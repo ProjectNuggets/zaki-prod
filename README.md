@@ -8,4 +8,12 @@
   Run `npm i` to install the dependencies.
 
   Run `npm run dev` to start the development server.
+
+  ## Backend (required, for API access + signup)
+
+  The ZAKI frontend now sends all API requests through the backend so the admin API key stays server-side.
+  Signup uses email verification handled by the backend.
+
+  1) Start the backend in `/home/papa-nova-01/Documents/ZAKI/backend`.
+  2) Set `VITE_ZAKI_BACKEND_URL` to the backend URL (ex: `http://localhost:8787`).
   

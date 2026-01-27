@@ -3,17 +3,25 @@ import { InputArea } from "./InputArea";
 import { ChevronDownIcon, CenterLogo } from "./icons";
 import { Copy, RefreshCw, ThumbsUp, MoreVertical, Share2, Download, File as FileIcon, X, Search, Pencil, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { apiRequest } from "@/lib/api";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   attachments?: { name: string; type: string; url: string }[];
+  chatId?: number;
 }
 
-export function ChatArea() {
+export function ChatArea({
+  user,
+}: {
+  user: { username?: string } | null;
+}) {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeWorkspaceSlug, setActiveWorkspaceSlug] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,10 +70,21 @@ export function ChatArea() {
   const [libraryResults, setLibraryResults] = useState<{ id: string; text: string; score?: number; metadata?: Record<string, string> }[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState("");
+  const [chatError, setChatError] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const userName = user?.username?.trim() || "User";
+  const userInitials = userName
+    .split(/[\s.@_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   const serializeChat = () => {
     const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
@@ -117,17 +136,180 @@ export function ChatArea() {
     setMenuOpen(false);
   };
 
-  const handleSend = (text: string, files: File[]) => {
-    const threadId = activeThreadId ?? `thread-${Date.now()}`;
-    if (!activeThreadId) {
-      const title = text.trim().split(/\n+/)[0].slice(0, 48) || "New chat";
-      window.dispatchEvent(new CustomEvent("zaki:thread-created", { detail: { id: threadId, label: title } }));
-      setActiveThreadId(threadId);
-      setShowZakiHome(false);
-      setShowSpaceDetail(false);
-      setShowSpacesView(false);
-      setShowLibraryView(false);
+  const loadThreadHistory = async (workspaceSlug: string, threadSlug: string) => {
+    setIsHistoryLoading(true);
+    setChatError("");
+    try {
+      const response = await apiRequest(
+        `/workspace/${workspaceSlug}/thread/${threadSlug}/chats`
+      );
+      if (!response.ok) {
+        throw new Error("Unable to load chats.");
+      }
+      const data = (await response.json()) as {
+        history?: {
+          role: "user" | "assistant";
+          content: string;
+          chatId?: number;
+          attachments?: { name: string; type: string; url: string }[];
+        }[];
+      };
+      const messages =
+        data.history?.map((entry, index) => ({
+          id: entry.chatId
+            ? `${entry.chatId}-${entry.role}-${index}`
+            : `${entry.role}-${index}`,
+          role: entry.role,
+          content: entry.content ?? "",
+          attachments: entry.attachments,
+          chatId: entry.chatId,
+        })) ?? [];
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [threadSlug]: messages,
+      }));
+    } catch (error) {
+      setChatError("Unable to load chat history.");
+    } finally {
+      setIsHistoryLoading(false);
     }
+  };
+
+  const streamChatMessage = async ({
+    workspaceSlug,
+    threadSlug,
+    message,
+    assistantId,
+  }: {
+    workspaceSlug: string;
+    threadSlug: string;
+    message: string;
+    assistantId: string;
+  }) => {
+    const response = await apiRequest(
+      `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }
+    );
+    if (!response.ok || !response.body) {
+      throw new Error("Chat stream failed.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    const updateAssistant = (chunk: string) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        return {
+          ...prev,
+          [threadSlug]: threadMessages.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: `${msg.content}${chunk}` }
+              : msg
+          ),
+        };
+      });
+    };
+
+    const emitThreadRename = (threadName: string) => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:rename-thread", {
+          detail: { id: threadSlug, label: threadName },
+        })
+      );
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.replace(/^data:\s*/, "");
+        if (!payload) continue;
+        try {
+          const data = JSON.parse(payload) as {
+            type?: string;
+            textResponse?: string;
+            error?: string | boolean | null;
+            action?: string;
+            thread?: { name?: string };
+          };
+          if (data.action === "rename_thread" && data.thread?.name) {
+            emitThreadRename(data.thread.name);
+          }
+          if (data.type === "textResponseChunk" && data.textResponse) {
+            updateAssistant(data.textResponse);
+          }
+          if (data.type === "abort" && data.error) {
+            throw new Error(
+              typeof data.error === "string" ? data.error : "Chat failed."
+            );
+          }
+        } catch (error) {
+          throw error;
+        }
+      }
+    }
+  };
+
+  const handleSend = async (text: string, files: File[]) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setChatError("Message is empty.");
+      return;
+    }
+    if (isStreaming) return;
+    if (!activeWorkspaceSlug) {
+      setChatError("Select a workspace before sending a message.");
+      return;
+    }
+    setChatError("");
+
+    let threadId = activeThreadId;
+    if (!threadId) {
+      try {
+        const response = await apiRequest(
+          `/workspace/${activeWorkspaceSlug}/thread/new`,
+          {
+            method: "POST",
+          }
+        );
+        if (!response.ok) {
+          throw new Error("Unable to create thread.");
+        }
+        const data = (await response.json()) as {
+          thread?: { slug: string; name: string };
+        };
+        threadId = data.thread?.slug ?? `thread-${Date.now()}`;
+        const label =
+          data.thread?.name ||
+          trimmed.split(/\n+/)[0].slice(0, 48) ||
+          "New chat";
+        window.dispatchEvent(
+          new CustomEvent("zaki:thread-created", {
+            detail: { id: threadId, label, spaceId: activeWorkspaceSlug },
+          })
+        );
+        setActiveThreadId(threadId);
+      } catch (error) {
+        setChatError("Unable to start a new chat.");
+        return;
+      }
+    }
+
+    setShowZakiHome(false);
+    setShowSpaceDetail(false);
+    setShowSpacesView(false);
+    setShowLibraryView(false);
+
     const attachmentsForMessage = files
       .filter((file) => file.type.startsWith("image/"))
       .map((file) => ({
@@ -135,32 +317,41 @@ export function ChatArea() {
         type: file.type,
         url: URL.createObjectURL(file),
       }));
+    const userMessageId = `user-${Date.now()}`;
+    const assistantMessageId = `assistant-${Date.now() + 1}`;
     const newUserMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: text,
+      id: userMessageId,
+      role: "user",
+      content: trimmed,
       attachments: attachmentsForMessage.length ? attachmentsForMessage : undefined,
     };
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+    };
+
     setMessagesByThread((prev) => ({
       ...prev,
-      [threadId]: [...(prev[threadId] ?? []), newUserMsg],
+      [threadId]: [...(prev[threadId] ?? []), newUserMsg, assistantMessage],
     }));
     setAttachments([]);
-    
-    // Mock response
-    setTimeout(() => {
-      setMessagesByThread((prev) => ({
-        ...prev,
-        [threadId]: [
-          ...(prev[threadId] ?? []),
-          {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: "I am Zaki, your AI assistant. I can help you with research, analysis, and writing in both Arabic and English. How can I assist you further?"
-          },
-        ],
-      }));
-    }, 1000);
+
+    try {
+      setIsStreaming(true);
+      await streamChatMessage({
+        workspaceSlug: activeWorkspaceSlug,
+        threadSlug: threadId,
+        message: trimmed,
+        assistantId: assistantMessageId,
+      });
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to send message."
+      );
+    } finally {
+      setIsStreaming(false);
+    }
   };
 
   useEffect(() => {
@@ -170,10 +361,21 @@ export function ChatArea() {
   }, [activeThreadId, messagesByThread]);
 
   useEffect(() => {
+    if (!activeThreadId || !activeWorkspaceSlug) return;
+    if (messagesByThread[activeThreadId]?.length) return;
+    loadThreadHistory(activeWorkspaceSlug, activeThreadId);
+  }, [activeThreadId, activeWorkspaceSlug, messagesByThread]);
+
+  useEffect(() => {
     window.dispatchEvent(new Event("zaki:request-spaces"));
     const handleSelectThread = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string | null }>).detail;
+      const detail = (event as CustomEvent<{ id: string | null; spaceId?: string }>).detail;
       setActiveThreadId(detail?.id ?? null);
+      if (detail?.spaceId) {
+        setActiveWorkspaceSlug(detail.spaceId);
+      }
+      setChatError("");
+      setShowSpaceDetail(false);
       setShowSpacesView(false);
       setShowLibraryView(false);
       setShowZakiHome(false);
@@ -181,6 +383,7 @@ export function ChatArea() {
     const handleClearThread = () => {
       setActiveThreadId(null);
       setAttachments([]);
+      setChatError("");
     };
     const handleViewSpaces = () => {
       setShowSpacesView(true);
@@ -188,6 +391,7 @@ export function ChatArea() {
       setAttachments([]);
       setShowLibraryView(false);
       setShowZakiHome(false);
+      setChatError("");
     };
     const handleSpacesData = (event: Event) => {
       const detail = (event as CustomEvent<{
@@ -204,6 +408,9 @@ export function ChatArea() {
         }[];
       }>).detail;
       setSpacesList(detail?.spaces ?? []);
+      if (!activeWorkspaceSlug && detail?.spaces?.length) {
+        setActiveWorkspaceSlug(detail.spaces[0].id);
+      }
       if (spaceDetail) {
         const updated = detail?.spaces?.find((space) => space.id === spaceDetail.id);
         if (updated) {
@@ -221,17 +428,22 @@ export function ChatArea() {
       setShowZakiHome(false);
       setActiveThreadId(null);
       setAttachments([]);
+      setChatError("");
     };
     const handleViewSpace = (event: Event) => {
       const detail = (event as CustomEvent<{ id: string }>).detail;
       const selected = spacesList.find((space) => space.id === detail?.id) ?? null;
       setSpaceDetail(selected);
+      if (detail?.id) {
+        setActiveWorkspaceSlug(detail.id);
+      }
       setShowZakiHome(false);
       setShowSpaceDetail(true);
       setShowSpacesView(false);
       setShowLibraryView(false);
       setActiveThreadId(null);
       setAttachments([]);
+      setChatError("");
     };
     const handleViewZakiHome = () => {
       setShowZakiHome(true);
@@ -240,6 +452,7 @@ export function ChatArea() {
       setShowLibraryView(false);
       setActiveThreadId(null);
       setAttachments([]);
+      setChatError("");
     };
     window.addEventListener("zaki:select-thread", handleSelectThread);
     window.addEventListener("zaki:clear-thread", handleClearThread);
@@ -259,7 +472,7 @@ export function ChatArea() {
       window.removeEventListener("zaki:view-space", handleViewSpace);
       window.removeEventListener("zaki:view-zaki-home", handleViewZakiHome);
     };
-  }, [spacesList, spaceDetail]);
+  }, [activeWorkspaceSlug, spacesList, spaceDetail]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -325,13 +538,7 @@ export function ChatArea() {
     { id: "palette", icon: Palette },
   ];
   const colorOptions = ["#E24A3B", "#F57C1F", "#F2B705", "#20A559", "#2F7EEA", "#7B4BE4", "#FF6FB1"];
-  const zakiSpace = spacesList.find((space) => space.id === "zaki");
-
-  const toSlug = (value: string) =>
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
+  const primarySpace = spacesList[0] ?? null;
 
   const runLibrarySearch = async () => {
     if (!librarySlug || !libraryQuery.trim()) {
@@ -340,19 +547,31 @@ export function ChatArea() {
     setLibraryLoading(true);
     setLibraryError("");
     try {
-      const baseUrl = (import.meta as { env?: Record<string, string> }).env?.VITE_API_BASE_URL ?? "";
-      const response = await fetch(`${baseUrl}/v1/workspace/${librarySlug}/vector-search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: libraryQuery, topN: 5, scoreThreshold: 0.5 }),
-      });
+      const response = await apiRequest(
+        `/v1/workspace/${librarySlug}/vector-search`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            query: libraryQuery,
+            topN: 5,
+            scoreThreshold: 0.5,
+          }),
+        }
+      );
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Vector search requires an API key.");
+        }
         throw new Error("Search failed");
       }
       const data = (await response.json()) as { results?: { id: string; text: string; score?: number; metadata?: Record<string, string> }[] };
       setLibraryResults(data.results ?? []);
     } catch (error) {
-      setLibraryError("Unable to fetch results. Check your workspace slug or API configuration.");
+      setLibraryError(
+        error instanceof Error
+          ? error.message
+          : "Unable to fetch results. Check your workspace slug or API configuration."
+      );
     } finally {
       setLibraryLoading(false);
     }
@@ -477,6 +696,16 @@ export function ChatArea() {
           autoScrollRef.current = scrollTop + clientHeight >= scrollHeight - 48;
         }}
       >
+        {chatError && (
+          <div className="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-[#f6d5ce] bg-[#fff3f0] px-4 py-3 text-sm text-[#d24430]">
+            {chatError}
+          </div>
+        )}
+        {isHistoryLoading && (
+          <div className="mx-auto mt-4 w-full max-w-3xl text-xs text-[#a3a3a3]">
+            Loading chat history...
+          </div>
+        )}
         {showLibraryView ? (
           <div className="px-10 py-10">
             <div className="flex items-center gap-3 mb-6">
@@ -492,7 +721,7 @@ export function ChatArea() {
                 <div className="text-xs text-[#88735A] font-semibold mb-3">Workspaces</div>
                 <div className="flex flex-col gap-2">
                   {spacesList.map((space) => {
-                    const slug = toSlug(space.title);
+                    const slug = space.id;
                     return (
                       <button
                         key={space.id}
@@ -677,17 +906,22 @@ export function ChatArea() {
                 </div>
               </div>
             </div>
-            {zakiSpace && (zakiSpace.threads?.length ?? 0) > 0 && (
+            {primarySpace && (primarySpace.threads?.length ?? 0) > 0 && (
               <div className="mt-10">
                 <div className="text-xs text-[#88735A] font-semibold mb-3">Recent chats</div>
                 <div className="flex flex-col gap-2">
-                  {zakiSpace.threads?.map((thread) => (
+                  {primarySpace.threads?.map((thread) => (
                     <div key={thread.id} className="flex items-center justify-between rounded-xl border border-[#efe4d6] bg-white px-4 py-3 text-sm text-[#1f1a14]">
                       <button
                         type="button"
                         className="flex-1 text-left font-medium"
                         onClick={() => {
-                          window.dispatchEvent(new CustomEvent("zaki:select-thread", { detail: { id: thread.id } }));
+                          if (!primarySpace) return;
+                          window.dispatchEvent(
+                            new CustomEvent("zaki:select-thread", {
+                              detail: { id: thread.id, spaceId: primarySpace.id },
+                            })
+                          );
                         }}
                       >
                         {thread.label}
@@ -819,7 +1053,12 @@ export function ChatArea() {
               </button>
             </div>
             <div className="mt-6">
-              <InputArea onSend={handleSend} attachments={attachments} setAttachments={setAttachments} />
+              <InputArea
+                onSend={handleSend}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                isSending={isStreaming}
+              />
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div className="rounded-2xl border border-[#efe4d6] bg-white p-4">
@@ -884,10 +1123,15 @@ export function ChatArea() {
                   >
                     <span
                       className="font-medium flex-1 text-left"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent("zaki:select-thread", { detail: { id: thread.id } }));
-                        setShowSpaceDetail(false);
-                      }}
+                        onClick={() => {
+                          if (!spaceDetail) return;
+                          window.dispatchEvent(
+                            new CustomEvent("zaki:select-thread", {
+                              detail: { id: thread.id, spaceId: spaceDetail.id },
+                            })
+                          );
+                          setShowSpaceDetail(false);
+                        }}
                       role="button"
                     >
                       {thread.label}
@@ -924,7 +1168,12 @@ export function ChatArea() {
               <div className="text-[#a3a3a3] text-base">Ready when you are</div>
             </div>
             <div className="w-full max-w-3xl">
-              <InputArea onSend={handleSend} attachments={attachments} setAttachments={setAttachments} />
+              <InputArea
+                onSend={handleSend}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                isSending={isStreaming}
+              />
             </div>
           </div>
         ) : (
@@ -955,12 +1204,18 @@ export function ChatArea() {
                     </div>
                   )}
                   {msg.content && (
-                    <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.role === 'user' 
-                        ? 'bg-[#EADBC8] text-[#1f1a14]' 
-                        : 'bg-transparent text-[#1f1a14]'
-                    }`}>
-                      {msg.content}
+                    <div
+                      className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-[#EADBC8] text-[#1f1a14]"
+                          : "bg-transparent text-[#1f1a14]"
+                      }`}
+                    >
+                      {msg.role === "assistant" ? (
+                        <ChatMarkdown content={msg.content} />
+                      ) : (
+                        msg.content
+                      )}
                     </div>
                   )}
                   {msg.role === 'assistant' && (
@@ -994,11 +1249,30 @@ export function ChatArea() {
 
                 {msg.role === 'user' && (
                   <div className="size-8 shrink-0 bg-[#faf6f0] rounded-full flex items-center justify-center text-xs font-medium text-[#1f1a14]">
-                    TA
+                    {userInitials}
                   </div>
                 )}
               </div>
             ))}
+            {isStreaming && (
+              <div className="flex gap-4 items-start">
+                <div className="size-8 shrink-0 flex items-start justify-center pt-[6px]">
+                  <div className="scale-75">
+                    <CenterLogo />
+                  </div>
+                </div>
+                <div className="rounded-2xl px-4 py-3 text-sm bg-transparent text-[#1f1a14]">
+                  <div className="flex items-center gap-2 text-[#88735A]">
+                    <span>Thinking</span>
+                    <span className="flex gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce [animation-delay:-0.2s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce [animation-delay:-0.1s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1006,7 +1280,12 @@ export function ChatArea() {
       {/* Input Area */}
       {!showReady && !showLibraryView && !showSpacesView && !showSpaceDetail && (
         <div className="relative z-20">
-          <InputArea onSend={handleSend} attachments={attachments} setAttachments={setAttachments} />
+          <InputArea
+            onSend={handleSend}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            isSending={isStreaming}
+          />
         </div>
       )}
       <input

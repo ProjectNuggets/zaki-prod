@@ -4,10 +4,36 @@ import {
 } from "./icons";
 import { Moon, Settings, Globe, HelpCircle, LogOut, MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiRequest } from "@/lib/api";
 
-export function Sidebar() {
-  const [expandedSpace, setExpandedSpace] = useState<string | null>("research");
+type SpaceThread = {
+  id: string;
+  label: string;
+  pinned?: boolean;
+};
+
+type Space = {
+  id: string;
+  title: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  instructions?: string;
+  pinnedFiles?: { name: string; type: string; size: number }[];
+  pinned?: boolean;
+  fixed?: boolean;
+  threads: SpaceThread[];
+};
+
+export function Sidebar({
+  user,
+  onLogout,
+}: {
+  user: { username?: string; role?: string } | null;
+  onLogout: () => void;
+}) {
+  const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -17,6 +43,9 @@ export function Sidebar() {
   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ type: "space" | "thread"; id: string; label: string } | null>(null);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [spacesLoading, setSpacesLoading] = useState(false);
+  const [spacesError, setSpacesError] = useState("");
 
   const isActive = (item: string) => activeItem === item;
   const isSpaceActive = (spaceId: string) => expandedSpace === spaceId;
@@ -29,60 +58,84 @@ export function Sidebar() {
     palette: Palette,
     file: FileText,
   };
-  const [spaces, setSpaces] = useState(() => [
-    {
-      id: "zaki",
-      title: "ZAKI",
-      description: "Your default assistant space.",
-      icon: "zaki",
-      color: "#D24430",
-      instructions: "Stay helpful, concise, and friendly.",
-      pinnedFiles: [],
-      pinned: false,
-      fixed: true,
-      threads: [],
-    },
-    {
-      id: "research",
-      title: "Research & Analysis",
-      description: "User research insights & data analysis",
-      icon: "folder",
-      color: "#88735A",
-      instructions: "Focus on user interviews, surveys, and product insights.",
-      pinnedFiles: [],
-      pinned: false,
-      fixed: false,
-      threads: [
-        { id: "user-research", label: "User research analysis", pinned: false },
-        { id: "competitive-analysis", label: "Competitive analysis", pinned: false },
-        { id: "meeting-notes", label: "Meeting notes", pinned: false },
-      ],
-    },
-    {
-      id: "web-search",
-      title: "Web Search",
-      description: "Search functionality and SEO optimization",
-      icon: "sparkles",
-      color: "#C97B3A",
-      instructions: "Use reliable sources and summarize findings.",
-      pinnedFiles: [],
-      pinned: false,
-      fixed: false,
-      threads: [],
-    },
-    {
-      id: "knowledge-base",
-      title: "Knowledge Base",
-      description: "Key tips for effective project management",
-      icon: "book",
-      color: "#5B7C6B",
-      instructions: "Prefer internal references and existing documentation.",
-      pinnedFiles: [],
-      pinned: false,
-      fixed: false,
-      threads: [],
-    },
-  ]);
+  const userName = user?.username?.trim() || "User";
+  const userInitials = useMemo(() => {
+    const parts = userName.split(/[\s.@_-]+/).filter(Boolean);
+    const initials =
+      parts.length === 1
+        ? parts[0].slice(0, 2)
+        : `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`;
+    return initials.toUpperCase();
+  }, [userName]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadWorkspaces = async () => {
+      setSpacesLoading(true);
+      setSpacesError("");
+      try {
+        const response = await apiRequest("/workspaces");
+        if (!response.ok) {
+          throw new Error("Failed to load workspaces.");
+        }
+        const data = (await response.json()) as {
+          workspaces?: { slug: string; name: string; description?: string }[];
+        };
+        const workspaces = data.workspaces ?? [];
+        const workspaceSpaces = await Promise.all(
+          workspaces.map(async (workspace, index) => {
+            let threads: SpaceThread[] = [];
+            try {
+              const threadResponse = await apiRequest(
+                `/workspace/${workspace.slug}/threads`
+              );
+              if (threadResponse.ok) {
+                const threadData = (await threadResponse.json()) as {
+                  threads?: { slug: string; name: string }[];
+                };
+                threads =
+                  threadData.threads?.map((thread) => ({
+                    id: thread.slug,
+                    label: thread.name || "Thread",
+                  })) ?? [];
+              }
+            } catch {
+              threads = [];
+            }
+            return {
+              id: workspace.slug,
+              title: workspace.name,
+              description: workspace.description || "Workspace",
+              icon: index === 0 ? "zaki" : "folder",
+              color: index === 0 ? "#D24430" : "#88735A",
+              instructions: "",
+              pinnedFiles: [],
+              pinned: false,
+              fixed: index === 0,
+              threads,
+            } satisfies Space;
+          })
+        );
+
+        if (!isMounted) return;
+        setSpaces(workspaceSpaces);
+        if (workspaceSpaces.length > 0) {
+          setExpandedSpace((prev) => prev ?? workspaceSpaces[0].id);
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        setSpacesError("Unable to load workspaces. Check your session.");
+        setSpaces([]);
+      } finally {
+        if (isMounted) setSpacesLoading(false);
+      }
+    };
+
+    loadWorkspaces();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -176,13 +229,13 @@ export function Sidebar() {
 
   useEffect(() => {
     const handleThreadCreated = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string; label: string }>).detail;
+      const detail = (event as CustomEvent<{ id: string; label: string; spaceId?: string }>).detail;
       if (!detail?.id) {
         return;
       }
       setSpaces((prev) =>
         prev.map((space) =>
-          space.id === expandedSpace
+          space.id === (detail.spaceId ?? expandedSpace)
             ? {
                 ...space,
                 threads: [
@@ -193,8 +246,15 @@ export function Sidebar() {
             : space
         )
       );
+      if (detail.spaceId) {
+        setExpandedSpace(detail.spaceId);
+      }
       setActiveItem(detail.id);
-      window.dispatchEvent(new CustomEvent("zaki:select-thread", { detail: { id: detail.id } }));
+      window.dispatchEvent(
+        new CustomEvent("zaki:select-thread", {
+          detail: { id: detail.id, spaceId: detail.spaceId ?? expandedSpace },
+        })
+      );
     };
 
     window.addEventListener("zaki:thread-created", handleThreadCreated);
@@ -230,7 +290,34 @@ export function Sidebar() {
         return space;
       })
     );
+    syncRename(editingItem.type, editingItem.id, trimmed);
     setEditingItem(null);
+  };
+
+  const syncRename = async (
+    type: "space" | "thread",
+    id: string,
+    label: string
+  ) => {
+    try {
+      if (type === "space") {
+        await apiRequest(`/workspace/${id}/update`, {
+          method: "POST",
+          body: JSON.stringify({ name: label }),
+        });
+        return;
+      }
+      const parentSpace = spaces.find((space) =>
+        space.threads.some((thread) => thread.id === id)
+      );
+      if (!parentSpace) return;
+      await apiRequest(`/workspace/${parentSpace.id}/thread/${id}/update`, {
+        method: "POST",
+        body: JSON.stringify({ name: label }),
+      });
+    } catch (error) {
+      setSpacesError("Unable to rename item. Try again.");
+    }
   };
 
   const togglePinned = (type: "space" | "thread", id: string) => {
@@ -253,7 +340,7 @@ export function Sidebar() {
     setOpenMenu(null);
   };
 
-  const performDelete = (type: "space" | "thread", id: string) => {
+  const performDelete = async (type: "space" | "thread", id: string) => {
     const shouldClear =
       type === "thread"
         ? activeItem === id
@@ -264,6 +351,29 @@ export function Sidebar() {
           );
     if (shouldClear) {
       window.dispatchEvent(new Event("zaki:clear-thread"));
+    }
+    if (type === "thread") {
+      const parentSpace = spaces.find((space) =>
+        space.threads.some((thread) => thread.id === id)
+      );
+      if (parentSpace) {
+        try {
+          await apiRequest(`/workspace/${parentSpace.id}/thread/${id}`, {
+            method: "DELETE",
+          });
+        } catch {
+          setSpacesError("Unable to delete thread.");
+        }
+      }
+    }
+    if (type === "space") {
+      try {
+        await apiRequest(`/workspace/${id}`, {
+          method: "DELETE",
+        });
+      } catch {
+        setSpacesError("Unable to delete workspace.");
+      }
     }
     if (type === "space") {
       setSpaces((prev) => prev.filter((space) => space.id !== id));
@@ -282,51 +392,86 @@ export function Sidebar() {
     setOpenMenu(null);
   };
 
-  const createSpace = (
+  const createSpace = async (
     name?: string,
     description?: string,
     instructions?: string,
     pinnedFiles?: { name: string; type: string; size: number }[]
   ) => {
-    const newSpace = {
-      id: `space-${Date.now()}`,
-      title: "",
-      description: description ?? "New space description",
-      instructions: instructions ?? "",
-      pinnedFiles: pinnedFiles ?? [],
-      pinned: false,
-      threads: [],
-    };
-    setSpaces((prev) => {
-      const nextIndex = prev.length + 1;
-      return [...prev, { ...newSpace, title: name?.trim() || `New space ${nextIndex}` }];
-    });
-    setExpandedSpace(newSpace.id);
-    setActiveItem(newSpace.id);
-    window.dispatchEvent(new Event("zaki:clear-thread"));
+    const trimmedName = name?.trim();
+    if (!trimmedName) return;
+    try {
+      const response = await apiRequest("/zaki/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: trimmedName }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create workspace.");
+      }
+      const data = (await response.json()) as {
+        workspace?: { slug: string; name: string; description?: string };
+      };
+      if (!data.workspace) {
+        throw new Error("Workspace not returned.");
+      }
+      const newSpace: Space = {
+        id: data.workspace.slug,
+        title: data.workspace.name,
+        description: description ?? data.workspace.description ?? "Workspace",
+        instructions: instructions ?? "",
+        pinnedFiles: pinnedFiles ?? [],
+        pinned: false,
+        threads: [],
+      };
+      setSpaces((prev) => [...prev, newSpace]);
+      setExpandedSpace(newSpace.id);
+      setActiveItem(newSpace.id);
+      window.dispatchEvent(new Event("zaki:clear-thread"));
+    } catch (error) {
+      setSpacesError("Unable to create a workspace. Check your permissions.");
+    }
   };
 
-  const createThreadInSpace = (spaceId: string | null) => {
+  const createThreadInSpace = async (spaceId: string | null) => {
     if (!spaceId) {
       return;
     }
-    const threadId = `thread-${Date.now()}`;
-    setSpaces((prev) =>
-      prev.map((space) =>
-        space.id === spaceId
-          ? {
-              ...space,
-              threads: [
-                ...space.threads,
-                { id: threadId, label: "New chat", pinned: false },
-              ],
-            }
-          : space
-      )
-    );
-    setExpandedSpace(spaceId);
-    setActiveItem(threadId);
-    window.dispatchEvent(new CustomEvent("zaki:select-thread", { detail: { id: threadId } }));
+    try {
+      const response = await apiRequest(`/workspace/${spaceId}/thread/new`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create thread.");
+      }
+      const data = (await response.json()) as {
+        thread?: { slug: string; name: string };
+      };
+      const threadId = data.thread?.slug ?? `thread-${Date.now()}`;
+      const threadLabel = data.thread?.name ?? "New chat";
+
+      setSpaces((prev) =>
+        prev.map((space) =>
+          space.id === spaceId
+            ? {
+                ...space,
+                threads: [
+                  ...space.threads,
+                  { id: threadId, label: threadLabel, pinned: false },
+                ],
+              }
+            : space
+        )
+      );
+      setExpandedSpace(spaceId);
+      setActiveItem(threadId);
+      window.dispatchEvent(
+        new CustomEvent("zaki:select-thread", {
+          detail: { id: threadId, spaceId },
+        })
+      );
+    } catch (error) {
+      setSpacesError("Unable to create a new chat.");
+    }
   };
 
   const toggleSpace = (spaceId: string) => {
@@ -385,15 +530,29 @@ export function Sidebar() {
         window.dispatchEvent(new Event("zaki:clear-thread"));
       }
     };
+    const handleRenameThread = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; label: string }>).detail;
+      if (!detail?.id || !detail?.label) return;
+      setSpaces((prev) =>
+        prev.map((space) => ({
+          ...space,
+          threads: space.threads.map((thread) =>
+            thread.id === detail.id ? { ...thread, label: detail.label } : thread
+          ),
+        }))
+      );
+    };
     window.addEventListener("zaki:create-space", handleCreateSpace);
     window.addEventListener("zaki:create-thread", handleCreateThread);
     window.addEventListener("zaki:update-space", handleUpdateSpace);
     window.addEventListener("zaki:delete-thread", handleDeleteThread);
+    window.addEventListener("zaki:rename-thread", handleRenameThread);
     return () => {
       window.removeEventListener("zaki:create-space", handleCreateSpace);
       window.removeEventListener("zaki:create-thread", handleCreateThread);
       window.removeEventListener("zaki:update-space", handleUpdateSpace);
       window.removeEventListener("zaki:delete-thread", handleDeleteThread);
+      window.removeEventListener("zaki:rename-thread", handleRenameThread);
     };
   }, [spaces]);
 
@@ -521,7 +680,7 @@ export function Sidebar() {
               type="button"
               title="Profile"
             >
-              TA
+              {userInitials}
             </button>
           </div>
         </>
@@ -620,6 +779,12 @@ export function Sidebar() {
       {/* Space Section */}
       <div className="flex-1 overflow-y-auto">
         <div className="text-[#a08462] text-xs font-medium mb-2 pl-1.5">Space</div>
+        {spacesLoading && (
+          <div className="text-xs text-[#a3a3a3] mb-3 pl-1.5">Loading workspaces...</div>
+        )}
+        {spacesError && (
+          <div className="text-xs text-[#d24430] mb-3 pl-1.5">{spacesError}</div>
+        )}
         
         <div className="flex flex-col gap-1">
           {spaces.filter((space) => space.fixed).map((space) => (
@@ -673,7 +838,11 @@ export function Sidebar() {
                         onClick={() => {
                           setExpandedSpace(space.id);
                           setActiveItem(thread.id);
-                          window.dispatchEvent(new CustomEvent("zaki:select-thread", { detail: { id: thread.id } }));
+                          window.dispatchEvent(
+                            new CustomEvent("zaki:select-thread", {
+                              detail: { id: thread.id, spaceId: space.id },
+                            })
+                          );
                         }}
                         type="button"
                       >
@@ -815,7 +984,11 @@ export function Sidebar() {
                         onClick={() => {
                           setExpandedSpace(space.id);
                           setActiveItem(thread.id);
-                          window.dispatchEvent(new CustomEvent("zaki:select-thread", { detail: { id: thread.id } }));
+                          window.dispatchEvent(
+                            new CustomEvent("zaki:select-thread", {
+                              detail: { id: thread.id, spaceId: space.id },
+                            })
+                          );
                         }}
                         type="button"
                       >
@@ -916,11 +1089,11 @@ export function Sidebar() {
           tabIndex={0}
         >
           <div className="size-10 bg-[#faf6f0] rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-base">
-            TA
+            {userInitials}
           </div>
           <div className="flex-1 min-w-0">
              <div className="flex items-center gap-1">
-                <span className="text-[#1f1a14] text-sm font-medium truncate">Tarek Adaoui</span>
+                <span className="text-[#1f1a14] text-sm font-medium truncate">{userName}</span>
                 <span className={cn(
                   "text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
                   planLabel === "PRO" ? "bg-[#c2f5da] text-[#0c291d]" : "bg-[#efefef] text-[#655543]"
@@ -928,7 +1101,7 @@ export function Sidebar() {
                   {planLabel}
                 </span>
              </div>
-             <div className="text-[#b09472] text-xs truncate">ta@novanuggets.com</div>
+             <div className="text-[#b09472] text-xs truncate">{userName}</div>
           </div>
           <button
             className="bg-white p-1 rounded-md border border-transparent hover:border-[#EBEBEB]"
@@ -951,10 +1124,12 @@ export function Sidebar() {
             data-profile-menu
           >
             <div className="flex items-center gap-2 px-2.5 py-2">
-              <div className="size-7 rounded-full bg-[#faf6f0] flex items-center justify-center text-xs font-medium text-[#1f1a14]">TA</div>
+              <div className="size-7 rounded-full bg-[#faf6f0] flex items-center justify-center text-xs font-medium text-[#1f1a14]">
+                {userInitials}
+              </div>
               <div className="min-w-0">
-                <div className="text-sm text-[#1f1a14] font-medium truncate">Tarek Adaoui</div>
-                <div className="text-xs text-[#a3a3a3] truncate">ta@novanuggets.com</div>
+                <div className="text-sm text-[#1f1a14] font-medium truncate">{userName}</div>
+                <div className="text-xs text-[#a3a3a3] truncate">{userName}</div>
               </div>
               <span className={cn(
                 "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
@@ -989,7 +1164,14 @@ export function Sidebar() {
               Need help?
             </button>
             <div className="h-px bg-[#f1f1f1] my-1" />
-            <button className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#d24430] hover:bg-[#fff3f0] transition-colors" type="button">
+            <button
+              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#d24430] hover:bg-[#fff3f0] transition-colors"
+              type="button"
+              onClick={() => {
+                setProfileMenuOpen(false);
+                onLogout();
+              }}
+            >
               <LogOut className="size-4" />
               Log out
             </button>
@@ -1028,14 +1210,14 @@ export function Sidebar() {
                     Display name
                     <input
                       className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
-                      defaultValue="Tarek Adaoui"
+                      defaultValue={userName}
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-xs text-[#88735A]">
                     Email
                     <input
                       className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
-                      defaultValue="ta@novanuggets.com"
+                      defaultValue={userName}
                     />
                   </label>
                 </div>

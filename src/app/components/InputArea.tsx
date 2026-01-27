@@ -5,10 +5,12 @@ export function InputArea({
   onSend,
   attachments,
   setAttachments,
+  isSending = false,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
+  isSending?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -17,12 +19,19 @@ export function InputArea({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitMessage = () => {
+    if (isSending) {
+      return;
+    }
     if (inputValue.trim() || attachments.length > 0) {
       onSend(inputValue, attachments);
       setInputValue("");
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitMessage();
   };
 
   const previews = useMemo(
@@ -156,11 +165,18 @@ export function InputArea({
           placeholder="How can I help you today?"
           autoComplete="off"
           value={inputValue}
+          disabled={isSending}
           onChange={(e) => {
             setInputValue(e.target.value);
             if (textareaRef.current) {
               textareaRef.current.style.height = "auto";
               textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              submitMessage();
             }
           }}
         />
@@ -235,7 +251,8 @@ export function InputArea({
            
            <button
              type="submit"
-             className="size-8 bg-[#655543] rounded-full flex items-center justify-center hover:bg-[#D24430] focus-visible:bg-[#D24430] active:bg-[#D24430] transition-colors"
+             className="size-8 bg-[#655543] rounded-full flex items-center justify-center hover:bg-[#D24430] focus-visible:bg-[#D24430] active:bg-[#D24430] transition-colors disabled:opacity-60"
+             disabled={isSending}
            >
               <ArrowUp className="size-4 text-white" />
            </button>
