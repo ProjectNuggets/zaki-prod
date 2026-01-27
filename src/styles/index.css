@@ -1,3 +1,319 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+:root {
+  --zaki-pattern-start: #eadbc8;
+  --zaki-pattern-mid: #c9b295;
+  --zaki-pattern-end: #e5d3bd;
+  --zaki-pattern-glow-1: rgba(245, 237, 224, 0.45);
+  --zaki-pattern-glow-2: rgba(210, 191, 165, 0.18);
+}
+
+.dark .zaki-app {
+  --zaki-pattern-start: #5f4d3c;
+  --zaki-pattern-mid: #6f5b47;
+  --zaki-pattern-end: #3a2f25;
+  --zaki-pattern-glow-1: rgba(90, 74, 58, 0.45);
+  --zaki-pattern-glow-2: rgba(120, 95, 70, 0.18);
+  --zaki-bg: #0f0b08;
+  --zaki-panel: #15100c;
+  --zaki-panel-border: rgba(255, 255, 255, 0.08);
+  --zaki-card: #21180f;
+  --zaki-card-border: rgba(255, 255, 255, 0.1);
+  --zaki-input: #2b2119;
+  --zaki-input-border: rgba(255, 255, 255, 0.12);
+  --zaki-hover: rgba(255, 255, 255, 0.06);
+  --zaki-text: #efe6d9;
+  --zaki-muted: #c8b6a0;
+  --zaki-subtle: #a18b73;
+}
+
+.dark .zaki-app {
+  background-color: var(--zaki-bg);
+}
+
+.dark .zaki-app .bg-white {
+  background-color: var(--zaki-panel);
+}
+
+.dark .zaki-app .bg-white\/80 {
+  background-color: rgba(33, 24, 15, 0.8);
+}
+
+.dark .zaki-app .bg-white\/70 {
+  background-color: rgba(33, 24, 15, 0.7);
+}
+
+.dark .zaki-app .bg-white\/90 {
+  background-color: rgba(33, 24, 15, 0.9);
+}
+
+.dark .zaki-app .bg-\[\#FFFBF5\] {
+  background-color: var(--zaki-panel);
+}
+
+.dark .zaki-app .bg-\[\#fff8f0\] {
+  background-color: var(--zaki-panel);
+}
+
+.dark .zaki-app .bg-\[\#fffdfa\] {
+  background-color: var(--zaki-input);
+}
+
+.dark .zaki-app .bg-\[\#faf6f0\] {
+  background-color: var(--zaki-card);
+}
+
+.dark .zaki-app .bg-\[\#f6efe6\] {
+  background-color: var(--zaki-card);
+}
+
+.dark .zaki-app .bg-\[\#f1e5d2\] {
+  background-color: #2d2218;
+}
+
+.dark .zaki-app .bg-\[\#fff4e8\] {
+  background-color: #2b2017;
+}
+
+.dark .zaki-app .border-\[\#f3e5d4\] {
+  border-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .bg-\[\#f8f2e9\] {
+  background-color: var(--zaki-hover);
+}
+
+.dark .zaki-app .bg-\[\#F8F2E9\] {
+  background-color: var(--zaki-hover);
+}
+
+.dark .zaki-app .hover\:bg-\[\#f8f2e9\]:hover {
+  background-color: var(--zaki-hover);
+}
+
+.dark .zaki-app .hover\:bg-\[\#F8F2E9\]:hover {
+  background-color: var(--zaki-hover);
+}
+
+.dark .zaki-app .bg-\[\#f0e6d8\] {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark .zaki-app .bg-\[\#fff3f0\] {
+  background-color: rgba(210, 68, 48, 0.18);
+}
+
+.dark .zaki-app .bg-\[\#e9dfd2\] {
+  background-color: var(--zaki-panel);
+}
+
+.dark .zaki-app .bg-\[\#EBEBEB\] {
+  background-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .bg-\[\#f1f1f1\] {
+  background-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .border-\[\#EBEBEB\] {
+  border-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .border-\[\#ebebeb\] {
+  border-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .border-\[\#ebe3d6\] {
+  border-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .border-\[\#e9dfd2\] {
+  border-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .border-\[\#efe4d6\] {
+  border-color: var(--zaki-card-border);
+}
+
+.dark .zaki-app .border-\[\#f1ece3\] {
+  border-color: var(--zaki-panel-border);
+}
+
+.dark .zaki-app .border-\[\#e7dbc9\] {
+  border-color: var(--zaki-input-border);
+}
+
+.dark .zaki-app .border-\[\#f6d5ce\] {
+  border-color: rgba(210, 68, 48, 0.4);
+}
+
+.dark .zaki-app .text-\[\#1f1a14\] {
+  color: var(--zaki-text);
+}
+
+.dark .zaki-app .zaki-user-bubble {
+  color: #1f1a14;
+}
+
+.zaki-chat-enter {
+  animation: zaki-chat-enter 420ms ease-out;
+  will-change: opacity, transform;
+}
+
+.zaki-input-float {
+  transition: transform 420ms ease;
+  will-change: transform;
+}
+
+.zaki-chat-thread {
+  width: min(100%, 56rem);
+}
+
+.zaki-message-row {
+  width: 100%;
+}
+
+.zaki-message-stack {
+  width: min(100%, 50rem);
+}
+
+.zaki-message-bubble {
+  max-width: min(100%, 48rem);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.zaki-assistant-bubble {
+  background: transparent;
+}
+
+.zaki-input-shell {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.zaki-input-form {
+  border-radius: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+.zaki-input-row {
+  gap: 0.75rem;
+}
+
+.zaki-input-field {
+  font-size: 1rem;
+}
+
+.zaki-agent-prefix {
+  letter-spacing: 0.01em;
+}
+
+.zaki-share-pill {
+  font-weight: 600;
+}
+
+.dark .zaki-share-modal {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #1c1612;
+  color: #efe6d9;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.dark .zaki-share-modal .bg-\[\#f8f2e9\] {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #c8b6a0;
+}
+
+.dark .zaki-share-modal .border-\[\#efe4d6\] {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark .zaki-share-modal .bg-\[\#fffdfa\] {
+  background-color: #1f1712;
+}
+
+.dark .zaki-share-modal .bg-\[\#f6efe6\] {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #efe6d9;
+}
+
+.dark .zaki-share-modal .bg-\[\#655543\] {
+  background-color: #2f241a;
+}
+
+.dark .zaki-share-modal .border-\[\#e7dbc9\] {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark .zaki-share-modal .text-\[\#655543\] {
+  color: #c8b6a0;
+}
+
+.dark .zaki-share-modal .text-\[\#1f1a14\] {
+  color: #efe6d9;
+}
+
+.dark .zaki-share-modal .text-\[\#88735A\] {
+  color: #b89c7f;
+}
+
+.dark .zaki-share-modal .text-\[\#a3a3a3\] {
+  color: #9b8a76;
+}
+
+@media (max-width: 640px) {
+  .zaki-chat-thread {
+    padding-top: 1rem;
+  }
+
+  .zaki-message-row {
+    gap: 0.75rem;
+  }
+
+  .zaki-message-stack {
+    max-width: 100%;
+  }
+
+  .zaki-message-bubble {
+    max-width: 100%;
+  }
+}
+
+@keyframes zaki-chat-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dark .zaki-app .text-\[\#655543\] {
+  color: var(--zaki-muted);
+}
+
+.dark .zaki-app .text-\[\#88735A\],
+.dark .zaki-app .text-\[\#88735a\] {
+  color: var(--zaki-subtle);
+}
+
+.dark .zaki-app .text-\[\#b09472\] {
+  color: #d1b89b;
+}
+
+.dark .zaki-app .text-\[\#a3a3a3\] {
+  color: #9b8a76;
+}
+
+.dark .zaki-app .text-\[\#a08462\] {
+  color: #b89c7f;
+}
+
+.dark .zaki-app .placeholder-\[\#b09472\]::placeholder {
+  color: #bda689;
+}
