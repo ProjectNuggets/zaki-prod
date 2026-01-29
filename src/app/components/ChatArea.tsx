@@ -4,7 +4,6 @@ import { Share2, MoreVertical, Download } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiRequest, buildApiUrl } from "@/lib/api";
 import {
-  StreamingIndicator,
   LibraryView,
   SpacesView,
   ZakiHomeView,
@@ -20,7 +19,7 @@ import { toast } from "sonner";
 import type { Space, Message, LibraryResult } from "@/types";
 
 export function ChatArea() {
-  const { user } = useAuthStore();
+  useAuthStore(); // For auth context, values used elsewhere
   const {
     view,
     threadId: activeThreadId,
@@ -38,7 +37,6 @@ export function ChatArea() {
   const showSpacesView = view === "spaces";
   const showLibraryView = view === "library";
   const showSpaceDetail = view === "space-detail";
-  const showChatView = view === "chat";
 
   // Message state
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
@@ -80,7 +78,6 @@ export function ChatArea() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Computed values
-  const userName = user?.username?.trim() || "User";
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const showReady = !activeThreadId || messages.length === 0;
   const primarySpace = spacesList[0] ?? null;
@@ -88,7 +85,6 @@ export function ChatArea() {
   const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
   const headerSpaceName = activeSpace?.title || "Space";
   const headerThreadName = activeThread?.label || "New chat";
-  const snapshotMessages = messages.slice(0, 6);
 
   // Serialize chat for export
   const serializeChat = useCallback(() => {
@@ -212,9 +208,11 @@ export function ChatArea() {
               );
               if (assistantIndex === -1) return prev;
               const updated = [...threadMessages];
+              const existingMsg = updated[assistantIndex];
+              if (!existingMsg) return prev;
               updated[assistantIndex] = {
-                ...updated[assistantIndex],
-                content: updated[assistantIndex].content + chunk,
+                ...existingMsg,
+                content: existingMsg.content + chunk,
               };
               return { ...prev, [threadSlug]: updated };
             });
@@ -259,7 +257,7 @@ export function ChatArea() {
           thread?: { slug: string; name: string };
         };
         threadId = data.thread?.slug ?? `thread-${Date.now()}`;
-        const label = data.thread?.name || trimmed.split(/\n+/)[0].slice(0, 48) || "New chat";
+        const label = data.thread?.name || trimmed.split(/\n+/)[0]?.slice(0, 48) || "New chat";
         window.dispatchEvent(
           new CustomEvent("zaki:thread-created", {
             detail: { id: threadId, label, spaceId: activeWorkspaceSlug },

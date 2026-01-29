@@ -2,7 +2,7 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   EditIcon, BookIcon, FolderIcon, ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -20,13 +20,14 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
-  const { goToThread, goToSpace, goHome } = useNavigation();
+  const { goToThread } = useNavigation();
   const setCollapsed = setSidebarCollapsed;
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const planLabel: "FREE" | "PRO" = "FREE";
+  // TODO: Fetch actual plan from user profile
+  const planLabel = "FREE" as "FREE" | "PRO";
   const [openMenu, setOpenMenu] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingValue, setEditingValue] = useState("");
@@ -64,10 +65,12 @@ export function Sidebar() {
   const userName = displayName.trim() || "User";
   const userInitials = useMemo(() => {
     const parts = userName.split(/[\s.@_-]+/).filter(Boolean);
+    const first = parts[0];
+    const second = parts[1];
     const initials =
-      parts.length === 1
-        ? parts[0].slice(0, 2)
-        : `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`;
+      parts.length === 1 && first
+        ? first.slice(0, 2)
+        : `${first?.[0] ?? ""}${second?.[0] ?? ""}`;
     return initials.toUpperCase();
   }, [userName]);
 
@@ -122,8 +125,9 @@ export function Sidebar() {
 
         if (!isMounted) return;
         setSpaces(workspaceSpaces);
-        if (workspaceSpaces.length > 0) {
-          setExpandedSpace((prev) => prev ?? workspaceSpaces[0].id);
+        const firstSpace = workspaceSpaces[0];
+        if (firstSpace) {
+          setExpandedSpace((prev) => prev ?? firstSpace.id);
         }
       } catch (error) {
         if (!isMounted) return;

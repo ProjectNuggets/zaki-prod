@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Space, Thread } from "@/types";
+import type { Space } from "@/types";
 
 interface SpacesState {
   spaces: Space[];

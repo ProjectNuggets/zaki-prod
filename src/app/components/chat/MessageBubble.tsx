@@ -11,12 +11,15 @@ export interface Message {
   chatId?: number;
 }
 
-interface MessageBubbleProps {
+export interface MessageBubbleProps {
   message: Message;
   showActions?: boolean;
+  isStreaming?: boolean;
 }
 
-export function MessageBubble({ message, showActions = true }: MessageBubbleProps) {
+export function MessageBubble({ message, showActions = true, isStreaming = false }: MessageBubbleProps) {
+  // isStreaming can be used to show typing indicator or disable actions
+  void isStreaming;
   const isUser = message.role === 'user';
 
   return (

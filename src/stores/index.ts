@@ -5,6 +5,4 @@ export { useChatStore } from "./chatStore";
 export { useSpacesStore } from "./spacesStore";
 export { useUIStore } from "./uiStore";
 
-// Re-export types
-export type { Message } from "./chatStore";
-export type { Space } from "./spacesStore";
+// Types are now in @/types - import from there

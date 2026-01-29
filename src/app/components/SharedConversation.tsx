@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Lock, Calendar, Eye, ArrowLeft, AlertCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ChatMarkdown } from './ChatMarkdown';
+// ChatMarkdown not currently used - using simple text rendering for share view
 import { CenterLogo } from './icons';
 import { buildApiUrl } from '@/lib/api';
 

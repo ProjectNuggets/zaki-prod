@@ -11,38 +11,49 @@ export function useNavigation() {
   const navigate = useNavigate();
   const store = useNavigationStore();
   
+  // Wrap navigation actions to sync with React Router
+  const goHome = () => {
+    store.goHome();
+    navigate('/');
+  };
+  
+  const goToSpaces = () => {
+    store.goToSpaces();
+    navigate('/spaces');
+  };
+  
+  const goToLibrary = () => {
+    store.goToLibrary();
+    navigate('/library');
+  };
+  
+  const goToSpace = (spaceId: string) => {
+    store.goToSpace(spaceId);
+    navigate(`/spaces/${spaceId}`);
+  };
+  
+  const goToThread = (spaceId: string, threadId: string) => {
+    store.goToThread(spaceId, threadId);
+    navigate(`/spaces/${spaceId}/threads/${threadId}`);
+  };
+  
+  const clearThread = () => {
+    store.clearThread();
+    navigate('/');
+  };
+
   return {
-    goHome: () => {
-      store.goHome();
-      navigate('/');
-    },
+    // State from store
+    currentView: store.view,
+    activeSpaceId: store.spaceId,
+    activeThreadId: store.threadId,
     
-    goToSpaces: () => {
-      store.goToSpaces();
-      navigate('/spaces');
-    },
-    
-    goToLibrary: () => {
-      store.goToLibrary();
-      navigate('/library');
-    },
-    
-    goToSpace: (spaceId: string) => {
-      store.goToSpace(spaceId);
-      navigate(`/spaces/${spaceId}`);
-    },
-    
-    goToThread: (spaceId: string, threadId: string) => {
-      store.goToThread(spaceId, threadId);
-      navigate(`/spaces/${spaceId}/threads/${threadId}`);
-    },
-    
-    clearThread: () => {
-      store.clearThread();
-      navigate('/');
-    },
-    
-    // Computed helpers
-    ...store,
+    // Navigation actions (with routing)
+    goHome,
+    goToSpaces,
+    goToLibrary,
+    goToSpace,
+    goToThread,
+    clearThread,
   };
 }

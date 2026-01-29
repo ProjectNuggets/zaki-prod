@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
-import { ChevronDownIcon, CenterLogo } from "../../icons";
+import { ChevronDownIcon } from "../../icons";
 import type { Space } from "@/types";
 
 interface ZakiHomeViewProps {

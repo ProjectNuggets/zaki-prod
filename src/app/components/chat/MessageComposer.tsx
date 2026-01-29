@@ -1,24 +1,20 @@
 import { useRef, useState } from "react";
 import { InputArea } from "../InputArea";
-import { File as FileIcon, X, GripVertical } from "lucide-react";
+import { File as FileIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MessageComposerProps {
   onSend?: (text: string, attachments: File[]) => void;
   disabled?: boolean;
   isStreaming?: boolean;
-  placeholder?: string;
   className?: string;
-  inputOffset?: number;
 }
 
 export function MessageComposer({
   onSend,
   disabled,
   isStreaming,
-  placeholder = "Ask anything...",
   className,
-  inputOffset = 0,
 }: MessageComposerProps) {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -56,8 +52,9 @@ export function MessageComposer({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setAttachments((prev) => [...prev, ...Array.from(e.target.files)]);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setAttachments((prev) => [...prev, ...Array.from(files)]);
     }
   };
 
@@ -116,11 +113,9 @@ export function MessageComposer({
       {/* Input */}
       <InputArea
         onSend={handleSend}
-        disabled={disabled}
-        isStreaming={isStreaming}
-        placeholder={placeholder}
-        onFileSelect={() => fileInputRef.current?.click()}
-        offset={inputOffset}
+        attachments={attachments}
+        setAttachments={setAttachments}
+        isSending={disabled || isStreaming}
       />
 
       {/* Hidden file input */}

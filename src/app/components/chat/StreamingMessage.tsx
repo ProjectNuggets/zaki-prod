@@ -1,6 +1,6 @@
 import { MessageBubble } from "./MessageBubble";
 import { StreamingIndicator } from "./StreamingIndicator";
-import type { Message } from "./MessageBubble";
+import type { Message } from "@/types";
 
 interface StreamingMessageProps {
   content: string;
@@ -17,7 +17,6 @@ export function StreamingMessage({
     id: "streaming",
     role: "assistant",
     content,
-    timestamp: new Date(),
   };
 
   return (

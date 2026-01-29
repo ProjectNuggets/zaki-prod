@@ -84,9 +84,9 @@ export function FlashlightIcon() {
   );
 }
 
-export function CenterLogo() {
+export function CenterLogo({ className }: { className?: string }) {
   return (
-    <div className="size-8 relative">
+    <div className={className || "size-8 relative"}>
       <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 32 32">
         <g>
           <path d={svgPaths.pb726e00} fill="#D24430" />

@@ -18,7 +18,8 @@ function extractText(node: React.ReactNode): string {
     return node.map(extractText).join("");
   }
   if (isValidElement(node)) {
-    return extractText(node.props?.children);
+    const props = node.props as { children?: React.ReactNode };
+    return extractText(props.children);
   }
   if (typeof node === "object") {
     const hastNode = node as HastLikeNode;
@@ -128,7 +129,7 @@ export function ChatMarkdown({ content }: { content: string }) {
           typeof className === "string"
             ? className
             : Array.isArray(className)
-            ? className.join(" ")
+            ? (className as string[]).join(" ")
             : undefined;
         const shouldUseChildren =
           typeof children === "string" ||
@@ -206,7 +207,8 @@ export function ChatMarkdown({ content }: { content: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-      components={components}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      components={components as any}
     >
       {content}
     </ReactMarkdown>

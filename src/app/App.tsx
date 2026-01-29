@@ -1,6 +1,6 @@
 import "@/styles/fonts.css";
 import { useEffect } from "react";
-import { Outlet, useLocation, useParams, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useParams } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { LoginScreen } from "./components/LoginScreen";
 import { Toaster } from "./components/ui/sonner";
@@ -12,7 +12,7 @@ export default function App() {
   const params = useParams();
   
   // Auth state from Zustand
-  const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
+  const { token, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
   
   // UI state from Zustand
   const { themePreference, systemTheme, setSystemTheme, resolvedTheme } = useUIStore();
