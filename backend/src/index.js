@@ -15,12 +15,16 @@ const PORT = Number(process.env.PORT || 8787);
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
+const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
 const SKIP_EMAIL_VERIFICATION = ["non", "none", "no"].includes(
   ZAKI_EMAIL_MODE.toLowerCase()
 );
 const ZAKI_VERIFY_TTL_MINUTES = Number(
   process.env.ZAKI_VERIFY_TTL_MINUTES || 60
+);
+const ZAKI_RESET_TTL_MINUTES = Number(
+  process.env.ZAKI_RESET_TTL_MINUTES || 30
 );
 const ZAKI_INCLUDE_VERIFY_LINK =
   String(process.env.ZAKI_INCLUDE_VERIFY_LINK || "").toLowerCase() === "true";
@@ -155,6 +159,8 @@ const smtpPort = Number(process.env.SMTP_PORT || 587);
 const smtpUser = (process.env.SMTP_USER || "").trim();
 const smtpPass = (process.env.SMTP_PASS || "").trim();
 const smtpFrom = (process.env.SMTP_FROM || "").trim();
+const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
+const resendFrom = (process.env.RESEND_FROM || "").trim();
 
 const mailer =
   ZAKI_EMAIL_MODE === "smtp" && smtpHost
@@ -168,6 +174,20 @@ const mailer =
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function parseFromAddress(value, fallbackEmail) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return { email: fallbackEmail, name: undefined };
+  }
+  const match = trimmed.match(/^(.*)<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^"|"$/g, "");
+    const email = match[2].trim();
+    return { email, name: name || undefined };
+  }
+  return { email: trimmed, name: undefined };
 }
 
 function isValidEmail(value) {
@@ -186,6 +206,18 @@ async function issueVerificationToken(userId) {
   return { token, expiresAt };
 }
 
+async function issuePasswordResetToken(userId) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = Date.now() + ZAKI_RESET_TTL_MINUTES * 60 * 1000;
+  const now = new Date().toISOString();
+  await dbQuery(
+    `INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, token, expiresAt, now]
+  );
+  return { token, expiresAt };
+}
+
 async function sendVerificationEmail(email, token) {
   const baseUrl =
     ZAKI_PUBLIC_URL ||
@@ -194,7 +226,41 @@ async function sendVerificationEmail(email, token) {
   const subject = "Verify your ZAKI account";
   const text = `Welcome to ZAKI! Verify your email by visiting: ${verifyUrl}`;
 
-  if (mailer) {
+  if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
+    if (!resendApiKey) {
+      throw new Error("RESEND_API_KEY is not configured.");
+    }
+    const from = parseFromAddress(resendFrom, "");
+    if (!from.email) {
+      throw new Error("RESEND_FROM is not configured.");
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: from.name ? `${from.name} <${from.email}>` : from.email,
+          to: [email],
+          subject,
+          text,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Resend error (${response.status})${errorText ? `: ${errorText}` : ""}`
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  } else if (mailer) {
     await mailer.sendMail({
       from: smtpFrom || smtpUser || "no-reply@zaki.local",
       to: email,
@@ -206,6 +272,67 @@ async function sendVerificationEmail(email, token) {
   }
 
   return verifyUrl;
+}
+
+async function sendPasswordResetEmail(email, token) {
+  const baseUrl =
+    ZAKI_APP_URL ||
+    ZAKI_PUBLIC_URL ||
+    `http://localhost:${PORT}`;
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const resetBase = normalizedBase.endsWith("/api")
+    ? normalizedBase.replace(/\/api$/, "")
+    : normalizedBase;
+  const resetUrl = `${resetBase}/reset?token=${token}`;
+  const subject = "Reset your ZAKI password";
+  const text = `Use this link to reset your password: ${resetUrl}`;
+
+  if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
+    if (!resendApiKey) {
+      throw new Error("RESEND_API_KEY is not configured.");
+    }
+    const from = parseFromAddress(resendFrom, "");
+    if (!from.email) {
+      throw new Error("RESEND_FROM is not configured.");
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: from.name ? `${from.name} <${from.email}>` : from.email,
+          to: [email],
+          subject,
+          text,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Resend error (${response.status})${errorText ? `: ${errorText}` : ""}`
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  } else if (mailer) {
+    await mailer.sendMail({
+      from: smtpFrom || smtpUser || "no-reply@zaki.local",
+      to: email,
+      subject,
+      text,
+    });
+  } else {
+    console.log(`[ZAKI] Password reset link for ${email}: ${resetUrl}`);
+  }
+
+  return resetUrl;
 }
 
 app.post("/signup", express.json({ limit: "1mb" }), async (req, res) => {
@@ -300,12 +427,186 @@ app.post("/signup", express.json({ limit: "1mb" }), async (req, res) => {
       verificationLink: ZAKI_INCLUDE_VERIFY_LINK ? verificationLink : undefined,
     });
   } catch (error) {
+    console.error("[ZAKI] Signup error:", error);
     res.status(500).json({
       success: false,
       error: error?.message || "Server error.",
     });
   }
 });
+
+app.post(
+  "/password-reset/request",
+  express.json({ limit: "1mb" }),
+  async (req, res) => {
+    try {
+      const { email } = req.body || {};
+      const normalizedEmail = normalizeEmail(email);
+
+      if (!normalizedEmail) {
+        res.status(400).json({
+          success: false,
+          error: "Email is required.",
+        });
+        return;
+      }
+      if (!isValidEmail(normalizedEmail)) {
+        res.status(400).json({
+          success: false,
+          error: "Please enter a valid email address.",
+        });
+        return;
+      }
+
+      const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
+        normalizedEmail,
+      ]);
+
+      if (user) {
+        const { token } = await issuePasswordResetToken(user.id);
+        const resetLink = await sendPasswordResetEmail(normalizedEmail, token);
+        res.status(200).json({
+          success: true,
+          message: "If the account exists, a reset link has been sent.",
+          resetLink: ZAKI_INCLUDE_VERIFY_LINK ? resetLink : undefined,
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "If the account exists, a reset link has been sent.",
+      });
+    } catch (error) {
+      console.error("[ZAKI] Password reset request error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message || "Server error.",
+      });
+    }
+  }
+);
+
+app.post(
+  "/password-reset/confirm",
+  express.json({ limit: "1mb" }),
+  async (req, res) => {
+    try {
+      const { token, password } = req.body || {};
+      const normalizedToken = String(token || "").trim();
+      const nextPassword = String(password || "");
+
+      if (!normalizedToken || !nextPassword) {
+        res.status(400).json({
+          success: false,
+          error: "Token and new password are required.",
+        });
+        return;
+      }
+
+      const record = await dbGet(
+        `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at
+         FROM password_reset_tokens pr
+         WHERE pr.token = $1`,
+        [normalizedToken]
+      );
+
+      if (!record) {
+        res.status(404).json({
+          success: false,
+          error: "Invalid reset token.",
+        });
+        return;
+      }
+
+      if (record.used_at) {
+        res.status(400).json({
+          success: false,
+          error: "Reset token already used.",
+        });
+        return;
+      }
+
+      const expiresAt = Number(record.expires_at);
+      if (Date.now() > expiresAt) {
+        res.status(410).json({
+          success: false,
+          error: "Reset token expired.",
+        });
+        return;
+      }
+
+      const passwordHash = bcrypt.hashSync(String(nextPassword), 10);
+      const now = Date.now();
+      const nowIso = new Date().toISOString();
+
+      const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1", [
+        record.user_id,
+      ]);
+      if (!zakiUser) {
+        res.status(404).json({
+          success: false,
+          error: "User not found.",
+        });
+        return;
+      }
+
+      let novaUserId = zakiUser.nova_user_id
+        ? Number(zakiUser.nova_user_id)
+        : null;
+      if (!novaUserId) {
+        const fetchedId = await fetchNovaUserIdByUsername(zakiUser.email);
+        if (fetchedId) {
+          novaUserId = Number(fetchedId);
+          await dbQuery(
+            `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+            [novaUserId, nowIso, zakiUser.id]
+          );
+        }
+      }
+
+      if (novaUserId) {
+        const novaResponse = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
+          method: "POST",
+          body: JSON.stringify({ password: String(nextPassword) }),
+        });
+        const novaPayload = await novaResponse.json().catch(() => ({}));
+        if (!novaResponse.ok || novaPayload?.success === false) {
+          const errorMessage =
+            novaPayload?.error ||
+            (novaResponse.status === 401
+              ? "NOVA.TYP is not in multi-user mode."
+              : "Unable to update NOVA.TYP password.");
+          res.status(400).json({
+            success: false,
+            error: errorMessage,
+          });
+          return;
+        }
+      }
+
+      await dbQuery(
+        `UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2`,
+        [now, record.id]
+      );
+      await dbQuery(
+        `UPDATE zaki_users SET password_hash = $1, updated_at = $2 WHERE id = $3`,
+        [passwordHash, nowIso, record.user_id]
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Password updated. You can sign in now.",
+      });
+    } catch (error) {
+      console.error("[ZAKI] Password reset confirm error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message || "Server error.",
+      });
+    }
+  }
+);
 
 app.post("/login", express.json({ limit: "1mb" }), async (req, res) => {
   try {

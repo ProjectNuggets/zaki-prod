@@ -21,6 +21,13 @@ function readSqliteJson(sql) {
   return JSON.parse(output);
 }
 
+function sqliteTableExists(name) {
+  const rows = readSqliteJson(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='${name}';`
+  );
+  return rows.length > 0;
+}
+
 function ensureSqliteExists() {
   if (!sqlitePath) {
     throw new Error("SQLITE_PATH is not configured.");
@@ -40,6 +47,11 @@ async function migrate() {
   const tokens = readSqliteJson(
     "SELECT id, user_id, token, expires_at, used_at, created_at FROM verification_tokens ORDER BY id;"
   );
+  const resetTokens = sqliteTableExists("password_reset_tokens")
+    ? readSqliteJson(
+        "SELECT id, user_id, token, expires_at, used_at, created_at FROM password_reset_tokens ORDER BY id;"
+      )
+    : [];
 
   const pool = getDb();
   const client = await pool.connect();
@@ -110,11 +122,37 @@ async function migrate() {
       );
     }
 
+    for (const row of resetTokens) {
+      const mappedUserId = idMap.get(Number(row.user_id));
+      if (!mappedUserId) {
+        continue;
+      }
+      await client.query(
+        `INSERT INTO password_reset_tokens
+         (id, user_id, token, expires_at, used_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (token) DO NOTHING`,
+        [
+          Number(row.id),
+          mappedUserId,
+          row.token,
+          Number(row.expires_at),
+          row.used_at === null || row.used_at === undefined
+            ? null
+            : Number(row.used_at),
+          row.created_at,
+        ]
+      );
+    }
+
     await client.query(
       `SELECT setval(pg_get_serial_sequence('zaki_users','id'), (SELECT COALESCE(MAX(id), 1) FROM zaki_users))`
     );
     await client.query(
       `SELECT setval(pg_get_serial_sequence('verification_tokens','id'), (SELECT COALESCE(MAX(id), 1) FROM verification_tokens))`
+    );
+    await client.query(
+      `SELECT setval(pg_get_serial_sequence('password_reset_tokens','id'), (SELECT COALESCE(MAX(id), 1) FROM password_reset_tokens))`
     );
 
     await client.query("COMMIT");
@@ -126,7 +164,7 @@ async function migrate() {
   }
 
   console.log(
-    `[ZAKI] Migration complete. Users: ${users.length}, Tokens: ${tokens.length}`
+    `[ZAKI] Migration complete. Users: ${users.length}, Tokens: ${tokens.length}, Reset tokens: ${resetTokens.length}`
   );
 }
 

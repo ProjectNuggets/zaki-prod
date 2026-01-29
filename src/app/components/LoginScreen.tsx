@@ -1,23 +1,40 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { LogoArabicOrange } from "./icons";
-import { requestPublicSignup, requestLogin } from "@/lib/api";
+import { requestPublicSignup, requestLogin, requestPasswordReset, confirmPasswordReset } from "@/lib/api";
 
 export function LoginScreen({
   onSuccess,
 }: {
   onSuccess: (token: string) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const initialToken =
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/reset")
+      ? new URLSearchParams(window.location.search).get("token") || ""
+      : "";
+  const [resetToken, setResetToken] = useState(initialToken);
+  const [mode, setMode] = useState<"login" | "signup" | "reset-request" | "reset-confirm">(
+    initialToken ? "reset-confirm" : "login"
+  );
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const clearResetUrl = () => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("token");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -26,6 +43,52 @@ export function LoginScreen({
     setIsLoading(true);
 
     try {
+      if (mode === "reset-request") {
+        if (!email.trim()) {
+          setError("Email is required.");
+          return;
+        }
+        const { data } = await requestPasswordReset(email.trim());
+        setNotice(
+          data?.message ||
+            "If the account exists, a reset link has been sent."
+        );
+        return;
+      }
+
+      if (mode === "reset-confirm") {
+        if (!resetToken) {
+          setError("Reset token is missing.");
+          return;
+        }
+        if (!resetPassword) {
+          setError("Password is required.");
+          return;
+        }
+        if (resetPassword !== resetConfirm) {
+          setError("Passwords do not match.");
+          return;
+        }
+
+        const { data, response } = await confirmPasswordReset({
+          token: resetToken,
+          password: resetPassword,
+        });
+        if (!response.ok || !data?.success) {
+          setError(
+            "Unable to reset your password. Please request a new link."
+          );
+          return;
+        }
+        setNotice(data?.message || "Password updated. You can sign in now.");
+        setResetPassword("");
+        setResetConfirm("");
+        setResetToken("");
+        clearResetUrl();
+        setMode("login");
+        return;
+      }
+
       if (mode === "signup") {
         if (!fullName.trim()) {
           setError("Full name is required.");
@@ -82,7 +145,9 @@ export function LoginScreen({
       setError(
         mode === "signup"
           ? "Sign up failed. Please try again."
-          : "Login failed. Please try again."
+          : mode === "reset-request" || mode === "reset-confirm"
+            ? "Password reset failed. Please try again."
+            : "Login failed. Please try again."
       );
     } finally {
       setIsLoading(false);
@@ -96,11 +161,22 @@ export function LoginScreen({
           <LogoArabicOrange />
         </div>
         <h1 className="mt-2 text-2xl font-semibold text-[#1f1a14]">
-          {mode === "signup" ? "Create your account" : "Welcome back"}
+          {mode === "signup"
+            ? "Create your account"
+            : mode === "reset-request"
+              ? "Reset your password"
+              : mode === "reset-confirm"
+                ? "Set a new password"
+                : "Welcome back"}
         </h1>
         {mode === "login" && null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          {mode === "reset-confirm" && (
+            <div className="rounded-xl border border-[#e7dbc9] bg-[#fff8f0] px-3 py-2 text-xs text-[#655543]">
+              Enter your new password below.
+            </div>
+          )}
           {mode === "signup" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
               Full name
@@ -128,44 +204,66 @@ export function LoginScreen({
               />
             </label>
           )}
-          <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
-            Email
-            <input
-              type="text"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              className="rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
-            Password
-            <div className="relative">
+          {(mode === "login" ||
+            mode === "signup" ||
+            mode === "reset-request") && (
+            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+              Email
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Your password"
-                className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 pr-12 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
-                autoComplete="current-password"
+                type="text"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                className="rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                autoComplete="email"
                 required
               />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#b09472] hover:text-[#655543]"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            </div>
-          </label>
+            </label>
+          )}
+
+          {(mode === "login" || mode === "signup") && (
+            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+              Password
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Your password"
+                  className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 pr-12 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#b09472] hover:text-[#655543]"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              </div>
+            </label>
+          )}
+
+          {mode === "login" && (
+            <button
+              type="button"
+              className="text-left text-xs font-semibold text-[#655543] hover:text-[#1f1a14]"
+              onClick={() => {
+                setError("");
+                setNotice("");
+                setMode("reset-request");
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
+
           {mode === "signup" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
               Confirm password
@@ -179,6 +277,35 @@ export function LoginScreen({
                 required
               />
             </label>
+          )}
+
+          {mode === "reset-confirm" && (
+            <>
+              <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+                New password
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={resetPassword}
+                  onChange={(event) => setResetPassword(event.target.value)}
+                  placeholder="New password"
+                  className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+                Confirm new password
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={resetConfirm}
+                  onChange={(event) => setResetConfirm(event.target.value)}
+                  placeholder="Repeat new password"
+                  className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+            </>
           )}
 
           {notice && (
@@ -196,29 +323,48 @@ export function LoginScreen({
             type="submit"
             disabled={
               isLoading ||
-              password.length === 0 ||
-              (mode === "signup" && confirmPassword.length === 0)
+              ((mode === "login" || mode === "signup") && password.length === 0) ||
+              (mode === "signup" && confirmPassword.length === 0) ||
+              (mode === "reset-confirm" &&
+                (resetPassword.length === 0 || resetConfirm.length === 0))
             }
             className="w-full rounded-xl bg-[#1f1a14] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2b241c] disabled:opacity-60"
           >
             {isLoading
               ? mode === "signup"
                 ? "Creating account..."
-                : "Signing in..."
+                : mode === "reset-request"
+                  ? "Sending link..."
+                  : mode === "reset-confirm"
+                    ? "Updating password..."
+                    : "Signing in..."
               : mode === "signup"
                 ? "Create account"
-                : "Sign in"}
+                : mode === "reset-request"
+                  ? "Send reset link"
+                  : mode === "reset-confirm"
+                    ? "Update password"
+                    : "Sign in"}
           </button>
         </form>
 
-        {mode === "login" && null}
         <button
           type="button"
           className="mt-4 text-xs font-semibold text-[#655543] hover:text-[#1f1a14]"
           onClick={() => {
             setError("");
             setNotice("");
-            setMode(mode === "signup" ? "login" : "signup");
+            if (mode === "signup") {
+              setMode("login");
+            } else if (mode === "login") {
+              setMode("signup");
+            } else {
+              setMode("login");
+              setResetPassword("");
+              setResetConfirm("");
+              setResetToken("");
+              clearResetUrl();
+            }
             if (mode === "signup") {
               setFullName("");
               setDateOfBirth("");
@@ -228,7 +374,9 @@ export function LoginScreen({
         >
           {mode === "signup"
             ? "Have an account? Sign in"
-            : "New here? Create an account"}
+            : mode === "login"
+              ? "New here? Create an account"
+              : "Back to sign in"}
         </button>
       </div>
     </div>
