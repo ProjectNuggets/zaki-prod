@@ -1290,8 +1290,11 @@ app.all("*", async (req, res) => {
       return;
     }
 
-    // TYP API expects /v1 prefix for all endpoints
-    const path = req.originalUrl.startsWith("/v1") ? req.originalUrl : `/v1${req.originalUrl}`;
+    // TYP API: most endpoints need /v1 prefix, but some (like /system/*) don't
+    const needsV1 = !req.originalUrl.startsWith("/v1") && 
+                    !req.originalUrl.startsWith("/system") &&
+                    !req.originalUrl.startsWith("/request-token");
+    const path = needsV1 ? `/v1${req.originalUrl}` : req.originalUrl;
     const targetUrl = `${apiBase}${path}`;
     const headers = buildProxyHeaders(req);
     const method = req.method.toUpperCase();
