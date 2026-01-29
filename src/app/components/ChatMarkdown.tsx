@@ -105,7 +105,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         const text = extractText(children ?? "").replace(/\n$/, "");
         if (inline) {
           return (
-            <code className="rounded-md bg-[#2d2d2d] px-1.5 py-0.5 font-mono text-[0.85em] text-[#e06c75]">
+            <code className="rounded-md bg-[#f0e6d8] px-1.5 py-0.5 font-mono text-[0.85em] text-[#c25d4a]">
               {text}
             </code>
           );
@@ -154,29 +154,21 @@ export function ChatMarkdown({ content }: { content: string }) {
         };
 
         return (
-          <div className="my-4 overflow-hidden rounded-zaki-lg border border-[#2d2d2d] bg-[#1e1e1e] shadow-lg">
-            {/* Terminal-style header with traffic lights */}
-            <div className="flex items-center justify-between bg-[#2d2d2d] px-3 py-2">
-              <div className="flex items-center gap-2">
-                {/* Traffic light dots */}
-                <div className="flex items-center gap-1.5">
-                  <span className="size-3 rounded-full bg-[#ff5f56]" />
-                  <span className="size-3 rounded-full bg-[#ffbd2e]" />
-                  <span className="size-3 rounded-full bg-[#27ca40]" />
-                </div>
-                <span className="ml-2 text-[11px] font-medium text-[#8b8b8b]">
-                  {displayLanguage}
-                </span>
-              </div>
+          <div className="my-4 overflow-hidden rounded-xl bg-[#1a1a1a]">
+            {/* Clean header */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#333]">
+              <span className="text-xs font-medium text-[#888]">
+                {displayLanguage}
+              </span>
               <button
                 type="button"
-                className="text-[11px] font-medium text-[#8b8b8b] hover:text-white transition-colors"
+                className="text-xs text-[#888] hover:text-[#ccc] transition-colors"
                 onClick={handleCopy}
               >
-                {copiedBlock === key ? "✓ Copied" : "Copy"}
+                {copiedBlock === key ? "Copied!" : "Copy"}
               </button>
             </div>
-            <pre className="overflow-x-auto px-4 py-4 text-[13px] leading-6 font-mono">
+            <pre className="overflow-x-auto px-4 py-4 text-[13px] leading-relaxed font-mono">
               <code className={codeClassName}>
                 {shouldUseChildren ? children : text}
               </code>
