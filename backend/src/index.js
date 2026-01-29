@@ -100,6 +100,60 @@ async function fetchNovaUserIdByUsername(username) {
   return match?.id ?? null;
 }
 
+/**
+ * Validate user session and get ZAKI user info
+ * Returns { valid: true, user, zakiUser, novaUserId } or { valid: false, error, status }
+ */
+async function validateSession(authHeader) {
+  if (!authHeader) {
+    return { valid: false, error: "Missing authorization token.", status: 401 };
+  }
+
+  const sessionResponse = await novaSessionRequest(
+    "/system/refresh-user",
+    authHeader,
+    { method: "GET" }
+  );
+  const sessionData = await sessionResponse.json().catch(() => ({}));
+  
+  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+    return { valid: false, error: "Invalid session.", status: 401 };
+  }
+
+  const email = normalizeEmail(sessionData.user.username);
+  const zakiUser = await dbGet(
+    "SELECT * FROM zaki_users WHERE email = $1",
+    [email]
+  );
+
+  if (!zakiUser) {
+    return { valid: false, error: "ZAKI user not found.", status: 404 };
+  }
+
+  if (!zakiUser.verified) {
+    return { valid: false, error: "Email is not verified.", status: 403 };
+  }
+
+  let novaUserId = zakiUser.nova_user_id ? Number(zakiUser.nova_user_id) : null;
+  if (!novaUserId) {
+    novaUserId = await fetchNovaUserIdByUsername(email);
+    if (novaUserId) {
+      await dbQuery(
+        `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+        [Number(novaUserId), new Date().toISOString(), zakiUser.id]
+      );
+    }
+  }
+
+  return {
+    valid: true,
+    user: sessionData.user,
+    zakiUser,
+    novaUserId,
+    email,
+  };
+}
+
 function buildProxyHeaders(req) {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
@@ -806,65 +860,162 @@ app.post("/zaki/workspaces", express.json({ limit: "1mb" }), async (req, res) =>
   }
 });
 
-// Create thread in workspace - proxy with session auth
+// Create thread in workspace
 app.post("/workspace/:slug/thread/new", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Missing authorization token." });
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      res.status(session.status).json({ error: session.error });
       return;
     }
 
     const { slug } = req.params;
-    const apiBase = getApiBase();
-    if (!apiBase) {
-      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
-      return;
-    }
-
-    // Forward to TYP with user's session token
-    const response = await fetch(`${apiBase}/v1/workspace/${slug}/thread/new`, {
+    const response = await novaAdminRequest(`/v1/workspace/${slug}/thread/new`, {
       method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
-      },
     });
 
     const data = await response.json().catch(() => ({}));
     res.status(response.status).json(data);
   } catch (error) {
+    console.error("[/workspace/:slug/thread/new] Error:", error);
     res.status(500).json({ error: error?.message || "Server error." });
   }
 });
 
-// Delete thread in workspace - proxy with session auth
+// Delete thread in workspace
 app.delete("/workspace/:slug/thread/:threadSlug", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Missing authorization token." });
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      res.status(session.status).json({ error: session.error });
       return;
     }
 
     const { slug, threadSlug } = req.params;
-    const apiBase = getApiBase();
-    if (!apiBase) {
-      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
-      return;
-    }
-
-    // Forward to TYP with user's session token
-    const response = await fetch(`${apiBase}/v1/workspace/${slug}/thread/${threadSlug}`, {
+    const response = await novaAdminRequest(`/v1/workspace/${slug}/thread/${threadSlug}`, {
       method: "DELETE",
-      headers: {
-        "Authorization": authHeader,
-      },
     });
 
     const data = await response.json().catch(() => ({}));
     res.status(response.status).json(data);
   } catch (error) {
+    console.error("[/workspace/:slug/thread/:threadSlug DELETE] Error:", error);
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
+// Update thread name
+app.post("/workspace/:slug/thread/:threadSlug/update", async (req, res) => {
+  try {
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      res.status(session.status).json({ error: session.error });
+      return;
+    }
+
+    const { slug, threadSlug } = req.params;
+    const response = await novaAdminRequest(`/v1/workspace/${slug}/thread/${threadSlug}/update`, {
+      method: "POST",
+      body: JSON.stringify(req.body || {}),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error("[/workspace/:slug/thread/:threadSlug/update] Error:", error);
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
+// Get thread chats/history
+app.get("/workspace/:slug/thread/:threadSlug/chats", async (req, res) => {
+  try {
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      res.status(session.status).json({ error: session.error });
+      return;
+    }
+
+    const { slug, threadSlug } = req.params;
+    const response = await novaAdminRequest(`/v1/workspace/${slug}/thread/${threadSlug}/chats`, {
+      method: "GET",
+    });
+
+    const data = await response.json().catch(() => ({}));
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error("[/workspace/:slug/thread/:threadSlug/chats] Error:", error);
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
+// =============================================================================
+// WORKSPACE & THREAD ROUTES - All use admin API after validating user session
+// =============================================================================
+
+// List workspaces for current user
+app.get("/workspaces", async (req, res) => {
+  try {
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      res.status(session.status).json({ error: session.error });
+      return;
+    }
+
+    // Get all workspaces using admin API
+    const workspacesResponse = await novaAdminRequest("/v1/workspaces", { method: "GET" });
+    const workspacesData = await workspacesResponse.json().catch(() => ({}));
+    
+    if (!workspacesResponse.ok) {
+      res.status(workspacesResponse.status).json(workspacesData);
+      return;
+    }
+
+    let workspaces = workspacesData.workspaces || [];
+    
+    // Filter to user's workspaces if we have their nova ID
+    if (session.novaUserId && workspaces.length > 0) {
+      const userWorkspaces = [];
+      for (const ws of workspaces) {
+        try {
+          const usersResponse = await novaAdminRequest(
+            `/v1/admin/workspaces/${ws.id}/users`,
+            { method: "GET" }
+          );
+          const usersData = await usersResponse.json().catch(() => ({}));
+          const users = usersData.users || [];
+          if (users.some(u => u.id === session.novaUserId)) {
+            userWorkspaces.push(ws);
+          }
+        } catch {
+          // Skip workspace if we can't check access
+        }
+      }
+      workspaces = userWorkspaces;
+    }
+
+    res.status(200).json({ workspaces });
+  } catch (error) {
+    console.error("[/workspaces] Error:", error);
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
+// List threads in a workspace
+app.get("/workspace/:slug/threads", async (req, res) => {
+  try {
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      res.status(session.status).json({ error: session.error });
+      return;
+    }
+
+    const { slug } = req.params;
+    const response = await novaAdminRequest(`/v1/workspace/${slug}/threads`, { method: "GET" });
+    const data = await response.json().catch(() => ({}));
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error("[/workspace/:slug/threads] Error:", error);
     res.status(500).json({ error: error?.message || "Server error." });
   }
 });
@@ -958,15 +1109,13 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
       return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
     }
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: "Missing authorization." });
+    // Validate session
+    const session = await validateSession(req.headers.authorization);
+    if (!session.valid) {
+      return res.status(session.status).json({ error: session.error });
     }
 
-    // Get user from session
-    const sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, { method: "GET" });
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    const userEmail = sessionData?.user?.username || null;
+    const userEmail = session.email;
 
     const { message } = req.body || {};
     const originalMessage = String(message || "").trim();
@@ -1003,15 +1152,15 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
       }
     }
 
-    // Forward to NOVA.TYP with enriched message
+    // Forward to NOVA.TYP with admin API key (user is already validated)
     const { slug, threadSlug } = req.params;
-    const targetUrl = `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
+    const targetUrl = `${apiBase}/v1/workspace/${slug}/thread/${threadSlug}/stream-chat`;
 
     const upstreamResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": authHeader,
+        "Authorization": `Bearer ${NOVA_TYP_API_KEY}`,
       },
       body: JSON.stringify({ message: enrichedMessage }),
     });
@@ -1362,6 +1511,9 @@ app.all("*", async (req, res) => {
     const headers = buildProxyHeaders(req);
     const method = req.method.toUpperCase();
     const needsBody = !["GET", "HEAD"].includes(method);
+
+    console.log(`[PROXY] ${method} ${req.originalUrl} -> ${targetUrl}`);
+    console.log(`[PROXY] Auth: ${req.headers.authorization ? 'present' : 'missing'}`);
 
     const upstream = await fetch(targetUrl, {
       method,
