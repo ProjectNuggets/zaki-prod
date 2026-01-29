@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
+import { SkeletonSpaceList } from "./ui/skeleton";
 
 type SpaceThread = {
   id: string;
@@ -797,7 +798,9 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto">
         <div className="text-[#a08462] text-xs font-medium mb-2 pl-1.5">Space</div>
         {spacesLoading && (
-          <div className="text-xs text-[#a3a3a3] mb-3 pl-1.5">Loading workspaces...</div>
+          <div className="mb-3">
+            <SkeletonSpaceList />
+          </div>
         )}
         {spacesError && (
           <div className="text-xs text-[#d24430] mb-3 pl-1.5">{spacesError}</div>

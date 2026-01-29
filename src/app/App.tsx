@@ -94,8 +94,14 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#fff8f0] dark:bg-[#0f0b08] flex items-center justify-center text-sm text-[#88735A] dark:text-[#c9b8a4]">
-        Loading session...
+      <div className="min-h-screen bg-[#fff8f0] dark:bg-[#0f0b08] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          {/* Spinner */}
+          <div className="size-8 border-2 border-[#88735A]/20 border-t-[#88735A] rounded-full animate-spin" />
+          <div className="text-sm text-[#88735A] dark:text-[#c9b8a4]">
+            Loading session...
+          </div>
+        </div>
       </div>
     );
   }
