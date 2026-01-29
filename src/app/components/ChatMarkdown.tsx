@@ -2,7 +2,7 @@ import { useMemo, useState, isValidElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/github.css";
+import "highlight.js/styles/atom-one-dark.css";
 
 type HastLikeNode = {
   value?: unknown;
@@ -105,7 +105,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         const text = extractText(children ?? "").replace(/\n$/, "");
         if (inline) {
           return (
-            <code className="rounded bg-zaki-sunken px-1.5 py-0.5 font-mono text-[0.85em] text-zaki-secondary">
+            <code className="rounded-md bg-[#2d2d2d] px-1.5 py-0.5 font-mono text-[0.85em] text-[#e06c75]">
               {text}
             </code>
           );
@@ -154,18 +154,29 @@ export function ChatMarkdown({ content }: { content: string }) {
         };
 
         return (
-          <div className="my-4 overflow-hidden rounded-zaki-lg border border-zaki bg-zaki-raised">
-            <div className="flex items-center justify-between bg-zaki-sunken px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-zaki-muted">
-              <span>{displayLanguage}</span>
+          <div className="my-4 overflow-hidden rounded-zaki-lg border border-[#2d2d2d] bg-[#1e1e1e] shadow-lg">
+            {/* Terminal-style header with traffic lights */}
+            <div className="flex items-center justify-between bg-[#2d2d2d] px-3 py-2">
+              <div className="flex items-center gap-2">
+                {/* Traffic light dots */}
+                <div className="flex items-center gap-1.5">
+                  <span className="size-3 rounded-full bg-[#ff5f56]" />
+                  <span className="size-3 rounded-full bg-[#ffbd2e]" />
+                  <span className="size-3 rounded-full bg-[#27ca40]" />
+                </div>
+                <span className="ml-2 text-[11px] font-medium text-[#8b8b8b]">
+                  {displayLanguage}
+                </span>
+              </div>
               <button
                 type="button"
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zaki-muted hover:text-zaki-secondary"
+                className="text-[11px] font-medium text-[#8b8b8b] hover:text-white transition-colors"
                 onClick={handleCopy}
               >
-                {copiedBlock === key ? "Copied" : "Copy"}
+                {copiedBlock === key ? "✓ Copied" : "Copy"}
               </button>
             </div>
-            <pre className="overflow-x-auto px-4 py-3 text-sm leading-6 text-zaki-primary font-mono">
+            <pre className="overflow-x-auto px-4 py-4 text-[13px] leading-6 font-mono">
               <code className={codeClassName}>
                 {shouldUseChildren ? children : text}
               </code>
