@@ -1,5 +1,5 @@
 import { MessageBubble } from "./MessageBubble";
-import { StreamingIndicator } from "./StreamingIndicator";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 import type { Message } from "@/types";
 
 interface StreamingMessageProps {
@@ -19,14 +19,20 @@ export function StreamingMessage({
     content,
   };
 
+  // Show thinking indicator when streaming but no content yet
+  const showThinking = isStreaming && !content.trim();
+
   return (
     <div className={className}>
-      <MessageBubble
-        message={message}
-        isStreaming={isStreaming}
-        showActions={false}
-      />
-      {isStreaming && <StreamingIndicator />}
+      {showThinking ? (
+        <ThinkingIndicator />
+      ) : (
+        <MessageBubble
+          message={message}
+          isStreaming={isStreaming}
+          showActions={false}
+        />
+      )}
     </div>
   );
 }

@@ -15,9 +15,10 @@ export interface MessageBubbleProps {
   message: Message;
   showActions?: boolean;
   isStreaming?: boolean;
+  animate?: boolean;
 }
 
-export function MessageBubble({ message, showActions = true, isStreaming = false }: MessageBubbleProps) {
+export function MessageBubble({ message, showActions = true, isStreaming = false, animate = true }: MessageBubbleProps) {
   // isStreaming can be used to show typing indicator or disable actions
   void isStreaming;
   const isUser = message.role === 'user';
@@ -26,7 +27,8 @@ export function MessageBubble({ message, showActions = true, isStreaming = false
     <div
       className={cn(
         "zaki-message-row flex gap-4",
-        isUser ? "justify-end items-start" : "justify-start items-start"
+        isUser ? "justify-end items-start" : "justify-start items-start",
+        animate && (isUser ? "zaki-message-enter-user" : "zaki-message-enter-assistant")
       )}
     >
       {!isUser && (

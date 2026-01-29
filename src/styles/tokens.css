@@ -484,3 +484,112 @@
 .bg-zaki-gradient {
   background: linear-gradient(to bottom right, var(--zaki-brand-gradient-from), var(--zaki-brand-gradient-to));
 }
+
+/* ============================================
+ * THINKING INDICATOR ANIMATIONS
+ * ============================================ */
+
+/* Slow ping for avatar pulse */
+@keyframes ping-slow {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Breathing pulse for avatar container */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.zaki-avatar-pulse {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Dot wave animation */
+@keyframes dot-wave {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.zaki-dot {
+  animation: dot-wave 1.2s ease-in-out infinite;
+}
+
+/* Shimmer effect for thinking text */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.zaki-thinking-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--zaki-text-muted) 0%,
+    var(--zaki-brand) 50%,
+    var(--zaki-text-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Message entry animations */
+@keyframes message-slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes message-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.zaki-message-enter-user {
+  animation: message-slide-up 0.3s ease-out;
+}
+
+.zaki-message-enter-assistant {
+  animation: message-fade-in 0.4s ease-out;
+}
