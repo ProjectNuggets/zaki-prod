@@ -1,16 +1,5 @@
 import { create } from "zustand";
-
-export interface Space {
-  id: string;
-  title: string;
-  description?: string;
-  instructions?: string;
-  pinnedFiles?: { name: string; type: string; size: number }[];
-  icon?: string;
-  color?: string;
-  fixed?: boolean;
-  threads?: { id: string; label: string }[];
-}
+import type { Space, Thread } from "@/types";
 
 interface SpacesState {
   spaces: Space[];

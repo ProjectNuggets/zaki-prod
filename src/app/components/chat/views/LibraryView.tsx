@@ -1,18 +1,6 @@
 import { Search } from "lucide-react";
 import { SkeletonMessage } from "../../ui/skeleton";
-
-interface Space {
-  id: string;
-  title: string;
-  description?: string;
-}
-
-interface LibraryResult {
-  id: string;
-  text: string;
-  score?: number;
-  metadata?: Record<string, string>;
-}
+import type { Space, LibraryResult } from "@/types";
 
 interface LibraryViewProps {
   spacesList: Space[];

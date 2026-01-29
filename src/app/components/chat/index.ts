@@ -19,5 +19,5 @@ export { ReadyState } from "./views/ReadyState";
 export { CreateSpaceModal } from "./modals/CreateSpaceModal";
 export { EditInstructionsModal } from "./modals/EditInstructionsModal";
 
-// Re-export types
-export type { Message } from "./MessageBubble";
+// Re-export types from shared types
+export type { Message, Space, Thread, LibraryResult } from "@/types";

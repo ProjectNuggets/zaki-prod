@@ -4,7 +4,6 @@ import { Share2, MoreVertical, Download } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiRequest, buildApiUrl } from "@/lib/api";
 import {
-  type Message,
   StreamingIndicator,
   LibraryView,
   SpacesView,
@@ -18,31 +17,7 @@ import {
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
-
-// Types
-interface Thread {
-  id: string;
-  label: string;
-}
-
-interface Space {
-  id: string;
-  title: string;
-  description?: string;
-  instructions?: string;
-  pinnedFiles?: { name: string; type: string; size: number }[];
-  icon?: string;
-  color?: string;
-  fixed?: boolean;
-  threads?: Thread[];
-}
-
-interface LibraryResult {
-  id: string;
-  text: string;
-  score?: number;
-  metadata?: Record<string, string>;
-}
+import type { Space, Message, LibraryResult } from "@/types";
 
 export function ChatArea() {
   const { user } = useAuthStore();

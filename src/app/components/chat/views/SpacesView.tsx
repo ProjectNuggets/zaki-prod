@@ -1,8 +1,4 @@
-interface Space {
-  id: string;
-  title: string;
-  description?: string;
-}
+import type { Space } from "@/types";
 
 interface SpacesViewProps {
   spacesList: Space[];

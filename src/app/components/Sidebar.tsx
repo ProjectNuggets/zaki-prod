@@ -2,7 +2,7 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   EditIcon, BookIcon, FolderIcon, ChevronDownIcon, CenterLogo
 } from "./icons";
-import { Moon, Settings, Globe, HelpCircle, LogOut, MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -10,25 +10,10 @@ import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { SkeletonSpaceList } from "./ui/skeleton";
+import type { Space, Thread } from "@/types";
 
-type SpaceThread = {
-  id: string;
-  label: string;
-  pinned?: boolean;
-};
-
-type Space = {
-  id: string;
-  title: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  instructions?: string;
-  pinnedFiles?: { name: string; type: string; size: number }[];
-  pinned?: boolean;
-  fixed?: boolean;
-  threads: SpaceThread[];
-};
+// Sidebar uses threads as required array
+type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 
 export function Sidebar() {
   // Get state from stores
@@ -46,7 +31,7 @@ export function Sidebar() {
   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ type: "space" | "thread"; id: string; label: string } | null>(null);
-  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [spaces, setSpaces] = useState<SidebarSpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(false);
   const [spacesError, setSpacesError] = useState("");
   const [profileEditOpen, setProfileEditOpen] = useState(false);
@@ -102,7 +87,7 @@ export function Sidebar() {
         const workspaces = data.workspaces ?? [];
         const workspaceSpaces = await Promise.all(
           workspaces.map(async (workspace, index) => {
-            let threads: SpaceThread[] = [];
+            let threads: Thread[] = [];
             try {
               const threadResponse = await apiRequest(
                 `/workspace/${workspace.slug}/threads`
@@ -433,7 +418,7 @@ export function Sidebar() {
       if (!data.workspace) {
         throw new Error("Workspace not returned.");
       }
-      const newSpace: Space = {
+      const newSpace: SidebarSpace = {
         id: data.workspace.slug,
         title: data.workspace.name,
         description: description ?? data.workspace.description ?? "Workspace",

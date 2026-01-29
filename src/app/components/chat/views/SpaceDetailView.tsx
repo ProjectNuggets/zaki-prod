@@ -2,26 +2,10 @@ import { useRef, useState } from "react";
 import { Pencil, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
 import { CenterLogo } from "../../icons";
 import { InputArea } from "../../InputArea";
-
-interface Thread {
-  id: string;
-  label: string;
-}
-
-interface SpaceDetail {
-  id: string;
-  title: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  instructions?: string;
-  pinnedFiles?: { name: string; type: string; size: number }[];
-  fixed?: boolean;
-  threads?: Thread[];
-}
+import type { Space } from "@/types";
 
 interface SpaceDetailViewProps {
-  spaceDetail: SpaceDetail;
+  spaceDetail: Space;
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isStreaming: boolean;
@@ -31,7 +15,7 @@ interface SpaceDetailViewProps {
   onGoToSpaces: () => void;
   onGoToThread: (spaceId: string, threadId: string) => void;
   onCreateThread: (spaceId: string) => void;
-  onUpdateSpace: (id: string, updates: Partial<SpaceDetail>) => void;
+  onUpdateSpace: (id: string, updates: Partial<Space>) => void;
   onDeleteThread: (threadId: string) => void;
   onEditInstructions: (instructions: string) => void;
   onUploadFiles: () => void;

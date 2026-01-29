@@ -1,17 +1,7 @@
 import { useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
 import { ChevronDownIcon, CenterLogo } from "../../icons";
-
-interface Thread {
-  id: string;
-  label: string;
-}
-
-interface Space {
-  id: string;
-  title: string;
-  threads?: Thread[];
-}
+import type { Space } from "@/types";
 
 interface ZakiHomeViewProps {
   primarySpace: Space | null;
