@@ -409,6 +409,204 @@ async function processMessage({ userId, message, autoExtract = true }) {
 }
 
 // =============================================================================
+// Conversation Summarization (LLM-based)
+// =============================================================================
+
+/**
+ * Summarize a conversation and extract key memories using LLM
+ * @param {Object} params
+ * @param {string} params.userId - User ID for storing memories
+ * @param {Array} params.messages - Array of {role, content} messages
+ * @param {string} params.threadId - Optional thread ID for metadata
+ * @param {string} params.threadTitle - Optional thread title
+ */
+async function summarizeConversation({ userId, messages, threadId, threadTitle }) {
+  const config = getConfig();
+  
+  if (!messages || messages.length < 2) {
+    return { summary: null, memories: [], skipped: "too_short" };
+  }
+
+  // Format conversation for the LLM
+  const conversationText = messages
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .join("\n\n");
+
+  // Truncate if too long (keep last ~6000 chars)
+  const maxConvoLength = 6000;
+  const truncatedConvo = conversationText.length > maxConvoLength
+    ? "...(earlier conversation truncated)...\n\n" + conversationText.slice(-maxConvoLength)
+    : conversationText;
+
+  const systemPrompt = `You analyze conversations and extract useful memories. Be concise and specific.
+
+Output JSON with this exact structure:
+{
+  "summary": "1-2 sentence summary of what was discussed/accomplished",
+  "facts": ["any new facts learned about the user (name, job, location, etc)"],
+  "preferences": ["any preferences or opinions the user expressed"],
+  "topics": ["main topics discussed"],
+  "action_items": ["any tasks, plans, or follow-ups mentioned"],
+  "mood": "user's apparent mood (positive/neutral/negative/frustrated)"
+}
+
+Rules:
+- Only include facts/preferences that are clearly stated, not implied
+- Keep each item to 1 short sentence max
+- If nothing notable, return empty arrays
+- Be specific, not generic ("prefers TypeScript" not "has coding preferences")`;
+
+  const userPrompt = `Analyze this conversation:\n\n${truncatedConvo}`;
+
+  // Try NOVA.TYP first, then Together
+  let analysis = null;
+  
+  if (config.novatypApiKey) {
+    try {
+      const response = await fetch(`${config.novatypBaseUrl}/api/v1/openai/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.novatypApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gemma-3-4b",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 800,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          // Extract JSON from response (handle markdown code blocks)
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            analysis = JSON.parse(jsonMatch[0]);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[Memory] NOVA.TYP summarization failed:", err.message);
+    }
+  }
+
+  // Fallback to Together.ai
+  if (!analysis && config.togetherApiKey) {
+    try {
+      const response = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.togetherApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 800,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            analysis = JSON.parse(jsonMatch[0]);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[Memory] Together.ai summarization failed:", err.message);
+    }
+  }
+
+  if (!analysis) {
+    return { summary: null, memories: [], error: "summarization_failed" };
+  }
+
+  // Store extracted memories
+  const storedMemories = [];
+  const timestamp = new Date().toISOString();
+  const metadata = { threadId, threadTitle, extractedAt: timestamp };
+
+  // Store facts
+  for (const fact of analysis.facts || []) {
+    if (fact && fact.trim()) {
+      try {
+        const result = await storeMemory({ 
+          userId, 
+          content: fact.trim(), 
+          type: "fact",
+          metadata,
+        });
+        if (!result.duplicate) storedMemories.push({ type: "fact", content: fact });
+      } catch (err) {
+        console.warn("[Memory] Failed to store fact:", err.message);
+      }
+    }
+  }
+
+  // Store preferences
+  for (const pref of analysis.preferences || []) {
+    if (pref && pref.trim()) {
+      try {
+        const result = await storeMemory({ 
+          userId, 
+          content: pref.trim(), 
+          type: "preference",
+          metadata,
+        });
+        if (!result.duplicate) storedMemories.push({ type: "preference", content: pref });
+      } catch (err) {
+        console.warn("[Memory] Failed to store preference:", err.message);
+      }
+    }
+  }
+
+  // Store conversation summary as episode
+  if (analysis.summary) {
+    const episodeContent = [
+      analysis.summary,
+      analysis.topics?.length ? `Topics: ${analysis.topics.join(", ")}` : null,
+      analysis.action_items?.length ? `Action items: ${analysis.action_items.join("; ")}` : null,
+    ].filter(Boolean).join(". ");
+
+    try {
+      const result = await storeMemory({
+        userId,
+        content: episodeContent,
+        type: "episode",
+        metadata: { ...metadata, mood: analysis.mood },
+      });
+      if (!result.duplicate) storedMemories.push({ type: "episode", content: episodeContent });
+    } catch (err) {
+      console.warn("[Memory] Failed to store episode:", err.message);
+    }
+  }
+
+  console.log(`[Memory] Summarized conversation for ${userId}: ${storedMemories.length} new memories`);
+
+  return {
+    summary: analysis.summary,
+    mood: analysis.mood,
+    topics: analysis.topics,
+    actionItems: analysis.action_items,
+    memories: storedMemories,
+  };
+}
+
+// =============================================================================
 // Health Check
 // =============================================================================
 
@@ -502,6 +700,20 @@ function createMemoryRoutes(app) {
     }
   });
 
+  // Summarize a conversation and extract memories
+  app.post("/api/memory/summarize", async (req, res) => {
+    try {
+      const { userId, messages, threadId, threadTitle } = req.body;
+      if (!userId || !messages) {
+        return res.status(400).json({ error: "userId and messages required" });
+      }
+      const result = await summarizeConversation({ userId, messages, threadId, threadTitle });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   console.log("[Memory] Routes registered at /api/memory/*");
 }
 
@@ -514,6 +726,7 @@ export {
   buildContext,
   extractFacts,
   processMessage,
+  summarizeConversation,
   checkHealth,
   createMemoryRoutes,
 };

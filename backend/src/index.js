@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { initDb, dbGet, dbQuery } from "./db.js";
-import { createMemoryRoutes, buildContext, processMessage } from "./memory.js";
+import { createMemoryRoutes, buildContext, processMessage, summarizeConversation } from "./memory.js";
 
 dotenv.config();
 
@@ -989,6 +989,72 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
   } catch (error) {
     console.error("[Chat] Stream error:", error);
     res.status(500).json({ error: error?.message || "Chat stream failed." });
+  }
+});
+
+// =============================================================================
+// CONVERSATION SUMMARIZATION (Memory)
+// =============================================================================
+
+/**
+ * POST /api/memory/end-session
+ * Called when user leaves a thread - triggers conversation summarization
+ */
+app.post("/api/memory/end-session", express.json({ limit: "5mb" }), async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.slice(7);
+    let novaUserId, userEmail;
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      novaUserId = payload.id || payload.userId || payload.sub;
+      userEmail = payload.email;
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    // Get email from zaki_users if not in token
+    if (!userEmail && novaUserId) {
+      const userResult = await dbQuery(
+        'SELECT email FROM zaki_users WHERE nova_user_id = $1',
+        [novaUserId]
+      );
+      if (userResult.rows.length) {
+        userEmail = userResult.rows[0].email;
+      }
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({ error: "Could not determine user" });
+    }
+
+    const { messages, threadId, threadTitle } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length < 3) {
+      // Skip summarization for very short conversations
+      return res.json({ skipped: true, reason: "conversation_too_short" });
+    }
+
+    // Run summarization in background (don't block the response)
+    summarizeConversation({
+      userId: userEmail,
+      messages,
+      threadId,
+      threadTitle,
+    }).then((result) => {
+      console.log(`[Memory] Session ended for ${userEmail}: ${result.memories?.length || 0} memories extracted`);
+    }).catch((err) => {
+      console.warn("[Memory] Summarization failed:", err.message);
+    });
+
+    res.json({ ok: true, queued: true });
+  } catch (error) {
+    console.error("[Memory] End session error:", error);
+    res.status(500).json({ error: "Failed to process session end" });
   }
 });
 

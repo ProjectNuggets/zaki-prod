@@ -462,6 +462,45 @@ export function ChatArea() {
     }
   }, [librarySlug, libraryQuery]);
 
+  // Track previous thread for summarization on switch
+  const prevThreadRef = useRef<{ id: string; workspaceSlug: string; title: string } | null>(null);
+
+  // Summarize conversation when leaving a thread
+  useEffect(() => {
+    const prevThread = prevThreadRef.current;
+    
+    // If we had a previous thread and we're switching away from it
+    if (prevThread && prevThread.id !== activeThreadId) {
+      const prevMessages = messagesByThread[prevThread.id];
+      
+      // Only summarize if there were meaningful messages (at least 2 exchanges)
+      if (prevMessages && prevMessages.length >= 4) {
+        // Fire and forget - don't block UI
+        apiRequest("/api/memory/end-session", {
+          method: "POST",
+          body: JSON.stringify({
+            messages: prevMessages.map((m) => ({ role: m.role, content: m.content })),
+            threadId: prevThread.id,
+            threadTitle: prevThread.title,
+          }),
+        }).catch((err) => {
+          console.warn("[Memory] Failed to summarize session:", err);
+        });
+      }
+    }
+
+    // Update the ref with current thread info
+    if (activeThreadId && activeWorkspaceSlug) {
+      prevThreadRef.current = {
+        id: activeThreadId,
+        workspaceSlug: activeWorkspaceSlug,
+        title: activeThread?.label || "Chat",
+      };
+    } else {
+      prevThreadRef.current = null;
+    }
+  }, [activeThreadId, activeWorkspaceSlug, activeThread?.label, messagesByThread]);
+
   // Auto-scroll effect
   useEffect(() => {
     if (scrollRef.current && autoScrollRef.current) {
