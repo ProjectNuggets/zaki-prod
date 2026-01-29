@@ -23,7 +23,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   token: getAuthToken(), // Read from localStorage on init
   user: null,
-  isLoading: false,
+  isLoading: !!getAuthToken(), // Start loading if token exists (needs validation)
   
   setToken: (token) => {
     if (token) {

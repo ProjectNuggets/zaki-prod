@@ -137,8 +137,11 @@ export function Sidebar() {
   };
 
   useEffect(() => {
-    fetchSpaces();
-  }, []);
+    // Only fetch if user is authenticated
+    if (user) {
+      fetchSpaces();
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
