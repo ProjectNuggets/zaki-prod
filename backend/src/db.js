@@ -43,6 +43,17 @@ export async function initDb() {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      token TEXT UNIQUE NOT NULL,
+      expires_at BIGINT NOT NULL,
+      used_at BIGINT,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS full_name TEXT;");
   await pool.query(
     "ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS date_of_birth TEXT;"

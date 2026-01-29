@@ -156,6 +156,46 @@ export async function requestPublicSignup({
   return { response, data };
 }
 
+export async function requestPasswordReset(email: string) {
+  const response = await backendRequest("/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+  let data: { success?: boolean; error?: string | null; message?: string | null } =
+    {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+
+  return { response, data };
+}
+
+export async function confirmPasswordReset({
+  token,
+  password,
+}: {
+  token: string;
+  password: string;
+}) {
+  const response = await backendRequest("/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+
+  let data: { success?: boolean; error?: string | null; message?: string | null } =
+    {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+
+  return { response, data };
+}
+
 export async function fetchCurrentUser() {
   const response = await apiRequest("/system/refresh-user");
   const data = (await response.json()) as {

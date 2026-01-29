@@ -16,7 +16,9 @@ cp .env.example .env
 - `NOVA_TYP_API_KEY` (admin API key from NOVA.TYP)
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
 - `ZAKI_PUBLIC_URL` (public backend URL for verification links)
-- `ZAKI_EMAIL_MODE` (`console`, `smtp`, or `non`)
+- `ZAKI_APP_URL` (public frontend URL for password reset links)
+- `ZAKI_EMAIL_MODE` (`console`, `smtp`, `resend`, or `non`)
+- `ZAKI_RESET_TTL_MINUTES` (password reset TTL in minutes)
 
 3) Install and run:
 
@@ -42,6 +44,8 @@ npm run migrate:sqlite
 - `GET /verify?token=...`
 - `POST /login` — body `{ "email": "...", "password": "..." }`
 - `POST /zaki/workspaces` — body `{ "name": "..." }` (requires Authorization header)
+- `POST /password-reset/request` — body `{ "email": "..." }`
+- `POST /password-reset/confirm` — body `{ "token": "...", "password": "..." }`
 
 ## Notes
 
@@ -49,3 +53,4 @@ npm run migrate:sqlite
 - Users are created in NOVA.TYP as `role: "default"` on first verified login.
 - If `ZAKI_EMAIL_MODE=console`, verification links are logged to stdout.
 - If `ZAKI_EMAIL_MODE=non`, users are auto-verified on signup.
+- If `ZAKI_EMAIL_MODE=resend`, set `RESEND_API_KEY` and `RESEND_FROM`.
