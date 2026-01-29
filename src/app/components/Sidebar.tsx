@@ -6,6 +6,7 @@ import { Moon, Settings, Globe, HelpCircle, LogOut, MoreHorizontal, Pin, Pencil,
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
 
 type SpaceThread = {
   id: string;
@@ -26,21 +27,14 @@ type Space = {
   threads: SpaceThread[];
 };
 
-export function Sidebar({
-  user,
-  onLogout,
-  themePreference,
-  resolvedTheme,
-  onThemeChange,
-}: {
-  user: { username?: string; role?: string } | null;
-  onLogout: () => void;
-  themePreference: "light" | "dark" | "system";
-  resolvedTheme: "light" | "dark";
-  onThemeChange: (theme: "light" | "dark" | "system") => void;
-}) {
+export function Sidebar() {
+  // Get state from stores
+  const { user, logout } = useAuthStore();
+  const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
+  const { setSpaces: setGlobalSpaces } = useSpacesStore();
+  const { goToThread, goToSpace, goHome } = useNavigationStore();
+  const setCollapsed = setSidebarCollapsed;
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -55,7 +49,7 @@ export function Sidebar({
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
-  const isDark = resolvedTheme === "dark";
+  const isDark = resolvedTheme() === "dark";
 
   const isActive = (item: string) => activeItem === item;
   const isSpaceActive = (spaceId: string) => expandedSpace === spaceId;
@@ -180,6 +174,11 @@ export function Sidebar({
     return () => document.removeEventListener("mousedown", handleProfileOutside);
   }, [profileMenuOpen]);
 
+  // Sync spaces to global store
+  useEffect(() => {
+    setGlobalSpaces(spaces);
+  }, [spaces, setGlobalSpaces]);
+
   useEffect(() => {
     window.dispatchEvent(
       new CustomEvent("zaki:spaces-data", {
@@ -266,11 +265,7 @@ export function Sidebar({
         setExpandedSpace(detail.spaceId);
       }
       setActiveItem(detail.id);
-      window.dispatchEvent(
-        new CustomEvent("zaki:select-thread", {
-          detail: { id: detail.id, spaceId: detail.spaceId ?? expandedSpace },
-        })
-      );
+      goToThread(detail.spaceId ?? expandedSpace ?? "", detail.id);
     };
 
     window.addEventListener("zaki:thread-created", handleThreadCreated);
@@ -480,11 +475,7 @@ export function Sidebar({
       );
       setExpandedSpace(spaceId);
       setActiveItem(threadId);
-      window.dispatchEvent(
-        new CustomEvent("zaki:select-thread", {
-          detail: { id: threadId, spaceId },
-        })
-      );
+      goToThread(spaceId, threadId);
     } catch (error) {
       setSpacesError("Unable to create a new chat.");
     }
@@ -595,10 +586,11 @@ export function Sidebar({
               <LogoArabicOrange />
             </button>
             <button
-              className="size-9 rounded-xl border border-transparent hover:border-[#EBEBEB] hover:bg-[#f8f2e9] transition-colors flex items-center justify-center"
+              className="size-9 rounded-xl border border-transparent hover:border-[#EBEBEB] hover:bg-[#f8f2e9] transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
               onClick={() => setCollapsed(false)}
               type="button"
               title="Expand sidebar"
+              aria-label="Expand sidebar"
             >
               <SideBarIcon />
             </button>
@@ -607,7 +599,7 @@ export function Sidebar({
           <div className="mt-6 flex flex-col items-center gap-2">
             <button
               className={cn(
-                "size-9 rounded-xl text-[#d24430] flex items-center justify-center transition-colors",
+                "size-9 rounded-xl text-[#d24430] flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
                 isActive("new-space") ? "bg-[#fa7319]/20" : "bg-[#fa7319]/15 hover:bg-[#fa7319]/20"
               )}
               onClick={() => {
@@ -617,12 +609,13 @@ export function Sidebar({
               }}
               type="button"
               title="New space"
+              aria-label="Create new space"
             >
               <AddIcon />
             </button>
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center",
+                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
                 isActive("spaces") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
               )}
               onClick={() => {
@@ -631,12 +624,13 @@ export function Sidebar({
               }}
               type="button"
               title="Spaces"
+              aria-label="View spaces"
             >
               <EditIcon />
             </button>
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center",
+                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
                 isActive("library") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
               )}
               onClick={() => {
@@ -645,17 +639,19 @@ export function Sidebar({
               }}
               type="button"
               title="Library"
+              aria-label="View library"
             >
               <BookIcon />
             </button>
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center",
+                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
                 isActive("search") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
               )}
               onClick={() => setActiveItem("search")}
               type="button"
               title="Search"
+              aria-label="Search"
             >
               <SearchIcon />
             </button>
@@ -664,7 +660,7 @@ export function Sidebar({
           <div className="mt-6 flex flex-col items-center gap-2">
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center",
+                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
                 isActive("research") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
               )}
               onClick={() => {
@@ -673,14 +669,16 @@ export function Sidebar({
               }}
               type="button"
               title="Research & Analysis"
+              aria-label="Research and analysis"
             >
               <FolderIcon />
             </button>
             <button
-              className="size-9 rounded-xl flex items-center justify-center transition-colors bg-[#faf6f0] hover:bg-[#f0e6d8]"
+              className="size-9 rounded-xl flex items-center justify-center transition-colors bg-[#faf6f0] hover:bg-[#f0e6d8] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
               onClick={() => createThreadInSpace(expandedSpace ?? spaces[0]?.id ?? null)}
               type="button"
               title="New chat"
+              aria-label="New chat"
             >
               <AddIcon color="#88735A" />
             </button>
@@ -689,12 +687,13 @@ export function Sidebar({
           <div className="mt-auto flex flex-col items-center gap-3 pt-4">
             <button
               className={cn(
-                "size-10 rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-sm transition-colors",
+                "size-10 rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-sm transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
                 isActive("profile") ? "bg-[#f0e6d8]" : "bg-[#faf6f0] hover:bg-[#f0e6d8]"
               )}
               onClick={() => setActiveItem("profile")}
               type="button"
               title="Profile"
+              aria-label="Open profile"
             >
               {userInitials}
             </button>
@@ -716,9 +715,10 @@ export function Sidebar({
           <LogoArabicOrange />
         </button>
         <button
-          className="bg-white p-1.5 rounded-lg border border-transparent hover:border-[#EBEBEB] transition-colors"
+          className="bg-white p-1.5 rounded-lg border border-transparent hover:border-[#EBEBEB] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
           onClick={() => setCollapsed(true)}
           type="button"
+          aria-label="Collapse sidebar"
         >
           <SideBarIcon />
         </button>
@@ -854,11 +854,7 @@ export function Sidebar({
                         onClick={() => {
                           setExpandedSpace(space.id);
                           setActiveItem(thread.id);
-                          window.dispatchEvent(
-                            new CustomEvent("zaki:select-thread", {
-                              detail: { id: thread.id, spaceId: space.id },
-                            })
-                          );
+                          goToThread(space.id, thread.id);
                         }}
                         type="button"
                       >
@@ -1000,11 +996,7 @@ export function Sidebar({
                         onClick={() => {
                           setExpandedSpace(space.id);
                           setActiveItem(thread.id);
-                          window.dispatchEvent(
-                            new CustomEvent("zaki:select-thread", {
-                              detail: { id: thread.id, spaceId: space.id },
-                            })
-                          );
+                          goToThread(space.id, thread.id);
                         }}
                         type="button"
                       >
@@ -1030,7 +1022,7 @@ export function Sidebar({
                       </button>
                       <button
                         type="button"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(openMenu?.id === thread.id ? null : { type: "thread", id: thread.id });
@@ -1038,6 +1030,7 @@ export function Sidebar({
                         data-menu-button
                         aria-haspopup="menu"
                         aria-expanded={openMenu?.id === thread.id}
+                        aria-label={`${thread.label} options`}
                       >
                         <MoreHorizontal className="size-4 text-[#b09472]" />
                       </button>
@@ -1162,7 +1155,7 @@ export function Sidebar({
             <button
               className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
               type="button"
-              onClick={() => onThemeChange(isDark ? "light" : "dark")}
+              onClick={() => setThemePreference(isDark ? "light" : "dark")}
             >
               <Moon className="size-4 text-[#88735A]" />
               Dark mode
@@ -1193,7 +1186,7 @@ export function Sidebar({
               type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
-                onLogout();
+                logout();
               }}
             >
               <LogOut className="size-4" />
@@ -1255,7 +1248,7 @@ export function Sidebar({
                       className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]"
                       value={themePreference}
                       onChange={(event) =>
-                        onThemeChange(event.target.value as "light" | "dark" | "system")
+                        setThemePreference(event.target.value as "light" | "dark" | "system")
                       }
                     >
                       <option value="light">Light</option>

@@ -2,12 +2,10 @@ import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { LogoArabicOrange } from "./icons";
 import { requestPublicSignup, requestLogin, requestPasswordReset, confirmPasswordReset } from "@/lib/api";
+import { useAuthStore } from "@/stores";
 
-export function LoginScreen({
-  onSuccess,
-}: {
-  onSuccess: (token: string) => void;
-}) {
+export function LoginScreen() {
+  const { setToken } = useAuthStore();
   const initialToken =
     typeof window !== "undefined" &&
     window.location.pathname.startsWith("/reset")
@@ -135,12 +133,13 @@ export function LoginScreen({
         username: email.trim() || undefined,
         password,
       });
+      
       if (!response.ok || !data?.valid || !data?.token) {
         setError("Login failed. Check your credentials and try again.");
         return;
       }
 
-      onSuccess(data.token);
+      setToken(data.token);
     } catch (err) {
       setError(
         mode === "signup"

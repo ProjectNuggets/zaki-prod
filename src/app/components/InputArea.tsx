@@ -171,7 +171,7 @@ export function InputArea({
                     />
                     <button
                       type="button"
-                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-[#efe4d6] flex items-center justify-center text-[#88735A] hover:text-[#655543]"
+                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-[#efe4d6] flex items-center justify-center text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430]"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -196,7 +196,7 @@ export function InputArea({
                     </div>
                     <button
                       type="button"
-                      className="text-[#88735A] hover:text-[#655543]"
+                      className="text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:rounded"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -214,10 +214,11 @@ export function InputArea({
            <div className="relative" ref={menuRef}>
              <button
                type="button"
-               className="size-8 bg-[#faf6f0] rounded-full flex items-center justify-center hover:bg-[#f0e6d8] transition-colors"
+               className="size-8 bg-[#faf6f0] rounded-full flex items-center justify-center hover:bg-[#f0e6d8] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
                onClick={() => setMenuOpen((open) => !open)}
                aria-haspopup="menu"
                aria-expanded={menuOpen}
+               aria-label="Add options"
              >
                 <Plus className="size-4 text-[#88735A]" />
              </button>
@@ -305,8 +306,9 @@ export function InputArea({
            />
            <button
              type="submit"
-             className="size-8 bg-[#655543] rounded-full flex items-center justify-center hover:bg-[#D24430] focus-visible:bg-[#D24430] active:bg-[#D24430] transition-colors disabled:opacity-60"
+             className="size-8 bg-[#655543] rounded-full flex items-center justify-center hover:bg-[#D24430] focus-visible:bg-[#D24430] active:bg-[#D24430] transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
              disabled={isSending}
+             aria-label="Send message"
            >
               <ArrowUp className="size-4 text-white" />
            </button>

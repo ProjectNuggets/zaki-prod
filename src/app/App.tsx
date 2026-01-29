@@ -1,63 +1,41 @@
 import "@/styles/fonts.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { LoginScreen } from "./components/LoginScreen";
-import {
-  clearAuthToken,
-  fetchCurrentUser,
-  getAuthToken,
-  setAuthToken,
-} from "@/lib/api";
-
-type AppUser = {
-  id?: number | string;
-  username?: string;
-  role?: string;
-};
-
-type ThemePreference = "light" | "dark" | "system";
-
-const getStoredTheme = (): ThemePreference => {
-  if (typeof window === "undefined") return "system";
-  const stored = window.localStorage.getItem("zaki-theme");
-  if (stored === "light" || stored === "dark" || stored === "system") {
-    return stored;
-  }
-  return "system";
-};
+import { clearAuthToken, fetchCurrentUser } from "@/lib/api";
+import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(() => getAuthToken());
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(!!token);
-  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
-    if (typeof window === "undefined") return "dark";
-    const stored = window.localStorage.getItem("zaki-theme");
-    if (!stored) return "dark";
-    return getStoredTheme();
-  });
-  const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
-    if (typeof window === "undefined") return "light";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
+  // Auth state from Zustand
+  const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
+  
+  // UI state from Zustand
+  const { themePreference, systemTheme, setSystemTheme, resolvedTheme } = useUIStore();
+  
+  // Navigation state from Zustand
+  const { initFromHash } = useNavigationStore();
 
-  const resolvedTheme = useMemo(
-    () => (themePreference === "system" ? systemTheme : themePreference),
-    [systemTheme, themePreference]
-  );
-
+  // Initialize navigation from URL hash on mount
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("zaki-theme", themePreference);
-  }, [themePreference]);
+    initFromHash();
+  }, [initFromHash]);
 
+  // Listen for hash changes (back/forward buttons)
+  useEffect(() => {
+    const handleHashChange = () => initFromHash();
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [initFromHash]);
+
+  // Sync theme to DOM
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
-    root.classList.toggle("dark", resolvedTheme === "dark");
-  }, [resolvedTheme]);
+    root.classList.toggle("dark", resolvedTheme() === "dark");
+  }, [themePreference, systemTheme, resolvedTheme]);
 
+  // Listen for system theme changes
   useEffect(() => {
     if (typeof window === "undefined") return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -65,24 +43,24 @@ export default function App() {
     handleChange();
     media.addEventListener("change", handleChange);
     return () => media.removeEventListener("change", handleChange);
-  }, []);
+  }, [setSystemTheme]);
 
+  // Fetch user on mount if token exists
   useEffect(() => {
     if (!token) {
       setUser(null);
-      setAuthLoading(false);
+      setLoading(false);
       return;
     }
 
     let isMounted = true;
-    setAuthLoading(true);
+    setLoading(true);
     fetchCurrentUser()
       .then(({ data, response }) => {
         if (!isMounted) return;
         if (!response.ok || !data?.success) {
           clearAuthToken();
-          setToken(null);
-          setUser(null);
+          logout();
           return;
         }
         setUser(data.user ?? null);
@@ -90,31 +68,19 @@ export default function App() {
       .catch(() => {
         if (!isMounted) return;
         clearAuthToken();
-        setToken(null);
-        setUser(null);
+        logout();
       })
       .finally(() => {
-        if (isMounted) setAuthLoading(false);
+        if (isMounted) setLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [token]);
-
-  const handleLogin = (newToken: string) => {
-    setAuthToken(newToken);
-    setToken(newToken);
-  };
-
-  const handleLogout = () => {
-    clearAuthToken();
-    setToken(null);
-    setUser(null);
-  };
+  }, [token, setUser, setLoading, logout]);
 
   if (!token && !authLoading) {
-    return <LoginScreen onSuccess={handleLogin} />;
+    return <LoginScreen />;
   }
 
   if (authLoading) {
@@ -127,14 +93,8 @@ export default function App() {
 
   return (
     <div className="zaki-app flex w-full h-screen overflow-hidden font-sans text-[#1f1a14] dark:text-[#efe6d9]">
-      <Sidebar
-        user={user}
-        onLogout={handleLogout}
-        themePreference={themePreference}
-        resolvedTheme={resolvedTheme}
-        onThemeChange={setThemePreference}
-      />
-      <ChatArea user={user} />
+      <Sidebar />
+      <ChatArea />
     </div>
   );
 }

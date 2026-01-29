@@ -6,29 +6,38 @@ import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { apiRequest, buildApiUrl } from "@/lib/api";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { MessageBubble, type Message, ChatHeader, EmptyState, MessageComposer } from "./chat";
+import { SkeletonMessage } from "./ui/skeleton";
+import { useNavigationStore, useAuthStore } from "@/stores";
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  attachments?: { name: string; type: string; url: string }[];
-  chatId?: number;
-}
+export function ChatArea() {
+  const { user } = useAuthStore();
+  // Navigation from Zustand store
+  const {
+    view,
+    activeThreadId,
+    activeWorkspaceSlug,
+    goHome,
+    goToSpaces,
+    goToLibrary,
+    goToSpace,
+    goToThread,
+    clearThread,
+  } = useNavigationStore();
+  
+  // Computed view states
+  const showZakiHome = view === "home";
+  const showSpacesView = view === "spaces";
+  const showLibraryView = view === "library";
+  const showSpaceDetail = view === "space-detail";
+  const showChatView = view === "chat";
 
-export function ChatArea({
-  user,
-}: {
-  user: { username?: string } | null;
-}) {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [activeWorkspaceSlug, setActiveWorkspaceSlug] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareNotice, setShareNotice] = useState("");
-  const [showSpacesView, setShowSpacesView] = useState(false);
   const [spacesList, setSpacesList] = useState<{
     id: string;
     title: string;
@@ -45,9 +54,6 @@ export function ChatArea({
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceInstructions, setSpaceInstructions] = useState("");
   const [spaceFiles, setSpaceFiles] = useState<File[]>([]);
-  const [showLibraryView, setShowLibraryView] = useState(false);
-  const [showSpaceDetail, setShowSpaceDetail] = useState(false);
-  const [showZakiHome, setShowZakiHome] = useState(false);
   const [spaceDetail, setSpaceDetail] = useState<{
     id: string;
     title: string;
@@ -447,17 +453,15 @@ export function ChatArea({
             detail: { id: threadId, label, spaceId: activeWorkspaceSlug },
           })
         );
-        setActiveThreadId(threadId);
+        // Navigation is handled by the thread creation event
       } catch (error) {
         setChatError("Unable to start a new chat.");
         return;
       }
     }
 
-    setShowZakiHome(false);
-    setShowSpaceDetail(false);
-    setShowSpacesView(false);
-    setShowLibraryView(false);
+    // View is now handled by navigation hook - ensure we're in chat view
+    if (!activeThreadId) return;
 
     const attachmentsForMessage = files
       .filter((file) => file.type.startsWith("image/"))
@@ -526,29 +530,14 @@ export function ChatArea({
 
   useEffect(() => {
     window.dispatchEvent(new Event("zaki:request-spaces"));
-    const handleSelectThread = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string | null; spaceId?: string }>).detail;
-      setActiveThreadId(detail?.id ?? null);
-      if (detail?.spaceId) {
-        setActiveWorkspaceSlug(detail.spaceId);
-      }
-      setChatError("");
-      setShowSpaceDetail(false);
-      setShowSpacesView(false);
-      setShowLibraryView(false);
-      setShowZakiHome(false);
-    };
     const handleClearThread = () => {
-      setActiveThreadId(null);
+      clearThread();
       setAttachments([]);
       setChatError("");
     };
     const handleViewSpaces = () => {
-      setShowSpacesView(true);
-      setActiveThreadId(null);
+      goToSpaces();
       setAttachments([]);
-      setShowLibraryView(false);
-      setShowZakiHome(false);
       setChatError("");
     };
     const handleSpacesData = (event: Event) => {
@@ -566,10 +555,8 @@ export function ChatArea({
         }[];
       }>).detail;
       setSpacesList(detail?.spaces ?? []);
-      if (!activeWorkspaceSlug && detail?.spaces?.length) {
-        setActiveWorkspaceSlug(detail.spaces[0].id);
-      }
-      if (spaceDetail) {
+      // Update spaceDetail if we have a match
+      if (spaceDetail && activeWorkspaceSlug) {
         const updated = detail?.spaces?.find((space) => space.id === spaceDetail.id);
         if (updated) {
           setSpaceDetail(updated);
@@ -580,11 +567,7 @@ export function ChatArea({
       setCreateSpaceOpen(true);
     };
     const handleViewLibrary = () => {
-      setShowLibraryView(true);
-      setShowSpacesView(false);
-      setShowSpaceDetail(false);
-      setShowZakiHome(false);
-      setActiveThreadId(null);
+      goToLibrary();
       setAttachments([]);
       setChatError("");
     };
@@ -593,26 +576,16 @@ export function ChatArea({
       const selected = spacesList.find((space) => space.id === detail?.id) ?? null;
       setSpaceDetail(selected);
       if (detail?.id) {
-        setActiveWorkspaceSlug(detail.id);
+        goToSpace(detail.id);
       }
-      setShowZakiHome(false);
-      setShowSpaceDetail(true);
-      setShowSpacesView(false);
-      setShowLibraryView(false);
-      setActiveThreadId(null);
       setAttachments([]);
       setChatError("");
     };
     const handleViewZakiHome = () => {
-      setShowZakiHome(true);
-      setShowSpaceDetail(false);
-      setShowSpacesView(false);
-      setShowLibraryView(false);
-      setActiveThreadId(null);
+      goHome();
       setAttachments([]);
       setChatError("");
     };
-    window.addEventListener("zaki:select-thread", handleSelectThread);
     window.addEventListener("zaki:clear-thread", handleClearThread);
     window.addEventListener("zaki:view-spaces", handleViewSpaces);
     window.addEventListener("zaki:spaces-data", handleSpacesData);
@@ -621,7 +594,6 @@ export function ChatArea({
     window.addEventListener("zaki:view-space", handleViewSpace);
     window.addEventListener("zaki:view-zaki-home", handleViewZakiHome);
     return () => {
-      window.removeEventListener("zaki:select-thread", handleSelectThread);
       window.removeEventListener("zaki:clear-thread", handleClearThread);
       window.removeEventListener("zaki:view-spaces", handleViewSpaces);
       window.removeEventListener("zaki:spaces-data", handleSpacesData);
@@ -864,18 +836,20 @@ export function ChatArea({
             <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
               <button
                 type="button"
-                className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-[#ebebeb] bg-white/80 px-3 py-1.5 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-[#ebebeb] bg-white/80 px-3 py-1.5 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
                 onClick={handleShare}
+                aria-label="Share conversation"
               >
                 <Share2 className="size-4 text-[#88735A]" />
                 Share
               </button>
               <button
                 type="button"
-                className="size-8 rounded-full border border-[#ebebeb] bg-white/80 flex items-center justify-center text-[#88735A] hover:bg-[#f8f2e9] transition-colors"
+                className="size-8 rounded-full border border-[#ebebeb] bg-white/80 flex items-center justify-center text-[#88735A] hover:bg-[#f8f2e9] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
                 onClick={() => setMenuOpen((open) => !open)}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
+                aria-label="More options"
               >
                 <MoreVertical className="size-4" />
               </button>
@@ -886,9 +860,10 @@ export function ChatArea({
                 >
                   <button
                     type="button"
-                    className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                    className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
                     role="menuitem"
                     onClick={handleExport}
+                    aria-label="Export conversation as JSON"
                   >
                     <Download className="size-4 text-[#88735A]" />
                     Export JSON
@@ -971,10 +946,16 @@ export function ChatArea({
                   <div className="mt-3 text-sm text-[#d24430]">{libraryError}</div>
                 )}
                 <div className="mt-4 flex flex-col gap-3">
-                  {libraryResults.length === 0 && !libraryLoading && (
+                  {libraryLoading && (
+                    <div className="flex flex-col gap-3">
+                      <SkeletonMessage />
+                      <SkeletonMessage />
+                    </div>
+                  )}
+                  {!libraryLoading && libraryResults.length === 0 && (
                     <div className="text-sm text-[#a3a3a3]">No results yet. Choose a workspace and search.</div>
                   )}
-                  {libraryResults.map((result) => (
+                  {!libraryLoading && libraryResults.map((result) => (
                     <div key={result.id} className="rounded-2xl border border-[#efe4d6] bg-[#fffdfa] p-4">
                       <div className="text-xs text-[#88735A]">Score: {result.score?.toFixed(2) ?? "N/A"}</div>
                       <div className="text-sm text-[#1f1a14] mt-2 whitespace-pre-line">{result.text}</div>
@@ -997,8 +978,9 @@ export function ChatArea({
               </div>
               <button
                 type="button"
-                className="ml-auto rounded-full bg-[#655543] text-white text-sm px-4 py-2 hover:bg-[#D24430] active:scale-[0.98] transition-[transform,background-color]"
+                className="ml-auto rounded-full bg-[#655543] text-white text-sm px-4 py-2 hover:bg-[#D24430] active:scale-[0.98] transition-[transform,background-color] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
                 onClick={() => setCreateSpaceOpen(true)}
+                aria-label="Create new space"
               >
                 Create new space
               </button>
@@ -1008,7 +990,7 @@ export function ChatArea({
               <div className="flex-1 rounded-full border border-[#efe4d6] bg-white px-4 py-2 text-sm text-[#b09472]">
                 Search spaces...
               </div>
-              <button className="text-sm text-[#88735A]">Sort by recent</button>
+              <button className="text-sm text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2 rounded px-2 py-1" aria-label="Sort spaces by recent">Sort by recent</button>
             </div>
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
@@ -1131,11 +1113,7 @@ export function ChatArea({
                         className="flex-1 text-left font-medium"
                         onClick={() => {
                           if (!primarySpace) return;
-                          window.dispatchEvent(
-                            new CustomEvent("zaki:select-thread", {
-                              detail: { id: thread.id, spaceId: primarySpace.id },
-                            })
-                          );
+                          goToThread(primarySpace.id, thread.id);
                         }}
                       >
                         {thread.label}
@@ -1176,11 +1154,9 @@ export function ChatArea({
           <div className="px-10 py-8">
             <button
               type="button"
-              className="text-xs text-[#88735A] hover:text-[#655543] mb-4"
-              onClick={() => {
-                setShowSpacesView(true);
-                setShowSpaceDetail(false);
-              }}
+              className="text-xs text-[#88735A] hover:text-[#655543] mb-4 focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2 rounded px-2 py-1"
+              onClick={() => goToSpaces()}
+              aria-label="Back to all spaces"
             >
               ← All spaces
             </button>
@@ -1317,11 +1293,12 @@ export function ChatArea({
                   {!spaceDetail.fixed && (
                     <button
                       type="button"
-                      className="text-[#88735A] hover:text-[#655543]"
+                      className="text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2 rounded p-1"
                       onClick={() => {
                         setEditInstructionsValue(spaceDetail.instructions || "");
                         setEditInstructionsOpen(true);
                       }}
+                      aria-label="Edit instructions"
                     >
                       <Pencil className="size-3.5" />
                     </button>
@@ -1345,12 +1322,7 @@ export function ChatArea({
                       className="font-medium flex-1 text-left"
                         onClick={() => {
                           if (!spaceDetail) return;
-                          window.dispatchEvent(
-                            new CustomEvent("zaki:select-thread", {
-                              detail: { id: thread.id, spaceId: spaceDetail.id },
-                            })
-                          );
-                          setShowSpaceDetail(false);
+                          goToThread(spaceDetail.id, thread.id);
                         }}
                       role="button"
                     >
@@ -1388,6 +1360,12 @@ export function ChatArea({
               <div className="text-[#a3a3a3] text-base">Ready when you are</div>
             </div>
           </div>
+        ) : isHistoryLoading ? (
+          <div className="zaki-chat-thread max-w-3xl mx-auto pt-16 pb-6 px-4 flex flex-col gap-6">
+            <SkeletonMessage isUser={false} />
+            <SkeletonMessage isUser={true} />
+            <SkeletonMessage isUser={false} />
+          </div>
         ) : (
           <div
             className={cn(
@@ -1396,110 +1374,9 @@ export function ChatArea({
             )}
           >
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn(
-                  "zaki-message-row flex gap-4",
-                  msg.role === "user" ? "justify-end items-start" : "justify-start items-start"
-                )}
-              >
-                {msg.role === 'assistant' && (
-                  <div className="size-8 shrink-0 flex items-start justify-center pt-[6px]">
-                     <div className="scale-75"><CenterLogo /></div>
-                  </div>
-                )}
-
-                <div
-                  className={cn(
-                    "zaki-message-stack max-w-[80%] flex flex-col gap-2",
-                    msg.role === "user" ? "items-end" : "items-start"
-                  )}
-                >
-                  {msg.attachments && msg.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {msg.attachments.map((attachment) => (
-                        <div
-                          key={attachment.url}
-                          className="size-[88px] overflow-hidden rounded-2xl border border-[#efe4d6] bg-[#faf6f0]"
-                        >
-                          <img
-                            src={attachment.url}
-                            alt={attachment.name}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {msg.content && (
-                    <div
-                      className={cn(
-                        "zaki-message-bubble rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                        msg.role === "user"
-                          ? "zaki-user-bubble bg-[#EADBC8] text-[#1f1a14]"
-                          : "zaki-assistant-bubble bg-transparent text-[#1f1a14]"
-                      )}
-                    >
-                      {msg.role === "assistant" ? (
-                        <ChatMarkdown content={msg.content} />
-                      ) : (
-                        msg.content
-                      )}
-                    </div>
-                  )}
-                  {msg.role === 'assistant' && (
-                    <div className="group mt-1 flex items-center gap-3 text-[#a3a3a3]">
-                      <button
-                        type="button"
-                        className="hover:text-[#655543] transition-colors"
-                        title="Copy"
-                      >
-                        <Copy className="size-3.5" />
-                      </button>
-                      <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          className="hover:text-[#655543] transition-colors"
-                          title="Regenerate response"
-                        >
-                          <RefreshCw className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          className="hover:text-[#655543] transition-colors"
-                          title="Good response"
-                        >
-                          <ThumbsUp className="size-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {msg.role === 'user' && (
-                  <div className="size-8 shrink-0" aria-hidden="true" />
-                )}
-              </div>
+              <MessageBubble key={msg.id} message={msg} />
             ))}
-            {isStreaming && (
-              <div className="flex gap-4 items-start">
-                <div className="size-8 shrink-0 flex items-start justify-center pt-[6px]">
-                  <div className="scale-75">
-                    <CenterLogo />
-                  </div>
-                </div>
-                <div className="rounded-2xl px-4 py-3 text-sm bg-transparent text-[#1f1a14]">
-                  <div className="flex items-center gap-2 text-[#88735A]">
-                    <span>Thinking</span>
-                    <span className="flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce [animation-delay:-0.2s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce [animation-delay:-0.1s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce" />
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
+            {isStreaming && <StreamingIndicator />}
           </div>
         )}
       </div>
