@@ -1290,7 +1290,9 @@ app.all("*", async (req, res) => {
       return;
     }
 
-    const targetUrl = `${apiBase}${req.originalUrl}`;
+    // TYP API expects /v1 prefix for all endpoints
+    const path = req.originalUrl.startsWith("/v1") ? req.originalUrl : `/v1${req.originalUrl}`;
+    const targetUrl = `${apiBase}${path}`;
     const headers = buildProxyHeaders(req);
     const method = req.method.toUpperCase();
     const needsBody = !["GET", "HEAD"].includes(method);
