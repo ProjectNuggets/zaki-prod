@@ -1,32 +1,41 @@
 import "@/styles/fonts.css";
 import { useEffect } from "react";
+import { Outlet, useLocation, useParams, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
-import { ChatArea } from "./components/ChatArea";
 import { LoginScreen } from "./components/LoginScreen";
 import { clearAuthToken, fetchCurrentUser } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 
 export default function App() {
+  const location = useLocation();
+  const params = useParams();
+  
   // Auth state from Zustand
   const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
   
   // UI state from Zustand
   const { themePreference, systemTheme, setSystemTheme, resolvedTheme } = useUIStore();
-  
-  // Navigation state from Zustand
-  const { initFromHash } = useNavigationStore();
 
-  // Initialize navigation from URL hash on mount
+  // Sync navigation store with React Router location (without triggering re-renders)
   useEffect(() => {
-    initFromHash();
-  }, [initFromHash]);
-
-  // Listen for hash changes (back/forward buttons)
-  useEffect(() => {
-    const handleHashChange = () => initFromHash();
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, [initFromHash]);
+    const path = location.pathname;
+    const { spaceId, threadId } = params;
+    
+    // Directly update the store state based on URL
+    const store = useNavigationStore.getState();
+    
+    if (path === '/spaces' && !spaceId) {
+      store.goToSpaces();
+    } else if (path === '/library') {
+      store.goToLibrary();
+    } else if (spaceId && threadId) {
+      store.goToThread(spaceId as string, threadId as string);
+    } else if (spaceId) {
+      store.goToSpace(spaceId as string);
+    } else {
+      store.goHome();
+    }
+  }, [location.pathname, params]);
 
   // Sync theme to DOM
   useEffect(() => {
@@ -94,7 +103,7 @@ export default function App() {
   return (
     <div className="zaki-app flex w-full h-screen overflow-hidden font-sans text-[#1f1a14] dark:text-[#efe6d9]">
       <Sidebar />
-      <ChatArea />
+      <Outlet />
     </div>
   );
 }

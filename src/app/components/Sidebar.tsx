@@ -6,7 +6,8 @@ import { Moon, Settings, Globe, HelpCircle, LogOut, MoreHorizontal, Pin, Pencil,
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
-import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
+import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
+import { useNavigation } from "@/hooks/useNavigation";
 
 type SpaceThread = {
   id: string;
@@ -32,7 +33,7 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
-  const { goToThread, goToSpace, goHome } = useNavigationStore();
+  const { goToThread, goToSpace, goHome } = useNavigation();
   const setCollapsed = setSidebarCollapsed;
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState("new-space");

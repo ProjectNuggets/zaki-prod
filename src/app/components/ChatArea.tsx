@@ -15,8 +15,8 @@ export function ChatArea() {
   // Navigation from Zustand store
   const {
     view,
-    activeThreadId,
-    activeWorkspaceSlug,
+    threadId: activeThreadId,
+    spaceId: activeWorkspaceSlug,
     goHome,
     goToSpaces,
     goToLibrary,
