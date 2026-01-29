@@ -29,9 +29,15 @@ type Space = {
 export function Sidebar({
   user,
   onLogout,
+  themePreference,
+  resolvedTheme,
+  onThemeChange,
 }: {
   user: { username?: string; role?: string } | null;
   onLogout: () => void;
+  themePreference: "light" | "dark" | "system";
+  resolvedTheme: "light" | "dark";
+  onThemeChange: (theme: "light" | "dark" | "system") => void;
 }) {
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -46,6 +52,10 @@ export function Sidebar({
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(false);
   const [spacesError, setSpacesError] = useState("");
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const isDark = resolvedTheme === "dark";
 
   const isActive = (item: string) => activeItem === item;
   const isSpaceActive = (spaceId: string) => expandedSpace === spaceId;
@@ -58,7 +68,13 @@ export function Sidebar({
     palette: Palette,
     file: FileText,
   };
-  const userName = user?.username?.trim() || "User";
+  useEffect(() => {
+    if (!displayName) {
+      setDisplayName(user?.username?.trim() || "User");
+    }
+  }, [user?.username, displayName]);
+
+  const userName = displayName.trim() || "User";
   const userInitials = useMemo(() => {
     const parts = userName.split(/[\s.@_-]+/).filter(Boolean);
     const initials =
@@ -559,7 +575,7 @@ export function Sidebar({
   return (
     <div
       className={cn(
-        "h-full flex flex-col bg-white border-r border-[#EBEBEB] shrink-0 transition-[width,padding] duration-300",
+        "zaki-sidebar h-full flex flex-col bg-white shrink-0 transition-[width,padding] duration-300",
         collapsed ? "w-[72px] py-4 px-2" : "w-[272px] py-5 px-3.5"
       )}
     >
@@ -909,7 +925,7 @@ export function Sidebar({
                 {!space.fixed && (
                   <button
                     type="button"
-                    className="size-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition"
+                    className="size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition"
                     onClick={(event) => {
                       event.stopPropagation();
                       setOpenMenu(openMenu?.id === space.id ? null : { type: "space", id: space.id });
@@ -1014,7 +1030,7 @@ export function Sidebar({
                       </button>
                       <button
                         type="button"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 size-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition"
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(openMenu?.id === thread.id ? null : { type: "thread", id: thread.id });
@@ -1081,41 +1097,34 @@ export function Sidebar({
       <div className="mt-4 pt-3 border-t border-[#EBEBEB] relative">
         <div
           className={cn(
-            "flex items-center gap-3 p-1.5 rounded-lg cursor-pointer transition-colors",
-            isActive("profile") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+            "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-[#f8f2e9]"
           )}
-          onClick={() => setActiveItem("profile")}
+          onClick={() => {
+            setActiveItem("profile");
+            setProfileMenuOpen((open) => !open);
+          }}
           role="button"
           tabIndex={0}
+          data-profile-button
         >
-          <div className="size-10 bg-[#faf6f0] rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-base">
-            {userInitials}
+          <div className="size-10 bg-[#faf6f0] rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-base overflow-hidden">
+            {profileImageUrl ? (
+              <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
+            ) : (
+              userInitials
+            )}
           </div>
           <div className="flex-1 min-w-0">
-             <div className="flex items-center gap-1">
-                <span className="text-[#1f1a14] text-sm font-medium truncate">{userName}</span>
-                <span className={cn(
-                  "text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
-                  planLabel === "PRO" ? "bg-[#c2f5da] text-[#0c291d]" : "bg-[#efefef] text-[#655543]"
-                )}>
-                  {planLabel}
-                </span>
-             </div>
-             <div className="text-[#b09472] text-xs truncate">{userName}</div>
+            <div className="text-[#1f1a14] text-sm font-medium truncate">{userName}</div>
+            <div
+              className={cn(
+                "text-xs font-semibold uppercase tracking-wider",
+                planLabel === "PRO" ? "text-[#0c291d]" : "text-[#219171]"
+              )}
+            >
+              {planLabel === "PRO" ? "Plus" : "Free"}
+            </div>
           </div>
-          <button
-            className="bg-white p-1 rounded-md border border-transparent hover:border-[#EBEBEB]"
-            onClick={(event) => {
-              event.stopPropagation();
-              setProfileMenuOpen((open) => !open);
-            }}
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={profileMenuOpen}
-            data-profile-button
-          >
-             <ChevronDownIcon color="#B09472" />
-          </button>
         </div>
         {profileMenuOpen && (
           <div
@@ -1123,26 +1132,41 @@ export function Sidebar({
             role="menu"
             data-profile-menu
           >
-            <div className="flex items-center gap-2 px-2.5 py-2">
-              <div className="size-7 rounded-full bg-[#faf6f0] flex items-center justify-center text-xs font-medium text-[#1f1a14]">
-                {userInitials}
+            <button
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-[#f8f2e9] transition-colors"
+              type="button"
+              onClick={() => {
+                setProfileMenuOpen(false);
+                setProfileEditOpen(true);
+              }}
+            >
+              <div className="size-7 rounded-full bg-[#faf6f0] flex items-center justify-center text-xs font-medium text-[#1f1a14] overflow-hidden">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
+                ) : (
+                  userInitials
+                )}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 text-left">
                 <div className="text-sm text-[#1f1a14] font-medium truncate">{userName}</div>
-                <div className="text-xs text-[#a3a3a3] truncate">{userName}</div>
+                <div className="text-xs text-[#a3a3a3] truncate">Manage profile</div>
               </div>
               <span className={cn(
                 "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
-                planLabel === "PRO" ? "bg-[#c2f5da] text-[#0c291d]" : "bg-[#efefef] text-[#655543]"
+                planLabel === "PRO" ? "bg-[#c2f5da] text-[#0c291d]" : "bg-[#efefef] text-[#219171]"
               )}>
                 {planLabel}
               </span>
-            </div>
+            </button>
             <div className="h-px bg-[#f1f1f1] my-1" />
-            <button className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors" type="button">
+            <button
+              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+              type="button"
+              onClick={() => onThemeChange(isDark ? "light" : "dark")}
+            >
               <Moon className="size-4 text-[#88735A]" />
               Dark mode
-              <span className="ml-auto text-[#a3a3a3] text-xs">Off</span>
+              <span className="ml-auto text-[#a3a3a3] text-xs">{isDark ? "On" : "Off"}</span>
             </button>
             <button
               className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
@@ -1227,10 +1251,16 @@ export function Sidebar({
                 <div className="mt-3 grid gap-3">
                   <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
                     Theme
-                    <select className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]">
-                      <option>Light</option>
-                      <option>System</option>
-                      <option>Dark</option>
+                    <select
+                      className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]"
+                      value={themePreference}
+                      onChange={(event) =>
+                        onThemeChange(event.target.value as "light" | "dark" | "system")
+                      }
+                    >
+                      <option value="light">Light</option>
+                      <option value="system">System</option>
+                      <option value="dark">Dark</option>
                     </select>
                   </label>
                   <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
@@ -1283,6 +1313,84 @@ export function Sidebar({
                 type="button"
                 className="rounded-full px-4 py-2 text-sm text-white bg-[#655543] hover:bg-[#504335] transition-colors"
                 onClick={() => setSettingsOpen(false)}
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {profileEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+          <div
+            className="absolute inset-0"
+            onClick={() => setProfileEditOpen(false)}
+            role="button"
+            aria-label="Close profile editor"
+          />
+          <div className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-lg font-semibold text-[#1f1a14]">Profile</div>
+                <div className="text-xs text-[#a3a3a3]">Update your display name and photo</div>
+              </div>
+              <button
+                type="button"
+                className="size-8 rounded-full bg-[#faf6f0] text-[#655543] hover:bg-[#f0e6d8] transition-colors"
+                onClick={() => setProfileEditOpen(false)}
+                aria-label="Close profile editor"
+              >
+                <span className="block text-lg leading-none">x</span>
+              </button>
+            </div>
+            <div className="mt-5 flex items-center gap-4">
+              <div className="size-16 rounded-full bg-[#faf6f0] flex items-center justify-center text-[#1f1a14] font-semibold text-lg overflow-hidden">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
+                ) : (
+                  userInitials
+                )}
+              </div>
+              <label className="text-sm text-[#655543] cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const nextUrl = URL.createObjectURL(file);
+                    setProfileImageUrl(nextUrl);
+                    event.target.value = "";
+                  }}
+                />
+                <span className="rounded-full border border-[#e7dbc9] px-3 py-2 text-xs text-[#655543] hover:bg-[#f8f2e9] transition-colors">
+                  Upload photo
+                </span>
+              </label>
+            </div>
+            <div className="mt-5">
+              <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+                Display name
+                <input
+                  className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-full px-4 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+                onClick={() => setProfileEditOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-4 py-2 text-sm text-white bg-[#655543] hover:bg-[#504335] transition-colors"
+                onClick={() => setProfileEditOpen(false)}
               >
                 Save changes
               </button>

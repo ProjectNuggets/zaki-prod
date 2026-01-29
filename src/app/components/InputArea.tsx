@@ -1,16 +1,21 @@
 import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function InputArea({
   onSend,
   attachments,
   setAttachments,
   isSending = false,
+  webSearchEnabled = false,
+  onToggleWebSearch,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isSending?: boolean;
+  webSearchEnabled?: boolean;
+  onToggleWebSearch?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -81,25 +86,73 @@ export function InputArea({
     }
   }, [inputValue]);
 
+  const upgradeModal =
+    upgradeOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+            <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
+            <div className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+              <div className="text-lg font-semibold text-[#1f1a14]">Upgrades are brewing</div>
+              <div className="mt-2 text-sm text-[#655543]">
+                We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized
+                plans as we speak — with prices that won’t scare your coffee.
+              </div>
+              <div className="mt-5 flex items-center justify-end">
+                <button
+                  type="button"
+                  className="rounded-full px-4 py-2 text-sm text-white bg-[#1f1a14] hover:bg-[#2b241c] transition-colors"
+                  onClick={() => setUpgradeOpen(false)}
+                >
+                  Sounds good
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
+    <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
       {/* Input Box */}
       <form 
         onSubmit={handleSubmit}
-        className="bg-[#fffdfa] rounded-[22px] shadow-sm border border-[#EBEBEB] overflow-visible flex flex-col min-h-[100px] relative z-10"
+        className="zaki-input-form bg-[#fffdfa] rounded-[22px] shadow-sm border border-[#EBEBEB] overflow-visible flex flex-col min-h-[88px] relative z-10"
       >
-        <div className="bg-[#f1e5d2] text-[#88735A] text-[11px] px-3 py-2 flex items-center gap-2 leading-[16px]">
-          <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-[#88735A]">
-            <Zap className="size-3" />
-          </span>
-          Access premium models & features
-          <button
-            type="button"
-            className="text-[#219171] font-medium hover:underline text-[11px] leading-[16px]"
-            onClick={() => setUpgradeOpen(true)}
-          >
-            Upgrade
-          </button>
+        <div className="bg-[#f1e5d2] text-[#88735A] text-[11px] px-3 py-2 grid grid-cols-[1fr_auto_1fr] items-center leading-[16px]">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[#88735A]">Web search</span>
+            <button
+              type="button"
+              onClick={onToggleWebSearch}
+              className={`h-5 w-9 rounded-full border transition-colors ${
+                webSearchEnabled
+                  ? "bg-[#D24430] border-[#D24430]"
+                  : "bg-white border-[#e5d6c5]"
+              }`}
+              aria-pressed={webSearchEnabled}
+            >
+              <span
+                className={`block h-4 w-4 rounded-full shadow transition-transform ${
+                  webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-[#b09472]"
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 justify-center">
+            <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-[#88735A]">
+              <Zap className="size-3" />
+            </span>
+            <span>Access premium models & features</span>
+            <button
+              type="button"
+              className="text-[#219171] font-medium hover:underline text-[11px] leading-[16px]"
+              onClick={() => setUpgradeOpen(true)}
+            >
+              Upgrade
+            </button>
+          </div>
+          <div />
         </div>
         <div className="p-3 flex flex-col gap-2 relative">
         {attachments.length > 0 && (
@@ -157,31 +210,7 @@ export function InputArea({
             </div>
           </div>
         )}
-        <textarea 
-          id="chat-input"
-          ref={textareaRef}
-          rows={1}
-          className="w-full bg-transparent outline-none text-[#1f1a14] placeholder-[#b09472] text-base px-2 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
-          placeholder="How can I help you today?"
-          autoComplete="off"
-          value={inputValue}
-          disabled={isSending}
-          onChange={(e) => {
-            setInputValue(e.target.value);
-            if (textareaRef.current) {
-              textareaRef.current.style.height = "auto";
-              textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              submitMessage();
-            }
-          }}
-        />
-        
-        <div className="flex justify-between items-center px-1">
+        <div className="zaki-input-row flex items-center gap-2 px-1">
            <div className="relative" ref={menuRef}>
              <button
                type="button"
@@ -248,7 +277,32 @@ export function InputArea({
                </div>
              )}
            </div>
-           
+           {webSearchEnabled && (
+             <span className="zaki-agent-prefix text-[#D24430] text-sm font-medium">@agent</span>
+           )}
+           <textarea 
+             id="chat-input"
+             ref={textareaRef}
+             rows={1}
+             className="zaki-input-field flex-1 bg-transparent outline-none text-[#1f1a14] placeholder-[#b09472] text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
+             placeholder="Ask anything"
+             autoComplete="off"
+             value={inputValue}
+             disabled={isSending}
+             onChange={(e) => {
+               setInputValue(e.target.value);
+               if (textareaRef.current) {
+                 textareaRef.current.style.height = "auto";
+                 textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+               }
+             }}
+             onKeyDown={(event) => {
+               if (event.key === "Enter" && !event.shiftKey) {
+                 event.preventDefault();
+                 submitMessage();
+               }
+             }}
+           />
            <button
              type="submit"
              className="size-8 bg-[#655543] rounded-full flex items-center justify-center hover:bg-[#D24430] focus-visible:bg-[#D24430] active:bg-[#D24430] transition-colors disabled:opacity-60"
@@ -272,27 +326,7 @@ export function InputArea({
         />
         </div>
       </form>
-      {upgradeOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-          <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
-          <div className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-            <div className="text-lg font-semibold text-[#1f1a14]">Upgrades are brewing</div>
-            <div className="mt-2 text-sm text-[#655543]">
-              We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized
-              plans as we speak — with prices that won’t scare your coffee.
-            </div>
-            <div className="mt-5 flex items-center justify-end">
-              <button
-                type="button"
-                className="rounded-full px-4 py-2 text-sm text-white bg-[#1f1a14] hover:bg-[#2b241c] transition-colors"
-                onClick={() => setUpgradeOpen(false)}
-              >
-                Sounds good
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {upgradeModal}
       
       <div className="text-center mt-2">
          <p className="text-[#a3a3a3] text-xs">Zaki can make mistakes. Consider checking important information.</p>

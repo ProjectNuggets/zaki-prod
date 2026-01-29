@@ -3,7 +3,8 @@ import { InputArea } from "./InputArea";
 import { ChevronDownIcon, CenterLogo } from "./icons";
 import { Copy, RefreshCw, ThumbsUp, MoreVertical, Share2, Download, File as FileIcon, X, Search, Pencil, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { apiRequest } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { apiRequest, buildApiUrl } from "@/lib/api";
 import { ChatMarkdown } from "./ChatMarkdown";
 
 interface Message {
@@ -25,6 +26,8 @@ export function ChatArea({
   const [attachments, setAttachments] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
   const [showSpacesView, setShowSpacesView] = useState(false);
   const [spacesList, setSpacesList] = useState<{
     id: string;
@@ -62,6 +65,8 @@ export function ChatArea({
   const [editInstructionsValue, setEditInstructionsValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [zakiMenuOpen, setZakiMenuOpen] = useState(false);
+  const [zakiExamplesOpen, setZakiExamplesOpen] = useState(false);
+  const zakiExamplesRef = useRef<HTMLDivElement>(null);
   const [zakiThreadMenuOpen, setZakiThreadMenuOpen] = useState<string | null>(null);
   const zakiMenuRef = useRef<HTMLDivElement>(null);
   const zakiThreadMenuRef = useRef<HTMLDivElement>(null);
@@ -73,10 +78,17 @@ export function ChatArea({
   const [chatError, setChatError] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [firstMessageTransition, setFirstMessageTransition] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [inputOffset, setInputOffset] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputWrapRef = useRef<HTMLDivElement>(null);
+  const readyRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const prevMessageCount = useRef(0);
   const userName = user?.username?.trim() || "User";
   const userInitials = userName
     .split(/[\s.@_-]+/)
@@ -104,6 +116,14 @@ export function ChatArea({
   };
 
   const handleShare = async () => {
+    setShareOpen(true);
+    setMenuOpen(false);
+  };
+
+  const handleCopyShareLink = async () => {
+    const shareUrl =
+      typeof window !== "undefined" ? window.location.href : "";
+    if (!shareUrl) return;
     const payload = serializeChat();
     const text = payload.messages
       .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
@@ -112,28 +132,102 @@ export function ChatArea({
     const shareText = text || "Shared chat from Zaki";
 
     try {
-      if (navigator.share) {
-        await navigator.share({ title: "Zaki Chat", text: shareText });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareText);
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = shareUrl;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
       }
+      setShareNotice("Link copied to clipboard.");
+    } catch (error) {
+      setShareNotice(
+        error instanceof Error ? error.message : "Unable to copy the link."
+      );
+    } finally {
+      // keep modal open for feedback
+    }
+  };
+
+  const handleExport = () => {
+    try {
+      const payload = serializeChat();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "zaki-chat-export.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setChatError("Chat exported.");
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to export this chat."
+      );
     } finally {
       setMenuOpen(false);
     }
   };
 
-  const handleExport = () => {
-    const payload = serializeChat();
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "zaki-chat-export.json";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    setMenuOpen(false);
+  const handleExportPdf = () => {
+    try {
+      const html = `
+        <html>
+          <head>
+            <title>${headerThreadName}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 24px; color: #1f1a14; }
+              h1 { font-size: 20px; margin: 0 0 16px; }
+              .snapshot { border: 1px solid #efe4d6; border-radius: 16px; padding: 16px; background: #fffdfa; }
+              .message { margin-bottom: 12px; }
+              .role { font-weight: bold; font-size: 12px; color: #88735A; text-transform: uppercase; }
+              .content { white-space: pre-wrap; margin-top: 4px; }
+            </style>
+          </head>
+          <body>
+            <h1>${headerThreadName}</h1>
+            <div class="snapshot">
+            ${snapshotMessages
+              .map(
+                (msg) => `
+                <div class="message">
+                  <div class="role">${msg.role}</div>
+                  <div class="content">${String(msg.content || "")}</div>
+                </div>`
+              )
+              .join("")}
+            </div>
+          </body>
+        </html>
+      `;
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        setChatError("Unable to open export window.");
+        return;
+      }
+      printWindow.document.title = headerThreadName;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      window.setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 300);
+      setShareOpen(false);
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to export PDF."
+      );
+    }
   };
 
   const loadThreadHistory = async (workspaceSlug: string, threadSlug: string) => {
@@ -186,6 +280,13 @@ export function ChatArea({
     message: string;
     assistantId: string;
   }) => {
+    if (import.meta.env.DEV) {
+      // Debug: confirm where we're sending and the exact message prefix.
+      console.debug("ZAKI stream-chat request", {
+        url: buildApiUrl(`/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`),
+        message,
+      });
+    }
     const response = await apiRequest(
       `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
       {
@@ -195,6 +296,25 @@ export function ChatArea({
     );
     if (!response.ok || !response.body) {
       throw new Error("Chat stream failed.");
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = (await response.json()) as Record<string, unknown>;
+      const agentUrl =
+        (data.agentInvocationUrl as string | undefined) ||
+        (data.invocationUrl as string | undefined) ||
+        (data.websocketUrl as string | undefined) ||
+        (data.wsUrl as string | undefined) ||
+        (data.url as string | undefined);
+      if (agentUrl) {
+        await streamAgentInvocation(agentUrl, assistantId);
+        return;
+      }
+      if (typeof data.message === "string") {
+        updateAssistant(data.message);
+      }
+      return;
     }
 
     const reader = response.body.getReader();
@@ -260,6 +380,35 @@ export function ChatArea({
     }
   };
 
+  const streamAgentInvocation = async (url: string, assistantId: string) => {
+    await new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(url);
+      ws.onmessage = (event) => {
+        const raw = typeof event.data === "string" ? event.data : "";
+        if (!raw) return;
+        try {
+          const payload = JSON.parse(raw) as Record<string, unknown>;
+          const type = typeof payload.type === "string" ? payload.type : "";
+          if (type === "done" || type === "complete" || type === "final") {
+            ws.close();
+            return;
+          }
+          const textChunk =
+            (payload.textResponse as string | undefined) ||
+            (payload.delta as string | undefined) ||
+            (payload.content as string | undefined) ||
+            (payload.message as string | undefined) ||
+            "";
+          if (textChunk) updateAssistant(textChunk);
+        } catch {
+          updateAssistant(raw);
+        }
+      };
+      ws.onerror = () => reject(new Error("Agent stream failed."));
+      ws.onclose = () => resolve();
+    });
+  };
+
   const handleSend = async (text: string, files: File[]) => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -319,10 +468,16 @@ export function ChatArea({
       }));
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now() + 1}`;
+    const hasAgentPrefix = trimmed.toLowerCase().startsWith("@agent");
+    const normalizedAgentText = trimmed.replace(/^@agent\s*/i, "");
+    const shouldUseAgent = webSearchEnabled || hasAgentPrefix;
+    const sendText = shouldUseAgent
+      ? `@agent ${normalizedAgentText}`.trim()
+      : trimmed;
     const newUserMsg: Message = {
       id: userMessageId,
       role: "user",
-      content: trimmed,
+      content: sendText,
       attachments: attachmentsForMessage.length ? attachmentsForMessage : undefined,
     };
     const assistantMessage: Message = {
@@ -336,13 +491,16 @@ export function ChatArea({
       [threadId]: [...(prev[threadId] ?? []), newUserMsg, assistantMessage],
     }));
     setAttachments([]);
+    if (webSearchEnabled) {
+      setWebSearchEnabled(false);
+    }
 
     try {
       setIsStreaming(true);
       await streamChatMessage({
         workspaceSlug: activeWorkspaceSlug,
         threadSlug: threadId,
-        message: trimmed,
+        message: sendText,
         assistantId: assistantMessageId,
       });
     } catch (error) {
@@ -502,6 +660,18 @@ export function ChatArea({
   }, [zakiMenuOpen, zakiThreadMenuOpen]);
 
   useEffect(() => {
+    const handleExamplesOutside = (event: MouseEvent) => {
+      if (zakiExamplesRef.current && !zakiExamplesRef.current.contains(event.target as Node)) {
+        setZakiExamplesOpen(false);
+      }
+    };
+    if (zakiExamplesOpen) {
+      document.addEventListener("mousedown", handleExamplesOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleExamplesOutside);
+  }, [zakiExamplesOpen]);
+
+  useEffect(() => {
     if (showSpacesView || showLibraryView || showSpaceDetail) {
       window.dispatchEvent(new Event("zaki:request-spaces"));
     }
@@ -539,6 +709,12 @@ export function ChatArea({
   ];
   const colorOptions = ["#E24A3B", "#F57C1F", "#F2B705", "#20A559", "#2F7EEA", "#7B4BE4", "#FF6FB1"];
   const primarySpace = spacesList[0] ?? null;
+  const activeSpace = spacesList.find((space) => space.id === activeWorkspaceSlug) ?? null;
+  const activeThread =
+    activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
+  const headerSpaceName = activeSpace?.title || "Space";
+  const headerThreadName = activeThread?.label || "New chat";
+  const snapshotMessages = messages.slice(0, 6);
 
   const runLibrarySearch = async () => {
     if (!librarySlug || !libraryQuery.trim()) {
@@ -578,6 +754,45 @@ export function ChatArea({
   };
 
   useEffect(() => {
+    if (messages.length === 1 && prevMessageCount.current === 0) {
+      setFirstMessageTransition(true);
+      const timeout = window.setTimeout(() => {
+        setFirstMessageTransition(false);
+      }, 420);
+      prevMessageCount.current = messages.length;
+      return () => window.clearTimeout(timeout);
+    }
+    prevMessageCount.current = messages.length;
+  }, [messages.length]);
+
+  useEffect(() => {
+    const updateOffset = () => {
+      if (!showReady || showLibraryView || showSpacesView || showSpaceDetail) {
+        setInputOffset(0);
+        return;
+      }
+      const container = containerRef.current;
+      const input = inputWrapRef.current;
+      if (!container || !input) return;
+      const containerRect = container.getBoundingClientRect();
+      const inputRect = input.getBoundingClientRect();
+      const currentTop = inputRect.top - containerRect.top;
+      const readyRect = readyRef.current?.getBoundingClientRect();
+      if (!readyRect) return;
+      const readyBottom = readyRect.bottom - containerRect.top;
+      const gap = 12;
+      setInputOffset(readyBottom + gap - currentTop);
+    };
+
+    const frame = window.requestAnimationFrame(updateOffset);
+    window.addEventListener("resize", updateOffset);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateOffset);
+    };
+  }, [showReady, showLibraryView, showSpacesView, showSpaceDetail]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
@@ -600,7 +815,8 @@ export function ChatArea({
 
   return (
     <div
-      className="flex-1 relative flex flex-col h-full bg-white"
+      ref={containerRef}
+      className="zaki-chat flex-1 relative flex flex-col h-full bg-white"
       onDragEnter={(event) => {
         event.preventDefault();
         dragCounter.current += 1;
@@ -640,15 +856,20 @@ export function ChatArea({
         <div className="relative z-20 flex flex-col h-full">
           {/* Header / Breadcrumb */}
           <div className="px-6 py-4 flex items-center gap-2">
-            <span className="text-[#b09472] text-sm">Research & Analysis</span>
+            <span className="text-[#b09472] text-sm">{headerSpaceName}</span>
             <span className="text-[#a3a3a3] text-sm">/</span>
             <div className="flex items-center gap-1 cursor-pointer hover:bg-[#F8F2E9] px-1 py-0.5 rounded">
-               <span className="text-[#1f1a14] text-sm font-medium">New chat</span>
-               <div className="bg-[#f8f2e9] rounded p-0.5">
-                 <ChevronDownIcon color="#B09472" />
-               </div>
+               <span className="text-[#1f1a14] text-sm font-medium">{headerThreadName}</span>
             </div>
-            <div className="ml-auto relative" ref={menuRef}>
+            <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
+              <button
+                type="button"
+                className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-[#ebebeb] bg-white/80 px-3 py-1.5 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                onClick={handleShare}
+              >
+                <Share2 className="size-4 text-[#88735A]" />
+                Share
+              </button>
               <button
                 type="button"
                 className="size-8 rounded-full border border-[#ebebeb] bg-white/80 flex items-center justify-center text-[#88735A] hover:bg-[#f8f2e9] transition-colors"
@@ -667,19 +888,10 @@ export function ChatArea({
                     type="button"
                     className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
                     role="menuitem"
-                    onClick={handleShare}
-                  >
-                    <Share2 className="size-4 text-[#88735A]" />
-                    Share
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
-                    role="menuitem"
                     onClick={handleExport}
                   >
                     <Download className="size-4 text-[#88735A]" />
-                    Export
+                    Export JSON
                   </button>
                 </div>
               )}
@@ -699,11 +911,6 @@ export function ChatArea({
         {chatError && (
           <div className="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-[#f6d5ce] bg-[#fff3f0] px-4 py-3 text-sm text-[#d24430]">
             {chatError}
-          </div>
-        )}
-        {isHistoryLoading && (
-          <div className="mx-auto mt-4 w-full max-w-3xl text-xs text-[#a3a3a3]">
-            Loading chat history...
           </div>
         )}
         {showLibraryView ? (
@@ -828,7 +1035,46 @@ export function ChatArea({
             <div className="flex items-center justify-between mb-10">
               <div className="flex-1 flex flex-col items-center gap-1">
                 <div className="text-xl font-semibold text-[#1f1a14] tracking-tight">ZAKI</div>
-                <div className="text-base text-[#a3a3a3]">ZAKI understands.</div>
+                <div
+                  className="relative text-base text-[#D24430] font-semibold uppercase tracking-wide inline-flex items-center gap-1 cursor-pointer"
+                  ref={zakiExamplesRef}
+                  onClick={() => setZakiExamplesOpen((open) => !open)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  UNDERSTANDS
+                  <ChevronDownIcon color="#D24430" />
+                  {zakiExamplesOpen && (
+                    <div className="absolute left-1/2 top-full mt-3 w-[320px] -translate-x-1/2 rounded-2xl border border-[#efe4d6] bg-white p-3 shadow-[0px_14px_30px_rgba(15,15,15,0.12)] z-20">
+                      <div className="text-[11px] text-[#D24430] font-semibold uppercase tracking-wider">Examples</div>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {zakiExamples.map((example) => (
+                          <button
+                            key={example}
+                            type="button"
+                            className="rounded-xl border border-[#f1dbc5] bg-[#fffdfa] px-3 py-2 text-sm text-[#1f1a14] text-left hover:bg-[#f8f2e9] transition-colors"
+                            onClick={() => handleSend(example, [])}
+                          >
+                            {example}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 text-[11px] text-[#D24430] font-semibold uppercase tracking-wider">Examples · Ramadan Special</div>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {zakiRamadanExamples.map((example) => (
+                          <button
+                            key={example}
+                            type="button"
+                            className="rounded-xl border border-[#f1dbc5] bg-[#fffdfa] px-3 py-2 text-sm text-[#1f1a14] text-left hover:bg-[#f8f2e9] transition-colors"
+                            onClick={() => handleSend(example, [])}
+                          >
+                            {example}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="relative" ref={zakiMenuRef}>
                 <button
@@ -853,38 +1099,6 @@ export function ChatArea({
               </div>
             </div>
             <div className="grid gap-6 md:grid-cols-2">
-              <div className="rounded-3xl border border-[#efe4d6] bg-[#fff8f0] p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
-                <div className="text-[11px] text-[#D24430] font-semibold mb-4 uppercase tracking-wider">Examples</div>
-                <div className="flex flex-col gap-3">
-                  {zakiExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      className="rounded-2xl border border-[#f1dbc5] bg-white px-4 py-3 text-sm text-[#1f1a14] text-left hover:bg-[#f8f2e9] hover:shadow-[0px_8px_18px_rgba(15,15,15,0.08)] transition-all border-l-4 border-l-[#D24430]"
-                      onClick={() => handleSend(example, [])}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-3xl border border-[#efe4d6] bg-[#fff8f0] p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
-                <div className="text-[11px] text-[#D24430] font-semibold mb-4 uppercase tracking-wider">Examples · Ramadan Special</div>
-                <div className="flex flex-col gap-3">
-                  {zakiRamadanExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      className="rounded-2xl border border-[#f1dbc5] bg-white px-4 py-3 text-sm text-[#1f1a14] text-left hover:bg-[#f8f2e9] hover:shadow-[0px_8px_18px_rgba(15,15,15,0.08)] transition-all border-l-4 border-l-[#D24430]"
-                      onClick={() => handleSend(example, [])}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-6 md:grid-cols-2 mt-6">
               <div className="rounded-3xl border border-[#efe4d6] bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
                 <div className="text-[11px] text-[#88735A] font-semibold mb-4 uppercase tracking-wider">Capabilities</div>
                 <div className="flex flex-col gap-3 text-sm text-[#1f1a14] text-center">
@@ -1058,38 +1272,44 @@ export function ChatArea({
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}
+                webSearchEnabled={webSearchEnabled}
+                onToggleWebSearch={() => setWebSearchEnabled((prev) => !prev)}
               />
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div className="rounded-2xl border border-[#efe4d6] bg-white p-4">
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-[#88735A] font-semibold">Project files</div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="text-xs text-[#88735A] hover:text-[#655543]"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      +
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs text-[#d24430] hover:text-[#b63a28]"
-                      onClick={() => {
-                        if (spaceDetail?.id) {
-                          window.dispatchEvent(
-                            new CustomEvent("zaki:update-space", {
-                              detail: { id: spaceDetail.id, pinnedFiles: [] },
-                            })
-                          );
-                        }
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  {!spaceDetail.fixed && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-[#88735A] hover:text-[#655543]"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-[#d24430] hover:text-[#b63a28]"
+                        onClick={() => {
+                          if (spaceDetail?.id) {
+                            window.dispatchEvent(
+                              new CustomEvent("zaki:update-space", {
+                                detail: { id: spaceDetail.id, pinnedFiles: [] },
+                              })
+                            );
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="text-sm text-[#1f1a14] mt-1">{spaceDetail.pinnedFiles?.length ?? 0} files</div>
+                <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-[#a3a3a3]" : "text-[#1f1a14]"}`}>
+                  {spaceDetail.fixed ? "ZAKI is not a project" : `${spaceDetail.pinnedFiles?.length ?? 0} files`}
+                </div>
               </div>
               <div className="rounded-2xl border border-[#efe4d6] bg-white p-4">
                 <div className="flex items-center justify-between">
@@ -1159,34 +1379,42 @@ export function ChatArea({
             </div>
           </div>
         ) : showReady ? (
-          <div className="min-h-full flex flex-col items-center justify-center px-4 py-16">
-            <div className="flex flex-col items-center gap-2 mb-6">
+          <div className="min-h-full flex flex-col items-center justify-center px-4 py-16 pb-32">
+            <div ref={readyRef} className="flex flex-col items-center gap-2 mb-6">
               <div className="scale-110">
                 <CenterLogo />
               </div>
               <div className="text-[#1f1a14] text-sm font-medium">ZKAI</div>
               <div className="text-[#a3a3a3] text-base">Ready when you are</div>
             </div>
-            <div className="w-full max-w-3xl">
-              <InputArea
-                onSend={handleSend}
-                attachments={attachments}
-                setAttachments={setAttachments}
-                isSending={isStreaming}
-              />
-            </div>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto pt-20 pb-4 px-4 flex flex-col gap-6">
+          <div
+            className={cn(
+              "zaki-chat-thread max-w-3xl mx-auto pt-16 pb-6 px-4 flex flex-col gap-6",
+              firstMessageTransition && "zaki-chat-enter"
+            )}
+          >
             {messages.map((msg) => (
-              <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end items-start' : 'justify-start items-start'}`}>
+              <div
+                key={msg.id}
+                className={cn(
+                  "zaki-message-row flex gap-4",
+                  msg.role === "user" ? "justify-end items-start" : "justify-start items-start"
+                )}
+              >
                 {msg.role === 'assistant' && (
                   <div className="size-8 shrink-0 flex items-start justify-center pt-[6px]">
                      <div className="scale-75"><CenterLogo /></div>
                   </div>
                 )}
 
-                <div className={`max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-2`}>
+                <div
+                  className={cn(
+                    "zaki-message-stack max-w-[80%] flex flex-col gap-2",
+                    msg.role === "user" ? "items-end" : "items-start"
+                  )}
+                >
                   {msg.attachments && msg.attachments.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {msg.attachments.map((attachment) => (
@@ -1205,11 +1433,12 @@ export function ChatArea({
                   )}
                   {msg.content && (
                     <div
-                      className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      className={cn(
+                        "zaki-message-bubble rounded-2xl px-4 py-3 text-sm leading-relaxed",
                         msg.role === "user"
-                          ? "bg-[#EADBC8] text-[#1f1a14]"
-                          : "bg-transparent text-[#1f1a14]"
-                      }`}
+                          ? "zaki-user-bubble bg-[#EADBC8] text-[#1f1a14]"
+                          : "zaki-assistant-bubble bg-transparent text-[#1f1a14]"
+                      )}
                     >
                       {msg.role === "assistant" ? (
                         <ChatMarkdown content={msg.content} />
@@ -1248,9 +1477,7 @@ export function ChatArea({
                 </div>
 
                 {msg.role === 'user' && (
-                  <div className="size-8 shrink-0 bg-[#faf6f0] rounded-full flex items-center justify-center text-xs font-medium text-[#1f1a14]">
-                    {userInitials}
-                  </div>
+                  <div className="size-8 shrink-0" aria-hidden="true" />
                 )}
               </div>
             ))}
@@ -1278,13 +1505,19 @@ export function ChatArea({
       </div>
 
       {/* Input Area */}
-      {!showReady && !showLibraryView && !showSpacesView && !showSpaceDetail && (
-        <div className="relative z-20">
+      {!showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail && (
+        <div
+          ref={inputWrapRef}
+          className="zaki-input-float relative z-20"
+          style={{ transform: `translateY(${inputOffset}px)` }}
+        >
           <InputArea
             onSend={handleSend}
             attachments={attachments}
             setAttachments={setAttachments}
             isSending={isStreaming}
+            webSearchEnabled={webSearchEnabled}
+            onToggleWebSearch={() => setWebSearchEnabled((prev) => !prev)}
           />
         </div>
       )}
@@ -1340,6 +1573,89 @@ export function ChatArea({
                 }}
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {shareOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]">
+          <div
+            className="absolute inset-0"
+            onClick={() => setShareOpen(false)}
+            role="button"
+            aria-label="Close share"
+          />
+          <div className="zaki-share-modal relative w-[560px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#e7dbc9] bg-white text-[#1f1a14] shadow-[0px_24px_60px_rgba(0,0,0,0.2)] px-6 py-6">
+            <div className="flex items-center justify-between">
+              <div className="text-xl font-semibold">{headerThreadName}</div>
+              <button
+                type="button"
+                className="size-9 rounded-full border border-[#e7dbc9] text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+                onClick={() => setShareOpen(false)}
+                aria-label="Close share"
+              >
+                <span className="text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="mt-4 rounded-2xl bg-[#f8f2e9] px-4 py-3 text-sm text-[#655543]">
+              <div>This conversation may include personal information.</div>
+              <div>Take a moment to check the content before sharing the link.</div>
+            </div>
+            <div className="mt-5 rounded-2xl border border-[#efe4d6] bg-[#fffdfa] p-4 max-h-[320px] overflow-y-auto">
+              <div className="space-y-3">
+                {snapshotMessages.map((msg) => (
+                  <div key={msg.id} className="text-sm">
+                    <div
+                      className={cn(
+                        "rounded-2xl px-4 py-3 leading-relaxed",
+                        msg.role === "user"
+                          ? "bg-[#655543] text-white ml-auto w-fit max-w-full"
+                          : "bg-[#f6efe6] text-[#1f1a14] w-fit max-w-full"
+                      )}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center justify-between text-[#88735A] text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="size-5 rounded-full bg-[#efe4d6] flex items-center justify-center">
+                    <div className="scale-[0.45]">
+                      <CenterLogo />
+                    </div>
+                  </div>
+                  ZAKI
+                </div>
+                <span className="text-[#a3a3a3]">Conversation snapshot</span>
+              </div>
+            </div>
+            {shareNotice && (
+              <div className="mt-4 rounded-xl bg-[#f8f2e9] px-3 py-2 text-xs text-[#655543] text-center">
+                {shareNotice}
+              </div>
+            )}
+            <div className="mt-6 flex items-center justify-center gap-6 text-sm">
+              <button
+                type="button"
+                className="flex flex-col items-center gap-2 text-[#655543] hover:text-[#1f1a14]"
+                onClick={handleCopyShareLink}
+              >
+                <span className="size-10 rounded-full border border-[#e7dbc9] flex items-center justify-center">
+                  <Share2 className="size-4" />
+                </span>
+                Copy link
+              </button>
+              <button
+                type="button"
+                className="flex flex-col items-center gap-2 text-[#655543] hover:text-[#1f1a14]"
+                onClick={handleExportPdf}
+              >
+                <span className="size-10 rounded-full border border-[#e7dbc9] flex items-center justify-center">
+                  <Download className="size-4" />
+                </span>
+                Export PDF
               </button>
             </div>
           </div>
