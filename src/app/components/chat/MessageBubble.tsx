@@ -64,7 +64,7 @@ export function MessageBubble({ message, showActions = true, isStreaming = false
             className={cn(
               "zaki-message-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed",
               isUser
-                ? "zaki-user-bubble bg-zaki-bubble-user text-zaki-primary"
+                ? "zaki-user-bubble bg-zaki-bubble-user text-zaki-bubble-user"
                 : "zaki-assistant-bubble bg-transparent text-zaki-primary"
             )}
           >

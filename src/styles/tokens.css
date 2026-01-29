@@ -58,6 +58,7 @@
   
   /* Message bubbles */
   --zaki-bubble-user: #EADBC8;      /* User message background */
+  --zaki-bubble-user-text: #3d2e1f; /* User message text - darker for contrast */
   --zaki-bubble-assistant: transparent; /* Assistant message background */
   
   /* Brand variants with opacity */
@@ -204,6 +205,7 @@
   
   /* Message bubbles */
   --zaki-bubble-user: #3d3128;
+  --zaki-bubble-user-text: #f5efe8; /* User message text in dark mode */
   
   /* Brand variants with opacity */
   --zaki-brand-10: rgba(250, 115, 25, 0.10);
@@ -305,6 +307,7 @@
 .bg-zaki-error { background-color: var(--zaki-error-bg); }
 .bg-zaki-success { background-color: var(--zaki-success-bg); }
 .bg-zaki-bubble-user { background-color: var(--zaki-bubble-user); }
+.text-zaki-bubble-user { color: var(--zaki-bubble-user-text); }
 
 /* Border colors */
 .border-zaki { border-color: var(--zaki-border-default); }
