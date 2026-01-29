@@ -125,6 +125,21 @@ export function ChatArea() {
     }
   }, [serializeChat, headerThreadName]);
 
+  // Strip memory context prefix from user messages (injected by backend for AI context)
+  const stripMemoryContext = (content: string): string => {
+    // Pattern: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
+    const userMessageMarker = "[USER MESSAGE]\n";
+    const memoryContextMarker = "[MEMORY CONTEXT";
+    
+    if (content.includes(memoryContextMarker) && content.includes(userMessageMarker)) {
+      const userMessageIndex = content.indexOf(userMessageMarker);
+      if (userMessageIndex !== -1) {
+        return content.slice(userMessageIndex + userMessageMarker.length).trim();
+      }
+    }
+    return content;
+  };
+
   // Load thread history
   const loadThreadHistory = useCallback(async (workspaceSlug: string, threadSlug: string) => {
     setIsHistoryLoading(true);
@@ -144,7 +159,8 @@ export function ChatArea() {
       const loadedMessages = data.history?.map((entry, index) => ({
         id: entry.chatId ? `${entry.chatId}-${entry.role}-${index}` : `${entry.role}-${index}`,
         role: entry.role,
-        content: entry.content ?? "",
+        // Strip memory context from user messages
+        content: entry.role === 'user' ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
         attachments: entry.attachments,
         chatId: entry.chatId,
       })) ?? [];
