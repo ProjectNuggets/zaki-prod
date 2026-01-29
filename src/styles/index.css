@@ -155,7 +155,7 @@
 }
 
 .dark .zaki-app .zaki-user-bubble {
-  color: #1f1a14;
+  color: var(--zaki-bubble-user-text);
 }
 
 .zaki-chat-enter {

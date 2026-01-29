@@ -2,7 +2,7 @@ import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea } from "./InputArea";
 import { Share2, MoreVertical, Download } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { apiRequest, buildApiUrl } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import {
   LibraryView,
   SpacesView,
@@ -159,7 +159,56 @@ export function ChatArea() {
     }
   }, []);
 
-  // Stream chat message
+  // Helper to update assistant message content
+  const updateAssistantContent = useCallback((threadSlug: string, assistantId: string, newContent: string) => {
+    setMessagesByThread((prev) => {
+      const threadMessages = prev[threadSlug] ?? [];
+      const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+      if (assistantIndex === -1) return prev;
+      const updated = [...threadMessages];
+      const existingMsg = updated[assistantIndex];
+      if (!existingMsg) return prev;
+      updated[assistantIndex] = {
+        ...existingMsg,
+        content: newContent,
+      };
+      return { ...prev, [threadSlug]: updated };
+    });
+  }, []);
+
+  // Stream via WebSocket for agent invocation URLs
+  const streamAgentInvocation = useCallback(async (
+    agentUrl: string,
+    threadSlug: string,
+    assistantId: string
+  ) => {
+    return new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(agentUrl);
+      let accumulated = "";
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          const chunk = payload.textResponse ?? payload.error ?? "";
+          if (payload.close || payload.type === "finalizeResponseStream") {
+            ws.close();
+            return;
+          }
+          if (chunk) {
+            accumulated += chunk;
+            updateAssistantContent(threadSlug, assistantId, accumulated);
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      ws.onerror = () => reject(new Error("Connection failed."));
+      ws.onclose = () => resolve();
+    });
+  }, [updateAssistantContent]);
+
+  // Stream chat message via fetch (POST)
   const streamChatMessage = useCallback(async ({
     workspaceSlug,
     threadSlug,
@@ -174,62 +223,92 @@ export function ChatArea() {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
 
-    const url = buildApiUrl(
-      `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`
+    const response = await apiRequest(
+      `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          message,
+          ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
+          ...(webSearchEnabled ? { webSearch: true } : {}),
+        }),
+      }
     );
-    const websocketUrl = url.replace(/^http/, "ws");
 
-    return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(websocketUrl);
+    if (!response.ok || !response.body) {
+      throw new Error("Chat stream failed.");
+    }
 
-      ws.onopen = () => {
-        ws.send(
-          JSON.stringify({
-            message,
-            ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
-            ...(webSearchEnabled ? { webSearch: true } : {}),
-          })
-        );
-      };
+    const contentType = response.headers.get("content-type") || "";
+    
+    // If JSON response, check for agent invocation URL
+    if (contentType.includes("application/json")) {
+      const data = (await response.json()) as Record<string, unknown>;
+      const agentUrl =
+        (data.agentInvocationUrl as string | undefined) ||
+        (data.invocationUrl as string | undefined) ||
+        (data.websocketUrl as string | undefined) ||
+        (data.wsUrl as string | undefined) ||
+        (data.url as string | undefined);
+      
+      if (agentUrl) {
+        await streamAgentInvocation(agentUrl, threadSlug, assistantId);
+        return;
+      }
+      
+      if (typeof data.message === "string") {
+        updateAssistantContent(threadSlug, assistantId, data.message);
+      }
+      return;
+    }
 
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          const chunk = payload.textResponse ?? payload.error ?? "";
-          if (payload.close || payload.type === "finalizeResponseStream") {
-            ws.close();
-            return;
+    // Stream SSE/text response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let accumulated = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      
+      const text = decoder.decode(value, { stream: true });
+      const lines = text.split("\n");
+      
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        
+        // Handle SSE format: data: {...}
+        if (line.startsWith("data: ")) {
+          try {
+            const payload = JSON.parse(line.slice(6));
+            const chunk = payload.textResponse ?? payload.content ?? "";
+            if (chunk) {
+              accumulated += chunk;
+              updateAssistantContent(threadSlug, assistantId, accumulated);
+            }
+          } catch {
+            // If not JSON, treat as plain text chunk
+            accumulated += line.slice(6);
+            updateAssistantContent(threadSlug, assistantId, accumulated);
           }
-          if (chunk) {
-            setMessagesByThread((prev) => {
-              const threadMessages = prev[threadSlug] ?? [];
-              const assistantIndex = threadMessages.findIndex(
-                (msg) => msg.id === assistantId
-              );
-              if (assistantIndex === -1) return prev;
-              const updated = [...threadMessages];
-              const existingMsg = updated[assistantIndex];
-              if (!existingMsg) return prev;
-              updated[assistantIndex] = {
-                ...existingMsg,
-                content: existingMsg.content + chunk,
-              };
-              return { ...prev, [threadSlug]: updated };
-            });
+        } else {
+          // Plain text streaming
+          try {
+            const payload = JSON.parse(line);
+            const chunk = payload.textResponse ?? payload.content ?? "";
+            if (chunk) {
+              accumulated += chunk;
+              updateAssistantContent(threadSlug, assistantId, accumulated);
+            }
+          } catch {
+            // Not JSON, use as-is
+            accumulated += line;
+            updateAssistantContent(threadSlug, assistantId, accumulated);
           }
-        } catch {
-          // Ignore parse errors
         }
-      };
-
-      ws.onerror = (error) => {
-        console.error("[ZAKI] WebSocket error:", error);
-        reject(new Error("Connection failed."));
-      };
-
-      ws.onclose = () => resolve();
-    });
-  }, [spacesList, webSearchEnabled]);
+      }
+    }
+  }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent]);
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[]) => {
