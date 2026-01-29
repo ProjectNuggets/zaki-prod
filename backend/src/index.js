@@ -806,6 +806,69 @@ app.post("/zaki/workspaces", express.json({ limit: "1mb" }), async (req, res) =>
   }
 });
 
+// Create thread in workspace - proxy with session auth
+app.post("/workspace/:slug/thread/new", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Missing authorization token." });
+      return;
+    }
+
+    const { slug } = req.params;
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+      return;
+    }
+
+    // Forward to TYP with user's session token
+    const response = await fetch(`${apiBase}/v1/workspace/${slug}/thread/new`, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+    res.status(response.status).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
+// Delete thread in workspace - proxy with session auth
+app.delete("/workspace/:slug/thread/:threadSlug", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Missing authorization token." });
+      return;
+    }
+
+    const { slug, threadSlug } = req.params;
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+      return;
+    }
+
+    // Forward to TYP with user's session token
+    const response = await fetch(`${apiBase}/v1/workspace/${slug}/thread/${threadSlug}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": authHeader,
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+    res.status(response.status).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
 app.get("/verify", async (req, res) => {
   const token = String(req.query.token || "");
   const wantsJson =
