@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { initDb, dbGet, dbQuery } from "./db.js";
+import { createMemoryRoutes, buildContext, processMessage } from "./memory.js";
 
 dotenv.config();
 
@@ -142,6 +143,10 @@ function copyResponseHeaders(upstream, res) {
 app.get("/health", (_, res) => {
   res.status(200).json({ ok: true });
 });
+
+// Initialize memory routes
+app.use(express.json({ limit: "10mb" }));
+createMemoryRoutes(app);
 
 await initDb();
 
@@ -571,6 +576,118 @@ app.get("/verify", async (req, res) => {
     res
       .status(200)
       .send("Email verified. Return to ZAKI and sign in.");
+  }
+});
+
+// =============================================================================
+// Chat Integration with Memory
+// =============================================================================
+
+/**
+ * Intercept stream-chat requests to inject memory context
+ * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
+ */
+app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit: "10mb" }), async (req, res) => {
+  try {
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: "Missing authorization." });
+    }
+
+    // Get user from session
+    const sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, { method: "GET" });
+    const sessionData = await sessionResponse.json().catch(() => ({}));
+    const userEmail = sessionData?.user?.username || null;
+
+    const { message } = req.body || {};
+    const originalMessage = String(message || "").trim();
+
+    if (!originalMessage) {
+      return res.status(400).json({ error: "Message is required." });
+    }
+
+    let enrichedMessage = originalMessage;
+    let memoryInjected = false;
+
+    // Inject memory context if we have a user
+    if (userEmail) {
+      try {
+        // Build context from memory
+        const memoryResult = await buildContext({
+          userId: userEmail,
+          query: originalMessage,
+          maxChars: 1500,
+        });
+
+        if (memoryResult.context) {
+          // Prepend memory context as a system instruction
+          enrichedMessage = `[MEMORY CONTEXT - Use this to personalize your response]\n${memoryResult.context}\n\n[USER MESSAGE]\n${originalMessage}`;
+          memoryInjected = true;
+          console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}`);
+        }
+
+        // Extract facts from user message (async, don't block)
+        processMessage({ userId: userEmail, message: originalMessage, autoExtract: true }).catch(() => {});
+      } catch (err) {
+        console.warn("[Memory] Context injection failed:", err.message);
+        // Continue without memory
+      }
+    }
+
+    // Forward to NOVA.TYP with enriched message
+    const { slug, threadSlug } = req.params;
+    const targetUrl = `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
+
+    const upstreamResponse = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": authHeader,
+      },
+      body: JSON.stringify({ message: enrichedMessage }),
+    });
+
+    // Stream the response back
+    res.status(upstreamResponse.status);
+    copyResponseHeaders(upstreamResponse, res);
+
+    if (!upstreamResponse.body) {
+      res.end();
+      return;
+    }
+
+    // Add memory injection indicator to first chunk
+    const reader = upstreamResponse.body.getReader();
+    let firstChunk = true;
+
+    const stream = new ReadableStream({
+      async pull(controller) {
+        const { value, done } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        
+        // Optionally prepend memory indicator (disabled for now)
+        // if (firstChunk && memoryInjected) {
+        //   const indicator = new TextEncoder().encode('data: {"type":"memoryUsed","count":' + memoryResult.sources.length + '}\n\n');
+        //   controller.enqueue(indicator);
+        // }
+        
+        firstChunk = false;
+        controller.enqueue(value);
+      },
+    });
+
+    Readable.fromWeb(stream).pipe(res);
+  } catch (error) {
+    console.error("[Chat] Stream error:", error);
+    res.status(500).json({ error: error?.message || "Chat stream failed." });
   }
 });
 
