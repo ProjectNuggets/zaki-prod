@@ -615,8 +615,8 @@ export function ChatArea() {
           primarySpace={primarySpace}
           onSendExample={(example) => handleSend(example, [])}
           onGoToThread={goToThread}
-          onDeleteThread={(threadId) => {
-            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId } }));
+          onDeleteThread={(threadId, spaceId) => {
+            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId, spaceId } }));
           }}
         />
       );
@@ -641,7 +641,7 @@ export function ChatArea() {
             window.dispatchEvent(new CustomEvent("zaki:update-space", { detail: { id, ...updates } }));
           }}
           onDeleteThread={(threadId) => {
-            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId } }));
+            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId, spaceId: spaceDetail.id } }));
           }}
           onEditInstructions={(instructions) => {
             setEditInstructionsValue(instructions);

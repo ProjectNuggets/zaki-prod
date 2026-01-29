@@ -7,7 +7,7 @@ interface ZakiHomeViewProps {
   primarySpace: Space | null;
   onSendExample: (example: string) => void;
   onGoToThread: (spaceId: string, threadId: string) => void;
-  onDeleteThread: (threadId: string) => void;
+  onDeleteThread: (threadId: string, spaceId?: string) => void;
 }
 
 const zakiExamples = [
@@ -170,7 +170,7 @@ export function ZakiHomeView({
                         className="w-full text-left px-3 py-2 text-sm text-zaki-brand hover:bg-zaki-error rounded-zaki-md"
                         type="button"
                         onClick={() => {
-                          onDeleteThread(thread.id);
+                          onDeleteThread(thread.id, primarySpace?.id);
                           setZakiThreadMenuOpen(null);
                         }}
                       >

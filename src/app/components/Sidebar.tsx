@@ -10,6 +10,7 @@ import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { SkeletonSpaceList } from "./ui/skeleton";
+import { toast } from "sonner";
 import type { Space, Thread } from "@/types";
 
 // Sidebar uses threads as required array
@@ -74,74 +75,69 @@ export function Sidebar() {
     return initials.toUpperCase();
   }, [userName]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const loadWorkspaces = async () => {
-      setSpacesLoading(true);
-      setSpacesError("");
-      try {
-        const response = await apiRequest("/workspaces");
-        if (!response.ok) {
-          throw new Error("Failed to load workspaces.");
-        }
-        const data = (await response.json()) as {
-          workspaces?: { slug: string; name: string; description?: string }[];
-        };
-        const workspaces = data.workspaces ?? [];
-        const workspaceSpaces = await Promise.all(
-          workspaces.map(async (workspace, index) => {
-            let threads: Thread[] = [];
-            try {
-              const threadResponse = await apiRequest(
-                `/workspace/${workspace.slug}/threads`
-              );
-              if (threadResponse.ok) {
-                const threadData = (await threadResponse.json()) as {
-                  threads?: { slug: string; name: string }[];
-                };
-                threads =
-                  threadData.threads?.map((thread) => ({
-                    id: thread.slug,
-                    label: thread.name || "Thread",
-                  })) ?? [];
-              }
-            } catch {
-              threads = [];
-            }
-            return {
-              id: workspace.slug,
-              title: workspace.name,
-              description: workspace.description || "Workspace",
-              icon: index === 0 ? "zaki" : "folder",
-              color: index === 0 ? "#D24430" : "#88735A",
-              instructions: "",
-              pinnedFiles: [],
-              pinned: false,
-              fixed: index === 0,
-              threads,
-            } satisfies Space;
-          })
-        );
-
-        if (!isMounted) return;
-        setSpaces(workspaceSpaces);
-        const firstSpace = workspaceSpaces[0];
-        if (firstSpace) {
-          setExpandedSpace((prev) => prev ?? firstSpace.id);
-        }
-      } catch (error) {
-        if (!isMounted) return;
-        setSpacesError("Unable to load workspaces. Check your session.");
-        setSpaces([]);
-      } finally {
-        if (isMounted) setSpacesLoading(false);
+  // Reusable function to fetch workspaces
+  const fetchSpaces = async () => {
+    setSpacesLoading(true);
+    setSpacesError("");
+    try {
+      const response = await apiRequest("/workspaces");
+      if (!response.ok) {
+        throw new Error("Failed to load workspaces.");
       }
-    };
+      const data = (await response.json()) as {
+        workspaces?: { slug: string; name: string; description?: string }[];
+      };
+      const workspaces = data.workspaces ?? [];
+      const workspaceSpaces = await Promise.all(
+        workspaces.map(async (workspace, index) => {
+          let threads: Thread[] = [];
+          try {
+            const threadResponse = await apiRequest(
+              `/workspace/${workspace.slug}/threads`
+            );
+            if (threadResponse.ok) {
+              const threadData = (await threadResponse.json()) as {
+                threads?: { slug: string; name: string }[];
+              };
+              threads =
+                threadData.threads?.map((thread) => ({
+                  id: thread.slug,
+                  label: thread.name || "Thread",
+                })) ?? [];
+            }
+          } catch {
+            threads = [];
+          }
+          return {
+            id: workspace.slug,
+            title: workspace.name,
+            description: workspace.description || "Workspace",
+            icon: index === 0 ? "zaki" : "folder",
+            color: index === 0 ? "#D24430" : "#88735A",
+            instructions: "",
+            pinnedFiles: [],
+            pinned: false,
+            fixed: index === 0,
+            threads,
+          } satisfies Space;
+        })
+      );
 
-    loadWorkspaces();
-    return () => {
-      isMounted = false;
-    };
+      setSpaces(workspaceSpaces);
+      const firstSpace = workspaceSpaces[0];
+      if (firstSpace) {
+        setExpandedSpace((prev) => prev ?? firstSpace.id);
+      }
+    } catch {
+      setSpacesError("Unable to load workspaces. Check your session.");
+      setSpaces([]);
+    } finally {
+      setSpacesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSpaces();
   }, []);
 
   useEffect(() => {
@@ -521,17 +517,42 @@ export function Sidebar() {
         )
       );
     };
-    const handleDeleteThread = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string }>).detail;
+    const handleDeleteThread = async (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; spaceId?: string }>).detail;
       if (!detail?.id) return;
+      
+      // Find the parent space
+      const parentSpace = detail.spaceId 
+        ? spaces.find((s) => s.id === detail.spaceId)
+        : spaces.find((space) => space.threads.some((thread) => thread.id === detail.id));
+      
+      // Optimistically remove from UI
       setSpaces((prev) =>
         prev.map((space) => ({
           ...space,
           threads: space.threads.filter((thread) => thread.id !== detail.id),
         }))
       );
+      
       if (activeItem === detail.id) {
         window.dispatchEvent(new Event("zaki:clear-thread"));
+      }
+      
+      // Call API to persist deletion
+      if (parentSpace) {
+        try {
+          const response = await apiRequest(`/workspace/${parentSpace.id}/thread/${detail.id}`, {
+            method: "DELETE",
+          });
+          if (!response.ok) {
+            throw new Error("Delete failed");
+          }
+          toast.success("Chat deleted");
+        } catch {
+          // Rollback: refetch spaces on failure
+          toast.error("Couldn't delete chat. Try again.");
+          fetchSpaces();
+        }
       }
     };
     const handleRenameThread = (event: Event) => {
