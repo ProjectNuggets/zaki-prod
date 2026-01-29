@@ -155,7 +155,7 @@ export function SharedConversation() {
     return (
       <div className="min-h-screen bg-zaki-base flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="size-8 border-2 border-[#88735A]/20 border-t-[#88735A] rounded-full animate-spin" />
+          <div className="size-8 border-2 border-zaki-spinner border-t-zaki-muted rounded-full animate-spin" />
           <div className="text-sm text-zaki-muted">Loading conversation...</div>
         </div>
       </div>
@@ -172,7 +172,7 @@ export function SharedConversation() {
           <p className="text-zaki-muted mb-6">{error}</p>
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#2a2420] hover:bg-[#3a3430] text-zaki-primary font-medium rounded-zaki-md transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary font-medium rounded-zaki-md transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Go to ZAKI
@@ -210,7 +210,7 @@ export function SharedConversation() {
       <div className="min-h-screen bg-zaki-base flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-zaki-primary border border-zaki-subtle rounded-zaki-lg p-8">
           <div className="flex justify-center mb-6">
-            <div className="size-16 rounded-full bg-[#2a2420] flex items-center justify-center">
+            <div className="size-16 rounded-full bg-zaki-dark-elevated flex items-center justify-center">
               <Lock className="w-8 h-8 text-zaki-brand" />
             </div>
           </div>
@@ -233,7 +233,7 @@ export function SharedConversation() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-[#655543] focus:outline-none focus:border-zaki-focus transition-colors"
+                className="w-full px-4 py-3 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
                 placeholder="Enter password"
                 autoFocus
               />
@@ -320,7 +320,7 @@ export function SharedConversation() {
                 className={cn(
                   "max-w-[80%] rounded-zaki-lg px-4 py-3",
                   msg.role === 'user'
-                    ? "bg-[#2a2420] text-zaki-primary"
+                    ? "bg-zaki-dark-elevated text-zaki-primary"
                     : "bg-zaki-primary border border-zaki-subtle text-zaki-primary"
                 )}
               >

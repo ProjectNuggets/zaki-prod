@@ -86,7 +86,7 @@ export function SpaceDetailView({
           {iconPickerOpen && !spaceDetail.fixed && (
             <div
               ref={iconPickerRef}
-              className="absolute top-14 left-0 w-[220px] rounded-zaki-lg border border-[#2b2b2b] bg-[#303030] text-white shadow-[0px_18px_36px_rgba(0,0,0,0.35)] p-3 z-30"
+              className="absolute top-14 left-0 w-[220px] rounded-zaki-lg border border-zaki-subtle bg-zaki-dark-elevated text-white shadow-[0px_18px_36px_rgba(0,0,0,0.35)] p-3 z-30"
             >
               <div className="flex items-center gap-2 mb-3">
                 {colorOptions.map((color) => (

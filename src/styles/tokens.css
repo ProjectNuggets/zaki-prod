@@ -48,10 +48,29 @@
   --zaki-error-bg: #fff3f0;         /* Error background */
   --zaki-warning: #f59e0b;          /* Warning states */
   --zaki-warning-bg: #fffbeb;       /* Warning background */
+  --zaki-info: #2563eb;             /* Info states */
+  --zaki-info-bg: #f0f8ff;          /* Info background */
+  --zaki-info-border: #d6e7f5;      /* Info border */
+  
+  /* Gradient endpoints */
+  --zaki-brand-gradient-from: #D24430;
+  --zaki-brand-gradient-to: #e85d4b;
   
   /* Message bubbles */
   --zaki-bubble-user: #EADBC8;      /* User message background */
   --zaki-bubble-assistant: transparent; /* Assistant message background */
+  
+  /* Brand variants with opacity */
+  --zaki-brand-10: rgba(250, 115, 25, 0.10);
+  --zaki-brand-15: rgba(250, 115, 25, 0.15);
+  --zaki-brand-20: rgba(250, 115, 25, 0.20);
+  
+  /* Additional surface variants */
+  --zaki-surface-input: #fff8f0;    /* Input backgrounds */
+  --zaki-surface-skeleton: #efe4d6; /* Skeleton loading */
+  
+  /* Placeholder text */
+  --zaki-text-placeholder: #b09472;
   
   /* Shadows — elevation levels */
   --zaki-shadow-sm: 0px 4px 12px rgba(15, 15, 15, 0.04);
@@ -185,6 +204,23 @@
   
   /* Message bubbles */
   --zaki-bubble-user: #3d3128;
+  
+  /* Brand variants with opacity */
+  --zaki-brand-10: rgba(250, 115, 25, 0.10);
+  --zaki-brand-15: rgba(250, 115, 25, 0.15);
+  --zaki-brand-20: rgba(250, 115, 25, 0.20);
+  
+  /* Additional dark surfaces */
+  --zaki-surface-input: #16120e;
+  --zaki-surface-skeleton: #2b2119;
+  --zaki-surface-dark-hover: #2a2118;
+  --zaki-surface-dark-card: #1f1814;
+  --zaki-surface-dark-elevated: #2a2420;
+  --zaki-surface-dark-elevated-hover: #3a3430;
+  
+  /* Dark mode text variants */
+  --zaki-text-dark-muted: #a89a85;
+  --zaki-text-dark-subtle: #b8a99a;
   
   /* Shadows — more subtle in dark mode */
   --zaki-shadow-sm: 0px 4px 12px rgba(0, 0, 0, 0.2);
@@ -399,4 +435,49 @@
 
 .zaki-menu-item-danger:hover {
   background-color: var(--zaki-error-bg);
+}
+
+/* Brand opacity variants */
+.bg-zaki-brand-10 { background-color: var(--zaki-brand-10); }
+.bg-zaki-brand-15 { background-color: var(--zaki-brand-15); }
+.bg-zaki-brand-20 { background-color: var(--zaki-brand-20); }
+.hover\:bg-zaki-brand-20:hover { background-color: var(--zaki-brand-20); }
+
+/* Input surfaces */
+.bg-zaki-input { background-color: var(--zaki-surface-input); }
+
+/* Placeholder text */
+.placeholder-zaki::placeholder { color: var(--zaki-text-placeholder); }
+.placeholder-zaki-muted::placeholder { color: var(--zaki-text-muted); }
+
+/* Checkbox accent */
+.accent-zaki { accent-color: var(--zaki-text-placeholder); }
+
+/* Skeleton */
+.bg-zaki-skeleton { background-color: var(--zaki-surface-skeleton); }
+
+/* Dark mode specific utilities */
+.dark .dark\:bg-zaki-dark-hover { background-color: var(--zaki-surface-dark-hover); }
+.dark .dark\:bg-zaki-dark-card { background-color: var(--zaki-surface-dark-card); }
+.dark .dark\:bg-zaki-dark-elevated { background-color: var(--zaki-surface-dark-elevated); }
+.dark .dark\:hover\:bg-zaki-dark-hover:hover { background-color: var(--zaki-surface-dark-hover); }
+.dark .dark\:hover\:bg-zaki-dark-elevated:hover { background-color: var(--zaki-surface-dark-elevated-hover); }
+.dark .dark\:text-zaki-dark-muted { color: var(--zaki-text-dark-muted); }
+.dark .dark\:text-zaki-dark-subtle { color: var(--zaki-text-dark-subtle); }
+.dark .dark\:border-zaki-dark { border-color: var(--zaki-surface-dark-hover); }
+
+/* Spinner */
+.border-zaki-spinner {
+  border-color: rgba(136, 115, 90, 0.2);
+  border-top-color: var(--zaki-text-muted);
+}
+
+/* Info toast colors */
+.bg-zaki-info { background-color: var(--zaki-info-bg); }
+.border-zaki-info { border-color: var(--zaki-info-border); }
+.text-zaki-info { color: var(--zaki-info); }
+
+/* Brand gradient */
+.bg-zaki-gradient {
+  background: linear-gradient(to bottom right, var(--zaki-brand-gradient-from), var(--zaki-brand-gradient-to));
 }

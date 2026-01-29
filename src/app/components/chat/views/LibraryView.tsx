@@ -64,7 +64,7 @@ export function LibraryView({
             <div className="flex-1 flex items-center gap-2 rounded-full border border-zaki bg-zaki-raised px-3 py-2 text-sm">
               <Search className="size-4 text-zaki-muted" />
               <input
-                className="flex-1 bg-transparent outline-none text-zaki-primary placeholder-[#b09472]"
+                className="flex-1 bg-transparent outline-none text-zaki-primary placeholder-zaki"
                 placeholder="Search within selected workspace"
                 value={libraryQuery}
                 onChange={(event) => setLibraryQuery(event.target.value)}

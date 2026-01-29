@@ -181,7 +181,7 @@ export function ShareModal({
                       "flex items-center gap-2 p-3 rounded-zaki-md border transition-all",
                       shareType === 'public'
                         ? "border-zaki-focus bg-zaki-brand/10"
-                        : "border-zaki-subtle hover:border-[#3a3430]"
+                        : "border-zaki-subtle hover:border-zaki-strong"
                     )}
                   >
                     <Globe className={cn(
@@ -204,7 +204,7 @@ export function ShareModal({
                       "flex items-center gap-2 p-3 rounded-zaki-md border transition-all",
                       shareType === 'password'
                         ? "border-zaki-focus bg-zaki-brand/10"
-                        : "border-zaki-subtle hover:border-[#3a3430]"
+                        : "border-zaki-subtle hover:border-zaki-strong"
                     )}
                   >
                     <Shield className={cn(
@@ -233,7 +233,7 @@ export function ShareModal({
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-[#655543] focus:outline-none focus:border-zaki-focus transition-colors"
+                      className="w-full px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
                       placeholder="Enter password"
                     />
                   </div>
@@ -245,7 +245,7 @@ export function ShareModal({
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-[#655543] focus:outline-none focus:border-zaki-focus transition-colors"
+                      className="w-full px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
                       placeholder="Confirm password"
                     />
                   </div>
@@ -313,7 +313,7 @@ export function ShareModal({
                       "px-4 py-2.5 rounded-zaki-md font-medium transition-colors",
                       copied
                         ? "bg-green-500 text-white"
-                        : "bg-[#2a2420] hover:bg-[#3a3430] text-zaki-primary"
+                        : "bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary"
                     )}
                   >
                     {copied ? (
@@ -347,7 +347,7 @@ export function ShareModal({
               {/* Done button */}
               <button
                 onClick={handleClose}
-                className="w-full px-4 py-3 bg-[#2a2420] hover:bg-[#3a3430] text-zaki-primary font-medium rounded-zaki-md transition-colors"
+                className="w-full px-4 py-3 bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary font-medium rounded-zaki-md transition-colors"
               >
                 Done
               </button>

@@ -287,7 +287,7 @@ export function InputArea({
              id="chat-input"
              ref={textareaRef}
              rows={1}
-             className="zaki-input-field flex-1 bg-transparent outline-none text-zaki-primary placeholder-[#b09472] text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
+             className="zaki-input-field flex-1 bg-transparent outline-none text-zaki-primary placeholder-zaki text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
              placeholder="Ask anything"
              autoComplete="off"
              value={inputValue}

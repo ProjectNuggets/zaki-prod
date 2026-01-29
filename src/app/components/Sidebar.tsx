@@ -597,7 +597,7 @@ export function Sidebar() {
             <button
               className={cn(
                 "size-9 rounded-zaki-md text-zaki-brand flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                isActive("new-space") ? "bg-[#fa7319]/20" : "bg-[#fa7319]/15 hover:bg-[#fa7319]/20"
+                isActive("new-space") ? "bg-zaki-brand-20" : "bg-zaki-brand-15 hover:bg-zaki-brand-20"
               )}
               onClick={() => {
                 setActiveItem("new-space");
@@ -685,7 +685,7 @@ export function Sidebar() {
             <button
               className={cn(
                 "size-10 rounded-full flex items-center justify-center text-zaki-primary font-medium text-sm transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                isActive("profile") ? "bg-[#f0e6d8]" : "bg-zaki-elevated hover:bg-zaki-active"
+                isActive("profile") ? "bg-zaki-active" : "bg-zaki-elevated hover:bg-zaki-active"
               )}
               onClick={() => setActiveItem("profile")}
               type="button"
@@ -727,7 +727,7 @@ export function Sidebar() {
         <input 
           type="text" 
           placeholder="Search..." 
-          className="bg-transparent border-none outline-none text-zaki-muted placeholder-[#b09472] text-sm w-full font-medium"
+          className="bg-transparent border-none outline-none text-zaki-muted placeholder-zaki text-sm w-full font-medium"
         />
       </div>
 
@@ -745,7 +745,7 @@ export function Sidebar() {
           }}
           type="button"
         >
-          <div className="bg-[#fa7319]/15 rounded-full size-5 flex items-center justify-center">
+          <div className="bg-zaki-brand-15 rounded-full size-5 flex items-center justify-center">
             <AddIcon />
           </div>
           <span className="text-zaki-brand text-sm font-medium">New space</span>
@@ -787,11 +787,11 @@ export function Sidebar() {
       </div>
 
       {/* Divider */}
-      <div className="h-px bg-[#EBEBEB] w-full mb-5" />
+      <div className="h-px bg-zaki-sunken w-full mb-5" />
 
       {/* Space Section */}
       <div className="flex-1 overflow-y-auto">
-        <div className="text-[#a08462] text-xs font-medium mb-2 pl-1.5">Space</div>
+        <div className="text-zaki-muted text-xs font-medium mb-2 pl-1.5">Space</div>
         {spacesLoading && (
           <div className="mb-3">
             <SkeletonSpaceList />
@@ -1264,7 +1264,7 @@ export function Sidebar() {
                   </label>
                   <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Auto-generate titles
-                    <input type="checkbox" className="size-4 accent-[#b09472]" defaultChecked />
+                    <input type="checkbox" className="size-4 accent-zaki" defaultChecked />
                   </label>
                 </div>
               </div>
@@ -1284,11 +1284,11 @@ export function Sidebar() {
                 <div className="mt-3 grid gap-3">
                   <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Allow chat analytics
-                    <input type="checkbox" className="size-4 accent-[#b09472]" />
+                    <input type="checkbox" className="size-4 accent-zaki" />
                   </label>
                   <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Save chat history
-                    <input type="checkbox" className="size-4 accent-[#b09472]" defaultChecked />
+                    <input type="checkbox" className="size-4 accent-zaki" defaultChecked />
                   </label>
                 </div>
               </div>
@@ -1409,7 +1409,7 @@ export function Sidebar() {
               </button>
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-white bg-[#d24430] hover:bg-zaki-brand transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand transition-colors"
                 onClick={() => {
                   performDelete(confirmDelete.type, confirmDelete.id);
                   setConfirmDelete(null);

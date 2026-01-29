@@ -34,7 +34,7 @@ export function DeleteConfirmModal({
           </button>
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-white bg-[#d24430] hover:bg-zaki-brand transition-colors"
+            className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand transition-colors"
             onClick={() => {
               onConfirm(item.type, item.id);
               onClose();

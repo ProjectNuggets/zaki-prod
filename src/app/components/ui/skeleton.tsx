@@ -11,7 +11,7 @@ export function Skeleton({ className, style, ...props }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "animate-pulse bg-[#efe4d6] rounded",
+        "animate-pulse bg-zaki-skeleton rounded",
         className
       )}
       style={style}

@@ -111,6 +111,49 @@ Use with Tailwind: `text-xs`, `text-sm`, `text-base`, etc.
 
 **Classes:** `transition-zaki-fast`, `transition-zaki-base`, `transition-zaki-slow`
 
+### Brand Opacity Variants
+
+| Token | Usage |
+|-------|-------|
+| `--zaki-brand-10` | Very subtle brand background |
+| `--zaki-brand-15` | Subtle brand background |
+| `--zaki-brand-20` | Light brand background |
+
+**Classes:** `bg-zaki-brand-10`, `bg-zaki-brand-15`, `bg-zaki-brand-20`, `hover:bg-zaki-brand-20`
+
+### Dark Mode Utilities
+
+| Class | Usage |
+|-------|-------|
+| `dark:bg-zaki-dark-hover` | Dark mode hover background |
+| `dark:bg-zaki-dark-card` | Dark mode card background |
+| `dark:bg-zaki-dark-elevated` | Dark mode elevated surface |
+| `dark:text-zaki-dark-muted` | Dark mode muted text |
+| `dark:text-zaki-dark-subtle` | Dark mode subtle text |
+| `dark:border-zaki-dark` | Dark mode borders |
+
+### Info State (Toasts)
+
+| Class | Usage |
+|-------|-------|
+| `bg-zaki-info` | Info toast background |
+| `border-zaki-info` | Info toast border |
+| `text-zaki-info` | Info toast text |
+
+### Gradient
+
+| Class | Usage |
+|-------|-------|
+| `bg-zaki-gradient` | Brand gradient (logo backgrounds) |
+
+### Form Elements
+
+| Class | Usage |
+|-------|-------|
+| `placeholder-zaki` | Input placeholder text |
+| `placeholder-zaki-muted` | Muted placeholder text |
+| `accent-zaki` | Checkbox/radio accent color |
+
 ---
 
 ## Component Classes

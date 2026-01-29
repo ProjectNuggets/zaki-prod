@@ -12,13 +12,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       toastOptions={{
         classNames: {
-          toast: "group toast bg-white dark:bg-zaki-primary border-zaki dark:border-[#3d3529] shadow-lg",
-          title: "text-zaki-primary dark:text-[#faf6f0] font-medium",
-          description: "text-zaki-secondary dark:text-[#a89a85]",
+          toast: "group toast bg-white dark:bg-zaki-primary border-zaki dark:border-zaki-dark shadow-lg",
+          title: "text-zaki-primary dark:text-zaki-primary font-medium",
+          description: "text-zaki-secondary dark:text-zaki-dark-muted",
           success: "!bg-zaki-success !border-zaki-strong !text-zaki-success",
           error: "!bg-zaki-error !border-zaki-strong !text-zaki-brand",
           warning: "!bg-zaki-base !border-zaki !text-zaki-muted",
-          info: "!bg-[#f0f8ff] !border-[#d6e7f5] !text-[#2563eb]",
+          info: "!bg-zaki-info !border-zaki-info !text-zaki-info",
         },
       }}
       position="bottom-right"
