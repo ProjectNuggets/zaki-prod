@@ -40,32 +40,32 @@ export function ChatMarkdown({ content }: { content: string }) {
     () => ({
       pre: ({ children }: { children: React.ReactNode }) => <>{children}</>,
       p: ({ children }: { children: React.ReactNode }) => (
-        <p className="mb-3 text-sm leading-6 text-[#1f1a14] last:mb-0">
+        <p className="mb-3 text-sm leading-6 text-zaki-primary last:mb-0">
           {children}
         </p>
       ),
       h1: ({ children }: { children: React.ReactNode }) => (
-        <h1 className="mb-3 text-lg font-semibold text-[#1f1a14]">
+        <h1 className="mb-3 text-lg font-semibold text-zaki-primary">
           {children}
         </h1>
       ),
       h2: ({ children }: { children: React.ReactNode }) => (
-        <h2 className="mb-3 text-base font-semibold text-[#1f1a14]">
+        <h2 className="mb-3 text-base font-semibold text-zaki-primary">
           {children}
         </h2>
       ),
       h3: ({ children }: { children: React.ReactNode }) => (
-        <h3 className="mb-2 text-sm font-semibold text-[#1f1a14]">
+        <h3 className="mb-2 text-sm font-semibold text-zaki-primary">
           {children}
         </h3>
       ),
       ul: ({ children }: { children: React.ReactNode }) => (
-        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-[#1f1a14]">
+        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-zaki-primary">
           {children}
         </ul>
       ),
       ol: ({ children }: { children: React.ReactNode }) => (
-        <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-[#1f1a14]">
+        <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-zaki-primary">
           {children}
         </ol>
       ),
@@ -83,13 +83,13 @@ export function ChatMarkdown({ content }: { content: string }) {
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="text-[#D24430] underline underline-offset-2 hover:text-[#b63a28]"
+          className="text-zaki-brand underline underline-offset-2 hover:text-zaki-brand"
         >
           {children}
         </a>
       ),
       blockquote: ({ children }: { children: React.ReactNode }) => (
-        <blockquote className="mb-3 border-l-2 border-[#e7dbc9] pl-3 text-sm text-[#655543]">
+        <blockquote className="mb-3 border-l-2 border-zaki-strong pl-3 text-sm text-zaki-secondary">
           {children}
         </blockquote>
       ),
@@ -105,7 +105,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         const text = extractText(children ?? "").replace(/\n$/, "");
         if (inline) {
           return (
-            <code className="rounded bg-[#f6efe6] px-1.5 py-0.5 font-mono text-[0.85em] text-[#5c4a35]">
+            <code className="rounded bg-zaki-sunken px-1.5 py-0.5 font-mono text-[0.85em] text-zaki-secondary">
               {text}
             </code>
           );
@@ -154,18 +154,18 @@ export function ChatMarkdown({ content }: { content: string }) {
         };
 
         return (
-          <div className="my-4 overflow-hidden rounded-2xl border border-[#e9dfd2] bg-[#fdfaf6]">
-            <div className="flex items-center justify-between bg-[#f6efe6] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[#88735A]">
+          <div className="my-4 overflow-hidden rounded-zaki-lg border border-zaki bg-zaki-raised">
+            <div className="flex items-center justify-between bg-zaki-sunken px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-zaki-muted">
               <span>{displayLanguage}</span>
               <button
                 type="button"
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#88735A] hover:text-[#655543]"
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zaki-muted hover:text-zaki-secondary"
                 onClick={handleCopy}
               >
                 {copiedBlock === key ? "Copied" : "Copy"}
               </button>
             </div>
-            <pre className="overflow-x-auto px-4 py-3 text-sm leading-6 text-[#1f1a14] font-mono">
+            <pre className="overflow-x-auto px-4 py-3 text-sm leading-6 text-zaki-primary font-mono">
               <code className={codeClassName}>
                 {shouldUseChildren ? children : text}
               </code>
@@ -174,14 +174,14 @@ export function ChatMarkdown({ content }: { content: string }) {
         );
       },
       table: ({ children }: { children: React.ReactNode }) => (
-        <div className="mb-4 overflow-hidden rounded-2xl border border-[#e9dfd2]">
-          <table className="w-full text-left text-sm text-[#1f1a14]">
+        <div className="mb-4 overflow-hidden rounded-zaki-lg border border-zaki">
+          <table className="w-full text-left text-sm text-zaki-primary">
             {children}
           </table>
         </div>
       ),
       thead: ({ children }: { children: React.ReactNode }) => (
-        <thead className="bg-[#f6efe6] text-xs uppercase tracking-[0.14em] text-[#88735A]">
+        <thead className="bg-zaki-sunken text-xs uppercase tracking-[0.14em] text-zaki-muted">
           {children}
         </thead>
       ),
@@ -189,7 +189,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         <tbody className="bg-white">{children}</tbody>
       ),
       tr: ({ children }: { children: React.ReactNode }) => (
-        <tr className="border-b border-[#efe4d6] last:border-b-0">
+        <tr className="border-b border-zaki last:border-b-0">
           {children}
         </tr>
       ),

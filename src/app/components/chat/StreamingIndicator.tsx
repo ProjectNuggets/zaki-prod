@@ -8,13 +8,13 @@ export function StreamingIndicator() {
           <CenterLogo />
         </div>
       </div>
-      <div className="rounded-2xl px-4 py-3 text-sm bg-transparent text-[#1f1a14]">
-        <div className="flex items-center gap-2 text-[#88735A]">
+      <div className="rounded-zaki-lg px-4 py-3 text-sm bg-transparent text-zaki-primary">
+        <div className="flex items-center gap-2 text-zaki-muted">
           <span>Thinking</span>
           <span className="flex gap-1" aria-hidden="true">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce [animation-delay:-0.2s]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce [animation-delay:-0.1s]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#b09472] animate-bounce" />
+            <span className="h-1.5 w-1.5 rounded-full bg-zaki-muted animate-bounce [animation-delay:-0.2s]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-zaki-muted animate-bounce [animation-delay:-0.1s]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-zaki-muted animate-bounce" />
           </span>
         </div>
       </div>

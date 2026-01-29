@@ -6,8 +6,8 @@ export function WelcomeScreen() {
       <div className="flex flex-col items-center gap-5">
         <CenterLogo />
         <div className="text-center">
-          <h1 className="text-[#1f1a14] text-lg font-medium mb-1">Marhaba Tarek</h1>
-          <p className="text-[#b09472] text-sm font-medium">What can I help you with today?</p>
+          <h1 className="text-zaki-primary text-lg font-medium mb-1">Marhaba Tarek</h1>
+          <p className="text-zaki-muted text-sm font-medium">What can I help you with today?</p>
         </div>
       </div>
     </div>

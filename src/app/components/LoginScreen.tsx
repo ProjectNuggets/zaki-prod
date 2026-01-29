@@ -154,12 +154,12 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fff8f0] flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-[28px] border border-[#efe4d6] bg-white shadow-[0px_22px_60px_rgba(15,15,15,0.12)] p-8">
+    <div className="min-h-screen bg-zaki-base flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-[28px] border border-zaki bg-white shadow-[0px_22px_60px_rgba(15,15,15,0.12)] p-8">
         <div className="flex items-center">
           <LogoArabicOrange />
         </div>
-        <h1 className="mt-2 text-2xl font-semibold text-[#1f1a14]">
+        <h1 className="mt-2 text-2xl font-semibold text-zaki-primary">
           {mode === "signup"
             ? "Create your account"
             : mode === "reset-request"
@@ -172,32 +172,32 @@ export function LoginScreen() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {mode === "reset-confirm" && (
-            <div className="rounded-xl border border-[#e7dbc9] bg-[#fff8f0] px-3 py-2 text-xs text-[#655543]">
+            <div className="rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-xs text-zaki-secondary">
               Enter your new password below.
             </div>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
               Full name
               <input
                 type="text"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
                 placeholder="Your full name"
-                className="rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="name"
                 required
               />
             </label>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
               Date of birth
               <input
                 type="date"
                 value={dateOfBirth}
                 onChange={(event) => setDateOfBirth(event.target.value)}
-                className="rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="bday"
                 required
               />
@@ -206,14 +206,14 @@ export function LoginScreen() {
           {(mode === "login" ||
             mode === "signup" ||
             mode === "reset-request") && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
               Email
               <input
                 type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
-                className="rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="email"
                 required
               />
@@ -221,7 +221,7 @@ export function LoginScreen() {
           )}
 
           {(mode === "login" || mode === "signup") && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
               Password
               <div className="relative">
                 <input
@@ -229,13 +229,13 @@ export function LoginScreen() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Your password"
-                  className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 pr-12 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 pr-12 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#b09472] hover:text-[#655543]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zaki-muted hover:text-zaki-secondary"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
@@ -252,7 +252,7 @@ export function LoginScreen() {
           {mode === "login" && (
             <button
               type="button"
-              className="text-left text-xs font-semibold text-[#655543] hover:text-[#1f1a14]"
+              className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary"
               onClick={() => {
                 setError("");
                 setNotice("");
@@ -264,14 +264,14 @@ export function LoginScreen() {
           )}
 
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
               Confirm password
               <input
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Repeat your password"
-                className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="new-password"
                 required
               />
@@ -280,26 +280,26 @@ export function LoginScreen() {
 
           {mode === "reset-confirm" && (
             <>
-              <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
                 New password
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetPassword}
                   onChange={(event) => setResetPassword(event.target.value)}
                   placeholder="New password"
-                  className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   autoComplete="new-password"
                   required
                 />
               </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold text-[#88735A]">
+              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
                 Confirm new password
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetConfirm}
                   onChange={(event) => setResetConfirm(event.target.value)}
                   placeholder="Repeat new password"
-                  className="w-full rounded-xl border border-[#e7dbc9] px-4 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   autoComplete="new-password"
                   required
                 />
@@ -308,12 +308,12 @@ export function LoginScreen() {
           )}
 
           {notice && (
-            <div className="rounded-xl border border-[#d8e7d1] bg-[#f3fbef] px-3 py-2 text-xs text-[#2f6a36]">
+            <div className="rounded-zaki-md border border-zaki-strong bg-zaki-success px-3 py-2 text-xs text-zaki-success">
               {notice}
             </div>
           )}
           {error && (
-            <div className="rounded-xl border border-[#f6d5ce] bg-[#fff3f0] px-3 py-2 text-xs text-[#d24430]">
+            <div className="rounded-zaki-md border border-zaki-strong bg-zaki-error px-3 py-2 text-xs text-zaki-brand">
               {error}
             </div>
           )}
@@ -327,7 +327,7 @@ export function LoginScreen() {
               (mode === "reset-confirm" &&
                 (resetPassword.length === 0 || resetConfirm.length === 0))
             }
-            className="w-full rounded-xl bg-[#1f1a14] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2b241c] disabled:opacity-60"
+            className="w-full rounded-zaki-md bg-zaki-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zaki-active disabled:opacity-60"
           >
             {isLoading
               ? mode === "signup"
@@ -349,7 +349,7 @@ export function LoginScreen() {
 
         <button
           type="button"
-          className="mt-4 text-xs font-semibold text-[#655543] hover:text-[#1f1a14]"
+          className="mt-4 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary"
           onClick={() => {
             setError("");
             setNotice("");

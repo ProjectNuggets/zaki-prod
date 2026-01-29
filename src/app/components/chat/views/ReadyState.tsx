@@ -8,8 +8,8 @@ export const ReadyState = forwardRef<HTMLDivElement>(function ReadyState(_, ref)
         <div className="scale-110">
           <CenterLogo />
         </div>
-        <div className="text-[#1f1a14] text-sm font-medium">ZKAI</div>
-        <div className="text-[#a3a3a3] text-base">Ready when you are</div>
+        <div className="text-zaki-primary text-sm font-medium">ZKAI</div>
+        <div className="text-zaki-disabled text-base">Ready when you are</div>
       </div>
     </div>
   );

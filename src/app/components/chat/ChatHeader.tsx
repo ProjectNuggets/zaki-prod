@@ -33,10 +33,10 @@ export function ChatHeader({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#efe4d6] dark:border-[#2a2118] bg-white/50 dark:bg-[#16120e]/50 backdrop-blur-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zaki dark:border-[#2a2118] bg-white/50 dark:bg-[#16120e]/50 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <CenterLogo className="size-6 text-[#D24430]" />
-          <h1 className="text-sm font-semibold text-[#1f1a14] dark:text-[#efe6d9] truncate max-w-[200px]">
+          <CenterLogo className="size-6 text-zaki-brand" />
+          <h1 className="text-sm font-semibold text-zaki-primary dark:text-zaki-primary truncate max-w-[200px]">
             {title}
           </h1>
         </div>
@@ -46,7 +46,7 @@ export function ChatHeader({
             <button
               type="button"
               onClick={onRegenerate}
-              className="size-8 flex items-center justify-center rounded-lg text-[#88735A] hover:bg-[#f8f2e9] dark:hover:bg-[#2a2118] transition-colors"
+              className="size-8 flex items-center justify-center rounded-lg text-zaki-muted hover:bg-zaki-hover dark:hover:bg-[#2a2118] transition-colors"
               aria-label="Regenerate"
             >
               <svg
@@ -68,7 +68,7 @@ export function ChatHeader({
             <button
               type="button"
               onClick={handleCopy}
-              className="size-8 flex items-center justify-center rounded-lg text-[#88735A] hover:bg-[#f8f2e9] dark:hover:bg-[#2a2118] transition-colors"
+              className="size-8 flex items-center justify-center rounded-lg text-zaki-muted hover:bg-zaki-hover dark:hover:bg-[#2a2118] transition-colors"
               aria-label={copied ? "Copied" : "Copy"}
             >
               {copied ? (
@@ -86,7 +86,7 @@ export function ChatHeader({
               type="button"
               onClick={onShare}
               className={`size-8 flex items-center justify-center rounded-lg transition-colors ${
-                shareOpen ? "bg-[#f8f2e9] text-[#D24430]" : "text-[#88735A] hover:bg-[#f8f2e9] dark:hover:bg-[#2a2118]"
+                shareOpen ? "bg-zaki-hover text-zaki-brand" : "text-zaki-muted hover:bg-zaki-hover dark:hover:bg-[#2a2118]"
               }`}
               aria-label="Share"
               aria-expanded={shareOpen}
@@ -100,7 +100,7 @@ export function ChatHeader({
               type="button"
               onClick={onMenuToggle}
               className={`size-8 flex items-center justify-center rounded-lg transition-colors ${
-                menuOpen ? "bg-[#f8f2e9] text-[#D24430]" : "text-[#88735A] hover:bg-[#f8f2e9] dark:hover:bg-[#2a2118]"
+                menuOpen ? "bg-zaki-hover text-zaki-brand" : "text-zaki-muted hover:bg-zaki-hover dark:hover:bg-[#2a2118]"
               }`}
               aria-label="Menu"
               aria-expanded={menuOpen}

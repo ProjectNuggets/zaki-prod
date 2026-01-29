@@ -572,7 +572,7 @@ export function Sidebar() {
           <div className="flex flex-col items-center gap-4">
             <button
               type="button"
-              className="size-9 rounded-xl bg-[#fff4e8] border border-[#f3e5d4] flex items-center justify-center"
+              className="size-9 rounded-zaki-md bg-zaki-selected border border-zaki flex items-center justify-center"
               onClick={() => {
                 setExpandedSpace("zaki");
                 setActiveItem("zaki");
@@ -583,7 +583,7 @@ export function Sidebar() {
               <LogoArabicOrange />
             </button>
             <button
-              className="size-9 rounded-xl border border-transparent hover:border-[#EBEBEB] hover:bg-[#f8f2e9] transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+              className="size-9 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
               onClick={() => setCollapsed(false)}
               type="button"
               title="Expand sidebar"
@@ -596,7 +596,7 @@ export function Sidebar() {
           <div className="mt-6 flex flex-col items-center gap-2">
             <button
               className={cn(
-                "size-9 rounded-xl text-[#d24430] flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
+                "size-9 rounded-zaki-md text-zaki-brand flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
                 isActive("new-space") ? "bg-[#fa7319]/20" : "bg-[#fa7319]/15 hover:bg-[#fa7319]/20"
               )}
               onClick={() => {
@@ -612,8 +612,8 @@ export function Sidebar() {
             </button>
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
-                isActive("spaces") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                isActive("spaces") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
               )}
               onClick={() => {
                 setActiveItem("spaces");
@@ -627,8 +627,8 @@ export function Sidebar() {
             </button>
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
-                isActive("library") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                isActive("library") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
               )}
               onClick={() => {
                 setActiveItem("library");
@@ -642,8 +642,8 @@ export function Sidebar() {
             </button>
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
-                isActive("search") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                isActive("search") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
               )}
               onClick={() => setActiveItem("search")}
               type="button"
@@ -657,8 +657,8 @@ export function Sidebar() {
           <div className="mt-6 flex flex-col items-center gap-2">
             <button
               className={cn(
-                "size-9 rounded-xl transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
-                isActive("research") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                isActive("research") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
               )}
               onClick={() => {
                 setExpandedSpace("research");
@@ -671,7 +671,7 @@ export function Sidebar() {
               <FolderIcon />
             </button>
             <button
-              className="size-9 rounded-xl flex items-center justify-center transition-colors bg-[#faf6f0] hover:bg-[#f0e6d8] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+              className="size-9 rounded-zaki-md flex items-center justify-center transition-colors bg-zaki-elevated hover:bg-zaki-active focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
               onClick={() => createThreadInSpace(expandedSpace ?? spaces[0]?.id ?? null)}
               type="button"
               title="New chat"
@@ -684,8 +684,8 @@ export function Sidebar() {
           <div className="mt-auto flex flex-col items-center gap-3 pt-4">
             <button
               className={cn(
-                "size-10 rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-sm transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2",
-                isActive("profile") ? "bg-[#f0e6d8]" : "bg-[#faf6f0] hover:bg-[#f0e6d8]"
+                "size-10 rounded-full flex items-center justify-center text-zaki-primary font-medium text-sm transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                isActive("profile") ? "bg-[#f0e6d8]" : "bg-zaki-elevated hover:bg-zaki-active"
               )}
               onClick={() => setActiveItem("profile")}
               type="button"
@@ -712,7 +712,7 @@ export function Sidebar() {
           <LogoArabicOrange />
         </button>
         <button
-          className="bg-white p-1.5 rounded-lg border border-transparent hover:border-[#EBEBEB] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+          className="bg-white p-1.5 rounded-lg border border-transparent hover:border-zaki-subtle transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
           onClick={() => setCollapsed(true)}
           type="button"
           aria-label="Collapse sidebar"
@@ -722,12 +722,12 @@ export function Sidebar() {
       </div>
 
       {/* Search */}
-      <div className="bg-[#f8f2e9] rounded-[10px] flex items-center p-2 gap-2 mb-5">
+      <div className="bg-zaki-hover rounded-[10px] flex items-center p-2 gap-2 mb-5">
         <SearchIcon />
         <input 
           type="text" 
           placeholder="Search..." 
-          className="bg-transparent border-none outline-none text-[#b09472] placeholder-[#b09472] text-sm w-full font-medium"
+          className="bg-transparent border-none outline-none text-zaki-muted placeholder-[#b09472] text-sm w-full font-medium"
         />
       </div>
 
@@ -736,7 +736,7 @@ export function Sidebar() {
         <button
           className={cn(
             "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-            isActive("new-space") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+            isActive("new-space") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
           )}
           onClick={() => {
             setActiveItem("new-space");
@@ -748,13 +748,13 @@ export function Sidebar() {
           <div className="bg-[#fa7319]/15 rounded-full size-5 flex items-center justify-center">
             <AddIcon />
           </div>
-          <span className="text-[#d24430] text-sm font-medium">New space</span>
+          <span className="text-zaki-brand text-sm font-medium">New space</span>
         </button>
 
         <button
           className={cn(
             "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-            isActive("spaces") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+            isActive("spaces") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
           )}
           onClick={() => {
             setActiveItem("spaces");
@@ -765,13 +765,13 @@ export function Sidebar() {
           <div className="size-5 flex items-center justify-center">
              <EditIcon />
           </div>
-          <span className="text-[#655543] text-sm font-medium">Spaces</span>
+          <span className="text-zaki-secondary text-sm font-medium">Spaces</span>
         </button>
 
         <button
           className={cn(
             "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-            isActive("library") ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+            isActive("library") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
           )}
           onClick={() => {
             setActiveItem("library");
@@ -782,7 +782,7 @@ export function Sidebar() {
           <div className="size-5 flex items-center justify-center">
              <BookIcon />
           </div>
-          <span className="text-[#655543] text-sm font-medium">Library</span>
+          <span className="text-zaki-secondary text-sm font-medium">Library</span>
         </button>
       </div>
 
@@ -798,7 +798,7 @@ export function Sidebar() {
           </div>
         )}
         {spacesError && (
-          <div className="text-xs text-[#d24430] mb-3 pl-1.5">{spacesError}</div>
+          <div className="text-xs text-zaki-brand mb-3 pl-1.5">{spacesError}</div>
         )}
         
         <div className="flex flex-col gap-1">
@@ -814,7 +814,7 @@ export function Sidebar() {
                   }}
                   className={cn(
                     "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-                    isSpaceActive(space.id) ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                    isSpaceActive(space.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
                   )}
                   type="button"
                 >
@@ -823,7 +823,7 @@ export function Sidebar() {
                       <CenterLogo />
                     </div>
                   </div>
-                  <span className="text-[#655543] text-sm font-medium flex-1">{space.title}</span>
+                  <span className="text-zaki-secondary text-sm font-medium flex-1">{space.title}</span>
                   {space.threads.length > 0 && (
                     <span
                       className={cn(
@@ -847,8 +847,8 @@ export function Sidebar() {
                     <div key={thread.id} className="relative group">
                       <button
                         className={cn(
-                          "w-full text-left text-[#655543] text-sm font-medium py-1.5 px-2 rounded-lg",
-                          isActive(thread.id) ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                          "w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
+                          isActive(thread.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
                         )}
                         onClick={() => {
                           setExpandedSpace(space.id);
@@ -862,14 +862,14 @@ export function Sidebar() {
                     </div>
                   ))}
                   <button
-                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-[#f8f2e9]"
+                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
                   >
-                    <div className="bg-[#faf6f0] rounded-full size-5 flex items-center justify-center">
+                    <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="#88735A" />
                     </div>
-                    <span className="text-[#88735a] text-sm font-medium">New chat</span>
+                    <span className="text-zaki-muted text-sm font-medium">New chat</span>
                   </button>
                 </div>
               )}
@@ -887,7 +887,7 @@ export function Sidebar() {
                   }}
                   className={cn(
                     "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-                    isSpaceActive(space.id) ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                    isSpaceActive(space.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
                   )}
                   type="button"
                 >
@@ -899,7 +899,7 @@ export function Sidebar() {
                   </div>
                   {editingItem?.type === "space" && editingItem.id === space.id ? (
                     <input
-                      className="flex-1 bg-white border border-[#e7dbc9] rounded-md px-2 py-1 text-sm text-[#655543] outline-none"
+                      className="flex-1 bg-white border border-zaki-strong rounded-md px-2 py-1 text-sm text-zaki-secondary outline-none"
                       value={editingValue}
                       onChange={(event) => setEditingValue(event.target.value)}
                       onBlur={commitRename}
@@ -914,13 +914,13 @@ export function Sidebar() {
                       autoFocus
                     />
                   ) : (
-                    <span className="text-[#655543] text-sm font-medium flex-1">{space.title}</span>
+                    <span className="text-zaki-secondary text-sm font-medium flex-1">{space.title}</span>
                   )}
                   <div className="flex items-center gap-1">
                 {!space.fixed && (
                   <button
                     type="button"
-                    className="size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition"
+                    className="size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition"
                     onClick={(event) => {
                       event.stopPropagation();
                       setOpenMenu(openMenu?.id === space.id ? null : { type: "space", id: space.id });
@@ -929,7 +929,7 @@ export function Sidebar() {
                     aria-haspopup="menu"
                     aria-expanded={openMenu?.id === space.id}
                   >
-                    <MoreHorizontal className="size-4 text-[#b09472]" />
+                    <MoreHorizontal className="size-4 text-zaki-muted" />
                   </button>
                 )}
                     {space.threads.length > 0 && (
@@ -951,29 +951,29 @@ export function Sidebar() {
                 </button>
                 {openMenu?.type === "space" && openMenu.id === space.id && (
                   <div
-                    className="absolute right-0 top-9 w-36 rounded-xl border border-[#EBEBEB] bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                    className="absolute right-0 top-9 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
                     role="menu"
                     data-menu
                   >
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-[#1f1a14] hover:bg-[#f8f2e9]"
+                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
                       onClick={() => togglePinned("space", space.id)}
                     >
-                      <Pin className="size-3.5 text-[#88735A]" />
+                      <Pin className="size-3.5 text-zaki-muted" />
                       {space.pinned ? "Unpin" : "Pinned"}
                     </button>
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-[#1f1a14] hover:bg-[#f8f2e9]"
+                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
                       onClick={() => startRename("space", space.id, space.title)}
                     >
-                      <Pencil className="size-3.5 text-[#88735A]" />
+                      <Pencil className="size-3.5 text-zaki-muted" />
                       Rename
                     </button>
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-[#d24430] hover:bg-[#fff3f0]"
+                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-brand hover:bg-zaki-error"
                       onClick={() => setConfirmDelete({ type: "space", id: space.id, label: space.title })}
                     >
                       <Trash2 className="size-3.5" />
@@ -989,8 +989,8 @@ export function Sidebar() {
                     <div key={thread.id} className="relative group">
                       <button
                         className={cn(
-                          "w-full text-left text-[#655543] text-sm font-medium py-1.5 px-2 rounded-lg",
-                          isActive(thread.id) ? "bg-[#f8f2e9]" : "hover:bg-[#f8f2e9]"
+                          "w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
+                          isActive(thread.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
                         )}
                         onClick={() => {
                           setExpandedSpace(space.id);
@@ -1001,7 +1001,7 @@ export function Sidebar() {
                       >
                         {editingItem?.type === "thread" && editingItem.id === thread.id ? (
                           <input
-                            className="w-full bg-white border border-[#e7dbc9] rounded-md px-2 py-1 text-sm text-[#655543] outline-none"
+                            className="w-full bg-white border border-zaki-strong rounded-md px-2 py-1 text-sm text-zaki-secondary outline-none"
                             value={editingValue}
                             onChange={(event) => setEditingValue(event.target.value)}
                             onBlur={commitRename}
@@ -1021,7 +1021,7 @@ export function Sidebar() {
                       </button>
                       <button
                         type="button"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#f8f2e9] transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(openMenu?.id === thread.id ? null : { type: "thread", id: thread.id });
@@ -1031,33 +1031,33 @@ export function Sidebar() {
                         aria-expanded={openMenu?.id === thread.id}
                         aria-label={`${thread.label} options`}
                       >
-                        <MoreHorizontal className="size-4 text-[#b09472]" />
+                        <MoreHorizontal className="size-4 text-zaki-muted" />
                       </button>
                       {openMenu?.type === "thread" && openMenu.id === thread.id && (
                         <div
-                          className="absolute right-0 top-8 w-36 rounded-xl border border-[#EBEBEB] bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
                           role="menu"
                           data-menu
                         >
                           <button
                             type="button"
-                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-[#1f1a14] hover:bg-[#f8f2e9]"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
                             onClick={() => togglePinned("thread", thread.id)}
                           >
-                            <Pin className="size-3.5 text-[#88735A]" />
+                            <Pin className="size-3.5 text-zaki-muted" />
                             {thread.pinned ? "Unpin" : "Pinned"}
                           </button>
                           <button
                             type="button"
-                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-[#1f1a14] hover:bg-[#f8f2e9]"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
                             onClick={() => startRename("thread", thread.id, thread.label)}
                           >
-                            <Pencil className="size-3.5 text-[#88735A]" />
+                            <Pencil className="size-3.5 text-zaki-muted" />
                             Rename
                           </button>
                           <button
                             type="button"
-                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-[#d24430] hover:bg-[#fff3f0]"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-brand hover:bg-zaki-error"
                             onClick={() => setConfirmDelete({ type: "thread", id: thread.id, label: thread.label })}
                           >
                             <Trash2 className="size-3.5" />
@@ -1068,14 +1068,14 @@ export function Sidebar() {
                     </div>
                   ))}
                   <button
-                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-[#f8f2e9]"
+                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
                   >
-                    <div className="bg-[#faf6f0] rounded-full size-5 flex items-center justify-center">
+                    <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="#88735A" />
                     </div>
-                    <span className="text-[#88735a] text-sm font-medium">New chat</span>
+                    <span className="text-zaki-muted text-sm font-medium">New chat</span>
                   </button>
                 </div>
               )}
@@ -1086,10 +1086,10 @@ export function Sidebar() {
       </div>
 
       {/* Footer Profile */}
-      <div className="mt-4 pt-3 border-t border-[#EBEBEB] relative">
+      <div className="mt-4 pt-3 border-t border-zaki-subtle relative">
         <div
           className={cn(
-            "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-[#f8f2e9]"
+            "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-zaki-hover"
           )}
           onClick={() => {
             setActiveItem("profile");
@@ -1099,7 +1099,7 @@ export function Sidebar() {
           tabIndex={0}
           data-profile-button
         >
-          <div className="size-10 bg-[#faf6f0] rounded-full flex items-center justify-center text-[#1f1a14] font-medium text-base overflow-hidden">
+          <div className="size-10 bg-zaki-elevated rounded-full flex items-center justify-center text-zaki-primary font-medium text-base overflow-hidden">
             {profileImageUrl ? (
               <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
             ) : (
@@ -1107,11 +1107,11 @@ export function Sidebar() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[#1f1a14] text-sm font-medium truncate">{userName}</div>
+            <div className="text-zaki-primary text-sm font-medium truncate">{userName}</div>
             <div
               className={cn(
                 "text-xs font-semibold uppercase tracking-wider",
-                planLabel === "PRO" ? "text-[#0c291d]" : "text-[#219171]"
+                planLabel === "PRO" ? "text-zaki-success" : "text-zaki-success"
               )}
             >
               {planLabel === "PRO" ? "Plus" : "Free"}
@@ -1120,19 +1120,19 @@ export function Sidebar() {
         </div>
         {profileMenuOpen && (
           <div
-            className="absolute bottom-14 right-0 w-[230px] rounded-2xl border border-[#EBEBEB] bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1 z-20"
+            className="absolute bottom-14 right-0 w-[230px] rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1 z-20"
             role="menu"
             data-profile-menu
           >
             <button
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-[#f8f2e9] transition-colors"
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-zaki-md hover:bg-zaki-hover transition-colors"
               type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
                 setProfileEditOpen(true);
               }}
             >
-              <div className="size-7 rounded-full bg-[#faf6f0] flex items-center justify-center text-xs font-medium text-[#1f1a14] overflow-hidden">
+              <div className="size-7 rounded-full bg-zaki-elevated flex items-center justify-center text-xs font-medium text-zaki-primary overflow-hidden">
                 {profileImageUrl ? (
                   <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
                 ) : (
@@ -1140,48 +1140,48 @@ export function Sidebar() {
                 )}
               </div>
               <div className="min-w-0 text-left">
-                <div className="text-sm text-[#1f1a14] font-medium truncate">{userName}</div>
-                <div className="text-xs text-[#a3a3a3] truncate">Manage profile</div>
+                <div className="text-sm text-zaki-primary font-medium truncate">{userName}</div>
+                <div className="text-xs text-zaki-disabled truncate">Manage profile</div>
               </div>
               <span className={cn(
                 "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
-                planLabel === "PRO" ? "bg-[#c2f5da] text-[#0c291d]" : "bg-[#efefef] text-[#219171]"
+                planLabel === "PRO" ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-success"
               )}>
                 {planLabel}
               </span>
             </button>
-            <div className="h-px bg-[#f1f1f1] my-1" />
+            <div className="h-px bg-zaki-sunken my-1" />
             <button
-              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+              className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
               type="button"
               onClick={() => setThemePreference(isDark ? "light" : "dark")}
             >
-              <Moon className="size-4 text-[#88735A]" />
+              <Moon className="size-4 text-zaki-muted" />
               Dark mode
-              <span className="ml-auto text-[#a3a3a3] text-xs">{isDark ? "On" : "Off"}</span>
+              <span className="ml-auto text-zaki-disabled text-xs">{isDark ? "On" : "Off"}</span>
             </button>
             <button
-              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+              className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
               type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
                 setSettingsOpen(true);
               }}
             >
-              <Settings className="size-4 text-[#88735A]" />
+              <Settings className="size-4 text-zaki-muted" />
               Settings
             </button>
-            <button className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors" type="button">
-              <Globe className="size-4 text-[#88735A]" />
+            <button className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors" type="button">
+              <Globe className="size-4 text-zaki-muted" />
               Language
             </button>
-            <button className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors" type="button">
-              <HelpCircle className="size-4 text-[#88735A]" />
+            <button className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors" type="button">
+              <HelpCircle className="size-4 text-zaki-muted" />
               Need help?
             </button>
-            <div className="h-px bg-[#f1f1f1] my-1" />
+            <div className="h-px bg-zaki-sunken my-1" />
             <button
-              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#d24430] hover:bg-[#fff3f0] transition-colors"
+              className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-brand hover:bg-zaki-error transition-colors"
               type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
@@ -1191,7 +1191,7 @@ export function Sidebar() {
               <LogOut className="size-4" />
               Log out
             </button>
-            <div className="px-2.5 pt-1 text-[10px] text-[#a3a3a3]">v1.5.69 · Terms & Conditions</div>
+            <div className="px-2.5 pt-1 text-[10px] text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
           </div>
         )}
       </div>
@@ -1203,15 +1203,15 @@ export function Sidebar() {
             role="button"
             aria-label="Close settings"
           />
-          <div ref={settingsModalRef} className="relative w-[560px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#f1ece3]">
+          <div ref={settingsModalRef} className="relative w-[560px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zaki">
               <div>
-                <div className="text-lg font-semibold text-[#1f1a14]">Settings</div>
-                <div className="text-xs text-[#a3a3a3]">Manage your preferences and account</div>
+                <div className="text-lg font-semibold text-zaki-primary">Settings</div>
+                <div className="text-xs text-zaki-disabled">Manage your preferences and account</div>
               </div>
               <button
                 type="button"
-                className="size-8 rounded-full bg-[#faf6f0] text-[#655543] hover:bg-[#f0e6d8] transition-colors"
+                className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
                 onClick={() => setSettingsOpen(false)}
                 aria-label="Close settings"
               >
@@ -1220,31 +1220,31 @@ export function Sidebar() {
             </div>
             <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-6">
               <div>
-                <div className="text-sm font-semibold text-[#1f1a14]">Profile</div>
+                <div className="text-sm font-semibold text-zaki-primary">Profile</div>
                 <div className="mt-3 grid gap-3">
-                  <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+                  <label className="flex flex-col gap-1 text-xs text-zaki-muted">
                     Display name
                     <input
-                      className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                      className="rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                       defaultValue={userName}
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+                  <label className="flex flex-col gap-1 text-xs text-zaki-muted">
                     Email
                     <input
-                      className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                      className="rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                       defaultValue={userName}
                     />
                   </label>
                 </div>
               </div>
               <div>
-                <div className="text-sm font-semibold text-[#1f1a14]">Preferences</div>
+                <div className="text-sm font-semibold text-zaki-primary">Preferences</div>
                 <div className="mt-3 grid gap-3">
-                  <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Theme
                     <select
-                      className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]"
+                      className="rounded-lg border border-zaki-strong bg-white px-2 py-1 text-sm text-zaki-primary"
                       value={themePreference}
                       onChange={(event) =>
                         setThemePreference(event.target.value as "light" | "dark" | "system")
@@ -1255,55 +1255,55 @@ export function Sidebar() {
                       <option value="dark">Dark</option>
                     </select>
                   </label>
-                  <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Language
-                    <select className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]">
+                    <select className="rounded-lg border border-zaki-strong bg-white px-2 py-1 text-sm text-zaki-primary">
                       <option>English</option>
                       <option>Arabic</option>
                     </select>
                   </label>
-                  <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Auto-generate titles
                     <input type="checkbox" className="size-4 accent-[#b09472]" defaultChecked />
                   </label>
                 </div>
               </div>
               <div>
-                <div className="text-sm font-semibold text-[#1f1a14]">Data & storage</div>
+                <div className="text-sm font-semibold text-zaki-primary">Data & storage</div>
                 <div className="mt-3 grid gap-3">
-                  <button className="w-full rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors" type="button">
+                  <button className="w-full rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors" type="button">
                     Clear local cache
                   </button>
-                  <button className="w-full rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors" type="button">
+                  <button className="w-full rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors" type="button">
                     Manage attachments
                   </button>
                 </div>
               </div>
               <div>
-                <div className="text-sm font-semibold text-[#1f1a14]">Privacy</div>
+                <div className="text-sm font-semibold text-zaki-primary">Privacy</div>
                 <div className="mt-3 grid gap-3">
-                  <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Allow chat analytics
                     <input type="checkbox" className="size-4 accent-[#b09472]" />
                   </label>
-                  <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                     Save chat history
                     <input type="checkbox" className="size-4 accent-[#b09472]" defaultChecked />
                   </label>
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#f1ece3]">
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-zaki">
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
                 onClick={() => setSettingsOpen(false)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-white bg-[#655543] hover:bg-[#504335] transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-white bg-zaki-secondary hover:bg-zaki-secondary transition-colors"
                 onClick={() => setSettingsOpen(false)}
               >
                 Save changes
@@ -1320,15 +1320,15 @@ export function Sidebar() {
             role="button"
             aria-label="Close profile editor"
           />
-          <div ref={profileEditModalRef} className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+          <div ref={profileEditModalRef} className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-lg font-semibold text-[#1f1a14]">Profile</div>
-                <div className="text-xs text-[#a3a3a3]">Update your display name and photo</div>
+                <div className="text-lg font-semibold text-zaki-primary">Profile</div>
+                <div className="text-xs text-zaki-disabled">Update your display name and photo</div>
               </div>
               <button
                 type="button"
-                className="size-8 rounded-full bg-[#faf6f0] text-[#655543] hover:bg-[#f0e6d8] transition-colors"
+                className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
                 onClick={() => setProfileEditOpen(false)}
                 aria-label="Close profile editor"
               >
@@ -1336,14 +1336,14 @@ export function Sidebar() {
               </button>
             </div>
             <div className="mt-5 flex items-center gap-4">
-              <div className="size-16 rounded-full bg-[#faf6f0] flex items-center justify-center text-[#1f1a14] font-semibold text-lg overflow-hidden">
+              <div className="size-16 rounded-full bg-zaki-elevated flex items-center justify-center text-zaki-primary font-semibold text-lg overflow-hidden">
                 {profileImageUrl ? (
                   <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
                 ) : (
                   userInitials
                 )}
               </div>
-              <label className="text-sm text-[#655543] cursor-pointer">
+              <label className="text-sm text-zaki-secondary cursor-pointer">
                 <input
                   type="file"
                   accept="image/*"
@@ -1356,16 +1356,16 @@ export function Sidebar() {
                     event.target.value = "";
                   }}
                 />
-                <span className="rounded-full border border-[#e7dbc9] px-3 py-2 text-xs text-[#655543] hover:bg-[#f8f2e9] transition-colors">
+                <span className="rounded-full border border-zaki-strong px-3 py-2 text-xs text-zaki-secondary hover:bg-zaki-hover transition-colors">
                   Upload photo
                 </span>
               </label>
             </div>
             <div className="mt-5">
-              <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+              <label className="flex flex-col gap-1 text-xs text-zaki-muted">
                 Display name
                 <input
-                  className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  className="rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                 />
@@ -1374,14 +1374,14 @@ export function Sidebar() {
             <div className="mt-6 flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
                 onClick={() => setProfileEditOpen(false)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-white bg-[#655543] hover:bg-[#504335] transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-white bg-zaki-secondary hover:bg-zaki-secondary transition-colors"
                 onClick={() => setProfileEditOpen(false)}
               >
                 Save changes
@@ -1393,23 +1393,23 @@ export function Sidebar() {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
           <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} role="button" aria-label="Close confirmation" />
-          <div ref={deleteConfirmModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-            <div className="text-lg font-semibold text-[#1f1a14]">Delete {confirmDelete.type}</div>
-            <div className="mt-2 text-sm text-[#655543]">
+          <div ref={deleteConfirmModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+            <div className="text-lg font-semibold text-zaki-primary">Delete {confirmDelete.type}</div>
+            <div className="mt-2 text-sm text-zaki-secondary">
               Deleting this {confirmDelete.type} will delete the chat and content permanently. There is no way to retrieve the content of the deleted {confirmDelete.type === "space" ? "chats in this space" : "chat"} after deletion.
             </div>
-            <div className="mt-4 text-xs text-[#a3a3a3]">Selected: {confirmDelete.label}</div>
+            <div className="mt-4 text-xs text-zaki-disabled">Selected: {confirmDelete.label}</div>
             <div className="mt-6 flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
                 onClick={() => setConfirmDelete(null)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm text-white bg-[#d24430] hover:bg-[#b63a28] transition-colors"
+                className="rounded-full px-4 py-2 text-sm text-white bg-[#d24430] hover:bg-zaki-brand transition-colors"
                 onClick={() => {
                   performDelete(confirmDelete.type, confirmDelete.id);
                   setConfirmDelete(null);

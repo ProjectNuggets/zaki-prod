@@ -48,7 +48,7 @@ export function MessageBubble({ message, showActions = true, isStreaming = false
             {message.attachments.map((attachment) => (
               <div
                 key={attachment.url}
-                className="size-[88px] overflow-hidden rounded-2xl border border-[#efe4d6] bg-[#faf6f0]"
+                className="size-[88px] overflow-hidden rounded-zaki-lg border border-zaki bg-zaki-elevated"
               >
                 <img
                   src={attachment.url}
@@ -62,10 +62,10 @@ export function MessageBubble({ message, showActions = true, isStreaming = false
         {message.content && (
           <div
             className={cn(
-              "zaki-message-bubble rounded-2xl px-4 py-3 text-sm leading-relaxed",
+              "zaki-message-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed",
               isUser
-                ? "zaki-user-bubble bg-[#EADBC8] text-[#1f1a14]"
-                : "zaki-assistant-bubble bg-transparent text-[#1f1a14]"
+                ? "zaki-user-bubble bg-zaki-bubble-user text-zaki-primary"
+                : "zaki-assistant-bubble bg-transparent text-zaki-primary"
             )}
           >
             {!isUser ? (

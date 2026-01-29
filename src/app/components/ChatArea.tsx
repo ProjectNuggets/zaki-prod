@@ -619,37 +619,37 @@ export function ChatArea() {
       {/* Drag overlay */}
       {dragActive && (
         <div className="absolute inset-0 z-30 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
-          <div className="rounded-2xl border border-[#e9dfd2] bg-white px-5 py-3 text-sm text-[#655543] shadow-[0px_10px_24px_rgba(15,15,15,0.12)]">
+          <div className="rounded-zaki-lg border border-zaki bg-white px-5 py-3 text-sm text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.12)]">
             Drop files to attach
           </div>
         </div>
       )}
 
-      <div className="relative h-full m-4 rounded-[28px] border border-[#e9dfd2] bg-[#FFFBF5] overflow-hidden flex flex-col">
+      <div className="relative h-full m-4 rounded-[28px] border border-zaki bg-zaki-base overflow-hidden flex flex-col">
         {/* Background */}
         <BackgroundPattern />
 
         <div className="relative z-20 flex flex-col h-full">
           {/* Header / Breadcrumb */}
           <div className="px-6 py-4 flex items-center gap-2">
-            <span className="text-[#b09472] text-sm">{headerSpaceName}</span>
-            <span className="text-[#a3a3a3] text-sm">/</span>
-            <div className="flex items-center gap-1 cursor-pointer hover:bg-[#F8F2E9] px-1 py-0.5 rounded">
-              <span className="text-[#1f1a14] text-sm font-medium">{headerThreadName}</span>
+            <span className="text-zaki-muted text-sm">{headerSpaceName}</span>
+            <span className="text-zaki-disabled text-sm">/</span>
+            <div className="flex items-center gap-1 cursor-pointer hover:bg-zaki-hover px-1 py-0.5 rounded">
+              <span className="text-zaki-primary text-sm font-medium">{headerThreadName}</span>
             </div>
             <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
               <button
                 type="button"
-                className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-[#ebebeb] bg-white/80 px-3 py-1.5 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+                className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                 onClick={handleShare}
                 aria-label="Share conversation"
               >
-                <Share2 className="size-4 text-[#88735A]" />
+                <Share2 className="size-4 text-zaki-muted" />
                 Share
               </button>
               <button
                 type="button"
-                className="size-8 rounded-full border border-[#ebebeb] bg-white/80 flex items-center justify-center text-[#88735A] hover:bg-[#f8f2e9] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+                className="size-8 rounded-full border border-zaki-subtle bg-white/80 flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                 onClick={() => setMenuOpen((open) => !open)}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
@@ -659,17 +659,17 @@ export function ChatArea() {
               </button>
               {menuOpen && (
                 <div
-                  className="absolute right-0 top-full mt-2 w-40 rounded-2xl border border-[#EBEBEB] bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
+                  className="absolute right-0 top-full mt-2 w-40 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
                   role="menu"
                 >
                   <button
                     type="button"
-                    className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+                    className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                     role="menuitem"
                     onClick={handleExport}
                     aria-label="Export conversation as JSON"
                   >
-                    <Download className="size-4 text-[#88735A]" />
+                    <Download className="size-4 text-zaki-muted" />
                     Export JSON
                   </button>
                 </div>

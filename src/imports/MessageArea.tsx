@@ -18,7 +18,7 @@ function Upgrade() {
       <div className="flex flex-row items-center size-full">
         <div className="content-stretch flex gap-[4px] items-center px-[12px] py-0 relative w-full">
           <FlashlightFill />
-          <div className="css-g0mm18 flex flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-[#88735a] text-[12px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+          <div className="css-g0mm18 flex flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-zaki-muted text-[12px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
             <p className="css-ew64yg leading-[16px]">{`Access premium models & features`}</p>
           </div>
           <div className="css-g0mm18 flex flex-col font-['Geist:Medium','Noto_Sans_Symbols2:Regular',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-[#d1d1d1] text-[12px] text-center" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
@@ -61,7 +61,7 @@ function AddLine() {
 
 function ChatCustomButtonAiTemplate() {
   return (
-    <div className="bg-[#f8f2e9] content-stretch flex items-center justify-center overflow-clip p-[4px] relative rounded-[9px] shrink-0" data-name="Chat / Custom Button / AI Template">
+    <div className="bg-zaki-hover content-stretch flex items-center justify-center overflow-clip p-[4px] relative rounded-[9px] shrink-0" data-name="Chat / Custom Button / AI Template">
       <AddLine />
     </div>
   );
@@ -106,7 +106,7 @@ function Action() {
 
 function Chat() {
   return (
-    <div className="bg-[#fffdfa] relative rounded-[19px] shadow-[0px_10px_10px_-5px_rgba(23,23,23,0.02),0px_6px_6px_-3px_rgba(23,23,23,0.04),0px_3px_3px_-1.5px_rgba(23,23,23,0.04),0px_1px_1px_-0.5px_rgba(23,23,23,0.04),0px_0px_0px_1px_rgba(23,23,23,0.02)] shrink-0 w-full z-[1]" data-name="Chat">
+    <div className="bg-zaki-raised relative rounded-[19px] shadow-[0px_10px_10px_-5px_rgba(23,23,23,0.02),0px_6px_6px_-3px_rgba(23,23,23,0.04),0px_3px_3px_-1.5px_rgba(23,23,23,0.04),0px_1px_1px_-0.5px_rgba(23,23,23,0.04),0px_0px_0px_1px_rgba(23,23,23,0.02)] shrink-0 w-full z-[1]" data-name="Chat">
       <div className="overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex flex-col gap-[31px] items-start pb-[12px] pt-[14px] px-[12px] relative w-full">
           <Text />

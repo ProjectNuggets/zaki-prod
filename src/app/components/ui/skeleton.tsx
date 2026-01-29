@@ -38,7 +38,7 @@ export function SkeletonMessage({ isUser }: { isUser?: boolean }) {
   return (
     <div className={cn("flex gap-4", isUser ? "justify-end" : "justify-start")}>
       {!isUser && <Skeleton className="size-8 rounded-full shrink-0" />}
-      <Skeleton className="h-20 w-[70%] rounded-2xl" />
+      <Skeleton className="h-20 w-[70%] rounded-zaki-lg" />
       {isUser && <div className="size-8 shrink-0" />}
     </div>
   );
@@ -48,7 +48,7 @@ export function SkeletonThreadList() {
   return (
     <div className="flex flex-col gap-2">
       {Array.from({ length: 4 }).map((_, i) => (
-        <Skeleton key={i} className="h-10 w-full rounded-xl" />
+        <Skeleton key={i} className="h-10 w-full rounded-zaki-md" />
       ))}
     </div>
   );

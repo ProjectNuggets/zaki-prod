@@ -56,7 +56,7 @@ export function SpaceDetailView({
     <div className="px-10 py-8">
       <button
         type="button"
-        className="text-xs text-[#88735A] hover:text-[#655543] mb-4 focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2 rounded px-2 py-1"
+        className="text-xs text-zaki-muted hover:text-zaki-secondary mb-4 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 rounded px-2 py-1"
         onClick={onGoToSpaces}
         aria-label="Back to all spaces"
       >
@@ -66,7 +66,7 @@ export function SpaceDetailView({
         <div className="relative">
           <button
             type="button"
-            className="size-12 rounded-full bg-[#f6efe6] flex items-center justify-center"
+            className="size-12 rounded-full bg-zaki-sunken flex items-center justify-center"
             onClick={() => {
               if (!spaceDetail.fixed) {
                 setIconPickerOpen((open) => !open);
@@ -86,7 +86,7 @@ export function SpaceDetailView({
           {iconPickerOpen && !spaceDetail.fixed && (
             <div
               ref={iconPickerRef}
-              className="absolute top-14 left-0 w-[220px] rounded-2xl border border-[#2b2b2b] bg-[#303030] text-white shadow-[0px_18px_36px_rgba(0,0,0,0.35)] p-3 z-30"
+              className="absolute top-14 left-0 w-[220px] rounded-zaki-lg border border-[#2b2b2b] bg-[#303030] text-white shadow-[0px_18px_36px_rgba(0,0,0,0.35)] p-3 z-30"
             >
               <div className="flex items-center gap-2 mb-3">
                 {colorOptions.map((color) => (
@@ -121,14 +121,14 @@ export function SpaceDetailView({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <div className="text-lg font-semibold text-[#1f1a14]">{spaceDetail.title}</div>
-            <span className="text-[10px] uppercase tracking-wide rounded-full bg-[#efefef] text-[#655543] px-2 py-0.5">Private</span>
+            <div className="text-lg font-semibold text-zaki-primary">{spaceDetail.title}</div>
+            <span className="text-[10px] uppercase tracking-wide rounded-full bg-zaki-sunken text-zaki-secondary px-2 py-0.5">Private</span>
           </div>
-          <div className="text-sm text-[#a3a3a3] mt-1">{spaceDetail.description}</div>
+          <div className="text-sm text-zaki-disabled mt-1">{spaceDetail.description}</div>
         </div>
         <button
           type="button"
-          className="rounded-full bg-[#655543] text-white text-sm px-4 py-2 hover:bg-[#D24430] active:scale-[0.98] transition-[transform,background-color]"
+          className="rounded-full bg-zaki-secondary text-white text-sm px-4 py-2 hover:bg-zaki-brand active:scale-[0.98] transition-[transform,background-color]"
           onClick={() => onCreateThread(spaceDetail.id)}
         >
           New chat
@@ -145,21 +145,21 @@ export function SpaceDetailView({
         />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-[#efe4d6] bg-white p-4">
+        <div className="rounded-zaki-lg border border-zaki bg-white p-4">
           <div className="flex items-center justify-between">
-            <div className="text-xs text-[#88735A] font-semibold">Project files</div>
+            <div className="text-xs text-zaki-muted font-semibold">Project files</div>
             {!spaceDetail.fixed && (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="text-xs text-[#88735A] hover:text-[#655543]"
+                  className="text-xs text-zaki-muted hover:text-zaki-secondary"
                   onClick={onUploadFiles}
                 >
                   +
                 </button>
                 <button
                   type="button"
-                  className="text-xs text-[#d24430] hover:text-[#b63a28]"
+                  className="text-xs text-zaki-brand hover:text-zaki-brand"
                   onClick={() => {
                     onUpdateSpace(spaceDetail.id, { pinnedFiles: [] });
                   }}
@@ -169,17 +169,17 @@ export function SpaceDetailView({
               </div>
             )}
           </div>
-          <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-[#a3a3a3]" : "text-[#1f1a14]"}`}>
+          <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"}`}>
             {spaceDetail.fixed ? "ZAKI is not a project" : `${spaceDetail.pinnedFiles?.length ?? 0} files`}
           </div>
         </div>
-        <div className="rounded-2xl border border-[#efe4d6] bg-white p-4">
+        <div className="rounded-zaki-lg border border-zaki bg-white p-4">
           <div className="flex items-center justify-between">
-            <div className="text-xs text-[#88735A] font-semibold">Instructions</div>
+            <div className="text-xs text-zaki-muted font-semibold">Instructions</div>
             {!spaceDetail.fixed && (
               <button
                 type="button"
-                className="text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2 rounded p-1"
+                className="text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 rounded p-1"
                 onClick={() => onEditInstructions(spaceDetail.instructions || "")}
                 aria-label="Edit instructions"
               >
@@ -187,19 +187,19 @@ export function SpaceDetailView({
               </button>
             )}
           </div>
-          <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-[#a3a3a3]" : "text-[#1f1a14]"} line-clamp-2`}>
+          <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"} line-clamp-2`}>
             {spaceDetail.fixed ? "ZAKI doesn't take instructions from anyone." : (spaceDetail.instructions || "No instructions yet.")}
           </div>
         </div>
       </div>
       <div className="mt-6">
-        <div className="text-xs text-[#88735A] font-semibold mb-3">Chats in this space</div>
+        <div className="text-xs text-zaki-muted font-semibold mb-3">Chats in this space</div>
         <div className="flex flex-col gap-2">
           {(spaceDetail.threads ?? []).map((thread) => (
             <button
               key={thread.id}
               type="button"
-              className="flex items-center justify-between rounded-xl border border-[#efe4d6] bg-white px-4 py-3 text-sm text-[#1f1a14] hover:bg-[#f8f2e9]"
+              className="flex items-center justify-between rounded-zaki-md border border-zaki bg-white px-4 py-3 text-sm text-zaki-primary hover:bg-zaki-hover"
             >
               <span
                 className="font-medium flex-1 text-left"
@@ -209,11 +209,11 @@ export function SpaceDetailView({
                 {thread.label}
               </span>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-[#a3a3a3]">Recently updated</span>
+                <span className="text-xs text-zaki-disabled">Recently updated</span>
                 {spaceDetail.fixed && (
                   <button
                     type="button"
-                    className="text-xs text-[#d24430] hover:text-[#b63a28]"
+                    className="text-xs text-zaki-brand hover:text-zaki-brand"
                     onClick={() => onDeleteThread(thread.id)}
                   >
                     Delete
@@ -223,7 +223,7 @@ export function SpaceDetailView({
             </button>
           ))}
           {(!spaceDetail.threads || spaceDetail.threads.length === 0) && (
-            <div className="text-sm text-[#a3a3a3]">No chats yet. Start one above.</div>
+            <div className="text-sm text-zaki-disabled">No chats yet. Start one above.</div>
           )}
         </div>
       </div>

@@ -99,7 +99,7 @@ export default function App() {
         <div className="flex flex-col items-center gap-4">
           {/* Spinner */}
           <div className="size-8 border-2 border-[#88735A]/20 border-t-[#88735A] rounded-full animate-spin" />
-          <div className="text-sm text-[#88735A] dark:text-[#c9b8a4]">
+          <div className="text-sm text-zaki-muted dark:text-[#c9b8a4]">
             Loading session...
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function App() {
   }
 
   return (
-    <div className="zaki-app flex w-full h-screen overflow-hidden font-sans text-[#1f1a14] dark:text-[#efe6d9]">
+    <div className="zaki-app flex w-full h-screen overflow-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
       <Sidebar />
       <Outlet />
       <Toaster />

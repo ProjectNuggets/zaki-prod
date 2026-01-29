@@ -76,11 +76,11 @@ function SearchLine() {
 
 function SearchInputAiTemplate() {
   return (
-    <div className="bg-[#f8f2e9] relative rounded-[10px] shrink-0 w-full" data-name="Search Input / AI Template">
+    <div className="bg-zaki-hover relative rounded-[10px] shrink-0 w-full" data-name="Search Input / AI Template">
       <div className="flex flex-row items-center overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex gap-[8px] items-center p-[8px] relative w-full">
           <SearchLine />
-          <p className="css-4hzbpn flex-[1_0_0] font-['Geist:Medium',sans-serif] font-medium leading-[20px] min-h-px min-w-px relative text-[#b09472] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+          <p className="css-4hzbpn flex-[1_0_0] font-['Geist:Medium',sans-serif] font-medium leading-[20px] min-h-px min-w-px relative text-zaki-muted text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
             Search...
           </p>
         </div>
@@ -122,7 +122,7 @@ function CustomButtonAiTemplate() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip p-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Custom Button / AI Template">
       <AddCircleLine />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#d24430] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-brand text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">New chat</p>
       </div>
     </div>
@@ -150,7 +150,7 @@ function ItemsNavigationAiTemplate() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip pl-[6px] pr-[8px] py-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Items / Navigation / AI Template">
       <EditCircleLine />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">Spaces</p>
       </div>
     </div>
@@ -178,7 +178,7 @@ function ItemsNavigationAiTemplate1() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip pl-[6px] pr-[8px] py-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Items / Navigation / AI Template">
       <BookOpenLine />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">Library</p>
       </div>
     </div>
@@ -249,7 +249,7 @@ function ItemsNavigationAiTemplate2() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip pl-[6px] pr-[8px] py-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Items / Navigation / AI Template">
       <Folder2Line />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">{`Research & Analysis`}</p>
       </div>
       <ArrowDownSLine />
@@ -259,10 +259,10 @@ function ItemsNavigationAiTemplate2() {
 
 function ItemsNavigationAiTemplate3() {
   return (
-    <div className="bg-[#f8f2e9] relative rounded-[8px] shrink-0 w-full" data-name="Items / Navigation / AI Template">
+    <div className="bg-zaki-hover relative rounded-[8px] shrink-0 w-full" data-name="Items / Navigation / AI Template">
       <div className="flex flex-row items-center overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex items-center pl-[10px] pr-[8px] py-[6px] relative w-full">
-          <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+          <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
             <p className="css-4hzbpn leading-[20px]">User research analysis</p>
           </div>
         </div>
@@ -276,7 +276,7 @@ function ItemsNavigationAiTemplate4() {
     <div className="relative rounded-[8px] shrink-0 w-full" data-name="Items / Navigation / AI Template">
       <div className="flex flex-row items-center overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex items-center pl-[6px] pr-[8px] py-[6px] relative w-full">
-          <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+          <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
             <p className="css-4hzbpn leading-[20px]">Competitive analysis</p>
           </div>
         </div>
@@ -290,7 +290,7 @@ function ItemsNavigationAiTemplate5() {
     <div className="relative rounded-[8px] shrink-0 w-full" data-name="Items / Navigation / AI Template">
       <div className="flex flex-row items-center overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex items-center pl-[6px] pr-[8px] py-[6px] relative w-full">
-          <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+          <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
             <p className="css-4hzbpn leading-[20px]">Meeting notes</p>
           </div>
         </div>
@@ -325,7 +325,7 @@ function AddLine1() {
 
 function AddCircleLine1() {
   return (
-    <div className="bg-[#faf6f0] overflow-clip relative rounded-[96px] shrink-0 size-[20px]" data-name="add-circle-line">
+    <div className="bg-zaki-elevated overflow-clip relative rounded-[96px] shrink-0 size-[20px]" data-name="add-circle-line">
       <AddLine1 />
     </div>
   );
@@ -335,7 +335,7 @@ function CustomButtonAiTemplate1() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip p-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Custom Button / AI Template">
       <AddCircleLine1 />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#88735a] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-muted text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">New thread</p>
       </div>
     </div>
@@ -367,7 +367,7 @@ function ItemsNavigationAiTemplate6() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip pl-[6px] pr-[8px] py-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Items / Navigation / AI Template">
       <Folder2Line1 />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">Web Search</p>
       </div>
     </div>
@@ -390,7 +390,7 @@ function ItemsNavigationAiTemplate7() {
   return (
     <div className="content-stretch flex gap-[8px] items-center overflow-clip pl-[6px] pr-[8px] py-[6px] relative rounded-[8px] shrink-0 w-[244px]" data-name="Items / Navigation / AI Template">
       <Folder2Line2 />
-      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-[#655543] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-[1_0_0] flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] min-h-px min-w-px relative text-zaki-secondary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">Knowledge Base</p>
       </div>
     </div>
@@ -434,8 +434,8 @@ function Divider1() {
 
 function Avatar() {
   return (
-    <div className="bg-[#faf6f0] relative rounded-[999px] shrink-0 size-[40px]" data-name="Avatar [1.1]">
-      <p className="absolute css-4hzbpn font-['Geist:Medium',sans-serif] font-medium inset-[20%_0] leading-[24px] text-[#1f1a14] text-[16px] text-center tracking-[-0.176px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+    <div className="bg-zaki-elevated relative rounded-[999px] shrink-0 size-[40px]" data-name="Avatar [1.1]">
+      <p className="absolute css-4hzbpn font-['Geist:Medium',sans-serif] font-medium inset-[20%_0] leading-[24px] text-zaki-primary text-[16px] text-center tracking-[-0.176px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         TA
       </p>
     </div>
@@ -444,7 +444,7 @@ function Avatar() {
 
 function Badge() {
   return (
-    <div className="bg-[#c2f5da] content-stretch flex items-center justify-center overflow-clip px-[6px] py-[2px] relative rounded-[5px] shrink-0" data-name="Badge">
+    <div className="bg-zaki-success content-stretch flex items-center justify-center overflow-clip px-[6px] py-[2px] relative rounded-[5px] shrink-0" data-name="Badge">
       <p className="css-ew64yg font-['Inter:Semi_Bold',sans-serif] font-semibold leading-[12px] not-italic relative shrink-0 text-[#0c291d] text-[11px] tracking-[0.22px] uppercase" style={{ fontFeatureSettings: "'ss11', 'calt' 0, 'liga' 0" }}>
         PRO
       </p>
@@ -455,7 +455,7 @@ function Badge() {
 function Name() {
   return (
     <div className="content-stretch flex gap-[4px] items-center relative shrink-0 w-full" data-name="Name">
-      <p className="css-ew64yg font-['Geist:Medium',sans-serif] font-medium leading-[20px] relative shrink-0 text-[#1f1a14] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <p className="css-ew64yg font-['Geist:Medium',sans-serif] font-medium leading-[20px] relative shrink-0 text-zaki-primary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         Tarek Adaoui
       </p>
       <Badge />
@@ -467,7 +467,7 @@ function Content() {
   return (
     <div className="content-stretch flex flex-[1_0_0] flex-col gap-[4px] items-start justify-center min-h-px min-w-px relative" data-name="Content">
       <Name />
-      <p className="css-4hzbpn font-['Geist:Medium',sans-serif] font-medium leading-[16px] relative shrink-0 text-[#b09472] text-[12px] w-full" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <p className="css-4hzbpn font-['Geist:Medium',sans-serif] font-medium leading-[16px] relative shrink-0 text-zaki-muted text-[12px] w-full" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         ta@novanuggets.com
       </p>
     </div>
@@ -563,7 +563,7 @@ function ArrowDownSLine2() {
 
 function CustomIconButtonAiTemplate2() {
   return (
-    <div className="bg-[#f8f2e9] content-stretch flex items-center justify-center overflow-clip relative rounded-[6px] shrink-0" data-name="Custom Icon Button / AI Template">
+    <div className="bg-zaki-hover content-stretch flex items-center justify-center overflow-clip relative rounded-[6px] shrink-0" data-name="Custom Icon Button / AI Template">
       <ArrowDownSLine2 />
     </div>
   );
@@ -572,13 +572,13 @@ function CustomIconButtonAiTemplate2() {
 function Breadcrumb() {
   return (
     <div className="absolute content-stretch flex gap-[4px] items-center left-[19px] top-[19px]" data-name="Breadcrumb">
-      <div className="css-g0mm18 flex flex-col font-['Geist:Regular',sans-serif] font-normal justify-center leading-[0] relative shrink-0 text-[#b09472] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="css-g0mm18 flex flex-col font-['Geist:Regular',sans-serif] font-normal justify-center leading-[0] relative shrink-0 text-zaki-muted text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-ew64yg leading-[20px]">{`Research & Analysis`}</p>
       </div>
-      <div className="css-g0mm18 flex flex-col font-['Geist:Regular',sans-serif] font-normal justify-center leading-[0] relative shrink-0 text-[#a3a3a3] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="css-g0mm18 flex flex-col font-['Geist:Regular',sans-serif] font-normal justify-center leading-[0] relative shrink-0 text-zaki-disabled text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-ew64yg leading-[20px]">/</p>
       </div>
-      <div className="css-g0mm18 flex flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-[#1f1a14] text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="css-g0mm18 flex flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-zaki-primary text-[14px] tracking-[-0.084px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-ew64yg leading-[20px]">New chat</p>
       </div>
       <CustomIconButtonAiTemplate2 />
@@ -611,10 +611,10 @@ function Asset() {
 function Text() {
   return (
     <div className="content-stretch flex flex-col font-['Geist:Medium',sans-serif] font-medium gap-[4px] items-start leading-[0] relative shrink-0 text-center w-full" data-name="Text">
-      <div className="flex flex-col h-[22px] justify-center relative shrink-0 text-[#1f1a14] text-[18px] tracking-[-0.27px] w-full" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-col h-[22px] justify-center relative shrink-0 text-zaki-primary text-[18px] tracking-[-0.27px] w-full" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[24px]">Marhaba Tarek</p>
       </div>
-      <div className="flex flex-col h-[22px] justify-center relative shrink-0 text-[#b09472] text-[14px] tracking-[-0.084px] w-full" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+      <div className="flex flex-col h-[22px] justify-center relative shrink-0 text-zaki-muted text-[14px] tracking-[-0.084px] w-full" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
         <p className="css-4hzbpn leading-[20px]">What can I help you with today?</p>
       </div>
     </div>
@@ -648,7 +648,7 @@ function Upgrade() {
       <div className="flex flex-row items-center size-full">
         <div className="content-stretch flex gap-[4px] items-center px-[12px] py-0 relative w-full">
           <FlashlightFill />
-          <div className="css-g0mm18 flex flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-[#88735a] text-[12px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
+          <div className="css-g0mm18 flex flex-col font-['Geist:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-zaki-muted text-[12px]" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
             <p className="css-ew64yg leading-[16px]">{`Access premium models & features`}</p>
           </div>
           <div className="css-g0mm18 flex flex-col font-['Geist:Medium','Noto_Sans:Medium',sans-serif] font-medium justify-center leading-[0] relative shrink-0 text-[#d1d1d1] text-[12px] text-center" style={{ fontFeatureSettings: "'calt' 0, 'liga' 0" }}>
@@ -691,7 +691,7 @@ function AddLine2() {
 
 function ChatCustomButtonAiTemplate() {
   return (
-    <div className="bg-[#f8f2e9] content-stretch flex items-center justify-center overflow-clip p-[4px] relative rounded-[9px] shrink-0" data-name="Chat / Custom Button / AI Template">
+    <div className="bg-zaki-hover content-stretch flex items-center justify-center overflow-clip p-[4px] relative rounded-[9px] shrink-0" data-name="Chat / Custom Button / AI Template">
       <AddLine2 />
     </div>
   );
@@ -736,7 +736,7 @@ function Action() {
 
 function Chat() {
   return (
-    <div className="bg-[#fffdfa] relative rounded-[19px] shadow-[0px_10px_10px_-5px_rgba(23,23,23,0.02),0px_6px_6px_-3px_rgba(23,23,23,0.04),0px_3px_3px_-1.5px_rgba(23,23,23,0.04),0px_1px_1px_-0.5px_rgba(23,23,23,0.04),0px_0px_0px_1px_rgba(23,23,23,0.02)] shrink-0 w-full z-[1]" data-name="Chat">
+    <div className="bg-zaki-raised relative rounded-[19px] shadow-[0px_10px_10px_-5px_rgba(23,23,23,0.02),0px_6px_6px_-3px_rgba(23,23,23,0.04),0px_3px_3px_-1.5px_rgba(23,23,23,0.04),0px_1px_1px_-0.5px_rgba(23,23,23,0.04),0px_0px_0px_1px_rgba(23,23,23,0.02)] shrink-0 w-full z-[1]" data-name="Chat">
       <div className="overflow-clip rounded-[inherit] size-full">
         <div className="content-stretch flex flex-col gap-[31px] items-start pb-[12px] pt-[14px] px-[12px] relative w-full">
           <Text1 />
@@ -787,7 +787,7 @@ function More2Line() {
 
 function CustomIconButtonAiTemplate3() {
   return (
-    <div className="absolute bg-[#f8f2e9] content-stretch flex items-center justify-center overflow-clip p-[4px] right-[15px] rounded-[8px] top-[15px]" data-name="Custom Icon Button / AI Template">
+    <div className="absolute bg-zaki-hover content-stretch flex items-center justify-center overflow-clip p-[4px] right-[15px] rounded-[8px] top-[15px]" data-name="Custom Icon Button / AI Template">
       <More2Line />
     </div>
   );
@@ -795,7 +795,7 @@ function CustomIconButtonAiTemplate3() {
 
 function Chat1() {
   return (
-    <div className="absolute bg-[#faf6f0] border border-[#e5d3bd] border-solid h-[888px] left-[272px] overflow-clip rounded-[24px] top-1/2 translate-y-[-50%] w-[1162px]" data-name="Chat">
+    <div className="absolute bg-zaki-elevated border border-[#e5d3bd] border-solid h-[888px] left-[272px] overflow-clip rounded-[24px] top-1/2 translate-y-[-50%] w-[1162px]" data-name="Chat">
       <div className="absolute flex h-[890px] items-center justify-center left-[-18px] top-[-3px] w-[1334px]" style={{ "--transform-inner-width": "0", "--transform-inner-height": "0" } as React.CSSProperties}>
         <div className="flex-none rotate-[90deg]">
           <PatternTiled />
@@ -811,7 +811,7 @@ function Chat1() {
 
 export default function Overview() {
   return (
-    <div className="bg-[#fffdfa] overflow-clip relative rounded-[28px] size-full" data-name="Overview">
+    <div className="bg-zaki-raised overflow-clip relative rounded-[28px] size-full" data-name="Overview">
       <SidebarAiTemplate />
       <Chat1 />
       <div className="absolute flex h-[99px] items-center justify-center left-[30px] top-[314px] w-0" style={{ "--transform-inner-width": "0", "--transform-inner-height": "0" } as React.CSSProperties}>

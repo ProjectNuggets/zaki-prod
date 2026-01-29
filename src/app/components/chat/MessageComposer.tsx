@@ -77,10 +77,10 @@ export function MessageComposer({
     >
       {/* Drag overlay */}
       {dragActive && (
-        <div className="absolute inset-0 z-50 bg-[#D24430]/10 border-2 border-dashed border-[#D24430] rounded-2xl flex items-center justify-center">
-          <div className="bg-white dark:bg-[#16120e] px-6 py-4 rounded-xl shadow-lg text-center">
-            <FileIcon className="size-8 mx-auto mb-2 text-[#D24430]" />
-            <p className="text-sm font-medium text-[#1f1a14] dark:text-[#efe6d9]">
+        <div className="absolute inset-0 z-50 bg-zaki-brand/10 border-2 border-dashed border-zaki-focus rounded-zaki-lg flex items-center justify-center">
+          <div className="bg-white dark:bg-[#16120e] px-6 py-4 rounded-zaki-md shadow-lg text-center">
+            <FileIcon className="size-8 mx-auto mb-2 text-zaki-brand" />
+            <p className="text-sm font-medium text-zaki-primary dark:text-zaki-primary">
               Drop files here
             </p>
           </div>
@@ -93,14 +93,14 @@ export function MessageComposer({
           {attachments.map((file, index) => (
             <div
               key={index}
-              className="flex items-center gap-2 px-3 py-2 bg-[#f8f2e9] dark:bg-[#2a2118] rounded-lg text-xs text-[#655543] dark:text-[#b8a99a]"
+              className="flex items-center gap-2 px-3 py-2 bg-zaki-hover dark:bg-[#2a2118] rounded-lg text-xs text-zaki-secondary dark:text-[#b8a99a]"
             >
               <FileIcon className="size-3.5" />
               <span className="max-w-[120px] truncate">{file.name}</span>
               <button
                 type="button"
                 onClick={() => removeAttachment(index)}
-                className="ml-1 text-[#88735A] hover:text-[#D24430] transition-colors"
+                className="ml-1 text-zaki-muted hover:text-zaki-brand transition-colors"
                 aria-label={`Remove ${file.name}`}
               >
                 <X className="size-3" />

@@ -31,15 +31,15 @@ export function ProfileEditModal({
         role="button"
         aria-label="Close profile editor"
       />
-      <div ref={modalRef} className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+      <div ref={modalRef} className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-lg font-semibold text-[#1f1a14]">Profile</div>
-            <div className="text-xs text-[#a3a3a3]">Update your display name and photo</div>
+            <div className="text-lg font-semibold text-zaki-primary">Profile</div>
+            <div className="text-xs text-zaki-disabled">Update your display name and photo</div>
           </div>
           <button
             type="button"
-            className="size-8 rounded-full bg-[#faf6f0] text-[#655543] hover:bg-[#f0e6d8] transition-colors"
+            className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
             onClick={onClose}
             aria-label="Close profile editor"
           >
@@ -47,23 +47,23 @@ export function ProfileEditModal({
           </button>
         </div>
         <div className="mt-5 flex items-center gap-4">
-          <div className="size-16 rounded-full bg-[#faf6f0] flex items-center justify-center text-[#1f1a14] font-semibold text-lg overflow-hidden">
+          <div className="size-16 rounded-full bg-zaki-elevated flex items-center justify-center text-zaki-primary font-semibold text-lg overflow-hidden">
             {profileImageUrl ? (
               <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
             ) : (
               userInitials
             )}
           </div>
-          <label className="text-sm text-[#655543] cursor-pointer">
-            <span className="underline hover:text-[#1f1a14]">Upload new photo</span>
+          <label className="text-sm text-zaki-secondary cursor-pointer">
+            <span className="underline hover:text-zaki-primary">Upload new photo</span>
             <input type="file" className="hidden" accept="image/*" />
           </label>
         </div>
         <div className="mt-5">
-          <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+          <label className="flex flex-col gap-1 text-xs text-zaki-muted">
             Display name
             <input
-              className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+              className="rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
             />
@@ -72,14 +72,14 @@ export function ProfileEditModal({
         <div className="mt-6 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+            className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-white bg-[#1f1a14] hover:bg-[#2b241c] transition-colors"
+            className="rounded-full px-4 py-2 text-sm text-white bg-zaki-primary hover:bg-zaki-active transition-colors"
             onClick={onClose}
           >
             Save changes

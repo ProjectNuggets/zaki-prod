@@ -93,16 +93,16 @@ export function InputArea({
       ? createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
             <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
-            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-              <div className="text-lg font-semibold text-[#1f1a14]">Upgrades are brewing</div>
-              <div className="mt-2 text-sm text-[#655543]">
+            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+              <div className="text-lg font-semibold text-zaki-primary">Upgrades are brewing</div>
+              <div className="mt-2 text-sm text-zaki-secondary">
                 We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized
                 plans as we speak — with prices that won’t scare your coffee.
               </div>
               <div className="mt-5 flex items-center justify-end">
                 <button
                   type="button"
-                  className="rounded-full px-4 py-2 text-sm text-white bg-[#1f1a14] hover:bg-[#2b241c] transition-colors"
+                  className="rounded-full px-4 py-2 text-sm text-white bg-zaki-primary hover:bg-zaki-active transition-colors"
                   onClick={() => setUpgradeOpen(false)}
                 >
                   Sounds good
@@ -119,36 +119,36 @@ export function InputArea({
       {/* Input Box */}
       <form 
         onSubmit={handleSubmit}
-        className="zaki-input-form bg-[#fffdfa] rounded-[22px] shadow-sm border border-[#EBEBEB] overflow-visible flex flex-col min-h-[88px] relative z-10"
+        className="zaki-input-form bg-zaki-raised rounded-[22px] shadow-sm border border-zaki-subtle overflow-visible flex flex-col min-h-[88px] relative z-10"
       >
-        <div className="bg-[#f1e5d2] text-[#88735A] text-[11px] px-3 py-2 grid grid-cols-[1fr_auto_1fr] items-center leading-[16px]">
+        <div className="bg-zaki-sunken text-zaki-muted text-[11px] px-3 py-2 grid grid-cols-[1fr_auto_1fr] items-center leading-[16px]">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#88735A]">Web search</span>
+            <span className="text-[11px] text-zaki-muted">Web search</span>
             <button
               type="button"
               onClick={onToggleWebSearch}
               className={`h-5 w-9 rounded-full border transition-colors ${
                 webSearchEnabled
-                  ? "bg-[#D24430] border-[#D24430]"
-                  : "bg-white border-[#e5d6c5]"
+                  ? "bg-zaki-brand border-zaki-focus"
+                  : "bg-white border-zaki"
               }`}
               aria-pressed={webSearchEnabled}
             >
               <span
                 className={`block h-4 w-4 rounded-full shadow transition-transform ${
-                  webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-[#b09472]"
+                  webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-zaki-muted"
                 }`}
               />
             </button>
           </div>
           <div className="flex items-center gap-2 justify-center">
-            <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-[#88735A]">
+            <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
               <Zap className="size-3" />
             </span>
             <span>Access premium models & features</span>
             <button
               type="button"
-              className="text-[#219171] font-medium hover:underline text-[11px] leading-[16px]"
+              className="text-zaki-success font-medium hover:underline text-[11px] leading-[16px]"
               onClick={() => setUpgradeOpen(true)}
             >
               Upgrade
@@ -164,7 +164,7 @@ export function InputArea({
                 preview.url ? (
                   <div
                     key={`${preview.file.name}-${index}`}
-                    className="relative size-[56px] rounded-xl bg-[#faf6f0] border border-[#efe4d6] overflow-hidden flex items-center justify-center"
+                    className="relative size-[56px] rounded-zaki-md bg-zaki-elevated border border-zaki overflow-hidden flex items-center justify-center"
                   >
                     <img
                       src={preview.url}
@@ -173,7 +173,7 @@ export function InputArea({
                     />
                     <button
                       type="button"
-                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-[#efe4d6] flex items-center justify-center text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430]"
+                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -190,15 +190,15 @@ export function InputArea({
                 preview.url ? null : (
                   <div
                     key={`${preview.file.name}-${index}`}
-                    className="flex items-center justify-between rounded-xl border border-[#efe4d6] bg-[#faf6f0] px-3 py-2 text-xs text-[#655543]"
+                    className="flex items-center justify-between rounded-zaki-md border border-zaki bg-zaki-elevated px-3 py-2 text-xs text-zaki-secondary"
                   >
                     <div className="flex items-center gap-2">
-                      <FileIcon className="size-4 text-[#88735A]" />
+                      <FileIcon className="size-4 text-zaki-muted" />
                       <span className="max-w-[220px] truncate">{preview.file.name}</span>
                     </div>
                     <button
                       type="button"
-                      className="text-[#88735A] hover:text-[#655543] focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:rounded"
+                      className="text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:rounded"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -216,30 +216,30 @@ export function InputArea({
            <div className="relative" ref={menuRef}>
              <button
                type="button"
-               className="size-8 bg-[#faf6f0] rounded-full flex items-center justify-center hover:bg-[#f0e6d8] transition-colors focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+               className="size-8 bg-zaki-elevated rounded-full flex items-center justify-center hover:bg-zaki-active transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                onClick={() => setMenuOpen((open) => !open)}
                aria-haspopup="menu"
                aria-expanded={menuOpen}
                aria-label="Add options"
              >
-                <Plus className="size-4 text-[#88735A]" />
+                <Plus className="size-4 text-zaki-muted" />
              </button>
              {menuOpen && (
                <div
-                 className="absolute left-0 bottom-10 w-56 rounded-2xl border border-[#ececec] bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
+                 className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
                  role="menu"
                >
                  <button
-                   className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                    type="button"
                    role="menuitem"
                    onClick={() => setMenuOpen(false)}
                  >
-                   <Sparkles className="size-4 text-[#88735A]" />
+                   <Sparkles className="size-4 text-zaki-muted" />
                    Generate image
                  </button>
                  <button
-                   className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                    type="button"
                    role="menuitem"
                    onClick={() => {
@@ -247,47 +247,47 @@ export function InputArea({
                      fileInputRef.current?.click();
                    }}
                  >
-                   <Paperclip className="size-4 text-[#88735A]" />
+                   <Paperclip className="size-4 text-zaki-muted" />
                    Upload image or file
                  </button>
                  <button
-                   className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                    type="button"
                    role="menuitem"
                    onClick={() => setMenuOpen(false)}
                  >
-                   <Search className="size-4 text-[#88735A]" />
+                   <Search className="size-4 text-zaki-muted" />
                    Deep research
                  </button>
                  <button
-                   className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                    type="button"
                    role="menuitem"
                    onClick={() => setMenuOpen(false)}
                  >
-                   <Bot className="size-4 text-[#88735A]" />
+                   <Bot className="size-4 text-zaki-muted" />
                    Agent mode
                  </button>
                  <button
-                   className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-[#1f1a14] hover:bg-[#f8f2e9] transition-colors"
+                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                    type="button"
                    role="menuitem"
                    onClick={() => setMenuOpen(false)}
                  >
-                   <GraduationCap className="size-4 text-[#88735A]" />
+                   <GraduationCap className="size-4 text-zaki-muted" />
                    Study and learn
                  </button>
                </div>
              )}
            </div>
            {webSearchEnabled && (
-             <span className="zaki-agent-prefix text-[#D24430] text-sm font-medium">@agent</span>
+             <span className="zaki-agent-prefix text-zaki-brand text-sm font-medium">@agent</span>
            )}
            <textarea 
              id="chat-input"
              ref={textareaRef}
              rows={1}
-             className="zaki-input-field flex-1 bg-transparent outline-none text-[#1f1a14] placeholder-[#b09472] text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
+             className="zaki-input-field flex-1 bg-transparent outline-none text-zaki-primary placeholder-[#b09472] text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
              placeholder="Ask anything"
              autoComplete="off"
              value={inputValue}
@@ -308,7 +308,7 @@ export function InputArea({
            />
            <button
              type="submit"
-             className="size-8 bg-[#655543] rounded-full flex items-center justify-center hover:bg-[#D24430] focus-visible:bg-[#D24430] active:bg-[#D24430] transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+             className="size-8 bg-zaki-secondary rounded-full flex items-center justify-center hover:bg-zaki-brand focus-visible:bg-zaki-brand active:bg-zaki-brand transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
              disabled={isSending}
              aria-label="Send message"
            >
@@ -333,7 +333,7 @@ export function InputArea({
       {upgradeModal}
       
       <div className="text-center mt-2">
-         <p className="text-[#a3a3a3] text-xs">Zaki can make mistakes. Consider checking important information.</p>
+         <p className="text-zaki-disabled text-xs">Zaki can make mistakes. Consider checking important information.</p>
       </div>
     </div>
   );

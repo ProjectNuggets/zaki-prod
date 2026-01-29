@@ -27,15 +27,15 @@ export function SettingsModal({
         role="button"
         aria-label="Close settings"
       />
-      <div ref={modalRef} className="relative w-[560px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#f1ece3]">
+      <div ref={modalRef} className="relative w-[560px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zaki">
           <div>
-            <div className="text-lg font-semibold text-[#1f1a14]">Settings</div>
-            <div className="text-xs text-[#a3a3a3]">Manage your preferences and account</div>
+            <div className="text-lg font-semibold text-zaki-primary">Settings</div>
+            <div className="text-xs text-zaki-disabled">Manage your preferences and account</div>
           </div>
           <button
             type="button"
-            className="size-8 rounded-full bg-[#faf6f0] text-[#655543] hover:bg-[#f0e6d8] transition-colors"
+            className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
             onClick={onClose}
             aria-label="Close settings"
           >
@@ -44,31 +44,31 @@ export function SettingsModal({
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-6">
           <div>
-            <div className="text-sm font-semibold text-[#1f1a14]">Profile</div>
+            <div className="text-sm font-semibold text-zaki-primary">Profile</div>
             <div className="mt-3 grid gap-3">
-              <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+              <label className="flex flex-col gap-1 text-xs text-zaki-muted">
                 Display name
                 <input
-                  className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  className="rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   defaultValue={userName}
                 />
               </label>
-              <label className="flex flex-col gap-1 text-xs text-[#88735A]">
+              <label className="flex flex-col gap-1 text-xs text-zaki-muted">
                 Email
                 <input
-                  className="rounded-xl border border-[#e7dbc9] px-3 py-2 text-sm text-[#1f1a14] outline-none focus:border-[#b09472]"
+                  className="rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   defaultValue={userName}
                 />
               </label>
             </div>
           </div>
           <div>
-            <div className="text-sm font-semibold text-[#1f1a14]">Preferences</div>
+            <div className="text-sm font-semibold text-zaki-primary">Preferences</div>
             <div className="mt-3 grid gap-3">
-              <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+              <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                 Theme
                 <select
-                  className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]"
+                  className="rounded-lg border border-zaki-strong bg-white px-2 py-1 text-sm text-zaki-primary"
                   value={themePreference}
                   onChange={(event) =>
                     onThemeChange(event.target.value as "light" | "dark" | "system")
@@ -79,9 +79,9 @@ export function SettingsModal({
                   <option value="system">System</option>
                 </select>
               </label>
-              <label className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543]">
+              <label className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary">
                 Language
-                <select className="rounded-lg border border-[#e7dbc9] bg-white px-2 py-1 text-sm text-[#1f1a14]">
+                <select className="rounded-lg border border-zaki-strong bg-white px-2 py-1 text-sm text-zaki-primary">
                   <option>English</option>
                   <option>العربية</option>
                 </select>
@@ -89,30 +89,30 @@ export function SettingsModal({
             </div>
           </div>
           <div>
-            <div className="text-sm font-semibold text-[#1f1a14]">Data & Privacy</div>
+            <div className="text-sm font-semibold text-zaki-primary">Data & Privacy</div>
             <div className="mt-3 grid gap-3">
-              <button className="flex items-center justify-between rounded-2xl border border-[#f1ece3] px-3 py-2 text-sm text-[#655543] hover:bg-[#faf6f0] transition-colors text-left">
+              <button className="flex items-center justify-between rounded-zaki-lg border border-zaki px-3 py-2 text-sm text-zaki-secondary hover:bg-zaki-elevated transition-colors text-left">
                 Export all data
-                <span className="text-xs text-[#a3a3a3]">Download your chats and files</span>
+                <span className="text-xs text-zaki-disabled">Download your chats and files</span>
               </button>
-              <button className="flex items-center justify-between rounded-2xl border border-[#f6d5ce] px-3 py-2 text-sm text-[#d24430] hover:bg-[#fff3f0] transition-colors text-left">
+              <button className="flex items-center justify-between rounded-zaki-lg border border-zaki-strong px-3 py-2 text-sm text-zaki-brand hover:bg-zaki-error transition-colors text-left">
                 Delete account
-                <span className="text-xs text-[#d24430]">This action cannot be undone</span>
+                <span className="text-xs text-zaki-brand">This action cannot be undone</span>
               </button>
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#f1ece3]">
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-zaki">
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-[#655543] hover:bg-[#f8f2e9] transition-colors"
+            className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-white bg-[#1f1a14] hover:bg-[#2b241c] transition-colors"
+            className="rounded-full px-4 py-2 text-sm text-white bg-zaki-primary hover:bg-zaki-active transition-colors"
             onClick={onClose}
           >
             Save changes

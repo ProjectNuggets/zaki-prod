@@ -23,15 +23,15 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className={cn("flex flex-col items-center justify-center h-full px-6", className)}>
-      <div className="w-16 h-16 mb-6 rounded-2xl bg-gradient-to-br from-[#D24430] to-[#e85d4b] flex items-center justify-center shadow-lg">
+      <div className="w-16 h-16 mb-6 rounded-zaki-lg bg-gradient-to-br from-[#D24430] to-[#e85d4b] flex items-center justify-center shadow-lg">
         <CenterLogo className="size-8 text-white" />
       </div>
       
-      <h2 className="text-2xl font-semibold text-[#1f1a14] dark:text-[#efe6d9] mb-2">
+      <h2 className="text-2xl font-semibold text-zaki-primary dark:text-zaki-primary mb-2">
         Good to see you, {userName}
       </h2>
       
-      <p className="text-[#88735A] dark:text-[#a89a8a] text-sm mb-8 text-center max-w-md">
+      <p className="text-zaki-muted dark:text-[#a89a8a] text-sm mb-8 text-center max-w-md">
         Ready when you are. Ask me anything or pick a suggestion to get started.
       </p>
 
@@ -41,10 +41,10 @@ export function EmptyState({
             key={index}
             type="button"
             onClick={() => onExampleClick?.(example)}
-            className="w-full text-left p-4 rounded-xl border border-[#efe4d6] dark:border-[#2a2118] bg-white dark:bg-[#16120e] text-[#655543] dark:text-[#b8a99a] text-sm hover:border-[#D24430] hover:bg-[#fff8f5] dark:hover:bg-[#1f1814] transition-all group"
+            className="w-full text-left p-4 rounded-zaki-md border border-zaki dark:border-[#2a2118] bg-white dark:bg-[#16120e] text-zaki-secondary dark:text-[#b8a99a] text-sm hover:border-zaki-focus hover:bg-[#fff8f5] dark:hover:bg-[#1f1814] transition-all group"
           >
             <span className="flex items-center gap-3">
-              <Sparkles className="size-4 text-[#D24430] opacity-60 group-hover:opacity-100 transition-opacity" />
+              <Sparkles className="size-4 text-zaki-brand opacity-60 group-hover:opacity-100 transition-opacity" />
               {example}
             </span>
           </button>
