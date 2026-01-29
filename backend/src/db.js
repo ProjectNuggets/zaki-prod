@@ -67,6 +67,32 @@ export async function initDb() {
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS full_name TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS date_of_birth TEXT;");
 
+  // Shared conversations table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shared_conversations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      token TEXT UNIQUE NOT NULL,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      workspace_slug TEXT NOT NULL,
+      thread_slug TEXT NOT NULL,
+      title TEXT,
+      conversation_snapshot JSONB NOT NULL,
+      is_password_protected BOOLEAN NOT NULL DEFAULT FALSE,
+      password_hash TEXT,
+      expires_at TIMESTAMPTZ NOT NULL,
+      view_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_shared_conversations_token ON shared_conversations(token);
+  `);
+  
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_shared_conversations_user_id ON shared_conversations(user_id);
+  `);
+
   // Memories table with vector support
   try {
     await pool.query(`

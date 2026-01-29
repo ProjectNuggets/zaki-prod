@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
+import { SharedConversation } from './app/components/SharedConversation';
 
 /**
  * Route structure:
@@ -9,6 +10,7 @@ import { ChatArea } from './app/components/ChatArea';
  * /spaces/:spaceId         → Space detail view
  * /spaces/:spaceId/threads/:threadId → Thread/chat view
  * /library                 → Document library
+ * /share/:token            → Public shared conversation view
  */
 
 export const router = createBrowserRouter([
@@ -36,11 +38,16 @@ export const router = createBrowserRouter([
         path: 'library',
         element: <ChatArea />, // Will show library view
       },
-      {
-        // Catch-all redirect
-        path: '*',
-        element: <Navigate to="/" replace />,
-      },
     ],
+  },
+  {
+    // Public share route (outside of App layout)
+    path: '/share/:token',
+    element: <SharedConversation />,
+  },
+  {
+    // Catch-all redirect
+    path: '*',
+    element: <Navigate to="/" replace />,
   },
 ]);

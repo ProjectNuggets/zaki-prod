@@ -1,6 +1,7 @@
 import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 export function InputArea({
   onSend,
@@ -23,6 +24,7 @@ export function InputArea({
   const menuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const upgradeModalRef = useFocusTrap<HTMLDivElement>(upgradeOpen);
 
   const submitMessage = () => {
     if (isSending) {
@@ -91,7 +93,7 @@ export function InputArea({
       ? createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
             <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
-            <div className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
               <div className="text-lg font-semibold text-[#1f1a14]">Upgrades are brewing</div>
               <div className="mt-2 text-sm text-[#655543]">
                 We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized

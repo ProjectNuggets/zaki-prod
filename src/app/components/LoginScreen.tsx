@@ -116,7 +116,7 @@ export function LoginScreen() {
           dateOfBirth: dateOfBirth.trim(),
         });
         if (!data?.success) {
-          setError("Sign up failed. Please check your details and try again.");
+          setError(data?.error || "Sign up failed. Please check your details and try again.");
           return;
         }
 
@@ -135,7 +135,7 @@ export function LoginScreen() {
       });
       
       if (!response.ok || !data?.valid || !data?.token) {
-        setError("Login failed. Check your credentials and try again.");
+        setError(data?.message || "Login failed. Check your credentials and try again.");
         return;
       }
 

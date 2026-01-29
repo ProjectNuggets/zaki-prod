@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { Outlet, useLocation, useParams, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { LoginScreen } from "./components/LoginScreen";
+import { Toaster } from "./components/ui/sonner";
 import { clearAuthToken, fetchCurrentUser } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 
@@ -110,6 +111,7 @@ export default function App() {
     <div className="zaki-app flex w-full h-screen overflow-hidden font-sans text-[#1f1a14] dark:text-[#efe6d9]">
       <Sidebar />
       <Outlet />
+      <Toaster />
     </div>
   );
 }

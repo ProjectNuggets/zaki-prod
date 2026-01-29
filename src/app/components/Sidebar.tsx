@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { SkeletonSpaceList } from "./ui/skeleton";
 
 type SpaceThread = {
@@ -52,6 +53,11 @@ export function Sidebar() {
   const [displayName, setDisplayName] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const isDark = resolvedTheme() === "dark";
+  
+  // Focus trap refs for modals
+  const settingsModalRef = useFocusTrap<HTMLDivElement>(settingsOpen);
+  const profileEditModalRef = useFocusTrap<HTMLDivElement>(profileEditOpen);
+  const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
 
   const isActive = (item: string) => activeItem === item;
   const isSpaceActive = (spaceId: string) => expandedSpace === spaceId;
@@ -1208,7 +1214,7 @@ export function Sidebar() {
             role="button"
             aria-label="Close settings"
           />
-          <div className="relative w-[560px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
+          <div ref={settingsModalRef} className="relative w-[560px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#f1ece3]">
               <div>
                 <div className="text-lg font-semibold text-[#1f1a14]">Settings</div>
@@ -1325,7 +1331,7 @@ export function Sidebar() {
             role="button"
             aria-label="Close profile editor"
           />
-          <div className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+          <div ref={profileEditModalRef} className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold text-[#1f1a14]">Profile</div>
@@ -1398,7 +1404,7 @@ export function Sidebar() {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
           <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} role="button" aria-label="Close confirmation" />
-          <div className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+          <div ref={deleteConfirmModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-3xl border border-[#ebe3d6] bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
             <div className="text-lg font-semibold text-[#1f1a14]">Delete {confirmDelete.type}</div>
             <div className="mt-2 text-sm text-[#655543]">
               Deleting this {confirmDelete.type} will delete the chat and content permanently. There is no way to retrieve the content of the deleted {confirmDelete.type === "space" ? "chats in this space" : "chat"} after deletion.

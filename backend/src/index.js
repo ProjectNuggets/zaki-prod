@@ -992,6 +992,291 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
   }
 });
 
+// =============================================================================
+// SHARE CONVERSATION ROUTES
+// =============================================================================
+
+const SHARE_EXPIRY_DAYS = 10;
+
+/**
+ * POST /api/share/create
+ * Create a shareable link for a conversation
+ */
+app.post("/api/share/create", express.json({ limit: "5mb" }), async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.slice(7);
+    // Decode JWT to get user ID (simplified - in production use proper JWT verification)
+    let novaUserId;
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      novaUserId = payload.id || payload.userId || payload.sub;
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    
+    // Look up the zaki_users.id from nova_user_id
+    const userResult = await dbQuery(
+      'SELECT id FROM zaki_users WHERE nova_user_id = $1',
+      [novaUserId]
+    );
+    
+    if (!userResult.rows.length) {
+      return res.status(401).json({ error: "User not found" });
+    }
+    
+    const zakiUserId = userResult.rows[0].id;
+    
+    const { 
+      workspaceSlug, 
+      threadSlug, 
+      title,
+      conversation, // Array of messages
+      isPasswordProtected = false,
+      password = null
+    } = req.body;
+    
+    if (!workspaceSlug || !threadSlug || !conversation || !Array.isArray(conversation)) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    
+    // Generate unique share token
+    const shareToken = crypto.randomBytes(16).toString('hex');
+    
+    // Hash password if protected
+    let passwordHash = null;
+    if (isPasswordProtected && password) {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+    
+    // Calculate expiry (10 days from now)
+    const expiresAt = new Date(Date.now() + SHARE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+    
+    await dbQuery(
+      `INSERT INTO shared_conversations 
+       (token, user_id, workspace_slug, thread_slug, title, conversation_snapshot, 
+        is_password_protected, password_hash, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        shareToken,
+        zakiUserId,
+        workspaceSlug,
+        threadSlug,
+        title || 'Shared Conversation',
+        JSON.stringify(conversation),
+        isPasswordProtected,
+        passwordHash,
+        expiresAt.toISOString()
+      ]
+    );
+    
+    const shareUrl = `${ZAKI_APP_URL || 'http://localhost:5173'}/share/${shareToken}`;
+    
+    res.json({
+      success: true,
+      token: shareToken,
+      url: shareUrl,
+      expiresAt: expiresAt.toISOString(),
+      isPasswordProtected
+    });
+    
+  } catch (error) {
+    console.error("[Share] Create error:", error);
+    res.status(500).json({ error: "Failed to create share link" });
+  }
+});
+
+/**
+ * GET /api/share/:token
+ * Get shared conversation metadata (doesn't include content if password protected)
+ */
+app.get("/api/share/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    const share = await dbGet(
+      `SELECT id, title, is_password_protected, expires_at, view_count, created_at
+       FROM shared_conversations 
+       WHERE token = $1`,
+      [token]
+    );
+    
+    if (!share) {
+      return res.status(404).json({ error: "Share link not found" });
+    }
+    
+    // Check if expired
+    if (new Date(share.expires_at) < new Date()) {
+      return res.status(410).json({ error: "Share link has expired" });
+    }
+    
+    res.json({
+      title: share.title,
+      isPasswordProtected: share.is_password_protected,
+      expiresAt: share.expires_at,
+      viewCount: share.view_count,
+      createdAt: share.created_at
+    });
+    
+  } catch (error) {
+    console.error("[Share] Get error:", error);
+    res.status(500).json({ error: "Failed to get share info" });
+  }
+});
+
+/**
+ * POST /api/share/:token/view
+ * Get the actual conversation content (with optional password verification)
+ */
+app.post("/api/share/:token/view", express.json(), async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body || {};
+    
+    const share = await dbGet(
+      `SELECT * FROM shared_conversations WHERE token = $1`,
+      [token]
+    );
+    
+    if (!share) {
+      return res.status(404).json({ error: "Share link not found" });
+    }
+    
+    // Check if expired
+    if (new Date(share.expires_at) < new Date()) {
+      return res.status(410).json({ error: "Share link has expired" });
+    }
+    
+    // Verify password if protected
+    if (share.is_password_protected) {
+      if (!password) {
+        return res.status(401).json({ error: "Password required", requiresPassword: true });
+      }
+      
+      const isValid = await bcrypt.compare(password, share.password_hash);
+      if (!isValid) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+    }
+    
+    // Increment view count
+    await dbQuery(
+      `UPDATE shared_conversations SET view_count = view_count + 1 WHERE id = $1`,
+      [share.id]
+    );
+    
+    // conversation_snapshot is already parsed by pg (JSONB column)
+    const conversation = typeof share.conversation_snapshot === 'string' 
+      ? JSON.parse(share.conversation_snapshot) 
+      : share.conversation_snapshot;
+    
+    res.json({
+      title: share.title,
+      conversation,
+      expiresAt: share.expires_at,
+      viewCount: share.view_count + 1,
+      createdAt: share.created_at
+    });
+    
+  } catch (error) {
+    console.error("[Share] View error:", error);
+    res.status(500).json({ error: "Failed to load conversation" });
+  }
+});
+
+/**
+ * DELETE /api/share/:token
+ * Delete a share link (owner only)
+ */
+app.delete("/api/share/:token", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.slice(7);
+    let userId;
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      userId = payload.id || payload.userId || payload.sub;
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    
+    const { token: shareToken } = req.params;
+    
+    const result = await dbQuery(
+      `DELETE FROM shared_conversations WHERE token = $1 AND user_id = $2`,
+      [shareToken, userId]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Share link not found or unauthorized" });
+    }
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error("[Share] Delete error:", error);
+    res.status(500).json({ error: "Failed to delete share link" });
+  }
+});
+
+/**
+ * GET /api/share/list
+ * List all share links for the current user
+ */
+app.get("/api/share/list", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.slice(7);
+    let userId;
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      userId = payload.id || payload.userId || payload.sub;
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    
+    const shares = await dbQuery(
+      `SELECT token, title, is_password_protected, expires_at, view_count, created_at
+       FROM shared_conversations 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+    
+    res.json({
+      shares: shares.rows.map(s => ({
+        token: s.token,
+        title: s.title,
+        isPasswordProtected: s.is_password_protected,
+        expiresAt: s.expires_at,
+        viewCount: s.view_count,
+        createdAt: s.created_at,
+        isExpired: new Date(s.expires_at) < new Date()
+      }))
+    });
+    
+  } catch (error) {
+    console.error("[Share] List error:", error);
+    res.status(500).json({ error: "Failed to list shares" });
+  }
+});
+
+// =============================================================================
+// CATCH-ALL PROXY
+// =============================================================================
+
 app.all("*", async (req, res) => {
   try {
     if (req.method === "OPTIONS") {
