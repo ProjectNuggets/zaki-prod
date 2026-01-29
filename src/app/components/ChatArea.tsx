@@ -4,7 +4,6 @@ import { Share2, MoreVertical, Download } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiRequest, buildApiUrl } from "@/lib/api";
 import {
-  MessageBubble,
   type Message,
   StreamingIndicator,
   LibraryView,
@@ -16,11 +15,9 @@ import {
   CreateSpaceModal,
   EditInstructionsModal,
 } from "./chat";
-import { SkeletonMessage } from "./ui/skeleton";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 // Types
 interface Thread {

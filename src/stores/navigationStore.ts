@@ -35,7 +35,6 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
   },
   
   goToSpaces: () => {
-    console.log('[navigationStore] goToSpaces called');
     set({ view: "spaces", spaceId: null, threadId: null });
   },
   
