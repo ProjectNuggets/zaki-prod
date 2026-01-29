@@ -926,8 +926,8 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
         });
 
         if (memoryResult.context) {
-          // Prepend memory context as a system instruction
-          enrichedMessage = `[MEMORY CONTEXT - Use this to personalize your response]\n${memoryResult.context}\n\n[USER MESSAGE]\n${originalMessage}`;
+          // Prepend memory context as natural buddy-style context
+          enrichedMessage = `[About this person — use naturally, don't quote verbatim]\n${memoryResult.context}\n\n---\n\n${originalMessage}`;
           memoryInjected = true;
           console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}`);
         }

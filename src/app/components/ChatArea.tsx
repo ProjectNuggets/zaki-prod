@@ -127,7 +127,7 @@ export function ChatArea() {
 
   // Strip memory context prefix from user messages (injected by backend for AI context)
   const stripMemoryContext = (content: string): string => {
-    // Pattern: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
+    // Old format: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
     const userMessageMarker = "[USER MESSAGE]\n";
     const memoryContextMarker = "[MEMORY CONTEXT";
     
@@ -137,6 +137,18 @@ export function ChatArea() {
         return content.slice(userMessageIndex + userMessageMarker.length).trim();
       }
     }
+    
+    // New buddy format: [About this person...]...\n---\n\n{actual message}
+    const buddyMarker = "[About this person";
+    const separator = "\n---\n\n";
+    
+    if (content.includes(buddyMarker) && content.includes(separator)) {
+      const sepIndex = content.indexOf(separator);
+      if (sepIndex !== -1) {
+        return content.slice(sepIndex + separator.length).trim();
+      }
+    }
+    
     return content;
   };
 

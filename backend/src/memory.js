@@ -286,50 +286,81 @@ async function deleteMemory(id, userId) {
 
 async function buildContext({ userId, query, maxChars = 2000 }) {
   const { results, provider, model } = await searchMemories({
-    userId, query, limit: 5, minScore: 0.2,
+    userId, query, limit: 8, minScore: 0.25,
   });
 
   if (!results.length) return { context: "", sources: [], provider, model };
 
-  const parts = [];
   const sources = [];
-  let chars = 0;
-
+  
+  // Categorize memories
   const facts = results.filter((r) => r.type === "fact");
   const prefs = results.filter((r) => r.type === "preference");
   const contexts = results.filter((r) => r.type === "context" || !r.type);
 
-  if (facts.length) {
-    parts.push("## Known Facts");
-    for (const f of facts) {
-      if (chars + f.content.length > maxChars) break;
-      parts.push(`- ${f.content}`);
-      chars += f.content.length;
+  // Build buddy-style context
+  const lines = [];
+  
+  // Extract name if we have it
+  const nameFact = facts.find((f) => 
+    /\b(name is|i'm |i am |call me )\b/i.test(f.content)
+  );
+  const nameMatch = nameFact?.content.match(/(?:name is|i'm |i am |call me )(\w+)/i);
+  const userName = nameMatch?.[1];
+
+  // Opening line - who is this person?
+  if (userName) {
+    lines.push(`You're chatting with ${userName} — someone you know.`);
+    sources.push({ id: nameFact.id, snippet: nameFact.content.slice(0, 80), score: nameFact.score });
+  } else {
+    lines.push("You're chatting with someone you've talked to before.");
+  }
+
+  // Add personality/identity facts naturally
+  const identityFacts = facts.filter((f) => 
+    f !== nameFact && /\b(work|job|developer|engineer|founder|student|live|from)\b/i.test(f.content)
+  );
+  if (identityFacts.length) {
+    const identitySnippets = identityFacts.slice(0, 2).map((f) => {
       sources.push({ id: f.id, snippet: f.content.slice(0, 80), score: f.score });
-    }
+      return f.content;
+    });
+    lines.push(`What you know: ${identitySnippets.join(". ")}`);
   }
 
-  if (prefs.length && chars < maxChars) {
-    parts.push("\n## User Preferences");
-    for (const p of prefs) {
-      if (chars + p.content.length > maxChars) break;
-      parts.push(`- ${p.content}`);
-      chars += p.content.length;
+  // Add preferences conversationally
+  if (prefs.length) {
+    const prefSnippets = prefs.slice(0, 3).map((p) => {
       sources.push({ id: p.id, snippet: p.content.slice(0, 80), score: p.score });
-    }
+      // Clean up the preference text
+      return p.content
+        .replace(/^(i |my )/i, "They ")
+        .replace(/^they they/i, "They");
+    });
+    lines.push(`Their style: ${prefSnippets.join(". ")}`);
   }
 
-  if (contexts.length && chars < maxChars) {
-    parts.push("\n## Relevant Context");
-    for (const c of contexts) {
-      if (chars + c.content.length > maxChars) break;
-      parts.push(`- ${c.content}`);
-      chars += c.content.length;
+  // Add relevant context from past conversations
+  if (contexts.length) {
+    const relevantContext = contexts.slice(0, 2).map((c) => {
       sources.push({ id: c.id, snippet: c.content.slice(0, 80), score: c.score });
-    }
+      return c.content;
+    });
+    lines.push(`Relevant from past chats: ${relevantContext.join(". ")}`);
   }
 
-  return { context: parts.join("\n"), sources, provider, model };
+  // Add a natural instruction
+  lines.push("");
+  lines.push("Use this context naturally — don't explicitly mention you \"remember\" things unless they ask. Just be a good friend who knows them.");
+
+  const context = lines.join("\n");
+  
+  // Truncate if too long
+  const finalContext = context.length > maxChars 
+    ? context.slice(0, maxChars) + "..."
+    : context;
+
+  return { context: finalContext, sources, provider, model };
 }
 
 // =============================================================================
