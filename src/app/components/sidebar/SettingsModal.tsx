@@ -1,4 +1,5 @@
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { MemoryViewer } from "../memory/MemoryViewer";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -6,6 +7,7 @@ interface SettingsModalProps {
   userName: string;
   themePreference: "light" | "dark" | "system";
   onThemeChange: (theme: "light" | "dark" | "system") => void;
+  userId?: string; // Add userId prop for memory viewer
 }
 
 export function SettingsModal({
@@ -14,6 +16,7 @@ export function SettingsModal({
   userName,
   themePreference,
   onThemeChange,
+  userId,
 }: SettingsModalProps) {
   const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
 
@@ -88,6 +91,13 @@ export function SettingsModal({
               </label>
             </div>
           </div>
+          {/* Memory Section */}
+          {userId && (
+            <div>
+              <MemoryViewer userId={userId} />
+            </div>
+          )}
+
           <div>
             <div className="text-sm font-semibold text-zaki-primary">Data & Privacy</div>
             <div className="mt-3 grid gap-3">

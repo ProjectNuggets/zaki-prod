@@ -2,7 +2,7 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   EditIcon, BookIcon, FolderIcon, ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -12,6 +12,7 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { SkeletonSpaceList } from "./ui/skeleton";
 import { toast } from "sonner";
 import type { Space, Thread } from "@/types";
+import { MemoryViewer } from "./memory/MemoryViewer";
 
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
@@ -27,6 +28,7 @@ export function Sidebar() {
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   // TODO: Fetch actual plan from user profile
   const planLabel = "FREE" as "FREE" | "PRO";
   const [openMenu, setOpenMenu] = useState<{ type: "space" | "thread"; id: string } | null>(null);
@@ -1189,6 +1191,17 @@ export function Sidebar() {
               type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
+                setMemoryOpen(true);
+              }}
+            >
+              <Brain className="size-4 text-zaki-muted" />
+              Memory
+            </button>
+            <button
+              className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+              type="button"
+              onClick={() => {
+                setProfileMenuOpen(false);
                 setSettingsOpen(true);
               }}
             >
@@ -1441,6 +1454,40 @@ export function Sidebar() {
               >
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {memoryOpen && user?.username && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+          <div
+            className="absolute inset-0"
+            onClick={() => setMemoryOpen(false)}
+            role="button"
+            aria-label="Close memory"
+          />
+          <div className="relative w-[720px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zaki">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                  <Brain className="size-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-zaki-primary">Your Memory</div>
+                  <div className="text-xs text-zaki-disabled">What ZAKI remembers about you</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
+                onClick={() => setMemoryOpen(false)}
+                aria-label="Close memory"
+              >
+                <span className="block text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="max-h-[75vh] overflow-y-auto px-6 py-6">
+              <MemoryViewer userId={user.username} />
             </div>
           </div>
         </div>

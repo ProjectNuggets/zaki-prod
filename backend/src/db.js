@@ -18,13 +18,21 @@ export async function initDb() {
     });
   }
 
-  // Enable pgvector extension (requires superuser or extension already installed)
+  // Check for pgvector extension
   try {
-    await pool.query("CREATE EXTENSION IF NOT EXISTS vector;");
-    console.log("[DB] pgvector extension enabled");
+    const result = await pool.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_extension WHERE extname = 'vector'
+      ) as has_vector;
+    `);
+    if (result.rows[0]?.has_vector) {
+      console.log("[DB] pgvector extension detected ✓");
+    } else {
+      console.warn("[DB] pgvector extension not installed");
+      console.warn("[DB] Run: CREATE EXTENSION vector; in the zaki database");
+    }
   } catch (err) {
-    console.warn("[DB] pgvector extension not available:", err.message);
-    console.warn("[DB] Memory will use in-memory fallback");
+    console.warn("[DB] Could not check for pgvector:", err.message);
   }
 
   // Users table

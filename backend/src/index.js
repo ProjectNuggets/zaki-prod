@@ -36,7 +36,10 @@ const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
 app.use(
   cors({
     origin: (origin, callback) => {
+      // In development, allow all origins
       if (!origin || allowedOrigins.length === 0) return callback(null, true);
+      // Allow file:// protocol for local development
+      if (origin?.startsWith('file://')) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("Origin not allowed"));
     },
@@ -656,42 +659,57 @@ app.post("/login", express.json({ limit: "1mb" }), async (req, res) => {
     }
 
     if (!user.nova_user_id) {
-      const createResponse = await novaAdminRequest("/v1/admin/users/new", {
-        method: "POST",
-        body: JSON.stringify({
-          username: normalizedEmail,
-          password: String(password),
-          role: "default",
-        }),
-      });
-      const payload = await createResponse.json().catch(() => ({}));
-      if (createResponse.ok && payload?.user?.id) {
+      // First, try to fetch existing NOVA user
+      const fetchedId = await fetchNovaUserIdByUsername(normalizedEmail);
+      
+      if (fetchedId) {
+        // Link existing NOVA user
         await dbQuery(
           `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-          [Number(payload.user.id), new Date().toISOString(), user.id]
+          [Number(fetchedId), new Date().toISOString(), user.id]
         );
-      } else if (
-        payload?.error &&
-        String(payload.error).toLowerCase().includes("exists")
-      ) {
-        await dbQuery(
-          `UPDATE zaki_users SET updated_at = $1 WHERE id = $2`,
-          [new Date().toISOString(), user.id]
-        );
-      } else if (createResponse.status === 401) {
-        res.status(401).json({
-          valid: false,
-          token: null,
-          message: "NOVA.TYP is not in multi-user mode.",
+      } else {
+        // Create new NOVA user
+        const createResponse = await novaAdminRequest("/v1/admin/users/new", {
+          method: "POST",
+          body: JSON.stringify({
+            username: normalizedEmail,
+            password: String(password),
+            role: "default",
+          }),
         });
-        return;
-      } else if (payload?.error) {
-        res.status(400).json({
-          valid: false,
-          token: null,
-          message: payload.error,
-        });
-        return;
+        const payload = await createResponse.json().catch(() => ({}));
+        if (createResponse.ok && payload?.user?.id) {
+          await dbQuery(
+            `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+            [Number(payload.user.id), new Date().toISOString(), user.id]
+          );
+        } else if (createResponse.status === 401) {
+          res.status(401).json({
+            valid: false,
+            token: null,
+            message: "NOVA.TYP is not in multi-user mode.",
+          });
+          return;
+        } else if (payload?.error && !String(payload.error).toLowerCase().includes("exists")) {
+          // Only fail if it's not a "user exists" error
+          res.status(400).json({
+            valid: false,
+            token: null,
+            message: payload.error,
+          });
+          return;
+        }
+        // If user exists error, fetch ID and continue
+        if (payload?.error && String(payload.error).toLowerCase().includes("exists")) {
+          const retryFetchId = await fetchNovaUserIdByUsername(normalizedEmail);
+          if (retryFetchId) {
+            await dbQuery(
+              `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+              [Number(retryFetchId), new Date().toISOString(), user.id]
+            );
+          }
+        }
       }
     }
 
