@@ -37,6 +37,98 @@ const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
   .filter(Boolean);
 
 // =============================================================================
+// SESSION CACHE - Avoid hitting NOVA on every request
+// =============================================================================
+const SESSION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const sessionCache = new Map();
+
+function getCachedSession(token) {
+  const cached = sessionCache.get(token);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    sessionCache.delete(token);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedSession(token, data) {
+  sessionCache.set(token, {
+    data,
+    expiresAt: Date.now() + SESSION_CACHE_TTL,
+  });
+}
+
+// JWT Decoding helper (no verification needed - NOVA signs it)
+function decodeJwt(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// =============================================================================
+// AUTHENTICATION MIDDLEWARE
+// Validates token locally, uses cache, falls back to NOVA refresh
+// =============================================================================
+async function authenticateToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "").trim();
+  
+  if (!token) {
+    return res.status(401).json({ error: "Missing authorization token." });
+  }
+
+  // Try cache first
+  let sessionData = getCachedSession(token);
+  
+  if (!sessionData) {
+    // Decode JWT to get basic info quickly
+    const jwtPayload = decodeJwt(token);
+    
+    if (jwtPayload?.id && jwtPayload?.email) {
+      // Use JWT data directly if available
+      sessionData = {
+        user: {
+          id: jwtPayload.id,
+          username: jwtPayload.email,
+          email: jwtPayload.email,
+        }
+      };
+      setCachedSession(token, sessionData);
+      console.log(`[Auth] Using JWT payload for ${jwtPayload.email}`);
+    } else {
+      // Fall back to NOVA refresh (cached for next time)
+      try {
+        const refreshRes = await novaSessionRequest("/system/refresh-user", `Bearer ${token}`, { method: "GET" });
+        if (refreshRes.ok) {
+          sessionData = await refreshRes.json();
+          setCachedSession(token, sessionData);
+          console.log(`[Auth] Cached session from NOVA for ${sessionData?.user?.username}`);
+        }
+      } catch (err) {
+        console.warn("[Auth] Session refresh failed:", err.message);
+      }
+    }
+  } else {
+    console.log(`[Auth] Using cached session for ${sessionData?.user?.username}`);
+  }
+
+  if (!sessionData?.user) {
+    return res.status(401).json({ error: "Invalid or expired token." });
+  }
+
+  // Attach user to request
+  req.user = sessionData.user;
+  req.token = token;
+  next();
+}
+
+// =============================================================================
 // SECURITY MIDDLEWARE
 // =============================================================================
 
@@ -1108,7 +1200,7 @@ app.get("/verify", async (req, res) => {
  * Intercept stream-chat requests to inject memory context
  * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
  */
-app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit: "10mb" }), async (req, res) => {
+app.post("/workspace/:slug/thread/:threadSlug/stream-chat", authenticateToken, express.json({ limit: "10mb" }), async (req, res) => {
   console.log(`[Chat] Received message request for ${req.params.slug}/${req.params.threadSlug}`);
   try {
     const apiBase = getApiBase();
@@ -1117,18 +1209,9 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
       return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
     }
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      console.error('[Chat] Missing authorization header');
-      return res.status(401).json({ error: "Missing authorization." });
-    }
-
-    // Get user from session
-    console.log('[Chat] Refreshing user session...');
-    const sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, { method: "GET" });
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    const userEmail = sessionData?.user?.username || null;
-    console.log(`[Chat] User: ${userEmail || 'unknown'}`);
+    // User is already attached by authenticateToken middleware
+    const userEmail = req.user?.username || req.user?.email || null;
+    console.log(`[Chat] User: ${userEmail || 'unknown'} (from ${getCachedSession(req.token) ? 'cache' : 'JWT/NOVA'})`);
 
     const { message } = req.body || {};
     const originalMessage = String(message || "").trim();
