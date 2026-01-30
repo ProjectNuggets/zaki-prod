@@ -3,6 +3,31 @@
 @import './theme.css';
 @import './tokens.css';
 
+/* =============================================================================
+   ACCESSIBILITY - Focus States
+   ============================================================================= */
+
+:focus-visible {
+  outline: 2px solid var(--zaki-brand, #D24430);
+  outline-offset: 2px;
+}
+
+/* Remove outline for mouse/touch users (keep for keyboard) */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Ensure error boundaries and modals have visible focus */
+[role="dialog"] :focus-visible,
+[role="alertdialog"] :focus-visible {
+  outline: 2px solid var(--zaki-brand, #D24430);
+  outline-offset: 3px;
+}
+
 :root {
   --zaki-pattern-start: #eadbc8;
   --zaki-pattern-mid: #c9b295;

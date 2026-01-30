@@ -8,7 +8,63 @@
  */
 
 import crypto from "node:crypto";
+import { z } from "zod";
 import { dbQuery, dbGet, dbAll, hasPgVector } from "./db.js";
+
+// =============================================================================
+// Input Validation Schemas
+// =============================================================================
+
+const StoreMemorySchema = z.object({
+  userId: z.string().email("Invalid user ID (must be email)"),
+  content: z.string().min(1, "Content is required").max(10000, "Content too long (max 10000 chars)"),
+  type: z.enum(["fact", "preference", "episode", "context", "action"]).default("context"),
+  metadata: z.record(z.any()).optional(),
+});
+
+const SearchMemorySchema = z.object({
+  userId: z.string().email("Invalid user ID (must be email)"),
+  query: z.string().min(1, "Query is required").max(1000, "Query too long"),
+  limit: z.number().int().min(1).max(50).optional().default(10),
+  minScore: z.number().min(0).max(1).optional().default(0.25),
+});
+
+const BuildContextSchema = z.object({
+  userId: z.string().email("Invalid user ID (must be email)"),
+  query: z.string().min(1, "Query is required").max(1000, "Query too long"),
+  maxChars: z.number().int().min(100).max(5000).optional().default(2000),
+});
+
+const DeleteMemorySchema = z.object({
+  userId: z.string().email("Invalid user ID (must be email)"),
+});
+
+const SummarizeSchema = z.object({
+  userId: z.string().email("Invalid user ID (must be email)"),
+  messages: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string(),
+  })).min(1, "At least one message required"),
+  threadId: z.string().optional(),
+  threadTitle: z.string().optional(),
+});
+
+const ExtractSchema = z.object({
+  userId: z.string().email("Invalid user ID (must be email)"),
+  content: z.string().min(1, "Content is required").max(10000, "Content too long"),
+  threadId: z.string().optional(),
+});
+
+function validate(schema, data) {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    return {
+      valid: false,
+      errors: result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+    };
+  }
+  return { valid: true, data: result.data };
+}
 
 // =============================================================================
 // Configuration
@@ -285,18 +341,63 @@ async function deleteMemory(id, userId) {
 // =============================================================================
 
 async function buildContext({ userId, query, maxChars = 2000 }) {
-  const { results, provider, model } = await searchMemories({
-    userId, query, limit: 8, minScore: 0.25,
-  });
+  const isPg = await checkStorage();
+  
+  if (!isPg) {
+    // In-memory fallback - use existing search approach
+    const { results, provider, model } = await searchMemories({
+      userId, query, limit: 8, minScore: 0.25,
+    });
+    // ... existing logic for in-memory
+    return buildContextFromResults(results, provider, model, maxChars);
+  }
+  
+  // PostgreSQL: Get ALL recent facts and preferences (not query-dependent)
+  const coreMemories = await dbAll(
+    `SELECT id, content, type, metadata, created_at,
+            NULL as score
+     FROM memories
+     WHERE user_id = $1 
+     AND type IN ('fact', 'preference')
+     ORDER BY created_at DESC
+     LIMIT 15`,
+    [userId]
+  );
+  
+  // ALSO get semantically relevant memories (query-specific)
+  let relevantMemories = [];
+  if (query && query.trim().length > 5) {
+    const { results } = await searchMemories({
+      userId, query, limit: 5, minScore: 0.2, // Lower threshold
+    });
+    relevantMemories = results;
+  }
+  
+  // Merge: Core facts + relevant context (deduplicate by ID)
+  const allMemories = [...coreMemories];
+  for (const rel of relevantMemories) {
+    if (!allMemories.find(m => m.id === rel.id)) {
+      allMemories.push(rel);
+    }
+  }
+  
+  if (!allMemories.length) {
+    return { context: "", sources: [], provider: "novatyp", model: "none" };
+  }
+  
+  return buildContextFromResults(allMemories, "hybrid", "core+semantic", maxChars);
+}
 
+// Helper to build context text from memory results
+function buildContextFromResults(results, provider, model, maxChars) {
   if (!results.length) return { context: "", sources: [], provider, model };
-
+  
   const sources = [];
   
   // Categorize memories
   const facts = results.filter((r) => r.type === "fact");
   const prefs = results.filter((r) => r.type === "preference");
-  const contexts = results.filter((r) => r.type === "context" || !r.type);
+  const contexts = results.filter((r) => r.type === "context" || r.type === "episode");
 
   // Build buddy-style context
   const lines = [];
@@ -305,53 +406,57 @@ async function buildContext({ userId, query, maxChars = 2000 }) {
   const nameFact = facts.find((f) => 
     /\b(name is|i'm |i am |call me )\b/i.test(f.content)
   );
-  const nameMatch = nameFact?.content.match(/(?:name is|i'm |i am |call me )(\w+)/i);
+  const nameMatch = nameFact?.content.match(/(?:name is|i'm |i am |call me |named )(\w+)/i);
   const userName = nameMatch?.[1];
 
   // Opening line - who is this person?
   if (userName) {
-    lines.push(`You're chatting with ${userName} — someone you know.`);
-    sources.push({ id: nameFact.id, snippet: nameFact.content.slice(0, 80), score: nameFact.score });
-  } else {
-    lines.push("You're chatting with someone you've talked to before.");
+    lines.push(`You're chatting with ${userName}.`);
+    sources.push({ id: nameFact.id, snippet: nameFact.content.slice(0, 80), score: nameFact.score || 1.0 });
   }
 
-  // Add personality/identity facts naturally
+  // Add core identity facts
   const identityFacts = facts.filter((f) => 
-    f !== nameFact && /\b(work|job|developer|engineer|founder|student|live|from)\b/i.test(f.content)
+    f !== nameFact && /\b(work|job|developer|engineer|founder|student|owner|entrepreneur)\b/i.test(f.content)
   );
   if (identityFacts.length) {
     const identitySnippets = identityFacts.slice(0, 2).map((f) => {
-      sources.push({ id: f.id, snippet: f.content.slice(0, 80), score: f.score });
+      sources.push({ id: f.id, snippet: f.content.slice(0, 80), score: f.score || 1.0 });
       return f.content;
     });
-    lines.push(`What you know: ${identitySnippets.join(". ")}`);
+    lines.push(`Background: ${identitySnippets.join(". ")}`);
+  }
+  
+  // Add location
+  const locationFact = facts.find((f) => 
+    /\b(based|live|from|location)\b/i.test(f.content) && f !== nameFact
+  );
+  if (locationFact) {
+    sources.push({ id: locationFact.id, snippet: locationFact.content.slice(0, 80), score: locationFact.score || 1.0 });
+    lines.push(`Location: ${locationFact.content}`);
   }
 
-  // Add preferences conversationally
+  // Add preferences
   if (prefs.length) {
-    const prefSnippets = prefs.slice(0, 3).map((p) => {
-      sources.push({ id: p.id, snippet: p.content.slice(0, 80), score: p.score });
-      // Clean up the preference text
-      return p.content
-        .replace(/^(i |my )/i, "They ")
-        .replace(/^they they/i, "They");
+    const prefSnippets = prefs.slice(0, 4).map((p) => {
+      sources.push({ id: p.id, snippet: p.content.slice(0, 80), score: p.score || 1.0 });
+      return p.content;
     });
-    lines.push(`Their style: ${prefSnippets.join(". ")}`);
+    lines.push(`Preferences: ${prefSnippets.join(", ")}`);
   }
 
-  // Add relevant context from past conversations
+  // Add contextual memories (if relevant)
   if (contexts.length) {
     const relevantContext = contexts.slice(0, 2).map((c) => {
-      sources.push({ id: c.id, snippet: c.content.slice(0, 80), score: c.score });
+      sources.push({ id: c.id, snippet: c.content.slice(0, 80), score: c.score || 1.0 });
       return c.content;
     });
-    lines.push(`Relevant from past chats: ${relevantContext.join(". ")}`);
+    lines.push(`Context: ${relevantContext.join(". ")}`);
   }
 
-  // Add a natural instruction
+  // Add instruction
   lines.push("");
-  lines.push("Use this context naturally — don't explicitly mention you \"remember\" things unless they ask. Just be a good friend who knows them.");
+  lines.push("Use this context naturally. Be a friend who knows them, not a database.");
 
   const context = lines.join("\n");
   
@@ -364,47 +469,192 @@ async function buildContext({ userId, query, maxChars = 2000 }) {
 }
 
 // =============================================================================
-// Fact Extraction from Messages
+// Fact Extraction from Messages (LLM-based)
 // =============================================================================
 
-function extractFacts(message) {
-  // Simple pattern matching for common fact types
+async function extractFactsWithLLM(message) {
+  const config = getConfig();
+  
+  // Quick filter: skip if message is too short or clearly not fact-bearing
+  if (message.trim().length < 10) {
+    return [];
+  }
+  
+  const systemPrompt = `Extract facts and preferences from user messages. Be strict and precise.
+
+Output JSON with this exact structure:
+{
+  "facts": ["fact 1", "fact 2"],
+  "preferences": ["preference 1", "preference 2"]
+}
+
+Rules:
+- Only extract COMPLETE, CLEAR statements
+- Ignore questions, incomplete sentences, conversational filler
+- Extract the core fact/preference, not the full sentence
+- Keep each item concise (one sentence max)
+- Return empty arrays if nothing extractable
+
+Examples:
+✅ Input: "My name is Alaa" → {"facts": ["Name is Alaa"], "preferences": []}
+✅ Input: "I prefer TypeScript over JavaScript" → {"facts": [], "preferences": ["Prefers TypeScript over JavaScript"]}
+✅ Input: "I work as a software developer" → {"facts": ["Works as software developer"], "preferences": []}
+❌ Input: "my job is?" → {"facts": [], "preferences": []} (incomplete question)
+❌ Input: "what's your name?" → {"facts": [], "preferences": []} (asking, not telling)
+❌ Input: "hello there" → {"facts": [], "preferences": []} (conversational filler)
+❌ Input: "I like" → {"facts": [], "preferences": []} (incomplete)`;
+
+  const userPrompt = `Extract facts and preferences from this message:\n\n"${message}"`;
+
+  // Use Together.ai with a small, fast model
+  try {
+    if (!config.togetherApiKey) {
+      console.warn("[Memory] Together.ai API key not configured, skipping LLM extraction");
+      return [];
+    }
+
+    const response = await fetch("https://api.together.xyz/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${config.togetherApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "Qwen/Qwen2.5-7B-Instruct-Turbo", // Fast, cheap, good reasoning
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 300,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("[Memory] Together.ai extraction failed:", response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      console.warn("[Memory] No content in LLM response");
+      return [];
+    }
+
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = content.match(/\{[\s\S]*?\}/);
+    if (!jsonMatch) {
+      console.warn("[Memory] No JSON found in LLM response:", content);
+      return [];
+    }
+
+    const extracted = JSON.parse(jsonMatch[0]);
+    const results = [];
+    
+    // Convert to our format
+    for (const fact of extracted.facts || []) {
+      if (fact && fact.trim()) {
+        results.push({ content: fact.trim(), type: "fact" });
+      }
+    }
+    
+    for (const pref of extracted.preferences || []) {
+      if (pref && pref.trim()) {
+        results.push({ content: pref.trim(), type: "preference" });
+      }
+    }
+    
+    console.log(`[Memory] LLM extracted ${results.length} items from message`);
+    return results;
+    
+  } catch (err) {
+    console.warn("[Memory] LLM extraction error:", err.message);
+    return [];
+  }
+}
+
+// Legacy pattern-based extraction (fallback)
+function extractFactsPattern(message) {
+  // Simple pattern matching as fallback if LLM fails
   const facts = [];
   const text = message.toLowerCase();
   
-  // Preferences
-  if (/\b(i prefer|i like|i love|i hate|i don't like|my favorite)\b/.test(text)) {
+  // Skip questions
+  if (message.includes('?')) return facts;
+  
+  // Skip very short messages
+  if (message.trim().length < 15) return facts;
+  
+  // Preferences - expanded patterns
+  if (/\b(prefer|like|love|hate|enjoy|fan of|into|interested in|favorite|passion)\b/i.test(text)) {
     facts.push({ content: message, type: "preference" });
   }
   
-  // Personal info (name, work, location)
-  if (/\b(my name is|i am|i'm|i work at|i live in|i'm from)\b/.test(text)) {
+  // Personal info - name
+  if (/\b(my name is|i am|i'm|call me|i go by)\s+\w+/i.test(text)) {
     facts.push({ content: message, type: "fact" });
   }
   
-  // Remember requests
-  if (/\b(remember that|don't forget|keep in mind)\b/.test(text)) {
-    facts.push({ content: message.replace(/^(remember that|don't forget|keep in mind)\s*/i, ""), type: "fact" });
+  // Work/occupation
+  if (/\b(i work (as|at)|my job is|i'm a)\s+\w+/i.test(text)) {
+    facts.push({ content: message, type: "fact" });
+  }
+  
+  // Location
+  if (/\b(based in|from|live in)\s+\w+/i.test(text)) {
+    facts.push({ content: message, type: "fact" });
   }
 
   return facts;
 }
 
+// Main extraction function (uses LLM, falls back to patterns)
+async function extractFacts(message) {
+  // Try LLM extraction first
+  const llmFacts = await extractFactsWithLLM(message);
+  
+  // If LLM worked, use it
+  if (llmFacts.length > 0) {
+    return llmFacts;
+  }
+  
+  // Fallback to pattern matching if LLM returns nothing
+  // (could mean no facts OR LLM failed)
+  // Pattern matching acts as safety net
+  const patternFacts = extractFactsPattern(message);
+  if (patternFacts.length > 0) {
+    console.log("[Memory] Using pattern fallback (LLM returned empty)");
+  }
+  
+  return patternFacts;
+}
+
 async function processMessage({ userId, message, autoExtract = true }) {
   if (!autoExtract) return { extracted: 0 };
   
-  const facts = extractFacts(message);
+  const facts = await extractFacts(message);
+  console.log(`[Memory] LLM found ${facts.length} items to remember`);
+  
   let stored = 0;
   
   for (const fact of facts) {
     try {
+      console.log(`[Memory] Storing: [${fact.type}] "${fact.content.slice(0, 50)}..."`);
       const result = await storeMemory({ userId, content: fact.content, type: fact.type });
-      if (!result.duplicate) stored++;
+      if (!result.duplicate) {
+        stored++;
+        console.log(`[Memory] ✓ Stored new memory (ID: ${result.id})`);
+      } else {
+        console.log(`[Memory] ⊘ Duplicate skipped`);
+      }
     } catch (err) {
       console.warn("[Memory] Failed to store extracted fact:", err.message);
     }
   }
   
+  console.log(`[Memory] Final: ${stored}/${facts.length} memories stored`);
   return { extracted: stored };
 }
 

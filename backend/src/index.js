@@ -5,6 +5,8 @@ import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
 import { initDb, dbGet, dbQuery } from "./db.js";
 import { createMemoryRoutes, buildContext, processMessage, summarizeConversation } from "./memory.js";
 
@@ -12,6 +14,7 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
+const isProduction = process.env.NODE_ENV === "production";
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
@@ -33,14 +36,56 @@ const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// =============================================================================
+// SECURITY MIDDLEWARE
+// =============================================================================
+
+// Request size limits to prevent memory exhaustion
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Rate limiting - general API
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+app.use('/api/', apiLimiter);
+
+// Stricter rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 attempts per hour
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please try again later.' }
+});
+app.use('/login', authLimiter);
+app.use('/signup', authLimiter);
+app.use('/password-reset', authLimiter);
+
+// CORS configuration
 app.use(
   cors({
     origin: (origin, callback) => {
       // In development, allow all origins
-      if (!origin || allowedOrigins.length === 0) return callback(null, true);
-      // Allow file:// protocol for local development
-      if (origin?.startsWith('file://')) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!isProduction && (!origin || allowedOrigins.length === 0)) {
+        return callback(null, true);
+      }
+      
+      // In development, allow file:// protocol for local testing
+      if (!isProduction && origin?.startsWith('file://')) {
+        return callback(null, true);
+      }
+      
+      // Production: strict allowlist only
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
@@ -147,12 +192,72 @@ function copyResponseHeaders(upstream, res) {
   });
 }
 
-app.get("/health", (_, res) => {
-  res.status(200).json({ ok: true });
+app.get("/health", async (_, res) => {
+  try {
+    // Check database connection using dbQuery
+    await dbQuery('SELECT 1');
+    res.status(200).json({ 
+      ok: true, 
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({ 
+      ok: false, 
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: err.message
+    });
+  }
 });
 
+// =============================================================================
+// INPUT VALIDATION SCHEMAS
+// =============================================================================
+
+const LoginSchema = z.object({
+  email: z.string().email().optional(),
+  username: z.string().email().optional(),
+  password: z.string().min(1, "Password is required"),
+}).refine(data => data.email || data.username, {
+  message: "Email or username is required",
+  path: ["email"]
+});
+
+const SignupSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  name: z.string().min(1, "Name is required").max(100),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format"),
+});
+
+const PasswordResetRequestSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+const PasswordResetConfirmSchema = z.object({
+  token: z.string().uuid("Invalid reset token"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+// Validation helper
+function validateInput(schema, data) {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const issues = result.error?.issues || result.error?.errors || [];
+    return {
+      valid: false,
+      errors: issues.map(e => ({
+        field: e.path?.join('.') || 'unknown',
+        message: e.message
+      }))
+    };
+  }
+  return { valid: true, data: result.data };
+}
+
 // Initialize memory routes
-app.use(express.json({ limit: "10mb" }));
 createMemoryRoutes(app);
 
 await initDb();
@@ -338,34 +443,22 @@ async function sendPasswordResetEmail(email, token) {
   return resetUrl;
 }
 
-app.post("/signup", express.json({ limit: "1mb" }), async (req, res) => {
+app.post("/signup", async (req, res) => {
   try {
-    const { email, password, name, dateOfBirth } = req.body || {};
-    const normalizedEmail = normalizeEmail(email);
-    const normalizedName = String(name || "").trim();
-    const normalizedDob = String(dateOfBirth || "").trim();
+    // Validate input with Zod
+    const validation = validateInput(SignupSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map(e => e.message).join(', '),
+      });
+      return;
+    }
 
-    if (!normalizedEmail || !password || !normalizedName || !normalizedDob) {
-      res.status(400).json({
-        success: false,
-        error: "Name, date of birth, email, and password are required.",
-      });
-      return;
-    }
-    if (!isValidEmail(normalizedEmail)) {
-      res.status(400).json({
-        success: false,
-        error: "Please enter a valid email address.",
-      });
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDob)) {
-      res.status(400).json({
-        success: false,
-        error: "Please enter a valid date of birth.",
-      });
-      return;
-    }
+    const { email, password, name, dateOfBirth } = validation.data;
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedName = name.trim();
+    const normalizedDob = dateOfBirth;
 
     const now = new Date().toISOString();
     const existing = await dbGet(
@@ -611,24 +704,27 @@ app.post(
   }
 );
 
-app.post("/login", express.json({ limit: "1mb" }), async (req, res) => {
+app.post("/login", async (req, res) => {
   try {
+    // Validate input
+    const validation = validateInput(LoginSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        valid: false,
+        token: null,
+        message: validation.errors.map(e => e.message).join(', '),
+      });
+      return;
+    }
+
     const apiBase = getApiBase();
     if (!apiBase) {
       res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
       return;
     }
 
-    const { email, password, username } = req.body || {};
+    const { email, username, password } = validation.data;
     const normalizedEmail = normalizeEmail(email || username);
-    if (!normalizedEmail || !password) {
-      res.status(400).json({
-        valid: false,
-        token: null,
-        message: "Email and password are required.",
-      });
-      return;
-    }
 
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
       normalizedEmail,
@@ -951,7 +1047,15 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
         }
 
         // Extract facts from user message (async, don't block)
-        processMessage({ userId: userEmail, message: originalMessage, autoExtract: true }).catch(() => {});
+        processMessage({ userId: userEmail, message: originalMessage, autoExtract: true })
+          .then((result) => {
+            if (result.extracted > 0) {
+              console.log(`[Memory] Extracted ${result.extracted} memories from message`);
+            }
+          })
+          .catch((err) => {
+            console.warn('[Memory] Extraction failed:', err.message);
+          });
       } catch (err) {
         console.warn("[Memory] Context injection failed:", err.message);
         // Continue without memory

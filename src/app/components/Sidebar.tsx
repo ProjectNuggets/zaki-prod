@@ -367,36 +367,68 @@ export function Sidebar() {
       );
       if (parentSpace) {
         try {
-          await apiRequest(`/workspace/${parentSpace.id}/thread/${id}`, {
+          const response = await apiRequest(`/workspace/${parentSpace.id}/thread/${id}`, {
             method: "DELETE",
           });
+          if (!response.ok) {
+            throw new Error('Delete failed');
+          }
+          // Only update local state if API succeeds
+          setSpaces((prev) =>
+            prev.map((space) => ({
+              ...space,
+              threads: space.threads.filter((thread) => thread.id !== id),
+            }))
+          );
+          toast.success('Thread deleted');
         } catch {
           setSpacesError("Unable to delete thread.");
+          toast.error('Failed to delete thread');
+          return; // Don't update state on failure
         }
       }
     }
     if (type === "space") {
       try {
-        await apiRequest(`/workspace/${id}`, {
+        const response = await apiRequest(`/workspace/${id}`, {
           method: "DELETE",
         });
-      } catch {
-        setSpacesError("Unable to delete workspace.");
+        
+        // Check if actually succeeded
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('[Delete] Space delete failed:', response.status, errorData);
+          
+          // Special handling for 401 (permission issue)
+          if (response.status === 401) {
+            throw new Error('You don\'t have permission to delete spaces. Contact admin or delete via NOVA.TYP.');
+          }
+          
+          throw new Error(errorData?.error || errorData?.message || 'Delete failed');
+        }
+        
+        // Parse response to confirm success
+        const data = await response.json().catch(() => ({ success: true }));
+        
+        if (data.success === false) {
+          console.error('[Delete] Space delete rejected:', data);
+          throw new Error(data.error || 'Delete was rejected');
+        }
+        
+        // Only update local state if API confirms success
+        setSpaces((prev) => prev.filter((space) => space.id !== id));
+        if (expandedSpace === id) {
+          const fallback = spaces.find((space) => space.id !== id)?.id ?? null;
+          setExpandedSpace(fallback);
+        }
+        toast.success('Space deleted');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to delete workspace';
+        setSpacesError(message);
+        toast.error(message);
+        console.error('[Delete] Space delete error:', err);
+        return; // Don't update state on failure
       }
-    }
-    if (type === "space") {
-      setSpaces((prev) => prev.filter((space) => space.id !== id));
-      if (expandedSpace === id) {
-        const fallback = spaces.find((space) => space.id !== id)?.id ?? null;
-        setExpandedSpace(fallback);
-      }
-    } else {
-      setSpaces((prev) =>
-        prev.map((space) => ({
-          ...space,
-          threads: space.threads.filter((thread) => thread.id !== id),
-        }))
-      );
     }
     setOpenMenu(null);
   };

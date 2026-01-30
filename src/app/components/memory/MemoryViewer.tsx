@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Trash2, Search, Calendar, Tag, Brain, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Memory {
   id: string;
@@ -38,7 +39,9 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
       const data = await response.json();
       setMemories(data.memories || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load memories');
+      const message = err instanceof Error ? err.message : 'Failed to load memories';
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -57,8 +60,10 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
       if (!response.ok) throw new Error('Failed to delete memory');
       
       setMemories(memories.filter(m => m.id !== memoryId));
+      toast.success('Memory deleted');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete memory');
+      const message = err instanceof Error ? err.message : 'Failed to delete memory';
+      toast.error(message);
     }
   };
 
@@ -327,7 +332,10 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
       {memories.length > 0 && (
         <div className="flex items-center justify-between pt-4 border-t border-zaki">
           <button
-            onClick={fetchMemories}
+            onClick={() => {
+              toast.info('Refreshing memories...');
+              fetchMemories();
+            }}
             className="inline-flex items-center gap-2 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors"
           >
             <RefreshCw className="size-4" />
@@ -335,14 +343,19 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
           </button>
           <button
             onClick={() => {
-              const dataStr = JSON.stringify(memories, null, 2);
-              const dataBlob = new Blob([dataStr], { type: 'application/json' });
-              const url = URL.createObjectURL(dataBlob);
-              const link = document.createElement('a');
-              link.href = url;
-              link.download = `zaki-memories-${new Date().toISOString().split('T')[0]}.json`;
-              link.click();
-              URL.revokeObjectURL(url);
+              try {
+                const dataStr = JSON.stringify(memories, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `zaki-memories-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                toast.success(`Exported ${memories.length} memories`);
+              } catch (err) {
+                toast.error('Failed to export memories');
+              }
             }}
             className="inline-flex items-center gap-2 text-sm text-zaki-brand hover:underline"
           >
