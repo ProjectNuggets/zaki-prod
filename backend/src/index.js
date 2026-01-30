@@ -997,17 +997,19 @@ app.delete("/zaki/workspaces/:slug", async (req, res) => {
     console.log(`[ZAKI] User ${email} deleting workspace ${slug}`);
 
     // Use admin API to delete the workspace
+    console.log(`[ZAKI] Calling NOVA API: DELETE /v1/workspace/${slug}`);
     const deleteResponse = await novaAdminRequest(`/v1/workspace/${slug}`, {
       method: "DELETE",
     });
 
     const deleteData = await deleteResponse.json().catch(() => ({}));
+    console.log(`[ZAKI] NOVA delete response: ${deleteResponse.status}`, deleteData);
 
     if (!deleteResponse.ok) {
       console.error(`[ZAKI] Failed to delete workspace ${slug}:`, deleteData);
       res.status(deleteResponse.status || 400).json({
         success: false,
-        error: deleteData?.message || deleteData?.error || "Unable to delete workspace."
+        error: deleteData?.message || deleteData?.error || `NOVA API error: ${deleteResponse.status}`
       });
       return;
     }

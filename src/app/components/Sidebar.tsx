@@ -427,6 +427,8 @@ export function Sidebar() {
         setSpacesError(message);
         toast.error(message);
         console.error('[Delete] Space delete error:', err);
+        // DEBUG: Log full error details
+        alert(`Delete failed: ${message}\n\nCheck console for details.\nSpace ID: ${id}`);
         return; // Don't update state on failure
       }
     }
