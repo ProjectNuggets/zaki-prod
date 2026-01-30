@@ -255,6 +255,7 @@ export function ChatArea() {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
 
+    console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
     const response = await apiRequest(
       `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
       {
@@ -267,7 +268,10 @@ export function ChatArea() {
       }
     );
 
+    console.log(`[Chat] Response status: ${response.status}`);
+
     if (!response.ok || !response.body) {
+      console.error(`[Chat] Stream failed: ${response.status}`);
       throw new Error("Chat stream failed.");
     }
 

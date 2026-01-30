@@ -1109,24 +1109,30 @@ app.get("/verify", async (req, res) => {
  * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
  */
 app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit: "10mb" }), async (req, res) => {
+  console.log(`[Chat] Received message request for ${req.params.slug}/${req.params.threadSlug}`);
   try {
     const apiBase = getApiBase();
     if (!apiBase) {
+      console.error('[Chat] NOVA_TYP_BASE_URL not configured');
       return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
     }
 
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+      console.error('[Chat] Missing authorization header');
       return res.status(401).json({ error: "Missing authorization." });
     }
 
     // Get user from session
+    console.log('[Chat] Refreshing user session...');
     const sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, { method: "GET" });
     const sessionData = await sessionResponse.json().catch(() => ({}));
     const userEmail = sessionData?.user?.username || null;
+    console.log(`[Chat] User: ${userEmail || 'unknown'}`);
 
     const { message } = req.body || {};
     const originalMessage = String(message || "").trim();
+    console.log(`[Chat] Message length: ${originalMessage.length}`);
 
     if (!originalMessage) {
       return res.status(400).json({ error: "Message is required." });
@@ -1171,6 +1177,9 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
     // Forward to NOVA.TYP with enriched message
     const { slug, threadSlug } = req.params;
     const targetUrl = `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
+    
+    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}`);
+    console.log(`[Chat] Memory injected: ${memoryInjected}`);
 
     const upstreamResponse = await fetch(targetUrl, {
       method: "POST",
@@ -1180,6 +1189,8 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
       },
       body: JSON.stringify({ message: enrichedMessage }),
     });
+
+    console.log(`[Chat] NOVA response status: ${upstreamResponse.status}`);
 
     // Stream the response back
     res.status(upstreamResponse.status);
@@ -1196,20 +1207,26 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
 
     const stream = new ReadableStream({
       async pull(controller) {
-        const { value, done } = await reader.read();
-        if (done) {
-          controller.close();
-          return;
+        try {
+          const { value, done } = await reader.read();
+          if (done) {
+            console.log('[Chat] Stream complete');
+            controller.close();
+            return;
+          }
+          
+          // Optionally prepend memory indicator (disabled for now)
+          // if (firstChunk && memoryInjected) {
+          //   const indicator = new TextEncoder().encode('data: {"type":"memoryUsed","count":' + memoryResult.sources.length + '}\n\n');
+          //   controller.enqueue(indicator);
+          // }
+          
+          firstChunk = false;
+          controller.enqueue(value);
+        } catch (err) {
+          console.error('[Chat] Stream error:', err.message);
+          controller.error(err);
         }
-        
-        // Optionally prepend memory indicator (disabled for now)
-        // if (firstChunk && memoryInjected) {
-        //   const indicator = new TextEncoder().encode('data: {"type":"memoryUsed","count":' + memoryResult.sources.length + '}\n\n');
-        //   controller.enqueue(indicator);
-        // }
-        
-        firstChunk = false;
-        controller.enqueue(value);
       },
     });
 
