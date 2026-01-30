@@ -997,8 +997,8 @@ app.delete("/zaki/workspaces/:slug", async (req, res) => {
     console.log(`[ZAKI] User ${email} deleting workspace ${slug}`);
 
     // Use admin API to delete the workspace
-    console.log(`[ZAKI] Calling NOVA API: DELETE /v1/workspace/${slug}`);
-    const deleteResponse = await novaAdminRequest(`/v1/workspace/${slug}`, {
+    console.log(`[ZAKI] Calling NOVA API: DELETE /v1/admin/workspaces/${slug}`);
+    const deleteResponse = await novaAdminRequest(`/v1/admin/workspaces/${slug}`, {
       method: "DELETE",
     });
 
