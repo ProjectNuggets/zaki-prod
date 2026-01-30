@@ -21,6 +21,7 @@ export function InputArea({
   const [menuOpen, setMenuOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [showFocusRing, setShowFocusRing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -287,7 +288,11 @@ export function InputArea({
              id="chat-input"
              ref={textareaRef}
              rows={1}
-             className="zaki-input-field flex-1 bg-transparent outline-none text-zaki-primary placeholder-zaki text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto"
+             className={`zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto transition-all duration-200 ${
+               showFocusRing 
+                 ? 'outline-none ring-2 ring-zaki-brand ring-offset-2 rounded-md' 
+                 : 'outline-none focus:outline-none'
+             }`}
              placeholder="Ask anything"
              autoComplete="off"
              value={inputValue}
@@ -304,6 +309,22 @@ export function InputArea({
                  event.preventDefault();
                  submitMessage();
                }
+               if (event.key === "Escape") {
+                 // Toggle focus ring visibility
+                 setShowFocusRing((prev) => !prev);
+               }
+             }}
+             onFocus={() => {
+               // Don't show ring on normal focus, only via Escape
+               // Ring state is controlled separately
+             }}
+             onBlur={() => {
+               // Hide ring when leaving
+               setShowFocusRing(false);
+             }}
+             onClick={() => {
+               // Hide ring on click (user is interacting)
+               setShowFocusRing(false);
              }}
            />
            <button
