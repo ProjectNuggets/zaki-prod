@@ -181,7 +181,11 @@ export function ChatArea() {
         [threadSlug]: loadedMessages,
       }));
     } catch (error) {
-      toast.error("Unable to load chat history");
+      console.error('[ChatArea] Failed to load history:', error);
+      // Only show toast if this isn't the initial load (avoid spam on app start)
+      if (messagesByThread[threadSlug]) {
+        toast.error("Unable to load chat history");
+      }
     } finally {
       setIsHistoryLoading(false);
     }

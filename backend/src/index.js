@@ -92,6 +92,28 @@ app.use(
   })
 );
 
+// =============================================================================
+// REQUEST LOGGING
+// =============================================================================
+app.use((req, res, next) => {
+  const start = Date.now();
+  const timestamp = new Date().toISOString();
+  
+  // Log request start
+  console.log(`[${timestamp}] → ${req.method} ${req.path} (${req.ip})`);
+  
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    const statusColor = status < 400 ? '\x1b[32m' : status < 500 ? '\x1b[33m' : '\x1b[31m';
+    const resetColor = '\x1b[0m';
+    
+    console.log(`[${timestamp}] ← ${req.method} ${req.path} ${statusColor}${status}${resetColor} ${duration}ms`);
+  });
+  
+  next();
+});
+
 function getApiBase() {
   if (!NOVA_TYP_BASE_URL) return null;
   const normalized = NOVA_TYP_BASE_URL.replace(/\/+$/, "");
@@ -917,6 +939,88 @@ app.post("/zaki/workspaces", express.json({ limit: "1mb" }), async (req, res) =>
     });
   } catch (error) {
     res.status(500).json({ error: error?.message || "Server error." });
+  }
+});
+
+/**
+ * Route: DELETE /zaki/workspaces/:slug
+ * Proxy to NOVA.TYP admin API for workspace deletion
+ * Uses admin API key to bypass permission restrictions
+ */
+app.delete("/zaki/workspaces/:slug", async (req, res) => {
+  try {
+    // Require authentication
+    const token = req.headers.authorization?.replace("Bearer ", "").trim();
+    const apiBase = NOVA_TYP_BASE_URL || "http://127.0.0.1:3000/api";
+    const verifyUrl = `${apiBase}/verify-token`;
+
+    let verifiedToken = null;
+    try {
+      const verifyRes = await fetch(verifyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (verifyRes.ok) {
+        verifiedToken = await verifyRes.json();
+      }
+    } catch {}
+
+    const tokenData = verifiedToken?.token?.data;
+    if (!tokenData || String(tokenData?.issuer || "") !== "NOVA.TYP") {
+      res.status(401).json({ error: "Invalid or expired token." });
+      return;
+    }
+
+    const userId = String(tokenData?.user_id || "");
+    const email = String(tokenData?.email || "");
+
+    // Get the user from zaki_users to verify they exist
+    const zakiUser = await dbGet(
+      `SELECT id, nova_user_id, verified FROM zaki_users WHERE email = $1`,
+      [email]
+    );
+
+    if (!zakiUser) {
+      res.status(404).json({ error: "ZAKI user not found." });
+      return;
+    }
+
+    if (!zakiUser.verified) {
+      res.status(403).json({ error: "Email is not verified." });
+      return;
+    }
+
+    const { slug } = req.params;
+
+    // Log the deletion attempt
+    console.log(`[ZAKI] User ${email} deleting workspace ${slug}`);
+
+    // Use admin API to delete the workspace
+    const deleteResponse = await novaAdminRequest(`/v1/workspace/${slug}`, {
+      method: "DELETE",
+    });
+
+    const deleteData = await deleteResponse.json().catch(() => ({}));
+
+    if (!deleteResponse.ok) {
+      console.error(`[ZAKI] Failed to delete workspace ${slug}:`, deleteData);
+      res.status(deleteResponse.status || 400).json({
+        success: false,
+        error: deleteData?.message || deleteData?.error || "Unable to delete workspace."
+      });
+      return;
+    }
+
+    console.log(`[ZAKI] Workspace ${slug} deleted successfully by ${email}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Workspace deleted successfully."
+    });
+  } catch (error) {
+    console.error("[ZAKI] Workspace deletion error:", error);
+    res.status(500).json({ success: false, error: "Failed to delete workspace." });
   }
 });
 

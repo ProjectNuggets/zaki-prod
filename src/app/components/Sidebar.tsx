@@ -390,7 +390,7 @@ export function Sidebar() {
     }
     if (type === "space") {
       try {
-        const response = await apiRequest(`/workspace/${id}`, {
+        const response = await apiRequest(`/zaki/workspaces/${id}`, {
           method: "DELETE",
         });
         
@@ -857,6 +857,25 @@ export function Sidebar() {
         )}
         {spacesError && (
           <div className="text-xs text-zaki-brand mb-3 pl-1.5">{spacesError}</div>
+        )}
+        
+        {/* Empty State - No Spaces */}
+        {!spacesLoading && spaces.filter((s) => !s.fixed).length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-zaki-hover flex items-center justify-center mb-3">
+              <Folder className="w-6 h-6 text-zaki-muted" />
+            </div>
+            <p className="text-sm text-zaki-primary font-medium mb-1">No spaces yet</p>
+            <p className="text-xs text-zaki-secondary mb-4">Create your first space to get started</p>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("zaki:create-space"))}
+              className="flex items-center gap-2 px-3 py-2 bg-zaki-brand text-white text-sm font-medium rounded-zaki-xl hover:bg-zaki-brand-hover transition-colors"
+              type="button"
+            >
+              <AddIcon className="w-4 h-4" />
+              Create Space
+            </button>
+          </div>
         )}
         
         <div className="flex flex-col gap-1">
