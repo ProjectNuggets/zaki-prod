@@ -1,0 +1,65 @@
+/**
+ * MobileSidebar - Sheet-based sidebar for mobile devices
+ * 
+ * Wraps the Sidebar component in a slide-out drawer on mobile.
+ * Hidden on desktop where the regular Sidebar is visible.
+ */
+
+import { useEffect } from "react";
+import * as SheetPrimitive from "@radix-ui/react-dialog";
+import { cn } from "@/lib/utils";
+import { Sidebar } from "./Sidebar";
+import { useUIStore } from "@/stores";
+
+export function MobileSidebar() {
+  const { mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
+
+  // Close mobile sidebar when navigation occurs
+  useEffect(() => {
+    const handleNavigation = () => setMobileSidebarOpen(false);
+    
+    // Listen for various navigation events from Sidebar
+    window.addEventListener("zaki:clear-thread", handleNavigation);
+    window.addEventListener("zaki:view-zaki-home", handleNavigation);
+    window.addEventListener("zaki:view-spaces", handleNavigation);
+    window.addEventListener("zaki:view-library", handleNavigation);
+    
+    return () => {
+      window.removeEventListener("zaki:clear-thread", handleNavigation);
+      window.removeEventListener("zaki:view-zaki-home", handleNavigation);
+      window.removeEventListener("zaki:view-spaces", handleNavigation);
+      window.removeEventListener("zaki:view-library", handleNavigation);
+    };
+  }, [setMobileSidebarOpen]);
+
+  return (
+    <SheetPrimitive.Root open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+      <SheetPrimitive.Portal>
+        {/* Overlay */}
+        <SheetPrimitive.Overlay
+          className={cn(
+            "fixed inset-0 z-50 bg-black/50",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+          )}
+        />
+        {/* Content - no default close button */}
+        <SheetPrimitive.Content
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 h-full w-[280px] sm:w-[300px]",
+            "bg-white dark:bg-[#0f0b08] shadow-lg",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+            "data-[state=closed]:duration-300 data-[state=open]:duration-300"
+          )}
+          aria-label="Navigation menu"
+        >
+          {/* Force sidebar to non-collapsed in mobile drawer */}
+          <div className="h-full [&_.zaki-sidebar]:w-full [&_.zaki-sidebar]:!w-full">
+            <Sidebar />
+          </div>
+        </SheetPrimitive.Content>
+      </SheetPrimitive.Portal>
+    </SheetPrimitive.Root>
+  );
+}

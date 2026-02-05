@@ -42,6 +42,7 @@ export function Sidebar() {
   const [displayName, setDisplayName] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const isDark = resolvedTheme() === "dark";
+  const [lastSynced, setLastSynced] = useState<Date>(new Date());
   
   // Focus trap refs for modals
   const settingsModalRef = useFocusTrap<HTMLDivElement>(settingsOpen);
@@ -50,6 +51,20 @@ export function Sidebar() {
 
   const isActive = (item: string) => activeItem === item;
   const isSpaceActive = (spaceId: string) => expandedSpace === spaceId;
+  
+  // Format relative time for "Last synced" badge
+  const formatRelativeTime = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "just now";
+    if (diffMins === 1) return "1 min ago";
+    if (diffMins < 60) return `${diffMins} min ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return "1 hour ago";
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    return "today";
+  };
   const spaceIconMap: Record<string, typeof Folder> = {
     folder: Folder,
     briefcase: Briefcase,
@@ -126,6 +141,7 @@ export function Sidebar() {
       );
 
       setSpaces(workspaceSpaces);
+      setLastSynced(new Date()); // Update sync timestamp
       const firstSpace = workspaceSpaces[0];
       if (firstSpace) {
         setExpandedSpace((prev) => prev ?? firstSpace.id);
@@ -144,6 +160,13 @@ export function Sidebar() {
       fetchSpaces();
     }
   }, [user]);
+  
+  // Force re-render every minute to update "Last synced" display
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -621,7 +644,9 @@ export function Sidebar() {
   }, [spaces]);
 
   return (
-    <div
+    <nav
+      role="navigation"
+      aria-label="Main navigation"
       className={cn(
         "zaki-sidebar h-full flex flex-col bg-white shrink-0 transition-[width,padding] duration-300",
         collapsed ? "w-[72px] py-4 px-2" : "w-[272px] py-5 px-3.5"
@@ -782,13 +807,19 @@ export function Sidebar() {
       </div>
 
       {/* Search */}
-      <div className="bg-zaki-hover rounded-[10px] flex items-center p-2 gap-2 mb-5">
+      <div className="bg-zaki-hover rounded-[10px] flex items-center p-2 gap-2 mb-2">
         <SearchIcon />
         <input 
           type="text" 
           placeholder="Search..." 
           className="bg-transparent border-none outline-none text-zaki-muted placeholder-zaki text-sm w-full font-medium"
         />
+      </div>
+      
+      {/* Last synced badge — trust signal */}
+      <div className="flex items-center gap-1.5 text-[10px] text-zaki-muted mb-4 pl-1">
+        <span className="inline-block size-1.5 rounded-full bg-zaki-accent animate-pulse" />
+        <span>Synced {formatRelativeTime(lastSynced)}</span>
       </div>
 
       {/* Actions */}
@@ -926,8 +957,8 @@ export function Sidebar() {
                     <div key={thread.id} className="relative group">
                       <button
                         className={cn(
-                          "w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
-                          isActive(thread.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+                          "zaki-thread-item w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
+                          isActive(thread.id) ? "zaki-nav-active" : ""
                         )}
                         onClick={() => {
                           setExpandedSpace(space.id);
@@ -1068,8 +1099,8 @@ export function Sidebar() {
                     <div key={thread.id} className="relative group">
                       <button
                         className={cn(
-                          "w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
-                          isActive(thread.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+                          "zaki-thread-item w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
+                          isActive(thread.id) ? "zaki-nav-active" : ""
                         )}
                         onClick={() => {
                           setExpandedSpace(space.id);
@@ -1301,7 +1332,7 @@ export function Sidebar() {
               </div>
               <button
                 type="button"
-                className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
+                className="size-11 md:size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
                 onClick={() => setSettingsOpen(false)}
                 aria-label="Close settings"
               >
@@ -1418,7 +1449,7 @@ export function Sidebar() {
               </div>
               <button
                 type="button"
-                className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
+                className="size-11 md:size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
                 onClick={() => setProfileEditOpen(false)}
                 aria-label="Close profile editor"
               >
@@ -1532,7 +1563,7 @@ export function Sidebar() {
               </div>
               <button
                 type="button"
-                className="size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
+                className="size-11 md:size-8 rounded-full bg-zaki-elevated text-zaki-secondary hover:bg-zaki-active transition-colors"
                 onClick={() => setMemoryOpen(false)}
                 aria-label="Close memory"
               >
@@ -1547,6 +1578,6 @@ export function Sidebar() {
       )}
         </>
       )}
-    </div>
+    </nav>
   );
 }

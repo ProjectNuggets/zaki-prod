@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Welcome to ZAKI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @media only screen and (max-width:620px){
+    .container{width:100% !important;}
+    .hero{font-size:24px !important;}
+    .cta{padding:12px 20px !important;}
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#F8F2E9;font-family:Helvetica,Arial,sans-serif;">
+<table width="100%" bgcolor="#F8F2E9" cellpadding="0" cellspacing="0" role="presentation">
+  <tr><td align="center" style="padding:20px 0;">
+    <table class="container" width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:8px;overflow:hidden;">
+      <!-- Header -->
+      <tr>
+        <td align="center" style="padding:30px 20px;">
+          <img src="https://novanuggets.com/assets/zaki-logo.png" alt="ZAKI" width="120" style="display:block;">
+        </td>
+      </tr>
+      <!-- Hero -->
+      <tr>
+        <td align="center" style="padding:0 30px;">
+          <h1 class="hero" style="margin:0;font-size:28px;color:#1F1A14;font-family:'Geist',Helvetica,Arial,sans-serif;">Welcome to ZAKI!</h1>
+        </td>
+      </tr>
+      <!-- Body -->
+      <tr>
+        <td style="padding:20px 30px;color:#1F1A14;font-size:16px;line-height:1.5;">
+          <p style="margin:0 0 15px;">Hi there,</p>
+          <p style="margin:0 0 15px;">We're thrilled you've joined the NovaNuggets family. ZAKI is the AI that remembers you, so every conversation feels personal and secure.</p>
+          <p style="margin:0 0 20px;">To get started, please verify your email address by clicking the button below.</p>
+          <!-- CTA Button -->
+          <table cellpadding="0" cellspacing="0" align="center">
+            <tr>
+              <td align="center" bgcolor="#D24430" style="border-radius:4px;">
+                <a href="{{VERIFY_URL}}"
+                   target="_blank"
+                   class="cta"
+                   style="display:inline-block;padding:14px 30px;color:#FFFFFF;font-size:16px;text-decoration:none;font-family:'Geist',Helvetica,Arial,sans-serif;">Verify My Email</a>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:20px 0 0;">If the button doesn't work, copy and paste this URL into your browser:<br>
+          <a href="{{VERIFY_URL}}" style="color:#219171;">{{VERIFY_URL}}</a></p>
+        </td>
+      </tr>
+      <!-- Footer -->
+      <tr>
+        <td align="center" style="padding:30px;font-size:13px;color:#777777;background:#F8F2E9;">
+          <p style="margin:0;">© 2026 NovaNuggets • <a href="https://novanuggets.com" style="color:#219171;text-decoration:none;">novanuggets.com</a></p>
+          <p style="margin:5px 0 0;">Secure AI Systems You Own</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

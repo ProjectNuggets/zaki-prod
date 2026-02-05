@@ -17,6 +17,7 @@ interface UIState {
   
   // Sidebar
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;  // Mobile drawer state
   
   // Modals
   shareModalOpen: boolean;
@@ -38,6 +39,8 @@ interface UIStore extends UIState {
   // Sidebar actions
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setMobileSidebarOpen: (open: boolean) => void;
+  toggleMobileSidebar: () => void;
   
   // Modal actions
   setShareModalOpen: (open: boolean) => void;
@@ -57,6 +60,7 @@ export const useUIStore = create<UIStore>()(
       themePreference: "system",
       systemTheme: "light",
       sidebarCollapsed: false,
+      mobileSidebarOpen: false,
       shareModalOpen: false,
       editInstructionsModalOpen: false,
       toasts: [],
@@ -72,6 +76,9 @@ export const useUIStore = create<UIStore>()(
       toggleSidebar: () =>
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setMobileSidebarOpen: (mobileSidebarOpen) => set({ mobileSidebarOpen }),
+      toggleMobileSidebar: () =>
+        set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
       
       setShareModalOpen: (shareModalOpen) => set({ shareModalOpen }),
       setEditInstructionsModalOpen: (editInstructionsModalOpen) =>

@@ -2,6 +2,9 @@ import "@/styles/fonts.css";
 import { useEffect } from "react";
 import { Outlet, useLocation, useParams } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
+import { MobileSidebar } from "./components/MobileSidebar";
+import { MobileHeader } from "./components/MobileHeader";
+import { SkipLink } from "./components/SkipLink";
 import { LoginScreen } from "./components/LoginScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
@@ -109,12 +112,27 @@ export default function App() {
   }
 
   return (
-    <div className="zaki-app flex w-full h-screen overflow-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
-      <Sidebar />
-      <ErrorBoundary>
-        <Outlet />
-      </ErrorBoundary>
-      <Toaster />
-    </div>
+    <>
+      <SkipLink />
+      {/* Mobile sidebar drawer */}
+      <MobileSidebar />
+      
+      <div className="zaki-app flex flex-col md:flex-row w-full h-screen overflow-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
+        {/* Mobile header with hamburger menu */}
+        <MobileHeader />
+        
+        {/* Desktop sidebar - hidden on mobile */}
+        <div className="hidden md:block">
+          <Sidebar />
+        </div>
+        
+        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
+        </main>
+        <Toaster />
+      </div>
+    </>
   );
 }

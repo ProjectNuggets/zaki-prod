@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Trash2, Search, Calendar, Tag, Brain, Download, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiRequest } from '@/lib/api';
+import { SkeletonMemoryViewer } from '../ui/skeleton';
 
 interface Memory {
   id: string;
   content: string;
   type: string;
   createdAt: string;
+  created_at?: string; // Backend uses snake_case
   metadata?: {
     threadId?: string;
     threadTitle?: string;
@@ -16,10 +19,9 @@ interface Memory {
 
 interface MemoryViewerProps {
   userId: string;
-  apiUrl?: string;
 }
 
-export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: MemoryViewerProps) {
+export function MemoryViewer({ userId }: MemoryViewerProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,10 +36,15 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${apiUrl}/api/memory/list/${userId}`);
+      const response = await apiRequest(`/api/memory/list/${userId}`);
       if (!response.ok) throw new Error('Failed to fetch memories');
       const data = await response.json();
-      setMemories(data.memories || []);
+      // Normalize snake_case to camelCase for dates
+      const normalizedMemories = (data.memories || []).map((m: Memory) => ({
+        ...m,
+        createdAt: m.createdAt || m.created_at || new Date().toISOString(),
+      }));
+      setMemories(normalizedMemories);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load memories';
       setError(message);
@@ -51,9 +58,8 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
     if (!confirm('Delete this memory? This action cannot be undone.')) return;
     
     try {
-      const response = await fetch(`${apiUrl}/api/memory/${memoryId}`, {
+      const response = await apiRequest(`/api/memory/${memoryId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
       
@@ -134,12 +140,7 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <div className="animate-spin size-10 border-4 border-zaki-primary border-t-transparent rounded-full mb-4" />
-        <p className="text-sm text-zaki-disabled">Loading your memories...</p>
-      </div>
-    );
+    return <SkeletonMemoryViewer />;
   }
 
   if (error) {

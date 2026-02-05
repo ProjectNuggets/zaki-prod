@@ -1,0 +1,15 @@
+Subject: Welcome to ZAKI – Verify Your Email & Get Started
+
+Hi there,
+
+We're thrilled you've joined the NovaNuggets family. ZAKI is the AI that remembers you, so every conversation feels personal and secure.
+
+Please verify your email address to get started:
+
+{{VERIFY_URL}}
+
+If the link doesn't work, copy and paste it into your browser.
+
+© 2026 NovaNuggets
+https://novanuggets.com
+Secure AI Systems You Own

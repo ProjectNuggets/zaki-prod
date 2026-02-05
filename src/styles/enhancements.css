@@ -1,0 +1,425 @@
+/**
+ * ZAKI Enhancements — Apple + Discord Blend
+ * Friendly precision: Clean foundation, playful soul
+ */
+
+/* =============================================================================
+ * INTER FONT (Apple-style typography)
+ * ============================================================================= */
+
+/* Font loaded via index.html <link> to avoid @import ordering issues */
+
+/* Use Inter as primary, Geist as fallback */
+:root {
+  --font-sans: 'Inter', 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', Monaco, monospace;
+  
+  /* Apple-like refined line heights */
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+}
+
+/* Apply Inter to entire app */
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11"; /* Inter features */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =============================================================================
+ * GLASSMORPHISM (Frosted glass effects)
+ * ============================================================================= */
+
+.zaki-glass {
+  background: rgba(255, 252, 248, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(136, 115, 90, 0.12);
+}
+
+.zaki-glass-dark {
+  background: rgba(15, 11, 8, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(193, 166, 133, 0.12);
+}
+
+.zaki-glass-elevated {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(136, 115, 90, 0.08);
+  box-shadow: 
+    0 4px 24px rgba(15, 15, 15, 0.04),
+    0 1px 2px rgba(15, 15, 15, 0.02);
+}
+
+/* Floating input area */
+.zaki-input-glass {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(136, 115, 90, 0.15);
+  border-radius: 24px;
+  box-shadow: 
+    0 4px 20px rgba(15, 15, 15, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* =============================================================================
+ * ANIMATIONS (Discord-like playfulness)
+ * ============================================================================= */
+
+/* Message slide-in for user */
+@keyframes messageSlideInUser {
+  from {
+    opacity: 0;
+    transform: translateY(16px) translateX(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+/* Message slide-in for assistant */
+@keyframes messageSlideInAssistant {
+  from {
+    opacity: 0;
+    transform: translateY(16px) translateX(-20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+.zaki-message-enter-user {
+  animation: messageSlideInUser 0.3s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+
+.zaki-message-enter-assistant {
+  animation: messageSlideInAssistant 0.35s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+
+/* Memory nugget float */
+@keyframes memoryFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.zaki-memory-float {
+  animation: memoryFloat 3s ease-in-out infinite;
+}
+
+/* Gentle pulse for thinking state */
+@keyframes gentlePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(0.96);
+  }
+}
+
+.zaki-thinking {
+  animation: gentlePulse 1.5s ease-in-out infinite;
+}
+
+/* Thinking indicator dots */
+@keyframes dotBounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.zaki-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--zaki-accent, #219171);
+  animation: dotBounce 1.4s ease-in-out infinite;
+}
+
+/* Avatar pulse ring */
+@keyframes pingSlow {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.animate-ping-slow {
+  animation: pingSlow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.zaki-avatar-pulse {
+  animation: gentlePulse 2s ease-in-out infinite;
+}
+
+/* Sparkle burst for new memories */
+@keyframes sparkleBurst {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(180deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0) rotate(360deg);
+  }
+}
+
+.zaki-sparkle {
+  animation: sparkleBurst 0.6s ease-out forwards;
+}
+
+/* Button micro-interactions */
+.zaki-button-bounce {
+  transition: transform 0.15s cubic-bezier(0.34, 1.4, 0.64, 1),
+              box-shadow 0.15s ease;
+}
+
+.zaki-button-bounce:hover {
+  transform: scale(1.05);
+}
+
+.zaki-button-bounce:active {
+  transform: scale(0.96);
+}
+
+/* Stagger children animation */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zaki-stagger > * {
+  opacity: 0;
+  animation: fadeSlideUp 0.3s ease-out forwards;
+}
+
+.zaki-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.zaki-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.zaki-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.zaki-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.zaki-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.zaki-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.zaki-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.zaki-stagger > *:nth-child(8) { animation-delay: 280ms; }
+
+/* =============================================================================
+ * MEMORY NUGGETS (Discord-like personality)
+ * ============================================================================= */
+
+.zaki-nugget {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  background: linear-gradient(135deg, 
+    rgba(210, 68, 48, 0.08) 0%, 
+    rgba(210, 68, 48, 0.04) 100%
+  );
+  border: 1px solid rgba(210, 68, 48, 0.15);
+  color: var(--zaki-primary-800);
+  transition: all 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
+  cursor: pointer;
+}
+
+.zaki-nugget:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 12px rgba(210, 68, 48, 0.15);
+  border-color: rgba(210, 68, 48, 0.25);
+}
+
+.zaki-nugget:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.zaki-nugget::before {
+  content: "✦";
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Different nugget types */
+.zaki-nugget--fact {
+  background: linear-gradient(135deg, 
+    rgba(33, 145, 113, 0.08) 0%, 
+    rgba(33, 145, 113, 0.04) 100%
+  );
+  border-color: rgba(33, 145, 113, 0.15);
+  color: var(--zaki-secondary-900);
+}
+
+.zaki-nugget--fact::before {
+  content: "🧠";
+}
+
+.zaki-nugget--preference {
+  background: linear-gradient(135deg, 
+    rgba(205, 179, 148, 0.12) 0%, 
+    rgba(205, 179, 148, 0.06) 100%
+  );
+  border-color: rgba(205, 179, 148, 0.2);
+  color: var(--zaki-neutral-900);
+}
+
+.zaki-nugget--preference::before {
+  content: "✨";
+}
+
+/* =============================================================================
+ * AVATAR MOODS (ZAKI personality)
+ * ============================================================================= */
+
+.zaki-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, 
+    var(--zaki-primary-500) 0%, 
+    var(--zaki-primary-700) 100%
+  );
+  color: white;
+  font-weight: 600;
+  transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.zaki-avatar--thinking {
+  animation: gentlePulse 2s ease-in-out infinite;
+}
+
+.zaki-avatar--happy {
+  transform: scale(1.05);
+  filter: brightness(1.05);
+}
+
+.zaki-avatar--confused {
+  transform: rotate(-5deg);
+  filter: saturate(0.9);
+}
+
+/* =============================================================================
+ * GRADIENT BACKGROUNDS (Apple-like depth)
+ * ============================================================================= */
+
+.zaki-gradient-subtle {
+  background: linear-gradient(180deg, 
+    var(--zaki-surface-base) 0%, 
+    var(--zaki-neutral-100) 100%
+  );
+}
+
+.zaki-gradient-warm {
+  background: linear-gradient(135deg, 
+    #fff8f0 0%, 
+    #f5ebe0 50%,
+    #efe4d6 100%
+  );
+}
+
+.zaki-gradient-brand {
+  background: linear-gradient(135deg, 
+    var(--zaki-primary-500) 0%, 
+    var(--zaki-primary-700) 100%
+  );
+}
+
+/* =============================================================================
+ * ELEVATED CARDS (Apple-style shadows)
+ * ============================================================================= */
+
+.zaki-card-elevated {
+  background: var(--zaki-surface-base);
+  border-radius: 16px;
+  border: 1px solid rgba(136, 115, 90, 0.08);
+  box-shadow: 
+    0 2px 8px rgba(15, 15, 15, 0.03),
+    0 8px 24px rgba(15, 15, 15, 0.04),
+    0 24px 48px rgba(15, 15, 15, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zaki-card-elevated:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 4px 12px rgba(15, 15, 15, 0.04),
+    0 12px 32px rgba(15, 15, 15, 0.05),
+    0 32px 64px rgba(15, 15, 15, 0.04);
+}
+
+/* =============================================================================
+ * TOUCH TARGET SIZES (Mobile optimization)
+ * ============================================================================= */
+
+@media (max-width: 768px) {
+  .zaki-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .zaki-button-mobile {
+    padding: 12px 20px;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  
+  .zaki-input-mobile {
+    font-size: 16px;
+    padding: 14px 18px;
+  }
+}
+
+/* =============================================================================
+ * REDUCED MOTION (Accessibility)
+ * ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .zaki-message-enter,
+  .zaki-memory-float,
+  .zaki-thinking,
+  .zaki-sparkle,
+  .zaki-stagger > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  
+  .zaki-button-bounce,
+  .zaki-nugget,
+  .zaki-card-elevated {
+    transition: none;
+  }
+}

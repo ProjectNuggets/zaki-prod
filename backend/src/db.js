@@ -118,12 +118,25 @@ export async function initDb() {
       );
     `);
     
+    // P0 Enhancement: Add importance scoring and access tracking columns
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS importance_score FLOAT DEFAULT 0.5;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS confidence_score FLOAT DEFAULT 0.8;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_count INT DEFAULT 0;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS decay_rate FLOAT DEFAULT 0.01;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_verified BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_message_id TEXT;`);
+    
     // Create indexes for efficient querying
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_content_hash ON memories(user_id, content_hash);
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(user_id, importance_score DESC);
     `);
     
     // Vector similarity index (IVFFlat for approximate search)
@@ -146,6 +159,95 @@ export async function initDb() {
     console.log("[DB] Memories table ready with pgvector");
   } catch (err) {
     console.warn("[DB] Memories table creation failed:", err.message);
+  }
+  
+  // P0 Enhancement: Proactive Memory Triggers table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS memory_triggers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        memory_id UUID REFERENCES memories(id) ON DELETE CASCADE,
+        trigger_type TEXT NOT NULL,
+        trigger_date TIMESTAMPTZ NOT NULL,
+        trigger_condition JSONB DEFAULT '{}',
+        context TEXT,
+        fired BOOLEAN DEFAULT FALSE,
+        fired_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memory_triggers_user_date 
+      ON memory_triggers(user_id, trigger_date) 
+      WHERE fired = FALSE;
+    `);
+    
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memory_triggers_pending
+      ON memory_triggers(trigger_date)
+      WHERE fired = FALSE;
+    `);
+    
+    console.log("[DB] Memory triggers table ready");
+  } catch (err) {
+    console.warn("[DB] Memory triggers table creation failed:", err.message);
+  }
+  
+  // P0 FIX: Memory Confirmations table (user feedback system)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS memory_confirmations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'context',
+        source_thread_id TEXT,
+        source_message_id TEXT,
+        confidence_score FLOAT DEFAULT 0.8,
+        status TEXT DEFAULT 'pending',
+        memory_id UUID REFERENCES memories(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memory_confirmations_user_pending 
+      ON memory_confirmations(user_id, status) 
+      WHERE status = 'pending';
+    `);
+    
+    console.log("[DB] Memory confirmations table ready (P0)");
+  } catch (err) {
+    console.warn("[DB] Memory confirmations table creation failed:", err.message);
+  }
+  
+  // P0 FIX: Memory Notifications table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS memory_notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        data JSONB DEFAULT '{}',
+        read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memory_notifications_user_unread 
+      ON memory_notifications(user_id, read, created_at DESC) 
+      WHERE read = FALSE;
+    `);
+    
+    console.log("[DB] Memory notifications table ready (P0)");
+  } catch (err) {
+    console.warn("[DB] Memory notifications table creation failed:", err.message);
   }
 }
 

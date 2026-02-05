@@ -1,16 +1,42 @@
 import type { Space } from "@/types";
+import { SkeletonSpaceGrid } from "../../ui/skeleton";
 
 interface SpacesViewProps {
   spacesList: Space[];
+  isLoading?: boolean;
   onCreateSpace: () => void;
   onViewSpace: (id: string) => void;
 }
 
 export function SpacesView({
   spacesList,
+  isLoading = false,
   onCreateSpace,
   onViewSpace,
 }: SpacesViewProps) {
+  if (isLoading) {
+    return (
+      <div className="px-10 py-10">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="size-10 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-muted text-xs font-semibold">SP</div>
+          <div>
+            <div className="text-lg font-semibold text-zaki-primary">Spaces</div>
+            <div className="text-sm text-zaki-disabled">Manage and explore your spaces in one place</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex-1 rounded-full border border-zaki bg-white px-4 py-2 text-sm text-zaki-muted">
+            Search spaces...
+          </div>
+          <span className="text-sm text-zaki-muted">Sort by recent</span>
+        </div>
+
+        <SkeletonSpaceGrid />
+      </div>
+    );
+  }
+
   return (
     <div className="px-10 py-10">
       <div className="flex items-center gap-3 mb-6">
@@ -21,7 +47,7 @@ export function SpacesView({
         </div>
         <button
           type="button"
-          className="ml-auto rounded-full bg-zaki-secondary text-white text-sm px-4 py-2 hover:bg-zaki-brand active:scale-[0.98] transition-[transform,background-color] focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+          className="ml-auto rounded-full bg-zaki-brand text-white text-sm px-4 py-2 hover:bg-zaki-brand-hover active:scale-[0.98] transition-all focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
           onClick={onCreateSpace}
           aria-label="Create new space"
         >

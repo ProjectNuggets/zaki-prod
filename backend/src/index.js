@@ -8,9 +8,54 @@ import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { initDb, dbGet, dbQuery } from "./db.js";
-import { createMemoryRoutes, buildContext, processMessage, summarizeConversation } from "./memory.js";
+import { createMemoryRoutes, buildContext } from "./memory/index.js";
+import { extractFacts } from "./memory-extraction.js";
+import { summarizeConversation } from "./memory-legacy.js";
 
 dotenv.config();
+
+// =============================================================================
+// P0 FIX: Preview memories instead of auto-storing
+// =============================================================================
+async function previewAndNotify({ userId, message, threadId = null }) {
+  const facts = await extractFacts(message);
+  
+  if (facts.length === 0) {
+    return { pending: 0 };
+  }
+  
+  let pending = 0;
+  
+  for (const fact of facts) {
+    // Check for duplicates
+    const hash = crypto.createHash("sha256").update(fact.content).digest("hex");
+    const existing = await dbGet(
+      "SELECT id FROM memories WHERE user_id = $1 AND content_hash = $2",
+      [userId, hash]
+    );
+    if (existing) continue;
+    
+    // Stage for confirmation
+    const id = crypto.randomUUID();
+    await dbQuery(
+      `INSERT INTO memory_confirmations (id, user_id, content, type, source_thread_id, source_message_id, confidence_score, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW())`,
+      [id, userId, fact.content, fact.type, threadId, null, 0.8]
+    );
+    pending++;
+  }
+  
+  // Create notification
+  if (pending > 0) {
+    await dbQuery(
+      `INSERT INTO memory_notifications (id, user_id, type, title, message, read, created_at)
+       VALUES ($1, $2, 'memory_extracted', 'New memories', $3, false, NOW())`,
+      [crypto.randomUUID(), userId, `ZAKI learned ${pending} thing${pending > 1 ? 's' : ''} about you`]
+    );
+  }
+  
+  return { pending };
+}
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
@@ -1139,6 +1184,7 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
     }
 
     let enrichedMessage = originalMessage;
+    console.log(`[Chat] Original message: ${originalMessage}`);
     let memoryInjected = false;
 
     // Inject memory context if we have a user
@@ -1156,17 +1202,18 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
           enrichedMessage = `[About this person — use naturally, don't quote verbatim]\n${memoryResult.context}\n\n---\n\n${originalMessage}`;
           memoryInjected = true;
           console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}`);
+          console.log(`[Chat] Enriched message: ${enrichedMessage}`);
         }
 
-        // Extract facts from user message (async, don't block)
-        processMessage({ userId: userEmail, message: originalMessage, autoExtract: true })
+        // P0 Fix: Extract and stage for confirmation (don't auto-store)
+        previewAndNotify({ userId: userEmail, message: originalMessage, threadId: threadSlug })
           .then((result) => {
-            if (result.extracted > 0) {
-              console.log(`[Memory] Extracted ${result.extracted} memories from message`);
+            if (result.pending > 0) {
+              console.log(`[Memory] ${result.pending} memories staged for confirmation`);
             }
           })
           .catch((err) => {
-            console.warn('[Memory] Extraction failed:', err.message);
+            console.warn('[Memory] Preview failed:', err.message);
           });
       } catch (err) {
         console.warn("[Memory] Context injection failed:", err.message);

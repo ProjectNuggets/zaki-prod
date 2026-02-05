@@ -57,11 +57,11 @@ export function ThinkingIndicator({ className }: ThinkingIndicatorProps) {
             {currentPhrase}
           </span>
           
-          {/* Animated dots */}
-          <span className="flex gap-1" aria-hidden="true">
-            <span className="zaki-dot h-1.5 w-1.5 rounded-full bg-zaki-brand/60" style={{ animationDelay: "0s" }} />
-            <span className="zaki-dot h-1.5 w-1.5 rounded-full bg-zaki-brand/60" style={{ animationDelay: "0.15s" }} />
-            <span className="zaki-dot h-1.5 w-1.5 rounded-full bg-zaki-brand/60" style={{ animationDelay: "0.3s" }} />
+          {/* Animated dots — teal accent */}
+          <span className="flex gap-1.5" aria-hidden="true">
+            <span className="zaki-dot" style={{ animationDelay: "0s" }} />
+            <span className="zaki-dot" style={{ animationDelay: "0.15s" }} />
+            <span className="zaki-dot" style={{ animationDelay: "0.3s" }} />
           </span>
         </div>
       </div>

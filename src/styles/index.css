@@ -2,13 +2,14 @@
 @import './tailwind.css';
 @import './theme.css';
 @import './tokens.css';
+@import './enhancements.css';
 
 /* =============================================================================
-   ACCESSIBILITY - Focus States
+   ACCESSIBILITY - Focus States (Teal accent for differentiation)
    ============================================================================= */
 
 :focus-visible {
-  outline: 2px solid var(--zaki-brand, #D24430);
+  outline: 2px solid var(--zaki-accent, #219171);
   outline-offset: 2px;
 }
 
@@ -21,11 +22,24 @@ select:focus:not(:focus-visible) {
   outline: none;
 }
 
+/* Chat input should never show focus ring — it's always ready */
+.zaki-input-field:focus,
+.zaki-input-field:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* Ensure error boundaries and modals have visible focus */
 [role="dialog"] :focus-visible,
 [role="alertdialog"] :focus-visible {
-  outline: 2px solid var(--zaki-brand, #D24430);
+  outline: 2px solid var(--zaki-accent, #219171);
   outline-offset: 3px;
+}
+
+/* Focus ring utility — uses accent (teal) */
+.focus-visible\:ring-zaki-accent:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--zaki-surface-base), 0 0 0 4px var(--zaki-accent);
 }
 
 :root {
