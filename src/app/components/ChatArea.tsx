@@ -1,6 +1,6 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea } from "./InputArea";
-import { Share2, MoreVertical, Download } from "lucide-react";
+import { Share2, MoreVertical, Download, Brain } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiRequest } from "@/lib/api";
 import {
@@ -12,7 +12,12 @@ import {
   ReadyState,
   CreateSpaceModal,
   EditInstructionsModal,
+  MemoryConfirmationPanel,
 } from "./chat";
+
+import { AutoSaveToast } from "./memory/AutoSaveToast";
+import { MemoryToast } from "./memory/MemoryToast";
+import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
@@ -47,6 +52,26 @@ export function ChatArea() {
   const historyLoadingRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+
+  // Memory state - works for both auto-save and manual modes
+  const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string}>>([]);
+  const [showMemoryToast, setShowMemoryToast] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const authUser = useAuthStore((s) => s.user);
+  
+  // Memory mode: autosave (default) or manual
+  const [memoryMode, setMemoryMode] = useMemoryMode();
+
+  // Clear pending memories when switching modes to prevent stale state
+  const prevModeRef = useRef(memoryMode);
+  useEffect(() => {
+    if (prevModeRef.current !== memoryMode) {
+      // Mode changed - clear pending memories and hide toast
+      setPendingMemories([]);
+      setShowMemoryToast(false);
+      prevModeRef.current = memoryMode;
+    }
+  }, [memoryMode]);
 
   // UI state
   const [dragActive, setDragActive] = useState(false);
@@ -354,6 +379,44 @@ export function ChatArea() {
     }
   }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent]);
 
+  // Check for memories - Auto-Save or Manual mode
+  const checkForSavedMemories = useCallback(async (message: string) => {
+    // Note: username is the email in ZAKI's auth system
+    if (!authUser?.username) return;
+    
+    const endpoint = memoryMode === "autosave" 
+      ? "/api/memory/autosave" 
+      : "/api/memory/preview";
+    
+    try {
+      const response = await apiRequest(endpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          userId: authUser.username,
+          message,
+          threadId: activeThreadId,
+        }),
+      });
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      
+      // Different response shapes for different modes
+      const memories = memoryMode === "autosave" 
+        ? (data.saved || [])
+        : (data.pending || []);
+      
+      if (memories.length > 0) {
+        setPendingMemories(memories);
+        setShowMemoryToast(true);
+      }
+    } catch (err) {
+      // Silent fail - not critical for chat
+      console.log("[Memory] Check failed:", err);
+    }
+  }, [authUser?.username, activeThreadId, memoryMode]);
+
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[]) => {
     const trimmed = text.trim();
@@ -436,12 +499,15 @@ export function ChatArea() {
         message: sendText,
         assistantId: assistantMessageId,
       });
+      
+      // P0 Fix: Check for auto-saved memories after response
+      await checkForSavedMemories(trimmed);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to send message");
     } finally {
       setIsStreaming(false);
     }
-  }, [activeWorkspaceSlug, activeThreadId, isStreaming, streamChatMessage]);
+  }, [activeWorkspaceSlug, activeThreadId, isStreaming, streamChatMessage, checkForSavedMemories]);
 
   // Library search
   const runLibrarySearch = useCallback(async () => {
@@ -811,7 +877,7 @@ export function ChatArea() {
               </button>
               <button
                 type="button"
-                className="size-8 rounded-full border border-zaki-subtle bg-white/80 flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                className="size-11 md:size-8 rounded-full border border-zaki-subtle bg-white/80 flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                 onClick={() => setMenuOpen((open) => !open)}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
@@ -824,6 +890,24 @@ export function ChatArea() {
                   className="absolute right-0 top-full mt-2 w-40 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
                   role="menu"
                 >
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowMemoryPanel(true);
+                    }}
+                    aria-label="Review memories"
+                  >
+                    <Brain className="size-4 text-zaki-muted" />
+                    Review Memories
+                    {pendingMemories.length > 0 && (
+                      <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
+                        {pendingMemories.length}
+                      </span>
+                    )}
+                  </button>
                   <button
                     type="button"
                     className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
@@ -866,6 +950,8 @@ export function ChatArea() {
                 isSending={isStreaming}
                 webSearchEnabled={webSearchEnabled}
                 onToggleWebSearch={() => setWebSearchEnabled((prev) => !prev)}
+                memoryMode={memoryMode}
+                onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
               />
             </div>
           )}
@@ -930,6 +1016,35 @@ export function ChatArea() {
           );
         }}
       />
+
+      {/* Memory Toast - Mode-dependent rendering */}
+      {showMemoryToast && pendingMemories.length > 0 && authUser?.username && (
+        memoryMode === "autosave" ? (
+          <AutoSaveToast
+            userId={authUser.username}
+            memories={pendingMemories}
+            onDismiss={() => setShowMemoryToast(false)}
+          />
+        ) : (
+          <MemoryToast
+            userId={authUser.username}
+            memories={pendingMemories.map(m => ({
+              ...m,
+              confirmationId: m.confirmationId || m.id, // Fallback to id if no confirmationId
+            }))}
+            onDismiss={() => setShowMemoryToast(false)}
+          />
+        )
+      )}
+
+      {/* P0 Fix: Memory Confirmation Panel - Full review UI */}
+      {authUser?.username && (
+        <MemoryConfirmationPanel
+          userId={authUser.username}
+          isOpen={showMemoryPanel}
+          onClose={() => setShowMemoryPanel(false)}
+        />
+      )}
     </div>
   );
 }

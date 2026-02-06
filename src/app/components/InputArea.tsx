@@ -1,7 +1,18 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, Brain, Clock } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+
+// Rotating placeholder suggestions — contextual prompts
+const placeholderSuggestions = [
+  "Ask anything",
+  "What's on your mind?",
+  "Ask me about yesterday's notes…",
+  "Summarize what we discussed…",
+  "Help me brainstorm…",
+  "What should I focus on today?",
+  "Remind me about…",
+];
 
 export function InputArea({
   onSend,
@@ -10,6 +21,8 @@ export function InputArea({
   isSending = false,
   webSearchEnabled = false,
   onToggleWebSearch,
+  memoryMode = "autosave",
+  onToggleMemoryMode,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
@@ -17,14 +30,38 @@ export function InputArea({
   isSending?: boolean;
   webSearchEnabled?: boolean;
   onToggleWebSearch?: () => void;
+  memoryMode?: "autosave" | "manual";
+  onToggleMemoryMode?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const upgradeModalRef = useFocusTrap<HTMLDivElement>(upgradeOpen);
+  const wasSendingRef = useRef(isSending);
+
+  // Auto-focus textarea when response completes (isSending: true → false)
+  useEffect(() => {
+    if (wasSendingRef.current && !isSending) {
+      // Response just finished — focus the input for seamless continuation
+      textareaRef.current?.focus();
+    }
+    wasSendingRef.current = isSending;
+  }, [isSending]);
+
+  // Rotate placeholder suggestions every 4 seconds (only when input is empty and not focused)
+  useEffect(() => {
+    if (inputValue.length > 0) return; // Don't rotate if user is typing
+    
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % placeholderSuggestions.length);
+    }, 4000);
+    
+    return () => clearInterval(interval);
+  }, [inputValue.length]);
 
   const submitMessage = () => {
     if (isSending) {
@@ -122,24 +159,53 @@ export function InputArea({
         className="zaki-input-form bg-zaki-raised rounded-[22px] shadow-sm border border-zaki-subtle overflow-visible flex flex-col min-h-[88px] relative z-10 focus-within:bg-zaki-raised focus-within:border-zaki-subtle"
       >
         <div className="bg-zaki-sunken text-zaki-muted text-[11px] px-3 py-2 grid grid-cols-[1fr_auto_1fr] items-center leading-[16px]">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-zaki-muted">Web search</span>
-            <button
-              type="button"
-              onClick={onToggleWebSearch}
-              className={`h-5 w-9 rounded-full border transition-colors ${
-                webSearchEnabled
-                  ? "bg-zaki-brand border-zaki-focus"
-                  : "bg-white border-zaki"
-              }`}
-              aria-pressed={webSearchEnabled}
-            >
-              <span
-                className={`block h-4 w-4 rounded-full shadow transition-transform ${
-                  webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-zaki-muted"
+          <div className="flex items-center gap-3">
+            {/* Web Search Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-zaki-muted">Web search</span>
+              <button
+                type="button"
+                onClick={onToggleWebSearch}
+                className={`h-5 w-9 rounded-full border transition-colors ${
+                  webSearchEnabled
+                    ? "bg-zaki-accent border-zaki-accent"
+                    : "bg-white border-zaki"
                 }`}
-              />
-            </button>
+                aria-pressed={webSearchEnabled}
+              >
+                <span
+                  className={`block h-4 w-4 rounded-full shadow transition-transform ${
+                    webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-zaki-muted"
+                  }`}
+                />
+              </button>
+            </div>
+            
+            {/* Memory Mode Toggle */}
+            <div className="flex items-center gap-2 border-l border-zaki-subtle pl-3">
+              <button
+                type="button"
+                onClick={onToggleMemoryMode}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] transition-colors ${
+                  memoryMode === "autosave"
+                    ? "bg-teal-100 text-teal-700 hover:bg-teal-200"
+                    : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                }`}
+                title={memoryMode === "autosave" ? "Auto-save memories with 3s undo" : "Manually confirm each memory"}
+              >
+                {memoryMode === "autosave" ? (
+                  <>
+                    <Clock className="size-3" />
+                    <span>Auto</span>
+                  </>
+                ) : (
+                  <>
+                    <Brain className="size-3" />
+                    <span>Manual</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 justify-center">
             <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
@@ -173,7 +239,7 @@ export function InputArea({
                     />
                     <button
                       type="button"
-                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -198,7 +264,7 @@ export function InputArea({
                     </div>
                     <button
                       type="button"
-                      className="text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:rounded"
+                      className="text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:rounded"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -216,7 +282,7 @@ export function InputArea({
            <div className="relative" ref={menuRef}>
              <button
                type="button"
-               className="size-8 bg-zaki-elevated rounded-full flex items-center justify-center hover:bg-zaki-active transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+               className="size-11 md:size-8 bg-zaki-elevated rounded-full flex items-center justify-center hover:bg-zaki-active transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
                onClick={() => setMenuOpen((open) => !open)}
                aria-haspopup="menu"
                aria-expanded={menuOpen}
@@ -288,7 +354,7 @@ export function InputArea({
              ref={textareaRef}
              rows={1}
              className="zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto outline-none focus:outline-none"
-             placeholder="Ask anything"
+             placeholder={placeholderSuggestions[placeholderIndex]}
              autoComplete="off"
              value={inputValue}
              disabled={isSending}
@@ -308,11 +374,11 @@ export function InputArea({
            />
            <button
              type="submit"
-             className="size-8 bg-zaki-secondary rounded-full flex items-center justify-center hover:bg-zaki-brand focus-visible:bg-zaki-brand active:bg-zaki-brand transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+             className="zaki-button-bounce size-11 md:size-8 bg-zaki-brand rounded-full flex items-center justify-center hover:bg-zaki-brand-hover disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
              disabled={isSending}
              aria-label="Send message"
            >
-              <ArrowUp className="size-4 text-white" />
+              <ArrowUp className="size-5 md:size-4 text-white" />
            </button>
         </div>
         <input

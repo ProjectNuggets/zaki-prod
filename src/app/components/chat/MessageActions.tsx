@@ -17,7 +17,7 @@ export function MessageActions({
     <div className={`group mt-1 flex items-center gap-3 text-zaki-disabled ${visible ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}>
       <button
         type="button"
-        className="hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-1 focus-visible:rounded p-1"
+        className="hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1 focus-visible:rounded p-1"
         title="Copy"
         aria-label="Copy message"
         onClick={onCopy}
@@ -27,7 +27,7 @@ export function MessageActions({
       <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
         <button
           type="button"
-          className="hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-1 focus-visible:rounded p-1"
+          className="hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1 focus-visible:rounded p-1"
           title="Regenerate response"
           aria-label="Regenerate response"
           onClick={onRegenerate}
@@ -36,7 +36,7 @@ export function MessageActions({
         </button>
         <button
           type="button"
-          className="hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-1 focus-visible:rounded p-1"
+          className="hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1 focus-visible:rounded p-1"
           title="Good response"
           aria-label="Mark as good response"
           onClick={onThumbsUp}

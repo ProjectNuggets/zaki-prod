@@ -1,0 +1,404 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ZAKI Core API",
+    "description": "Authentication, workspaces, threads, chat, and sharing endpoints (excludes Memory API)",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8787",
+      "description": "Development"
+    }
+  ],
+  "tags": [
+    { "name": "Health", "description": "System status" },
+    { "name": "Authentication", "description": "Signup, login, verification" },
+    { "name": "Workspaces", "description": "Workspace management" },
+    { "name": "Chat", "description": "Streaming chat with LLM" },
+    { "name": "Sharing", "description": "Share threads publicly" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Basic health check",
+        "responses": {
+          "200": { "description": "Server is running" }
+        }
+      }
+    },
+    "/verify": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Verify email with token",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Email verified" },
+          "400": { "description": "Invalid or expired token" }
+        }
+      }
+    },
+    "/signup": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Register new user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "name", "dateOfBirth"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "minLength": 6 },
+                  "name": { "type": "string" },
+                  "dateOfBirth": { "type": "string", "format": "date" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signup successful / Check email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "verificationLink": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error or email exists" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "User login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "token": { "type": "string" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "email": { "type": "string" },
+                        "name": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/zaki/workspaces": {
+      "post": {
+        "tags": ["Workspaces"],
+        "summary": "Create workspace",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "userId"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "userId": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Workspace created" },
+          "400": { "description": "Validation error" }
+        }
+      },
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "List user workspaces",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "List of workspaces" }
+        }
+      }
+    },
+    "/zaki/workspaces/{slug}": {
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "Get workspace details",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Workspace details" },
+          "404": { "description": "Not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Workspaces"],
+        "summary": "Delete workspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Deleted" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/workspace/{slug}/thread/{threadSlug}/stream-chat": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Stream chat response",
+        "description": "Sends message to LLM with streaming response. Also triggers memory extraction.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "threadSlug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["message", "userId"],
+                "properties": {
+                  "message": { "type": "string", "description": "User message" },
+                  "userId": { "type": "string" },
+                  "model": { 
+                    "type": "string", 
+                    "enum": ["openrouter/auto", "google/gemini-flash-1.5", "anthropic/claude-3.5-sonnet"],
+                    "default": "openrouter/auto"
+                  },
+                  "history": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": { "type": "string", "enum": ["user", "assistant"] },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  },
+                  "webSearchEnabled": { "type": "boolean", "default": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming response (SSE)",
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/share/create": {
+      "post": {
+        "tags": ["Sharing"],
+        "summary": "Create shareable link",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["threadId", "userId"],
+                "properties": {
+                  "threadId": { "type": "string" },
+                  "userId": { "type": "string" },
+                  "expiresInDays": { "type": "integer", "default": 7 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Share link created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": { "type": "string" },
+                    "url": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/share/{token}": {
+      "get": {
+        "tags": ["Sharing"],
+        "summary": "Get shared thread",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Shared thread data" },
+          "404": { "description": "Not found or expired" }
+        }
+      },
+      "delete": {
+        "tags": ["Sharing"],
+        "summary": "Revoke share link",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Share revoked" }
+        }
+      }
+    },
+    "/api/share/list": {
+      "get": {
+        "tags": ["Sharing"],
+        "summary": "List user's shared threads",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "List of shares" }
+        }
+      }
+    },
+    "/api/share/{token}/view": {
+      "post": {
+        "tags": ["Sharing"],
+        "summary": "Record share view",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "View recorded" }
+        }
+      }
+    }
+  }
+}

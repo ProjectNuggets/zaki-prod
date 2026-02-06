@@ -1,0 +1,505 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ZAKI Memory API",
+    "description": "Persistent memory system with auto-save/manual modes and context retrieval",
+    "version": "0.9-beta",
+    "contact": {
+      "name": "ZAKI Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8787",
+      "description": "Development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "System health checks"
+    },
+    {
+      "name": "Auto-Save",
+      "description": "Automatic memory extraction with 3s undo"
+    },
+    {
+      "name": "Manual",
+      "description": "Manual confirmation workflow"
+    },
+    {
+      "name": "Context",
+      "description": "Memory retrieval for chat context"
+    },
+    {
+      "name": "Core",
+      "description": "Basic CRUD operations"
+    }
+  ],
+  "paths": {
+    "/api/memory/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Check system health",
+        "responses": {
+          "200": {
+            "description": "System is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "storage": { "type": "string", "example": "pgvector" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/autosave": {
+      "post": {
+        "tags": ["Auto-Save"],
+        "summary": "Extract and auto-save memories",
+        "description": "Analyzes message, extracts facts, saves immediately with 3s undo window",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId", "message"],
+                "properties": {
+                  "userId": { "type": "string", "example": "user@example.com" },
+                  "message": { "type": "string", "example": "My name is Alex" },
+                  "threadId": { "type": "string", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memories extracted and saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "saved": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "content": { "type": "string" },
+                          "type": { "type": "string", "enum": ["fact", "preference", "emotion", "event", "goal", "relationship", "struggle"] },
+                          "undoUntil": { "type": "number", "description": "Unix timestamp for undo deadline" }
+                        }
+                      }
+                    },
+                    "duplicates": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields"
+          }
+        }
+      }
+    },
+    
+    "/api/memory/undo/{id}": {
+      "post": {
+        "tags": ["Auto-Save"],
+        "summary": "Undo a memory within 3s window",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Memory ID to undo"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId"],
+                "properties": {
+                  "userId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Undo result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": { "type": "boolean", "example": true }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": { "type": "boolean", "example": false },
+                        "error": { "type": "string", "example": "Undo expired or not found" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/preview": {
+      "post": {
+        "tags": ["Manual"],
+        "summary": "Stage memories for manual confirmation",
+        "description": "Extracts facts but stores in pending state for user review",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId", "message"],
+                "properties": {
+                  "userId": { "type": "string" },
+                  "message": { "type": "string" },
+                  "threadId": { "type": "string", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memories staged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pending": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "content": { "type": "string" },
+                          "type": { "type": "string" },
+                          "confirmationId": { "type": "string" }
+                        }
+                      }
+                    },
+                    "duplicates": { "type": "array" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/confirmations/{userId}": {
+      "get": {
+        "tags": ["Manual"],
+        "summary": "Get pending confirmations",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of pending confirmations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "confirmations": { "type": "array" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/confirmations/{id}/confirm": {
+      "post": {
+        "tags": ["Manual"],
+        "summary": "Confirm a staged memory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId"],
+                "properties": {
+                  "userId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory confirmed and stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "memoryId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/confirmations/{id}/reject": {
+      "post": {
+        "tags": ["Manual"],
+        "summary": "Reject a staged memory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId"],
+                "properties": {
+                  "userId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/context": {
+      "post": {
+        "tags": ["Context"],
+        "summary": "Build context for chat",
+        "description": "Retrieves relevant memories based on query for LLM context injection",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId", "query"],
+                "properties": {
+                  "userId": { "type": "string" },
+                  "query": { "type": "string", "example": "What is my name?" },
+                  "maxChars": { "type": "integer", "default": 2000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Context built",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "context": { "type": "string", "example": "About this person:\n- Name is Alex\n" },
+                    "sources": { "type": "array" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/context/{userId}": {
+      "get": {
+        "tags": ["Context"],
+        "summary": "Build context (GET convenience)",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Query string"
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "schema": { "type": "integer", "default": 2000 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context built"
+          }
+        }
+      }
+    },
+    
+    "/api/memory/list/{userId}": {
+      "get": {
+        "tags": ["Core"],
+        "summary": "List all user memories",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of memories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "memories": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "content": { "type": "string" },
+                          "type": { "type": "string" },
+                          "created_at": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "/api/memory/{id}": {
+      "delete": {
+        "tags": ["Core"],
+        "summary": "Delete a memory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId"],
+                "properties": {
+                  "userId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
