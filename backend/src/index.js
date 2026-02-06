@@ -19,6 +19,7 @@ const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
+const ZAKI_DEFAULT_WORKSPACE_SLUG = (process.env.ZAKI_DEFAULT_WORKSPACE_SLUG || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
 const SKIP_EMAIL_VERIFICATION = ["non", "none", "no"].includes(
   ZAKI_EMAIL_MODE.toLowerCase()
@@ -45,14 +46,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting - general API
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' }
-});
-app.use('/api/', apiLimiter);
+// Removed global limiter per requirement. Auth limiter remains below.
 
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
@@ -66,6 +60,9 @@ const authLimiter = rateLimit({
 app.use('/login', authLimiter);
 app.use('/signup', authLimiter);
 app.use('/password-reset', authLimiter);
+app.use('/api/login', authLimiter);
+app.use('/api/signup', authLimiter);
+app.use('/api/password-reset', authLimiter);
 
 // CORS configuration
 app.use(
@@ -168,6 +165,27 @@ async function fetchNovaUserIdByUsername(username) {
     (user) => String(user.username).toLowerCase() === String(username).toLowerCase()
   );
   return match?.id ?? null;
+}
+
+async function ensureUserInDefaultWorkspace(novaUserId) {
+  if (!ZAKI_DEFAULT_WORKSPACE_SLUG || !novaUserId) {
+    return { success: true };
+  }
+  const response = await novaAdminRequest(
+    `/v1/admin/workspaces/${ZAKI_DEFAULT_WORKSPACE_SLUG}/manage-users`,
+    {
+      method: "POST",
+      body: JSON.stringify({ userIds: [Number(novaUserId)], reset: false }),
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false) {
+    return {
+      success: false,
+      error: data?.error || data?.message || "Unable to assign workspace.",
+    };
+  }
+  return { success: true };
 }
 
 function buildProxyHeaders(req) {
@@ -352,7 +370,11 @@ async function sendVerificationEmail(email, token) {
   const baseUrl =
     ZAKI_PUBLIC_URL ||
     `http://localhost:${PORT}`;
-  const verifyUrl = `${baseUrl.replace(/\/+$/, "")}/verify?token=${token}`;
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const verifyBase = normalizedBase.endsWith("/api")
+    ? normalizedBase.replace(/\/api$/, "")
+    : normalizedBase;
+  const verifyUrl = `${verifyBase}/verify?token=${token}`;
   const subject = "Verify your ZAKI account";
   const text = `Welcome to ZAKI! Verify your email by visiting: ${verifyUrl}`;
 
@@ -465,7 +487,7 @@ async function sendPasswordResetEmail(email, token) {
   return resetUrl;
 }
 
-app.post("/signup", async (req, res) => {
+const signupHandler = async (req, res) => {
   try {
     // Validate input with Zod
     const validation = validateInput(SignupSchema, req.body || {});
@@ -551,182 +573,199 @@ app.post("/signup", async (req, res) => {
       error: error?.message || "Server error.",
     });
   }
-});
+};
+
+app.post("/signup", signupHandler);
+app.post("/api/signup", signupHandler);
+
+const passwordResetRequestHandler = async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail) {
+      res.status(400).json({
+        success: false,
+        error: "Email is required.",
+      });
+      return;
+    }
+    if (!isValidEmail(normalizedEmail)) {
+      res.status(400).json({
+        success: false,
+        error: "Please enter a valid email address.",
+      });
+      return;
+    }
+
+    const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
+      normalizedEmail,
+    ]);
+
+    if (user) {
+      const { token } = await issuePasswordResetToken(user.id);
+      const resetLink = await sendPasswordResetEmail(normalizedEmail, token);
+      res.status(200).json({
+        success: true,
+        message: "If the account exists, a reset link has been sent.",
+        resetLink: ZAKI_INCLUDE_VERIFY_LINK ? resetLink : undefined,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "If the account exists, a reset link has been sent.",
+    });
+  } catch (error) {
+    console.error("[ZAKI] Password reset request error:", error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Server error.",
+    });
+  }
+};
 
 app.post(
   "/password-reset/request",
   express.json({ limit: "1mb" }),
-  async (req, res) => {
-    try {
-      const { email } = req.body || {};
-      const normalizedEmail = normalizeEmail(email);
-
-      if (!normalizedEmail) {
-        res.status(400).json({
-          success: false,
-          error: "Email is required.",
-        });
-        return;
-      }
-      if (!isValidEmail(normalizedEmail)) {
-        res.status(400).json({
-          success: false,
-          error: "Please enter a valid email address.",
-        });
-        return;
-      }
-
-      const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
-        normalizedEmail,
-      ]);
-
-      if (user) {
-        const { token } = await issuePasswordResetToken(user.id);
-        const resetLink = await sendPasswordResetEmail(normalizedEmail, token);
-        res.status(200).json({
-          success: true,
-          message: "If the account exists, a reset link has been sent.",
-          resetLink: ZAKI_INCLUDE_VERIFY_LINK ? resetLink : undefined,
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        message: "If the account exists, a reset link has been sent.",
-      });
-    } catch (error) {
-      console.error("[ZAKI] Password reset request error:", error);
-      res.status(500).json({
-        success: false,
-        error: error?.message || "Server error.",
-      });
-    }
-  }
+  passwordResetRequestHandler
 );
+app.post(
+  "/api/password-reset/request",
+  express.json({ limit: "1mb" }),
+  passwordResetRequestHandler
+);
+
+const passwordResetConfirmHandler = async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    const normalizedToken = String(token || "").trim();
+    const nextPassword = String(password || "");
+
+    if (!normalizedToken || !nextPassword) {
+      res.status(400).json({
+        success: false,
+        error: "Token and new password are required.",
+      });
+      return;
+    }
+
+    const record = await dbGet(
+      `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at
+       FROM password_reset_tokens pr
+       WHERE pr.token = $1`,
+      [normalizedToken]
+    );
+
+    if (!record) {
+      res.status(404).json({
+        success: false,
+        error: "Invalid reset token.",
+      });
+      return;
+    }
+
+    if (record.used_at) {
+      res.status(400).json({
+        success: false,
+        error: "Reset token already used.",
+      });
+      return;
+    }
+
+    const expiresAt = Number(record.expires_at);
+    if (Date.now() > expiresAt) {
+      res.status(410).json({
+        success: false,
+        error: "Reset token expired.",
+      });
+      return;
+    }
+
+    const passwordHash = bcrypt.hashSync(String(nextPassword), 10);
+    const now = Date.now();
+    const nowIso = new Date().toISOString();
+
+    const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1", [
+      record.user_id,
+    ]);
+    if (!zakiUser) {
+      res.status(404).json({
+        success: false,
+        error: "User not found.",
+      });
+      return;
+    }
+
+    let novaUserId = zakiUser.nova_user_id
+      ? Number(zakiUser.nova_user_id)
+      : null;
+    if (!novaUserId) {
+      const fetchedId = await fetchNovaUserIdByUsername(zakiUser.email);
+      if (fetchedId) {
+        novaUserId = Number(fetchedId);
+        await dbQuery(
+          `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+          [novaUserId, nowIso, zakiUser.id]
+        );
+      }
+    }
+
+    if (novaUserId) {
+      const novaResponse = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
+        method: "POST",
+        body: JSON.stringify({ password: String(nextPassword) }),
+      });
+      const novaPayload = await novaResponse.json().catch(() => ({}));
+      if (!novaResponse.ok || novaPayload?.success === false) {
+        const errorMessage =
+          novaPayload?.error ||
+          (novaResponse.status === 401
+            ? "NOVA.TYP is not in multi-user mode."
+            : "Unable to update NOVA.TYP password.");
+        res.status(400).json({
+          success: false,
+          error: errorMessage,
+        });
+        return;
+      }
+    }
+
+    await dbQuery(
+      `UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2`,
+      [now, record.id]
+    );
+    await dbQuery(
+      `UPDATE zaki_users SET password_hash = $1, updated_at = $2 WHERE id = $3`,
+      [passwordHash, nowIso, record.user_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Password updated. You can sign in now.",
+    });
+  } catch (error) {
+    console.error("[ZAKI] Password reset confirm error:", error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Server error.",
+    });
+  }
+};
 
 app.post(
   "/password-reset/confirm",
   express.json({ limit: "1mb" }),
-  async (req, res) => {
-    try {
-      const { token, password } = req.body || {};
-      const normalizedToken = String(token || "").trim();
-      const nextPassword = String(password || "");
-
-      if (!normalizedToken || !nextPassword) {
-        res.status(400).json({
-          success: false,
-          error: "Token and new password are required.",
-        });
-        return;
-      }
-
-      const record = await dbGet(
-        `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at
-         FROM password_reset_tokens pr
-         WHERE pr.token = $1`,
-        [normalizedToken]
-      );
-
-      if (!record) {
-        res.status(404).json({
-          success: false,
-          error: "Invalid reset token.",
-        });
-        return;
-      }
-
-      if (record.used_at) {
-        res.status(400).json({
-          success: false,
-          error: "Reset token already used.",
-        });
-        return;
-      }
-
-      const expiresAt = Number(record.expires_at);
-      if (Date.now() > expiresAt) {
-        res.status(410).json({
-          success: false,
-          error: "Reset token expired.",
-        });
-        return;
-      }
-
-      const passwordHash = bcrypt.hashSync(String(nextPassword), 10);
-      const now = Date.now();
-      const nowIso = new Date().toISOString();
-
-      const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1", [
-        record.user_id,
-      ]);
-      if (!zakiUser) {
-        res.status(404).json({
-          success: false,
-          error: "User not found.",
-        });
-        return;
-      }
-
-      let novaUserId = zakiUser.nova_user_id
-        ? Number(zakiUser.nova_user_id)
-        : null;
-      if (!novaUserId) {
-        const fetchedId = await fetchNovaUserIdByUsername(zakiUser.email);
-        if (fetchedId) {
-          novaUserId = Number(fetchedId);
-          await dbQuery(
-            `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-            [novaUserId, nowIso, zakiUser.id]
-          );
-        }
-      }
-
-      if (novaUserId) {
-        const novaResponse = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
-          method: "POST",
-          body: JSON.stringify({ password: String(nextPassword) }),
-        });
-        const novaPayload = await novaResponse.json().catch(() => ({}));
-        if (!novaResponse.ok || novaPayload?.success === false) {
-          const errorMessage =
-            novaPayload?.error ||
-            (novaResponse.status === 401
-              ? "NOVA.TYP is not in multi-user mode."
-              : "Unable to update NOVA.TYP password.");
-          res.status(400).json({
-            success: false,
-            error: errorMessage,
-          });
-          return;
-        }
-      }
-
-      await dbQuery(
-        `UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2`,
-        [now, record.id]
-      );
-      await dbQuery(
-        `UPDATE zaki_users SET password_hash = $1, updated_at = $2 WHERE id = $3`,
-        [passwordHash, nowIso, record.user_id]
-      );
-
-      res.status(200).json({
-        success: true,
-        message: "Password updated. You can sign in now.",
-      });
-    } catch (error) {
-      console.error("[ZAKI] Password reset confirm error:", error);
-      res.status(500).json({
-        success: false,
-        error: error?.message || "Server error.",
-      });
-    }
-  }
+  passwordResetConfirmHandler
+);
+app.post(
+  "/api/password-reset/confirm",
+  express.json({ limit: "1mb" }),
+  passwordResetConfirmHandler
 );
 
-app.post("/login", async (req, res) => {
+const loginHandler = async (req, res) => {
   try {
     // Validate input
     const validation = validateInput(LoginSchema, req.body || {});
@@ -776,7 +815,9 @@ app.post("/login", async (req, res) => {
       return;
     }
 
-    if (!user.nova_user_id) {
+    let novaUserId = user.nova_user_id ? Number(user.nova_user_id) : null;
+
+    if (!novaUserId) {
       // First, try to fetch existing NOVA user
       const fetchedId = await fetchNovaUserIdByUsername(normalizedEmail);
       
@@ -786,6 +827,7 @@ app.post("/login", async (req, res) => {
           `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
           [Number(fetchedId), new Date().toISOString(), user.id]
         );
+        novaUserId = Number(fetchedId);
       } else {
         // Create new NOVA user
         const createResponse = await novaAdminRequest("/v1/admin/users/new", {
@@ -802,6 +844,7 @@ app.post("/login", async (req, res) => {
             `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
             [Number(payload.user.id), new Date().toISOString(), user.id]
           );
+          novaUserId = Number(payload.user.id);
         } else if (createResponse.status === 401) {
           res.status(401).json({
             valid: false,
@@ -826,8 +869,19 @@ app.post("/login", async (req, res) => {
               `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
               [Number(retryFetchId), new Date().toISOString(), user.id]
             );
+            novaUserId = Number(retryFetchId);
           }
         }
+      }
+    }
+
+    if (novaUserId) {
+      const assignResult = await ensureUserInDefaultWorkspace(novaUserId);
+      if (!assignResult.success) {
+        console.warn(
+          "[ZAKI] Failed to assign default workspace:",
+          assignResult.error
+        );
       }
     }
 
@@ -844,9 +898,12 @@ app.post("/login", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error?.message || "Server error." });
   }
-});
+};
 
-app.post("/zaki/workspaces", express.json({ limit: "1mb" }), async (req, res) => {
+app.post("/login", loginHandler);
+app.post("/api/login", loginHandler);
+
+const createWorkspaceHandler = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
@@ -940,40 +997,37 @@ app.post("/zaki/workspaces", express.json({ limit: "1mb" }), async (req, res) =>
   } catch (error) {
     res.status(500).json({ error: error?.message || "Server error." });
   }
-});
+};
+
+app.post("/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspaceHandler);
+app.post("/api/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspaceHandler);
 
 /**
  * Route: DELETE /zaki/workspaces/:slug
  * Proxy to NOVA.TYP admin API for workspace deletion
  * Uses admin API key to bypass permission restrictions
  */
-app.delete("/zaki/workspaces/:slug", async (req, res) => {
+const deleteWorkspaceHandler = async (req, res) => {
   try {
-    // Require authentication
-    const token = req.headers.authorization?.replace("Bearer ", "").trim();
-    const apiBase = NOVA_TYP_BASE_URL || "http://127.0.0.1:3000/api";
-    const verifyUrl = `${apiBase}/verify-token`;
+    // Require authentication and validate session with NOVA.TYP
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Missing authorization token." });
+      return;
+    }
 
-    let verifiedToken = null;
-    try {
-      const verifyRes = await fetch(verifyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      if (verifyRes.ok) {
-        verifiedToken = await verifyRes.json();
-      }
-    } catch {}
-
-    const tokenData = verifiedToken?.token?.data;
-    if (!tokenData || String(tokenData?.issuer || "") !== "NOVA.TYP") {
+    const sessionResponse = await novaSessionRequest(
+      "/system/refresh-user",
+      authHeader,
+      { method: "GET" }
+    );
+    const sessionData = await sessionResponse.json().catch(() => ({}));
+    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
       res.status(401).json({ error: "Invalid or expired token." });
       return;
     }
 
-    const userId = String(tokenData?.user_id || "");
-    const email = String(tokenData?.email || "");
+    const email = String(sessionData.user.username || "");
 
     // Get the user from zaki_users to verify they exist
     const zakiUser = await dbGet(
@@ -1024,9 +1078,12 @@ app.delete("/zaki/workspaces/:slug", async (req, res) => {
     console.error("[ZAKI] Workspace deletion error:", error);
     res.status(500).json({ success: false, error: "Failed to delete workspace." });
   }
-});
+};
 
-app.get("/verify", async (req, res) => {
+app.delete("/zaki/workspaces/:slug", deleteWorkspaceHandler);
+app.delete("/api/zaki/workspaces/:slug", deleteWorkspaceHandler);
+
+const verifyHandler = async (req, res) => {
   const token = String(req.query.token || "");
   const wantsJson =
     String(req.query.format || "").toLowerCase() === "json" ||
@@ -1098,7 +1155,10 @@ app.get("/verify", async (req, res) => {
       .status(200)
       .send("Email verified. Return to ZAKI and sign in.");
   }
-});
+};
+
+app.get("/verify", verifyHandler);
+app.get("/api/verify", verifyHandler);
 
 // =============================================================================
 // Chat Integration with Memory
@@ -1108,7 +1168,7 @@ app.get("/verify", async (req, res) => {
  * Intercept stream-chat requests to inject memory context
  * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
  */
-app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit: "10mb" }), async (req, res) => {
+const streamChatHandler = async (req, res) => {
   console.log(`[Chat] Received message request for ${req.params.slug}/${req.params.threadSlug}`);
   try {
     const apiBase = getApiBase();
@@ -1127,7 +1187,9 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
     console.log('[Chat] Refreshing user session...');
     const sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, { method: "GET" });
     const sessionData = await sessionResponse.json().catch(() => ({}));
-    const userEmail = sessionData?.user?.username || null;
+    const userEmail = sessionData?.user?.username
+      ? normalizeEmail(sessionData.user.username)
+      : null;
     console.log(`[Chat] User: ${userEmail || 'unknown'}`);
 
     const { message } = req.body || {};
@@ -1155,7 +1217,10 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
           // Prepend memory context as natural buddy-style context
           enrichedMessage = `[About this person — use naturally, don't quote verbatim]\n${memoryResult.context}\n\n---\n\n${originalMessage}`;
           memoryInjected = true;
-          console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}`);
+          const preview = memoryResult.context.slice(0, 220).replace(/\s+/g, " ");
+          console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}. Context preview: ${preview}`);
+        } else {
+          console.log(`[Memory] No context injected for ${userEmail}`);
         }
 
         // Extract facts from user message (async, don't block)
@@ -1235,7 +1300,18 @@ app.post("/workspace/:slug/thread/:threadSlug/stream-chat", express.json({ limit
     console.error("[Chat] Stream error:", error);
     res.status(500).json({ error: error?.message || "Chat stream failed." });
   }
-});
+};
+
+app.post(
+  "/workspace/:slug/thread/:threadSlug/stream-chat",
+  express.json({ limit: "10mb" }),
+  streamChatHandler
+);
+app.post(
+  "/api/workspace/:slug/thread/:threadSlug/stream-chat",
+  express.json({ limit: "10mb" }),
+  streamChatHandler
+);
 
 // =============================================================================
 // CONVERSATION SUMMARIZATION (Memory)
@@ -1276,6 +1352,7 @@ app.post("/api/memory/end-session", express.json({ limit: "5mb" }), async (req, 
     if (!userEmail) {
       return res.status(400).json({ error: "Could not determine user" });
     }
+    userEmail = normalizeEmail(userEmail);
 
     const { messages, threadId, threadTitle } = req.body;
 
@@ -1601,7 +1678,8 @@ app.all("*", async (req, res) => {
       return;
     }
 
-    const targetUrl = `${apiBase}${req.originalUrl}`;
+    const proxiedPath = req.originalUrl.replace(/^\/api(\/|$)/, "/");
+    const targetUrl = `${apiBase}${proxiedPath}`;
     const headers = buildProxyHeaders(req);
     const method = req.method.toUpperCase();
     const needsBody = !["GET", "HEAD"].includes(method);

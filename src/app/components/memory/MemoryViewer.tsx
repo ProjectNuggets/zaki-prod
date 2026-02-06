@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Trash2, Search, Calendar, Tag, Brain, Download, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { getApiBase } from '../../../lib/api';
 
 interface Memory {
   id: string;
@@ -19,12 +20,15 @@ interface MemoryViewerProps {
   apiUrl?: string;
 }
 
-export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: MemoryViewerProps) {
+export function MemoryViewer({ userId, apiUrl }: MemoryViewerProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
+
+  const apiBase = (apiUrl && apiUrl.trim()) ? apiUrl.replace(/\/+$/, "") : getApiBase();
+  const memoryBase = apiBase.endsWith('/api') ? apiBase : `${apiBase}/api`;
 
   useEffect(() => {
     fetchMemories();
@@ -34,7 +38,7 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${apiUrl}/api/memory/list/${userId}`);
+      const response = await fetch(`${memoryBase}/memory/list/${userId}`);
       if (!response.ok) throw new Error('Failed to fetch memories');
       const data = await response.json();
       setMemories(data.memories || []);
@@ -51,7 +55,7 @@ export function MemoryViewer({ userId, apiUrl = 'http://localhost:8787' }: Memor
     if (!confirm('Delete this memory? This action cannot be undone.')) return;
     
     try {
-      const response = await fetch(`${apiUrl}/api/memory/${memoryId}`, {
+      const response = await fetch(`${memoryBase}/memory/${memoryId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),

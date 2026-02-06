@@ -43,6 +43,8 @@ export function ChatArea() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const historyLoadedRef = useRef<Record<string, boolean>>({});
+  const historyLoadingRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
@@ -154,6 +156,10 @@ export function ChatArea() {
 
   // Load thread history
   const loadThreadHistory = useCallback(async (workspaceSlug: string, threadSlug: string) => {
+    if (historyLoadedRef.current[threadSlug] || historyLoadingRef.current[threadSlug]) {
+      return;
+    }
+    historyLoadingRef.current[threadSlug] = true;
     setIsHistoryLoading(true);
     try {
       const response = await apiRequest(`/workspace/${workspaceSlug}/thread/${threadSlug}/chats`);
@@ -180,6 +186,7 @@ export function ChatArea() {
         ...prev,
         [threadSlug]: loadedMessages,
       }));
+      historyLoadedRef.current[threadSlug] = true;
     } catch (error) {
       console.error('[ChatArea] Failed to load history:', error);
       // Only show toast if this isn't the initial load (avoid spam on app start)
@@ -187,6 +194,7 @@ export function ChatArea() {
         toast.error("Unable to load chat history");
       }
     } finally {
+      historyLoadingRef.current[threadSlug] = false;
       setIsHistoryLoading(false);
     }
   }, []);

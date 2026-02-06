@@ -85,6 +85,10 @@ const TOGETHER_DIMS = 768;
 const memoryStoreFallback = new Map();
 let usePgVector = null; // null = not checked yet
 
+function normalizeUserId(userId) {
+  return String(userId || "").trim().toLowerCase();
+}
+
 // =============================================================================
 // Embedding Provider
 // =============================================================================
@@ -188,6 +192,7 @@ async function checkStorage() {
 }
 
 async function storeMemory({ userId, content, type = "context", metadata = {} }) {
+  const normalizedUserId = normalizeUserId(userId);
   const hash = hashText(content);
   const isPg = await checkStorage();
 
@@ -195,12 +200,12 @@ async function storeMemory({ userId, content, type = "context", metadata = {} })
   if (isPg) {
     const existing = await dbGet(
       "SELECT id FROM memories WHERE user_id = $1 AND content_hash = $2",
-      [userId, hash]
+      [normalizedUserId, hash]
     );
     if (existing) return { id: existing.id, duplicate: true };
   } else {
     for (const [id, mem] of memoryStoreFallback.entries()) {
-      if (mem.userId === userId && mem.hash === hash) {
+      if (mem.userId === normalizedUserId && mem.hash === hash) {
         return { id, duplicate: true };
       }
     }
@@ -216,14 +221,14 @@ async function storeMemory({ userId, content, type = "context", metadata = {} })
       `INSERT INTO memories (user_id, content, content_hash, type, embedding, embedding_provider, metadata)
        VALUES ($1, $2, $3, $4, $5::vector, $6, $7)
        RETURNING id`,
-      [userId, content, hash, type, vectorStr, provider, JSON.stringify(metadata)]
+      [normalizedUserId, content, hash, type, vectorStr, provider, JSON.stringify(metadata)]
     );
     return { id: result.rows[0].id, duplicate: false };
   } else {
     // In-memory fallback
     const id = crypto.randomUUID();
     memoryStoreFallback.set(id, {
-      id, userId, content, hash, type, embedding, provider, dims, metadata,
+      id, userId: normalizedUserId, content, hash, type, embedding, provider, dims, metadata,
       createdAt: new Date().toISOString(),
     });
     return { id, duplicate: false };
@@ -231,6 +236,7 @@ async function storeMemory({ userId, content, type = "context", metadata = {} })
 }
 
 async function searchMemories({ userId, query, limit = 5, minScore = 0.3 }) {
+  const normalizedUserId = normalizeUserId(userId);
   const { embeddings, provider, model } = await getEmbeddings(query);
   const queryEmb = embeddings[0];
   const isPg = await checkStorage();
@@ -245,7 +251,7 @@ async function searchMemories({ userId, query, limit = 5, minScore = 0.3 }) {
        WHERE user_id = $2
        ORDER BY embedding <=> $1::vector
        LIMIT $3`,
-      [vectorStr, userId, limit * 2] // fetch extra to filter by minScore
+      [vectorStr, normalizedUserId, limit * 2] // fetch extra to filter by minScore
     );
     
     const results = rows
@@ -260,13 +266,13 @@ async function searchMemories({ userId, query, limit = 5, minScore = 0.3 }) {
         metadata: r.metadata || {},
       }));
 
-    const total = await dbGet("SELECT COUNT(*) as count FROM memories WHERE user_id = $1", [userId]);
+    const total = await dbGet("SELECT COUNT(*) as count FROM memories WHERE user_id = $1", [normalizedUserId]);
     return { results, provider, model, totalSearched: Number(total?.count || 0) };
   } else {
     // In-memory fallback
     const results = [];
     for (const mem of memoryStoreFallback.values()) {
-      if (mem.userId !== userId) continue;
+      if (mem.userId !== normalizedUserId) continue;
       if (mem.embedding.length !== queryEmb.length) continue;
       const score = cosineSimilarity(queryEmb, mem.embedding);
       if (score >= minScore) {
@@ -291,11 +297,12 @@ async function searchMemories({ userId, query, limit = 5, minScore = 0.3 }) {
 }
 
 async function getMemories(userId) {
+  const normalizedUserId = normalizeUserId(userId);
   const isPg = await checkStorage();
   if (isPg) {
     const rows = await dbAll(
       "SELECT id, content, type, metadata, created_at FROM memories WHERE user_id = $1 ORDER BY created_at DESC",
-      [userId]
+      [normalizedUserId]
     );
     return rows.map((r) => ({
       id: r.id,
@@ -307,7 +314,7 @@ async function getMemories(userId) {
   } else {
     const memories = [];
     for (const mem of memoryStoreFallback.values()) {
-      if (mem.userId === userId) {
+      if (mem.userId === normalizedUserId) {
         memories.push({
           id: mem.id,
           content: mem.content,
@@ -322,16 +329,17 @@ async function getMemories(userId) {
 }
 
 async function deleteMemory(id, userId) {
+  const normalizedUserId = normalizeUserId(userId);
   const isPg = await checkStorage();
   if (isPg) {
     const result = await dbQuery(
       "DELETE FROM memories WHERE id = $1 AND user_id = $2",
-      [id, userId]
+      [id, normalizedUserId]
     );
     return result.rowCount > 0;
   } else {
     const mem = memoryStoreFallback.get(id);
-    if (!mem || mem.userId !== userId) return false;
+    if (!mem || mem.userId !== normalizedUserId) return false;
     return memoryStoreFallback.delete(id);
   }
 }
@@ -341,12 +349,13 @@ async function deleteMemory(id, userId) {
 // =============================================================================
 
 async function buildContext({ userId, query, maxChars = 2000 }) {
+  const normalizedUserId = normalizeUserId(userId);
   const isPg = await checkStorage();
   
   if (!isPg) {
     // In-memory fallback - use existing search approach
     const { results, provider, model } = await searchMemories({
-      userId, query, limit: 8, minScore: 0.25,
+      userId: normalizedUserId, query, limit: 8, minScore: 0.25,
     });
     // ... existing logic for in-memory
     return buildContextFromResults(results, provider, model, maxChars);
@@ -361,14 +370,14 @@ async function buildContext({ userId, query, maxChars = 2000 }) {
      AND type IN ('fact', 'preference')
      ORDER BY created_at DESC
      LIMIT 15`,
-    [userId]
+    [normalizedUserId]
   );
   
   // ALSO get semantically relevant memories (query-specific)
   let relevantMemories = [];
   if (query && query.trim().length > 5) {
     const { results } = await searchMemories({
-      userId, query, limit: 5, minScore: 0.2, // Lower threshold
+      userId: normalizedUserId, query, limit: 5, minScore: 0.2, // Lower threshold
     });
     relevantMemories = results;
   }
@@ -382,8 +391,11 @@ async function buildContext({ userId, query, maxChars = 2000 }) {
   }
   
   if (!allMemories.length) {
+    console.log(`[Memory] No memories found for ${normalizedUserId} (core: ${coreMemories.length}, relevant: ${relevantMemories.length})`);
     return { context: "", sources: [], provider: "novatyp", model: "none" };
   }
+  
+  console.log(`[Memory] Building context for ${normalizedUserId} (core: ${coreMemories.length}, relevant: ${relevantMemories.length}, total: ${allMemories.length})`);
   
   return buildContextFromResults(allMemories, "hybrid", "core+semantic", maxChars);
 }
@@ -580,28 +592,50 @@ function extractFactsPattern(message) {
   // Simple pattern matching as fallback if LLM fails
   const facts = [];
   const text = message.toLowerCase();
-  
+
+  // Explicit identity capture (allow short messages and avoid question filtering)
+  const nameMatch = message.match(/\b(my name is|i am|i'm|call me|i go by)\s+([^\s.,!?]+)/i);
+  if (nameMatch?.[2]) {
+    facts.push({ content: `Name is ${nameMatch[2]}`, type: "fact" });
+  }
+
+  const jobMatch = message.match(/\b(i work (as|at)|my job is|i'm a|i am a)\s+(.+)/i);
+  if (jobMatch?.[3]) {
+    const job = jobMatch[3].trim().replace(/[.!?]+$/g, "");
+    if (job) {
+      facts.push({ content: `Works as ${job}`, type: "fact" });
+    }
+  }
+
+  const locationMatch = message.match(/\b(based in|from|live in)\s+([^\s.,!?]+)/i);
+  if (locationMatch?.[2]) {
+    facts.push({ content: `Lives in ${locationMatch[2]}`, type: "fact" });
+  }
+
+  // If we already extracted explicit facts, return them.
+  if (facts.length) return facts;
+
   // Skip questions
   if (message.includes('?')) return facts;
-  
+
   // Skip very short messages
-  if (message.trim().length < 15) return facts;
-  
+  if (message.trim().length < 12) return facts;
+
   // Preferences - expanded patterns
   if (/\b(prefer|like|love|hate|enjoy|fan of|into|interested in|favorite|passion)\b/i.test(text)) {
     facts.push({ content: message, type: "preference" });
   }
-  
+
   // Personal info - name
   if (/\b(my name is|i am|i'm|call me|i go by)\s+\w+/i.test(text)) {
     facts.push({ content: message, type: "fact" });
   }
-  
+
   // Work/occupation
   if (/\b(i work (as|at)|my job is|i'm a)\s+\w+/i.test(text)) {
     facts.push({ content: message, type: "fact" });
   }
-  
+
   // Location
   if (/\b(based in|from|live in)\s+\w+/i.test(text)) {
     facts.push({ content: message, type: "fact" });
@@ -881,8 +915,8 @@ async function checkHealth() {
 // Express Routes
 // =============================================================================
 
-function createMemoryRoutes(app) {
-  app.get("/api/memory/health", async (req, res) => {
+function registerMemoryRoutes(app, basePath) {
+  app.get(`${basePath}/health`, async (req, res) => {
     try {
       const health = await checkHealth();
       res.json({ ok: true, ...health });
@@ -891,7 +925,7 @@ function createMemoryRoutes(app) {
     }
   });
 
-  app.post("/api/memory/store", async (req, res) => {
+  app.post(`${basePath}/store`, async (req, res) => {
     try {
       const { userId, content, type, metadata } = req.body;
       if (!userId || !content) {
@@ -904,7 +938,7 @@ function createMemoryRoutes(app) {
     }
   });
 
-  app.post("/api/memory/search", async (req, res) => {
+  app.post(`${basePath}/search`, async (req, res) => {
     try {
       const { userId, query, limit, minScore } = req.body;
       if (!userId || !query) {
@@ -917,7 +951,7 @@ function createMemoryRoutes(app) {
     }
   });
 
-  app.post("/api/memory/context", async (req, res) => {
+  app.post(`${basePath}/context`, async (req, res) => {
     try {
       const { userId, query, maxChars } = req.body;
       if (!userId || !query) {
@@ -930,7 +964,7 @@ function createMemoryRoutes(app) {
     }
   });
 
-  app.get("/api/memory/list/:userId", async (req, res) => {
+  app.get(`${basePath}/list/:userId`, async (req, res) => {
     try {
       const memories = await getMemories(req.params.userId);
       res.json({ memories, count: memories.length });
@@ -939,7 +973,7 @@ function createMemoryRoutes(app) {
     }
   });
 
-  app.delete("/api/memory/:id", async (req, res) => {
+  app.delete(`${basePath}/:id`, async (req, res) => {
     try {
       const { userId } = req.body;
       if (!userId) return res.status(400).json({ error: "userId required" });
@@ -951,7 +985,7 @@ function createMemoryRoutes(app) {
   });
 
   // Summarize a conversation and extract memories
-  app.post("/api/memory/summarize", async (req, res) => {
+  app.post(`${basePath}/summarize`, async (req, res) => {
     try {
       const { userId, messages, threadId, threadTitle } = req.body;
       if (!userId || !messages) {
@@ -964,7 +998,12 @@ function createMemoryRoutes(app) {
     }
   });
 
-  console.log("[Memory] Routes registered at /api/memory/*");
+  console.log(`[Memory] Routes registered at ${basePath}/*`);
+}
+
+function createMemoryRoutes(app) {
+  registerMemoryRoutes(app, "/api/memory");
+  registerMemoryRoutes(app, "/memory");
 }
 
 export {

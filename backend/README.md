@@ -17,6 +17,7 @@ cp .env.example .env
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
 - `ZAKI_PUBLIC_URL` (public backend URL for verification links)
 - `ZAKI_APP_URL` (public frontend URL for password reset links)
+- `ZAKI_DEFAULT_WORKSPACE_SLUG` (workspace slug to auto-assign new users)
 - `ZAKI_EMAIL_MODE` (`console`, `smtp`, `resend`, or `non`)
 - `ZAKI_RESET_TTL_MINUTES` (password reset TTL in minutes)
 
