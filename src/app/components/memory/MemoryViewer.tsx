@@ -215,7 +215,7 @@ export function MemoryViewer({ userId }: MemoryViewerProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zaki-disabled" />
             <input
               type="text"
-              placeholder="Search your memories..."
+              placeholder="Search memories"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-zaki-lg border border-zaki-strong pl-10 pr-4 py-2.5 text-sm text-zaki-primary placeholder:text-zaki-disabled outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20 transition-all"

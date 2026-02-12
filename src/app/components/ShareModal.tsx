@@ -125,17 +125,17 @@ export function ShareModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
         onClick={handleClose}
       />
 
       {/* Modal */}
       <div 
         ref={focusTrapRef}
-        className="relative bg-zaki-primary border border-zaki-subtle rounded-zaki-lg w-full max-w-md shadow-2xl"
+        className="zaki-share-modal relative bg-white border border-zaki-subtle rounded-zaki-lg w-full max-w-md shadow-[0px_24px_60px_rgba(15,15,15,0.18)]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zaki-subtle">
+        <div className="flex items-center justify-between p-4 border-b border-zaki-subtle bg-zaki-base">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-full bg-zaki-brand/10 flex items-center justify-center">
               <Link2 className="w-5 h-5 text-zaki-brand" />
@@ -147,7 +147,8 @@ export function ShareModal({
           </div>
           <button
             onClick={handleClose}
-            className="p-2 hover:bg-zaki-hover rounded-lg transition-colors"
+            className="p-2 hover:bg-zaki-hover rounded-lg transition-colors text-zaki-muted"
+            aria-label="Close share modal"
           >
             <X className="w-5 h-5 text-zaki-muted" />
           </button>
@@ -158,7 +159,7 @@ export function ShareModal({
           {!shareUrl ? (
             <>
               {/* Thread info */}
-              <div className="mb-4 p-3 bg-zaki-base rounded-zaki-md">
+                <div className="mb-4 p-4 bg-zaki-base rounded-zaki-md border border-zaki-subtle">
                 <p className="text-sm text-zaki-muted">Sharing</p>
                 <p className="text-zaki-primary font-medium truncate">
                   {threadTitle || 'Untitled Conversation'}
@@ -178,10 +179,10 @@ export function ShareModal({
                     type="button"
                     onClick={() => setShareType('public')}
                     className={cn(
-                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all",
+                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all bg-white",
                       shareType === 'public'
-                        ? "border-zaki-focus bg-zaki-brand/10"
-                        : "border-zaki-subtle hover:border-zaki-strong"
+                        ? "border-zaki-focus bg-zaki-selected"
+                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
                     )}
                   >
                     <Globe className={cn(
@@ -201,10 +202,10 @@ export function ShareModal({
                     type="button"
                     onClick={() => setShareType('password')}
                     className={cn(
-                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all",
+                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all bg-white",
                       shareType === 'password'
-                        ? "border-zaki-focus bg-zaki-brand/10"
-                        : "border-zaki-subtle hover:border-zaki-strong"
+                        ? "border-zaki-focus bg-zaki-selected"
+                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
                     )}
                   >
                     <Shield className={cn(
@@ -234,7 +235,7 @@ export function ShareModal({
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
-                      placeholder="Enter password"
+                      placeholder="Password"
                     />
                   </div>
                   <div>
@@ -254,7 +255,7 @@ export function ShareModal({
 
               {/* Error message */}
               {error && (
-                <div className="mb-4 p-3 bg-zaki-brand/10 border border-zaki-focus/30 rounded-zaki-md">
+                <div className="mb-4 p-4 bg-zaki-brand/10 border border-zaki-focus/30 rounded-zaki-md">
                   <p className="text-sm text-zaki-brand">{error}</p>
                 </div>
               )}
@@ -263,7 +264,7 @@ export function ShareModal({
               <button
                 onClick={handleCreate}
                 disabled={isCreating}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white font-medium rounded-zaki-md transition-colors"
+                className="w-full zaki-btn flex items-center justify-center gap-2 bg-zaki-accent hover:bg-zaki-accent-hover disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white transition-colors"
               >
                 {isCreating ? (
                   <>
@@ -282,8 +283,8 @@ export function ShareModal({
             <>
               {/* Success state */}
               <div className="text-center mb-6">
-                <div className="size-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-8 h-8 text-green-500" />
+                <div className="size-16 rounded-full bg-zaki-accent-10 flex items-center justify-center mx-auto mb-4">
+                  <Check className="w-8 h-8 text-zaki-accent" />
                 </div>
                 <h3 className="text-lg font-semibold text-zaki-primary mb-1">
                   Link Created!
@@ -300,33 +301,33 @@ export function ShareModal({
                 <label className="block text-sm font-medium text-zaki-muted mb-2">
                   Share Link
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={shareUrl}
                     readOnly
-                    className="flex-1 px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary text-sm"
+                    className="flex-1 px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary text-sm font-medium"
                   />
                   <button
                     onClick={handleCopy}
                     className={cn(
-                      "px-4 py-2.5 rounded-zaki-md font-medium transition-colors",
+                      "zaki-btn-sm rounded-zaki-md font-semibold transition-colors w-full sm:w-auto",
                       copied
-                        ? "bg-green-500 text-white"
+                        ? "bg-zaki-accent text-white"
                         : "bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary"
                     )}
                   >
                     {copied ? (
-                      <Check className="w-5 h-5" />
+                      <Check className="w-4 h-4" />
                     ) : (
-                      <Copy className="w-5 h-5" />
+                      <Copy className="w-4 h-4" />
                     )}
                   </button>
                 </div>
               </div>
 
               {/* Info */}
-              <div className="p-3 bg-zaki-base rounded-zaki-md text-sm text-zaki-muted mb-4">
+              <div className="p-3 bg-zaki-raised border border-zaki-subtle rounded-zaki-md text-sm text-zaki-muted mb-4">
                 <div className="flex items-center gap-2">
                   {shareType === 'password' ? (
                     <Lock className="w-4 h-4" />
@@ -347,7 +348,7 @@ export function ShareModal({
               {/* Done button */}
               <button
                 onClick={handleClose}
-                className="w-full px-4 py-3 bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary font-medium rounded-zaki-md transition-colors"
+                className="w-full zaki-btn bg-white border border-zaki-subtle text-zaki-primary hover:bg-zaki-hover transition-colors"
               >
                 Done
               </button>

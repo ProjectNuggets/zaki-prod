@@ -33,7 +33,7 @@ export function ProfileMenu({
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-zaki-primary truncate">{userName}</div>
-          <div className="text-[10px] text-zaki-disabled">{planLabel} plan</div>
+          <div className="text-2xs text-zaki-disabled">{planLabel} plan</div>
         </div>
       </div>
       <div className="h-px bg-zaki-sunken my-1" />
@@ -77,7 +77,7 @@ export function ProfileMenu({
         <LogOut className="size-4" />
         Log out
       </button>
-      <div className="px-2.5 pt-1 text-[10px] text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
+      <div className="px-2.5 pt-1 text-2xs text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
     </div>
   );
 }

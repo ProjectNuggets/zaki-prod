@@ -17,6 +17,7 @@ interface ShareInfo {
   expiresAt: string;
   viewCount: number;
   createdAt: string;
+  sharedByName?: string;
 }
 
 interface ConversationData {
@@ -25,6 +26,7 @@ interface ConversationData {
   expiresAt: string;
   viewCount: number;
   createdAt: string;
+  sharedByName?: string;
 }
 
 type ViewState = 'loading' | 'password' | 'viewing' | 'error' | 'expired';
@@ -37,6 +39,16 @@ export function SharedConversation() {
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [conversation, setConversation] = useState<ConversationData | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+
+  const sharedByName = conversation?.sharedByName || shareInfo?.sharedByName || "";
+  const sharedByInitials = sharedByName
+    ? sharedByName
+        .split(/[\s.@_-]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("")
+    : "";
 
   // Fetch share info on mount
   useEffect(() => {
@@ -172,7 +184,7 @@ export function SharedConversation() {
           <p className="text-zaki-muted mb-6">{error}</p>
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary font-medium rounded-zaki-md transition-colors"
+            className="inline-flex items-center gap-2 zaki-btn bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Go to ZAKI
@@ -194,7 +206,7 @@ export function SharedConversation() {
           </p>
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-brand hover:bg-zaki-brand text-white font-medium rounded-zaki-md transition-colors"
+            className="inline-flex items-center gap-2 zaki-btn bg-zaki-brand hover:bg-zaki-brand text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Go to ZAKI
@@ -234,7 +246,7 @@ export function SharedConversation() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
-                placeholder="Enter password"
+                placeholder="Password"
                 autoFocus
               />
               {error && (
@@ -245,7 +257,7 @@ export function SharedConversation() {
             <button
               type="submit"
               disabled={isVerifying || !password}
-              className="w-full px-6 py-3 bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white font-medium rounded-zaki-md transition-colors"
+              className="w-full zaki-btn bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white transition-colors"
             >
               {isVerifying ? 'Verifying...' : 'View Conversation'}
             </button>
@@ -267,17 +279,17 @@ export function SharedConversation() {
 
   // Viewing state
   return (
-    <div className="min-h-screen bg-zaki-base text-zaki-primary">
+    <div className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] text-zaki-primary dark:text-zaki-dark-primary">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-zaki-base/95 backdrop-blur-sm border-b border-zaki-subtle">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-10 bg-zaki-base/95 dark:bg-[#0f0b08]/95 backdrop-blur-sm border-b border-zaki-subtle dark:border-zaki-dark">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <Link to="/" className="flex items-center gap-2 text-zaki-brand hover:text-zaki-brand transition-colors">
               <CenterLogo className="size-6" />
               <span className="font-semibold">ZAKI</span>
             </Link>
             
-            <div className="flex items-center gap-4 text-xs text-zaki-muted">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-zaki-muted dark:text-zaki-dark-muted">
               <div className="flex items-center gap-1">
                 <Eye className="w-3.5 h-3.5" />
                 <span>{conversation?.viewCount} views</span>
@@ -295,12 +307,23 @@ export function SharedConversation() {
             </div>
           </div>
           
-          <h1 className="mt-3 text-lg font-semibold">{conversation?.title}</h1>
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-raised dark:bg-zaki-dark-elevated px-3 py-1 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
+            <Lock className="size-3.5 text-zaki-muted dark:text-zaki-dark-muted" />
+            Shared by ZAKI · Read-only conversation
+          </div>
+          {!sharedByName && (
+            <div className="mt-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
+              Set a profile name in Settings to show your initials in shared views.
+            </div>
+          )}
+          <h1 className="mt-3 text-xl font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
+            {conversation?.title}
+          </h1>
         </div>
       </header>
 
       {/* Conversation */}
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-8">
         <div className="flex flex-col gap-6">
           {conversation?.conversation.map((msg, index) => (
             <div
@@ -311,26 +334,26 @@ export function SharedConversation() {
               )}
             >
               {msg.role === 'assistant' && (
-                <div className="size-8 rounded-full bg-zaki-brand flex items-center justify-center shrink-0">
-                  <CenterLogo className="size-4 text-white" />
+                <div className="size-9 rounded-full bg-zaki-base dark:bg-zaki-dark-card border border-zaki-subtle dark:border-zaki-dark flex items-center justify-center shrink-0">
+                  <CenterLogo className="size-4" />
                 </div>
               )}
               
               <div
                 className={cn(
-                  "max-w-[80%] rounded-zaki-lg px-4 py-3",
+                  "max-w-[92%] sm:max-w-[80%] rounded-zaki-xl px-4 py-3 border border-zaki-subtle dark:border-zaki-dark",
                   msg.role === 'user'
-                    ? "bg-zaki-dark-elevated text-zaki-primary"
-                    : "bg-zaki-primary border border-zaki-subtle text-zaki-primary"
+                    ? "bg-zaki-elevated/80 dark:bg-zaki-dark-elevated text-zaki-primary dark:text-zaki-dark-primary"
+                    : "bg-zaki-raised dark:bg-zaki-dark-card text-zaki-primary dark:text-zaki-dark-primary"
                 )}
               >
                 {/* Use simple text rendering since ChatMarkdown uses light-mode colors */}
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+                <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{msg.content}</p>
               </div>
               
               {msg.role === 'user' && (
-                <div className="size-8 rounded-full bg-zaki-secondary flex items-center justify-center shrink-0 text-xs font-medium">
-                  U
+                <div className="size-9 rounded-full bg-transparent border border-zaki-subtle dark:border-zaki-dark flex items-center justify-center shrink-0 text-xs font-semibold text-zaki-muted dark:text-zaki-dark-muted">
+                  {sharedByInitials || ""}
                 </div>
               )}
             </div>
@@ -338,13 +361,13 @@ export function SharedConversation() {
         </div>
 
         {/* Footer */}
-        <div className="mt-12 pt-8 border-t border-zaki-subtle text-center">
-          <p className="text-sm text-zaki-muted mb-4">
+        <div className="mt-12 pt-8 border-t border-zaki-subtle dark:border-zaki-dark text-center">
+          <p className="text-sm text-zaki-muted dark:text-zaki-dark-muted mb-4">
             This is a read-only view of a shared conversation.
           </p>
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-brand hover:bg-zaki-brand text-white font-medium rounded-zaki-md transition-colors"
+            className="inline-flex items-center gap-2 zaki-btn bg-zaki-brand hover:bg-zaki-brand text-white transition-colors"
           >
             Start your own conversation on ZAKI
           </Link>

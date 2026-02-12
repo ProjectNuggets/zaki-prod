@@ -1,17 +1,16 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, Brain, Clock } from "lucide-react";
+import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { cn } from "@/lib/utils";
 
 // Rotating placeholder suggestions — contextual prompts
 const placeholderSuggestions = [
   "Ask anything",
-  "What's on your mind?",
-  "Ask me about yesterday's notes…",
-  "Summarize what we discussed…",
-  "Help me brainstorm…",
-  "What should I focus on today?",
-  "Remind me about…",
+  "Summarize our last conversation",
+  "Help me brainstorm a plan",
+  "Draft a message or email",
+  "Turn this into a checklist",
 ];
 
 export function InputArea({
@@ -128,18 +127,18 @@ export function InputArea({
   const upgradeModal =
     upgradeOpen && typeof document !== "undefined"
       ? createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[1px]">
             <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
-            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-              <div className="text-lg font-semibold text-zaki-primary">Upgrades are brewing</div>
-              <div className="mt-2 text-sm text-zaki-secondary">
+            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+              <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Upgrades are brewing</div>
+              <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
                 We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized
                 plans as we speak — with prices that won’t scare your coffee.
               </div>
               <div className="mt-5 flex items-center justify-end">
                 <button
                   type="button"
-                  className="rounded-full px-4 py-2 text-sm text-white bg-zaki-primary hover:bg-zaki-active transition-colors"
+                  className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand-hover transition-colors"
                   onClick={() => setUpgradeOpen(false)}
                 >
                   Sounds good
@@ -154,75 +153,22 @@ export function InputArea({
   return (
     <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
       {/* Input Box */}
-      <form 
-        onSubmit={handleSubmit}
-        className="zaki-input-form bg-zaki-raised rounded-[22px] shadow-sm border border-zaki-subtle overflow-visible flex flex-col min-h-[88px] relative z-10 focus-within:bg-zaki-raised focus-within:border-zaki-subtle"
-      >
-        <div className="bg-zaki-sunken text-zaki-muted text-[11px] px-3 py-2 grid grid-cols-[1fr_auto_1fr] items-center leading-[16px]">
-          <div className="flex items-center gap-3">
-            {/* Web Search Toggle */}
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-zaki-muted">Web search</span>
-              <button
-                type="button"
-                onClick={onToggleWebSearch}
-                className={`h-5 w-9 rounded-full border transition-colors ${
-                  webSearchEnabled
-                    ? "bg-zaki-accent border-zaki-accent"
-                    : "bg-white border-zaki"
-                }`}
-                aria-pressed={webSearchEnabled}
-              >
-                <span
-                  className={`block h-4 w-4 rounded-full shadow transition-transform ${
-                    webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-zaki-muted"
-                  }`}
-                />
-              </button>
-            </div>
-            
-            {/* Memory Mode Toggle */}
-            <div className="flex items-center gap-2 border-l border-zaki-subtle pl-3">
-              <button
-                type="button"
-                onClick={onToggleMemoryMode}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] transition-colors ${
-                  memoryMode === "autosave"
-                    ? "bg-teal-100 text-teal-700 hover:bg-teal-200"
-                    : "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                }`}
-                title={memoryMode === "autosave" ? "Auto-save memories with 3s undo" : "Manually confirm each memory"}
-              >
-                {memoryMode === "autosave" ? (
-                  <>
-                    <Clock className="size-3" />
-                    <span>Auto</span>
-                  </>
-                ) : (
-                  <>
-                    <Brain className="size-3" />
-                    <span>Manual</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 justify-center">
+      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10">
+        <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
+          <div className="w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]">
             <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
               <Zap className="size-3" />
             </span>
-            <span>Access premium models & features</span>
-            <button
-              type="button"
-              className="text-zaki-success font-medium hover:underline text-[11px] leading-[16px]"
-              onClick={() => setUpgradeOpen(true)}
-            >
-              Upgrade
-            </button>
+            <span className="text-zaki-secondary">Access premium models & features</span>
+              <button
+                type="button"
+                className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
+                onClick={() => setUpgradeOpen(true)}
+              >
+                Upgrade!
+              </button>
           </div>
-          <div />
-        </div>
-        <div className="p-3 flex flex-col gap-2 relative">
+          <div className="w-full mt-2 rounded-[16px] border border-[#ead7c1] dark:border-zaki-dark bg-[#fffaf4] dark:bg-[#15110d] px-3 py-2.5 flex flex-col gap-2 relative">
         {attachments.length > 0 && (
           <div className="flex flex-col gap-2 px-2">
             <div className="flex flex-wrap gap-2">
@@ -278,108 +224,136 @@ export function InputArea({
             </div>
           </div>
         )}
-        <div className="zaki-input-row flex items-center gap-2 px-1">
-           <div className="relative" ref={menuRef}>
-             <button
-               type="button"
-               className="size-11 md:size-8 bg-zaki-elevated rounded-full flex items-center justify-center hover:bg-zaki-active transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-               onClick={() => setMenuOpen((open) => !open)}
-               aria-haspopup="menu"
-               aria-expanded={menuOpen}
-               aria-label="Add options"
-             >
-                <Plus className="size-4 text-zaki-muted" />
-             </button>
-             {menuOpen && (
-               <div
-                 className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
-                 role="menu"
-               >
-                 <button
-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                   type="button"
-                   role="menuitem"
-                   onClick={() => setMenuOpen(false)}
-                 >
-                   <Sparkles className="size-4 text-zaki-muted" />
-                   Generate image
-                 </button>
-                 <button
-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                   type="button"
-                   role="menuitem"
-                   onClick={() => {
-                     setMenuOpen(false);
-                     fileInputRef.current?.click();
-                   }}
-                 >
-                   <Paperclip className="size-4 text-zaki-muted" />
-                   Upload image or file
-                 </button>
-                 <button
-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                   type="button"
-                   role="menuitem"
-                   onClick={() => setMenuOpen(false)}
-                 >
-                   <Search className="size-4 text-zaki-muted" />
-                   Deep research
-                 </button>
-                 <button
-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                   type="button"
-                   role="menuitem"
-                   onClick={() => setMenuOpen(false)}
-                 >
-                   <Bot className="size-4 text-zaki-muted" />
-                   Agent mode
-                 </button>
-                 <button
-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                   type="button"
-                   role="menuitem"
-                   onClick={() => setMenuOpen(false)}
-                 >
-                   <GraduationCap className="size-4 text-zaki-muted" />
-                   Study and learn
-                 </button>
-               </div>
-             )}
-           </div>
-           {webSearchEnabled && (
-             <span className="zaki-agent-prefix text-zaki-brand text-sm font-medium">@agent</span>
-           )}
-           <textarea 
-             id="chat-input"
-             ref={textareaRef}
-             rows={1}
-             className="zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto outline-none focus:outline-none"
-             placeholder={placeholderSuggestions[placeholderIndex]}
-             autoComplete="off"
-             value={inputValue}
-             disabled={isSending}
-             onChange={(e) => {
-               setInputValue(e.target.value);
-               if (textareaRef.current) {
-                 textareaRef.current.style.height = "auto";
-                 textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-               }
-             }}
-             onKeyDown={(event) => {
-               if (event.key === "Enter" && !event.shiftKey) {
-                 event.preventDefault();
-                 submitMessage();
-               }
-             }}
-           />
-           <button
-             type="submit"
-             className="zaki-button-bounce size-11 md:size-8 bg-zaki-brand rounded-full flex items-center justify-center hover:bg-zaki-brand-hover disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-             disabled={isSending}
-             aria-label="Send message"
-           >
-              <ArrowUp className="size-5 md:size-4 text-white" />
-           </button>
+        <div className="flex items-end gap-2 px-1">
+          <textarea 
+            id="chat-input"
+            ref={textareaRef}
+            rows={1}
+            className="zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none zaki-scrollbar-fade"
+            placeholder={placeholderSuggestions[placeholderIndex]}
+            autoComplete="off"
+            value={inputValue}
+            disabled={isSending}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              if (textareaRef.current) {
+                textareaRef.current.style.height = "auto";
+                textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submitMessage();
+              }
+            }}
+          />
+        </div>
+        <div className="zaki-input-row flex items-center gap-2 px-1 pt-0.5">
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              className="size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Add options"
+            >
+              <Plus className="size-4 text-zaki-muted" />
+            </button>
+            {menuOpen && (
+              <div
+                className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
+                role="menu"
+              >
+                <button
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <Sparkles className="size-4 text-zaki-muted" />
+                  Generate image
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <Paperclip className="size-4 text-zaki-muted" />
+                  Upload image or file
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <Search className="size-4 text-zaki-muted" />
+                  Deep research
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <Bot className="size-4 text-zaki-muted" />
+                  Agent mode
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <GraduationCap className="size-4 text-zaki-muted" />
+                  Study and learn
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onToggleWebSearch}
+            className={cn(
+              "size-9 rounded-xl flex items-center justify-center border transition-colors",
+              webSearchEnabled
+                ? "bg-zaki-accent/15 border-zaki-accent/30 text-zaki-accent"
+                : "bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
+            )}
+            aria-pressed={webSearchEnabled}
+            aria-label="Toggle web search"
+          >
+            <Search className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleMemoryMode}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border px-3 py-1 text-2xs transition-colors",
+              "bg-[#f6eee4] border-[#ead7c1] text-zaki-secondary hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-subtle dark:hover:bg-zaki-dark-hover"
+            )}
+            title={memoryMode === "autosave" ? "Auto-save memories with 3s undo" : "Manually confirm each memory"}
+          >
+            <span className="text-zaki-muted">Memory</span>
+            <span className="h-4 w-px bg-[#e4d6c4] dark:bg-zaki-dark-hover" />
+            <span className="capitalize">{memoryMode === "autosave" ? "Auto" : "Manual"}</span>
+            <ChevronDown className="size-3 text-zaki-muted" />
+          </button>
+          <span className="flex-1" />
+          <button
+            type="submit"
+            className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+            disabled={isSending}
+            aria-label="Send message"
+          >
+            <ArrowUp className="size-4 text-white" />
+          </button>
         </div>
         <input
           ref={fileInputRef}
@@ -394,6 +368,7 @@ export function InputArea({
             event.target.value = "";
           }}
         />
+        </div>
         </div>
       </form>
       {upgradeModal}

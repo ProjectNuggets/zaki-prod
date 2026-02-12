@@ -183,7 +183,7 @@ export function LoginScreen() {
                 type="text"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder="Your full name"
+                placeholder="Full name"
                 className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="name"
                 required
@@ -212,7 +212,7 @@ export function LoginScreen() {
                 type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
+                placeholder="Email address"
                 className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="email"
                 required
@@ -228,7 +228,7 @@ export function LoginScreen() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Your password"
+                  placeholder="Password"
                   className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 pr-12 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
@@ -270,7 +270,7 @@ export function LoginScreen() {
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Repeat your password"
+                placeholder="Confirm password"
                 className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                 autoComplete="new-password"
                 required
@@ -298,7 +298,7 @@ export function LoginScreen() {
                   type={showPassword ? "text" : "password"}
                   value={resetConfirm}
                   onChange={(event) => setResetConfirm(event.target.value)}
-                  placeholder="Repeat new password"
+                  placeholder="Confirm new password"
                   className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
                   autoComplete="new-password"
                   required
@@ -327,7 +327,7 @@ export function LoginScreen() {
               (mode === "reset-confirm" &&
                 (resetPassword.length === 0 || resetConfirm.length === 0))
             }
-            className="w-full rounded-zaki-md bg-zaki-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zaki-active disabled:opacity-60"
+            className="w-full zaki-btn bg-zaki-primary text-white transition-colors hover:bg-zaki-active disabled:opacity-60"
           >
             {isLoading
               ? mode === "signup"

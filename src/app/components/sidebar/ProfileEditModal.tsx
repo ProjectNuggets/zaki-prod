@@ -72,14 +72,14 @@ export function ProfileEditModal({
         <div className="mt-6 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
+            className="zaki-btn zaki-btn-secondary"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-white bg-zaki-primary hover:bg-zaki-active transition-colors"
+            className="zaki-btn bg-zaki-primary text-white hover:bg-zaki-active transition-colors"
             onClick={onClose}
           >
             Save changes

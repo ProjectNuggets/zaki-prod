@@ -1,13 +1,13 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea } from "./InputArea";
 import { Share2, MoreVertical, Download, Brain } from "lucide-react";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type { CSSProperties } from "react";
 import { apiRequest } from "@/lib/api";
 import {
   LibraryView,
   SpacesView,
   ZakiHomeView,
-  SpaceDetailView,
   ChatView,
   ReadyState,
   CreateSpaceModal,
@@ -22,6 +22,8 @@ import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
 import type { Space, Message, LibraryResult } from "@/types";
+import { useMessages } from "@/queries/useThreads";
+import { MemoryRail } from "./memory/MemoryRail";
 
 export function ChatArea() {
   useAuthStore(); // For auth context, values used elsewhere
@@ -32,7 +34,6 @@ export function ChatArea() {
     goHome,
     goToSpaces,
     goToLibrary,
-    goToSpace,
     goToThread,
     clearThread,
   } = useNavigationStore();
@@ -41,22 +42,29 @@ export function ChatArea() {
   const showZakiHome = view === "home";
   const showSpacesView = view === "spaces";
   const showLibraryView = view === "library";
-  const showSpaceDetail = view === "space-detail";
+  const showSpaceDetail = false;
 
   // Message state
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const historyLoadedRef = useRef<Record<string, boolean>>({});
-  const historyLoadingRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   // Memory state - works for both auto-save and manual modes
-  const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string}>>([]);
+  const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
   const [showMemoryToast, setShowMemoryToast] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  // Memory chip removed
+  const lastMemoryRequestRef = useRef<{ message: string; threadId?: string; mode: "autosave" | "manual" } | null>(null);
+  const memoryQueueRef = useRef<Array<{ id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual" }>>([]);
+  const memoryFlushTimerRef = useRef<number | null>(null);
+  const autoDismissTimerRef = useRef<number | null>(null);
+  const memoryInFlightRef = useRef(false);
+  const queuedMemoryCheckRef = useRef<{ message: string; threadId?: string; mode?: "autosave" | "manual" } | null>(null);
+  const memorySeenRef = useRef<Set<string>>(new Set());
   const authUser = useAuthStore((s) => s.user);
   
   // Memory mode: autosave (default) or manual
@@ -66,12 +74,22 @@ export function ChatArea() {
   const prevModeRef = useRef(memoryMode);
   useEffect(() => {
     if (prevModeRef.current !== memoryMode) {
-      // Mode changed - clear pending memories and hide toast
-      setPendingMemories([]);
-      setShowMemoryToast(false);
+      // Mode changed - keep manual pending memories visible until resolved
+      const hasManualPending = pendingMemories.some((m) => m._mode === "manual");
+      if (prevModeRef.current === "manual" && hasManualPending) {
+        setShowMemoryToast(true);
+      } else if (memoryMode === "autosave") {
+        setShowMemoryToast(false);
+      }
       prevModeRef.current = memoryMode;
     }
-  }, [memoryMode]);
+  }, [memoryMode, pendingMemories]);
+
+  useEffect(() => {
+    if (pendingMemories.some((m) => m._mode === "manual")) {
+      setShowMemoryToast(true);
+    }
+  }, [pendingMemories]);
 
   // UI state
   const [dragActive, setDragActive] = useState(false);
@@ -81,10 +99,26 @@ export function ChatArea() {
   const [editInstructionsOpen, setEditInstructionsOpen] = useState(false);
   const [editInstructionsValue, setEditInstructionsValue] = useState("");
   const [inputOffset, setInputOffset] = useState(0);
+  const [inputHeight, setInputHeight] = useState(0);
+  const [inputLeft, setInputLeft] = useState(0);
+  const [inputWidth, setInputWidth] = useState(0);
 
   // Spaces state
   const [spacesList, setSpacesList] = useState<Space[]>([]);
-  const [spaceDetail, setSpaceDetail] = useState<Space | null>(null);
+  const [editSpaceId, setEditSpaceId] = useState<string | null>(null);
+  const [fileUploadSpaceId, setFileUploadSpaceId] = useState<string | null>(null);
+
+  const toastPosition = useMemo(() => {
+    const left = inputWidth ? inputLeft : 16;
+    const width =
+      inputWidth ||
+      (typeof window !== "undefined"
+        ? Math.min(window.innerWidth - 32, 896)
+        : 640);
+    const bottom = inputOffset + inputHeight + 72;
+    return { left, width, bottom };
+  }, [inputHeight, inputLeft, inputOffset, inputWidth]);
+
 
   // Library state
   const [libraryQuery, setLibraryQuery] = useState("");
@@ -103,6 +137,7 @@ export function ChatArea() {
   const autoScrollRef = useRef(true);
   const prevMessageCount = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
 
   // Computed values
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
@@ -179,50 +214,10 @@ export function ChatArea() {
     return content;
   };
 
-  // Load thread history
-  const loadThreadHistory = useCallback(async (workspaceSlug: string, threadSlug: string) => {
-    if (historyLoadedRef.current[threadSlug] || historyLoadingRef.current[threadSlug]) {
-      return;
-    }
-    historyLoadingRef.current[threadSlug] = true;
-    setIsHistoryLoading(true);
-    try {
-      const response = await apiRequest(`/workspace/${workspaceSlug}/thread/${threadSlug}/chats`);
-      if (!response.ok) {
-        throw new Error("Unable to load chats.");
-      }
-      const data = (await response.json()) as {
-        history?: {
-          role: "user" | "assistant";
-          content: string;
-          chatId?: number;
-          attachments?: { name: string; type: string; url: string }[];
-        }[];
-      };
-      const loadedMessages = data.history?.map((entry, index) => ({
-        id: entry.chatId ? `${entry.chatId}-${entry.role}-${index}` : `${entry.role}-${index}`,
-        role: entry.role,
-        // Strip memory context from user messages
-        content: entry.role === 'user' ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
-        attachments: entry.attachments,
-        chatId: entry.chatId,
-      })) ?? [];
-      setMessagesByThread((prev) => ({
-        ...prev,
-        [threadSlug]: loadedMessages,
-      }));
-      historyLoadedRef.current[threadSlug] = true;
-    } catch (error) {
-      console.error('[ChatArea] Failed to load history:', error);
-      // Only show toast if this isn't the initial load (avoid spam on app start)
-      if (messagesByThread[threadSlug]) {
-        toast.error("Unable to load chat history");
-      }
-    } finally {
-      historyLoadingRef.current[threadSlug] = false;
-      setIsHistoryLoading(false);
-    }
-  }, []);
+  const { data: historyData, isLoading: isHistoryLoading } = useMessages(
+    activeWorkspaceSlug,
+    activeThreadId
+  );
 
   // Helper to update assistant message content
   const updateAssistantContent = useCallback((threadSlug: string, assistantId: string, newContent: string) => {
@@ -380,13 +375,38 @@ export function ChatArea() {
   }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent]);
 
   // Check for memories - Auto-Save or Manual mode
-  const checkForSavedMemories = useCallback(async (message: string) => {
+  const flushMemoryQueue = useCallback(() => {
+    if (memoryQueueRef.current.length === 0) return;
+    setPendingMemories((prev) => {
+      const merged = [...prev, ...memoryQueueRef.current];
+      memoryQueueRef.current = [];
+      return merged;
+    });
+    setShowMemoryToast(true);
+    if (memoryMode === "autosave") {
+      if (autoDismissTimerRef.current) {
+        window.clearTimeout(autoDismissTimerRef.current);
+      }
+      autoDismissTimerRef.current = window.setTimeout(() => {
+        setShowMemoryToast(false);
+      }, 3000);
+    }
+  }, [memoryMode]);
+
+  const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
     // Note: username is the email in ZAKI's auth system
     if (!authUser?.username) return;
+    if (memoryInFlightRef.current) {
+      queuedMemoryCheckRef.current = { message, threadId, mode: modeOverride };
+      return;
+    }
     
-    const endpoint = memoryMode === "autosave" 
+    const activeMode = modeOverride ?? memoryMode;
+    const endpoint = activeMode === "autosave" 
       ? "/api/memory/autosave" 
       : "/api/memory/preview";
+    lastMemoryRequestRef.current = { message, threadId, mode: activeMode };
+    memoryInFlightRef.current = true;
     
     try {
       const response = await apiRequest(endpoint, {
@@ -394,28 +414,55 @@ export function ChatArea() {
         body: JSON.stringify({
           userId: authUser.username,
           message,
-          threadId: activeThreadId,
+          threadId: threadId ?? activeThreadId,
         }),
       });
       
-      if (!response.ok) return;
+      if (!response.ok) {
+        setMemoryError("Memory save failed. Retry?");
+        return;
+      }
       
       const data = await response.json();
       
       // Different response shapes for different modes
-      const memories = memoryMode === "autosave" 
-        ? (data.saved || [])
-        : (data.pending || []);
+      const memories = (activeMode === "autosave" ? (data.saved || []) : (data.pending || [])).map(
+        (m: { id: string; content: string; type: string; confirmationId?: string }) => ({
+          ...m,
+          _mode: activeMode,
+        })
+      );
       
       if (memories.length > 0) {
-        setPendingMemories(memories);
-        setShowMemoryToast(true);
+        const uniqueMemories = memories.filter((m) => {
+          const key = m.confirmationId || m.id;
+          if (memorySeenRef.current.has(key)) return false;
+          memorySeenRef.current.add(key);
+          return true;
+        });
+        if (uniqueMemories.length === 0) return;
+        memoryQueueRef.current = [...memoryQueueRef.current, ...uniqueMemories];
+        if (memoryFlushTimerRef.current) {
+          window.clearTimeout(memoryFlushTimerRef.current);
+        }
+        memoryFlushTimerRef.current = window.setTimeout(() => {
+          flushMemoryQueue();
+          memoryFlushTimerRef.current = null;
+        }, 600);
       }
     } catch (err) {
       // Silent fail - not critical for chat
       console.log("[Memory] Check failed:", err);
+      setMemoryError("Memory save failed. Retry?");
+    } finally {
+      memoryInFlightRef.current = false;
+      if (queuedMemoryCheckRef.current) {
+        const next = queuedMemoryCheckRef.current;
+        queuedMemoryCheckRef.current = null;
+        checkForSavedMemories(next.message, next.threadId, next.mode);
+      }
     }
-  }, [authUser?.username, activeThreadId, memoryMode]);
+  }, [authUser?.username, activeThreadId, memoryMode, flushMemoryQueue]);
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[]) => {
@@ -455,7 +502,7 @@ export function ChatArea() {
       }
     }
 
-    if (!activeThreadId) return;
+    if (!threadId) return;
 
     const attachmentsForMessage = files
       .filter((file) => file.type.startsWith("image/"))
@@ -469,8 +516,8 @@ export function ChatArea() {
 
     setMessagesByThread((prev) => ({
       ...prev,
-      [activeThreadId]: [
-        ...(prev[activeThreadId] ?? []),
+      [threadId]: [
+        ...(prev[threadId] ?? []),
         {
           id: userMessageId,
           role: "user" as const,
@@ -495,19 +542,39 @@ export function ChatArea() {
     try {
       await streamChatMessage({
         workspaceSlug: activeWorkspaceSlug,
-        threadSlug: activeThreadId,
+        threadSlug: threadId,
         message: sendText,
         assistantId: assistantMessageId,
       });
       
       // P0 Fix: Check for auto-saved memories after response
-      await checkForSavedMemories(trimmed);
+      await checkForSavedMemories(trimmed, threadId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to send message");
     } finally {
       setIsStreaming(false);
     }
   }, [activeWorkspaceSlug, activeThreadId, isStreaming, streamChatMessage, checkForSavedMemories]);
+
+  const handleStartChat = useCallback(() => {
+    const spaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
+    if (!spaceId) {
+      goToSpaces();
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
+  }, [activeWorkspaceSlug, goToSpaces, primarySpace?.id]);
+
+  const handleExampleSelect = useCallback(
+    (example: string) => {
+      if (!activeWorkspaceSlug) {
+        goToSpaces();
+        return;
+      }
+      handleSend(example, []);
+    },
+    [activeWorkspaceSlug, goToSpaces, handleSend]
+  );
 
   // Library search
   const runLibrarySearch = useCallback(async () => {
@@ -590,12 +657,26 @@ export function ChatArea() {
     }
   }, [activeThreadId, messagesByThread]);
 
-  // Load thread history effect
+  // Load thread history from React Query
   useEffect(() => {
     if (!activeThreadId || !activeWorkspaceSlug) return;
-    if (messagesByThread[activeThreadId]?.length) return;
-    loadThreadHistory(activeWorkspaceSlug, activeThreadId);
-  }, [activeThreadId, activeWorkspaceSlug, messagesByThread, loadThreadHistory]);
+    if (!historyData || historyLoadedRef.current[activeThreadId]) return;
+    if (messagesByThread[activeThreadId]?.length) {
+      historyLoadedRef.current[activeThreadId] = true;
+      return;
+    }
+
+    const cleaned = historyData.map((entry) => ({
+      ...entry,
+      content: entry.role === "user" ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
+    }));
+
+    setMessagesByThread((prev) => ({
+      ...prev,
+      [activeThreadId]: cleaned,
+    }));
+    historyLoadedRef.current[activeThreadId] = true;
+  }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
 
   // First message transition effect
   useEffect(() => {
@@ -613,7 +694,7 @@ export function ChatArea() {
   // Input offset effect
   useEffect(() => {
     const updateOffset = () => {
-      if (!showReady || showLibraryView || showSpacesView || showSpaceDetail) {
+      if (!showReady || showLibraryView || showSpacesView || showSpaceDetail || activeThreadId) {
         setInputOffset(0);
         return;
       }
@@ -637,6 +718,36 @@ export function ChatArea() {
       window.removeEventListener("resize", updateOffset);
     };
   }, [showReady, showLibraryView, showSpacesView, showSpaceDetail]);
+
+  // Track input height to pad chat list (ChatGPT-style spacing)
+  useEffect(() => {
+    const inputEl = inputWrapRef.current;
+    if (!inputEl) return;
+    if (typeof ResizeObserver === "undefined") {
+      // Fallback: single measurement without observing
+      const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
+      const rect = target.getBoundingClientRect();
+      setInputHeight(rect.height);
+      setInputLeft(rect.left);
+      setInputWidth(rect.width);
+      return;
+    }
+    const updateMetrics = () => {
+      const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
+      const rect = target.getBoundingClientRect();
+      setInputHeight(rect.height);
+      setInputLeft(rect.left);
+      setInputWidth(rect.width);
+    };
+    updateMetrics();
+    const observer = new ResizeObserver(updateMetrics);
+    observer.observe(inputEl);
+    window.addEventListener("resize", updateMetrics);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateMetrics);
+    };
+  }, [inputWrapRef]);
 
   // Click outside menu effect
   useEffect(() => {
@@ -677,12 +788,6 @@ export function ChatArea() {
     const handleSpacesData = (event: Event) => {
       const detail = (event as CustomEvent<{ spaces: Space[] }>).detail;
       setSpacesList(detail?.spaces ?? []);
-      if (spaceDetail && activeWorkspaceSlug) {
-        const updated = detail?.spaces?.find((space) => space.id === spaceDetail.id);
-        if (updated) {
-          setSpaceDetail(updated);
-        }
-      }
     };
 
     const handleOpenCreateSpace = () => {
@@ -696,12 +801,26 @@ export function ChatArea() {
 
     const handleViewSpace = (event: Event) => {
       const detail = (event as CustomEvent<{ id: string }>).detail;
-      const selected = spacesList.find((space) => space.id === detail?.id) ?? null;
-      setSpaceDetail(selected);
       if (detail?.id) {
-        goToSpace(detail.id);
+        window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId: detail.id } }));
       }
       setAttachments([]);
+    };
+
+    const handleEditSpaceInstructions = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string }>).detail;
+      const selected = spacesList.find((space) => space.id === detail?.id);
+      if (!selected) return;
+      setEditSpaceId(selected.id);
+      setEditInstructionsValue(selected.instructions ?? "");
+      setEditInstructionsOpen(true);
+    };
+
+    const handleUploadSpaceFiles = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string }>).detail;
+      if (!detail?.id) return;
+      setFileUploadSpaceId(detail.id);
+      fileInputRef.current?.click();
     };
 
     const handleViewZakiHome = () => {
@@ -715,6 +834,8 @@ export function ChatArea() {
     window.addEventListener("zaki:open-create-space", handleOpenCreateSpace);
     window.addEventListener("zaki:view-library", handleViewLibrary);
     window.addEventListener("zaki:view-space", handleViewSpace);
+    window.addEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
+    window.addEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
     window.addEventListener("zaki:view-zaki-home", handleViewZakiHome);
 
     return () => {
@@ -724,9 +845,22 @@ export function ChatArea() {
       window.removeEventListener("zaki:open-create-space", handleOpenCreateSpace);
       window.removeEventListener("zaki:view-library", handleViewLibrary);
       window.removeEventListener("zaki:view-space", handleViewSpace);
+      window.removeEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
+      window.removeEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
       window.removeEventListener("zaki:view-zaki-home", handleViewZakiHome);
     };
-  }, [activeWorkspaceSlug, clearThread, goHome, goToLibrary, goToSpace, goToSpaces, spaceDetail, spacesList]);
+  }, [activeWorkspaceSlug, clearThread, goHome, goToLibrary, goToSpaces, spacesList]);
+
+  useEffect(() => {
+    return () => {
+      if (memoryFlushTimerRef.current) {
+        window.clearTimeout(memoryFlushTimerRef.current);
+      }
+      if (autoDismissTimerRef.current) {
+        window.clearTimeout(autoDismissTimerRef.current);
+      }
+    };
+  }, []);
 
   // Render main content based on view
   const renderContent = () => {
@@ -771,38 +905,8 @@ export function ChatArea() {
       );
     }
 
-    if (showSpaceDetail && spaceDetail) {
-      return (
-        <SpaceDetailView
-          spaceDetail={spaceDetail}
-          attachments={attachments}
-          setAttachments={setAttachments}
-          isStreaming={isStreaming}
-          webSearchEnabled={webSearchEnabled}
-          onToggleWebSearch={() => setWebSearchEnabled((prev) => !prev)}
-          onSend={handleSend}
-          onGoToSpaces={goToSpaces}
-          onGoToThread={goToThread}
-          onCreateThread={(spaceId) => {
-            window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
-          }}
-          onUpdateSpace={(id, updates) => {
-            window.dispatchEvent(new CustomEvent("zaki:update-space", { detail: { id, ...updates } }));
-          }}
-          onDeleteThread={(threadId) => {
-            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId, spaceId: spaceDetail.id } }));
-          }}
-          onEditInstructions={(instructions) => {
-            setEditInstructionsValue(instructions);
-            setEditInstructionsOpen(true);
-          }}
-          onUploadFiles={() => fileInputRef.current?.click()}
-        />
-      );
-    }
-
     if (showReady) {
-      return <ReadyState ref={readyRef} />;
+      return <ReadyState ref={readyRef} onStartChat={handleStartChat} onSelectExample={handleExampleSelect} />;
     }
 
     return (
@@ -818,7 +922,15 @@ export function ChatArea() {
   return (
     <div
       ref={containerRef}
-      className="zaki-chat flex-1 relative flex flex-col h-full bg-white"
+      className="zaki-chat flex-1 relative flex flex-col h-full bg-transparent"
+      style={
+        {
+          "--zaki-input-height": `${inputHeight}px`,
+          "--zaki-input-offset": `${inputOffset}px`,
+          "--zaki-input-left": `${inputLeft}px`,
+          "--zaki-input-width": `${inputWidth}px`,
+        } as CSSProperties
+      }
       onDragEnter={(event) => {
         event.preventDefault();
         dragCounter.current += 1;
@@ -853,18 +965,18 @@ export function ChatArea() {
         </div>
       )}
 
-      <div className="relative h-full m-4 rounded-[28px] border border-zaki bg-zaki-base overflow-hidden flex flex-col">
+      <div className="relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col">
         {/* Background */}
         <BackgroundPattern />
 
         <div className="relative z-20 flex flex-col h-full">
           {/* Header / Breadcrumb */}
           <div className="px-6 py-4 flex items-center gap-2">
-            <span className="text-zaki-muted text-sm">{headerSpaceName}</span>
-            <span className="text-zaki-disabled text-sm">/</span>
-            <div className="flex items-center gap-1 cursor-pointer hover:bg-zaki-hover px-1 py-0.5 rounded">
-              <span className="text-zaki-primary text-sm font-medium">{headerThreadName}</span>
-            </div>
+            <span className="zaki-subheader-pill">
+              {headerSpaceName}
+              <span className="text-zaki-muted">/</span>
+              {headerThreadName}
+            </span>
             <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
               <button
                 type="button"
@@ -925,12 +1037,23 @@ export function ChatArea() {
 
           {/* Main Content */}
           <div
-            className="flex-1 relative z-10 overflow-y-auto"
+            className="flex-1 relative z-10 overflow-y-auto zaki-scrollbar-fade"
             ref={scrollRef}
+            style={{
+              paddingBottom:
+                !showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail
+                  ? Math.max(24, inputHeight + 24)
+                  : undefined,
+            }}
             onScroll={() => {
               if (!scrollRef.current) return;
-              const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-              autoScrollRef.current = scrollTop + clientHeight >= scrollHeight - 48;
+              if (scrollRafRef.current) return;
+              scrollRafRef.current = window.requestAnimationFrame(() => {
+                if (!scrollRef.current) return;
+                const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+                autoScrollRef.current = scrollTop + clientHeight >= scrollHeight - 48;
+                scrollRafRef.current = null;
+              });
             }}
           >
             {renderContent()}
@@ -964,7 +1087,7 @@ export function ChatArea() {
             multiple
             onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
-              if (files.length && spaceDetail) {
+              if (files.length && fileUploadSpaceId) {
                 const pinnedFiles = files.map((file) => ({
                   name: file.name,
                   type: file.type,
@@ -972,10 +1095,11 @@ export function ChatArea() {
                 }));
                 window.dispatchEvent(
                   new CustomEvent("zaki:update-space", {
-                    detail: { id: spaceDetail.id, pinnedFiles },
+                    detail: { id: fileUploadSpaceId, pinnedFiles },
                   })
                 );
               }
+              setFileUploadSpaceId(null);
               event.target.value = "";
             }}
           />
@@ -986,12 +1110,15 @@ export function ChatArea() {
       <EditInstructionsModal
         isOpen={editInstructionsOpen}
         initialValue={editInstructionsValue}
-        onClose={() => setEditInstructionsOpen(false)}
+        onClose={() => {
+          setEditInstructionsOpen(false);
+          setEditSpaceId(null);
+        }}
         onSave={(instructions) => {
-          if (spaceDetail) {
+          if (editSpaceId) {
             window.dispatchEvent(
               new CustomEvent("zaki:update-space", {
-                detail: { id: spaceDetail.id, instructions },
+                detail: { id: editSpaceId, instructions },
               })
             );
           }
@@ -1019,22 +1146,69 @@ export function ChatArea() {
 
       {/* Memory Toast - Mode-dependent rendering */}
       {showMemoryToast && pendingMemories.length > 0 && authUser?.username && (
-        memoryMode === "autosave" ? (
-          <AutoSaveToast
-            userId={authUser.username}
-            memories={pendingMemories}
-            onDismiss={() => setShowMemoryToast(false)}
-          />
-        ) : (
-          <MemoryToast
-            userId={authUser.username}
-            memories={pendingMemories.map(m => ({
-              ...m,
-              confirmationId: m.confirmationId || m.id, // Fallback to id if no confirmationId
-            }))}
-            onDismiss={() => setShowMemoryToast(false)}
-          />
-        )
+        <MemoryRail
+          memoryMode={pendingMemories.some((m) => m._mode === "manual") ? "manual" : memoryMode}
+          memories={
+            pendingMemories.some((m) => m._mode === "manual")
+              ? pendingMemories.filter((m) => m._mode === "manual")
+              : pendingMemories.filter((m) => m._mode === "autosave")
+          }
+          userId={authUser.username}
+          position={toastPosition}
+          onResolve={(resolvedId) => {
+            setPendingMemories((prev) => {
+              const next = prev.filter((m) => (m.confirmationId || m.id) !== resolvedId);
+              if (next.filter((m) => m._mode === "manual").length === 0) {
+                setShowMemoryToast(false);
+              }
+              return next;
+            });
+          }}
+          onDismiss={() => setShowMemoryToast(false)}
+        />
+      )}
+
+      {memoryError && (
+        <div
+          className="fixed z-50"
+          aria-live="polite"
+          style={{
+            left: toastPosition.left,
+            width: toastPosition.width,
+            bottom: toastPosition.bottom + 36,
+          }}
+        >
+          <div className="rounded-full border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-1.5 text-2xs text-zaki-secondary dark:text-zaki-dark-subtle shadow-[0px_8px_20px_rgba(15,15,15,0.08)] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand text-[10px] font-semibold">
+                !
+              </span>
+              <span>{memoryError}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-zaki-brand font-semibold hover:underline"
+                onClick={() => {
+                  const last = lastMemoryRequestRef.current;
+                  if (last) {
+                    checkForSavedMemories(last.message, last.threadId, last.mode);
+                  }
+                  setMemoryError(null);
+                }}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="text-zaki-muted dark:text-zaki-dark-muted font-medium hover:underline"
+                onClick={() => setMemoryError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* P0 Fix: Memory Confirmation Panel - Full review UI */}

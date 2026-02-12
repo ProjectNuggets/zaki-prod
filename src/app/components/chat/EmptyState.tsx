@@ -1,24 +1,26 @@
 import { CenterLogo } from "../icons";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  emptyStateExamples,
+  emptyStateHeadline,
+  emptyStateSubtext,
+  emptyStateCta,
+  emptyStateCtaHelper,
+} from "./emptyStateContent";
 
 interface EmptyStateProps {
   userName?: string;
   onExampleClick?: (text: string) => void;
+  onStartChat?: () => void;
   examples?: string[];
   className?: string;
 }
 
-const defaultExamples = [
-  "Draft a bold brand manifesto for a rebellious fintech.",
-  "Summarize this meeting and pull out the 3 real decisions.",
-  "Give me a brutally honest UX critique of this flow.",
-];
-
 export function EmptyState({
   userName = "there",
   onExampleClick,
-  examples = defaultExamples,
+  examples = emptyStateExamples,
   className,
 }: EmptyStateProps) {
   return (
@@ -27,13 +29,34 @@ export function EmptyState({
         <CenterLogo className="size-8 text-white" />
       </div>
       
-      <h2 className="text-2xl font-semibold text-zaki-primary dark:text-zaki-primary mb-2">
-        Good to see you, {userName}
+      <h2 className="text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary mb-2">
+        {emptyStateHeadline}, {userName}
       </h2>
       
       <p className="text-zaki-muted dark:text-zaki-dark-muted text-sm mb-8 text-center max-w-md">
-        Ready when you are. Ask me anything or pick a suggestion to get started.
+        {emptyStateSubtext}
       </p>
+
+      <div className="mb-6 flex flex-col items-center gap-3">
+        <div className="text-[11px] uppercase tracking-[0.2em] text-zaki-muted">
+          {emptyStateCtaHelper}
+        </div>
+        <button className="zaki-btn bg-zaki-accent text-white" onClick={onStartChat}>
+          {emptyStateCta}
+        </button>
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
+          {examples.slice(0, 2).map((example) => (
+            <button
+              key={example}
+              type="button"
+              className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover"
+              onClick={() => onExampleClick?.(example)}
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="w-full max-w-lg space-y-2">
         {examples.map((example, index) => (

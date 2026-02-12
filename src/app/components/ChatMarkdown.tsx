@@ -33,6 +33,41 @@ function extractText(node: React.ReactNode): string {
   return "";
 }
 
+function extractTableRows(node: React.ReactNode): string[][] {
+  const rows: string[][] = [];
+  const collectRows = (children: React.ReactNode) => {
+    if (children === null || children === undefined) return;
+    if (Array.isArray(children)) {
+      children.forEach(collectRows);
+      return;
+    }
+    if (isValidElement(children)) {
+      const type = children.type as string;
+      const props = children.props as { children?: React.ReactNode };
+      if (type === "tr") {
+        const cells: string[] = [];
+        const rowChildren = props.children;
+        if (Array.isArray(rowChildren)) {
+          rowChildren.forEach((child) => {
+            if (isValidElement(child)) {
+              const cellProps = child.props as { children?: React.ReactNode };
+              cells.push(extractText(cellProps.children));
+            }
+          });
+        } else if (isValidElement(rowChildren)) {
+          const cellProps = rowChildren.props as { children?: React.ReactNode };
+          cells.push(extractText(cellProps.children));
+        }
+        if (cells.length > 0) rows.push(cells);
+        return;
+      }
+      collectRows(props.children);
+    }
+  };
+  collectRows(node);
+  return rows;
+}
+
 export function ChatMarkdown({ content }: { content: string }) {
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
 
@@ -40,37 +75,37 @@ export function ChatMarkdown({ content }: { content: string }) {
     () => ({
       pre: ({ children }: { children: React.ReactNode }) => <>{children}</>,
       p: ({ children }: { children: React.ReactNode }) => (
-        <p className="mb-3 text-sm leading-6 text-zaki-primary last:mb-0">
+        <p className="mb-3 text-[15px] leading-7 text-zaki-primary dark:text-zaki-dark-primary last:mb-0">
           {children}
         </p>
       ),
       h1: ({ children }: { children: React.ReactNode }) => (
-        <h1 className="mb-3 text-lg font-semibold text-zaki-primary">
+        <h1 className="mb-3 text-xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
           {children}
         </h1>
       ),
       h2: ({ children }: { children: React.ReactNode }) => (
-        <h2 className="mb-3 text-base font-semibold text-zaki-primary">
+        <h2 className="mb-3 text-[17px] font-semibold text-zaki-primary dark:text-zaki-dark-primary">
           {children}
         </h2>
       ),
       h3: ({ children }: { children: React.ReactNode }) => (
-        <h3 className="mb-2 text-sm font-semibold text-zaki-primary">
+        <h3 className="mb-2 text-[15px] font-semibold text-zaki-primary dark:text-zaki-dark-primary">
           {children}
         </h3>
       ),
       ul: ({ children }: { children: React.ReactNode }) => (
-        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-zaki-primary">
+        <ul className="mb-3 list-disc space-y-1 pl-5 text-[15px] leading-7 text-zaki-primary dark:text-zaki-dark-primary">
           {children}
         </ul>
       ),
       ol: ({ children }: { children: React.ReactNode }) => (
-        <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-zaki-primary">
+        <ol className="mb-3 list-decimal space-y-1 pl-5 text-[15px] leading-7 text-zaki-primary dark:text-zaki-dark-primary">
           {children}
         </ol>
       ),
       li: ({ children }: { children: React.ReactNode }) => (
-        <li className="leading-6">{children}</li>
+        <li className="leading-7">{children}</li>
       ),
       a: ({
         children,
@@ -89,7 +124,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         </a>
       ),
       blockquote: ({ children }: { children: React.ReactNode }) => (
-        <blockquote className="mb-3 border-l-2 border-zaki-strong pl-3 text-sm text-zaki-secondary">
+        <blockquote className="mb-3 border-l-2 border-zaki-strong pl-3 text-[15px] leading-7 text-zaki-secondary dark:text-zaki-dark-subtle">
           {children}
         </blockquote>
       ),
@@ -105,7 +140,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         const text = extractText(children ?? "").replace(/\n$/, "");
         if (inline) {
           return (
-            <code className="rounded-md bg-[#f0e6d8] px-1.5 py-0.5 font-mono text-[0.85em] text-[#c25d4a]">
+            <code className="rounded-md bg-[#f6f4f1] dark:bg-[#1f1a15] px-1.5 py-0.5 font-mono text-[0.85em] text-[#8b4a3a] dark:text-[#d3b59a]">
               {text}
             </code>
           );
@@ -124,6 +159,9 @@ export function ChatMarkdown({ content }: { content: string }) {
           rawLanguage && !["text", "plaintext"].includes(rawLanguage)
             ? rawLanguage.toUpperCase()
             : "CODE";
+        const isEmail =
+          rawLanguage.toLowerCase().includes("email") ||
+          rawLanguage.toLowerCase().includes("mail");
         const key = `${rawLanguage || "code"}:${text.slice(0, 32)}`;
         const codeClassName =
           typeof className === "string"
@@ -154,21 +192,24 @@ export function ChatMarkdown({ content }: { content: string }) {
         };
 
         return (
-          <div className="my-4 overflow-hidden rounded-xl bg-[#1a1a1a]">
-            {/* Clean header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[#333]">
-              <span className="text-xs font-medium text-[#888]">
+          <div className="my-4 overflow-hidden rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-transparent">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-zaki-subtle dark:border-zaki-dark bg-transparent">
+              <span className="text-2xs font-semibold tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted whitespace-nowrap">
                 {displayLanguage}
               </span>
               <button
                 type="button"
-                className="text-xs text-[#888] hover:text-[#ccc] transition-colors"
+                className="text-2xs font-semibold text-zaki-muted dark:text-zaki-dark-muted hover:text-zaki-primary dark:hover:text-zaki-dark-primary transition-colors"
                 onClick={handleCopy}
               >
-                {copiedBlock === key ? "Copied!" : "Copy"}
+                {copiedBlock === key ? "Copied" : "Copy"}
               </button>
             </div>
-            <pre className="overflow-x-auto px-4 py-4 text-[13px] leading-relaxed font-mono">
+            <pre
+              className={`overflow-x-auto px-4 py-4 text-[13px] leading-relaxed ${
+                isEmail ? "font-sans" : "font-mono"
+              } text-zaki-primary dark:text-zaki-dark-primary whitespace-pre`}
+            >
               <code className={codeClassName}>
                 {shouldUseChildren ? children : text}
               </code>
@@ -176,31 +217,54 @@ export function ChatMarkdown({ content }: { content: string }) {
           </div>
         );
       },
-      table: ({ children }: { children: React.ReactNode }) => (
-        <div className="mb-4 overflow-hidden rounded-zaki-lg border border-zaki">
-          <table className="w-full text-left text-sm text-zaki-primary">
-            {children}
-          </table>
-        </div>
-      ),
+      table: ({ children }: { children: React.ReactNode }) => {
+        const rows = extractTableRows(children);
+        const tsv = rows.map((row) => row.join("\t")).join("\n");
+        const key = `table:${tsv.slice(0, 32)}`;
+        const handleCopy = async () => {
+          try {
+            await navigator.clipboard.writeText(tsv);
+            setCopiedBlock(key);
+            window.setTimeout(() => setCopiedBlock(null), 1200);
+          } catch {
+            setCopiedBlock(null);
+          }
+        };
+        return (
+          <div className="mb-4 overflow-x-auto">
+            <div className="flex items-center justify-end mb-2">
+              <button
+                type="button"
+                className="text-2xs font-semibold text-zaki-muted dark:text-zaki-dark-muted hover:text-zaki-primary dark:hover:text-zaki-dark-primary transition-colors"
+                onClick={handleCopy}
+              >
+                {copiedBlock === key ? "Copied" : "Copy table"}
+              </button>
+            </div>
+            <table className="w-full text-left text-sm text-zaki-primary dark:text-zaki-dark-primary">
+              {children}
+            </table>
+          </div>
+        );
+      },
       thead: ({ children }: { children: React.ReactNode }) => (
-        <thead className="bg-zaki-sunken text-xs uppercase tracking-[0.14em] text-zaki-muted">
+        <thead className="text-[11px] uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
           {children}
         </thead>
       ),
       tbody: ({ children }: { children: React.ReactNode }) => (
-        <tbody className="bg-white">{children}</tbody>
+        <tbody className="bg-transparent">{children}</tbody>
       ),
       tr: ({ children }: { children: React.ReactNode }) => (
-        <tr className="border-b border-zaki last:border-b-0">
+        <tr className="border-b border-zaki-subtle dark:border-zaki-dark last:border-b-0">
           {children}
         </tr>
       ),
       th: ({ children }: { children: React.ReactNode }) => (
-        <th className="px-3 py-2 text-xs font-semibold">{children}</th>
+        <th className="px-4 py-3 text-[11px] font-semibold whitespace-nowrap">{children}</th>
       ),
       td: ({ children }: { children: React.ReactNode }) => (
-        <td className="px-3 py-2">{children}</td>
+        <td className="px-4 py-3 text-[13px] leading-6">{children}</td>
       ),
     }),
     [copiedBlock]

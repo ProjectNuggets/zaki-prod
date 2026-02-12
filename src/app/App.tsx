@@ -1,5 +1,5 @@
 import "@/styles/fonts.css";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Outlet, useLocation, useParams } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { MobileSidebar } from "./components/MobileSidebar";
@@ -14,6 +14,8 @@ import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 export default function App() {
   const location = useLocation();
   const params = useParams();
+  const scrollTimerRef = useRef<number | null>(null);
+  const scrollTargetRef = useRef<HTMLElement | null>(null);
   
   // Auth state from Zustand
   const { token, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
@@ -48,6 +50,31 @@ export default function App() {
     const root = document.documentElement;
     root.classList.toggle("dark", resolvedTheme() === "dark");
   }, [themePreference, systemTheme, resolvedTheme]);
+
+  // Show scrollbars only while actively scrolling, then fade after 3s
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleScroll = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      const scrollable = target?.closest?.(".zaki-scrollbar-fade") as HTMLElement | null;
+      if (!scrollable) return;
+      scrollTargetRef.current = scrollable;
+      scrollable.classList.add("is-scrolling");
+      if (scrollTimerRef.current) {
+        window.clearTimeout(scrollTimerRef.current);
+      }
+      scrollTimerRef.current = window.setTimeout(() => {
+        scrollTargetRef.current?.classList.remove("is-scrolling");
+      }, 3000);
+    };
+    document.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("scroll", handleScroll, true);
+      if (scrollTimerRef.current) {
+        window.clearTimeout(scrollTimerRef.current);
+      }
+    };
+  }, []);
 
   // Listen for system theme changes
   useEffect(() => {
@@ -126,10 +153,16 @@ export default function App() {
           <Sidebar />
         </div>
         
-        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
+        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 bg-[#FDF6EE] dark:bg-[#0f0b08]">
+          <div className="zaki-main-shell">
+            <div className="zaki-main-panel">
+              <div className="zaki-main-inner">
+                <ErrorBoundary>
+                  <Outlet />
+                </ErrorBoundary>
+              </div>
+            </div>
+          </div>
         </main>
         <Toaster />
       </div>

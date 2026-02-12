@@ -27,14 +27,14 @@ interface MemoryConfirmationPanelProps {
   onClose: () => void;
 }
 
-const typeConfig: Record<string, { icon: typeof Brain; label: string; color: string; bg: string }> = {
-  fact: { icon: Lightbulb, label: "Fact", color: "text-amber-600", bg: "bg-amber-50" },
-  preference: { icon: Sparkles, label: "Preference", color: "text-amber-600", bg: "bg-amber-50" },
-  emotion: { icon: Heart, label: "Emotion", color: "text-rose-500", bg: "bg-rose-50" },
-  event: { icon: Calendar, label: "Event", color: "text-indigo-600", bg: "bg-indigo-50" },
-  goal: { icon: Target, label: "Goal", color: "text-emerald-600", bg: "bg-emerald-50" },
-  relationship: { icon: Users, label: "Relationship", color: "text-violet-600", bg: "bg-violet-50" },
-  struggle: { icon: CloudRain, label: "Challenge", color: "text-slate-600", bg: "bg-slate-50" },
+const typeConfig: Record<string, { icon: typeof Brain; label: string; className: string }> = {
+  fact: { icon: Lightbulb, label: "Fact", className: "bg-zaki-accent-10 text-zaki-accent" },
+  preference: { icon: Sparkles, label: "Preference", className: "bg-zaki-brand-10 text-zaki-brand" },
+  emotion: { icon: Heart, label: "Emotion", className: "bg-zaki-selected text-zaki-secondary" },
+  event: { icon: Calendar, label: "Event", className: "bg-zaki-selected text-zaki-secondary" },
+  goal: { icon: Target, label: "Goal", className: "bg-zaki-selected text-zaki-secondary" },
+  relationship: { icon: Users, label: "Relationship", className: "bg-zaki-selected text-zaki-secondary" },
+  struggle: { icon: CloudRain, label: "Challenge", className: "bg-zaki-selected text-zaki-secondary" },
 };
 
 export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfirmationPanelProps) {
@@ -139,15 +139,15 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
-      <div className="w-full max-w-lg max-h-[80vh] bg-white dark:bg-[#0f0b08] rounded-2xl shadow-xl border border-zaki dark:border-[#2b2119] overflow-hidden">
+      <div className="w-full max-w-lg max-h-[80vh] bg-white rounded-2xl shadow-[0px_24px_60px_rgba(15,15,15,0.18)] border border-zaki-subtle overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zaki dark:border-[#2b2119]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle bg-zaki-base">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-xl bg-gradient-to-br from-zaki-brand to-zaki-primary-500 flex items-center justify-center">
               <Brain className="size-5 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
+              <h2 className="text-lg font-semibold text-zaki-primary">
                 Memories to Review
               </h2>
               <p className="text-sm text-zaki-muted">
@@ -157,19 +157,19 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
           </div>
           <button
             onClick={onClose}
-            className="size-8 rounded-full hover:bg-zaki-hover dark:hover:bg-[#21180f] flex items-center justify-center text-zaki-muted transition-colors"
+            className="size-8 rounded-full hover:bg-zaki-hover flex items-center justify-center text-zaki-muted transition-colors"
           >
             <X className="size-5" />
           </button>
         </div>
 
         {/* Memory Mode Toggle */}
-        <div className="px-6 py-3 border-b border-zaki dark:border-[#2b2119] bg-zaki/30 dark:bg-[#1a140e]">
+        <div className="px-6 py-3 border-b border-zaki-subtle bg-zaki-base">
           <MemoryModeToggle value={memoryMode} onChange={setMemoryMode} />
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[60vh] p-4">
+          <div className="overflow-y-auto max-h-[60vh] p-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="size-8 border-2 border-zaki-spinner border-t-zaki-brand rounded-full animate-spin" />
@@ -199,19 +199,19 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                     key={memory.id}
                     className={cn(
                       "group rounded-xl border transition-all",
-                      "border-zaki dark:border-[#2b2119] bg-white dark:bg-[#15100c]",
-                      "hover:border-zaki-brand/30 dark:hover:border-zaki-brand/30",
+                      "border-zaki-subtle bg-white",
+                      "hover:border-zaki-brand/30",
                       isLoading && "opacity-60"
                     )}
                   >
                     <div className="p-4">
                       {/* Type badge */}
                       <div className="flex items-center gap-2 mb-3">
-                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", config.bg, config.color)}>
+                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold", config.className)}>
                           <Icon className="size-3.5" />
                           {config.label}
                         </span>
-                        <span className="text-xs text-zaki-muted">
+                        <span className="text-2xs text-zaki-muted">
                           {Math.round(memory.confidence_score * 100)}% confidence
                         </span>
                       </div>
@@ -228,7 +228,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                           />
                         </div>
                       ) : (
-                        <p className="text-sm text-zaki-primary dark:text-[#efe6d9] mb-4 leading-relaxed">
+                        <p className="text-sm text-zaki-primary mb-4 leading-relaxed">
                           "{memory.content}"
                         </p>
                       )}
@@ -240,7 +240,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                             <button
                               onClick={() => saveEdit(memory.id)}
                               disabled={isLoading}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zaki-brand text-white text-sm font-medium hover:bg-zaki-brand-hover transition-colors disabled:opacity-50"
+                              className="flex-1 zaki-btn bg-zaki-accent hover:bg-zaki-accent-hover text-white disabled:opacity-50"
                             >
                               <Check className="size-4" />
                               Save
@@ -248,7 +248,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                             <button
                               onClick={() => setEditingId(null)}
                               disabled={isLoading}
-                              className="px-4 py-2 rounded-lg border border-zaki dark:border-[#2b2119] text-sm text-zaki-secondary hover:bg-zaki-hover dark:hover:bg-[#21180f] transition-colors"
+                              className="zaki-btn-sm border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover transition-colors"
                             >
                               Cancel
                             </button>
@@ -258,7 +258,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                             <button
                               onClick={() => handleConfirm(memory.id)}
                               disabled={isLoading}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zaki-brand text-white text-sm font-medium hover:bg-zaki-brand-hover transition-colors disabled:opacity-50"
+                              className="flex-1 zaki-btn bg-zaki-accent hover:bg-zaki-accent-hover text-white disabled:opacity-50"
                             >
                               <Check className="size-4" />
                               Remember
@@ -266,7 +266,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                             <button
                               onClick={() => startEdit(memory)}
                               disabled={isLoading}
-                              className="size-9 flex items-center justify-center rounded-lg border border-zaki dark:border-[#2b2119] text-zaki-secondary hover:bg-zaki-hover dark:hover:bg-[#21180f] transition-colors disabled:opacity-50"
+                              className="size-9 flex items-center justify-center rounded-lg border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover transition-colors disabled:opacity-50"
                               title="Edit"
                             >
                               <Edit2 className="size-4" />
@@ -274,7 +274,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                             <button
                               onClick={() => handleReject(memory.id)}
                               disabled={isLoading}
-                              className="size-9 flex items-center justify-center rounded-lg border border-zaki dark:border-[#2b2119] text-zaki-secondary hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                              className="size-9 flex items-center justify-center rounded-lg border border-zaki-subtle text-zaki-secondary hover:bg-zaki-error hover:text-zaki-brand transition-colors disabled:opacity-50"
                               title="Forget"
                             >
                               <X className="size-4" />
@@ -291,8 +291,8 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-zaki dark:border-[#2b2119] bg-zaki-elevated/50 dark:bg-[#15100c]/50">
-          <p className="text-xs text-zaki-muted text-center">
+        <div className="px-6 py-3 border-t border-zaki-subtle bg-zaki-base">
+          <p className="text-2xs text-zaki-muted text-center">
             Confirmed memories help ZAKI understand you better.
             <br />
             You can always review and delete memories later.

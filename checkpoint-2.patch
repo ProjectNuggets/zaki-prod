@@ -1,0 +1,4061 @@
+diff --git a/src/app/App.tsx b/src/app/App.tsx
+index ec2bbaa..5d97992 100644
+--- a/src/app/App.tsx
++++ b/src/app/App.tsx
+@@ -126,10 +126,16 @@ export default function App() {
+           <Sidebar />
+         </div>
+         
+-        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden">
+-          <ErrorBoundary>
+-            <Outlet />
+-          </ErrorBoundary>
++        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 bg-[#FDF6EE] dark:bg-[#0f0b08]">
++          <div className="zaki-main-shell">
++            <div className="zaki-main-panel">
++              <div className="zaki-main-inner">
++                <ErrorBoundary>
++                  <Outlet />
++                </ErrorBoundary>
++              </div>
++            </div>
++          </div>
+         </main>
+         <Toaster />
+       </div>
+diff --git a/src/app/components/ChatArea.tsx b/src/app/components/ChatArea.tsx
+index c3bd389..2f67c45 100644
+--- a/src/app/components/ChatArea.tsx
++++ b/src/app/components/ChatArea.tsx
+@@ -1,13 +1,13 @@
+ import { BackgroundPattern } from "./BackgroundPattern";
+ import { InputArea } from "./InputArea";
+ import { Share2, MoreVertical, Download, Brain } from "lucide-react";
+-import { useState, useRef, useEffect, useCallback } from "react";
++import { useState, useRef, useEffect, useCallback, useMemo } from "react";
++import type { CSSProperties } from "react";
+ import { apiRequest } from "@/lib/api";
+ import {
+   LibraryView,
+   SpacesView,
+   ZakiHomeView,
+-  SpaceDetailView,
+   ChatView,
+   ReadyState,
+   CreateSpaceModal,
+@@ -22,6 +22,9 @@ import { useNavigationStore, useAuthStore } from "@/stores";
+ import { ShareModal } from "./ShareModal";
+ import { toast } from "sonner";
+ import type { Space, Message, LibraryResult } from "@/types";
++import { useMessages } from "@/queries/useThreads";
++import { SpeederLoader } from "./ui/SpeederLoader";
++import { MemoryRail } from "./memory/MemoryRail";
+ 
+ export function ChatArea() {
+   useAuthStore(); // For auth context, values used elsewhere
+@@ -32,7 +35,6 @@ export function ChatArea() {
+     goHome,
+     goToSpaces,
+     goToLibrary,
+-    goToSpace,
+     goToThread,
+     clearThread,
+   } = useNavigationStore();
+@@ -41,37 +43,52 @@ export function ChatArea() {
+   const showZakiHome = view === "home";
+   const showSpacesView = view === "spaces";
+   const showLibraryView = view === "library";
+-  const showSpaceDetail = view === "space-detail";
++  const showSpaceDetail = false;
+ 
+   // Message state
+   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
+   const [attachments, setAttachments] = useState<File[]>([]);
+   const [isStreaming, setIsStreaming] = useState(false);
+-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+   const historyLoadedRef = useRef<Record<string, boolean>>({});
+-  const historyLoadingRef = useRef<Record<string, boolean>>({});
+   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
+   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+ 
+   // Memory state - works for both auto-save and manual modes
+-  const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string}>>([]);
++  const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
+   const [showMemoryToast, setShowMemoryToast] = useState(false);
+   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
++  const [memoryError, setMemoryError] = useState<string | null>(null);
++  // Memory chip removed
++  const lastMemoryRequestRef = useRef<{ message: string; threadId?: string; mode: "autosave" | "manual" } | null>(null);
++  const memoryQueueRef = useRef<Array<{ id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual" }>>([]);
++  const memoryFlushTimerRef = useRef<number | null>(null);
++  const autoDismissTimerRef = useRef<number | null>(null);
+   const authUser = useAuthStore((s) => s.user);
+   
+   // Memory mode: autosave (default) or manual
+   const [memoryMode, setMemoryMode] = useMemoryMode();
++  const [isStartingThread, setIsStartingThread] = useState(false);
+ 
+   // Clear pending memories when switching modes to prevent stale state
+   const prevModeRef = useRef(memoryMode);
+   useEffect(() => {
+     if (prevModeRef.current !== memoryMode) {
+-      // Mode changed - clear pending memories and hide toast
+-      setPendingMemories([]);
+-      setShowMemoryToast(false);
++      // Mode changed - keep manual pending memories visible until resolved
++      const hasManualPending = pendingMemories.some((m) => m._mode === "manual");
++      if (prevModeRef.current === "manual" && hasManualPending) {
++        setShowMemoryToast(true);
++      } else if (memoryMode === "autosave") {
++        setShowMemoryToast(false);
++      }
+       prevModeRef.current = memoryMode;
+     }
+-  }, [memoryMode]);
++  }, [memoryMode, pendingMemories]);
++
++  useEffect(() => {
++    if (pendingMemories.some((m) => m._mode === "manual")) {
++      setShowMemoryToast(true);
++    }
++  }, [pendingMemories]);
+ 
+   // UI state
+   const [dragActive, setDragActive] = useState(false);
+@@ -81,10 +98,26 @@ export function ChatArea() {
+   const [editInstructionsOpen, setEditInstructionsOpen] = useState(false);
+   const [editInstructionsValue, setEditInstructionsValue] = useState("");
+   const [inputOffset, setInputOffset] = useState(0);
++  const [inputHeight, setInputHeight] = useState(0);
++  const [inputLeft, setInputLeft] = useState(0);
++  const [inputWidth, setInputWidth] = useState(0);
+ 
+   // Spaces state
+   const [spacesList, setSpacesList] = useState<Space[]>([]);
+-  const [spaceDetail, setSpaceDetail] = useState<Space | null>(null);
++  const [editSpaceId, setEditSpaceId] = useState<string | null>(null);
++  const [fileUploadSpaceId, setFileUploadSpaceId] = useState<string | null>(null);
++
++  const toastPosition = useMemo(() => {
++    const left = inputWidth ? inputLeft : 16;
++    const width =
++      inputWidth ||
++      (typeof window !== "undefined"
++        ? Math.min(window.innerWidth - 32, 896)
++        : 640);
++    const bottom = inputOffset + inputHeight + 72;
++    return { left, width, bottom };
++  }, [inputHeight, inputLeft, inputOffset, inputWidth]);
++
+ 
+   // Library state
+   const [libraryQuery, setLibraryQuery] = useState("");
+@@ -179,50 +212,10 @@ export function ChatArea() {
+     return content;
+   };
+ 
+-  // Load thread history
+-  const loadThreadHistory = useCallback(async (workspaceSlug: string, threadSlug: string) => {
+-    if (historyLoadedRef.current[threadSlug] || historyLoadingRef.current[threadSlug]) {
+-      return;
+-    }
+-    historyLoadingRef.current[threadSlug] = true;
+-    setIsHistoryLoading(true);
+-    try {
+-      const response = await apiRequest(`/workspace/${workspaceSlug}/thread/${threadSlug}/chats`);
+-      if (!response.ok) {
+-        throw new Error("Unable to load chats.");
+-      }
+-      const data = (await response.json()) as {
+-        history?: {
+-          role: "user" | "assistant";
+-          content: string;
+-          chatId?: number;
+-          attachments?: { name: string; type: string; url: string }[];
+-        }[];
+-      };
+-      const loadedMessages = data.history?.map((entry, index) => ({
+-        id: entry.chatId ? `${entry.chatId}-${entry.role}-${index}` : `${entry.role}-${index}`,
+-        role: entry.role,
+-        // Strip memory context from user messages
+-        content: entry.role === 'user' ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
+-        attachments: entry.attachments,
+-        chatId: entry.chatId,
+-      })) ?? [];
+-      setMessagesByThread((prev) => ({
+-        ...prev,
+-        [threadSlug]: loadedMessages,
+-      }));
+-      historyLoadedRef.current[threadSlug] = true;
+-    } catch (error) {
+-      console.error('[ChatArea] Failed to load history:', error);
+-      // Only show toast if this isn't the initial load (avoid spam on app start)
+-      if (messagesByThread[threadSlug]) {
+-        toast.error("Unable to load chat history");
+-      }
+-    } finally {
+-      historyLoadingRef.current[threadSlug] = false;
+-      setIsHistoryLoading(false);
+-    }
+-  }, []);
++  const { data: historyData, isLoading: isHistoryLoading } = useMessages(
++    activeWorkspaceSlug,
++    activeThreadId
++  );
+ 
+   // Helper to update assistant message content
+   const updateAssistantContent = useCallback((threadSlug: string, assistantId: string, newContent: string) => {
+@@ -380,13 +373,32 @@ export function ChatArea() {
+   }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent]);
+ 
+   // Check for memories - Auto-Save or Manual mode
+-  const checkForSavedMemories = useCallback(async (message: string) => {
++  const flushMemoryQueue = useCallback(() => {
++    if (memoryQueueRef.current.length === 0) return;
++    setPendingMemories((prev) => {
++      const merged = [...prev, ...memoryQueueRef.current];
++      memoryQueueRef.current = [];
++      return merged;
++    });
++    setShowMemoryToast(true);
++    if (memoryMode === "autosave") {
++      if (autoDismissTimerRef.current) {
++        window.clearTimeout(autoDismissTimerRef.current);
++      }
++      autoDismissTimerRef.current = window.setTimeout(() => {
++        setShowMemoryToast(false);
++      }, 3000);
++    }
++  }, [memoryMode]);
++
++  const checkForSavedMemories = useCallback(async (message: string, threadId?: string) => {
+     // Note: username is the email in ZAKI's auth system
+     if (!authUser?.username) return;
+     
+     const endpoint = memoryMode === "autosave" 
+       ? "/api/memory/autosave" 
+       : "/api/memory/preview";
++    lastMemoryRequestRef.current = { message, threadId, mode: memoryMode };
+     
+     try {
+       const response = await apiRequest(endpoint, {
+@@ -394,28 +406,41 @@ export function ChatArea() {
+         body: JSON.stringify({
+           userId: authUser.username,
+           message,
+-          threadId: activeThreadId,
++          threadId: threadId ?? activeThreadId,
+         }),
+       });
+       
+-      if (!response.ok) return;
++      if (!response.ok) {
++        setMemoryError("Memory save failed. Retry?");
++        return;
++      }
+       
+       const data = await response.json();
+       
+       // Different response shapes for different modes
+-      const memories = memoryMode === "autosave" 
+-        ? (data.saved || [])
+-        : (data.pending || []);
++      const memories = (memoryMode === "autosave" ? (data.saved || []) : (data.pending || [])).map(
++        (m: { id: string; content: string; type: string; confirmationId?: string }) => ({
++          ...m,
++          _mode: memoryMode,
++        })
++      );
+       
+       if (memories.length > 0) {
+-        setPendingMemories(memories);
+-        setShowMemoryToast(true);
++        memoryQueueRef.current = [...memoryQueueRef.current, ...memories];
++        if (memoryFlushTimerRef.current) {
++          window.clearTimeout(memoryFlushTimerRef.current);
++        }
++        memoryFlushTimerRef.current = window.setTimeout(() => {
++          flushMemoryQueue();
++          memoryFlushTimerRef.current = null;
++        }, 600);
+       }
+     } catch (err) {
+       // Silent fail - not critical for chat
+       console.log("[Memory] Check failed:", err);
++      setMemoryError("Memory save failed. Retry?");
+     }
+-  }, [authUser?.username, activeThreadId, memoryMode]);
++  }, [authUser?.username, activeThreadId, memoryMode, flushMemoryQueue]);
+ 
+   // Handle send message
+   const handleSend = useCallback(async (text: string, files: File[]) => {
+@@ -455,7 +480,7 @@ export function ChatArea() {
+       }
+     }
+ 
+-    if (!activeThreadId) return;
++    if (!threadId) return;
+ 
+     const attachmentsForMessage = files
+       .filter((file) => file.type.startsWith("image/"))
+@@ -469,8 +494,8 @@ export function ChatArea() {
+ 
+     setMessagesByThread((prev) => ({
+       ...prev,
+-      [activeThreadId]: [
+-        ...(prev[activeThreadId] ?? []),
++      [threadId]: [
++        ...(prev[threadId] ?? []),
+         {
+           id: userMessageId,
+           role: "user" as const,
+@@ -495,13 +520,13 @@ export function ChatArea() {
+     try {
+       await streamChatMessage({
+         workspaceSlug: activeWorkspaceSlug,
+-        threadSlug: activeThreadId,
++        threadSlug: threadId,
+         message: sendText,
+         assistantId: assistantMessageId,
+       });
+       
+       // P0 Fix: Check for auto-saved memories after response
+-      await checkForSavedMemories(trimmed);
++      await checkForSavedMemories(trimmed, threadId);
+     } catch (error) {
+       toast.error(error instanceof Error ? error.message : "Unable to send message");
+     } finally {
+@@ -509,6 +534,26 @@ export function ChatArea() {
+     }
+   }, [activeWorkspaceSlug, activeThreadId, isStreaming, streamChatMessage, checkForSavedMemories]);
+ 
++  const handleStartChat = useCallback(() => {
++    const spaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
++    if (!spaceId) {
++      goToSpaces();
++      return;
++    }
++    window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
++  }, [activeWorkspaceSlug, goToSpaces, primarySpace?.id]);
++
++  const handleExampleSelect = useCallback(
++    (example: string) => {
++      if (!activeWorkspaceSlug) {
++        goToSpaces();
++        return;
++      }
++      handleSend(example, []);
++    },
++    [activeWorkspaceSlug, goToSpaces, handleSend]
++  );
++
+   // Library search
+   const runLibrarySearch = useCallback(async () => {
+     if (!librarySlug || !libraryQuery.trim()) {
+@@ -590,12 +635,26 @@ export function ChatArea() {
+     }
+   }, [activeThreadId, messagesByThread]);
+ 
+-  // Load thread history effect
++  // Load thread history from React Query
+   useEffect(() => {
+     if (!activeThreadId || !activeWorkspaceSlug) return;
+-    if (messagesByThread[activeThreadId]?.length) return;
+-    loadThreadHistory(activeWorkspaceSlug, activeThreadId);
+-  }, [activeThreadId, activeWorkspaceSlug, messagesByThread, loadThreadHistory]);
++    if (!historyData || historyLoadedRef.current[activeThreadId]) return;
++    if (messagesByThread[activeThreadId]?.length) {
++      historyLoadedRef.current[activeThreadId] = true;
++      return;
++    }
++
++    const cleaned = historyData.map((entry) => ({
++      ...entry,
++      content: entry.role === "user" ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
++    }));
++
++    setMessagesByThread((prev) => ({
++      ...prev,
++      [activeThreadId]: cleaned,
++    }));
++    historyLoadedRef.current[activeThreadId] = true;
++  }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
+ 
+   // First message transition effect
+   useEffect(() => {
+@@ -638,6 +697,36 @@ export function ChatArea() {
+     };
+   }, [showReady, showLibraryView, showSpacesView, showSpaceDetail]);
+ 
++  // Track input height to pad chat list (ChatGPT-style spacing)
++  useEffect(() => {
++    const inputEl = inputWrapRef.current;
++    if (!inputEl) return;
++    if (typeof ResizeObserver === "undefined") {
++      // Fallback: single measurement without observing
++      const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
++      const rect = target.getBoundingClientRect();
++      setInputHeight(rect.height);
++      setInputLeft(rect.left);
++      setInputWidth(rect.width);
++      return;
++    }
++    const updateMetrics = () => {
++      const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
++      const rect = target.getBoundingClientRect();
++      setInputHeight(rect.height);
++      setInputLeft(rect.left);
++      setInputWidth(rect.width);
++    };
++    updateMetrics();
++    const observer = new ResizeObserver(updateMetrics);
++    observer.observe(inputEl);
++    window.addEventListener("resize", updateMetrics);
++    return () => {
++      observer.disconnect();
++      window.removeEventListener("resize", updateMetrics);
++    };
++  }, [inputWrapRef]);
++
+   // Click outside menu effect
+   useEffect(() => {
+     const handleClickOutside = (event: MouseEvent) => {
+@@ -677,12 +766,6 @@ export function ChatArea() {
+     const handleSpacesData = (event: Event) => {
+       const detail = (event as CustomEvent<{ spaces: Space[] }>).detail;
+       setSpacesList(detail?.spaces ?? []);
+-      if (spaceDetail && activeWorkspaceSlug) {
+-        const updated = detail?.spaces?.find((space) => space.id === spaceDetail.id);
+-        if (updated) {
+-          setSpaceDetail(updated);
+-        }
+-      }
+     };
+ 
+     const handleOpenCreateSpace = () => {
+@@ -696,14 +779,29 @@ export function ChatArea() {
+ 
+     const handleViewSpace = (event: Event) => {
+       const detail = (event as CustomEvent<{ id: string }>).detail;
+-      const selected = spacesList.find((space) => space.id === detail?.id) ?? null;
+-      setSpaceDetail(selected);
+       if (detail?.id) {
+-        goToSpace(detail.id);
++        setIsStartingThread(true);
++        window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId: detail.id } }));
+       }
+       setAttachments([]);
+     };
+ 
++    const handleEditSpaceInstructions = (event: Event) => {
++      const detail = (event as CustomEvent<{ id: string }>).detail;
++      const selected = spacesList.find((space) => space.id === detail?.id);
++      if (!selected) return;
++      setEditSpaceId(selected.id);
++      setEditInstructionsValue(selected.instructions ?? "");
++      setEditInstructionsOpen(true);
++    };
++
++    const handleUploadSpaceFiles = (event: Event) => {
++      const detail = (event as CustomEvent<{ id: string }>).detail;
++      if (!detail?.id) return;
++      setFileUploadSpaceId(detail.id);
++      fileInputRef.current?.click();
++    };
++
+     const handleViewZakiHome = () => {
+       goHome();
+       setAttachments([]);
+@@ -715,6 +813,8 @@ export function ChatArea() {
+     window.addEventListener("zaki:open-create-space", handleOpenCreateSpace);
+     window.addEventListener("zaki:view-library", handleViewLibrary);
+     window.addEventListener("zaki:view-space", handleViewSpace);
++    window.addEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
++    window.addEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
+     window.addEventListener("zaki:view-zaki-home", handleViewZakiHome);
+ 
+     return () => {
+@@ -724,12 +824,39 @@ export function ChatArea() {
+       window.removeEventListener("zaki:open-create-space", handleOpenCreateSpace);
+       window.removeEventListener("zaki:view-library", handleViewLibrary);
+       window.removeEventListener("zaki:view-space", handleViewSpace);
++      window.removeEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
++      window.removeEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
+       window.removeEventListener("zaki:view-zaki-home", handleViewZakiHome);
+     };
+-  }, [activeWorkspaceSlug, clearThread, goHome, goToLibrary, goToSpace, goToSpaces, spaceDetail, spacesList]);
++  }, [activeWorkspaceSlug, clearThread, goHome, goToLibrary, goToSpaces, spacesList]);
++
++  useEffect(() => {
++    if (!isStartingThread) return;
++    if (view === "chat" && activeThreadId) {
++      setIsStartingThread(false);
++    }
++  }, [activeThreadId, isStartingThread, view]);
++
++  useEffect(() => {
++    return () => {
++      if (memoryFlushTimerRef.current) {
++        window.clearTimeout(memoryFlushTimerRef.current);
++      }
++      if (autoDismissTimerRef.current) {
++        window.clearTimeout(autoDismissTimerRef.current);
++      }
++    };
++  }, []);
+ 
+   // Render main content based on view
+   const renderContent = () => {
++    if (isStartingThread) {
++      return (
++        <div className="min-h-[40vh] flex items-center justify-center">
++          <SpeederLoader />
++        </div>
++      );
++    }
+     if (showLibraryView) {
+       return (
+         <LibraryView
+@@ -771,38 +898,8 @@ export function ChatArea() {
+       );
+     }
+ 
+-    if (showSpaceDetail && spaceDetail) {
+-      return (
+-        <SpaceDetailView
+-          spaceDetail={spaceDetail}
+-          attachments={attachments}
+-          setAttachments={setAttachments}
+-          isStreaming={isStreaming}
+-          webSearchEnabled={webSearchEnabled}
+-          onToggleWebSearch={() => setWebSearchEnabled((prev) => !prev)}
+-          onSend={handleSend}
+-          onGoToSpaces={goToSpaces}
+-          onGoToThread={goToThread}
+-          onCreateThread={(spaceId) => {
+-            window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
+-          }}
+-          onUpdateSpace={(id, updates) => {
+-            window.dispatchEvent(new CustomEvent("zaki:update-space", { detail: { id, ...updates } }));
+-          }}
+-          onDeleteThread={(threadId) => {
+-            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId, spaceId: spaceDetail.id } }));
+-          }}
+-          onEditInstructions={(instructions) => {
+-            setEditInstructionsValue(instructions);
+-            setEditInstructionsOpen(true);
+-          }}
+-          onUploadFiles={() => fileInputRef.current?.click()}
+-        />
+-      );
+-    }
+-
+     if (showReady) {
+-      return <ReadyState ref={readyRef} />;
++      return <ReadyState ref={readyRef} onStartChat={handleStartChat} onSelectExample={handleExampleSelect} />;
+     }
+ 
+     return (
+@@ -818,7 +915,15 @@ export function ChatArea() {
+   return (
+     <div
+       ref={containerRef}
+-      className="zaki-chat flex-1 relative flex flex-col h-full bg-white"
++      className="zaki-chat flex-1 relative flex flex-col h-full bg-transparent"
++      style={
++        {
++          "--zaki-input-height": `${inputHeight}px`,
++          "--zaki-input-offset": `${inputOffset}px`,
++          "--zaki-input-left": `${inputLeft}px`,
++          "--zaki-input-width": `${inputWidth}px`,
++        } as CSSProperties
++      }
+       onDragEnter={(event) => {
+         event.preventDefault();
+         dragCounter.current += 1;
+@@ -853,18 +958,18 @@ export function ChatArea() {
+         </div>
+       )}
+ 
+-      <div className="relative h-full m-4 rounded-[28px] border border-zaki bg-zaki-base overflow-hidden flex flex-col">
++      <div className="relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col">
+         {/* Background */}
+         <BackgroundPattern />
+ 
+         <div className="relative z-20 flex flex-col h-full">
+           {/* Header / Breadcrumb */}
+           <div className="px-6 py-4 flex items-center gap-2">
+-            <span className="text-zaki-muted text-sm">{headerSpaceName}</span>
+-            <span className="text-zaki-disabled text-sm">/</span>
+-            <div className="flex items-center gap-1 cursor-pointer hover:bg-zaki-hover px-1 py-0.5 rounded">
+-              <span className="text-zaki-primary text-sm font-medium">{headerThreadName}</span>
+-            </div>
++            <span className="zaki-subheader-pill">
++              {headerSpaceName}
++              <span className="text-zaki-muted">/</span>
++              {headerThreadName}
++            </span>
+             <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
+               <button
+                 type="button"
+@@ -927,6 +1032,12 @@ export function ChatArea() {
+           <div
+             className="flex-1 relative z-10 overflow-y-auto"
+             ref={scrollRef}
++            style={{
++              paddingBottom:
++                !showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail
++                  ? Math.max(24, inputHeight + 24)
++                  : undefined,
++            }}
+             onScroll={() => {
+               if (!scrollRef.current) return;
+               const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+@@ -964,7 +1075,7 @@ export function ChatArea() {
+             multiple
+             onChange={(event) => {
+               const files = Array.from(event.target.files ?? []);
+-              if (files.length && spaceDetail) {
++              if (files.length && fileUploadSpaceId) {
+                 const pinnedFiles = files.map((file) => ({
+                   name: file.name,
+                   type: file.type,
+@@ -972,10 +1083,11 @@ export function ChatArea() {
+                 }));
+                 window.dispatchEvent(
+                   new CustomEvent("zaki:update-space", {
+-                    detail: { id: spaceDetail.id, pinnedFiles },
++                    detail: { id: fileUploadSpaceId, pinnedFiles },
+                   })
+                 );
+               }
++              setFileUploadSpaceId(null);
+               event.target.value = "";
+             }}
+           />
+@@ -986,12 +1098,15 @@ export function ChatArea() {
+       <EditInstructionsModal
+         isOpen={editInstructionsOpen}
+         initialValue={editInstructionsValue}
+-        onClose={() => setEditInstructionsOpen(false)}
++        onClose={() => {
++          setEditInstructionsOpen(false);
++          setEditSpaceId(null);
++        }}
+         onSave={(instructions) => {
+-          if (spaceDetail) {
++          if (editSpaceId) {
+             window.dispatchEvent(
+               new CustomEvent("zaki:update-space", {
+-                detail: { id: spaceDetail.id, instructions },
++                detail: { id: editSpaceId, instructions },
+               })
+             );
+           }
+@@ -1019,22 +1134,63 @@ export function ChatArea() {
+ 
+       {/* Memory Toast - Mode-dependent rendering */}
+       {showMemoryToast && pendingMemories.length > 0 && authUser?.username && (
+-        memoryMode === "autosave" ? (
+-          <AutoSaveToast
+-            userId={authUser.username}
+-            memories={pendingMemories}
+-            onDismiss={() => setShowMemoryToast(false)}
+-          />
+-        ) : (
+-          <MemoryToast
+-            userId={authUser.username}
+-            memories={pendingMemories.map(m => ({
+-              ...m,
+-              confirmationId: m.confirmationId || m.id, // Fallback to id if no confirmationId
+-            }))}
+-            onDismiss={() => setShowMemoryToast(false)}
+-          />
+-        )
++        <MemoryRail
++          memoryMode={pendingMemories.some((m) => m._mode === "manual") ? "manual" : memoryMode}
++          memories={
++            pendingMemories.some((m) => m._mode === "manual")
++              ? pendingMemories.filter((m) => m._mode === "manual")
++              : pendingMemories.filter((m) => m._mode === "autosave")
++          }
++          userId={authUser.username}
++          position={toastPosition}
++          onResolve={(resolvedId) => {
++            setPendingMemories((prev) => {
++              const next = prev.filter((m) => (m.confirmationId || m.id) !== resolvedId);
++              if (next.filter((m) => m._mode === "manual").length === 0) {
++                setShowMemoryToast(false);
++              }
++              return next;
++            });
++          }}
++          onDismiss={() => setShowMemoryToast(false)}
++        />
++      )}
++
++      {memoryError && (
++        <div
++          className="fixed z-50"
++          style={{
++            left: toastPosition.left,
++            width: toastPosition.width,
++            bottom: toastPosition.bottom + 36,
++          }}
++        >
++          <div className="rounded-full border border-zaki-subtle bg-white px-3 py-1.5 text-2xs text-zaki-secondary shadow-[0px_8px_20px_rgba(15,15,15,0.08)] flex items-center justify-between gap-2">
++            <span>{memoryError}</span>
++            <div className="flex items-center gap-2">
++              <button
++                type="button"
++                className="text-zaki-brand font-semibold hover:underline"
++                onClick={() => {
++                  const last = lastMemoryRequestRef.current;
++                  if (last) {
++                    checkForSavedMemories(last.message, last.threadId);
++                  }
++                  setMemoryError(null);
++                }}
++              >
++                Retry
++              </button>
++              <button
++                type="button"
++                className="text-zaki-muted font-medium hover:underline"
++                onClick={() => setMemoryError(null)}
++              >
++                Dismiss
++              </button>
++            </div>
++          </div>
++        </div>
+       )}
+ 
+       {/* P0 Fix: Memory Confirmation Panel - Full review UI */}
+diff --git a/src/app/components/InputArea.tsx b/src/app/components/InputArea.tsx
+index ce0d506..15e3208 100644
+--- a/src/app/components/InputArea.tsx
++++ b/src/app/components/InputArea.tsx
+@@ -1,17 +1,16 @@
+-import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, Brain, Clock } from "lucide-react";
++import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, ChevronDown } from "lucide-react";
+ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+ import { createPortal } from "react-dom";
+ import { useFocusTrap } from "@/hooks/useFocusTrap";
++import { cn } from "@/lib/utils";
+ 
+ // Rotating placeholder suggestions — contextual prompts
+ const placeholderSuggestions = [
+   "Ask anything",
+-  "What's on your mind?",
+-  "Ask me about yesterday's notes…",
+-  "Summarize what we discussed…",
+-  "Help me brainstorm…",
+-  "What should I focus on today?",
+-  "Remind me about…",
++  "Summarize our last conversation",
++  "Help me brainstorm a plan",
++  "Draft a message or email",
++  "Turn this into a checklist",
+ ];
+ 
+ export function InputArea({
+@@ -128,18 +127,18 @@ export function InputArea({
+   const upgradeModal =
+     upgradeOpen && typeof document !== "undefined"
+       ? createPortal(
+-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
++          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[1px]">
+             <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
+-            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
+-              <div className="text-lg font-semibold text-zaki-primary">Upgrades are brewing</div>
+-              <div className="mt-2 text-sm text-zaki-secondary">
++            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
++              <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Upgrades are brewing</div>
++              <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
+                 We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized
+                 plans as we speak — with prices that won’t scare your coffee.
+               </div>
+               <div className="mt-5 flex items-center justify-end">
+                 <button
+                   type="button"
+-                  className="rounded-full px-4 py-2 text-sm text-white bg-zaki-primary hover:bg-zaki-active transition-colors"
++                  className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand-hover transition-colors"
+                   onClick={() => setUpgradeOpen(false)}
+                 >
+                   Sounds good
+@@ -154,75 +153,22 @@ export function InputArea({
+   return (
+     <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
+       {/* Input Box */}
+-      <form 
+-        onSubmit={handleSubmit}
+-        className="zaki-input-form bg-zaki-raised rounded-[22px] shadow-sm border border-zaki-subtle overflow-visible flex flex-col min-h-[88px] relative z-10 focus-within:bg-zaki-raised focus-within:border-zaki-subtle"
+-      >
+-        <div className="bg-zaki-sunken text-zaki-muted text-[11px] px-3 py-2 grid grid-cols-[1fr_auto_1fr] items-center leading-[16px]">
+-          <div className="flex items-center gap-3">
+-            {/* Web Search Toggle */}
+-            <div className="flex items-center gap-2">
+-              <span className="text-[11px] text-zaki-muted">Web search</span>
+-              <button
+-                type="button"
+-                onClick={onToggleWebSearch}
+-                className={`h-5 w-9 rounded-full border transition-colors ${
+-                  webSearchEnabled
+-                    ? "bg-zaki-accent border-zaki-accent"
+-                    : "bg-white border-zaki"
+-                }`}
+-                aria-pressed={webSearchEnabled}
+-              >
+-                <span
+-                  className={`block h-4 w-4 rounded-full shadow transition-transform ${
+-                    webSearchEnabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-zaki-muted"
+-                  }`}
+-                />
+-              </button>
+-            </div>
+-            
+-            {/* Memory Mode Toggle */}
+-            <div className="flex items-center gap-2 border-l border-zaki-subtle pl-3">
++      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10">
++        <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
++          <div className="w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]">
++            <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
++              <Zap className="size-3" />
++            </span>
++            <span className="text-zaki-secondary">Access premium models & features</span>
+               <button
+                 type="button"
+-                onClick={onToggleMemoryMode}
+-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] transition-colors ${
+-                  memoryMode === "autosave"
+-                    ? "bg-teal-100 text-teal-700 hover:bg-teal-200"
+-                    : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+-                }`}
+-                title={memoryMode === "autosave" ? "Auto-save memories with 3s undo" : "Manually confirm each memory"}
++                className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
++                onClick={() => setUpgradeOpen(true)}
+               >
+-                {memoryMode === "autosave" ? (
+-                  <>
+-                    <Clock className="size-3" />
+-                    <span>Auto</span>
+-                  </>
+-                ) : (
+-                  <>
+-                    <Brain className="size-3" />
+-                    <span>Manual</span>
+-                  </>
+-                )}
++                Upgrade!
+               </button>
+-            </div>
+-          </div>
+-          <div className="flex items-center gap-2 justify-center">
+-            <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+-              <Zap className="size-3" />
+-            </span>
+-            <span>Access premium models & features</span>
+-            <button
+-              type="button"
+-              className="text-zaki-success font-medium hover:underline text-[11px] leading-[16px]"
+-              onClick={() => setUpgradeOpen(true)}
+-            >
+-              Upgrade
+-            </button>
+           </div>
+-          <div />
+-        </div>
+-        <div className="p-3 flex flex-col gap-2 relative">
++          <div className="w-full mt-2 rounded-[16px] border border-[#ead7c1] dark:border-zaki-dark bg-[#fffaf4] dark:bg-[#15110d] px-3 py-2.5 flex flex-col gap-2 relative">
+         {attachments.length > 0 && (
+           <div className="flex flex-col gap-2 px-2">
+             <div className="flex flex-wrap gap-2">
+@@ -278,108 +224,136 @@ export function InputArea({
+             </div>
+           </div>
+         )}
+-        <div className="zaki-input-row flex items-center gap-2 px-1">
+-           <div className="relative" ref={menuRef}>
+-             <button
+-               type="button"
+-               className="size-11 md:size-8 bg-zaki-elevated rounded-full flex items-center justify-center hover:bg-zaki-active transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+-               onClick={() => setMenuOpen((open) => !open)}
+-               aria-haspopup="menu"
+-               aria-expanded={menuOpen}
+-               aria-label="Add options"
+-             >
+-                <Plus className="size-4 text-zaki-muted" />
+-             </button>
+-             {menuOpen && (
+-               <div
+-                 className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
+-                 role="menu"
+-               >
+-                 <button
+-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+-                   type="button"
+-                   role="menuitem"
+-                   onClick={() => setMenuOpen(false)}
+-                 >
+-                   <Sparkles className="size-4 text-zaki-muted" />
+-                   Generate image
+-                 </button>
+-                 <button
+-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+-                   type="button"
+-                   role="menuitem"
+-                   onClick={() => {
+-                     setMenuOpen(false);
+-                     fileInputRef.current?.click();
+-                   }}
+-                 >
+-                   <Paperclip className="size-4 text-zaki-muted" />
+-                   Upload image or file
+-                 </button>
+-                 <button
+-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+-                   type="button"
+-                   role="menuitem"
+-                   onClick={() => setMenuOpen(false)}
+-                 >
+-                   <Search className="size-4 text-zaki-muted" />
+-                   Deep research
+-                 </button>
+-                 <button
+-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+-                   type="button"
+-                   role="menuitem"
+-                   onClick={() => setMenuOpen(false)}
+-                 >
+-                   <Bot className="size-4 text-zaki-muted" />
+-                   Agent mode
+-                 </button>
+-                 <button
+-                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+-                   type="button"
+-                   role="menuitem"
+-                   onClick={() => setMenuOpen(false)}
+-                 >
+-                   <GraduationCap className="size-4 text-zaki-muted" />
+-                   Study and learn
+-                 </button>
+-               </div>
+-             )}
+-           </div>
+-           {webSearchEnabled && (
+-             <span className="zaki-agent-prefix text-zaki-brand text-sm font-medium">@agent</span>
+-           )}
+-           <textarea 
+-             id="chat-input"
+-             ref={textareaRef}
+-             rows={1}
+-             className="zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-base px-1 py-1 resize-none min-h-[24px] max-h-[160px] overflow-y-auto outline-none focus:outline-none"
+-             placeholder={placeholderSuggestions[placeholderIndex]}
+-             autoComplete="off"
+-             value={inputValue}
+-             disabled={isSending}
+-             onChange={(e) => {
+-               setInputValue(e.target.value);
+-               if (textareaRef.current) {
+-                 textareaRef.current.style.height = "auto";
+-                 textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+-               }
+-             }}
+-             onKeyDown={(event) => {
+-               if (event.key === "Enter" && !event.shiftKey) {
+-                 event.preventDefault();
+-                 submitMessage();
+-               }
+-             }}
+-           />
+-           <button
+-             type="submit"
+-             className="zaki-button-bounce size-11 md:size-8 bg-zaki-brand rounded-full flex items-center justify-center hover:bg-zaki-brand-hover disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+-             disabled={isSending}
+-             aria-label="Send message"
+-           >
+-              <ArrowUp className="size-5 md:size-4 text-white" />
+-           </button>
++        <div className="flex items-end gap-2 px-1">
++          <textarea 
++            id="chat-input"
++            ref={textareaRef}
++            rows={1}
++            className="zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none"
++            placeholder={placeholderSuggestions[placeholderIndex]}
++            autoComplete="off"
++            value={inputValue}
++            disabled={isSending}
++            onChange={(e) => {
++              setInputValue(e.target.value);
++              if (textareaRef.current) {
++                textareaRef.current.style.height = "auto";
++                textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
++              }
++            }}
++            onKeyDown={(event) => {
++              if (event.key === "Enter" && !event.shiftKey) {
++                event.preventDefault();
++                submitMessage();
++              }
++            }}
++          />
++        </div>
++        <div className="zaki-input-row flex items-center gap-2 px-1 pt-0.5">
++          <div className="relative" ref={menuRef}>
++            <button
++              type="button"
++              className="size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
++              onClick={() => setMenuOpen((open) => !open)}
++              aria-haspopup="menu"
++              aria-expanded={menuOpen}
++              aria-label="Add options"
++            >
++              <Plus className="size-4 text-zaki-muted" />
++            </button>
++            {menuOpen && (
++              <div
++                className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
++                role="menu"
++              >
++                <button
++                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
++                  type="button"
++                  role="menuitem"
++                  onClick={() => setMenuOpen(false)}
++                >
++                  <Sparkles className="size-4 text-zaki-muted" />
++                  Generate image
++                </button>
++                <button
++                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
++                  type="button"
++                  role="menuitem"
++                  onClick={() => {
++                    setMenuOpen(false);
++                    fileInputRef.current?.click();
++                  }}
++                >
++                  <Paperclip className="size-4 text-zaki-muted" />
++                  Upload image or file
++                </button>
++                <button
++                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
++                  type="button"
++                  role="menuitem"
++                  onClick={() => setMenuOpen(false)}
++                >
++                  <Search className="size-4 text-zaki-muted" />
++                  Deep research
++                </button>
++                <button
++                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
++                  type="button"
++                  role="menuitem"
++                  onClick={() => setMenuOpen(false)}
++                >
++                  <Bot className="size-4 text-zaki-muted" />
++                  Agent mode
++                </button>
++                <button
++                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
++                  type="button"
++                  role="menuitem"
++                  onClick={() => setMenuOpen(false)}
++                >
++                  <GraduationCap className="size-4 text-zaki-muted" />
++                  Study and learn
++                </button>
++              </div>
++            )}
++          </div>
++          <button
++            type="button"
++            onClick={onToggleWebSearch}
++            className={cn(
++              "size-9 rounded-xl flex items-center justify-center border transition-colors",
++              webSearchEnabled
++                ? "bg-zaki-accent/15 border-zaki-accent/30 text-zaki-accent"
++                : "bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
++            )}
++            aria-pressed={webSearchEnabled}
++            aria-label="Toggle web search"
++          >
++            <Search className="size-4" />
++          </button>
++          <button
++            type="button"
++            onClick={onToggleMemoryMode}
++            className={cn(
++              "flex items-center gap-2 rounded-xl border px-3 py-1 text-2xs transition-colors",
++              "bg-[#f6eee4] border-[#ead7c1] text-zaki-secondary hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-subtle dark:hover:bg-zaki-dark-hover"
++            )}
++            title={memoryMode === "autosave" ? "Auto-save memories with 3s undo" : "Manually confirm each memory"}
++          >
++            <span className="text-zaki-muted">Memory</span>
++            <span className="h-4 w-px bg-[#e4d6c4] dark:bg-zaki-dark-hover" />
++            <span className="capitalize">{memoryMode === "autosave" ? "Auto" : "Manual"}</span>
++            <ChevronDown className="size-3 text-zaki-muted" />
++          </button>
++          <span className="flex-1" />
++          <button
++            type="submit"
++            className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
++            disabled={isSending}
++            aria-label="Send message"
++          >
++            <ArrowUp className="size-4 text-white" />
++          </button>
+         </div>
+         <input
+           ref={fileInputRef}
+@@ -395,6 +369,7 @@ export function InputArea({
+           }}
+         />
+         </div>
++        </div>
+       </form>
+       {upgradeModal}
+       
+diff --git a/src/app/components/LoginScreen.tsx b/src/app/components/LoginScreen.tsx
+index 9bf1ef6..e177e89 100644
+--- a/src/app/components/LoginScreen.tsx
++++ b/src/app/components/LoginScreen.tsx
+@@ -183,7 +183,7 @@ export function LoginScreen() {
+                 type="text"
+                 value={fullName}
+                 onChange={(event) => setFullName(event.target.value)}
+-                placeholder="Your full name"
++                placeholder="Full name"
+                 className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                 autoComplete="name"
+                 required
+@@ -212,7 +212,7 @@ export function LoginScreen() {
+                 type="text"
+                 value={email}
+                 onChange={(event) => setEmail(event.target.value)}
+-                placeholder="you@example.com"
++                placeholder="Email address"
+                 className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                 autoComplete="email"
+                 required
+@@ -228,7 +228,7 @@ export function LoginScreen() {
+                   type={showPassword ? "text" : "password"}
+                   value={password}
+                   onChange={(event) => setPassword(event.target.value)}
+-                  placeholder="Your password"
++                  placeholder="Password"
+                   className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 pr-12 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                   required
+@@ -270,7 +270,7 @@ export function LoginScreen() {
+                 type={showPassword ? "text" : "password"}
+                 value={confirmPassword}
+                 onChange={(event) => setConfirmPassword(event.target.value)}
+-                placeholder="Repeat your password"
++                placeholder="Confirm password"
+                 className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                 autoComplete="new-password"
+                 required
+@@ -298,7 +298,7 @@ export function LoginScreen() {
+                   type={showPassword ? "text" : "password"}
+                   value={resetConfirm}
+                   onChange={(event) => setResetConfirm(event.target.value)}
+-                  placeholder="Repeat new password"
++                  placeholder="Confirm new password"
+                   className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                   autoComplete="new-password"
+                   required
+@@ -327,7 +327,7 @@ export function LoginScreen() {
+               (mode === "reset-confirm" &&
+                 (resetPassword.length === 0 || resetConfirm.length === 0))
+             }
+-            className="w-full rounded-zaki-md bg-zaki-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zaki-active disabled:opacity-60"
++            className="w-full zaki-btn bg-zaki-primary text-white transition-colors hover:bg-zaki-active disabled:opacity-60"
+           >
+             {isLoading
+               ? mode === "signup"
+diff --git a/src/app/components/ShareModal.tsx b/src/app/components/ShareModal.tsx
+index d09455b..843918c 100644
+--- a/src/app/components/ShareModal.tsx
++++ b/src/app/components/ShareModal.tsx
+@@ -125,17 +125,17 @@ export function ShareModal({
+     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+       {/* Backdrop */}
+       <div
+-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
++        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+         onClick={handleClose}
+       />
+ 
+       {/* Modal */}
+       <div 
+         ref={focusTrapRef}
+-        className="relative bg-zaki-primary border border-zaki-subtle rounded-zaki-lg w-full max-w-md shadow-2xl"
++        className="zaki-share-modal relative bg-white border border-zaki-subtle rounded-zaki-lg w-full max-w-md shadow-[0px_24px_60px_rgba(15,15,15,0.18)]"
+       >
+         {/* Header */}
+-        <div className="flex items-center justify-between p-4 border-b border-zaki-subtle">
++        <div className="flex items-center justify-between p-4 border-b border-zaki-subtle bg-zaki-base">
+           <div className="flex items-center gap-3">
+             <div className="size-10 rounded-full bg-zaki-brand/10 flex items-center justify-center">
+               <Link2 className="w-5 h-5 text-zaki-brand" />
+@@ -147,7 +147,7 @@ export function ShareModal({
+           </div>
+           <button
+             onClick={handleClose}
+-            className="p-2 hover:bg-zaki-hover rounded-lg transition-colors"
++            className="p-2 hover:bg-zaki-hover rounded-lg transition-colors text-zaki-muted"
+           >
+             <X className="w-5 h-5 text-zaki-muted" />
+           </button>
+@@ -158,7 +158,7 @@ export function ShareModal({
+           {!shareUrl ? (
+             <>
+               {/* Thread info */}
+-              <div className="mb-4 p-3 bg-zaki-base rounded-zaki-md">
++                <div className="mb-4 p-4 bg-zaki-base rounded-zaki-md border border-zaki-subtle">
+                 <p className="text-sm text-zaki-muted">Sharing</p>
+                 <p className="text-zaki-primary font-medium truncate">
+                   {threadTitle || 'Untitled Conversation'}
+@@ -178,10 +178,10 @@ export function ShareModal({
+                     type="button"
+                     onClick={() => setShareType('public')}
+                     className={cn(
+-                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all",
++                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all bg-white",
+                       shareType === 'public'
+-                        ? "border-zaki-focus bg-zaki-brand/10"
+-                        : "border-zaki-subtle hover:border-zaki-strong"
++                        ? "border-zaki-focus bg-zaki-selected"
++                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
+                     )}
+                   >
+                     <Globe className={cn(
+@@ -201,10 +201,10 @@ export function ShareModal({
+                     type="button"
+                     onClick={() => setShareType('password')}
+                     className={cn(
+-                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all",
++                      "flex items-center gap-2 p-3 rounded-zaki-md border transition-all bg-white",
+                       shareType === 'password'
+-                        ? "border-zaki-focus bg-zaki-brand/10"
+-                        : "border-zaki-subtle hover:border-zaki-strong"
++                        ? "border-zaki-focus bg-zaki-selected"
++                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
+                     )}
+                   >
+                     <Shield className={cn(
+@@ -234,7 +234,7 @@ export function ShareModal({
+                       value={password}
+                       onChange={(e) => setPassword(e.target.value)}
+                       className="w-full px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
+-                      placeholder="Enter password"
++                      placeholder="Password"
+                     />
+                   </div>
+                   <div>
+@@ -254,7 +254,7 @@ export function ShareModal({
+ 
+               {/* Error message */}
+               {error && (
+-                <div className="mb-4 p-3 bg-zaki-brand/10 border border-zaki-focus/30 rounded-zaki-md">
++                <div className="mb-4 p-4 bg-zaki-brand/10 border border-zaki-focus/30 rounded-zaki-md">
+                   <p className="text-sm text-zaki-brand">{error}</p>
+                 </div>
+               )}
+@@ -263,7 +263,7 @@ export function ShareModal({
+               <button
+                 onClick={handleCreate}
+                 disabled={isCreating}
+-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white font-medium rounded-zaki-md transition-colors"
++                className="w-full zaki-btn flex items-center justify-center gap-2 bg-zaki-accent hover:bg-zaki-accent-hover disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white transition-colors"
+               >
+                 {isCreating ? (
+                   <>
+@@ -282,8 +282,8 @@ export function ShareModal({
+             <>
+               {/* Success state */}
+               <div className="text-center mb-6">
+-                <div className="size-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+-                  <Check className="w-8 h-8 text-green-500" />
++                <div className="size-16 rounded-full bg-zaki-accent-10 flex items-center justify-center mx-auto mb-4">
++                  <Check className="w-8 h-8 text-zaki-accent" />
+                 </div>
+                 <h3 className="text-lg font-semibold text-zaki-primary mb-1">
+                   Link Created!
+@@ -300,33 +300,33 @@ export function ShareModal({
+                 <label className="block text-sm font-medium text-zaki-muted mb-2">
+                   Share Link
+                 </label>
+-                <div className="flex gap-2">
++                <div className="flex flex-col sm:flex-row gap-2">
+                   <input
+                     type="text"
+                     value={shareUrl}
+                     readOnly
+-                    className="flex-1 px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary text-sm"
++                    className="flex-1 px-4 py-2.5 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary text-sm font-medium"
+                   />
+                   <button
+                     onClick={handleCopy}
+                     className={cn(
+-                      "px-4 py-2.5 rounded-zaki-md font-medium transition-colors",
++                      "zaki-btn-sm rounded-zaki-md font-semibold transition-colors w-full sm:w-auto",
+                       copied
+-                        ? "bg-green-500 text-white"
++                        ? "bg-zaki-accent text-white"
+                         : "bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary"
+                     )}
+                   >
+                     {copied ? (
+-                      <Check className="w-5 h-5" />
++                      <Check className="w-4 h-4" />
+                     ) : (
+-                      <Copy className="w-5 h-5" />
++                      <Copy className="w-4 h-4" />
+                     )}
+                   </button>
+                 </div>
+               </div>
+ 
+               {/* Info */}
+-              <div className="p-3 bg-zaki-base rounded-zaki-md text-sm text-zaki-muted mb-4">
++              <div className="p-3 bg-zaki-raised border border-zaki-subtle rounded-zaki-md text-sm text-zaki-muted mb-4">
+                 <div className="flex items-center gap-2">
+                   {shareType === 'password' ? (
+                     <Lock className="w-4 h-4" />
+@@ -347,7 +347,7 @@ export function ShareModal({
+               {/* Done button */}
+               <button
+                 onClick={handleClose}
+-                className="w-full px-4 py-3 bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary font-medium rounded-zaki-md transition-colors"
++                className="w-full zaki-btn bg-white border border-zaki-subtle text-zaki-primary hover:bg-zaki-hover transition-colors"
+               >
+                 Done
+               </button>
+diff --git a/src/app/components/SharedConversation.tsx b/src/app/components/SharedConversation.tsx
+index 77fdbdd..af8c399 100644
+--- a/src/app/components/SharedConversation.tsx
++++ b/src/app/components/SharedConversation.tsx
+@@ -172,7 +172,7 @@ export function SharedConversation() {
+           <p className="text-zaki-muted mb-6">{error}</p>
+           <Link
+             to="/"
+-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary font-medium rounded-zaki-md transition-colors"
++            className="inline-flex items-center gap-2 zaki-btn bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary transition-colors"
+           >
+             <ArrowLeft className="w-4 h-4" />
+             Go to ZAKI
+@@ -194,7 +194,7 @@ export function SharedConversation() {
+           </p>
+           <Link
+             to="/"
+-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-brand hover:bg-zaki-brand text-white font-medium rounded-zaki-md transition-colors"
++            className="inline-flex items-center gap-2 zaki-btn bg-zaki-brand hover:bg-zaki-brand text-white transition-colors"
+           >
+             <ArrowLeft className="w-4 h-4" />
+             Go to ZAKI
+@@ -234,7 +234,7 @@ export function SharedConversation() {
+                 value={password}
+                 onChange={(e) => setPassword(e.target.value)}
+                 className="w-full px-4 py-3 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
+-                placeholder="Enter password"
++                placeholder="Password"
+                 autoFocus
+               />
+               {error && (
+@@ -245,7 +245,7 @@ export function SharedConversation() {
+             <button
+               type="submit"
+               disabled={isVerifying || !password}
+-              className="w-full px-6 py-3 bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white font-medium rounded-zaki-md transition-colors"
++              className="w-full zaki-btn bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white transition-colors"
+             >
+               {isVerifying ? 'Verifying...' : 'View Conversation'}
+             </button>
+@@ -270,14 +270,14 @@ export function SharedConversation() {
+     <div className="min-h-screen bg-zaki-base text-zaki-primary">
+       {/* Header */}
+       <header className="sticky top-0 z-10 bg-zaki-base/95 backdrop-blur-sm border-b border-zaki-subtle">
+-        <div className="max-w-3xl mx-auto px-4 py-4">
+-          <div className="flex items-center justify-between">
++        <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-4">
++          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+             <Link to="/" className="flex items-center gap-2 text-zaki-brand hover:text-zaki-brand transition-colors">
+               <CenterLogo className="size-6" />
+               <span className="font-semibold">ZAKI</span>
+             </Link>
+             
+-            <div className="flex items-center gap-4 text-xs text-zaki-muted">
++            <div className="flex flex-wrap items-center gap-3 text-xs text-zaki-muted">
+               <div className="flex items-center gap-1">
+                 <Eye className="w-3.5 h-3.5" />
+                 <span>{conversation?.viewCount} views</span>
+@@ -296,11 +296,14 @@ export function SharedConversation() {
+           </div>
+           
+           <h1 className="mt-3 text-lg font-semibold">{conversation?.title}</h1>
++          <div className="mt-3 rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-2 text-2xs text-zaki-muted">
++            Shared by ZAKI · Read-only conversation
++          </div>
+         </div>
+       </header>
+ 
+       {/* Conversation */}
+-      <main className="max-w-3xl mx-auto px-4 py-8">
++      <main className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-8">
+         <div className="flex flex-col gap-6">
+           {conversation?.conversation.map((msg, index) => (
+             <div
+@@ -311,17 +314,17 @@ export function SharedConversation() {
+               )}
+             >
+               {msg.role === 'assistant' && (
+-                <div className="size-8 rounded-full bg-zaki-brand flex items-center justify-center shrink-0">
+-                  <CenterLogo className="size-4 text-white" />
++                <div className="size-8 rounded-full bg-zaki-base border border-zaki-subtle flex items-center justify-center shrink-0">
++                  <CenterLogo className="size-4" />
+                 </div>
+               )}
+               
+               <div
+                 className={cn(
+-                  "max-w-[80%] rounded-zaki-lg px-4 py-3",
++                  "max-w-[92%] sm:max-w-[80%] rounded-zaki-lg px-4 py-3 border border-zaki-subtle",
+                   msg.role === 'user'
+-                    ? "bg-zaki-dark-elevated text-zaki-primary"
+-                    : "bg-zaki-primary border border-zaki-subtle text-zaki-primary"
++                    ? "bg-zaki-elevated text-zaki-primary"
++                    : "bg-zaki-raised text-zaki-primary"
+                 )}
+               >
+                 {/* Use simple text rendering since ChatMarkdown uses light-mode colors */}
+@@ -329,9 +332,7 @@ export function SharedConversation() {
+               </div>
+               
+               {msg.role === 'user' && (
+-                <div className="size-8 rounded-full bg-zaki-secondary flex items-center justify-center shrink-0 text-xs font-medium">
+-                  U
+-                </div>
++                <div className="size-8 rounded-full bg-zaki-base border border-zaki-subtle flex items-center justify-center shrink-0 text-xs font-medium text-zaki-muted" />
+               )}
+             </div>
+           ))}
+@@ -344,7 +345,7 @@ export function SharedConversation() {
+           </p>
+           <Link
+             to="/"
+-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-zaki-brand hover:bg-zaki-brand text-white font-medium rounded-zaki-md transition-colors"
++            className="inline-flex items-center gap-2 zaki-btn bg-zaki-brand hover:bg-zaki-brand text-white transition-colors"
+           >
+             Start your own conversation on ZAKI
+           </Link>
+diff --git a/src/app/components/Sidebar.tsx b/src/app/components/Sidebar.tsx
+index 0e0a277..7f08a26 100644
+--- a/src/app/components/Sidebar.tsx
++++ b/src/app/components/Sidebar.tsx
+@@ -13,6 +13,7 @@ import { SkeletonSpaceList } from "./ui/skeleton";
+ import { toast } from "sonner";
+ import type { Space, Thread } from "@/types";
+ import { MemoryViewer } from "./memory/MemoryViewer";
++import { useSpaces } from "@/queries/useSpaces";
+ 
+ // Sidebar uses threads as required array
+ type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
+@@ -31,12 +32,20 @@ export function Sidebar() {
+   const [memoryOpen, setMemoryOpen] = useState(false);
+   // TODO: Fetch actual plan from user profile
+   const planLabel = "FREE" as "FREE" | "PRO";
+-  const [openMenu, setOpenMenu] = useState<{ type: "space" | "thread"; id: string } | null>(null);
++  const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
++  const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);
++  const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<SidebarSpace | null>(null);
++  const [spaceDescriptionDraft, setSpaceDescriptionDraft] = useState("");
+   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
+   const [editingValue, setEditingValue] = useState("");
+   const [confirmDelete, setConfirmDelete] = useState<{ type: "space" | "thread"; id: string; label: string } | null>(null);
+   const [spaces, setSpaces] = useState<SidebarSpace[]>([]);
+-  const [spacesLoading, setSpacesLoading] = useState(false);
++  const {
++    data: spacesData,
++    isLoading: spacesLoading,
++    error: spacesQueryError,
++    refetch: refetchSpaces,
++  } = useSpaces(!!user);
+   const [spacesError, setSpacesError] = useState("");
+   const [profileEditOpen, setProfileEditOpen] = useState(false);
+   const [displayName, setDisplayName] = useState("");
+@@ -46,6 +55,7 @@ export function Sidebar() {
+   
+   // Focus trap refs for modals
+   const settingsModalRef = useFocusTrap<HTMLDivElement>(settingsOpen);
++  const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
+   const profileEditModalRef = useFocusTrap<HTMLDivElement>(profileEditOpen);
+   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
+ 
+@@ -92,74 +102,27 @@ export function Sidebar() {
+     return initials.toUpperCase();
+   }, [userName]);
+ 
+-  // Reusable function to fetch workspaces
+-  const fetchSpaces = async () => {
+-    setSpacesLoading(true);
+-    setSpacesError("");
+-    try {
+-      const response = await apiRequest("/workspaces");
+-      if (!response.ok) {
+-        throw new Error("Failed to load workspaces.");
+-      }
+-      const data = (await response.json()) as {
+-        workspaces?: { slug: string; name: string; description?: string }[];
+-      };
+-      const workspaces = data.workspaces ?? [];
+-      const workspaceSpaces = await Promise.all(
+-        workspaces.map(async (workspace, index) => {
+-          let threads: Thread[] = [];
+-          try {
+-            const threadResponse = await apiRequest(
+-              `/workspace/${workspace.slug}/threads`
+-            );
+-            if (threadResponse.ok) {
+-              const threadData = (await threadResponse.json()) as {
+-                threads?: { slug: string; name: string }[];
+-              };
+-              threads =
+-                threadData.threads?.map((thread) => ({
+-                  id: thread.slug,
+-                  label: thread.name || "Thread",
+-                })) ?? [];
+-            }
+-          } catch {
+-            threads = [];
+-          }
+-          return {
+-            id: workspace.slug,
+-            title: workspace.name,
+-            description: workspace.description || "Workspace",
+-            icon: index === 0 ? "zaki" : "folder",
+-            color: index === 0 ? "#D24430" : "#88735A",
+-            instructions: "",
+-            pinnedFiles: [],
+-            pinned: false,
+-            fixed: index === 0,
+-            threads,
+-          } satisfies Space;
+-        })
+-      );
+-
+-      setSpaces(workspaceSpaces);
+-      setLastSynced(new Date()); // Update sync timestamp
+-      const firstSpace = workspaceSpaces[0];
+-      if (firstSpace) {
+-        setExpandedSpace((prev) => prev ?? firstSpace.id);
+-      }
+-    } catch {
+-      setSpacesError("Unable to load workspaces. Check your session.");
++  useEffect(() => {
++    if (!user) {
+       setSpaces([]);
+-    } finally {
+-      setSpacesLoading(false);
++      return;
+     }
+-  };
++    if (!spacesData) {
++      return;
++    }
++    setSpaces(spacesData as SidebarSpace[]);
++    setLastSynced(new Date());
++    setSpacesError("");
++    const firstSpace = spacesData[0];
++    if (firstSpace) {
++      setExpandedSpace((prev) => prev ?? firstSpace.id);
++    }
++  }, [user, spacesData]);
+ 
+   useEffect(() => {
+-    // Only fetch if user is authenticated
+-    if (user) {
+-      fetchSpaces();
+-    }
+-  }, [user]);
++    if (!spacesQueryError) return;
++    setSpacesError("Unable to load workspaces. Check your session.");
++  }, [spacesQueryError]);
+   
+   // Force re-render every minute to update "Last synced" display
+   const [, setTick] = useState(0);
+@@ -563,6 +526,7 @@ export function Sidebar() {
+         pinnedFiles?: { name: string; type: string; size: number }[];
+         icon?: string;
+         color?: string;
++        description?: string;
+       }>).detail;
+       if (!detail?.id) return;
+       setSpaces((prev) =>
+@@ -574,6 +538,7 @@ export function Sidebar() {
+                 pinnedFiles: detail.pinnedFiles ? detail.pinnedFiles : space.pinnedFiles,
+                 icon: space.fixed ? space.icon : detail.icon ?? space.icon,
+                 color: space.fixed ? space.color : detail.color ?? space.color,
++                description: detail.description ?? space.description,
+               }
+             : space
+         )
+@@ -613,7 +578,7 @@ export function Sidebar() {
+         } catch {
+           // Rollback: refetch spaces on failure
+           toast.error("Couldn't delete chat. Try again.");
+-          fetchSpaces();
++          refetchSpaces();
+         }
+       }
+     };
+@@ -629,17 +594,27 @@ export function Sidebar() {
+         }))
+       );
+     };
++    const handleOpenSpaceSettings = (event: Event) => {
++      const detail = (event as CustomEvent<{ id: string }>).detail;
++      const target = spaces.find((space) => space.id === detail?.id);
++      if (!target) return;
++      setSpaceSettingsTarget(target);
++      setSpaceDescriptionDraft(target.description ?? "");
++      setSpaceSettingsOpen(true);
++    };
+     window.addEventListener("zaki:create-space", handleCreateSpace);
+     window.addEventListener("zaki:create-thread", handleCreateThread);
+     window.addEventListener("zaki:update-space", handleUpdateSpace);
+     window.addEventListener("zaki:delete-thread", handleDeleteThread);
+     window.addEventListener("zaki:rename-thread", handleRenameThread);
++    window.addEventListener("zaki:open-space-settings", handleOpenSpaceSettings);
+     return () => {
+       window.removeEventListener("zaki:create-space", handleCreateSpace);
+       window.removeEventListener("zaki:create-thread", handleCreateThread);
+       window.removeEventListener("zaki:update-space", handleUpdateSpace);
+       window.removeEventListener("zaki:delete-thread", handleDeleteThread);
+       window.removeEventListener("zaki:rename-thread", handleRenameThread);
++      window.removeEventListener("zaki:open-space-settings", handleOpenSpaceSettings);
+     };
+   }, [spaces]);
+ 
+@@ -648,7 +623,7 @@ export function Sidebar() {
+       role="navigation"
+       aria-label="Main navigation"
+       className={cn(
+-        "zaki-sidebar h-full flex flex-col bg-white shrink-0 transition-[width,padding] duration-300",
++        "zaki-sidebar h-full flex flex-col bg-[#FDF6EE] dark:bg-[#0f0b08] border-r-0 shrink-0 transition-[width,padding] duration-300",
+         collapsed ? "w-[72px] py-4 px-2" : "w-[272px] py-5 px-3.5"
+       )}
+     >
+@@ -668,7 +643,7 @@ export function Sidebar() {
+               <LogoArabicOrange />
+             </button>
+             <button
+-              className="size-9 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
++              className="size-9 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+               onClick={() => setCollapsed(false)}
+               type="button"
+               title="Expand sidebar"
+@@ -797,7 +772,7 @@ export function Sidebar() {
+           <LogoArabicOrange />
+         </button>
+         <button
+-          className="bg-white p-1.5 rounded-lg border border-transparent hover:border-zaki-subtle transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
++          className="size-9 rounded-lg border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+           onClick={() => setCollapsed(true)}
+           type="button"
+           aria-label="Collapse sidebar"
+@@ -807,17 +782,17 @@ export function Sidebar() {
+       </div>
+ 
+       {/* Search */}
+-      <div className="bg-zaki-hover rounded-[10px] flex items-center p-2 gap-2 mb-2">
++      <div className="bg-zaki-hover rounded-[10px] flex items-center p-2.5 gap-2 mb-2">
+         <SearchIcon />
+         <input 
+           type="text" 
+-          placeholder="Search..." 
++          placeholder="Search spaces"
+           className="bg-transparent border-none outline-none text-zaki-muted placeholder-zaki text-sm w-full font-medium"
+         />
+       </div>
+       
+       {/* Last synced badge — trust signal */}
+-      <div className="flex items-center gap-1.5 text-[10px] text-zaki-muted mb-4 pl-1">
++      <div className="flex items-center gap-1.5 text-2xs text-zaki-muted mb-4 pl-1">
+         <span className="inline-block size-1.5 rounded-full bg-zaki-accent animate-pulse" />
+         <span>Synced {formatRelativeTime(lastSynced)}</span>
+       </div>
+@@ -881,7 +856,7 @@ export function Sidebar() {
+       <div className="h-px bg-zaki-sunken w-full mb-5" />
+ 
+       {/* Space Section */}
+-      <div className="flex-1 overflow-y-auto">
++      <div className="flex-1 overflow-y-auto bg-[#FDF6EE] dark:bg-[#0f0b08]">
+         <div className="text-zaki-muted text-xs font-medium mb-2 pl-1.5">Space</div>
+         {spacesLoading && (
+           <div className="mb-3">
+@@ -919,7 +894,6 @@ export function Sidebar() {
+                   onClick={() => {
+                     setExpandedSpace(space.id);
+                     setActiveItem(space.id);
+-                    window.dispatchEvent(new Event("zaki:clear-thread"));
+                     window.dispatchEvent(new CustomEvent("zaki:view-space", { detail: { id: space.id } }));
+                   }}
+                   className={cn(
+@@ -992,7 +966,6 @@ export function Sidebar() {
+                   onClick={() => {
+                     setExpandedSpace(space.id);
+                     setActiveItem(space.id);
+-                    window.dispatchEvent(new Event("zaki:clear-thread"));
+                     window.dispatchEvent(new CustomEvent("zaki:view-space", { detail: { id: space.id } }));
+                   }}
+                   className={cn(
+@@ -1030,16 +1003,16 @@ export function Sidebar() {
+                 {!space.fixed && (
+                   <button
+                     type="button"
+-                    className="size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition"
++                    className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                     onClick={(event) => {
+                       event.stopPropagation();
+-                      setOpenMenu(openMenu?.id === space.id ? null : { type: "space", id: space.id });
++                      setSpaceSettingsTarget(space);
++                      setSpaceDescriptionDraft(space.description ?? "");
++                      setSpaceSettingsOpen(true);
+                     }}
+-                    data-menu-button
+-                    aria-haspopup="menu"
+-                    aria-expanded={openMenu?.id === space.id}
++                    aria-label={`${space.title} settings`}
+                   >
+-                    <MoreHorizontal className="size-4 text-zaki-muted" />
++                    <Settings className="size-4 text-zaki-muted" />
+                   </button>
+                 )}
+                     {space.threads.length > 0 && (
+@@ -1059,38 +1032,6 @@ export function Sidebar() {
+                     )}
+                   </div>
+                 </button>
+-                {openMenu?.type === "space" && openMenu.id === space.id && (
+-                  <div
+-                    className="absolute right-0 top-9 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+-                    role="menu"
+-                    data-menu
+-                  >
+-                    <button
+-                      type="button"
+-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
+-                      onClick={() => togglePinned("space", space.id)}
+-                    >
+-                      <Pin className="size-3.5 text-zaki-muted" />
+-                      {space.pinned ? "Unpin" : "Pinned"}
+-                    </button>
+-                    <button
+-                      type="button"
+-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
+-                      onClick={() => startRename("space", space.id, space.title)}
+-                    >
+-                      <Pencil className="size-3.5 text-zaki-muted" />
+-                      Rename
+-                    </button>
+-                    <button
+-                      type="button"
+-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-brand hover:bg-zaki-error"
+-                      onClick={() => setConfirmDelete({ type: "space", id: space.id, label: space.title })}
+-                    >
+-                      <Trash2 className="size-3.5" />
+-                      Delete
+-                    </button>
+-                  </div>
+-                )}
+               </div>
+ 
+               {isSpaceActive(space.id) && (
+@@ -1254,7 +1195,7 @@ export function Sidebar() {
+                 <div className="text-xs text-zaki-disabled truncate">Manage profile</div>
+               </div>
+               <span className={cn(
+-                "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
++                "ml-auto text-2xs font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
+                 planLabel === "PRO" ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-success"
+               )}>
+                 {planLabel}
+@@ -1312,7 +1253,7 @@ export function Sidebar() {
+               <LogOut className="size-4" />
+               Log out
+             </button>
+-            <div className="px-2.5 pt-1 text-[10px] text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
++            <div className="px-2.5 pt-1 text-2xs text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
+           </div>
+         )}
+       </div>
+@@ -1575,6 +1516,81 @@ export function Sidebar() {
+             </div>
+           </div>
+         </div>
++      )}
++      {spaceSettingsOpen && spaceSettingsTarget && (
++        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[1px]">
++          <div
++            className="absolute inset-0"
++            onClick={() => {
++              setSpaceSettingsOpen(false);
++              setSpaceSettingsTarget(null);
++            }}
++            role="button"
++            aria-label="Close space settings"
++          />
++          <div
++            ref={spaceSettingsModalRef}
++            className="relative w-[360px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-5 py-4"
++          >
++            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">Space settings</div>
++            <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted mt-1 mb-4 truncate">{spaceSettingsTarget.title}</div>
++            <div className="flex flex-col gap-2">
++              <div className="flex flex-col gap-1">
++                <label className="text-2xs text-zaki-muted">Description</label>
++                <textarea
++                  className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
++                  rows={3}
++                  maxLength={200}
++                  value={spaceDescriptionDraft}
++                  onChange={(event) => setSpaceDescriptionDraft(event.target.value)}
++                  placeholder="Describe what this space is for…"
++                />
++                <div className="text-[10px] text-zaki-muted text-right">
++                  {spaceDescriptionDraft.length}/200
++                </div>
++              </div>
++              <button
++                type="button"
++                className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
++                onClick={() => {
++                  setSpaceSettingsOpen(false);
++                  window.dispatchEvent(
++                    new CustomEvent("zaki:edit-space-instructions", { detail: { id: spaceSettingsTarget.id } })
++                  );
++                }}
++              >
++                Edit instructions
++              </button>
++              <button
++                type="button"
++                className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
++                onClick={() => {
++                  setSpaceSettingsOpen(false);
++                  window.dispatchEvent(
++                    new CustomEvent("zaki:upload-space-files", { detail: { id: spaceSettingsTarget.id } })
++                  );
++                }}
++              >
++                Add project files
++              </button>
++              <button
++                type="button"
++                className="w-full rounded-zaki-lg bg-zaki-brand text-white px-3 py-2 text-sm font-semibold hover:bg-zaki-brand-hover transition-colors"
++                onClick={() => {
++                  if (!spaceSettingsTarget) return;
++                  window.dispatchEvent(
++                    new CustomEvent("zaki:update-space", {
++                      detail: { id: spaceSettingsTarget.id, description: spaceDescriptionDraft.trim() },
++                    })
++                  );
++                  setSpaceSettingsOpen(false);
++                }}
++              >
++                Save description
++              </button>
++            </div>
++          </div>
++        </div>
+       )}
+         </>
+       )}
+diff --git a/src/app/components/chat/EmptyState.tsx b/src/app/components/chat/EmptyState.tsx
+index 6fc613e..8c63b23 100644
+--- a/src/app/components/chat/EmptyState.tsx
++++ b/src/app/components/chat/EmptyState.tsx
+@@ -1,24 +1,24 @@
+ import { CenterLogo } from "../icons";
+ import { Sparkles } from "lucide-react";
+ import { cn } from "@/lib/utils";
++import {
++  emptyStateExamples,
++  emptyStateHeadline,
++  emptyStateSubtext,
++} from "./emptyStateContent";
+ 
+ interface EmptyStateProps {
+   userName?: string;
+   onExampleClick?: (text: string) => void;
++  onStartChat?: () => void;
+   examples?: string[];
+   className?: string;
+ }
+ 
+-const defaultExamples = [
+-  "Draft a bold brand manifesto for a rebellious fintech.",
+-  "Summarize this meeting and pull out the 3 real decisions.",
+-  "Give me a brutally honest UX critique of this flow.",
+-];
+-
+ export function EmptyState({
+   userName = "there",
+   onExampleClick,
+-  examples = defaultExamples,
++  examples = emptyStateExamples,
+   className,
+ }: EmptyStateProps) {
+   return (
+@@ -28,13 +28,31 @@ export function EmptyState({
+       </div>
+       
+       <h2 className="text-2xl font-semibold text-zaki-primary dark:text-zaki-primary mb-2">
+-        Good to see you, {userName}
++        {emptyStateHeadline}, {userName}
+       </h2>
+       
+       <p className="text-zaki-muted dark:text-zaki-dark-muted text-sm mb-8 text-center max-w-md">
+-        Ready when you are. Ask me anything or pick a suggestion to get started.
++        {emptyStateSubtext}
+       </p>
+ 
++      <div className="mb-6 flex flex-col items-center gap-3">
++        <button className="zaki-btn bg-zaki-accent text-white" onClick={onStartChat}>
++          Start new chat
++        </button>
++        <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
++          {examples.slice(0, 2).map((example) => (
++            <button
++              key={example}
++              type="button"
++              className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover"
++              onClick={() => onExampleClick?.(example)}
++            >
++              {example}
++            </button>
++          ))}
++        </div>
++      </div>
++
+       <div className="w-full max-w-lg space-y-2">
+         {examples.map((example, index) => (
+           <button
+diff --git a/src/app/components/chat/views/LibraryView.tsx b/src/app/components/chat/views/LibraryView.tsx
+index c96cc67..44dc334 100644
+--- a/src/app/components/chat/views/LibraryView.tsx
++++ b/src/app/components/chat/views/LibraryView.tsx
+@@ -26,7 +26,7 @@ export function LibraryView({
+   onSearch,
+ }: LibraryViewProps) {
+   return (
+-    <div className="px-10 py-10">
++    <div className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full">
+       <div className="flex items-center gap-3 mb-6">
+         <div className="size-10 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-muted text-xs font-semibold">LB</div>
+         <div>
+@@ -35,8 +35,8 @@ export function LibraryView({
+         </div>
+       </div>
+ 
+-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+-        <div className="rounded-zaki-lg border border-zaki bg-white p-4">
++      <div className="grid gap-4 md:gap-6 lg:grid-cols-[280px_1fr]">
++        <div className="rounded-zaki-lg border border-zaki bg-white p-4 md:p-5">
+           <div className="text-xs text-zaki-muted font-semibold mb-3">Workspaces</div>
+           <div className="flex flex-col gap-2">
+             {spacesList.map((space) => {
+@@ -58,21 +58,21 @@ export function LibraryView({
+             })}
+           </div>
+         </div>
+-        <div className="rounded-zaki-lg border border-zaki bg-white p-5">
++        <div className="rounded-zaki-lg border border-zaki bg-white p-4 md:p-5">
+           <div className="text-sm font-semibold text-zaki-primary">Vector search</div>
+-          <div className="mt-3 flex items-center gap-2">
+-            <div className="flex-1 flex items-center gap-2 rounded-full border border-zaki bg-zaki-raised px-3 py-2 text-sm">
++          <div className="mt-3 flex flex-col sm:flex-row items-center gap-2">
++            <div className="flex-1 flex items-center gap-2 rounded-full border border-zaki bg-zaki-raised px-4 py-2.5 text-sm">
+               <Search className="size-4 text-zaki-muted" />
+               <input
+                 className="flex-1 bg-transparent outline-none text-zaki-primary placeholder-zaki"
+-                placeholder="Search within selected workspace"
++                placeholder="Search this workspace"
+                 value={libraryQuery}
+                 onChange={(event) => setLibraryQuery(event.target.value)}
+               />
+             </div>
+             <button
+               type="button"
+-              className="rounded-full bg-zaki-primary text-white text-sm px-4 py-2 hover:bg-zaki-active transition-colors"
++              className="zaki-btn w-full sm:w-auto bg-zaki-primary text-white hover:bg-zaki-active transition-colors"
+               onClick={onSearch}
+               disabled={libraryLoading}
+             >
+diff --git a/src/app/components/chat/views/ReadyState.tsx b/src/app/components/chat/views/ReadyState.tsx
+index ed1a02a..7e0f643 100644
+--- a/src/app/components/chat/views/ReadyState.tsx
++++ b/src/app/components/chat/views/ReadyState.tsx
+@@ -1,15 +1,42 @@
+ import { forwardRef } from "react";
+ import { CenterLogo } from "../../icons";
++import { emptyStateHeadline, emptyStateSubtext, emptyStateExamples } from "../emptyStateContent";
+ 
+-export const ReadyState = forwardRef<HTMLDivElement>(function ReadyState(_, ref) {
++export const ReadyState = forwardRef<
++  HTMLDivElement,
++  { onStartChat?: () => void; onSelectExample?: (example: string) => void }
++>(function ReadyState(
++  { onStartChat, onSelectExample },
++  ref
++) {
+   return (
+     <div className="min-h-full flex flex-col items-center justify-center px-4 py-16 pb-32">
+       <div ref={ref} className="flex flex-col items-center gap-2 mb-6">
+         <div className="scale-110">
+           <CenterLogo />
+         </div>
+-        <div className="text-zaki-primary text-sm font-medium">ZKAI</div>
+-        <div className="text-zaki-disabled text-base">Ready when you are</div>
++        <div className="text-zaki-primary text-sm font-medium">ZAKI</div>
++        <div className="text-zaki-primary text-lg font-semibold">{emptyStateHeadline}</div>
++        <div className="text-zaki-disabled text-sm text-center max-w-md">
++          {emptyStateSubtext}
++        </div>
++        <div className="mt-6 flex flex-col items-center gap-3">
++          <button className="zaki-btn bg-zaki-accent text-white" onClick={onStartChat}>
++            Start new chat
++          </button>
++          <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
++            {emptyStateExamples.slice(0, 2).map((example) => (
++              <button
++                key={example}
++                type="button"
++                className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover"
++                onClick={() => onSelectExample?.(example)}
++              >
++                {example}
++              </button>
++            ))}
++          </div>
++        </div>
+       </div>
+     </div>
+   );
+diff --git a/src/app/components/chat/views/SpaceDetailView.tsx b/src/app/components/chat/views/SpaceDetailView.tsx
+index 6a8f921..4a9afe8 100644
+--- a/src/app/components/chat/views/SpaceDetailView.tsx
++++ b/src/app/components/chat/views/SpaceDetailView.tsx
+@@ -1,5 +1,5 @@
+-import { useRef, useState } from "react";
+-import { Pencil, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
++import { useEffect, useRef, useState } from "react";
++import { Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
+ import { CenterLogo } from "../../icons";
+ import { InputArea } from "../../InputArea";
+ import type { Space } from "@/types";
+@@ -52,8 +52,29 @@ export function SpaceDetailView({
+   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+   const iconPickerRef = useRef<HTMLDivElement>(null);
+ 
++  useEffect(() => {
++    if (!iconPickerOpen) return;
++    const handleClickOutside = (event: MouseEvent) => {
++      if (!iconPickerRef.current) return;
++      if (!iconPickerRef.current.contains(event.target as Node)) {
++        setIconPickerOpen(false);
++      }
++    };
++    const handleEscape = (event: KeyboardEvent) => {
++      if (event.key === "Escape") {
++        setIconPickerOpen(false);
++      }
++    };
++    document.addEventListener("mousedown", handleClickOutside);
++    document.addEventListener("keydown", handleEscape);
++    return () => {
++      document.removeEventListener("mousedown", handleClickOutside);
++      document.removeEventListener("keydown", handleEscape);
++    };
++  }, [iconPickerOpen]);
++
+   return (
+-    <div className="px-10 py-8">
++    <div className="px-4 sm:px-6 md:px-10 py-8 max-w-6xl mx-auto w-full">
+       <button
+         type="button"
+         className="text-xs text-zaki-muted hover:text-zaki-secondary mb-4 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 rounded px-2 py-1"
+@@ -62,7 +83,7 @@ export function SpaceDetailView({
+       >
+         ← All spaces
+       </button>
+-      <div className="flex items-start gap-4">
++      <div className="flex flex-col md:flex-row md:items-start gap-4">
+         <div className="relative">
+           <button
+             type="button"
+@@ -86,33 +107,38 @@ export function SpaceDetailView({
+           {iconPickerOpen && !spaceDetail.fixed && (
+             <div
+               ref={iconPickerRef}
+-              className="absolute top-14 left-0 w-[220px] rounded-zaki-lg border border-zaki-subtle bg-zaki-dark-elevated text-white shadow-[0px_18px_36px_rgba(0,0,0,0.35)] p-3 z-30"
++              className="absolute top-14 left-0 w-[240px] rounded-zaki-xl border border-zaki-subtle bg-white text-zaki-primary shadow-[0px_18px_36px_rgba(15,15,15,0.16)] p-3 z-30"
+             >
++              <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider mb-3">
++                Appearance
++              </div>
+               <div className="flex items-center gap-2 mb-3">
+                 {colorOptions.map((color) => (
+                   <button
+                     key={color}
+                     type="button"
+-                    className="size-6 rounded-full border border-white/20"
++                    className="size-6 rounded-full border border-zaki-subtle hover:scale-105 transition-transform"
+                     style={{ backgroundColor: color }}
+                     onClick={() => {
+                       onUpdateSpace(spaceDetail.id, { color });
++                      setIconPickerOpen(false);
+                     }}
+                   />
+                 ))}
+               </div>
+-              <div className="h-px bg-white/10 mb-3" />
++              <div className="h-px bg-zaki-subtle mb-3" />
+               <div className="grid grid-cols-6 gap-2">
+                 {iconOptions.map((option) => (
+                   <button
+                     key={option.id}
+                     type="button"
+-                    className="size-7 rounded-lg hover:bg-white/10 flex items-center justify-center"
++                    className="size-8 rounded-lg hover:bg-zaki-hover flex items-center justify-center"
+                     onClick={() => {
+                       onUpdateSpace(spaceDetail.id, { icon: option.id });
++                      setIconPickerOpen(false);
+                     }}
+                   >
+-                    <option.icon className="size-4 text-white" />
++                    <option.icon className="size-4 text-zaki-muted" />
+                   </button>
+                 ))}
+               </div>
+@@ -122,13 +148,13 @@ export function SpaceDetailView({
+         <div className="flex-1">
+           <div className="flex items-center gap-2">
+             <div className="text-lg font-semibold text-zaki-primary">{spaceDetail.title}</div>
+-            <span className="text-[10px] uppercase tracking-wide rounded-full bg-zaki-sunken text-zaki-secondary px-2 py-0.5">Private</span>
++            <span className="text-2xs uppercase tracking-wide rounded-full bg-zaki-sunken text-zaki-secondary px-2 py-0.5">Private</span>
+           </div>
+           <div className="text-sm text-zaki-disabled mt-1">{spaceDetail.description}</div>
+         </div>
+         <button
+           type="button"
+-          className="rounded-full bg-zaki-secondary text-white text-sm px-4 py-2 hover:bg-zaki-brand active:scale-[0.98] transition-[transform,background-color]"
++          className="zaki-btn w-full md:w-auto bg-zaki-secondary text-white hover:bg-zaki-brand active:scale-[0.98] transition-[transform,background-color]"
+           onClick={() => onCreateThread(spaceDetail.id)}
+         >
+           New chat
+@@ -144,86 +170,102 @@ export function SpaceDetailView({
+           onToggleWebSearch={onToggleWebSearch}
+         />
+       </div>
+-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+-        <div className="rounded-zaki-lg border border-zaki bg-white p-4">
++      <div className="mt-6 grid gap-4 lg:grid-cols-2">
++        <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
+           <div className="flex items-center justify-between">
+-            <div className="text-xs text-zaki-muted font-semibold">Project files</div>
++            <div>
++              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Project files</div>
++              <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"}`}>
++                {spaceDetail.fixed ? "ZAKI is not a project" : `${spaceDetail.pinnedFiles?.length ?? 0} files`}
++              </div>
++            </div>
+             {!spaceDetail.fixed && (
+               <div className="flex items-center gap-2">
+                 <button
+                   type="button"
+-                  className="text-xs text-zaki-muted hover:text-zaki-secondary"
++                  className="zaki-btn-sm bg-white border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover"
+                   onClick={onUploadFiles}
+                 >
+-                  +
++                  Upload
+                 </button>
+                 <button
+                   type="button"
+-                  className="text-xs text-zaki-brand hover:text-zaki-brand"
++                  className="zaki-btn-sm bg-transparent text-zaki-brand hover:text-zaki-brand"
+                   onClick={() => {
+                     onUpdateSpace(spaceDetail.id, { pinnedFiles: [] });
+                   }}
+                 >
+-                  Delete
++                  Clear
+                 </button>
+               </div>
+             )}
+           </div>
+-          <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"}`}>
+-            {spaceDetail.fixed ? "ZAKI is not a project" : `${spaceDetail.pinnedFiles?.length ?? 0} files`}
+-          </div>
+         </div>
+-        <div className="rounded-zaki-lg border border-zaki bg-white p-4">
++        <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
+           <div className="flex items-center justify-between">
+-            <div className="text-xs text-zaki-muted font-semibold">Instructions</div>
++            <div>
++              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Instructions</div>
++              <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"} line-clamp-2`}>
++                {spaceDetail.fixed ? "ZAKI doesn't take instructions from anyone." : (spaceDetail.instructions || "Add guidance for this space.")}
++              </div>
++            </div>
+             {!spaceDetail.fixed && (
+               <button
+                 type="button"
+-                className="text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 rounded p-1"
++                className="zaki-btn-sm bg-white border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover"
+                 onClick={() => onEditInstructions(spaceDetail.instructions || "")}
+                 aria-label="Edit instructions"
+               >
+-                <Pencil className="size-3.5" />
++                Edit
+               </button>
+             )}
+           </div>
+-          <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"} line-clamp-2`}>
+-            {spaceDetail.fixed ? "ZAKI doesn't take instructions from anyone." : (spaceDetail.instructions || "No instructions yet.")}
+-          </div>
+         </div>
+       </div>
+-      <div className="mt-6">
+-        <div className="text-xs text-zaki-muted font-semibold mb-3">Chats in this space</div>
+-        <div className="flex flex-col gap-2">
++
++      <div className="mt-6 rounded-zaki-xl border border-zaki bg-zaki-raised p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
++        <div className="flex items-center justify-between mb-4">
++          <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Chats in this space</div>
++          <div className="text-2xs text-zaki-muted">{(spaceDetail.threads ?? []).length} total</div>
++        </div>
++        <div className="flex flex-col divide-y divide-zaki-subtle">
+           {(spaceDetail.threads ?? []).map((thread) => (
+-            <button
++            <div
+               key={thread.id}
+-              type="button"
+-              className="flex items-center justify-between rounded-zaki-md border border-zaki bg-white px-4 py-3 text-sm text-zaki-primary hover:bg-zaki-hover"
++              role="button"
++              tabIndex={0}
++              className="group flex items-center justify-between px-2 py-3 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md transition-colors"
++              onClick={() => onGoToThread(spaceDetail.id, thread.id)}
++              onKeyDown={(event) => {
++                if (event.key === "Enter" || event.key === " ") {
++                  event.preventDefault();
++                  onGoToThread(spaceDetail.id, thread.id);
++                }
++              }}
+             >
+-              <span
+-                className="font-medium flex-1 text-left"
+-                onClick={() => onGoToThread(spaceDetail.id, thread.id)}
+-                role="button"
+-              >
+-                {thread.label}
+-              </span>
++              <div className="flex items-center gap-3 min-w-0">
++                <span className="size-2 rounded-full bg-zaki-accent/40 group-hover:bg-zaki-accent transition-colors" />
++                <span className="font-medium text-left truncate">{thread.label}</span>
++              </div>
+               <div className="flex items-center gap-3">
+-                <span className="text-xs text-zaki-disabled">Recently updated</span>
++                <span className="text-2xs text-zaki-disabled">Updated recently</span>
+                 {spaceDetail.fixed && (
+                   <button
+                     type="button"
+-                    className="text-xs text-zaki-brand hover:text-zaki-brand"
+-                    onClick={() => onDeleteThread(thread.id)}
++                    className="text-2xs text-zaki-brand hover:text-zaki-brand"
++                    onClick={(event) => {
++                      event.stopPropagation();
++                      onDeleteThread(thread.id);
++                    }}
+                   >
+                     Delete
+                   </button>
+                 )}
+               </div>
+-            </button>
++            </div>
+           ))}
+           {(!spaceDetail.threads || spaceDetail.threads.length === 0) && (
+-            <div className="text-sm text-zaki-disabled">No chats yet. Start one above.</div>
++            <div className="text-sm text-zaki-disabled py-4">No chats yet. Start one above.</div>
+           )}
+         </div>
+       </div>
+diff --git a/src/app/components/chat/views/SpacesView.tsx b/src/app/components/chat/views/SpacesView.tsx
+index 7034349..3bb7296 100644
+--- a/src/app/components/chat/views/SpacesView.tsx
++++ b/src/app/components/chat/views/SpacesView.tsx
+@@ -1,5 +1,7 @@
+ import type { Space } from "@/types";
++import { Folder, MoreHorizontal, Plus, Search, Share2 } from "lucide-react";
+ import { SkeletonSpaceGrid } from "../../ui/skeleton";
++import { useEffect, useRef, useState } from "react";
+ 
+ interface SpacesViewProps {
+   spacesList: Space[];
+@@ -14,22 +16,63 @@ export function SpacesView({
+   onCreateSpace,
+   onViewSpace,
+ }: SpacesViewProps) {
++  const [editingId, setEditingId] = useState<string | null>(null);
++  const [descriptionDraft, setDescriptionDraft] = useState("");
++  const [confirmSpaceId, setConfirmSpaceId] = useState<string | null>(null);
++  const confirmRef = useRef<HTMLDivElement>(null);
++
++  useEffect(() => {
++    if (!confirmSpaceId) return;
++    const handleClickOutside = (event: MouseEvent) => {
++      if (!confirmRef.current) return;
++      if (!confirmRef.current.contains(event.target as Node)) {
++        setConfirmSpaceId(null);
++      }
++    };
++    const handleEscape = (event: KeyboardEvent) => {
++      if (event.key === "Escape") {
++        setConfirmSpaceId(null);
++      }
++    };
++    document.addEventListener("mousedown", handleClickOutside);
++    document.addEventListener("keydown", handleEscape);
++    return () => {
++      document.removeEventListener("mousedown", handleClickOutside);
++      document.removeEventListener("keydown", handleEscape);
++    };
++  }, [confirmSpaceId]);
++
++  const commitDescription = (spaceId: string) => {
++    window.dispatchEvent(
++      new CustomEvent("zaki:update-space", {
++        detail: { id: spaceId, description: descriptionDraft.trim() },
++      })
++    );
++    setEditingId(null);
++  };
++
+   if (isLoading) {
+     return (
+-      <div className="px-10 py-10">
+-        <div className="flex items-center gap-3 mb-6">
+-          <div className="size-10 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-muted text-xs font-semibold">SP</div>
+-          <div>
++      <div className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full">
++        <div className="flex flex-wrap items-center gap-3 mb-4">
++          <div className="size-9 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-muted text-xs font-semibold">SP</div>
++          <div className="flex items-center gap-2">
+             <div className="text-lg font-semibold text-zaki-primary">Spaces</div>
+-            <div className="text-sm text-zaki-disabled">Manage and explore your spaces in one place</div>
++            <div className="size-8 rounded-full border border-zaki-subtle bg-white flex items-center justify-center text-zaki-muted">
++              <Share2 className="size-4" />
++            </div>
++            <div className="size-8 rounded-full border border-zaki-subtle bg-white flex items-center justify-center text-zaki-muted">
++              <MoreHorizontal className="size-4" />
++            </div>
+           </div>
+         </div>
+ 
+-        <div className="flex items-center gap-3 mb-6">
+-          <div className="flex-1 rounded-full border border-zaki bg-white px-4 py-2 text-sm text-zaki-muted">
+-            Search spaces...
++        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
++          <div className="flex-1 flex items-center gap-2 rounded-full border border-zaki-subtle bg-white px-4 py-2 text-sm text-zaki-secondary">
++            <Search className="size-4 text-zaki-muted" />
++            <span className="text-zaki-muted">Search spaces...</span>
+           </div>
+-          <span className="text-sm text-zaki-muted">Sort by recent</span>
++          <span className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary">Sort by: recent</span>
+         </div>
+ 
+         <SkeletonSpaceGrid />
+@@ -38,43 +81,142 @@ export function SpacesView({
+   }
+ 
+   return (
+-    <div className="px-10 py-10">
+-      <div className="flex items-center gap-3 mb-6">
+-        <div className="size-10 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-muted text-xs font-semibold">SP</div>
+-        <div>
++    <div className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full">
++      <div className="flex flex-wrap items-center gap-3 mb-4">
++        <div className="size-9 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-muted text-xs font-semibold">SP</div>
++        <div className="flex items-center gap-2">
+           <div className="text-lg font-semibold text-zaki-primary">Spaces</div>
+-          <div className="text-sm text-zaki-disabled">Manage and explore your spaces in one place</div>
++          <button className="size-8 rounded-full border border-zaki-subtle bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover">
++            <Share2 className="size-4" />
++          </button>
++          <button className="size-8 rounded-full border border-zaki-subtle bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover">
++            <MoreHorizontal className="size-4" />
++          </button>
+         </div>
+-        <button
+-          type="button"
+-          className="ml-auto rounded-full bg-zaki-brand text-white text-sm px-4 py-2 hover:bg-zaki-brand-hover active:scale-[0.98] transition-all focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+-          onClick={onCreateSpace}
+-          aria-label="Create new space"
+-        >
+-          Create new space
+-        </button>
+       </div>
+ 
+-      <div className="flex items-center gap-3 mb-6">
+-        <div className="flex-1 rounded-full border border-zaki bg-white px-4 py-2 text-sm text-zaki-muted">
+-          Search spaces...
++      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
++        <div className="flex-1 flex items-center gap-2 rounded-full border border-zaki-subtle bg-white px-4 py-2 text-sm text-zaki-secondary">
++          <Search className="size-4 text-zaki-muted" />
++          <input
++            className="flex-1 bg-transparent outline-none placeholder-zaki text-sm"
++            placeholder="Search spaces..."
++            aria-label="Search spaces"
++          />
+         </div>
+-        <button className="text-sm text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 rounded px-2 py-1" aria-label="Sort spaces by recent">Sort by recent</button>
++        <button className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover">
++          Sort by: recent
++        </button>
+       </div>
+ 
+       <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
++        <button
++          type="button"
++          onClick={onCreateSpace}
++          className="rounded-zaki-xl border border-dashed border-zaki-strong bg-zaki-raised/70 p-4 md:p-5 text-left hover:bg-zaki-hover transition-colors"
++        >
++          <div className="flex items-center gap-2 text-sm font-semibold text-zaki-secondary">
++            <span className="size-6 rounded-full border border-zaki-subtle bg-white flex items-center justify-center">
++              <Plus className="size-3.5 text-zaki-muted" />
++            </span>
++            Create new space
++          </div>
++        </button>
+         {spacesList.map((space) => (
+           <div
+             key={space.id}
+-            className="rounded-zaki-lg border border-zaki bg-white p-4 shadow-[0px_6px_18px_rgba(15,15,15,0.06)] cursor-pointer hover:shadow-[0px_8px_24px_rgba(15,15,15,0.1)] transition-shadow"
++            className="relative rounded-zaki-xl border border-zaki-subtle bg-white p-4 md:p-5 shadow-[0px_6px_18px_rgba(15,15,15,0.06)] cursor-pointer hover:shadow-[0px_10px_24px_rgba(15,15,15,0.08)] transition-shadow"
+             role="button"
+-            onClick={() => onViewSpace(space.id)}
++            onClick={() => setConfirmSpaceId(space.id)}
+           >
+-            <div className="text-sm font-semibold text-zaki-primary">{space.title}</div>
+-            <div className="text-xs text-zaki-disabled mt-1">
+-              {space.description || "Space description"}
++            <div className="flex items-start justify-between gap-4">
++              <div className="min-w-0 flex-1">
++                <div className="flex items-center gap-2 text-sm font-semibold text-zaki-primary whitespace-nowrap">
++                  <Folder className="size-4 text-zaki-muted" />
++                  <span className="truncate">{space.title}</span>
++                </div>
++                <div className="text-xs text-zaki-disabled mt-2">
++                  {(space.threads?.length ?? 0)} chats
++                </div>
++                <div className="text-2xs text-zaki-muted mt-6">Updated recently</div>
++              </div>
++              <div className="flex flex-col items-end gap-2 w-[80%]">
++                <div className="flex items-center justify-end gap-2">
++                  {confirmSpaceId === space.id && (
++                    <div
++                      ref={confirmRef}
++                      className="rounded-full border border-zaki-subtle bg-white px-3 py-1 text-2xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.12)]"
++                      role="button"
++                      tabIndex={0}
++                      onClick={(event) => {
++                        event.stopPropagation();
++                        setConfirmSpaceId(null);
++                        onViewSpace(space.id);
++                      }}
++                      onKeyDown={(event) => {
++                        if (event.key === "Enter" || event.key === " ") {
++                          event.preventDefault();
++                          setConfirmSpaceId(null);
++                          onViewSpace(space.id);
++                        }
++                        if (event.key === "Escape") {
++                          setConfirmSpaceId(null);
++                        }
++                      }}
++                    >
++                      Start new chat
++                    </div>
++                  )}
++                  <button
++                    type="button"
++                    className="size-7 rounded-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover flex items-center justify-center text-zaki-muted"
++                    onClick={(event) => {
++                      event.stopPropagation();
++                      window.dispatchEvent(
++                        new CustomEvent("zaki:open-space-settings", { detail: { id: space.id } })
++                      );
++                    }}
++                    aria-label={`${space.title} settings`}
++                  >
++                    <MoreHorizontal className="size-4" />
++                  </button>
++                </div>
++                <div className="w-full">
++                  {editingId === space.id ? (
++                    <textarea
++                      className="zaki-space-desc-input w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-xs text-zaki-secondary outline-none focus:outline-none focus:ring-0"
++                      rows={3}
++                      maxLength={200}
++                      value={descriptionDraft}
++                      onChange={(event) => setDescriptionDraft(event.target.value)}
++                      onBlur={() => commitDescription(space.id)}
++                      onKeyDown={(event) => {
++                        if (event.key === "Enter" && !event.shiftKey) {
++                          event.preventDefault();
++                          commitDescription(space.id);
++                        }
++                        if (event.key === "Escape") {
++                          setEditingId(null);
++                        }
++                      }}
++                      autoFocus
++                    />
++                  ) : (
++                    <button
++                      type="button"
++                      className="w-full text-right text-xs text-zaki-secondary zaki-line-clamp-3 hover:text-zaki-primary"
++                      onClick={(event) => {
++                        event.stopPropagation();
++                        setEditingId(space.id);
++                        setDescriptionDraft(space.description ?? "");
++                      }}
++                    >
++                      {space.description || "Add a short description…"}
++                    </button>
++                  )}
++                </div>
++              </div>
+             </div>
+-            <div className="text-[10px] text-zaki-muted mt-3">Updated recently</div>
+           </div>
+         ))}
+       </div>
+diff --git a/src/app/components/chat/views/ZakiHomeView.tsx b/src/app/components/chat/views/ZakiHomeView.tsx
+index 286e32e..1fef3e7 100644
+--- a/src/app/components/chat/views/ZakiHomeView.tsx
++++ b/src/app/components/chat/views/ZakiHomeView.tsx
+@@ -1,7 +1,7 @@
+-import { useRef, useState } from "react";
+-import { MoreVertical } from "lucide-react";
+-import { ChevronDownIcon } from "../../icons";
++import { useState } from "react";
++import { MoreVertical, ArrowLeft, ArrowRight, ShieldCheck, Sparkles, Clock } from "lucide-react";
+ import type { Space } from "@/types";
++import { emptyStateExamples, emptyStateHeadline, emptyStateSubtext } from "../emptyStateContent";
+ 
+ interface ZakiHomeViewProps {
+   primarySpace: Space | null;
+@@ -10,28 +10,49 @@ interface ZakiHomeViewProps {
+   onDeleteThread: (threadId: string, spaceId?: string) => void;
+ }
+ 
+-const zakiExamples = [
+-  "Explain quantum computing in simple terms",
+-  "Got any creative ideas for a 10 year old's birthday?",
+-  "How do I make an HTTP request in JavaScript?",
+-];
++const zakiExamples = emptyStateExamples;
+ 
+-const zakiRamadanExamples = [
+-  "When is Iftar time in Dubai today?",
+-  "What are good Suhoor meal ideas?",
+-  "Share a Ramadan greeting message",
++const zakiMissionSlides = [
++  {
++    title: "Memory-first by design",
++    body: "ZAKI keeps the context that matters so every conversation feels continuous.",
++  },
++  {
++    title: "Human-centered focus",
++    body: "Built to reduce friction, not add it. Fast, calm, and predictable.",
++  },
++  {
++    title: "Trustable by default",
++    body: "Clear boundaries, transparent behaviors, and respectful defaults.",
++  },
+ ];
+ 
+-const zakiCapabilities = [
+-  "Remembers what user said earlier in the conversation",
+-  "Allows user to provide follow-up corrections",
+-  "Trained to decline inappropriate requests",
++const zakiNews = [
++  {
++    title: "ZAKI Weekly",
++    body: "Product updates, memory tips, and launch progress.",
++    meta: "Latest",
++  },
++  {
++    title: "Behind the memory engine",
++    body: "A short note on how we keep context private and useful.",
++    meta: "Blog",
++  },
+ ];
+ 
+-const zakiLimitations = [
+-  "May occasionally generate incorrect information",
+-  "May occasionally produce harmful instructions or biased content",
+-  "Limited knowledge of world and events after training",
++const quickStart = [
++  {
++    title: "Summarize the last meeting",
++    body: "Turn notes into clean highlights and next steps.",
++  },
++  {
++    title: "Plan a launch timeline",
++    body: "Break goals into weekly milestones with owners.",
++  },
++  {
++    title: "Draft a message",
++    body: "Write a crisp update for your team or client.",
++  },
+ ];
+ 
+ export function ZakiHomeView({
+@@ -40,60 +61,36 @@ export function ZakiHomeView({
+   onGoToThread,
+   onDeleteThread,
+ }: ZakiHomeViewProps) {
++  void primarySpace;
++  void onGoToThread;
++  void onDeleteThread;
+   const [zakiMenuOpen, setZakiMenuOpen] = useState(false);
+-  const [zakiExamplesOpen, setZakiExamplesOpen] = useState(false);
+-  const [zakiThreadMenuOpen, setZakiThreadMenuOpen] = useState<string | null>(null);
+-  const zakiMenuRef = useRef<HTMLDivElement>(null);
+-  const zakiExamplesRef = useRef<HTMLDivElement>(null);
+-  const zakiThreadMenuRef = useRef<HTMLDivElement>(null);
+-
++  const [activeSlide, setActiveSlide] = useState(0);
+   return (
+-    <div className="px-10 py-12">
+-      <div className="flex items-center justify-between mb-10">
+-        <div className="flex-1 flex flex-col items-center gap-1">
+-          <div className="text-xl font-semibold text-zaki-primary tracking-tight">ZAKI</div>
+-          <div
+-            className="relative text-base text-zaki-brand font-semibold uppercase tracking-wide inline-flex items-center gap-1 cursor-pointer"
+-            ref={zakiExamplesRef}
+-            onClick={() => setZakiExamplesOpen((open) => !open)}
+-            role="button"
+-            tabIndex={0}
+-          >
+-            UNDERSTANDS
+-            <ChevronDownIcon color="#D24430" />
+-            {zakiExamplesOpen && (
+-              <div className="absolute left-1/2 top-full mt-3 w-[320px] -translate-x-1/2 rounded-zaki-lg border border-zaki bg-white p-3 shadow-[0px_14px_30px_rgba(15,15,15,0.12)] z-20">
+-                <div className="text-[11px] text-zaki-brand font-semibold uppercase tracking-wider">Examples</div>
+-                <div className="mt-2 flex flex-col gap-2">
+-                  {zakiExamples.map((example) => (
+-                    <button
+-                      key={example}
+-                      type="button"
+-                      className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-sm text-zaki-primary text-left hover:bg-zaki-hover transition-colors"
+-                      onClick={() => onSendExample(example)}
+-                    >
+-                      {example}
+-                    </button>
+-                  ))}
+-                </div>
+-                <div className="mt-3 text-[11px] text-zaki-brand font-semibold uppercase tracking-wider">Examples · Ramadan Special</div>
+-                <div className="mt-2 flex flex-col gap-2">
+-                  {zakiRamadanExamples.map((example) => (
+-                    <button
+-                      key={example}
+-                      type="button"
+-                      className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-sm text-zaki-primary text-left hover:bg-zaki-hover transition-colors"
+-                      onClick={() => onSendExample(example)}
+-                    >
+-                      {example}
+-                    </button>
+-                  ))}
+-                </div>
+-              </div>
+-            )}
++    <div className="px-4 sm:px-6 md:px-10 py-10 md:py-12 min-h-full flex flex-col max-w-6xl mx-auto w-full">
++      <div className="flex items-start justify-between gap-4 mb-8">
++        <div className="flex-1">
++          <div className="text-xs text-zaki-muted font-semibold uppercase tracking-widest">Welcome back</div>
++          <div className="mt-2 text-2xl md:text-3xl font-semibold text-zaki-primary tracking-tight">
++            {emptyStateHeadline}
++          </div>
++          <div className="mt-2 text-sm text-zaki-muted max-w-2xl">{emptyStateSubtext}</div>
++          <div className="mt-4 flex flex-wrap items-center gap-2">
++            <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-xs text-zaki-secondary">
++              <ShieldCheck className="size-3.5 text-zaki-success" />
++              Memory is on
++              <span className="text-zaki-muted">·</span>
++              We only store what you approve.
++            </div>
++            <button
++              type="button"
++              className="text-xs font-semibold text-zaki-brand hover:underline"
++            >
++              Learn how memory works
++            </button>
+           </div>
+         </div>
+-        <div className="relative" ref={zakiMenuRef}>
++        <div className="relative">
+           <button
+             type="button"
+             className="size-9 rounded-full border border-zaki bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors"
+@@ -115,75 +112,139 @@ export function ZakiHomeView({
+           )}
+         </div>
+       </div>
+-      <div className="grid gap-6 md:grid-cols-2">
++
++      <div className="grid gap-4 md:grid-cols-3 mb-10">
++        {quickStart.map((item) => (
++          <button
++            key={item.title}
++            type="button"
++            className="rounded-zaki-2xl border border-zaki-subtle bg-white/90 p-5 text-left shadow-[0px_10px_26px_rgba(15,15,15,0.06)] hover:shadow-[0px_16px_30px_rgba(15,15,15,0.08)] transition-shadow"
++            onClick={() => onSendExample(item.title)}
++          >
++            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zaki-muted">
++              <Sparkles className="size-3.5 text-zaki-brand" />
++              Quick start
++            </div>
++            <div className="mt-3 text-base font-semibold text-zaki-primary">{item.title}</div>
++            <div className="mt-2 text-sm text-zaki-secondary">{item.body}</div>
++          </button>
++        ))}
++      </div>
++
++      <div className="grid gap-4 md:gap-6 lg:grid-cols-[1.2fr_1fr]">
+         <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
+-          <div className="text-[11px] text-zaki-muted font-semibold mb-4 uppercase tracking-wider">Capabilities</div>
+-          <div className="flex flex-col gap-3 text-sm text-zaki-primary text-center">
+-            {zakiCapabilities.map((item) => (
+-              <div key={item} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
+-                {item}
++          <div className="flex items-center justify-between mb-4">
++            <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">
++              Latest from ZAKI
++            </div>
++            <button
++              type="button"
++              className="zaki-btn-sm text-zaki-brand hover:text-zaki-brand bg-transparent"
++            >
++              View all
++            </button>
++          </div>
++          <div className="grid gap-3 md:grid-cols-2">
++            {zakiNews.map((item) => (
++              <div key={item.title} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
++                <div className="text-2xs text-zaki-muted uppercase tracking-wider">{item.meta}</div>
++                <div className="text-sm text-zaki-primary font-semibold mt-1">{item.title}</div>
++                <div className="text-xs text-zaki-secondary mt-2">{item.body}</div>
+               </div>
+             ))}
+           </div>
+         </div>
++
+         <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
+-          <div className="text-[11px] text-zaki-muted font-semibold mb-4 uppercase tracking-wider">Limitations</div>
+-          <div className="flex flex-col gap-3 text-sm text-zaki-primary text-center">
+-            {zakiLimitations.map((item) => (
+-              <div key={item} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
+-                {item}
++          <div className="flex items-center justify-between mb-4">
++            <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">
++              Mission
++            </div>
++            <div className="flex items-center gap-2">
++              <button
++                type="button"
++                className="zaki-btn-sm size-8 p-0 border border-zaki bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors"
++                onClick={() => setActiveSlide((prev) => (prev - 1 + zakiMissionSlides.length) % zakiMissionSlides.length)}
++                aria-label="Previous mission"
++              >
++                <ArrowLeft className="size-4" />
++              </button>
++              <button
++                type="button"
++                className="zaki-btn-sm size-8 p-0 border border-zaki bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors"
++                onClick={() => setActiveSlide((prev) => (prev + 1) % zakiMissionSlides.length)}
++                aria-label="Next mission"
++              >
++                <ArrowRight className="size-4" />
++              </button>
++            </div>
++          </div>
++          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-5 py-4 min-h-[140px] flex flex-col justify-between">
++            <div>
++              <div className="text-lg font-semibold text-zaki-primary">
++                {zakiMissionSlides[activeSlide]?.title}
+               </div>
+-            ))}
++              <div className="text-sm text-zaki-secondary mt-2">
++                {zakiMissionSlides[activeSlide]?.body}
++              </div>
++            </div>
++            <div className="mt-4 flex items-center gap-2">
++              {zakiMissionSlides.map((_, index) => (
++                <button
++                  key={index}
++                  type="button"
++                  className={`h-1.5 rounded-full transition-all ${
++                    index === activeSlide ? "w-6 bg-zaki-brand" : "w-3 bg-zaki-border-default"
++                  }`}
++                  onClick={() => setActiveSlide(index)}
++                  aria-label={`Mission slide ${index + 1}`}
++                />
++              ))}
++            </div>
+           </div>
+         </div>
+       </div>
+-      {primarySpace && (primarySpace.threads?.length ?? 0) > 0 && (
+-        <div className="mt-10">
+-          <div className="text-xs text-zaki-muted font-semibold mb-3">Recent chats</div>
+-          <div className="flex flex-col gap-2">
+-            {primarySpace.threads?.map((thread) => (
+-              <div key={thread.id} className="flex items-center justify-between rounded-zaki-md border border-zaki bg-white px-4 py-3 text-sm text-zaki-primary">
+-                <button
+-                  type="button"
+-                  className="flex-1 text-left font-medium"
+-                  onClick={() => {
+-                    if (!primarySpace) return;
+-                    onGoToThread(primarySpace.id, thread.id);
+-                  }}
+-                >
+-                  {thread.label}
+-                </button>
+-                <div className="relative" ref={zakiThreadMenuRef}>
+-                  <button
+-                    type="button"
+-                    className="size-8 rounded-full hover:bg-zaki-hover flex items-center justify-center text-zaki-muted"
+-                    onClick={() => setZakiThreadMenuOpen((prev) => (prev === thread.id ? null : thread.id))}
+-                  >
+-                    <MoreVertical className="size-4" />
+-                  </button>
+-                  {zakiThreadMenuOpen === thread.id && (
+-                    <div className="absolute right-0 mt-2 w-32 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1">
+-                      <button className="w-full text-left px-3 py-2 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md" type="button">
+-                        Rename
+-                      </button>
+-                      <button
+-                        className="w-full text-left px-3 py-2 text-sm text-zaki-brand hover:bg-zaki-error rounded-zaki-md"
+-                        type="button"
+-                        onClick={() => {
+-                          onDeleteThread(thread.id, primarySpace?.id);
+-                          setZakiThreadMenuOpen(null);
+-                        }}
+-                      >
+-                        Delete
+-                      </button>
+-                    </div>
+-                  )}
+-                </div>
++
++      <div className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
++        <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
++          <div className="flex items-center justify-between">
++            <div>
++              <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">Memory clarity</div>
++              <div className="mt-2 text-sm text-zaki-secondary max-w-xl">
++                ZAKI only saves what helps you. Review and manage memories anytime.
+               </div>
++            </div>
++            <div className="size-10 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-brand">
++              <Clock className="size-5" />
++            </div>
++          </div>
++          <div className="mt-4 grid gap-3 md:grid-cols-2">
++            <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
++              <div className="text-xs font-semibold text-zaki-primary">Review saved memories</div>
++              <div className="text-xs text-zaki-muted mt-1">Edit or delete anything ZAKI keeps.</div>
++            </div>
++            <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
++              <div className="text-xs font-semibold text-zaki-primary">You stay in control</div>
++              <div className="text-xs text-zaki-muted mt-1">ZAKI asks for confirmation in manual mode.</div>
++            </div>
++          </div>
++        </div>
++        <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
++          <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">Examples</div>
++          <div className="mt-3 flex flex-wrap gap-2">
++            {zakiExamples.slice(0, 4).map((example) => (
++              <button
++                key={example}
++                type="button"
++                className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover"
++                onClick={() => onSendExample(example)}
++              >
++                {example}
++              </button>
+             ))}
+           </div>
+         </div>
+-      )}
++      </div>
+     </div>
+   );
+ }
+diff --git a/src/app/components/memory/AutoSaveToast.tsx b/src/app/components/memory/AutoSaveToast.tsx
+index 485a292..94254ba 100644
+--- a/src/app/components/memory/AutoSaveToast.tsx
++++ b/src/app/components/memory/AutoSaveToast.tsx
+@@ -19,24 +19,17 @@ interface AutoSaveToastProps {
+   userId: string;
+   memories: SavedMemory[];
+   onDismiss: () => void;
++  position?: { left: number; width: number; bottom: number };
++  progress?: number;
+ }
+ 
+-const typeIcons: Record<string, string> = {
+-  fact: "💡",
+-  preference: "✨",
+-  emotion: "💭",
+-  event: "📅",
+-  goal: "🎯",
+-  relationship: "👤",
+-  struggle: "🌧️",
+-};
+-
+ const UNDO_DURATION = 3000; // 3 seconds
+ 
+-export function AutoSaveToast({ userId, memories, onDismiss }: AutoSaveToastProps) {
++export function AutoSaveToast({ userId, memories, onDismiss, position, progress: progressOverride }: AutoSaveToastProps) {
+   const [undoneIds, setUndoneIds] = useState<string[]>([]);
+   const [progress, setProgress] = useState(100);
+   const [isUndoing, setIsUndoing] = useState(false);
++  const [isExpanded, setIsExpanded] = useState(false);
+ 
+   // Filter out undone memories
+   const activeMemories = memories.filter(m => !undoneIds.includes(m.id));
+@@ -66,6 +59,11 @@ export function AutoSaveToast({ userId, memories, onDismiss }: AutoSaveToastProp
+       return;
+     }
+ 
++    if (progressOverride !== undefined) {
++      setProgress(progressOverride);
++      return;
++    }
++
+     const startTime = Date.now();
+     const timer = setInterval(() => {
+       const elapsed = Date.now() - startTime;
+@@ -79,7 +77,7 @@ export function AutoSaveToast({ userId, memories, onDismiss }: AutoSaveToastProp
+     }, 16); // ~60fps
+ 
+     return () => clearInterval(timer);
+-  }, [activeMemories.length, onDismiss]);
++  }, [activeMemories.length, onDismiss, progressOverride]);
+ 
+   // Auto-dismiss when all undone
+   useEffect(() => {
+@@ -96,78 +94,96 @@ export function AutoSaveToast({ userId, memories, onDismiss }: AutoSaveToastProp
+   const count = activeMemories.length;
+ 
+   return (
+-    <div className="fixed bottom-4 right-4 z-50 w-full max-w-sm">
+-      <div className={cn(
+-        "rounded-zaki-lg border bg-white dark:bg-zinc-900 shadow-lg",
+-        "border-zinc-200 dark:border-zinc-700 overflow-hidden"
+-      )}>
+-        {/* Header */}
+-        <div className="p-4 flex items-center gap-3">
+-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-900/20">
+-            <Brain className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+-          </div>
+-          <div className="flex-1">
+-            <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+-              {count} memory{count > 1 ? 'ies' : 'y'} saved
+-            </p>
+-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+-              Undo within 3 seconds
++    <div
++      className="fixed z-50"
++      style={{
++        left: position?.left ?? 16,
++        width: position?.width ?? "calc(100% - 32px)",
++        bottom: position?.bottom ?? 24,
++      }}
++    >
++      <div
++        className={cn(
++          "rounded-2xl border shadow-[0px_10px_22px_rgba(15,15,15,0.1)]",
++          "border-[#d6e2ff] bg-[#eef3ff] dark:border-[#2c3550] dark:bg-[#1f2330]",
++          "overflow-hidden"
++        )}
++      >
++        <div className="flex items-center justify-between gap-2 px-3 py-1.5">
++          <div className="flex items-center gap-2 min-w-0">
++            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 dark:bg-white/10">
++              <Brain className="h-3 w-3 text-[#2d5bff]" />
++            </div>
++            <p className="text-2xs text-zaki-primary dark:text-zaki-dark-primary truncate">
++              {count} new memory saved
+             </p>
+           </div>
++          <div className="flex items-center gap-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
++            <span>{Math.ceil((progress / 100) * 3)}s left</span>
++            <button
++              onClick={() => activeMemories.forEach((m) => undo(m.id))}
++              disabled={isUndoing}
++              className={cn(
++                "font-medium underline underline-offset-2 relative",
++                "disabled:opacity-50 disabled:cursor-not-allowed"
++              )}
++            >
++              Undo (3s)
++              <span
++                className="absolute left-0 -bottom-1 h-0.5 bg-[#2d5bff] transition-all"
++                style={{ width: `${progress}%` }}
++              />
++            </button>
++            <button
++              type="button"
++              onClick={() => setIsExpanded((prev) => !prev)}
++              className="p-1.5 rounded-full text-zaki-muted hover:bg-white/60 dark:hover:bg-white/10"
++              aria-label={isExpanded ? "Collapse memory list" : "Expand memory list"}
++            >
++              {isExpanded ? "–" : "+"}
++            </button>
++          </div>
+         </div>
+-
+-        {/* Progress bar */}
+-        <div className="h-1 bg-zinc-100 dark:bg-zinc-800">
+-          <div 
+-            className="h-full bg-teal-500 transition-all duration-100 ease-linear"
++        <div className="h-0.5 bg-[#d9e4ff] dark:bg-[#27314a]">
++          <div
++            className="h-full bg-[#2d5bff] transition-all duration-100 ease-linear"
+             style={{ width: `${progress}%` }}
+           />
+         </div>
+-
+-        {/* Memory list */}
+-        <div className="max-h-32 overflow-y-auto p-3 space-y-2">
+-          {activeMemories.map((memory) => (
+-            <div
+-              key={memory.id}
+-              className="flex items-center gap-2 p-2 rounded-md bg-zinc-50 dark:bg-zinc-800/50"
+-            >
+-              <span className="text-lg">{typeIcons[memory.type] || "💡"}</span>
+-              <p className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 truncate">
+-                {memory.content}
+-              </p>
+-              <button
+-                onClick={() => undo(memory.id)}
+-                disabled={isUndoing}
+-                className={cn(
+-                  "p-1.5 rounded-md text-zinc-500 hover:text-teal-600",
+-                  "hover:bg-teal-50 dark:hover:bg-teal-900/20",
+-                  "disabled:opacity-50 disabled:cursor-not-allowed"
+-                )}
+-                title="Undo"
+-              >
+-                {isUndoing ? (
+-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+-                ) : (
+-                  <Undo2 className="h-3.5 w-3.5" />
+-                )}
+-              </button>
++        {isExpanded && (
++          <div className="bg-white dark:bg-zaki-dark-card px-4 py-2 border-t border-[#d9e4ff] dark:border-[#27314a]">
++            <div className="space-y-2">
++              {activeMemories.slice(0, 2).map((memory) => (
++                <div key={memory.id} className="flex items-center justify-between gap-3">
++                  <div className="flex items-center gap-2 min-w-0">
++                    <span className="rounded-full bg-[#ede7ff] px-2 py-0.5 text-[10px] font-semibold text-[#6a4bff] tracking-wide">
++                      {(memory.type || "memory").toUpperCase()}
++                    </span>
++                    <span className="text-sm text-zaki-primary truncate">{memory.content}</span>
++                  </div>
++                  <button
++                    onClick={() => undo(memory.id)}
++                    disabled={isUndoing}
++                    className={cn(
++                      "text-zaki-muted hover:text-zaki-secondary",
++                      "disabled:opacity-50 disabled:cursor-not-allowed"
++                    )}
++                    aria-label="Undo memory"
++                  >
++                    {isUndoing ? (
++                      <Loader2 className="h-4 w-4 animate-spin" />
++                    ) : (
++                      <Undo2 className="h-4 w-4" />
++                    )}
++                  </button>
++                </div>
++              ))}
++              {activeMemories.length > 2 && (
++                <div className="text-2xs text-zaki-muted">+{activeMemories.length - 2} more</div>
++              )}
+             </div>
+-          ))}
+-        </div>
+-
+-        {/* Footer */}
+-        <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center">
+-          <button
+-            onClick={() => activeMemories.forEach(m => undo(m.id))}
+-            disabled={isUndoing}
+-            className="text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+-          >
+-            Undo all
+-          </button>
+-          <span className="text-xs text-zinc-400">
+-            {Math.ceil((progress / 100) * 3)}s left
+-          </span>
+-        </div>
++          </div>
++        )}
+       </div>
+     </div>
+   );
+diff --git a/src/app/components/memory/MemoryConfirmationPanel.tsx b/src/app/components/memory/MemoryConfirmationPanel.tsx
+index 25f83f6..47cf41d 100644
+--- a/src/app/components/memory/MemoryConfirmationPanel.tsx
++++ b/src/app/components/memory/MemoryConfirmationPanel.tsx
+@@ -27,14 +27,14 @@ interface MemoryConfirmationPanelProps {
+   onClose: () => void;
+ }
+ 
+-const typeConfig: Record<string, { icon: typeof Brain; label: string; color: string; bg: string }> = {
+-  fact: { icon: Lightbulb, label: "Fact", color: "text-amber-600", bg: "bg-amber-50" },
+-  preference: { icon: Sparkles, label: "Preference", color: "text-amber-600", bg: "bg-amber-50" },
+-  emotion: { icon: Heart, label: "Emotion", color: "text-rose-500", bg: "bg-rose-50" },
+-  event: { icon: Calendar, label: "Event", color: "text-indigo-600", bg: "bg-indigo-50" },
+-  goal: { icon: Target, label: "Goal", color: "text-emerald-600", bg: "bg-emerald-50" },
+-  relationship: { icon: Users, label: "Relationship", color: "text-violet-600", bg: "bg-violet-50" },
+-  struggle: { icon: CloudRain, label: "Challenge", color: "text-slate-600", bg: "bg-slate-50" },
++const typeConfig: Record<string, { icon: typeof Brain; label: string; className: string }> = {
++  fact: { icon: Lightbulb, label: "Fact", className: "bg-zaki-accent-10 text-zaki-accent" },
++  preference: { icon: Sparkles, label: "Preference", className: "bg-zaki-brand-10 text-zaki-brand" },
++  emotion: { icon: Heart, label: "Emotion", className: "bg-zaki-selected text-zaki-secondary" },
++  event: { icon: Calendar, label: "Event", className: "bg-zaki-selected text-zaki-secondary" },
++  goal: { icon: Target, label: "Goal", className: "bg-zaki-selected text-zaki-secondary" },
++  relationship: { icon: Users, label: "Relationship", className: "bg-zaki-selected text-zaki-secondary" },
++  struggle: { icon: CloudRain, label: "Challenge", className: "bg-zaki-selected text-zaki-secondary" },
+ };
+ 
+ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfirmationPanelProps) {
+@@ -139,15 +139,15 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+ 
+   return (
+     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
+-      <div className="w-full max-w-lg max-h-[80vh] bg-white dark:bg-[#0f0b08] rounded-2xl shadow-xl border border-zaki dark:border-[#2b2119] overflow-hidden">
++      <div className="w-full max-w-lg max-h-[80vh] bg-white rounded-2xl shadow-[0px_24px_60px_rgba(15,15,15,0.18)] border border-zaki-subtle overflow-hidden">
+         {/* Header */}
+-        <div className="flex items-center justify-between px-6 py-4 border-b border-zaki dark:border-[#2b2119]">
++        <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle bg-zaki-base">
+           <div className="flex items-center gap-3">
+             <div className="size-10 rounded-xl bg-gradient-to-br from-zaki-brand to-zaki-primary-500 flex items-center justify-center">
+               <Brain className="size-5 text-white" />
+             </div>
+             <div>
+-              <h2 className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
++              <h2 className="text-lg font-semibold text-zaki-primary">
+                 Memories to Review
+               </h2>
+               <p className="text-sm text-zaki-muted">
+@@ -157,19 +157,19 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+           </div>
+           <button
+             onClick={onClose}
+-            className="size-8 rounded-full hover:bg-zaki-hover dark:hover:bg-[#21180f] flex items-center justify-center text-zaki-muted transition-colors"
++            className="size-8 rounded-full hover:bg-zaki-hover flex items-center justify-center text-zaki-muted transition-colors"
+           >
+             <X className="size-5" />
+           </button>
+         </div>
+ 
+         {/* Memory Mode Toggle */}
+-        <div className="px-6 py-3 border-b border-zaki dark:border-[#2b2119] bg-zaki/30 dark:bg-[#1a140e]">
++        <div className="px-6 py-3 border-b border-zaki-subtle bg-zaki-base">
+           <MemoryModeToggle value={memoryMode} onChange={setMemoryMode} />
+         </div>
+ 
+         {/* Content */}
+-        <div className="overflow-y-auto max-h-[60vh] p-4">
++          <div className="overflow-y-auto max-h-[60vh] p-4">
+           {loading ? (
+             <div className="flex flex-col items-center justify-center py-12">
+               <div className="size-8 border-2 border-zaki-spinner border-t-zaki-brand rounded-full animate-spin" />
+@@ -199,19 +199,19 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                     key={memory.id}
+                     className={cn(
+                       "group rounded-xl border transition-all",
+-                      "border-zaki dark:border-[#2b2119] bg-white dark:bg-[#15100c]",
+-                      "hover:border-zaki-brand/30 dark:hover:border-zaki-brand/30",
++                      "border-zaki-subtle bg-white",
++                      "hover:border-zaki-brand/30",
+                       isLoading && "opacity-60"
+                     )}
+                   >
+                     <div className="p-4">
+                       {/* Type badge */}
+                       <div className="flex items-center gap-2 mb-3">
+-                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", config.bg, config.color)}>
++                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold", config.className)}>
+                           <Icon className="size-3.5" />
+                           {config.label}
+                         </span>
+-                        <span className="text-xs text-zaki-muted">
++                        <span className="text-2xs text-zaki-muted">
+                           {Math.round(memory.confidence_score * 100)}% confidence
+                         </span>
+                       </div>
+@@ -228,7 +228,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                           />
+                         </div>
+                       ) : (
+-                        <p className="text-sm text-zaki-primary dark:text-[#efe6d9] mb-4 leading-relaxed">
++                        <p className="text-sm text-zaki-primary mb-4 leading-relaxed">
+                           "{memory.content}"
+                         </p>
+                       )}
+@@ -240,7 +240,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                             <button
+                               onClick={() => saveEdit(memory.id)}
+                               disabled={isLoading}
+-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zaki-brand text-white text-sm font-medium hover:bg-zaki-brand-hover transition-colors disabled:opacity-50"
++                              className="flex-1 zaki-btn bg-zaki-accent hover:bg-zaki-accent-hover text-white disabled:opacity-50"
+                             >
+                               <Check className="size-4" />
+                               Save
+@@ -248,7 +248,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                             <button
+                               onClick={() => setEditingId(null)}
+                               disabled={isLoading}
+-                              className="px-4 py-2 rounded-lg border border-zaki dark:border-[#2b2119] text-sm text-zaki-secondary hover:bg-zaki-hover dark:hover:bg-[#21180f] transition-colors"
++                              className="zaki-btn-sm border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover transition-colors"
+                             >
+                               Cancel
+                             </button>
+@@ -258,7 +258,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                             <button
+                               onClick={() => handleConfirm(memory.id)}
+                               disabled={isLoading}
+-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zaki-brand text-white text-sm font-medium hover:bg-zaki-brand-hover transition-colors disabled:opacity-50"
++                              className="flex-1 zaki-btn bg-zaki-accent hover:bg-zaki-accent-hover text-white disabled:opacity-50"
+                             >
+                               <Check className="size-4" />
+                               Remember
+@@ -266,7 +266,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                             <button
+                               onClick={() => startEdit(memory)}
+                               disabled={isLoading}
+-                              className="size-9 flex items-center justify-center rounded-lg border border-zaki dark:border-[#2b2119] text-zaki-secondary hover:bg-zaki-hover dark:hover:bg-[#21180f] transition-colors disabled:opacity-50"
++                              className="size-9 flex items-center justify-center rounded-lg border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover transition-colors disabled:opacity-50"
+                               title="Edit"
+                             >
+                               <Edit2 className="size-4" />
+@@ -274,7 +274,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+                             <button
+                               onClick={() => handleReject(memory.id)}
+                               disabled={isLoading}
+-                              className="size-9 flex items-center justify-center rounded-lg border border-zaki dark:border-[#2b2119] text-zaki-secondary hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors disabled:opacity-50"
++                              className="size-9 flex items-center justify-center rounded-lg border border-zaki-subtle text-zaki-secondary hover:bg-zaki-error hover:text-zaki-brand transition-colors disabled:opacity-50"
+                               title="Forget"
+                             >
+                               <X className="size-4" />
+@@ -291,8 +291,8 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
+         </div>
+ 
+         {/* Footer */}
+-        <div className="px-6 py-3 border-t border-zaki dark:border-[#2b2119] bg-zaki-elevated/50 dark:bg-[#15100c]/50">
+-          <p className="text-xs text-zaki-muted text-center">
++        <div className="px-6 py-3 border-t border-zaki-subtle bg-zaki-base">
++          <p className="text-2xs text-zaki-muted text-center">
+             Confirmed memories help ZAKI understand you better.
+             <br />
+             You can always review and delete memories later.
+diff --git a/src/app/components/memory/MemoryModeToggle.tsx b/src/app/components/memory/MemoryModeToggle.tsx
+index a73c516..6547df1 100644
+--- a/src/app/components/memory/MemoryModeToggle.tsx
++++ b/src/app/components/memory/MemoryModeToggle.tsx
+@@ -18,10 +18,10 @@ interface MemoryModeToggleProps {
+ 
+ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
+   return (
+-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4">
++    <div className="rounded-zaki-lg border border-zaki-subtle bg-white p-4">
+       <div className="flex items-center gap-2 mb-3">
+-        <Brain className="h-4 w-4 text-teal-500" />
+-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
++        <Brain className="h-4 w-4 text-zaki-accent" />
++        <span className="text-sm font-medium text-zaki-primary">
+           Memory Mode
+         </span>
+       </div>
+@@ -34,29 +34,29 @@ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
+             "relative p-3 rounded-md text-left transition-all",
+             "border-2",
+             value === "autosave"
+-              ? "border-teal-500 bg-teal-50/50 dark:bg-teal-900/20"
+-              : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300"
++              ? "border-zaki-accent bg-zaki-accent-10"
++              : "border-zaki-subtle hover:border-zaki-strong"
+           )}
+         >
+           <div className="flex items-start gap-2">
+             <Clock className={cn(
+               "h-4 w-4 mt-0.5",
+-              value === "autosave" ? "text-teal-500" : "text-zinc-400"
++              value === "autosave" ? "text-zaki-accent" : "text-zaki-muted"
+             )} />
+             <div>
+               <p className={cn(
+                 "text-sm font-medium",
+-                value === "autosave" ? "text-teal-700 dark:text-teal-400" : "text-zinc-700 dark:text-zinc-300"
++                value === "autosave" ? "text-zaki-accent" : "text-zaki-secondary"
+               )}>
+                 Auto-Save
+               </p>
+-              <p className="text-xs text-zinc-500 mt-1">
++              <p className="text-2xs text-zaki-muted mt-1">
+                 Save instantly, 3s undo
+               </p>
+             </div>
+           </div>
+           {value === "autosave" && (
+-            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-teal-500" />
++            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-zaki-accent" />
+           )}
+         </button>
+ 
+@@ -67,29 +67,29 @@ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
+             "relative p-3 rounded-md text-left transition-all",
+             "border-2",
+             value === "manual"
+-              ? "border-amber-500 bg-amber-50/50 dark:bg-amber-900/20"
+-              : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300"
++              ? "border-zaki-brand bg-zaki-brand-10"
++              : "border-zaki-subtle hover:border-zaki-strong"
+           )}
+         >
+           <div className="flex items-start gap-2">
+             <AlertCircle className={cn(
+               "h-4 w-4 mt-0.5",
+-              value === "manual" ? "text-amber-500" : "text-zinc-400"
++              value === "manual" ? "text-zaki-brand" : "text-zaki-muted"
+             )} />
+             <div>
+               <p className={cn(
+                 "text-sm font-medium",
+-                value === "manual" ? "text-amber-700 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-300"
++                value === "manual" ? "text-zaki-brand" : "text-zaki-secondary"
+               )}>
+                 Manual
+               </p>
+-              <p className="text-xs text-zinc-500 mt-1">
++              <p className="text-2xs text-zaki-muted mt-1">
+                 Confirm each memory
+               </p>
+             </div>
+           </div>
+           {value === "manual" && (
+-            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-amber-500" />
++            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-zaki-brand" />
+           )}
+         </button>
+       </div>
+diff --git a/src/app/components/memory/MemoryToast.tsx b/src/app/components/memory/MemoryToast.tsx
+index b4b47bc..9958d1a 100644
+--- a/src/app/components/memory/MemoryToast.tsx
++++ b/src/app/components/memory/MemoryToast.tsx
+@@ -21,6 +21,7 @@ interface MemoryToastProps {
+   userId: string;
+   memories: StagedMemory[];
+   onDismiss: () => void;
++  position?: { left: number; width: number; bottom: number };
+ }
+ 
+ const typeIcons: Record<string, string> = {
+@@ -43,7 +44,7 @@ const typeLabels: Record<string, string> = {
+   struggle: "Challenge",
+ };
+ 
+-export function MemoryToast({ userId, memories, onDismiss }: MemoryToastProps) {
++export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToastProps) {
+   const [processedIds, setProcessedIds] = useState<string[]>([]);
+   const [isExpanded, setIsExpanded] = useState(false);
+   const [isProcessing, setIsProcessing] = useState(false);
+@@ -94,113 +95,91 @@ export function MemoryToast({ userId, memories, onDismiss }: MemoryToastProps) {
+   }
+ 
+   return (
+-    <div className="fixed bottom-4 right-4 z-50 w-full max-w-sm">
+-      <div className={cn(
+-        "rounded-zaki-lg border bg-white dark:bg-zinc-900 shadow-lg",
+-        "border-zinc-200 dark:border-zinc-700 overflow-hidden"
+-      )}>
+-        {/* Header */}
+-        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800">
+-          <div className="flex items-center gap-3">
+-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-900/20">
+-              <Brain className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+-            </div>
+-            <div className="flex-1">
+-              <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+-                {pendingCount} new memory{pendingCount > 1 ? 'ies' : 'y'}
+-              </p>
+-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+-                Review before saving
+-              </p>
++    <div
++      className="fixed z-50"
++      style={{
++        left: position?.left ?? 16,
++        width: position?.width ?? "calc(100% - 32px)",
++        bottom: position?.bottom ?? 24,
++      }}
++    >
++      <div
++        className={cn(
++          "rounded-2xl border shadow-[0px_10px_22px_rgba(15,15,15,0.1)]",
++          "border-[#d6e2ff] bg-[#eef3ff] dark:border-[#2c3550] dark:bg-[#1f2330]",
++          "overflow-hidden"
++        )}
++      >
++        <div className="flex items-center justify-between gap-2 px-3 py-1.5">
++          <div className="flex items-center gap-2 min-w-0">
++            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 dark:bg-white/10">
++              <Brain className="h-3 w-3 text-[#2d5bff]" />
+             </div>
++            <p className="text-2xs text-zaki-primary dark:text-zaki-dark-primary truncate">
++              {pendingCount} new memory
++            </p>
++          </div>
++          <div className="flex items-center gap-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
++            <button
++              onClick={confirmAll}
++              disabled={isProcessing}
++              className={cn(
++                "font-medium underline underline-offset-2",
++                "disabled:opacity-50 disabled:cursor-not-allowed"
++              )}
++            >
++              Save All
++            </button>
+             <button
+               onClick={() => setIsExpanded(!isExpanded)}
+-              className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"
++              className="p-1.5 rounded-full text-zaki-muted hover:bg-white/60 dark:hover:bg-white/10"
++              aria-label={isExpanded ? "Collapse memory list" : "Expand memory list"}
+             >
+               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+             </button>
+           </div>
+         </div>
+ 
+-        {/* Memory List */}
+         {isExpanded && (
+-          <div className="max-h-64 overflow-y-auto">
+-            {memories
+-              .filter(m => !processedIds.includes(m.confirmationId))
+-              .map((memory, index) => (
+-              <div
+-                key={memory.confirmationId}
+-                className={cn(
+-                  "p-3 border-b border-zinc-50 dark:border-zinc-800",
+-                  index % 2 === 0 && "bg-zinc-50/50 dark:bg-zinc-800/50"
+-                )}
+-              >
+-                <div className="flex items-start gap-2">
+-                  <span className="text-lg">{typeIcons[memory.type] || "💡"}</span>
+-                  <div className="flex-1 min-w-0">
+-                    <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+-                      {memory.content}
+-                    </p>
+-                    <p className="text-xs text-zinc-400 mt-0.5">
+-                      {typeLabels[memory.type] || memory.type}
+-                    </p>
++          <div className="bg-white dark:bg-zaki-dark-card px-4 py-3 border-t border-[#d9e4ff] dark:border-[#27314a]">
++            <div className="space-y-4">
++              {memories
++                .filter((m) => !processedIds.includes(m.confirmationId))
++                .slice(0, 2)
++                .map((memory) => (
++                  <div key={memory.confirmationId} className="flex items-start justify-between gap-3">
++                    <div className="min-w-0">
++                      <p className="text-sm text-zaki-primary">{memory.content}</p>
++                      <div className="mt-1 flex items-center gap-3 text-xs text-zaki-muted">
++                        <button
++                          onClick={() => confirm(memory.confirmationId)}
++                          disabled={isProcessing}
++                          className={cn("hover:text-zaki-primary", "disabled:opacity-50")}
++                        >
++                          Save
++                        </button>
++                        <button
++                          onClick={() => reject(memory.confirmationId)}
++                          disabled={isProcessing}
++                          className={cn("hover:text-zaki-primary", "disabled:opacity-50")}
++                        >
++                          Ignore
++                        </button>
++                      </div>
++                    </div>
++                    <span className="rounded-full bg-[#ede7ff] px-2 py-0.5 text-[10px] font-semibold text-[#6a4bff] tracking-wide">
++                      {(typeLabels[memory.type] || memory.type).toUpperCase()}
++                    </span>
+                   </div>
++                ))}
++              {memories.filter((m) => !processedIds.includes(m.confirmationId)).length > 2 && (
++                <div className="text-2xs text-zaki-muted">
++                  +{memories.filter((m) => !processedIds.includes(m.confirmationId)).length - 2} more
+                 </div>
+-                <div className="flex gap-2 mt-2">
+-                  <button
+-                    onClick={() => confirm(memory.confirmationId)}
+-                    disabled={isProcessing}
+-                    className={cn(
+-                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5",
+-                      "bg-teal-500 hover:bg-teal-600 text-white text-sm rounded-md",
+-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+-                    )}
+-                  >
+-                    <Check className="h-3.5 w-3.5" />
+-                    Save
+-                  </button>
+-                  <button
+-                    onClick={() => reject(memory.confirmationId)}
+-                    disabled={isProcessing}
+-                    className={cn(
+-                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5",
+-                      "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700",
+-                      "text-zinc-700 dark:text-zinc-300 text-sm rounded-md",
+-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+-                    )}
+-                  >
+-                    <X className="h-3.5 w-3.5" />
+-                    Ignore
+-                  </button>
+-                </div>
+-              </div>
+-            ))}
++              )}
++            </div>
+           </div>
+         )}
+-
+-        {/* Footer Actions */}
+-        <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex gap-2">
+-          <button
+-            onClick={confirmAll}
+-            disabled={isProcessing}
+-            className={cn(
+-              "flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium rounded-md",
+-              "disabled:opacity-50"
+-            )}
+-          >
+-            Save All
+-          </button>
+-          <button
+-            onClick={onDismiss}
+-            disabled={isProcessing}
+-            className={cn(
+-              "px-4 py-2 text-zinc-600 dark:text-zinc-400 text-sm hover:text-zinc-900",
+-              "disabled:opacity-50"
+-            )}
+-          >
+-            Decide Later
+-          </button>
+-        </div>
+       </div>
+     </div>
+   );
+diff --git a/src/app/components/memory/MemoryViewer.tsx b/src/app/components/memory/MemoryViewer.tsx
+index 2294c29..ff9a575 100644
+--- a/src/app/components/memory/MemoryViewer.tsx
++++ b/src/app/components/memory/MemoryViewer.tsx
+@@ -215,7 +215,7 @@ export function MemoryViewer({ userId }: MemoryViewerProps) {
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zaki-disabled" />
+             <input
+               type="text"
+-              placeholder="Search your memories..."
++              placeholder="Search memories"
+               value={searchQuery}
+               onChange={(e) => setSearchQuery(e.target.value)}
+               className="w-full rounded-zaki-lg border border-zaki-strong pl-10 pr-4 py-2.5 text-sm text-zaki-primary placeholder:text-zaki-disabled outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20 transition-all"
+diff --git a/src/app/components/sidebar/ProfileMenu.tsx b/src/app/components/sidebar/ProfileMenu.tsx
+index fc02cf6..5eec3c8 100644
+--- a/src/app/components/sidebar/ProfileMenu.tsx
++++ b/src/app/components/sidebar/ProfileMenu.tsx
+@@ -33,7 +33,7 @@ export function ProfileMenu({
+         </div>
+         <div className="flex-1 min-w-0">
+           <div className="text-sm font-medium text-zaki-primary truncate">{userName}</div>
+-          <div className="text-[10px] text-zaki-disabled">{planLabel} plan</div>
++          <div className="text-2xs text-zaki-disabled">{planLabel} plan</div>
+         </div>
+       </div>
+       <div className="h-px bg-zaki-sunken my-1" />
+@@ -77,7 +77,7 @@ export function ProfileMenu({
+         <LogOut className="size-4" />
+         Log out
+       </button>
+-      <div className="px-2.5 pt-1 text-[10px] text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
++      <div className="px-2.5 pt-1 text-2xs text-zaki-disabled">v1.5.69 · Terms & Conditions</div>
+     </div>
+   );
+ }
+diff --git a/src/queries/useSpaces.ts b/src/queries/useSpaces.ts
+index c13970b..d4530be 100644
+--- a/src/queries/useSpaces.ts
++++ b/src/queries/useSpaces.ts
+@@ -27,7 +27,7 @@ interface ThreadResponse {
+ 
+ // Fetchers
+ async function fetchSpaces(): Promise<Space[]> {
+-  const response = await apiRequest("/workspace");
++  const response = await apiRequest("/workspaces");
+   if (!response.ok) {
+     throw new Error("Failed to load workspaces");
+   }
+@@ -75,7 +75,7 @@ async function createSpace(space: {
+   icon?: string;
+   color?: string;
+ }): Promise<Space> {
+-  const response = await apiRequest("/workspace", {
++  const response = await apiRequest("/zaki/workspaces", {
+     method: "POST",
+     body: JSON.stringify(space),
+   });
+@@ -106,8 +106,8 @@ async function updateSpace(
+   id: string,
+   updates: Partial<Space>
+ ): Promise<Space> {
+-  const response = await apiRequest(`/workspace/${id}`, {
+-    method: "PATCH",
++  const response = await apiRequest(`/workspace/${id}/update`, {
++    method: "POST",
+     body: JSON.stringify({
+       name: updates.title,
+       description: updates.description,
+@@ -140,7 +140,7 @@ async function updateSpace(
+ }
+ 
+ async function deleteSpace(id: string): Promise<void> {
+-  const response = await apiRequest(`/workspace/${id}`, {
++  const response = await apiRequest(`/zaki/workspaces/${id}`, {
+     method: "DELETE",
+   });
+   
+@@ -150,10 +150,11 @@ async function deleteSpace(id: string): Promise<void> {
+ }
+ 
+ // Hooks
+-export function useSpaces() {
++export function useSpaces(enabled = true) {
+   return useQuery({
+     queryKey: spaceKeys.all,
+     queryFn: fetchSpaces,
++    enabled,
+   });
+ }
+ 
+diff --git a/src/queries/useThreads.ts b/src/queries/useThreads.ts
+index 0ebd5cf..6b64a14 100644
+--- a/src/queries/useThreads.ts
++++ b/src/queries/useThreads.ts
+@@ -11,9 +11,9 @@ export const threadKeys = {
+ 
+ // Types
+ interface MessageResponse {
+-  id?: string;
+   role: "user" | "assistant";
+   content: string;
++  chatId?: number;
+   attachments?: { name: string; type: string; url: string }[];
+ }
+ 
+@@ -23,20 +23,21 @@ async function fetchMessages(
+   threadId: string
+ ): Promise<Message[]> {
+   const response = await apiRequest(
+-    `/workspace/${spaceId}/thread/${threadId}/messages`
++    `/workspace/${spaceId}/thread/${threadId}/chats`
+   );
+   
+   if (!response.ok) {
+     throw new Error("Failed to load messages");
+   }
+   
+-  const data = await response.json() as { messages?: MessageResponse[] };
++  const data = await response.json() as { history?: MessageResponse[] };
+   
+-  return (data.messages ?? []).map((msg, i) => ({
+-    id: msg.id ?? `msg-${i}`,
++  return (data.history ?? []).map((msg, i) => ({
++    id: msg.chatId ? `${msg.chatId}-${msg.role}-${i}` : `${msg.role}-${i}`,
+     role: msg.role,
+-    content: msg.content,
++    content: msg.content ?? "",
+     attachments: msg.attachments,
++    chatId: msg.chatId,
+   }));
+ }
+ 
+diff --git a/src/styles/enhancements.css b/src/styles/enhancements.css
+index ef3a02d..84d0618 100644
+--- a/src/styles/enhancements.css
++++ b/src/styles/enhancements.css
+@@ -9,9 +9,9 @@
+ 
+ /* Font loaded via index.html <link> to avoid @import ordering issues */
+ 
+-/* Use Inter as primary, Geist as fallback */
++/* Use Geist as primary */
+ :root {
+-  --font-sans: 'Inter', 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
++  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+   --font-mono: 'Geist Mono', 'SF Mono', Monaco, monospace;
+   
+   /* Apple-like refined line heights */
+@@ -245,7 +245,7 @@ body {
+   gap: 6px;
+   padding: 6px 14px;
+   border-radius: 9999px;
+-  font-size: 13px;
++  font-size: var(--zaki-text-xs);
+   font-weight: 500;
+   background: linear-gradient(135deg, 
+     rgba(210, 68, 48, 0.08) 0%, 
+@@ -269,7 +269,7 @@ body {
+ 
+ .zaki-nugget::before {
+   content: "✦";
+-  font-size: 10px;
++  font-size: var(--zaki-text-2xs);
+   opacity: 0.7;
+ }
+ 
+diff --git a/src/styles/index.css b/src/styles/index.css
+index 40ec984..2962ca2 100644
+--- a/src/styles/index.css
++++ b/src/styles/index.css
+@@ -13,6 +13,78 @@
+   outline-offset: 2px;
+ }
+ 
++.text-2xs {
++  font-size: var(--zaki-text-2xs);
++  line-height: 1.35;
++}
++
++.zaki-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 0.5rem;
++  font-size: var(--zaki-text-sm);
++  font-weight: var(--zaki-font-semibold);
++  padding: 10px 16px;
++  border-radius: 9999px;
++  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
++}
++
++.zaki-btn-sm {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 0.4rem;
++  font-size: var(--zaki-text-xs);
++  font-weight: var(--zaki-font-semibold);
++  padding: 8px 12px;
++  border-radius: 9999px;
++  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
++}
++
++.zaki-main-shell {
++  height: 100%;
++  display: flex;
++  flex-direction: column;
++  padding: 20px;
++}
++
++.zaki-main-panel {
++  flex: 1;
++  border-radius: 28px;
++  border: 1px solid var(--zaki-border-default);
++  background: var(--zaki-surface-base);
++  overflow: hidden;
++  box-shadow: 0 24px 60px rgba(15, 15, 15, 0.08);
++}
++
++.zaki-main-inner {
++  height: 100%;
++  display: flex;
++  flex-direction: column;
++  background: var(--zaki-surface-base);
++}
++
++.dark .zaki-main-panel,
++.dark .zaki-main-inner {
++  background: #0f0b08;
++  border-color: #2b2119;
++  box-shadow: none;
++}
++
++.zaki-subheader-pill {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 6px 12px;
++  border-radius: 9999px;
++  border: 1px solid var(--zaki-border-default);
++  background: var(--zaki-surface-elevated);
++  color: var(--zaki-text-secondary);
++  font-size: var(--zaki-text-xs);
++  font-weight: 600;
++}
++
+ /* Remove outline for mouse/touch users (keep for keyboard) */
+ button:focus:not(:focus-visible),
+ a:focus:not(:focus-visible),
+@@ -57,7 +129,7 @@ select:focus:not(:focus-visible) {
+   --zaki-pattern-glow-1: rgba(90, 74, 58, 0.45);
+   --zaki-pattern-glow-2: rgba(120, 95, 70, 0.18);
+   --zaki-bg: #0f0b08;
+-  --zaki-panel: #15100c;
++  --zaki-panel: #0f0b08;
+   --zaki-panel-border: rgba(255, 255, 255, 0.08);
+   --zaki-card: #21180f;
+   --zaki-card-border: rgba(255, 255, 255, 0.1);
+@@ -195,6 +267,8 @@ select:focus:not(:focus-visible) {
+ 
+ .dark .zaki-app .zaki-user-bubble {
+   color: var(--zaki-bubble-user-text);
++  background: transparent;
++  border: 1px solid var(--zaki-panel-border);
+ }
+ 
+ .zaki-chat-enter {
+@@ -255,6 +329,155 @@ select:focus:not(:focus-visible) {
+   font-weight: 600;
+ }
+ 
++.zaki-space-desc-input {
++  transition: border-color 200ms ease, box-shadow 200ms ease;
++}
++
++.zaki-space-desc-input:focus {
++  border-color: var(--zaki-border);
++  box-shadow: none;
++  outline: none;
++}
++
++.zaki-line-clamp-3 {
++  display: -webkit-box;
++  -webkit-line-clamp: 3;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++}
++
++.zaki-speeder {
++  position: relative;
++  margin: 0 auto;
++  color: #bda28a;
++  animation: zaki-speeder-shake 0.4s linear infinite;
++}
++
++.zaki-speeder > span {
++  height: 5px;
++  width: 35px;
++  background: currentColor;
++  position: absolute;
++  top: -8px;
++  left: 50px;
++  border-radius: 2px 10px 1px 0;
++}
++
++.zaki-speeder-base span {
++  position: absolute;
++  width: 0;
++  height: 0;
++  border-top: 5px solid transparent;
++  border-right: 80px solid currentColor;
++  border-bottom: 5px solid transparent;
++}
++
++.zaki-speeder-base span:before {
++  content: "";
++  height: 18px;
++  width: 18px;
++  border-radius: 50%;
++  background: currentColor;
++  position: absolute;
++  right: -95px;
++  top: -12px;
++}
++
++.zaki-speeder-base span:after {
++  content: "";
++  position: absolute;
++  width: 0;
++  height: 0;
++  border-top: 0 solid transparent;
++  border-right: 45px solid currentColor;
++  border-bottom: 12px solid transparent;
++  top: -12px;
++  right: -82px;
++}
++
++.zaki-speeder-face {
++  position: absolute;
++  height: 10px;
++  width: 16px;
++  background: currentColor;
++  border-radius: 20px 20px 0 0;
++  transform: rotate(-40deg);
++  right: -110px;
++  top: -11px;
++}
++
++.zaki-speeder-face:after {
++  content: "";
++  height: 10px;
++  width: 10px;
++  background: currentColor;
++  right: 3px;
++  top: 6px;
++  position: absolute;
++  transform: rotate(40deg);
++  transform-origin: 50% 50%;
++  border-radius: 0 0 0 2px;
++}
++
++.zaki-speeder > span > span:nth-child(1),
++.zaki-speeder > span > span:nth-child(2),
++.zaki-speeder > span > span:nth-child(3),
++.zaki-speeder > span > span:nth-child(4) {
++  width: 24px;
++  height: 1px;
++  background: currentColor;
++  position: absolute;
++  animation: zaki-speeder-fazer1 0.2s linear infinite;
++}
++
++.zaki-speeder > span > span:nth-child(2) {
++  top: 3px;
++  animation: zaki-speeder-fazer2 0.4s linear infinite;
++}
++
++.zaki-speeder > span > span:nth-child(3) {
++  top: 1px;
++  animation: zaki-speeder-fazer3 0.4s linear infinite;
++  animation-delay: -1s;
++}
++
++.zaki-speeder > span > span:nth-child(4) {
++  top: 4px;
++  animation: zaki-speeder-fazer4 1s linear infinite;
++  animation-delay: -1s;
++}
++
++@keyframes zaki-speeder-fazer1 {
++  0% { left: 0; }
++  100% { left: -60px; opacity: 0; }
++}
++@keyframes zaki-speeder-fazer2 {
++  0% { left: 0; }
++  100% { left: -80px; opacity: 0; }
++}
++@keyframes zaki-speeder-fazer3 {
++  0% { left: 0; }
++  100% { left: -40px; opacity: 0; }
++}
++@keyframes zaki-speeder-fazer4 {
++  0% { left: 0; }
++  100% { left: -110px; opacity: 0; }
++}
++
++@keyframes zaki-speeder-shake {
++  0% { transform: translate(2px, 1px) rotate(0deg); }
++  10% { transform: translate(-1px, -3px) rotate(-1deg); }
++  20% { transform: translate(-2px, 0px) rotate(1deg); }
++  30% { transform: translate(1px, 2px) rotate(0deg); }
++  40% { transform: translate(1px, -1px) rotate(1deg); }
++  50% { transform: translate(-1px, 3px) rotate(-1deg); }
++  60% { transform: translate(-1px, 1px) rotate(0deg); }
++  70% { transform: translate(3px, 1px) rotate(-1deg); }
++  80% { transform: translate(-2px, -1px) rotate(1deg); }
++  90% { transform: translate(2px, 1px) rotate(0deg); }
++  100% { transform: translate(1px, -2px) rotate(-1deg); }
++}
++
+ .dark .zaki-share-modal {
+   border-color: rgba(255, 255, 255, 0.12);
+   background: #1c1612;
+diff --git a/src/styles/tokens.css b/src/styles/tokens.css
+index 82eb586..2e285ad 100644
+--- a/src/styles/tokens.css
++++ b/src/styles/tokens.css
+@@ -103,7 +103,7 @@
+   --zaki-border-focus: var(--zaki-accent);
+   
+   /* Interactive states */
+-  --zaki-hover: var(--zaki-neutral-100);
++  --zaki-hover: #f0e1d1;
+   --zaki-active: var(--zaki-neutral-200);
+   --zaki-selected: rgba(210, 68, 48, 0.08);
+   --zaki-selected-accent: rgba(33, 145, 113, 0.08);
+@@ -151,6 +151,7 @@
+   --zaki-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+   
+   /* Font sizes */
++  --zaki-text-2xs: 11px;
+   --zaki-text-xs: 12px;
+   --zaki-text-sm: 14px;
+   --zaki-text-base: 16px;
+@@ -516,7 +517,8 @@ body, html {
+ 
+ .zaki-nav-active {
+   position: relative;
+-  background: var(--zaki-hover);
++  background: var(--zaki-selected);
++  border: 1px solid var(--zaki-border-subtle);
+ }
+ 
+ .zaki-nav-active::before {
+@@ -545,19 +547,12 @@ body, html {
+   position: relative;
+ }
+ 
+-.zaki-thread-item::before {
+-  content: '';
+-  position: absolute;
+-  inset: 0;
+-  border-radius: inherit;
+-  background: var(--zaki-hover);
+-  opacity: 0;
+-  transition: opacity 300ms ease;
+-  pointer-events: none;
++.zaki-thread-item {
++  background-color: transparent;
+ }
+ 
+-.zaki-thread-item:hover::before {
+-  opacity: 1;
++.zaki-thread-item:hover {
++  background-color: var(--zaki-hover);
+ }
+ 
+ /* Sweep highlight animation — kept for potential future use */

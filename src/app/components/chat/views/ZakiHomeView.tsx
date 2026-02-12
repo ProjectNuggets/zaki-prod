@@ -1,7 +1,13 @@
-import { useRef, useState } from "react";
-import { MoreVertical } from "lucide-react";
-import { ChevronDownIcon } from "../../icons";
+import { useState } from "react";
+import { MoreVertical, ArrowLeft, ArrowRight, ShieldCheck, Sparkles, Clock } from "lucide-react";
 import type { Space } from "@/types";
+import {
+  emptyStateExamples,
+  emptyStateHeadline,
+  emptyStateSubtext,
+  emptyStateCta,
+  emptyStateCtaHelper,
+} from "../emptyStateContent";
 
 interface ZakiHomeViewProps {
   primarySpace: Space | null;
@@ -10,28 +16,49 @@ interface ZakiHomeViewProps {
   onDeleteThread: (threadId: string, spaceId?: string) => void;
 }
 
-const zakiExamples = [
-  "Explain quantum computing in simple terms",
-  "Got any creative ideas for a 10 year old's birthday?",
-  "How do I make an HTTP request in JavaScript?",
+const zakiExamples = emptyStateExamples;
+
+const zakiMissionSlides = [
+  {
+    title: "Memory-first by design",
+    body: "ZAKI keeps the context that matters so every conversation feels continuous.",
+  },
+  {
+    title: "Human-centered focus",
+    body: "Built to reduce friction, not add it. Fast, calm, and predictable.",
+  },
+  {
+    title: "Trustable by default",
+    body: "Clear boundaries, transparent behaviors, and respectful defaults.",
+  },
 ];
 
-const zakiRamadanExamples = [
-  "When is Iftar time in Dubai today?",
-  "What are good Suhoor meal ideas?",
-  "Share a Ramadan greeting message",
+const zakiNews = [
+  {
+    title: "ZAKI Weekly",
+    body: "Product updates, memory tips, and launch progress.",
+    meta: "Latest",
+  },
+  {
+    title: "Behind the memory engine",
+    body: "A short note on how we keep context private and useful.",
+    meta: "Blog",
+  },
 ];
 
-const zakiCapabilities = [
-  "Remembers what user said earlier in the conversation",
-  "Allows user to provide follow-up corrections",
-  "Trained to decline inappropriate requests",
-];
-
-const zakiLimitations = [
-  "May occasionally generate incorrect information",
-  "May occasionally produce harmful instructions or biased content",
-  "Limited knowledge of world and events after training",
+const quickStart = [
+  {
+    title: "Summarize the last meeting",
+    body: "Turn notes into clean highlights and next steps.",
+  },
+  {
+    title: "Plan a launch timeline",
+    body: "Break goals into weekly milestones with owners.",
+  },
+  {
+    title: "Draft a message",
+    body: "Write a crisp update for your team or client.",
+  },
 ];
 
 export function ZakiHomeView({
@@ -40,66 +67,57 @@ export function ZakiHomeView({
   onGoToThread,
   onDeleteThread,
 }: ZakiHomeViewProps) {
+  void primarySpace;
+  void onGoToThread;
+  void onDeleteThread;
   const [zakiMenuOpen, setZakiMenuOpen] = useState(false);
-  const [zakiExamplesOpen, setZakiExamplesOpen] = useState(false);
-  const [zakiThreadMenuOpen, setZakiThreadMenuOpen] = useState<string | null>(null);
-  const zakiMenuRef = useRef<HTMLDivElement>(null);
-  const zakiExamplesRef = useRef<HTMLDivElement>(null);
-  const zakiThreadMenuRef = useRef<HTMLDivElement>(null);
-
+  const [activeSlide, setActiveSlide] = useState(0);
   return (
-    <div className="px-10 py-12">
-      <div className="flex items-center justify-between mb-10">
-        <div className="flex-1 flex flex-col items-center gap-1">
-          <div className="text-xl font-semibold text-zaki-primary tracking-tight">ZAKI</div>
-          <div
-            className="relative text-base text-zaki-brand font-semibold uppercase tracking-wide inline-flex items-center gap-1 cursor-pointer"
-            ref={zakiExamplesRef}
-            onClick={() => setZakiExamplesOpen((open) => !open)}
-            role="button"
-            tabIndex={0}
-          >
-            UNDERSTANDS
-            <ChevronDownIcon color="#D24430" />
-            {zakiExamplesOpen && (
-              <div className="absolute left-1/2 top-full mt-3 w-[320px] -translate-x-1/2 rounded-zaki-lg border border-zaki bg-white p-3 shadow-[0px_14px_30px_rgba(15,15,15,0.12)] z-20">
-                <div className="text-[11px] text-zaki-brand font-semibold uppercase tracking-wider">Examples</div>
-                <div className="mt-2 flex flex-col gap-2">
-                  {zakiExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-sm text-zaki-primary text-left hover:bg-zaki-hover transition-colors"
-                      onClick={() => onSendExample(example)}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 text-[11px] text-zaki-brand font-semibold uppercase tracking-wider">Examples · Ramadan Special</div>
-                <div className="mt-2 flex flex-col gap-2">
-                  {zakiRamadanExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-sm text-zaki-primary text-left hover:bg-zaki-hover transition-colors"
-                      onClick={() => onSendExample(example)}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+    <div className="px-4 sm:px-6 md:px-10 py-10 md:py-12 min-h-full flex flex-col max-w-6xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-10">
+        <div className="flex-1 max-w-3xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-2xs text-zaki-muted uppercase tracking-[0.2em]">
+            Welcome back
+          </div>
+          <h1 className="mt-4 text-3xl md:text-4xl font-semibold text-zaki-primary tracking-tight">
+            {emptyStateHeadline}
+          </h1>
+          <div className="mt-3 text-base text-zaki-muted max-w-2xl">{emptyStateSubtext}</div>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-xs text-zaki-secondary">
+              <ShieldCheck className="size-4 text-zaki-success" />
+              Memory is on
+              <span className="text-zaki-muted">·</span>
+              We only store what you approve.
+            </div>
+            <button
+              type="button"
+              className="text-xs font-semibold text-zaki-brand hover:underline"
+            >
+              Learn how memory works
+            </button>
+          </div>
+          <div className="mt-6 flex flex-col items-start gap-2 w-full">
+            <div className="text-[11px] uppercase tracking-[0.24em] text-zaki-muted">
+              {emptyStateCtaHelper}
+            </div>
+            <button
+              type="button"
+              className="zaki-btn bg-zaki-accent text-white w-full sm:w-auto"
+              onClick={() => onSendExample(emptyStateExamples[0])}
+            >
+              {emptyStateCta}
+            </button>
           </div>
         </div>
-        <div className="relative" ref={zakiMenuRef}>
+        <div className="relative self-start sm:self-auto">
           <button
             type="button"
             className="size-9 rounded-full border border-zaki bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors"
             onClick={() => setZakiMenuOpen((open) => !open)}
             aria-haspopup="menu"
             aria-expanded={zakiMenuOpen}
+            aria-label="Home menu"
           >
             <MoreVertical className="size-4" />
           </button>
@@ -115,75 +133,139 @@ export function ZakiHomeView({
           )}
         </div>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+
+      <div className="grid gap-4 md:grid-cols-3 mb-10">
+        {quickStart.map((item) => (
+          <button
+            key={item.title}
+            type="button"
+            className="rounded-zaki-2xl border border-zaki-subtle bg-white/90 p-5 text-left shadow-[0px_10px_26px_rgba(15,15,15,0.06)] hover:shadow-[0px_16px_30px_rgba(15,15,15,0.08)] transition-shadow"
+            onClick={() => onSendExample(item.title)}
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zaki-muted">
+              <Sparkles className="size-4 text-zaki-brand" />
+              Quick start
+            </div>
+            <div className="mt-3 text-base font-semibold text-zaki-primary">{item.title}</div>
+            <div className="mt-2 text-sm text-zaki-secondary">{item.body}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 md:gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
-          <div className="text-[11px] text-zaki-muted font-semibold mb-4 uppercase tracking-wider">Capabilities</div>
-          <div className="flex flex-col gap-3 text-sm text-zaki-primary text-center">
-            {zakiCapabilities.map((item) => (
-              <div key={item} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
-                {item}
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">
+              Latest from ZAKI
+            </div>
+            <button
+              type="button"
+              className="zaki-btn-sm text-zaki-brand hover:text-zaki-brand bg-transparent"
+            >
+              View all
+            </button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {zakiNews.map((item) => (
+              <div key={item.title} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
+                <div className="text-2xs text-zaki-muted uppercase tracking-wider">{item.meta}</div>
+                <div className="text-sm text-zaki-primary font-semibold mt-1">{item.title}</div>
+                <div className="text-xs text-zaki-secondary mt-2">{item.body}</div>
               </div>
             ))}
           </div>
         </div>
+
         <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
-          <div className="text-[11px] text-zaki-muted font-semibold mb-4 uppercase tracking-wider">Limitations</div>
-          <div className="flex flex-col gap-3 text-sm text-zaki-primary text-center">
-            {zakiLimitations.map((item) => (
-              <div key={item} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
-                {item}
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">
+              Mission
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="zaki-btn-sm size-8 p-0 border border-zaki bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors"
+                onClick={() => setActiveSlide((prev) => (prev - 1 + zakiMissionSlides.length) % zakiMissionSlides.length)}
+                aria-label="Previous mission"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                className="zaki-btn-sm size-8 p-0 border border-zaki bg-white flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors"
+                onClick={() => setActiveSlide((prev) => (prev + 1) % zakiMissionSlides.length)}
+                aria-label="Next mission"
+              >
+                <ArrowRight className="size-4" />
+              </button>
+            </div>
+          </div>
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-5 py-4 min-h-[140px] flex flex-col justify-between">
+            <div>
+              <div className="text-lg font-semibold text-zaki-primary">
+                {zakiMissionSlides[activeSlide]?.title}
               </div>
+              <div className="text-sm text-zaki-secondary mt-2">
+                {zakiMissionSlides[activeSlide]?.body}
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              {zakiMissionSlides.map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className={`h-1.5 rounded-full transition-all ${
+                    index === activeSlide ? "w-6 bg-zaki-brand" : "w-3 bg-zaki-border-default"
+                  }`}
+                  onClick={() => setActiveSlide(index)}
+                  aria-label={`Mission slide ${index + 1}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+        <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">Memory clarity</div>
+              <div className="mt-2 text-sm text-zaki-secondary max-w-xl">
+                ZAKI only saves what helps you. Review and manage memories anytime.
+              </div>
+            </div>
+            <div className="size-10 rounded-full bg-zaki-sunken flex items-center justify-center text-zaki-brand">
+              <Clock className="size-5" />
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
+              <div className="text-xs font-semibold text-zaki-primary">Review saved memories</div>
+              <div className="text-xs text-zaki-muted mt-1">Edit or delete anything ZAKI keeps.</div>
+            </div>
+            <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
+              <div className="text-xs font-semibold text-zaki-primary">You stay in control</div>
+              <div className="text-xs text-zaki-muted mt-1">ZAKI asks for confirmation in manual mode.</div>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)]">
+          <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">Examples</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {zakiExamples.slice(0, 4).map((example) => (
+              <button
+                key={example}
+                type="button"
+                className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover"
+                onClick={() => onSendExample(example)}
+              >
+                {example}
+              </button>
             ))}
           </div>
         </div>
       </div>
-      {primarySpace && (primarySpace.threads?.length ?? 0) > 0 && (
-        <div className="mt-10">
-          <div className="text-xs text-zaki-muted font-semibold mb-3">Recent chats</div>
-          <div className="flex flex-col gap-2">
-            {primarySpace.threads?.map((thread) => (
-              <div key={thread.id} className="flex items-center justify-between rounded-zaki-md border border-zaki bg-white px-4 py-3 text-sm text-zaki-primary">
-                <button
-                  type="button"
-                  className="flex-1 text-left font-medium"
-                  onClick={() => {
-                    if (!primarySpace) return;
-                    onGoToThread(primarySpace.id, thread.id);
-                  }}
-                >
-                  {thread.label}
-                </button>
-                <div className="relative" ref={zakiThreadMenuRef}>
-                  <button
-                    type="button"
-                    className="size-8 rounded-full hover:bg-zaki-hover flex items-center justify-center text-zaki-muted"
-                    onClick={() => setZakiThreadMenuOpen((prev) => (prev === thread.id ? null : thread.id))}
-                  >
-                    <MoreVertical className="size-4" />
-                  </button>
-                  {zakiThreadMenuOpen === thread.id && (
-                    <div className="absolute right-0 mt-2 w-32 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1">
-                      <button className="w-full text-left px-3 py-2 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md" type="button">
-                        Rename
-                      </button>
-                      <button
-                        className="w-full text-left px-3 py-2 text-sm text-zaki-brand hover:bg-zaki-error rounded-zaki-md"
-                        type="button"
-                        onClick={() => {
-                          onDeleteThread(thread.id, primarySpace?.id);
-                          setZakiThreadMenuOpen(null);
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -27,14 +27,14 @@ export function DeleteConfirmModal({
         <div className="mt-6 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
+            className="zaki-btn zaki-btn-secondary"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand transition-colors"
+            className="zaki-btn bg-zaki-brand text-white hover:bg-zaki-brand transition-colors"
             onClick={() => {
               onConfirm(item.type, item.id);
               onClose();

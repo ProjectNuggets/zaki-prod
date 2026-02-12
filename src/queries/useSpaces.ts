@@ -27,7 +27,7 @@ interface ThreadResponse {
 
 // Fetchers
 async function fetchSpaces(): Promise<Space[]> {
-  const response = await apiRequest("/workspace");
+  const response = await apiRequest("/workspaces");
   if (!response.ok) {
     throw new Error("Failed to load workspaces");
   }
@@ -75,7 +75,7 @@ async function createSpace(space: {
   icon?: string;
   color?: string;
 }): Promise<Space> {
-  const response = await apiRequest("/workspace", {
+  const response = await apiRequest("/zaki/workspaces", {
     method: "POST",
     body: JSON.stringify(space),
   });
@@ -106,8 +106,8 @@ async function updateSpace(
   id: string,
   updates: Partial<Space>
 ): Promise<Space> {
-  const response = await apiRequest(`/workspace/${id}`, {
-    method: "PATCH",
+  const response = await apiRequest(`/workspace/${id}/update`, {
+    method: "POST",
     body: JSON.stringify({
       name: updates.title,
       description: updates.description,
@@ -140,7 +140,7 @@ async function updateSpace(
 }
 
 async function deleteSpace(id: string): Promise<void> {
-  const response = await apiRequest(`/workspace/${id}`, {
+  const response = await apiRequest(`/zaki/workspaces/${id}`, {
     method: "DELETE",
   });
   
@@ -150,10 +150,11 @@ async function deleteSpace(id: string): Promise<void> {
 }
 
 // Hooks
-export function useSpaces() {
+export function useSpaces(enabled = true) {
   return useQuery({
     queryKey: spaceKeys.all,
     queryFn: fetchSpaces,
+    enabled,
   });
 }
 

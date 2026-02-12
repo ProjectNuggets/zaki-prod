@@ -9,9 +9,9 @@
 
 /* Font loaded via index.html <link> to avoid @import ordering issues */
 
-/* Use Inter as primary, Geist as fallback */
+/* Use Geist as primary */
 :root {
-  --font-sans: 'Inter', 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono', 'SF Mono', Monaco, monospace;
   
   /* Apple-like refined line heights */
@@ -245,7 +245,7 @@ body {
   gap: 6px;
   padding: 6px 14px;
   border-radius: 9999px;
-  font-size: 13px;
+  font-size: var(--zaki-text-xs);
   font-weight: 500;
   background: linear-gradient(135deg, 
     rgba(210, 68, 48, 0.08) 0%, 
@@ -269,7 +269,7 @@ body {
 
 .zaki-nugget::before {
   content: "✦";
-  font-size: 10px;
+  font-size: var(--zaki-text-2xs);
   opacity: 0.7;
 }
 

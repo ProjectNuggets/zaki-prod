@@ -18,10 +18,10 @@ interface MemoryModeToggleProps {
 
 export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4">
+    <div className="rounded-zaki-lg border border-zaki-subtle bg-white p-4">
       <div className="flex items-center gap-2 mb-3">
-        <Brain className="h-4 w-4 text-teal-500" />
-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <Brain className="h-4 w-4 text-zaki-accent" />
+        <span className="text-sm font-medium text-zaki-primary">
           Memory Mode
         </span>
       </div>
@@ -34,29 +34,29 @@ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
             "relative p-3 rounded-md text-left transition-all",
             "border-2",
             value === "autosave"
-              ? "border-teal-500 bg-teal-50/50 dark:bg-teal-900/20"
-              : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300"
+              ? "border-zaki-accent bg-zaki-accent-10"
+              : "border-zaki-subtle hover:border-zaki-strong"
           )}
         >
           <div className="flex items-start gap-2">
             <Clock className={cn(
               "h-4 w-4 mt-0.5",
-              value === "autosave" ? "text-teal-500" : "text-zinc-400"
+              value === "autosave" ? "text-zaki-accent" : "text-zaki-muted"
             )} />
             <div>
               <p className={cn(
                 "text-sm font-medium",
-                value === "autosave" ? "text-teal-700 dark:text-teal-400" : "text-zinc-700 dark:text-zinc-300"
+                value === "autosave" ? "text-zaki-accent" : "text-zaki-secondary"
               )}>
                 Auto-Save
               </p>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-2xs text-zaki-muted mt-1">
                 Save instantly, 3s undo
               </p>
             </div>
           </div>
           {value === "autosave" && (
-            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-teal-500" />
+            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-zaki-accent" />
           )}
         </button>
 
@@ -67,29 +67,29 @@ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
             "relative p-3 rounded-md text-left transition-all",
             "border-2",
             value === "manual"
-              ? "border-amber-500 bg-amber-50/50 dark:bg-amber-900/20"
-              : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300"
+              ? "border-zaki-brand bg-zaki-brand-10"
+              : "border-zaki-subtle hover:border-zaki-strong"
           )}
         >
           <div className="flex items-start gap-2">
             <AlertCircle className={cn(
               "h-4 w-4 mt-0.5",
-              value === "manual" ? "text-amber-500" : "text-zinc-400"
+              value === "manual" ? "text-zaki-brand" : "text-zaki-muted"
             )} />
             <div>
               <p className={cn(
                 "text-sm font-medium",
-                value === "manual" ? "text-amber-700 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-300"
+                value === "manual" ? "text-zaki-brand" : "text-zaki-secondary"
               )}>
                 Manual
               </p>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-2xs text-zaki-muted mt-1">
                 Confirm each memory
               </p>
             </div>
           </div>
           {value === "manual" && (
-            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-amber-500" />
+            <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-zaki-brand" />
           )}
         </button>
       </div>

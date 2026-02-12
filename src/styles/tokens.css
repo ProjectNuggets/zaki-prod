@@ -103,7 +103,7 @@
   --zaki-border-focus: var(--zaki-accent);
   
   /* Interactive states */
-  --zaki-hover: var(--zaki-neutral-100);
+  --zaki-hover: #f0e1d1;
   --zaki-active: var(--zaki-neutral-200);
   --zaki-selected: rgba(210, 68, 48, 0.08);
   --zaki-selected-accent: rgba(33, 145, 113, 0.08);
@@ -118,6 +118,10 @@
   --zaki-info: var(--zaki-secondary-700);
   --zaki-info-bg: rgba(41, 195, 154, 0.08);
   --zaki-info-border: rgba(41, 195, 154, 0.20);
+
+  /* Scrollbar */
+  --zaki-scrollbar-thumb: #efe2d3;
+  --zaki-scrollbar-thumb-hover: #efe2d3;
   
   /* Message bubbles */
   --zaki-bubble-user: var(--zaki-neutral-300);
@@ -151,6 +155,7 @@
   --zaki-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   
   /* Font sizes */
+  --zaki-text-2xs: 11px;
   --zaki-text-xs: 12px;
   --zaki-text-sm: 14px;
   --zaki-text-base: 16px;
@@ -242,6 +247,10 @@
   --zaki-text-muted: var(--zaki-neutral-500);
   --zaki-text-disabled: var(--zaki-neutral-700);
   --zaki-text-placeholder: var(--zaki-neutral-700);
+
+  /* Scrollbar */
+  --zaki-scrollbar-thumb: #312a20;
+  --zaki-scrollbar-thumb-hover: #312a20;
   
   /* Surfaces — warm dark */
   --zaki-surface-base: var(--zaki-neutral-1600);
@@ -304,6 +313,14 @@ body, html {
 .zaki-focus-ring:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--zaki-surface-base), 0 0 0 4px var(--zaki-accent);
+}
+
+.zaki-pressable {
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.zaki-pressable:active {
+  transform: translateY(1px) scale(0.99);
 }
 
 /* Screen reader only */
@@ -396,6 +413,15 @@ body, html {
 
 /* Interactive states */
 .hover\:bg-zaki-hover:hover { background-color: var(--zaki-hover); }
+
+/* Slightly stronger hover contrast in light mode */
+.hover\:bg-zaki-hover:hover {
+  box-shadow: inset 0 0 0 1px var(--zaki-border-strong);
+}
+
+.dark .hover\:bg-zaki-hover:hover {
+  box-shadow: none;
+}
 .hover\:bg-zaki-active:hover { background-color: var(--zaki-active); }
 .hover\:text-zaki-primary:hover { color: var(--zaki-text-primary); }
 .hover\:text-zaki-accent:hover { color: var(--zaki-accent); }
@@ -516,7 +542,8 @@ body, html {
 
 .zaki-nav-active {
   position: relative;
-  background: var(--zaki-hover);
+  background: var(--zaki-selected);
+  border: 1px solid var(--zaki-border-subtle);
 }
 
 .zaki-nav-active::before {
@@ -530,6 +557,7 @@ body, html {
   background-color: var(--zaki-neutral-700);
   border-radius: 0 2px 2px 0;
 }
+
 
 /* Active dot indicator */
 .zaki-active-dot {
@@ -545,19 +573,12 @@ body, html {
   position: relative;
 }
 
-.zaki-thread-item::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--zaki-hover);
-  opacity: 0;
-  transition: opacity 300ms ease;
-  pointer-events: none;
+.zaki-thread-item {
+  background-color: transparent;
 }
 
-.zaki-thread-item:hover::before {
-  opacity: 1;
+.zaki-thread-item:hover {
+  background-color: var(--zaki-hover);
 }
 
 /* Sweep highlight animation — kept for potential future use */
@@ -732,28 +753,49 @@ body, html {
  * SCROLLBAR — Warm styled
  * ============================================ */
 
-::-webkit-scrollbar {
+.zaki-scrollbar-fade::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-::-webkit-scrollbar-track {
+.zaki-scrollbar-fade::-webkit-scrollbar-track {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--zaki-neutral-400);
+.zaki-scrollbar-fade::-webkit-scrollbar-thumb {
+  background: transparent;
   border-radius: 4px;
+  opacity: 0;
+  transition: background-color 600ms ease, opacity 600ms ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--zaki-neutral-500);
+.zaki-scrollbar-fade::-webkit-scrollbar-thumb:hover {
+  background: transparent;
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: var(--zaki-neutral-1200);
+.dark .zaki-scrollbar-fade::-webkit-scrollbar-thumb {
+  background: transparent;
+  opacity: 0;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--zaki-neutral-1100);
+.dark .zaki-scrollbar-fade::-webkit-scrollbar-thumb:hover {
+  background: transparent;
+}
+
+.zaki-scrollbar-fade.is-scrolling::-webkit-scrollbar-thumb {
+  background: var(--zaki-scrollbar-thumb);
+  opacity: 1;
+}
+
+.zaki-scrollbar-fade.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: var(--zaki-scrollbar-thumb-hover);
+}
+
+.dark .zaki-scrollbar-fade.is-scrolling::-webkit-scrollbar-thumb {
+  background: var(--zaki-scrollbar-thumb);
+  opacity: 1;
+}
+
+.dark .zaki-scrollbar-fade.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: var(--zaki-scrollbar-thumb-hover);
 }

@@ -13,6 +13,98 @@
   outline-offset: 2px;
 }
 
+.text-2xs {
+  font-size: var(--zaki-text-2xs);
+  line-height: 1.35;
+}
+
+.zaki-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: var(--zaki-text-sm);
+  font-weight: var(--zaki-font-semibold);
+  padding: 10px 16px;
+  border-radius: 9999px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+}
+
+.zaki-btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: var(--zaki-text-xs);
+  font-weight: var(--zaki-font-semibold);
+  padding: 8px 12px;
+  border-radius: 9999px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+}
+
+.zaki-btn-secondary {
+  background: #ffffff;
+  color: var(--zaki-text-secondary);
+  border: 1px solid var(--zaki-border-subtle);
+}
+
+.zaki-btn-secondary:hover {
+  background: var(--zaki-hover);
+}
+
+.dark .zaki-btn-secondary {
+  background: var(--zaki-surface-dark-card);
+  color: var(--zaki-text-secondary);
+  border-color: var(--zaki-border-default);
+}
+
+.dark .zaki-btn-secondary:hover {
+  background: var(--zaki-surface-dark-elevated);
+}
+
+.zaki-main-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.zaki-main-panel {
+  flex: 1;
+  border-radius: 28px;
+  border: 1px solid var(--zaki-border-default);
+  background: var(--zaki-surface-base);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 15, 15, 0.08);
+}
+
+.zaki-main-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--zaki-surface-base);
+}
+
+.dark .zaki-main-panel,
+.dark .zaki-main-inner {
+  background: #0f0b08;
+  border-color: #2b2119;
+  box-shadow: none;
+}
+
+.zaki-subheader-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--zaki-border-default);
+  background: var(--zaki-surface-elevated);
+  color: var(--zaki-text-secondary);
+  font-size: var(--zaki-text-xs);
+  font-weight: 600;
+}
+
 /* Remove outline for mouse/touch users (keep for keyboard) */
 button:focus:not(:focus-visible),
 a:focus:not(:focus-visible),
@@ -57,7 +149,7 @@ select:focus:not(:focus-visible) {
   --zaki-pattern-glow-1: rgba(90, 74, 58, 0.45);
   --zaki-pattern-glow-2: rgba(120, 95, 70, 0.18);
   --zaki-bg: #0f0b08;
-  --zaki-panel: #15100c;
+  --zaki-panel: #0f0b08;
   --zaki-panel-border: rgba(255, 255, 255, 0.08);
   --zaki-card: #21180f;
   --zaki-card-border: rgba(255, 255, 255, 0.1);
@@ -195,6 +287,8 @@ select:focus:not(:focus-visible) {
 
 .dark .zaki-app .zaki-user-bubble {
   color: var(--zaki-bubble-user-text);
+  background: transparent;
+  border: 1px solid var(--zaki-panel-border);
 }
 
 .zaki-chat-enter {
@@ -253,6 +347,155 @@ select:focus:not(:focus-visible) {
 
 .zaki-share-pill {
   font-weight: 600;
+}
+
+.zaki-space-desc-input {
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.zaki-space-desc-input:focus {
+  border-color: var(--zaki-border);
+  box-shadow: none;
+  outline: none;
+}
+
+.zaki-line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.zaki-speeder {
+  position: relative;
+  margin: 0 auto;
+  color: #bda28a;
+  animation: zaki-speeder-shake 0.4s linear infinite;
+}
+
+.zaki-speeder > span {
+  height: 5px;
+  width: 35px;
+  background: currentColor;
+  position: absolute;
+  top: -8px;
+  left: 50px;
+  border-radius: 2px 10px 1px 0;
+}
+
+.zaki-speeder-base span {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-right: 80px solid currentColor;
+  border-bottom: 5px solid transparent;
+}
+
+.zaki-speeder-base span:before {
+  content: "";
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: currentColor;
+  position: absolute;
+  right: -95px;
+  top: -12px;
+}
+
+.zaki-speeder-base span:after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-top: 0 solid transparent;
+  border-right: 45px solid currentColor;
+  border-bottom: 12px solid transparent;
+  top: -12px;
+  right: -82px;
+}
+
+.zaki-speeder-face {
+  position: absolute;
+  height: 10px;
+  width: 16px;
+  background: currentColor;
+  border-radius: 20px 20px 0 0;
+  transform: rotate(-40deg);
+  right: -110px;
+  top: -11px;
+}
+
+.zaki-speeder-face:after {
+  content: "";
+  height: 10px;
+  width: 10px;
+  background: currentColor;
+  right: 3px;
+  top: 6px;
+  position: absolute;
+  transform: rotate(40deg);
+  transform-origin: 50% 50%;
+  border-radius: 0 0 0 2px;
+}
+
+.zaki-speeder > span > span:nth-child(1),
+.zaki-speeder > span > span:nth-child(2),
+.zaki-speeder > span > span:nth-child(3),
+.zaki-speeder > span > span:nth-child(4) {
+  width: 24px;
+  height: 1px;
+  background: currentColor;
+  position: absolute;
+  animation: zaki-speeder-fazer1 0.2s linear infinite;
+}
+
+.zaki-speeder > span > span:nth-child(2) {
+  top: 3px;
+  animation: zaki-speeder-fazer2 0.4s linear infinite;
+}
+
+.zaki-speeder > span > span:nth-child(3) {
+  top: 1px;
+  animation: zaki-speeder-fazer3 0.4s linear infinite;
+  animation-delay: -1s;
+}
+
+.zaki-speeder > span > span:nth-child(4) {
+  top: 4px;
+  animation: zaki-speeder-fazer4 1s linear infinite;
+  animation-delay: -1s;
+}
+
+@keyframes zaki-speeder-fazer1 {
+  0% { left: 0; }
+  100% { left: -60px; opacity: 0; }
+}
+@keyframes zaki-speeder-fazer2 {
+  0% { left: 0; }
+  100% { left: -80px; opacity: 0; }
+}
+@keyframes zaki-speeder-fazer3 {
+  0% { left: 0; }
+  100% { left: -40px; opacity: 0; }
+}
+@keyframes zaki-speeder-fazer4 {
+  0% { left: 0; }
+  100% { left: -110px; opacity: 0; }
+}
+
+@keyframes zaki-speeder-shake {
+  0% { transform: translate(2px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -3px) rotate(-1deg); }
+  20% { transform: translate(-2px, 0px) rotate(1deg); }
+  30% { transform: translate(1px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 3px) rotate(-1deg); }
+  60% { transform: translate(-1px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-1deg); }
+  80% { transform: translate(-2px, -1px) rotate(1deg); }
+  90% { transform: translate(2px, 1px) rotate(0deg); }
+  100% { transform: translate(1px, -2px) rotate(-1deg); }
 }
 
 .dark .zaki-share-modal {

@@ -11,9 +11,9 @@ export const threadKeys = {
 
 // Types
 interface MessageResponse {
-  id?: string;
   role: "user" | "assistant";
   content: string;
+  chatId?: number;
   attachments?: { name: string; type: string; url: string }[];
 }
 
@@ -23,20 +23,21 @@ async function fetchMessages(
   threadId: string
 ): Promise<Message[]> {
   const response = await apiRequest(
-    `/workspace/${spaceId}/thread/${threadId}/messages`
+    `/workspace/${spaceId}/thread/${threadId}/chats`
   );
   
   if (!response.ok) {
     throw new Error("Failed to load messages");
   }
   
-  const data = await response.json() as { messages?: MessageResponse[] };
+  const data = await response.json() as { history?: MessageResponse[] };
   
-  return (data.messages ?? []).map((msg, i) => ({
-    id: msg.id ?? `msg-${i}`,
+  return (data.history ?? []).map((msg, i) => ({
+    id: msg.chatId ? `${msg.chatId}-${msg.role}-${i}` : `${msg.role}-${i}`,
     role: msg.role,
-    content: msg.content,
+    content: msg.content ?? "",
     attachments: msg.attachments,
+    chatId: msg.chatId,
   }));
 }
 

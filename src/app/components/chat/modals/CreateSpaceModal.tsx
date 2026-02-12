@@ -129,14 +129,14 @@ export function CreateSpaceModal({
         <div className="mt-6 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors"
+            className="zaki-btn zaki-btn-secondary"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-full px-4 py-2 text-sm text-white bg-zaki-secondary hover:bg-zaki-brand active:scale-[0.98] transition-[transform,background-color]"
+            className="zaki-btn bg-zaki-secondary text-white hover:bg-zaki-brand transition-[transform,background-color] zaki-pressable"
             onClick={handleCreate}
           >
             Create space
