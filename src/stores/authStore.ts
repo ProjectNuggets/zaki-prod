@@ -4,6 +4,7 @@ import { getAuthToken, setAuthToken, clearAuthToken } from "@/lib/api";
 interface User {
   id?: number | string;
   username?: string;
+  fullName?: string | null;
   role?: string;
 }
 

@@ -1,20 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CenterLogo } from "../icons";
 import { cn } from "@/lib/utils";
-
-const thinkingPhrases = [
-  "Thinking",
-  "Mulling it over",
-  "Let me think",
-  "Processing",
-  "Working on it",
-];
+import { useTranslation } from "react-i18next";
 
 interface ThinkingIndicatorProps {
   className?: string;
 }
 
 export function ThinkingIndicator({ className }: ThinkingIndicatorProps) {
+  const { t } = useTranslation();
+  const thinkingPhrases = useMemo(
+    () => t("chat.thinkingPhrases", { returnObjects: true }) as string[],
+    [t]
+  );
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
 

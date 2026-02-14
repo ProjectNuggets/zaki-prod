@@ -4,8 +4,8 @@ import {
 } from "./icons";
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
-import { apiRequest } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiRequest, updateProfile } from "@/lib/api";
 import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -14,13 +14,17 @@ import { toast } from "sonner";
 import type { Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { useSpaces } from "@/queries/useSpaces";
+import { useTranslation } from "react-i18next";
+import { SettingsModal } from "./sidebar/SettingsModal";
 
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 
 export function Sidebar() {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   // Get state from stores
-  const { user, logout } = useAuthStore();
+  const { user, logout, setUser } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
   const { goToThread } = useNavigation();
@@ -50,11 +54,13 @@ export function Sidebar() {
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
   const isDark = resolvedTheme() === "dark";
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
+  const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
+  const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
   
   // Focus trap refs for modals
-  const settingsModalRef = useFocusTrap<HTMLDivElement>(settingsOpen);
   const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
   const profileEditModalRef = useFocusTrap<HTMLDivElement>(profileEditOpen);
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
@@ -86,9 +92,9 @@ export function Sidebar() {
   };
   useEffect(() => {
     if (!displayName) {
-      setDisplayName(user?.username?.trim() || "User");
+      setDisplayName(user?.fullName?.trim() || user?.username?.trim() || "User");
     }
-  }, [user?.username, displayName]);
+  }, [user?.fullName, user?.username, displayName]);
 
   const userName = displayName.trim() || "User";
   const userInitials = useMemo(() => {
@@ -103,6 +109,10 @@ export function Sidebar() {
   }, [userName]);
 
   useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(expandStorageKey) : null;
+    if (stored && stored !== "none" && stored !== expandedSpace) {
+      setExpandedSpace(stored);
+    }
     if (!user) {
       setSpaces([]);
       return;
@@ -113,11 +123,25 @@ export function Sidebar() {
     setSpaces(spacesData as SidebarSpace[]);
     setLastSynced(new Date());
     setSpacesError("");
+    if (stored === "none") {
+      setExpandedSpace(null);
+      return;
+    }
     const firstSpace = spacesData[0];
     if (firstSpace) {
-      setExpandedSpace((prev) => prev ?? firstSpace.id);
+      const storedValid = stored && spacesData.some((space) => space.id === stored);
+      setExpandedSpace((prev) => prev ?? (storedValid ? stored : null) ?? firstSpace.id);
     }
   }, [user, spacesData]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!expandedSpace) {
+      window.localStorage.setItem(expandStorageKey, "none");
+      return;
+    }
+    window.localStorage.setItem(expandStorageKey, expandedSpace);
+  }, [expandStorageKey, expandedSpace]);
 
   useEffect(() => {
     if (!spacesQueryError) return;
@@ -162,6 +186,28 @@ export function Sidebar() {
   useEffect(() => {
     setGlobalSpaces(spaces);
   }, [spaces, setGlobalSpaces]);
+
+  const saveDisplayName = useCallback(async () => {
+    if (!user?.username) return;
+    setProfileSaving(true);
+    try {
+      const nextName = displayName.trim();
+      const { response, data } = await updateProfile(nextName);
+      if (!response.ok || data?.error) {
+        toast.error(data?.error || "Unable to save profile");
+        return;
+      }
+      setUser({
+        ...user,
+        fullName: nextName || null,
+      });
+      toast.success("Profile updated");
+    } catch (error) {
+      toast.error("Unable to save profile");
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [displayName, setUser, user]);
 
   useEffect(() => {
     window.dispatchEvent(
@@ -734,8 +780,8 @@ export function Sidebar() {
               className="size-9 rounded-zaki-md flex items-center justify-center transition-colors bg-zaki-elevated hover:bg-zaki-active focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
               onClick={() => createThreadInSpace(expandedSpace ?? spaces[0]?.id ?? null)}
               type="button"
-              title="New chat"
-              aria-label="New chat"
+              title={t("sidebar.actions.newChat")}
+              aria-label={t("sidebar.actions.newChat")}
             >
               <AddIcon color="#88735A" />
             </button>
@@ -786,7 +832,7 @@ export function Sidebar() {
         <SearchIcon />
         <input 
           type="text" 
-          placeholder="Search spaces"
+          placeholder={t("sidebar.searchPlaceholder")}
           className="bg-transparent border-none outline-none text-zaki-muted placeholder-zaki text-sm w-full font-medium"
         />
       </div>
@@ -794,7 +840,7 @@ export function Sidebar() {
       {/* Last synced badge — trust signal */}
       <div className="flex items-center gap-1.5 text-2xs text-zaki-muted mb-4 pl-1">
         <span className="inline-block size-1.5 rounded-full bg-zaki-accent animate-pulse" />
-        <span>Synced {formatRelativeTime(lastSynced)}</span>
+        <span>{t("sidebar.synced", { time: formatRelativeTime(lastSynced) })}</span>
       </div>
 
       {/* Actions */}
@@ -814,7 +860,7 @@ export function Sidebar() {
           <div className="bg-zaki-brand-15 rounded-full size-5 flex items-center justify-center">
             <AddIcon />
           </div>
-          <span className="text-zaki-brand text-sm font-medium">New space</span>
+          <span className="text-zaki-brand text-sm font-medium">{t("sidebar.nav.newSpace")}</span>
         </button>
 
         <button
@@ -831,7 +877,7 @@ export function Sidebar() {
           <div className="size-5 flex items-center justify-center">
              <EditIcon />
           </div>
-          <span className="text-zaki-secondary text-sm font-medium">Spaces</span>
+          <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.spaces")}</span>
         </button>
 
         <button
@@ -848,7 +894,7 @@ export function Sidebar() {
           <div className="size-5 flex items-center justify-center">
              <BookIcon />
           </div>
-          <span className="text-zaki-secondary text-sm font-medium">Library</span>
+          <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.library")}</span>
         </button>
       </div>
 
@@ -857,7 +903,7 @@ export function Sidebar() {
 
       {/* Space Section */}
       <div className="flex-1 overflow-y-auto bg-[#FDF6EE] dark:bg-[#0f0b08] zaki-scrollbar-fade">
-        <div className="text-zaki-muted text-xs font-medium mb-2 pl-1.5">Space</div>
+        <div className="text-zaki-muted text-xs font-medium mb-2 pl-1.5">{t("sidebar.section.space")}</div>
         {spacesLoading && (
           <div className="mb-3">
             <SkeletonSpaceList />
@@ -873,15 +919,15 @@ export function Sidebar() {
             <div className="w-12 h-12 rounded-2xl bg-zaki-hover flex items-center justify-center mb-3">
               <Folder className="w-6 h-6 text-zaki-muted" />
             </div>
-            <p className="text-sm text-zaki-primary font-medium mb-1">No spaces yet</p>
-            <p className="text-xs text-zaki-secondary mb-4">Create your first space to get started</p>
+            <p className="text-sm text-zaki-primary font-medium mb-1">{t("sidebar.empty.noSpaces")}</p>
+            <p className="text-xs text-zaki-secondary mb-4">{t("sidebar.empty.noSpacesHelper")}</p>
             <button
               onClick={() => window.dispatchEvent(new CustomEvent("zaki:create-space"))}
               className="flex items-center gap-2 px-3 py-2 bg-zaki-brand text-white text-sm font-medium rounded-zaki-xl hover:bg-zaki-brand-hover transition-colors"
               type="button"
             >
               <AddIcon className="w-4 h-4" />
-              Create Space
+              {t("sidebar.actions.createSpace")}
             </button>
           </div>
         )}
@@ -892,9 +938,8 @@ export function Sidebar() {
               <div className="relative group">
                 <button
                   onClick={() => {
-                    setExpandedSpace(space.id);
+                    setExpandedSpace((prev) => (prev === space.id ? null : space.id));
                     setActiveItem(space.id);
-                    window.dispatchEvent(new CustomEvent("zaki:view-space", { detail: { id: space.id } }));
                   }}
                   className={cn(
                     "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
@@ -907,12 +952,14 @@ export function Sidebar() {
                       <CenterLogo />
                     </div>
                   </div>
-                  <span className="text-zaki-secondary text-sm font-medium flex-1">{space.title}</span>
+                  <span className={cn("text-zaki-secondary text-sm font-medium flex-1", isRtl && "text-right")}>
+                    {space.title}
+                  </span>
                   {space.threads.length > 0 && (
                     <span
                       className={cn(
                         "inline-flex transition-transform",
-                        isSpaceActive(space.id) ? "rotate-0" : "-rotate-90"
+                        isSpaceActive(space.id) ? "rotate-0" : isRtl ? "rotate-90" : "-rotate-90"
                       )}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -932,6 +979,7 @@ export function Sidebar() {
                       <button
                         className={cn(
                           "zaki-thread-item w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
+                          isRtl && "text-right",
                           isActive(thread.id) ? "zaki-nav-active" : ""
                         )}
                         onClick={() => {
@@ -953,7 +1001,7 @@ export function Sidebar() {
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="#88735A" />
                     </div>
-                    <span className="text-zaki-muted text-sm font-medium">New chat</span>
+                    <span className="text-zaki-muted text-sm font-medium">{t("sidebar.actions.newChat")}</span>
                   </button>
                 </div>
               )}
@@ -964,9 +1012,8 @@ export function Sidebar() {
               <div className="relative group">
                 <button
                   onClick={() => {
-                    setExpandedSpace(space.id);
+                    setExpandedSpace((prev) => (prev === space.id ? null : space.id));
                     setActiveItem(space.id);
-                    window.dispatchEvent(new CustomEvent("zaki:view-space", { detail: { id: space.id } }));
                   }}
                   className={cn(
                     "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
@@ -997,7 +1044,9 @@ export function Sidebar() {
                       autoFocus
                     />
                   ) : (
-                    <span className="text-zaki-secondary text-sm font-medium flex-1">{space.title}</span>
+                    <span className={cn("text-zaki-secondary text-sm font-medium flex-1", isRtl && "text-right")}>
+                      {space.title}
+                    </span>
                   )}
                   <div className="flex items-center gap-1">
                 {!space.fixed && (
@@ -1019,7 +1068,7 @@ export function Sidebar() {
                       <span
                         className={cn(
                           "inline-flex transition-transform",
-                          isSpaceActive(space.id) ? "rotate-0" : "-rotate-90"
+                          isSpaceActive(space.id) ? "rotate-0" : isRtl ? "rotate-90" : "-rotate-90"
                         )}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -1041,6 +1090,7 @@ export function Sidebar() {
                       <button
                         className={cn(
                           "zaki-thread-item w-full text-left text-zaki-secondary text-sm font-medium py-1.5 px-2 rounded-lg",
+                          isRtl && "text-right",
                           isActive(thread.id) ? "zaki-nav-active" : ""
                         )}
                         onClick={() => {
@@ -1126,7 +1176,7 @@ export function Sidebar() {
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="#88735A" />
                     </div>
-                    <span className="text-zaki-muted text-sm font-medium">New chat</span>
+                    <span className="text-zaki-muted text-sm font-medium">{t("sidebar.actions.newChat")}</span>
                   </button>
                 </div>
               )}
@@ -1257,131 +1307,22 @@ export function Sidebar() {
           </div>
         )}
       </div>
-      {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-          <div
-            className="absolute inset-0"
-            onClick={() => setSettingsOpen(false)}
-            role="button"
-            aria-label="Close settings"
-          />
-          <div ref={settingsModalRef} className="relative w-[620px] max-w-[calc(100%-2rem)] rounded-[28px] border border-zaki-subtle bg-white dark:bg-zaki-dark-card dark:border-zaki-dark shadow-[0px_30px_80px_rgba(15,15,15,0.18)]">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-zaki-subtle dark:border-zaki-dark bg-zaki-base/80 dark:bg-zaki-dark-elevated">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-full border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card flex items-center justify-center text-zaki-brand text-sm font-semibold">
-                  S
-                </div>
-                <div>
-                  <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Settings</div>
-                  <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">Profile, preferences, and data controls</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="size-9 rounded-full border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card text-zaki-secondary dark:text-zaki-dark-muted hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
-                onClick={() => setSettingsOpen(false)}
-                aria-label="Close settings"
-              >
-                <span className="block text-lg leading-none">×</span>
-              </button>
-            </div>
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-6">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">Profile</div>
-                <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
-                  <label className="flex flex-col gap-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                    Display name
-                    <input
-                      className="rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
-                      defaultValue={userName}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                    Email
-                    <input
-                      className="rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
-                      defaultValue={userName}
-                    />
-                  </label>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">Preferences</div>
-                <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
-                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                    Theme
-                    <select
-                      className="rounded-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-2 py-1 text-sm text-zaki-primary dark:text-zaki-dark-primary"
-                      value={themePreference}
-                      onChange={(event) =>
-                        setThemePreference(event.target.value as "light" | "dark" | "system")
-                      }
-                    >
-                      <option value="light">Light</option>
-                      <option value="system">System</option>
-                      <option value="dark">Dark</option>
-                    </select>
-                  </label>
-                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                    Language
-                    <select className="rounded-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-2 py-1 text-sm text-zaki-primary dark:text-zaki-dark-primary">
-                      <option>English</option>
-                      <option>Arabic</option>
-                    </select>
-                  </label>
-                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                    Auto-generate titles
-                    <input type="checkbox" className="size-4 accent-zaki" defaultChecked />
-                  </label>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">Data & storage</div>
-                <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
-                  <button className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors" type="button">
-                    Clear local cache
-                  </button>
-                  <button className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors" type="button">
-                    Manage attachments
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">Privacy</div>
-                <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
-                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                    Allow chat analytics
-                    <input type="checkbox" className="size-4 accent-zaki" />
-                  </label>
-                  <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                    Save chat history
-                    <input type="checkbox" className="size-4 accent-zaki" defaultChecked />
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-zaki-subtle dark:border-zaki-dark bg-zaki-base/80 dark:bg-zaki-dark-elevated">
-              <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">Changes apply immediately</div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="zaki-btn zaki-btn-secondary"
-                  onClick={() => setSettingsOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="zaki-btn bg-zaki-brand text-white hover:bg-zaki-brand-hover transition-colors"
-                  onClick={() => setSettingsOpen(false)}
-                >
-                  Save changes
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        displayName={displayName}
+        onDisplayNameChange={setDisplayName}
+        email={user?.username || ""}
+        themePreference={themePreference}
+        onThemeChange={(value) =>
+          setThemePreference(value as "light" | "dark" | "system")
+        }
+        onSave={async () => {
+          await saveDisplayName();
+          setSettingsOpen(false);
+        }}
+        saving={profileSaving}
+      />
       {profileEditOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
           <div
@@ -1452,7 +1393,11 @@ export function Sidebar() {
               <button
                 type="button"
                 className="zaki-btn bg-zaki-secondary text-white hover:bg-zaki-secondary transition-colors"
-                onClick={() => setProfileEditOpen(false)}
+                onClick={async () => {
+                  await saveDisplayName();
+                  setProfileEditOpen(false);
+                }}
+                disabled={profileSaving}
               >
                 Save changes
               </button>
@@ -1542,7 +1487,7 @@ export function Sidebar() {
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-zaki-subtle dark:border-zaki-dark">
               <div>
-                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">Space settings</div>
+                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">{t("sidebar.spaceSettings")}</div>
                 <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted mt-1 truncate">
                   {spaceSettingsTarget.title}
                 </div>

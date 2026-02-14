@@ -99,6 +99,19 @@ export async function backendRequest(
   });
 }
 
+export async function backendAuthRequest(
+  path: string,
+  options: ApiRequestOptions = {}
+) {
+  const { headers, ...rest } = options;
+  const requestHeaders = new Headers(headers ?? {});
+  const token = getAuthToken();
+  if (token && !requestHeaders.has("Authorization")) {
+    requestHeaders.set("Authorization", `Bearer ${token}`);
+  }
+  return backendRequest(path, { ...rest, headers: requestHeaders });
+}
+
 export async function requestLogin({
   username,
   password,
@@ -200,8 +213,30 @@ export async function fetchCurrentUser() {
   const response = await apiRequest("/system/refresh-user");
   const data = (await response.json()) as {
     success?: boolean;
-    user?: { username?: string; role?: string; id?: number | string } | null;
+    user?: { username?: string; role?: string; id?: number | string; fullName?: string | null } | null;
     message?: string | null;
+  };
+  return { response, data };
+}
+
+export async function fetchProfile() {
+  const response = await backendAuthRequest("/api/profile", { method: "GET" });
+  const data = (await response.json()) as {
+    success?: boolean;
+    user?: { username?: string; fullName?: string | null } | null;
+  };
+  return { response, data };
+}
+
+export async function updateProfile(fullName: string) {
+  const response = await backendAuthRequest("/api/profile", {
+    method: "PATCH",
+    body: JSON.stringify({ fullName }),
+  });
+  const data = (await response.json()) as {
+    success?: boolean;
+    user?: { username?: string; fullName?: string | null } | null;
+    error?: string | null;
   };
   return { response, data };
 }

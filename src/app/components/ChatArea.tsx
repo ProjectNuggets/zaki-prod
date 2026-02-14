@@ -1,7 +1,8 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea } from "./InputArea";
-import { Share2, MoreVertical, Download, Brain } from "lucide-react";
+import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { apiRequest } from "@/lib/api";
 import {
@@ -26,6 +27,8 @@ import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
 
 export function ChatArea() {
+  const { i18n } = useTranslation();
+  const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   useAuthStore(); // For auth context, values used elsewhere
   const {
     view,
@@ -86,7 +89,7 @@ export function ChatArea() {
   }, [memoryMode, pendingMemories]);
 
   useEffect(() => {
-    if (pendingMemories.some((m) => m._mode === "manual")) {
+    if (pendingMemories.some((m) => m._mode === "manual" || m._mode === "autosave")) {
       setShowMemoryToast(true);
     }
   }, [pendingMemories]);
@@ -98,10 +101,12 @@ export function ChatArea() {
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [editInstructionsOpen, setEditInstructionsOpen] = useState(false);
   const [editInstructionsValue, setEditInstructionsValue] = useState("");
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [inputOffset, setInputOffset] = useState(0);
   const [inputHeight, setInputHeight] = useState(0);
   const [inputLeft, setInputLeft] = useState(0);
   const [inputWidth, setInputWidth] = useState(0);
+  const [inputTop, setInputTop] = useState(0);
 
   // Spaces state
   const [spacesList, setSpacesList] = useState<Space[]>([]);
@@ -115,9 +120,11 @@ export function ChatArea() {
       (typeof window !== "undefined"
         ? Math.min(window.innerWidth - 32, 896)
         : 640);
-    const bottom = inputOffset + inputHeight + 72;
+    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+    const anchorTop = inputTop || inputOffset;
+    const bottom = viewportHeight - Math.max(0, anchorTop - 12);
     return { left, width, bottom };
-  }, [inputHeight, inputLeft, inputOffset, inputWidth]);
+  }, [inputHeight, inputLeft, inputOffset, inputTop, inputWidth]);
 
 
   // Library state
@@ -132,6 +139,7 @@ export function ChatArea() {
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
   const dragCounter = useRef(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
@@ -147,6 +155,31 @@ export function ChatArea() {
   const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
   const headerSpaceName = activeSpace?.title || "Space";
   const headerThreadName = activeThread?.label || "New chat";
+
+  const handleCopyMessage = useCallback(async (message: Message) => {
+    if (!message.content) return;
+    try {
+      await navigator.clipboard.writeText(message.content);
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Unable to copy message");
+    }
+  }, []);
+
+  const updateScrollIndicator = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const isScrollable = scrollHeight - clientHeight > 120;
+    const atBottom = scrollTop + clientHeight >= scrollHeight - 24;
+    autoScrollRef.current = atBottom;
+    setShowScrollToBottom(isScrollable && !atBottom);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(updateScrollIndicator);
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages.length, showZakiHome, showLibraryView, showSpacesView, showSpaceDetail, updateScrollIndicator]);
 
   // Serialize chat for export
   const serializeChat = useCallback(() => {
@@ -389,6 +422,7 @@ export function ChatArea() {
       }
       autoDismissTimerRef.current = window.setTimeout(() => {
         setShowMemoryToast(false);
+        setPendingMemories((prev) => prev.filter((m) => m._mode !== "autosave"));
       }, 3000);
     }
   }, [memoryMode]);
@@ -472,7 +506,8 @@ export function ChatArea() {
       return;
     }
     if (isStreaming) return;
-    if (!activeWorkspaceSlug) {
+    const resolvedWorkspaceSlug = activeWorkspaceSlug ?? primarySpace?.id ?? null;
+    if (!resolvedWorkspaceSlug) {
       toast.error("Select a workspace before sending a message");
       return;
     }
@@ -480,7 +515,7 @@ export function ChatArea() {
     let threadId = activeThreadId;
     if (!threadId) {
       try {
-        const response = await apiRequest(`/workspace/${activeWorkspaceSlug}/thread/new`, {
+        const response = await apiRequest(`/workspace/${resolvedWorkspaceSlug}/thread/new`, {
           method: "POST",
         });
         if (!response.ok) {
@@ -493,7 +528,7 @@ export function ChatArea() {
         const label = data.thread?.name || trimmed.split(/\n+/)[0]?.slice(0, 48) || "New chat";
         window.dispatchEvent(
           new CustomEvent("zaki:thread-created", {
-            detail: { id: threadId, label, spaceId: activeWorkspaceSlug },
+            detail: { id: threadId, label, spaceId: resolvedWorkspaceSlug },
           })
         );
       } catch (error) {
@@ -541,7 +576,7 @@ export function ChatArea() {
 
     try {
       await streamChatMessage({
-        workspaceSlug: activeWorkspaceSlug,
+        workspaceSlug: resolvedWorkspaceSlug,
         threadSlug: threadId,
         message: sendText,
         assistantId: assistantMessageId,
@@ -554,7 +589,35 @@ export function ChatArea() {
     } finally {
       setIsStreaming(false);
     }
-  }, [activeWorkspaceSlug, activeThreadId, isStreaming, streamChatMessage, checkForSavedMemories]);
+  }, [activeThreadId, activeWorkspaceSlug, primarySpace?.id, isStreaming, streamChatMessage, checkForSavedMemories]);
+
+  const handleRegenerateMessage = useCallback(
+    (message: Message) => {
+      if (isStreaming) return;
+      const idx = messages.findIndex((msg) => msg.id === message.id);
+      if (idx <= 0) {
+        toast.error("No previous user message to regenerate");
+        return;
+      }
+      let userMessage: Message | null = null;
+      for (let i = idx - 1; i >= 0; i -= 1) {
+        if (messages[i]?.role === "user") {
+          userMessage = messages[i];
+          break;
+        }
+      }
+      if (!userMessage?.content?.trim()) {
+        toast.error("No previous user message to regenerate");
+        return;
+      }
+      handleSend(userMessage.content, []);
+    },
+    [handleSend, isStreaming, messages]
+  );
+
+  const handleThumbsUpMessage = useCallback(() => {
+    toast.success("Thanks for the feedback");
+  }, []);
 
   const handleStartChat = useCallback(() => {
     const spaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
@@ -567,13 +630,9 @@ export function ChatArea() {
 
   const handleExampleSelect = useCallback(
     (example: string) => {
-      if (!activeWorkspaceSlug) {
-        goToSpaces();
-        return;
-      }
       handleSend(example, []);
     },
-    [activeWorkspaceSlug, goToSpaces, handleSend]
+    [handleSend]
   );
 
   // Library search
@@ -730,6 +789,7 @@ export function ChatArea() {
       setInputHeight(rect.height);
       setInputLeft(rect.left);
       setInputWidth(rect.width);
+      setInputTop(rect.top);
       return;
     }
     const updateMetrics = () => {
@@ -738,6 +798,7 @@ export function ChatArea() {
       setInputHeight(rect.height);
       setInputLeft(rect.left);
       setInputWidth(rect.width);
+      setInputTop(rect.top);
     };
     updateMetrics();
     const observer = new ResizeObserver(updateMetrics);
@@ -915,6 +976,9 @@ export function ChatArea() {
         isHistoryLoading={isHistoryLoading}
         isStreaming={isStreaming}
         firstMessageTransition={firstMessageTransition}
+        onCopyMessage={handleCopyMessage}
+        onRegenerateMessage={handleRegenerateMessage}
+        onThumbsUpMessage={handleThumbsUpMessage}
       />
     );
   };
@@ -971,69 +1035,73 @@ export function ChatArea() {
 
         <div className="relative z-20 flex flex-col h-full">
           {/* Header / Breadcrumb */}
-          <div className="px-6 py-4 flex items-center gap-2">
-            <span className="zaki-subheader-pill">
-              {headerSpaceName}
-              <span className="text-zaki-muted">/</span>
-              {headerThreadName}
-            </span>
-            <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
-              <button
-                type="button"
-                className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-                onClick={handleShare}
-                aria-label="Share conversation"
-              >
-                <Share2 className="size-4 text-zaki-muted" />
-                Share
-              </button>
-              <button
-                type="button"
-                className="size-11 md:size-8 rounded-full border border-zaki-subtle bg-white/80 flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-                onClick={() => setMenuOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                aria-label="More options"
-              >
-                <MoreVertical className="size-4" />
-              </button>
-              {menuOpen && (
-                <div
-                  className="absolute right-0 top-full mt-2 w-40 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
-                  role="menu"
+          {!showZakiHome ? (
+            <div className="px-6 py-4 flex items-center gap-2" dir="ltr">
+              <span className="zaki-subheader-pill" dir={isRtl ? "rtl" : "ltr"}>
+                {headerSpaceName}
+                <span className="text-zaki-muted">/</span>
+                {headerThreadName}
+              </span>
+              <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
+                <button
+                  type="button"
+                  className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                  onClick={handleShare}
+                  aria-label="Share conversation"
                 >
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setShowMemoryPanel(true);
-                    }}
-                    aria-label="Review memories"
+                  <Share2 className="size-4 text-zaki-muted" />
+                  Share
+                </button>
+                <button
+                  type="button"
+                  className="size-11 md:size-8 rounded-full border border-zaki-subtle bg-white/80 flex items-center justify-center text-zaki-muted hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                  onClick={() => setMenuOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label="More options"
+                >
+                  <MoreVertical className="size-4" />
+                </button>
+                {menuOpen && (
+                  <div
+                    className="absolute right-0 top-full mt-2 w-40 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
+                    role="menu"
                   >
-                    <Brain className="size-4 text-zaki-muted" />
-                    Review Memories
-                    {pendingMemories.length > 0 && (
-                      <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
-                        {pendingMemories.length}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-                    role="menuitem"
-                    onClick={handleExport}
-                    aria-label="Export conversation as JSON"
-                  >
-                    <Download className="size-4 text-zaki-muted" />
-                    Export JSON
-                  </button>
-                </div>
-              )}
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setShowMemoryPanel(true);
+                      }}
+                      aria-label="Review memories"
+                    >
+                      <Brain className="size-4 text-zaki-muted" />
+                      Review Memories
+                      {pendingMemories.length > 0 && (
+                        <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
+                          {pendingMemories.length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                      role="menuitem"
+                      onClick={handleExport}
+                      aria-label="Export conversation as JSON"
+                    >
+                      <Download className="size-4 text-zaki-muted" />
+                      Export JSON
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="h-[64px]" aria-hidden="true" />
+          )}
 
           {/* Main Content */}
           <div
@@ -1051,13 +1119,37 @@ export function ChatArea() {
               scrollRafRef.current = window.requestAnimationFrame(() => {
                 if (!scrollRef.current) return;
                 const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-                autoScrollRef.current = scrollTop + clientHeight >= scrollHeight - 48;
+                const atBottom = scrollTop + clientHeight >= scrollHeight - 48;
+                autoScrollRef.current = atBottom;
+                setShowScrollToBottom(scrollHeight - clientHeight > 120 && !atBottom);
                 scrollRafRef.current = null;
               });
             }}
           >
             {renderContent()}
           </div>
+
+          {showScrollToBottom && !showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail && (
+            <div
+              className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20"
+              style={{ bottom: Math.max(24, inputHeight + 24 + inputOffset) + 20 }}
+            >
+              <button
+                type="button"
+                className="pointer-events-auto size-10 rounded-full border border-zaki-subtle bg-white/90 text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover shadow-[0px_10px_24px_rgba(15,15,15,0.16)] transition-colors"
+                onClick={() => {
+                  const el = scrollRef.current;
+                  if (!el) return;
+                  el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+                  autoScrollRef.current = true;
+                  setShowScrollToBottom(false);
+                }}
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown className="size-5 mx-auto" />
+              </button>
+            </div>
+          )}
 
           {/* Input Area */}
           {!showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail && (
@@ -1164,7 +1256,10 @@ export function ChatArea() {
               return next;
             });
           }}
-          onDismiss={() => setShowMemoryToast(false)}
+          onDismiss={() => {
+            setShowMemoryToast(false);
+            setPendingMemories((prev) => prev.filter((m) => m._mode !== "autosave"));
+          }}
         />
       )}
 

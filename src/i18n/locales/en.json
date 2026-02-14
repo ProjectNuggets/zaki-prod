@@ -1,0 +1,183 @@
+{
+  "language": {
+    "english": "English",
+    "arabic": "Arabic"
+  },
+  "settings": {
+    "language": "Language"
+  },
+  "sidebar": {
+    "searchPlaceholder": "Search spaces",
+    "synced": "Synced {{time}}",
+    "nav": {
+      "newSpace": "New space",
+      "spaces": "Spaces",
+      "library": "Library",
+      "search": "Search",
+      "newChat": "New chat"
+    },
+    "section": {
+      "space": "Space",
+      "spaces": "Spaces",
+      "library": "Library"
+    },
+    "actions": {
+      "createSpace": "Create Space",
+      "newChat": "New chat"
+    },
+    "empty": {
+      "noSpaces": "No spaces yet",
+      "noSpacesHelper": "Create your first space to get started"
+    },
+    "spaceSettings": "Space settings"
+  },
+  "empty": {
+    "headline": "Ready when you are",
+    "greeting": "Ready when you are, {{name}}",
+    "subtext": "Choose a next step, or pick a prompt to get moving fast.",
+    "cta": "Start a new chat",
+    "ctaHelper": "Next step",
+    "examples": [
+      "Turn our recent updates into a confident summary.",
+      "If you were me, what would you do to get better?",
+      "Teach me about [subject] using an interactive, proven method."
+    ]
+  },
+  "home": {
+    "welcome": "Welcome back",
+    "memoryOn": "Memory is on",
+    "memoryOnHelper": "We only store what you approve.",
+    "learnMemory": "Learn how memory works",
+    "quickStartLabel": "Quick start",
+    "latestLabel": "Latest from ZAKI",
+    "viewAll": "View all",
+    "missionLabel": "Why we exist",
+    "memoryClarityLabel": "Memory clarity",
+    "memoryClarityBody": "ZAKI only saves what helps you. Review and manage memories anytime.",
+    "examplesLabel": "Examples",
+    "examplesSets": {
+      "default": "Examples",
+      "ramadan": "Ramadan"
+    },
+    "ramadanExamples": [
+      "Give me suggestions for today's Ramadan meals from my region that are easy to make.",
+      "Give me tips and tricks to survive fasting.",
+      "Draft Ramadan greetings to send to my family and friends."
+    ],
+    "quickStart": [
+      {
+        "title": "Give me 5 actionable ideas for [problem].",
+        "body": "Get practical, high-impact suggestions in seconds."
+      },
+      {
+        "title": "Create a 7-day plan for [goal].",
+        "body": "Simple daily steps, prioritized and realistic."
+      },
+      {
+        "title": "Draft a professional email for [topic + tone].",
+        "body": "Clear, concise, and ready to send."
+      }
+    ],
+    "missionSlides": [
+      {
+        "title": "Local-first intelligence",
+        "body": "Most AI is trained on global data that misses local culture. We build ZAKI to feel native, not generic — shaped by how communities think, speak, and decide."
+      },
+      {
+        "title": "Built on a powerful base model",
+        "body": "ZAKI starts with strong reasoning, then adapts to local language, context, and norms — so answers sound right, not translated."
+      },
+      {
+        "title": "Improves with you",
+        "body": "With every interaction, ZAKI learns to align more closely with your culture, heritage, and way of thinking — becoming more personal over time."
+      }
+    ],
+    "missionCarouselHint": "Slide {{current}} of {{total}} • Auto-rotates",
+    "news": [
+      {
+        "title": "ZAKI Weekly",
+        "body": "Product updates, memory tips, and launch progress.",
+        "meta": "Latest"
+      },
+      {
+        "title": "Behind the memory engine",
+        "body": "A short note on how we keep context private and useful.",
+        "meta": "Blog"
+      }
+    ],
+    "memoryCards": [
+      {
+        "title": "Review saved memories",
+        "body": "Edit or delete anything ZAKI keeps."
+      },
+      {
+        "title": "You stay in control",
+        "body": "ZAKI asks for confirmation in manual mode."
+      }
+    ],
+    "capabilitiesLabel": "Capabilities",
+    "limitationsLabel": "Limitations",
+    "capabilities": [
+      "Remembers what you shared earlier in the conversation",
+      "Lets you correct or refine context over time",
+      "Declines unsafe or inappropriate requests"
+    ],
+    "limitations": [
+      "May occasionally generate incorrect information",
+      "May sometimes miss nuance without enough context",
+      "Knowledge may be limited for very recent events"
+    ]
+  },
+  "share": {
+    "title": "Share Conversation",
+    "subtitle": "Create a shareable link",
+    "sharing": "Sharing",
+    "untitled": "Untitled Conversation",
+    "meta": "{{count}} messages • Expires in 10 days",
+    "accessType": "Access Type",
+    "public": "Public",
+    "publicHelper": "Anyone with link",
+    "protected": "Protected",
+    "protectedHelper": "Requires password",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "passwordPlaceholder": "Password",
+    "confirmPasswordPlaceholder": "Confirm password",
+    "errorPasswordRequired": "Please enter a password",
+    "errorPasswordLength": "Password must be at least 4 characters",
+    "errorPasswordMismatch": "Passwords do not match",
+    "errorCreate": "Failed to create share link",
+    "create": "Create Share Link",
+    "creating": "Creating link...",
+    "successTitle": "Link Created!",
+    "successPublic": "Anyone with this link can view the conversation",
+    "successProtected": "Your password-protected link is ready",
+    "shareLink": "Share Link",
+    "passwordProtected": "Password protected",
+    "publicLink": "Public link",
+    "expires": "This link will expire in 10 days.",
+    "done": "Done"
+  },
+  "chat": {
+    "thinking": "Thinking",
+    "thinkingPhrases": [
+      "Thinking",
+      "Mulling it over",
+      "Let me think",
+      "Processing",
+      "Working on it"
+    ]
+  },
+  "input": {
+    "disclaimer": "Zaki can make mistakes. Consider checking important information.",
+    "upgradeLabel": "Access premium features",
+    "upgradeCta": "Upgrade!",
+    "placeholders": [
+      "Ask anything",
+      "Summarize our last conversation",
+      "Help me brainstorm a plan",
+      "Draft a message or email",
+      "Turn this into a checklist"
+    ]
+  }
+}

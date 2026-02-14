@@ -105,6 +105,35 @@ body {
   animation: messageSlideInAssistant 0.35s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
 }
 
+@keyframes messageGlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  30% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+}
+
+.zaki-message-reveal {
+  position: relative;
+}
+
+.zaki-message-reveal::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: radial-gradient(60% 80% at 50% 10%, rgba(255, 204, 153, 0.22), rgba(255, 204, 153, 0));
+  opacity: 0;
+  pointer-events: none;
+  animation: messageGlow 1.4s ease-out;
+}
+
 /* Memory nugget float */
 @keyframes memoryFloat {
   0%, 100% {

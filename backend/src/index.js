@@ -948,6 +948,116 @@ const loginHandler = async (req, res) => {
 app.post("/login", loginHandler);
 app.post("/api/login", loginHandler);
 
+// -----------------------------------------------------------------------------
+// Profile: get/update display name (full_name)
+// -----------------------------------------------------------------------------
+const ProfileSchema = z.object({
+  fullName: z.string().trim().max(80).optional(),
+});
+
+const getProfileHandler = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Missing authorization token." });
+      return;
+    }
+
+    const sessionResponse = await novaSessionRequest(
+      "/system/refresh-user",
+      authHeader,
+      { method: "GET" }
+    );
+    const sessionData = await sessionResponse.json().catch(() => ({}));
+    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+      res.status(401).json({ error: "Invalid or expired token." });
+      return;
+    }
+
+    const email = normalizeEmail(String(sessionData.user.username || ""));
+    if (!email) {
+      res.status(400).json({ error: "Invalid user." });
+      return;
+    }
+
+    const zakiUser = await dbGet(
+      "SELECT email, full_name FROM zaki_users WHERE email = $1",
+      [email]
+    );
+    if (!zakiUser) {
+      res.status(404).json({ error: "ZAKI user not found." });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        username: zakiUser.email,
+        fullName: zakiUser.full_name || null,
+      },
+    });
+  } catch (error) {
+    console.error("[ZAKI] Profile fetch error:", error);
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+};
+
+const updateProfileHandler = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Missing authorization token." });
+      return;
+    }
+
+    const sessionResponse = await novaSessionRequest(
+      "/system/refresh-user",
+      authHeader,
+      { method: "GET" }
+    );
+    const sessionData = await sessionResponse.json().catch(() => ({}));
+    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+      res.status(401).json({ error: "Invalid or expired token." });
+      return;
+    }
+
+    const validation = validateInput(ProfileSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const email = normalizeEmail(String(sessionData.user.username || ""));
+    if (!email) {
+      res.status(400).json({ error: "Invalid user." });
+      return;
+    }
+
+    const nextNameRaw = validation.data.fullName ?? "";
+    const nextName = String(nextNameRaw || "").trim();
+    const now = new Date().toISOString();
+
+    await dbQuery(
+      `UPDATE zaki_users SET full_name = $1, updated_at = $2 WHERE email = $3`,
+      [nextName || null, now, email]
+    );
+
+    res.status(200).json({
+      success: true,
+      user: { username: email, fullName: nextName || null },
+    });
+  } catch (error) {
+    console.error("[ZAKI] Profile update error:", error);
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+};
+
+app.get("/api/profile", getProfileHandler);
+app.patch("/api/profile", express.json({ limit: "1mb" }), updateProfileHandler);
+
 const createWorkspaceHandler = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;

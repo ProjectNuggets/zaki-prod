@@ -1,39 +1,43 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CenterLogo } from "../icons";
 import { ChatMarkdown } from "../ChatMarkdown";
+import { MessageActions } from "./MessageActions";
+import { cn } from "@/lib/utils";
 
 interface StreamingBubbleProps {
   content: string;
+  isStreaming?: boolean;
+  showActions?: boolean;
+  onCopyMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
+  onRegenerateMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
+  onThumbsUpMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
 }
 
-export function StreamingBubble({ content }: StreamingBubbleProps) {
+export function StreamingBubble({
+  content,
+  isStreaming = true,
+  showActions = false,
+  onCopyMessage,
+  onRegenerateMessage,
+  onThumbsUpMessage,
+}: StreamingBubbleProps) {
   const [displayedContent, setDisplayedContent] = useState("");
-  const [isTypingPhase, setIsTypingPhase] = useState(true);
-  const charIndexRef = useRef(0);
-  const typingCharsLimit = 80; // Type first 80 chars, then show rest instantly
-  const typingSpeed = 12; // ms per character
+  const lastContentLenRef = useRef(0);
 
   useEffect(() => {
-    // If content grew, we need to catch up
-    if (content.length > displayedContent.length) {
-      if (isTypingPhase && charIndexRef.current < typingCharsLimit) {
-        // Still in typing phase - animate character by character
-        const timer = setTimeout(() => {
-          charIndexRef.current += 1;
-          setDisplayedContent(content.slice(0, charIndexRef.current));
-          
-          // Exit typing phase after limit
-          if (charIndexRef.current >= typingCharsLimit) {
-            setIsTypingPhase(false);
-          }
-        }, typingSpeed);
-        return () => clearTimeout(timer);
-      } else {
-        // Past typing phase - show all content instantly
-        setDisplayedContent(content);
-      }
+    if (!content) {
+      setDisplayedContent("");
+      return;
     }
-  }, [content, displayedContent, isTypingPhase]);
+    setDisplayedContent(content);
+  }, [content]);
+
+  useEffect(() => {
+    if (content.length < lastContentLenRef.current) {
+      setDisplayedContent("");
+    }
+    lastContentLenRef.current = content.length;
+  }, [content.length]);
 
   // Reset when content starts fresh (new message)
   useEffect(() => {
@@ -56,10 +60,30 @@ export function StreamingBubble({ content }: StreamingBubbleProps) {
       <div className="zaki-message-stack max-w-[80%] flex flex-col gap-2 items-start">
         <div className="zaki-message-bubble zaki-assistant-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed bg-transparent text-zaki-primary">
           <ChatMarkdown content={displayedContent} />
-          {isTypingPhase && displayedContent.length < content.length && (
-            <span className="inline-block w-0.5 h-4 bg-zaki-brand ml-0.5 animate-pulse align-middle" />
-          )}
         </div>
+        {showActions && (
+          <div className="text-zaki-disabled">
+            {/** Use same actions component styling via MessageActions */}
+            {/* We call handlers with a minimal message object */}
+            <MessageActions
+              onCopy={
+                onCopyMessage
+                  ? () => onCopyMessage({ id: "streaming", role: "assistant", content })
+                  : undefined
+              }
+              onRegenerate={
+                onRegenerateMessage
+                  ? () => onRegenerateMessage({ id: "streaming", role: "assistant", content })
+                  : undefined
+              }
+              onThumbsUp={
+                onThumbsUpMessage
+                  ? () => onThumbsUpMessage({ id: "streaming", role: "assistant", content })
+                  : undefined
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,13 +1,7 @@
 import { CenterLogo } from "../icons";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  emptyStateExamples,
-  emptyStateHeadline,
-  emptyStateSubtext,
-  emptyStateCta,
-  emptyStateCtaHelper,
-} from "./emptyStateContent";
+import { useTranslation } from "react-i18next";
 
 interface EmptyStateProps {
   userName?: string;
@@ -20,9 +14,12 @@ interface EmptyStateProps {
 export function EmptyState({
   userName = "there",
   onExampleClick,
-  examples = emptyStateExamples,
+  examples,
   className,
 }: EmptyStateProps) {
+  const { t } = useTranslation();
+  const fallbackExamples = t("empty.examples", { returnObjects: true }) as string[];
+  const resolvedExamples = examples ?? fallbackExamples;
   return (
     <div className={cn("flex flex-col items-center justify-center h-full px-6", className)}>
       <div className="w-16 h-16 mb-6 rounded-zaki-lg bg-zaki-gradient flex items-center justify-center shadow-lg">
@@ -30,22 +27,22 @@ export function EmptyState({
       </div>
       
       <h2 className="text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary mb-2">
-        {emptyStateHeadline}, {userName}
+        {t("empty.greeting", { name: userName })}
       </h2>
       
       <p className="text-zaki-muted dark:text-zaki-dark-muted text-sm mb-8 text-center max-w-md">
-        {emptyStateSubtext}
+        {t("empty.subtext")}
       </p>
 
       <div className="mb-6 flex flex-col items-center gap-3">
         <div className="text-[11px] uppercase tracking-[0.2em] text-zaki-muted">
-          {emptyStateCtaHelper}
+          {t("empty.ctaHelper")}
         </div>
         <button className="zaki-btn bg-zaki-accent text-white" onClick={onStartChat}>
-          {emptyStateCta}
+          {t("empty.cta")}
         </button>
         <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
-          {examples.slice(0, 2).map((example) => (
+          {resolvedExamples.slice(0, 2).map((example) => (
             <button
               key={example}
               type="button"
@@ -59,7 +56,7 @@ export function EmptyState({
       </div>
 
       <div className="w-full max-w-lg space-y-2">
-        {examples.map((example, index) => (
+        {resolvedExamples.map((example, index) => (
           <button
             key={index}
             type="button"

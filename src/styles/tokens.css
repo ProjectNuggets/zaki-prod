@@ -558,6 +558,11 @@ body, html {
   border-radius: 0 2px 2px 0;
 }
 
+.rtl .zaki-nav-active::before {
+  left: auto;
+  right: 0;
+  border-radius: 2px 0 0 2px;
+}
 
 /* Active dot indicator */
 .zaki-active-dot {
@@ -723,22 +728,24 @@ body, html {
  * ============================================ */
 
 @keyframes message-slide-up {
-  0% { opacity: 0; transform: translateY(12px); }
+  0% { opacity: 0; transform: translateY(10px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes message-fade-in {
-  0% { opacity: 0; transform: translateX(-8px); }
-  100% { opacity: 1; transform: translateX(0); }
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
+
 .zaki-message-enter-user {
-  animation: message-slide-up 0.3s ease-out;
+  animation: message-slide-up 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
 }
 
 .zaki-message-enter-assistant {
-  animation: message-fade-in 0.4s ease-out;
+  animation: message-fade-in 0.4s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
 }
+
 
 /* ============================================
  * SELECTION HIGHLIGHT — Teal

@@ -1,17 +1,23 @@
-import { MessageBubble } from "./MessageBubble";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { StreamingBubble } from "./StreamingBubble";
 import type { Message } from "@/types";
 
 interface StreamingMessageProps {
   content: string;
   isStreaming: boolean;
   className?: string;
+  onCopyMessage?: (message: Message) => void;
+  onRegenerateMessage?: (message: Message) => void;
+  onThumbsUpMessage?: (message: Message) => void;
 }
 
 export function StreamingMessage({
   content,
   isStreaming,
   className,
+  onCopyMessage,
+  onRegenerateMessage,
+  onThumbsUpMessage,
 }: StreamingMessageProps) {
   const message: Message = {
     id: "streaming",
@@ -26,11 +32,16 @@ export function StreamingMessage({
     <div className={className}>
       {showThinking ? (
         <ThinkingIndicator />
+      ) : isStreaming ? (
+        <StreamingBubble content={content} isStreaming />
       ) : (
-        <MessageBubble
-          message={message}
-          isStreaming={isStreaming}
-          showActions={false}
+        <StreamingBubble
+          content={content}
+          isStreaming={false}
+          showActions
+          onCopyMessage={onCopyMessage}
+          onRegenerateMessage={onRegenerateMessage}
+          onThumbsUpMessage={onThumbsUpMessage}
         />
       )}
     </div>

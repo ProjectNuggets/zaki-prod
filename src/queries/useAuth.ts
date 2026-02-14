@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchCurrentUser, requestLogin, setAuthToken, clearAuthToken } from "@/lib/api";
+import { fetchCurrentUser, fetchProfile, requestLogin, setAuthToken, clearAuthToken } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
 // Keys
@@ -18,8 +18,19 @@ export function useCurrentUser() {
       try {
         const { response, data } = await fetchCurrentUser();
         if (response.ok && data.user) {
-          setUser(data.user);
-          return data.user;
+          const baseUser = data.user;
+          try {
+            const profile = await fetchProfile();
+            if (profile.response.ok && profile.data.user) {
+              const merged = { ...baseUser, fullName: profile.data.user.fullName ?? null };
+              setUser(merged);
+              return merged;
+            }
+          } catch {
+            // Ignore profile fetch failure
+          }
+          setUser(baseUser);
+          return baseUser;
         }
         setUser(null);
         return null;

@@ -16,9 +16,20 @@ export interface MessageBubbleProps {
   showActions?: boolean;
   isStreaming?: boolean;
   animate?: boolean;
+  onCopy?: (message: Message) => void;
+  onRegenerate?: (message: Message) => void;
+  onThumbsUp?: (message: Message) => void;
 }
 
-export function MessageBubble({ message, showActions = true, isStreaming = false, animate = true }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  showActions = true,
+  isStreaming = false,
+  animate = true,
+  onCopy,
+  onRegenerate,
+  onThumbsUp,
+}: MessageBubbleProps) {
   // isStreaming can be used to show typing indicator or disable actions
   void isStreaming;
   const isUser = message.role === 'user';
@@ -77,7 +88,13 @@ export function MessageBubble({ message, showActions = true, isStreaming = false
             )}
           </div>
         )}
-        {showActions && !isUser && <MessageActions />}
+        {showActions && !isUser && (
+          <MessageActions
+            onCopy={onCopy ? () => onCopy(message) : undefined}
+            onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
+            onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}
+          />
+        )}
       </div>
 
       {isUser && <div className="size-8 shrink-0" aria-hidden="true" />}

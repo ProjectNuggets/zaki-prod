@@ -1,17 +1,9 @@
 import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { cn } from "@/lib/utils";
-
-// Rotating placeholder suggestions — contextual prompts
-const placeholderSuggestions = [
-  "Ask anything",
-  "Summarize our last conversation",
-  "Help me brainstorm a plan",
-  "Draft a message or email",
-  "Turn this into a checklist",
-];
 
 export function InputArea({
   onSend,
@@ -36,6 +28,12 @@ export function InputArea({
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
+  const placeholderSuggestions = useMemo(
+    () => t("input.placeholders", { returnObjects: true }) as string[],
+    [t]
+  );
   const menuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -153,20 +151,43 @@ export function InputArea({
   return (
     <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
       {/* Input Box */}
-      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10">
+      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir="ltr">
         <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
-          <div className="w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]">
-            <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
-              <Zap className="size-3" />
-            </span>
-            <span className="text-zaki-secondary">Access premium models & features</span>
-              <button
-                type="button"
-                className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
-                onClick={() => setUpgradeOpen(true)}
-              >
-                Upgrade!
-              </button>
+          <div
+            className={cn(
+              "w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
+              isRtl ? "justify-end text-right" : "justify-start text-left"
+            )}
+          >
+            {isRtl ? (
+              <>
+                <button
+                  type="button"
+                  className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
+                  onClick={() => setUpgradeOpen(true)}
+                >
+                  {t("input.upgradeCta")}
+                </button>
+                <span className="text-zaki-secondary">{t("input.upgradeLabel")}</span>
+                <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+                  <Zap className="size-3" />
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+                  <Zap className="size-3" />
+                </span>
+                <span className="text-zaki-secondary">{t("input.upgradeLabel")}</span>
+                <button
+                  type="button"
+                  className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
+                  onClick={() => setUpgradeOpen(true)}
+                >
+                  {t("input.upgradeCta")}
+                </button>
+              </>
+            )}
           </div>
           <div className="w-full mt-2 rounded-[16px] border border-[#ead7c1] dark:border-zaki-dark bg-[#fffaf4] dark:bg-[#15110d] px-3 py-2.5 flex flex-col gap-2 relative">
         {attachments.length > 0 && (
@@ -229,9 +250,13 @@ export function InputArea({
             id="chat-input"
             ref={textareaRef}
             rows={1}
-            className="zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none zaki-scrollbar-fade"
+            className={cn(
+              "zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none zaki-scrollbar-fade",
+              isRtl ? "text-right" : "text-left"
+            )}
             placeholder={placeholderSuggestions[placeholderIndex]}
             autoComplete="off"
+            dir="auto"
             value={inputValue}
             disabled={isSending}
             onChange={(e) => {
@@ -374,7 +399,9 @@ export function InputArea({
       {upgradeModal}
       
       <div className="text-center mt-2">
-         <p className="text-zaki-disabled text-xs">Zaki can make mistakes. Consider checking important information.</p>
+         <p className="text-zaki-disabled text-xs" dir={isRtl ? "rtl" : "ltr"}>
+           {t("input.disclaimer")}
+         </p>
       </div>
     </div>
   );

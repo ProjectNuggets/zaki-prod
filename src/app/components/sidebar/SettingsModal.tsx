@@ -1,24 +1,32 @@
 import { useFocusTrap } from "@/hooks/useFocusTrap";
-import { MemoryViewer } from "../memory/MemoryViewer";
+import { useTranslation } from "react-i18next";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userName: string;
+  displayName: string;
+  email: string;
+  onDisplayNameChange: (name: string) => void;
   themePreference: "light" | "dark" | "system";
   onThemeChange: (theme: "light" | "dark" | "system") => void;
-  userId?: string; // Add userId prop for memory viewer
+  onSave: () => void | Promise<void>;
+  saving?: boolean;
 }
 
 export function SettingsModal({
   isOpen,
   onClose,
-  userName,
+  displayName,
+  email,
+  onDisplayNameChange,
   themePreference,
   onThemeChange,
-  userId,
+  onSave,
+  saving = false,
 }: SettingsModalProps) {
   const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
+  const { t, i18n } = useTranslation();
+  const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
 
   if (!isOpen) return null;
 
@@ -58,14 +66,16 @@ export function SettingsModal({
                 Display name
                 <input
                   className="rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
-                  defaultValue={userName}
+                  value={displayName}
+                  onChange={(event) => onDisplayNameChange(event.target.value)}
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs text-zaki-muted">
                 Email
                 <input
                   className="rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
-                  defaultValue={userName}
+                  value={email}
+                  readOnly
                 />
               </label>
             </div>
@@ -88,21 +98,18 @@ export function SettingsModal({
                 </select>
               </label>
               <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-secondary">
-                Language
-                <select className="rounded-lg border border-zaki-subtle bg-white px-2 py-1 text-sm text-zaki-primary">
-                  <option>English</option>
-                  <option>العربية</option>
+                {t("settings.language")}
+                <select
+                  className="rounded-lg border border-zaki-subtle bg-white px-2 py-1 text-sm text-zaki-primary"
+                  value={languageValue}
+                  onChange={(event) => i18n.changeLanguage(event.target.value)}
+                >
+                  <option value="en">{t("language.english")}</option>
+                  <option value="ar">{t("language.arabic")}</option>
                 </select>
               </label>
             </div>
           </div>
-          {/* Memory Section */}
-          {userId && (
-            <div>
-              <MemoryViewer userId={userId} />
-            </div>
-          )}
-
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted">Data & Privacy</div>
             <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
@@ -129,7 +136,8 @@ export function SettingsModal({
           <button
             type="button"
             className="zaki-btn bg-zaki-brand text-white hover:bg-zaki-brand-hover transition-colors"
-            onClick={onClose}
+            onClick={onSave}
+            disabled={saving}
           >
             Save changes
           </button>

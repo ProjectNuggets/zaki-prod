@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import { MessageBubble, type Message } from "../index";
-import { ThinkingIndicator } from "../ThinkingIndicator";
-import { StreamingBubble } from "../StreamingBubble";
+import { StreamingMessage } from "../StreamingMessage";
 import { SkeletonMessage } from "../../ui/skeleton";
 
 interface ChatViewProps {
@@ -9,6 +8,9 @@ interface ChatViewProps {
   isHistoryLoading: boolean;
   isStreaming: boolean;
   firstMessageTransition: boolean;
+  onCopyMessage?: (message: Message) => void;
+  onRegenerateMessage?: (message: Message) => void;
+  onThumbsUpMessage?: (message: Message) => void;
 }
 
 export function ChatView({
@@ -16,6 +18,9 @@ export function ChatView({
   isHistoryLoading,
   isStreaming,
   firstMessageTransition,
+  onCopyMessage,
+  onRegenerateMessage,
+  onThumbsUpMessage,
 }: ChatViewProps) {
   if (isHistoryLoading) {
     return (
@@ -36,19 +41,27 @@ export function ChatView({
     >
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
-        const isStreamingMessage = isLast && msg.role === 'assistant' && isStreaming;
-        
-        // Show thinking indicator for empty streaming assistant message
-        if (isStreamingMessage && !msg.content.trim()) {
-          return <ThinkingIndicator key={msg.id} />;
+        const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
+
+        if (isStreamingMessage) {
+          return (
+            <StreamingMessage
+              key={msg.id}
+              content={msg.content}
+              isStreaming={isStreamingMessage}
+            />
+          );
         }
-        
-        // Show streaming bubble with typing effect for assistant message being streamed
-        if (isStreamingMessage && msg.content.trim()) {
-          return <StreamingBubble key={msg.id} content={msg.content} />;
-        }
-        
-        return <MessageBubble key={msg.id} message={msg} />;
+
+        return (
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onCopy={onCopyMessage}
+            onRegenerate={onRegenerateMessage}
+            onThumbsUp={onThumbsUpMessage}
+          />
+        );
       })}
     </div>
   );
