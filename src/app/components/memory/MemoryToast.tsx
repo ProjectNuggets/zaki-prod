@@ -6,7 +6,8 @@
  */
 
 import { useState } from "react";
-import { Brain, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Brain, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
 
@@ -24,16 +25,6 @@ interface MemoryToastProps {
   position?: { left: number; width: number; bottom: number };
 }
 
-const typeIcons: Record<string, string> = {
-  fact: "💡",
-  preference: "✨",
-  emotion: "💭",
-  event: "📅",
-  goal: "🎯",
-  relationship: "👤",
-  struggle: "🌧️",
-};
-
 const typeLabels: Record<string, string> = {
   fact: "Fact",
   preference: "Preference",
@@ -48,6 +39,7 @@ export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToa
   const [processedIds, setProcessedIds] = useState<string[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const { t } = useTranslation();
 
   const pendingCount = memories.filter(m => !processedIds.includes(m.confirmationId)).length;
 
@@ -116,7 +108,7 @@ export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToa
               <Brain className="h-3 w-3 text-[#2d5bff]" />
             </div>
             <p className="text-2xs text-zaki-primary dark:text-zaki-dark-primary truncate">
-              {pendingCount} new memory
+              {pendingCount} {t("memory.toReview")}
             </p>
           </div>
           <div className="flex items-center gap-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
@@ -128,7 +120,7 @@ export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToa
                 "disabled:opacity-50 disabled:cursor-not-allowed"
               )}
             >
-              Save All
+              {t("memory.rememberAll")}
             </button>
             <button
               onClick={() => setIsExpanded(!isExpanded)}
@@ -156,14 +148,14 @@ export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToa
                           disabled={isProcessing}
                           className={cn("hover:text-zaki-primary", "disabled:opacity-50")}
                         >
-                          Save
+                          {t("memory.remember")}
                         </button>
                         <button
                           onClick={() => reject(memory.confirmationId)}
                           disabled={isProcessing}
                           className={cn("hover:text-zaki-primary", "disabled:opacity-50")}
                         >
-                          Ignore
+                          {t("memory.skip")}
                         </button>
                       </div>
                     </div>

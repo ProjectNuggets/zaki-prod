@@ -47,6 +47,7 @@
     "welcome": "Welcome back",
     "memoryOn": "Memory is on",
     "memoryOnHelper": "We only store what you approve.",
+    "conflictsBadge": "Conflicts {{count}}",
     "learnMemory": "Learn how memory works",
     "quickStartLabel": "Quick start",
     "latestLabel": "Latest from ZAKI",
@@ -166,7 +167,11 @@
       "Let me think",
       "Processing",
       "Working on it"
-    ]
+    ],
+    "whyAnswer": "Why this answer?",
+    "hideWhy": "Hide why",
+    "usedMemory": "Used memory",
+    "usedMemoryCount": "Used {{count}} memories"
   },
   "input": {
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
@@ -179,5 +184,16 @@
       "Draft a message or email",
       "Turn this into a checklist"
     ]
+  },
+  "memory": {
+    "saved": "memory saved",
+    "toReview": "memory to review",
+    "review": "Review",
+    "hide": "Hide",
+    "remember": "Remember",
+    "skip": "Not now",
+    "reviewAll": "Review all memories",
+    "open": "Open",
+    "rememberAll": "Remember all"
   }
 }

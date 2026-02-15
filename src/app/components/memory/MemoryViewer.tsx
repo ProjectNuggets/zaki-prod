@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Trash2, Search, Calendar, Tag, Brain, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/api';
 import { SkeletonMemoryViewer } from '../ui/skeleton';
@@ -21,16 +23,36 @@ interface MemoryViewerProps {
   userId: string;
 }
 
+interface MemoryConflict {
+  id: string;
+  new_content: string;
+  new_type: string;
+  conflicting_content?: string;
+  conflicting_type?: string;
+  created_at?: string;
+}
+
 export function MemoryViewer({ userId }: MemoryViewerProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [conflicts, setConflicts] = useState<MemoryConflict[]>([]);
   const [loading, setLoading] = useState(true);
+  const [conflictsLoading, setConflictsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'memories' | 'conflicts'>('memories');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
+  const { i18n } = useTranslation();
+  const isRtl = i18n.language?.toLowerCase().startsWith('ar');
 
   useEffect(() => {
     fetchMemories();
   }, [userId]);
+
+  useEffect(() => {
+    if (activeTab === 'conflicts') {
+      fetchConflicts();
+    }
+  }, [activeTab, userId]);
 
   const fetchMemories = async () => {
     setLoading(true);
@@ -51,6 +73,53 @@ export function MemoryViewer({ userId }: MemoryViewerProps) {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchConflicts = async () => {
+    setConflictsLoading(true);
+    try {
+      const response = await apiRequest(`/api/memory/conflicts/${userId}`);
+      if (!response.ok) throw new Error('Failed to fetch conflicts');
+      const data = await response.json();
+      const nextConflicts = data.conflicts || [];
+      setConflicts(nextConflicts);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("zaki:memory-conflicts-count", {
+            detail: { count: nextConflicts.length },
+          })
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load conflicts';
+      toast.error(message);
+    } finally {
+      setConflictsLoading(false);
+    }
+  };
+
+  const resolveConflict = async (conflictId: string, action: 'keep_existing' | 'use_new') => {
+    try {
+      const response = await apiRequest(`/api/memory/conflicts/${conflictId}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ userId, action }),
+      });
+      if (!response.ok) throw new Error('Failed to resolve conflict');
+      const next = conflicts.filter((c) => c.id !== conflictId);
+      setConflicts(next);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("zaki:memory-conflicts-count", {
+            detail: { count: next.length },
+          })
+        );
+      }
+      await fetchMemories();
+      toast.success('Conflict resolved');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to resolve conflict';
+      toast.error(message);
     }
   };
 
@@ -166,7 +235,78 @@ export function MemoryViewer({ userId }: MemoryViewerProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", isRtl && "rtl")}>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className={cn(
+            "px-3 py-1.5 rounded-full text-xs font-semibold transition-colors",
+            activeTab === 'memories'
+              ? 'bg-zaki-brand text-white'
+              : 'bg-zaki-sunken text-zaki-muted'
+          )}
+          onClick={() => setActiveTab('memories')}
+        >
+          Memories
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "px-3 py-1.5 rounded-full text-xs font-semibold transition-colors",
+            activeTab === 'conflicts'
+              ? 'bg-zaki-brand text-white'
+              : 'bg-zaki-sunken text-zaki-muted'
+          )}
+          onClick={() => setActiveTab('conflicts')}
+        >
+          Conflicts {conflicts.length > 0 && <span>({conflicts.length})</span>}
+        </button>
+      </div>
+
+      {activeTab === 'conflicts' ? (
+        <div className="space-y-3">
+          {conflictsLoading ? (
+            <div className="text-sm text-zaki-muted">Loading conflicts...</div>
+          ) : conflicts.length === 0 ? (
+            <div className="text-sm text-zaki-muted">No conflicts to resolve.</div>
+          ) : (
+            conflicts.map((conflict) => (
+              <div
+                key={conflict.id}
+                className="rounded-zaki-lg border border-zaki-subtle bg-zaki-elevated px-4 py-3 space-y-3"
+              >
+                <div className={cn("grid gap-3 sm:grid-cols-2", isRtl && "text-right")}>
+                  <div className="rounded-zaki-md border border-zaki-subtle bg-white/70 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-zaki-muted">Existing memory</div>
+                    <div className="text-sm text-zaki-primary mt-1">{conflict.conflicting_content || '—'}</div>
+                  </div>
+                  <div className="rounded-zaki-md border border-zaki-subtle bg-white/70 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-zaki-muted">New memory</div>
+                    <div className="text-sm text-zaki-primary mt-1">{conflict.new_content}</div>
+                  </div>
+                </div>
+                <div className={cn("flex items-center gap-3", isRtl && "flex-row-reverse justify-start")}>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-zaki-muted hover:text-zaki-primary"
+                    onClick={() => resolveConflict(conflict.id, 'keep_existing')}
+                  >
+                    Keep existing
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-zaki-brand hover:underline"
+                    onClick={() => resolveConflict(conflict.id, 'use_new')}
+                  >
+                    Use new
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        <>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
@@ -364,6 +504,8 @@ export function MemoryViewer({ userId }: MemoryViewerProps) {
             Export All
           </button>
         </div>
+      )}
+        </>
       )}
     </div>
   );

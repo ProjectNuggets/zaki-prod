@@ -33,12 +33,19 @@ export interface Message {
   content: string;
   attachments?: MessageAttachment[];
   chatId?: number;
+  memorySources?: MemorySource[];
 }
 
 export interface MessageAttachment {
   name: string;
   type: string;
   url: string;
+}
+
+export interface MemorySource {
+  id: string;
+  content: string;
+  type: string;
 }
 
 export interface LibraryResult {

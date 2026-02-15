@@ -19,12 +19,6 @@ export function StreamingMessage({
   onRegenerateMessage,
   onThumbsUpMessage,
 }: StreamingMessageProps) {
-  const message: Message = {
-    id: "streaming",
-    role: "assistant",
-    content,
-  };
-
   // Show thinking indicator when streaming but no content yet
   const showThinking = isStreaming && !content.trim();
 

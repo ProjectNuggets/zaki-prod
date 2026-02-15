@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Brain, Check, X, Undo2, ChevronDown, ChevronUp } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Brain, Undo2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
 
@@ -32,6 +33,7 @@ const typeLabels: Record<string, string> = {
 export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, onResolve }: MemoryRailProps) {
   const [expanded, setExpanded] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const { t } = useTranslation();
 
   const visibleMemories = memories.slice(0, 3);
   const hasMore = memories.length > visibleMemories.length;
@@ -92,7 +94,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
             <Brain className="size-3" />
           </span>
           <span className="truncate">
-            {memories.length} {memoryMode === "autosave" ? "memory saved" : "memory to review"}
+            {memories.length} {memoryMode === "autosave" ? t("memory.saved") : t("memory.toReview")}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -101,7 +103,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
             className="text-zaki-brand font-semibold hover:underline"
             onClick={() => setExpanded((prev) => !prev)}
           >
-            {expanded ? "Hide" : "Review"}
+            {expanded ? t("memory.hide") : t("memory.review")}
           </button>
           <button
             type="button"
@@ -141,7 +143,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
                           disabled={processing}
                           className={cn("hover:text-zaki-primary", "disabled:opacity-50")}
                         >
-                          Save
+                          {t("memory.remember")}
                         </button>
                         <button
                           type="button"
@@ -149,7 +151,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
                           disabled={processing}
                           className={cn("hover:text-zaki-primary", "disabled:opacity-50")}
                         >
-                          Ignore
+                          {t("memory.skip")}
                         </button>
                       </>
                     ) : (
@@ -179,13 +181,13 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
             )}
           </div>
           <div className="mt-3 flex items-center justify-between text-2xs text-zaki-muted">
-            <span>Review all memories</span>
+            <span>{t("memory.reviewAll")}</span>
             <button
               type="button"
               className="text-zaki-brand font-semibold hover:underline"
               onClick={() => window.dispatchEvent(new Event("zaki:open-memory"))}
             >
-              Open
+              {t("memory.open")}
             </button>
           </div>
         </div>

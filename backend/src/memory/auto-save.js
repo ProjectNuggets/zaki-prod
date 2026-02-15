@@ -4,7 +4,7 @@
  * S-tier UX: Save immediately, allow 3-second undo
  */
 
-import { storeMemory, deleteMemory } from "./operations.js";
+import { storeMemory, deleteMemory, findConflict, createConflict } from "./operations.js";
 
 // Simple in-memory undo buffer (3-second TTL)
 const undoBuffer = new Map();
@@ -15,19 +15,48 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
   const facts = await extractFacts(message);
   
   if (facts.length === 0) {
-    return { saved: [], duplicates: [] };
+    return { saved: [], duplicates: [], conflicts: [] };
   }
 
   const saved = [];
   const duplicates = [];
+  const conflicts = [];
 
   for (const fact of facts) {
     try {
+      const conflict = await findConflict({
+        userId,
+        content: fact.content,
+        conflictKey: fact.conflictKey,
+        polarity: fact.polarity,
+      });
+      if (conflict) {
+        const { id } = await createConflict({
+          userId,
+          newContent: fact.content,
+          newType: fact.type,
+          newConfidenceScore: 0.8,
+          conflictMemory: conflict,
+        });
+        conflicts.push({
+          id,
+          content: fact.content,
+          type: fact.type,
+          conflictingContent: conflict.content,
+          conflictingType: conflict.type,
+        });
+        continue;
+      }
+
+      const metadata = fact.conflictKey
+        ? { conflictKey: fact.conflictKey, polarity: fact.polarity }
+        : null;
       const result = await storeMemory({
         userId,
         content: fact.content,
         type: fact.type,
         sourceThreadId: threadId,
+        metadata,
       });
 
       if (result.duplicate) {
@@ -51,7 +80,7 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
     }
   }
 
-  return { saved, duplicates };
+  return { saved, duplicates, conflicts };
 }
 
 export async function undoMemory({ userId, memoryId }) {

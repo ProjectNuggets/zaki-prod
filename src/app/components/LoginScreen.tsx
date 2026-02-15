@@ -154,12 +154,12 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-zaki-base flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-[28px] border border-zaki bg-white shadow-[0px_22px_60px_rgba(15,15,15,0.12)] p-8">
+    <div className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-[28px] border border-zaki dark:border-[#2a2018] bg-zaki-raised dark:bg-[#0F0B0A] shadow-zaki-xl dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] p-8">
         <div className="flex items-center">
           <LogoArabicOrange />
         </div>
-        <h1 className="mt-2 text-2xl font-semibold text-zaki-primary">
+        <h1 className="mt-2 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
           {mode === "signup"
             ? "Create your account"
             : mode === "reset-request"
@@ -172,32 +172,32 @@ export function LoginScreen() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {mode === "reset-confirm" && (
-            <div className="rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-xs text-zaki-secondary">
+            <div className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base dark:bg-[#14100d] px-3 py-2 text-xs text-zaki-secondary dark:text-[#c9b8a4]">
               Enter your new password below.
             </div>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
               Full name
               <input
                 type="text"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
                 placeholder="Full name"
-                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="name"
                 required
               />
             </label>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
               Date of birth
               <input
                 type="date"
                 value={dateOfBirth}
                 onChange={(event) => setDateOfBirth(event.target.value)}
-                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="bday"
                 required
               />
@@ -206,14 +206,14 @@ export function LoginScreen() {
           {(mode === "login" ||
             mode === "signup" ||
             mode === "reset-request") && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
               Email
               <input
                 type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="Email address"
-                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="email"
                 required
               />
@@ -221,7 +221,7 @@ export function LoginScreen() {
           )}
 
           {(mode === "login" || mode === "signup") && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
               Password
               <div className="relative">
                 <input
@@ -229,13 +229,13 @@ export function LoginScreen() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Password"
-                  className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 pr-12 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                  className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 pr-12 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zaki-muted hover:text-zaki-secondary"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zaki-muted hover:text-zaki-secondary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
@@ -252,7 +252,7 @@ export function LoginScreen() {
           {mode === "login" && (
             <button
               type="button"
-              className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary"
+              className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
               onClick={() => {
                 setError("");
                 setNotice("");
@@ -264,14 +264,14 @@ export function LoginScreen() {
           )}
 
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
               Confirm password
               <input
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Confirm password"
-                className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="new-password"
                 required
               />
@@ -280,26 +280,26 @@ export function LoginScreen() {
 
           {mode === "reset-confirm" && (
             <>
-              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
                 New password
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetPassword}
                   onChange={(event) => setResetPassword(event.target.value)}
                   placeholder="New password"
-                  className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                  className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete="new-password"
                   required
                 />
               </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted">
+              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
                 Confirm new password
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetConfirm}
                   onChange={(event) => setResetConfirm(event.target.value)}
                   placeholder="Confirm new password"
-                  className="w-full rounded-zaki-md border border-zaki-strong px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
+                  className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete="new-password"
                   required
                 />
@@ -308,12 +308,12 @@ export function LoginScreen() {
           )}
 
           {notice && (
-            <div className="rounded-zaki-md border border-zaki-strong bg-zaki-success px-3 py-2 text-xs text-zaki-success">
+            <div className="rounded-zaki-md border border-zaki-strong dark:border-[#1d3b30] bg-zaki-success dark:bg-[rgba(33,145,113,0.2)] px-3 py-2 text-xs text-zaki-success dark:text-[#e9fff8]">
               {notice}
             </div>
           )}
           {error && (
-            <div className="rounded-zaki-md border border-zaki-strong bg-zaki-error px-3 py-2 text-xs text-zaki-brand">
+            <div className="rounded-zaki-md border border-zaki-strong dark:border-[#3a1f1b] bg-zaki-error dark:bg-[rgba(210,68,48,0.18)] px-3 py-2 text-xs text-zaki-brand dark:text-[#ffe7e2]">
               {error}
             </div>
           )}
@@ -327,7 +327,7 @@ export function LoginScreen() {
               (mode === "reset-confirm" &&
                 (resetPassword.length === 0 || resetConfirm.length === 0))
             }
-            className="w-full zaki-btn bg-zaki-primary text-white transition-colors hover:bg-zaki-active disabled:opacity-60"
+            className="w-full zaki-btn bg-zaki-primary text-white transition-colors hover:bg-zaki-brand-hover disabled:opacity-60"
           >
             {isLoading
               ? mode === "signup"
@@ -349,7 +349,7 @@ export function LoginScreen() {
 
         <button
           type="button"
-          className="mt-4 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary"
+          className="mt-4 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
           onClick={() => {
             setError("");
             setNotice("");

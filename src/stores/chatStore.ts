@@ -6,6 +6,7 @@ export interface Message {
   content: string;
   attachments?: { name: string; type: string; url: string }[];
   chatId?: number;
+  memorySources?: { id: string; content: string; type: string }[];
 }
 
 interface ChatState {

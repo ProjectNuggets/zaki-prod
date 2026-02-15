@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { CenterLogo } from "../icons";
@@ -9,6 +11,7 @@ export interface Message {
   content: string;
   attachments?: { name: string; type: string; url: string }[];
   chatId?: number;
+  memorySources?: { id: string; content: string; type: string }[];
 }
 
 export interface MessageBubbleProps {
@@ -33,6 +36,9 @@ export function MessageBubble({
   // isStreaming can be used to show typing indicator or disable actions
   void isStreaming;
   const isUser = message.role === 'user';
+  const [showWhy, setShowWhy] = useState(false);
+  const memorySources = message.memorySources || [];
+  const { t } = useTranslation();
 
   return (
     <div
@@ -89,11 +95,42 @@ export function MessageBubble({
           </div>
         )}
         {showActions && !isUser && (
-          <MessageActions
-            onCopy={onCopy ? () => onCopy(message) : undefined}
-            onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
-            onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}
-          />
+          <>
+            <MessageActions
+              onCopy={onCopy ? () => onCopy(message) : undefined}
+              onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
+              onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}
+            />
+            {memorySources.length > 0 && (
+              <button
+                type="button"
+                className="text-2xs text-zaki-muted hover:text-zaki-primary transition-colors"
+                onClick={() => setShowWhy((prev) => !prev)}
+              >
+                {showWhy ? t("chat.hideWhy") : t("chat.whyAnswer")}
+              </button>
+            )}
+          </>
+        )}
+        {showWhy && memorySources.length > 0 && (
+          <div className="mt-2 rounded-zaki-lg border border-zaki-subtle bg-white/80 dark:bg-zaki-dark-card px-3 py-2 text-2xs text-zaki-secondary dark:text-zaki-dark-subtle transition-all duration-200">
+            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zaki-muted mb-1">
+              <span>{t("chat.usedMemory")}</span>
+              <span className="font-semibold text-zaki-secondary dark:text-zaki-dark-subtle">
+                {t("chat.usedMemoryCount", { count: memorySources.length })}
+              </span>
+            </div>
+            <div className="space-y-1">
+              {memorySources.map((source) => (
+                <div key={source.id} className="flex items-start gap-2">
+                  <span className="text-[10px] uppercase text-zaki-muted">
+                    {source.type}
+                  </span>
+                  <span className="text-zaki-primary dark:text-zaki-dark-primary">{source.content}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

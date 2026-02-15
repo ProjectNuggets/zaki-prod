@@ -5,6 +5,7 @@ import { MoreVertical, ArrowLeft, ArrowRight, ShieldCheck, Sparkles } from "luci
 import { CenterLogo, LogoArabicOrange } from "../../icons";
 import { useAuthStore } from "@/stores";
 import type { Space } from "@/types";
+import { apiRequest } from "@/lib/api";
 
 interface ZakiHomeViewProps {
   primarySpace: Space | null;
@@ -29,11 +30,11 @@ function QuickStartGrid({
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-3 mb-10">
-      {items.map((item) => (
+      {items.map((item, index) => (
         <button
-          key={item.title}
+          key={`${item.title}-${index}`}
           type="button"
-          className="rounded-zaki-2xl border border-zaki-subtle bg-white/90 p-5 text-left shadow-[0px_10px_26px_rgba(15,15,15,0.06)] hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-[0px_10px_26px_rgba(15,15,15,0.12)] dark:hover:bg-[#17110f]"
+          className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 text-left shadow-zaki-md hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-lg dark:hover:bg-[#17110f]"
           onClick={() => onSendExample(item.title)}
         >
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zaki-muted rtl:text-right rtl:justify-end rtl:w-full rtl:flex-row-reverse dark:text-zaki-dark-muted">
@@ -64,7 +65,7 @@ function MissionCard({
   carouselHint: string;
 }) {
   return (
-    <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.08)] mb-8 dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-[0px_18px_40px_rgba(15,15,15,0.18)]">
+    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 shadow-zaki-lg mb-8 dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2 text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
           {icon}
@@ -109,7 +110,6 @@ function ExamplesCard({
   activeSet,
   examples,
   isRtl,
-  onPrev,
   onNext,
   onSendExample,
 }: {
@@ -118,13 +118,12 @@ function ExamplesCard({
   activeSet: number;
   examples: string[];
   isRtl: boolean;
-  onPrev: () => void;
   onNext: () => void;
   onSendExample: (example: string) => void;
 }) {
   const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
   return (
-    <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-4 shadow-[0px_18px_40px_rgba(15,15,15,0.08)] dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-[0px_18px_40px_rgba(15,15,15,0.18)]">
+    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-4 shadow-zaki-lg dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
       <div className="flex items-center justify-between gap-2 min-h-[28px]">
         <div className="flex items-center gap-2 justify-end text-right leading-none">
           <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
@@ -175,15 +174,21 @@ function CapabilitiesCard({
   limitationsLabel: string;
 }) {
   return (
-    <div className="rounded-zaki-2xl border border-zaki bg-white/90 p-4 shadow-[0px_18px_40px_rgba(15,15,15,0.08)] dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-[0px_18px_40px_rgba(15,15,15,0.18)]">
+    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-4 shadow-zaki-lg dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rtl:text-right">
           <div className="min-h-[28px] flex items-center text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
             {capabilitiesLabel}
           </div>
-          <ul className="mt-2 space-y-1.5 text-sm leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+          <ul className="mt-2 space-y-1 text-sm leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
             {capabilities.map((item) => (
-              <li key={item}>• {item}</li>
+              <li key={item} className="flex items-start gap-2 px-2 py-1 rtl:flex-row-reverse">
+                <span
+                  className="mt-[6px] size-1.5 rounded-full bg-zaki-muted dark:bg-zaki-dark-muted"
+                  aria-hidden="true"
+                />
+                <span className="flex-1">{item}</span>
+              </li>
             ))}
           </ul>
         </div>
@@ -191,9 +196,15 @@ function CapabilitiesCard({
           <div className="min-h-[28px] flex items-center text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
             {limitationsLabel}
           </div>
-          <ul className="mt-2 space-y-1.5 text-sm leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+          <ul className="mt-2 space-y-1 text-sm leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
             {limitations.map((item) => (
-              <li key={item}>• {item}</li>
+              <li key={item} className="flex items-start gap-2 px-2 py-1 rtl:flex-row-reverse">
+                <span
+                  className="mt-[6px] size-1.5 rounded-full bg-zaki-muted dark:bg-zaki-dark-muted"
+                  aria-hidden="true"
+                />
+                <span className="flex-1">{item}</span>
+              </li>
             ))}
           </ul>
         </div>
@@ -222,7 +233,7 @@ function MemoryPopover({
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 mt-3 w-[520px] max-w-[calc(100vw-3rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5 z-30"
+      className="absolute right-0 mt-3 w-[520px] max-w-[calc(100vw-3rem)] rounded-zaki-2xl border border-zaki bg-zaki-raised shadow-zaki-xl px-6 py-5 z-30"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -283,6 +294,7 @@ export function ZakiHomeView({
   const [activeSlide, setActiveSlide] = useState(0);
   const [activeExampleSet, setActiveExampleSet] = useState(0);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [conflictCount, setConflictCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const memoryPanelRef = useRef<HTMLDivElement>(null);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
@@ -333,6 +345,32 @@ export function ZakiHomeView({
   }, [zakiMenuOpen]);
 
   useEffect(() => {
+    const userId = user?.username;
+    if (!userId) return;
+    apiRequest(`/api/memory/conflicts/${userId}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.count !== undefined) {
+          setConflictCount(data.count);
+        }
+      })
+      .catch(() => null);
+  }, [user?.username]);
+
+  useEffect(() => {
+    const handleConflictCount = (event: Event) => {
+      const detail = (event as CustomEvent<{ count?: number }>).detail;
+      if (typeof detail?.count === "number") {
+        setConflictCount(detail.count);
+      }
+    };
+    window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
+    return () => {
+      window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
+    };
+  }, []);
+
+  useEffect(() => {
     if (zakiMissionSlides.length <= 1) return;
     const interval = window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % zakiMissionSlides.length);
@@ -361,6 +399,11 @@ export function ZakiHomeView({
               {t("home.memoryOn")}
               <span className="text-zaki-muted">·</span>
               {t("home.memoryOnHelper")}
+              {conflictCount > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-zaki-brand text-white px-2 py-0.5 text-[10px] font-semibold">
+                  {t("home.conflictsBadge", { count: conflictCount })}
+                </span>
+              )}
             </div>
             <div className="relative">
               <button
@@ -391,7 +434,12 @@ export function ZakiHomeView({
             <button
               type="button"
               className="zaki-btn bg-zaki-accent text-white w-full sm:w-auto"
-              onClick={() => onSendExample(zakiExamples[0])}
+              onClick={() => {
+                const example = zakiExamples[0];
+                if (example) {
+                  onSendExample(example);
+                }
+              }}
             >
               {t("empty.cta")}
             </button>
@@ -451,7 +499,6 @@ export function ZakiHomeView({
           activeSet={activeExampleSet}
           examples={activeExamples}
           isRtl={isRtl}
-          onPrev={() => setActiveExampleSet((prev) => (prev - 1 + exampleSets.length) % exampleSets.length)}
           onNext={() => setActiveExampleSet((prev) => (prev + 1) % exampleSets.length)}
           onSendExample={onSendExample}
         />

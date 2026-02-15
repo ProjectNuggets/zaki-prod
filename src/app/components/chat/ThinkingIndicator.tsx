@@ -1,4 +1,3 @@
-import { useState, useEffect, useMemo } from "react";
 import { CenterLogo } from "../icons";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -9,26 +8,6 @@ interface ThinkingIndicatorProps {
 
 export function ThinkingIndicator({ className }: ThinkingIndicatorProps) {
   const { t } = useTranslation();
-  const thinkingPhrases = useMemo(
-    () => t("chat.thinkingPhrases", { returnObjects: true }) as string[],
-    [t]
-  );
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsTransitioning(true);
-      setTimeout(() => {
-        setPhraseIndex((prev) => (prev + 1) % thinkingPhrases.length);
-        setIsTransitioning(false);
-      }, 200); // Fade out duration
-    }, 2500); // Change phrase every 2.5s
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const currentPhrase = thinkingPhrases[phraseIndex] ?? "Thinking";
 
   return (
     <div className={cn("flex gap-4 items-start", className)}>
@@ -45,14 +24,8 @@ export function ThinkingIndicator({ className }: ThinkingIndicatorProps) {
       {/* Thinking Text with Shimmer */}
       <div className="rounded-zaki-lg px-4 py-3 text-sm bg-transparent">
         <div className="flex items-center gap-3">
-          {/* Rotating phrase with fade transition */}
-          <span 
-            className={cn(
-              "zaki-thinking-text text-zaki-muted font-medium transition-opacity duration-200",
-              isTransitioning ? "opacity-0" : "opacity-100"
-            )}
-          >
-            {currentPhrase}
+          <span className="zaki-thinking-text text-zaki-muted font-medium">
+            {t("chat.thinking")}
           </span>
           
           {/* Animated dots — teal accent */}

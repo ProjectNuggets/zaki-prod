@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import fs from "node:fs";
+import path from "node:path";
 import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -12,7 +14,19 @@ import { createMemoryRoutes, buildContext } from "./memory/index.js";
 import { extractFacts } from "./memory-extraction.js";
 import { summarizeConversation } from "./memory-legacy.js";
 
-dotenv.config();
+// Load environment variables from the first valid .env location.
+const envCandidates = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "backend", ".env"),
+  path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", ".env"),
+];
+
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 // =============================================================================
 // P0 FIX: Preview memories instead of auto-storing
@@ -1358,6 +1372,7 @@ const streamChatHandler = async (req, res) => {
     let enrichedMessage = originalMessage;
     console.log(`[Chat] Original message: ${originalMessage}`);
     let memoryInjected = false;
+    let memorySources = [];
 
     // Inject memory context if we have a user
     if (userEmail) {
@@ -1370,9 +1385,14 @@ const streamChatHandler = async (req, res) => {
         });
 
         if (memoryResult.context) {
-          // Prepend memory context as natural buddy-style context
-          enrichedMessage = `[About this person — use naturally, don't quote verbatim]\n${memoryResult.context}\n\n---\n\n${originalMessage}`;
+          // Prepend memory context with explicit relevance guidance + no hallucination
+          enrichedMessage = `[About this person — use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate or invent details beyond this memory.]\n${memoryResult.context}\n\n---\n\n${originalMessage}`;
           memoryInjected = true;
+          memorySources = (memoryResult.sources || []).map((source) => ({
+            id: source.id,
+            content: source.content,
+            type: source.type,
+          }));
           console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}`);
           const preview = memoryResult.context.slice(0, 220).replace(/\s+/g, " ");
           console.log(`[Memory] Context preview: ${preview}`);
@@ -1380,16 +1400,18 @@ const streamChatHandler = async (req, res) => {
           console.log(`[Memory] No context injected for ${userEmail}`);
         }
 
-        // P0 Fix: Extract and stage for confirmation (don't auto-store)
-        previewAndNotify({ userId: userEmail, message: originalMessage, threadId: threadSlug })
-          .then((result) => {
-            if (result.pending > 0) {
-              console.log(`[Memory] ${result.pending} memories staged for confirmation`);
-            }
-          })
-          .catch((err) => {
-            console.warn('[Memory] Preview failed:', err.message);
-          });
+        // Optional: Extract and stage for confirmation during stream (disabled by default)
+        if (process.env.ZAKI_STREAM_CAPTURE === "true") {
+          previewAndNotify({ userId: userEmail, message: originalMessage, threadId: threadSlug })
+            .then((result) => {
+              if (result.pending > 0) {
+                console.log(`[Memory] ${result.pending} memories staged for confirmation`);
+              }
+            })
+            .catch((err) => {
+              console.warn('[Memory] Preview failed:', err.message);
+            });
+        }
       } catch (err) {
         console.warn("[Memory] Context injection failed:", err.message);
         // Continue without memory
@@ -1437,11 +1459,15 @@ const streamChatHandler = async (req, res) => {
             return;
           }
           
-          // Optionally prepend memory indicator (disabled for now)
-          // if (firstChunk && memoryInjected) {
-          //   const indicator = new TextEncoder().encode('data: {"type":"memoryUsed","count":' + memoryResult.sources.length + '}\n\n');
-          //   controller.enqueue(indicator);
-          // }
+          if (firstChunk && memoryInjected && memorySources.length > 0) {
+            const indicatorPayload = {
+              type: "memoryUsed",
+              count: memorySources.length,
+              sources: memorySources.slice(0, 5),
+            };
+            const indicator = new TextEncoder().encode(`data: ${JSON.stringify(indicatorPayload)}\n\n`);
+            controller.enqueue(indicator);
+          }
           
           firstChunk = false;
           controller.enqueue(value);

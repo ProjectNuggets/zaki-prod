@@ -14,6 +14,7 @@ interface EmptyStateProps {
 export function EmptyState({
   userName = "there",
   onExampleClick,
+  onStartChat,
   examples,
   className,
 }: EmptyStateProps) {

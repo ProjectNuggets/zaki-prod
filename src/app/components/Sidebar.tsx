@@ -34,6 +34,7 @@ export function Sidebar() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   // TODO: Fetch actual plan from user profile
   const planLabel = "FREE" as "FREE" | "PRO";
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
@@ -57,8 +58,45 @@ export function Sidebar() {
   const [profileSaving, setProfileSaving] = useState(false);
   const isDark = resolvedTheme() === "dark";
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
-  const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
   const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
+
+  useEffect(() => {
+    const handleOpenMemory = () => {
+      if (!user?.username) return;
+      setMemoryOpen(true);
+    };
+    const handleConflictCount = (event: Event) => {
+      const detail = (event as CustomEvent<{ count?: number }>).detail;
+      if (typeof detail?.count === "number") {
+        setMemoryConflictCount(detail.count);
+      }
+    };
+    window.addEventListener("zaki:open-memory", handleOpenMemory);
+    window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
+    return () => {
+      window.removeEventListener("zaki:open-memory", handleOpenMemory);
+      window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
+    };
+  }, [user?.username]);
+
+  useEffect(() => {
+    if (!profileMenuOpen || !user?.username) return;
+    let active = true;
+    apiRequest(`/api/memory/conflicts/${user.username}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        const count = typeof data.count === "number" ? data.count : (data.conflicts?.length ?? 0);
+        setMemoryConflictCount(count);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMemoryConflictCount(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [profileMenuOpen, user?.username]);
   
   // Focus trap refs for modals
   const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
@@ -926,7 +964,7 @@ export function Sidebar() {
               className="flex items-center gap-2 px-3 py-2 bg-zaki-brand text-white text-sm font-medium rounded-zaki-xl hover:bg-zaki-brand-hover transition-colors"
               type="button"
             >
-              <AddIcon className="w-4 h-4" />
+              <AddIcon color="#FFFFFF" />
               {t("sidebar.actions.createSpace")}
             </button>
           </div>
@@ -1271,6 +1309,11 @@ export function Sidebar() {
             >
               <Brain className="size-4 text-zaki-muted" />
               Memory
+              {memoryConflictCount > 0 && (
+                <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {memoryConflictCount}
+                </span>
+              )}
             </button>
             <button
               className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"

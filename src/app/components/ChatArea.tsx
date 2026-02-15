@@ -16,8 +16,6 @@ import {
   MemoryConfirmationPanel,
 } from "./chat";
 
-import { AutoSaveToast } from "./memory/AutoSaveToast";
-import { MemoryToast } from "./memory/MemoryToast";
 import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
@@ -60,6 +58,8 @@ export function ChatArea() {
   const [showMemoryToast, setShowMemoryToast] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [memoryConflictCount, setMemoryConflictCount] = useState(0);
+  const [showConflictToast, setShowConflictToast] = useState(false);
   // Memory chip removed
   const lastMemoryRequestRef = useRef<{ message: string; threadId?: string; mode: "autosave" | "manual" } | null>(null);
   const memoryQueueRef = useRef<Array<{ id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual" }>>([]);
@@ -68,6 +68,7 @@ export function ChatArea() {
   const memoryInFlightRef = useRef(false);
   const queuedMemoryCheckRef = useRef<{ message: string; threadId?: string; mode?: "autosave" | "manual" } | null>(null);
   const memorySeenRef = useRef<Set<string>>(new Set());
+  const memoryConflictSeenRef = useRef<Set<string>>(new Set());
   const authUser = useAuthStore((s) => s.user);
   
   // Memory mode: autosave (default) or manual
@@ -121,10 +122,13 @@ export function ChatArea() {
         ? Math.min(window.innerWidth - 32, 896)
         : 640);
     const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
-    const anchorTop = inputTop || inputOffset;
-    const bottom = viewportHeight - Math.max(0, anchorTop - 12);
+    const hasInputMetrics = inputWidth > 0 && inputTop > 0;
+    const gap = -12;
+    const bottom = hasInputMetrics
+      ? Math.max(24, viewportHeight - inputTop + gap)
+      : 24;
     return { left, width, bottom };
-  }, [inputHeight, inputLeft, inputOffset, inputTop, inputWidth]);
+  }, [inputLeft, inputTop, inputWidth]);
 
 
   // Library state
@@ -269,6 +273,25 @@ export function ChatArea() {
     });
   }, []);
 
+  const updateAssistantSources = useCallback(
+    (threadSlug: string, assistantId: string, sources: Array<{ id: string; content: string; type: string }>) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const updated = [...threadMessages];
+        const existingMsg = updated[assistantIndex];
+        if (!existingMsg) return prev;
+        updated[assistantIndex] = {
+          ...existingMsg,
+          memorySources: sources,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
+
   // Stream via WebSocket for agent invocation URLs
   const streamAgentInvocation = useCallback(async (
     agentUrl: string,
@@ -378,6 +401,10 @@ export function ChatArea() {
         if (line.startsWith("data: ")) {
           try {
             const payload = JSON.parse(line.slice(6));
+            if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
+              updateAssistantSources(threadSlug, assistantId, payload.sources);
+              continue;
+            }
             const chunk = payload.textResponse ?? payload.content ?? "";
             if (chunk) {
               accumulated += chunk;
@@ -392,6 +419,10 @@ export function ChatArea() {
           // Plain text streaming
           try {
             const payload = JSON.parse(line);
+            if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
+              updateAssistantSources(threadSlug, assistantId, payload.sources);
+              continue;
+            }
             const chunk = payload.textResponse ?? payload.content ?? "";
             if (chunk) {
               accumulated += chunk;
@@ -405,7 +436,7 @@ export function ChatArea() {
         }
       }
     }
-  }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent]);
+  }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
 
   // Check for memories - Auto-Save or Manual mode
   const flushMemoryQueue = useCallback(() => {
@@ -458,6 +489,19 @@ export function ChatArea() {
       }
       
       const data = await response.json();
+      const conflicts = data.conflicts || [];
+      if (conflicts.length > 0) {
+        const newConflicts = conflicts.filter((conflict: { id?: string }) => {
+          if (!conflict?.id) return true;
+          if (memoryConflictSeenRef.current.has(conflict.id)) return false;
+          memoryConflictSeenRef.current.add(conflict.id);
+          return true;
+        });
+        if (newConflicts.length > 0) {
+          setMemoryConflictCount((prev) => prev + newConflicts.length);
+          setShowConflictToast(true);
+        }
+      }
       
       // Different response shapes for different modes
       const memories = (activeMode === "autosave" ? (data.saved || []) : (data.pending || [])).map(
@@ -468,7 +512,7 @@ export function ChatArea() {
       );
       
       if (memories.length > 0) {
-        const uniqueMemories = memories.filter((m) => {
+        const uniqueMemories = memories.filter((m: { id: string; confirmationId?: string }) => {
           const key = m.confirmationId || m.id;
           if (memorySeenRef.current.has(key)) return false;
           memorySeenRef.current.add(key);
@@ -601,8 +645,9 @@ export function ChatArea() {
       }
       let userMessage: Message | null = null;
       for (let i = idx - 1; i >= 0; i -= 1) {
-        if (messages[i]?.role === "user") {
-          userMessage = messages[i];
+        const candidate = messages[i];
+        if (candidate && candidate.role === "user") {
+          userMessage = candidate;
           break;
         }
       }
@@ -1261,6 +1306,52 @@ export function ChatArea() {
             setPendingMemories((prev) => prev.filter((m) => m._mode !== "autosave"));
           }}
         />
+      )}
+
+      {showConflictToast && memoryConflictCount > 0 && (
+        <div
+          className="fixed z-40"
+          aria-live="polite"
+          style={{
+            left: toastPosition.left,
+            width: toastPosition.width,
+            bottom: toastPosition.bottom + (showMemoryToast ? 48 : 16),
+          }}
+        >
+          <div className="rounded-full border border-zaki-subtle dark:border-zaki-dark bg-white/95 dark:bg-zaki-dark-card px-3 py-1.5 text-2xs text-zaki-secondary dark:text-zaki-dark-subtle shadow-[0px_8px_20px_rgba(15,15,15,0.08)] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-zaki-hover text-zaki-brand">
+                !
+              </span>
+              <span className="truncate">
+                {memoryConflictCount} memory conflict{memoryConflictCount > 1 ? "s" : ""} detected
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-zaki-brand font-semibold hover:underline"
+                onClick={() => {
+                  window.dispatchEvent(new Event("zaki:open-memory"));
+                  setShowConflictToast(false);
+                  setMemoryConflictCount(0);
+                }}
+              >
+                Review
+              </button>
+              <button
+                type="button"
+                className="text-zaki-muted dark:text-zaki-dark-muted font-medium hover:underline"
+                onClick={() => {
+                  setShowConflictToast(false);
+                  setMemoryConflictCount(0);
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {memoryError && (

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { CenterLogo } from "../icons";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageActions } from "./MessageActions";
-import { cn } from "@/lib/utils";
 
 interface StreamingBubbleProps {
   content: string;
@@ -15,7 +14,6 @@ interface StreamingBubbleProps {
 
 export function StreamingBubble({
   content,
-  isStreaming = true,
   showActions = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -38,16 +36,6 @@ export function StreamingBubble({
     }
     lastContentLenRef.current = content.length;
   }, [content.length]);
-
-  // Reset when content starts fresh (new message)
-  useEffect(() => {
-    if (content.length < 10 && displayedContent.length > content.length + 50) {
-      // Likely a new message, reset
-      charIndexRef.current = 0;
-      setDisplayedContent("");
-      setIsTypingPhase(true);
-    }
-  }, [content, displayedContent]);
 
   return (
     <div className="zaki-message-row flex gap-4 justify-start items-start zaki-message-enter-assistant">

@@ -15,6 +15,10 @@ import {
   getPendingConfirmations,
   confirmMemory,
   rejectMemory,
+  findConflict,
+  createConflict,
+  getConflicts,
+  resolveConflict,
   checkStorage,
 } from "./operations.js";
 
@@ -114,7 +118,7 @@ export function createMemoryRoutes(app) {
         return res.json({ pending: [], duplicates: [] });
       }
       
-      const results = { pending: [], duplicates: [] };
+      const results = { pending: [], duplicates: [], conflicts: [] };
       
       for (const fact of facts) {
         // Check hash dupes
@@ -132,6 +136,30 @@ export function createMemoryRoutes(app) {
           continue;
         }
         
+        const conflict = await findConflict({
+          userId,
+          content: fact.content,
+          conflictKey: fact.conflictKey,
+          polarity: fact.polarity,
+        });
+        if (conflict) {
+          const { id } = await createConflict({
+            userId,
+            newContent: fact.content,
+            newType: fact.type,
+            newConfidenceScore: 0.8,
+            conflictMemory: conflict,
+          });
+          results.conflicts.push({
+            id,
+            content: fact.content,
+            type: fact.type,
+            conflictingContent: conflict.content,
+            conflictingType: conflict.type,
+          });
+          continue;
+        }
+
         // Stage for confirmation
         const { id } = await stageMemory({
           userId,
@@ -139,6 +167,8 @@ export function createMemoryRoutes(app) {
           type: fact.type,
           sourceThreadId: threadId,
           confidenceScore: 0.8,
+          conflictKey: fact.conflictKey,
+          polarity: fact.polarity,
         });
         
         results.pending.push({
@@ -186,6 +216,42 @@ export function createMemoryRoutes(app) {
     try {
       const { userId } = req.body;
       const result = await rejectMemory(req.params.id, userId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================================================
+  // Conflicts: Always ask user
+  // ==========================================================================
+
+  app.get("/api/memory/conflicts/:userId", async (req, res) => {
+    try {
+      const conflicts = await getConflicts(
+        req.params.userId,
+        parseInt(req.query.limit) || 50
+      );
+      res.json({ conflicts, count: conflicts.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/memory/conflicts/:id/resolve", async (req, res) => {
+    try {
+      const { userId, action } = req.body;
+      if (!userId || !action) {
+        return res.status(400).json({ error: "userId and action required" });
+      }
+      const result = await resolveConflict({
+        userId,
+        conflictId: req.params.id,
+        action,
+      });
+      if (result.error) {
+        return res.status(404).json(result);
+      }
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
