@@ -52,6 +52,9 @@ export function buildApiUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
   const base = getApiBase();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (base.endsWith("/api") && normalizedPath.startsWith("/api/")) {
+    return `${base}${normalizedPath.slice(4)}`;
+  }
   return `${base}${normalizedPath}`;
 }
 
@@ -84,7 +87,10 @@ export async function backendRequest(
     throw new Error("Backend URL not configured.");
   }
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const url = `${base}${normalizedPath}`;
+  const url =
+    base.endsWith("/api") && normalizedPath.startsWith("/api/")
+      ? `${base}${normalizedPath.slice(4)}`
+      : `${base}${normalizedPath}`;
   const { headers, body, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
 
