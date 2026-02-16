@@ -1,72 +1,112 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { useBillingPortal, useCheckout, useEntitlements } from "@/queries";
+import { useBillingPortal, useCheckout, useEntitlements, useRedeemAccessCode } from "@/queries";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const plans = [
-  {
-    tier: "free",
-    label: "Free",
-    price: "$0",
-    blurb: "Great for trying ZAKI and basic workflows.",
-    features: ["Core chat", "Memory basics", "Standard response quality"],
-  },
-  {
-    tier: "student",
-    label: "Student",
-    price: "$5 / month",
-    blurb: "Premium features for focused learning.",
-    features: ["Premium models", "Priority responses", "Expanded memory limits"],
-  },
-  {
-    tier: "personal",
-    label: "Personal",
-    price: "$10 / month",
-    blurb: "Best for everyday use and deeper context.",
-    features: ["Premium models", "Priority responses", "Advanced memory insights"],
-  },
-];
+type PlanTier = "free" | "student" | "personal";
+const planTiers: PlanTier[] = ["free", "student", "personal"];
 
 type BillingNotice = {
   tone: "success" | "info";
   message: string;
 };
 
-const billingNoticeByStatus: Record<string, BillingNotice> = {
-  success: {
-    tone: "success",
-    message: "Billing update received. Your plan status will refresh shortly.",
-  },
-  cancel: {
-    tone: "info",
-    message: "Checkout canceled. You can pick a plan anytime.",
-  },
-  manage: {
-    tone: "success",
-    message: "Returned from billing portal.",
-  },
-};
-
 export function PricingPage() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
+  const language = i18n.language || undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
+  const [accessCode, setAccessCode] = useState("");
   const checkout = useCheckout();
   const portal = useBillingPortal();
+  const redeemAccessCode = useRedeemAccessCode();
   const { data: entitlementsResult } = useEntitlements();
   const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
+  const accessActive = Boolean(entitlementsResult?.data?.access?.active);
+  const accessExpiresAt = entitlementsResult?.data?.access?.expiresAt ?? null;
+  const accessCampaign = entitlementsResult?.data?.access?.campaign ?? null;
   const isPremium =
     ["student", "personal"].includes(currentTier) &&
     ["active", "trialing", "past_due"].includes(planStatus);
 
+  const plans = useMemo(
+    () =>
+      planTiers.map((tier) => ({
+        tier,
+        label: t(`pricingPage.plans.${tier}.label`),
+        price: t(`pricingPage.plans.${tier}.price`),
+        blurb: t(`pricingPage.plans.${tier}.blurb`),
+        features: t(`pricingPage.plans.${tier}.features`, {
+          returnObjects: true,
+        }) as string[],
+      })),
+    [t, i18n.language]
+  );
+
+  const billingNoticeByStatus = useMemo<Record<string, BillingNotice>>(
+    () => ({
+      success: {
+        tone: "success",
+        message: t("pricingPage.billingNotices.success"),
+      },
+      cancel: {
+        tone: "info",
+        message: t("pricingPage.billingNotices.cancel"),
+      },
+      manage: {
+        tone: "success",
+        message: t("pricingPage.billingNotices.manage"),
+      },
+    }),
+    [t, i18n.language]
+  );
+
   const currentPlanLabel = useMemo(() => {
     const plan = plans.find((p) => p.tier === currentTier);
-    return plan?.label ?? "Free";
-  }, [currentTier]);
+    return plan?.label ?? t("pricingPage.plans.free.label");
+  }, [currentTier, plans, t]);
+
+  const localizedPlanStatus = useMemo(
+    () =>
+      t(`pricingPage.statusValues.${planStatus}`, {
+        defaultValue: planStatus,
+      }),
+    [planStatus, t]
+  );
+
+  const accessExpiresLabel = useMemo(() => {
+    if (!accessExpiresAt) return null;
+    const date = new Date(accessExpiresAt);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(language, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }, [accessExpiresAt, language]);
+
+  const accessSummary = useMemo(() => {
+    if (!accessActive) {
+      return t("pricingPage.access.summaryInactive");
+    }
+    if (accessExpiresLabel && accessCampaign) {
+      return t("pricingPage.access.summaryActiveUntilCampaign", {
+        date: accessExpiresLabel,
+        campaign: accessCampaign,
+      });
+    }
+    if (accessExpiresLabel) {
+      return t("pricingPage.access.summaryActiveUntil", { date: accessExpiresLabel });
+    }
+    if (accessCampaign) {
+      return t("pricingPage.access.summaryActiveCampaign", { campaign: accessCampaign });
+    }
+    return t("pricingPage.access.summaryActive");
+  }, [accessActive, accessCampaign, accessExpiresLabel, t]);
 
   useEffect(() => {
     const status = searchParams.get("billing");
@@ -90,15 +130,21 @@ export function PricingPage() {
     <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
       <div className="mx-auto w-full max-w-5xl">
         <div className={cn("flex flex-col gap-3", isRtl ? "text-right" : "text-left")}>
-          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-zaki-muted">
-            Pricing
+          <div
+            className={cn(
+              "text-xs font-semibold text-zaki-muted",
+              isRtl ? "tracking-normal" : "uppercase tracking-[0.3em]"
+            )}
+          >
+            {t("pricingPage.eyebrow")}
           </div>
           <h1 className="text-3xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-            Choose the plan that fits you
+            {t("pricingPage.title")}
           </h1>
           <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-            You’re currently on <span className="font-semibold">{currentPlanLabel}</span>
-            {isPremium ? " · Manage or switch anytime." : " · Upgrade when you’re ready."}
+            {t("pricingPage.currentPlan", { plan: currentPlanLabel })}
+            {" · "}
+            {isPremium ? t("pricingPage.currentPlanPremium") : t("pricingPage.currentPlanFree")}
           </p>
           {billingNotice && (
             <div
@@ -120,19 +166,102 @@ export function PricingPage() {
                 try {
                   await portal.mutateAsync();
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+                  toast.error(
+                    err instanceof Error ? err.message : t("pricingPage.portalError")
+                  );
                 }
               }}
             >
-              Manage plan
+              {t("pricingPage.managePlan")}
             </button>
             <span className="text-xs text-zaki-muted self-center">
-              Status: {planStatus}
+              {t("pricingPage.statusLabel")}: {localizedPlanStatus}
             </span>
           </div>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-5 py-5 shadow-[0px_16px_30px_rgba(15,15,15,0.06)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                  {t("pricingPage.access.title")}
+                </div>
+                <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                  {t("pricingPage.access.description")}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-2xs",
+                  isRtl ? "tracking-normal" : "uppercase tracking-[0.2em]",
+                  accessActive
+                    ? "border-zaki-success bg-zaki-success text-zaki-primary"
+                    : "border-zaki-subtle bg-zaki-hover text-zaki-secondary"
+                )}
+              >
+                {accessActive
+                  ? t("pricingPage.access.stateActive")
+                  : t("pricingPage.access.stateInactive")}
+              </span>
+            </div>
+            <div
+              className={cn(
+                "mt-4 flex flex-col gap-2 sm:flex-row",
+                isRtl && "sm:flex-row-reverse"
+              )}
+            >
+              <input
+                type="text"
+                value={accessCode}
+                onChange={(event) => setAccessCode(event.target.value)}
+                placeholder={t("pricingPage.access.placeholder")}
+                className="w-full rounded-full border border-zaki-subtle bg-white px-4 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"
+              />
+              <button
+                type="button"
+                className="rounded-full bg-zaki-brand px-4 py-2 text-sm text-white hover:bg-zaki-brand-hover transition-colors disabled:opacity-50"
+                disabled={redeemAccessCode.isPending || accessCode.trim().length === 0}
+                onClick={async () => {
+                  const code = accessCode.trim();
+                  if (!code) return;
+                  try {
+                    const result = await redeemAccessCode.mutateAsync(code);
+                    const expiry = result.accessExpiresAt
+                      ? new Date(result.accessExpiresAt)
+                      : null;
+                    const expiryLabel =
+                      expiry && !Number.isNaN(expiry.getTime())
+                        ? expiry.toLocaleDateString(language, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : null;
+                    toast.success(
+                      expiryLabel
+                        ? t("pricingPage.access.toastActivatedUntil", {
+                            date: expiryLabel,
+                          })
+                        : t("pricingPage.access.toastRedeemed")
+                    );
+                    setAccessCode("");
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : t("pricingPage.access.toastRedeemFailed")
+                    );
+                  }
+                }}
+              >
+                {redeemAccessCode.isPending
+                  ? t("pricingPage.access.applying")
+                  : t("pricingPage.access.apply")}
+              </button>
+            </div>
+            <div className="mt-3 text-xs text-zaki-muted">{accessSummary}</div>
+          </div>
           {plans.map((plan) => {
             const isCurrent = currentTier === plan.tier;
             return (
@@ -148,8 +277,13 @@ export function PricingPage() {
                     {plan.label}
                   </div>
                   {isCurrent && (
-                    <span className="text-2xs uppercase tracking-[0.2em] text-zaki-brand">
-                      Current
+                    <span
+                      className={cn(
+                        "text-2xs text-zaki-brand",
+                        isRtl ? "tracking-normal" : "uppercase tracking-[0.2em]"
+                      )}
+                    >
+                      {t("pricingPage.currentBadge")}
                     </span>
                   )}
                 </div>
@@ -171,7 +305,7 @@ export function PricingPage() {
                       className="w-full rounded-full border border-zaki-subtle px-3 py-2 text-xs text-zaki-secondary hover:bg-zaki-hover transition-colors"
                       disabled
                     >
-                      Included
+                      {t("pricingPage.included")}
                     </button>
                   ) : (
                     <button
@@ -181,11 +315,13 @@ export function PricingPage() {
                         try {
                           await checkout.mutateAsync(plan.tier as "student" | "personal");
                         } catch (err) {
-                          toast.error(err instanceof Error ? err.message : "Checkout failed");
+                          toast.error(
+                            err instanceof Error ? err.message : t("pricingPage.checkoutError")
+                          );
                         }
                       }}
                     >
-                      Choose {plan.label}
+                      {t("pricingPage.choose", { plan: plan.label })}
                     </button>
                   )}
                 </div>

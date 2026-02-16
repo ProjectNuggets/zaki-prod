@@ -215,6 +215,81 @@
       }
     }
   },
+  "pricingPage": {
+    "eyebrow": "الأسعار",
+    "title": "اختر الخطة المناسبة لك",
+    "currentPlan": "أنت حاليًا على خطة {{plan}}",
+    "currentPlanPremium": "يمكنك الإدارة أو التبديل في أي وقت.",
+    "currentPlanFree": "يمكنك الترقية عندما تكون جاهزًا.",
+    "billingNotices": {
+      "success": "تم استلام تحديث الفوترة. سيتم تحديث حالة خطتك قريبًا.",
+      "cancel": "تم إلغاء عملية الدفع. يمكنك اختيار خطة في أي وقت.",
+      "manage": "تمت العودة من بوابة الفوترة."
+    },
+    "managePlan": "إدارة الخطة",
+    "statusLabel": "الحالة",
+    "statusValues": {
+      "active": "نشطة",
+      "trialing": "تجريبية",
+      "past_due": "متأخرة السداد",
+      "inactive": "غير نشطة",
+      "canceled": "ملغاة"
+    },
+    "access": {
+      "title": "رمز التفعيل",
+      "description": "فعّل رمز الحملة لتشغيل ZAKI لمدة 30 يومًا.",
+      "stateActive": "فعّال",
+      "stateInactive": "غير فعّال",
+      "placeholder": "أدخل رمز التفعيل",
+      "apply": "تفعيل الرمز",
+      "applying": "جارٍ التفعيل...",
+      "toastActivatedUntil": "تم تفعيل الوصول حتى {{date}}.",
+      "toastRedeemed": "تم تفعيل رمز الوصول.",
+      "toastRedeemFailed": "تعذر تفعيل رمز الوصول",
+      "summaryActive": "الوصول فعّال.",
+      "summaryActiveUntil": "الوصول فعّال حتى {{date}}.",
+      "summaryActiveCampaign": "الوصول فعّال ({{campaign}}).",
+      "summaryActiveUntilCampaign": "الوصول فعّال حتى {{date}} ({{campaign}}).",
+      "summaryInactive": "لا يوجد رمز تفعيل نشط. فعّل رمزًا للمتابعة في المحادثة."
+    },
+    "plans": {
+      "free": {
+        "label": "مجانية",
+        "price": "0$",
+        "blurb": "مناسبة لتجربة ZAKI والمهام الأساسية.",
+        "features": [
+          "دردشة أساسية",
+          "أساسيات الذاكرة",
+          "جودة استجابة قياسية"
+        ]
+      },
+      "student": {
+        "label": "طالب",
+        "price": "5$ / شهر",
+        "blurb": "ميزات متقدمة للدراسة والتركيز.",
+        "features": [
+          "نماذج متقدمة",
+          "استجابات بأولوية",
+          "حدود ذاكرة موسعة"
+        ]
+      },
+      "personal": {
+        "label": "شخصي",
+        "price": "10$ / شهر",
+        "blurb": "مناسب للاستخدام اليومي وسياق أعمق.",
+        "features": [
+          "نماذج متقدمة",
+          "استجابات بأولوية",
+          "رؤى ذاكرة متقدمة"
+        ]
+      }
+    },
+    "currentBadge": "الحالية",
+    "included": "متضمنة",
+    "choose": "اختر {{plan}}",
+    "portalError": "تعذر فتح بوابة الفوترة",
+    "checkoutError": "فشلت عملية الدفع"
+  },
   "memory": {
     "saved": "تم حفظ الذاكرة",
     "toReview": "ذاكرة للمراجعة",

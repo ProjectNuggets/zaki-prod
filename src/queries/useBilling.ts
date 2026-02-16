@@ -5,6 +5,7 @@ import {
   createCheckoutSession,
   deleteAccount,
   fetchEntitlements,
+  redeemAccessCode,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
@@ -85,6 +86,22 @@ export function useDeleteAccount() {
         throw new Error(data.error ?? "Unable to delete account");
       }
       return data;
+    },
+  });
+}
+
+export function useRedeemAccessCode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const { response, data } = await redeemAccessCode(code);
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Unable to redeem access code");
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
     },
   });
 }

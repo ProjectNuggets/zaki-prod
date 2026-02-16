@@ -1636,7 +1636,8 @@ app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req,
 
     const code = normalizeAccessCode(validation.data.code);
     const accessCode = await dbGet(
-      "SELECT * FROM access_codes WHERE code = $1",
+      `SELECT * FROM access_codes
+       WHERE UPPER(regexp_replace(code, '[\\s-]+', '', 'g')) = $1`,
       [code]
     );
     if (!accessCode || !accessCode.active) {
@@ -1675,7 +1676,7 @@ app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req,
            access_code_last = $3,
            updated_at = NOW()
        WHERE id = $4`,
-      [expiresAt.toISOString(), accessCode.campaign, code, zakiUser.id]
+      [expiresAt.toISOString(), accessCode.campaign, accessCode.code, zakiUser.id]
     );
 
     await dbQuery(

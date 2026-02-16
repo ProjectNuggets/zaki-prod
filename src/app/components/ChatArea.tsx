@@ -354,9 +354,38 @@ export function ChatArea() {
 
     console.log(`[Chat] Response status: ${response.status}`);
 
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
       console.error(`[Chat] Stream failed: ${response.status}`);
-      throw new Error("Chat stream failed.");
+      let message = `Chat request failed (${response.status}).`;
+      const errorContentType = response.headers.get("content-type") || "";
+      try {
+        if (errorContentType.includes("application/json")) {
+          const data = (await response.json()) as {
+            error?: string;
+            message?: string;
+            code?: string;
+          };
+          if (typeof data.message === "string" && data.message.trim()) {
+            message = data.message;
+          } else if (typeof data.error === "string" && data.error.trim()) {
+            message = data.error;
+          } else if (data.code === "access_expired") {
+            message = "Access code required. Redeem a fresh code to keep chatting.";
+          }
+        } else {
+          const text = (await response.text()).trim();
+          if (text) {
+            message = text;
+          }
+        }
+      } catch {
+        // Keep fallback message.
+      }
+      throw new Error(message);
+    }
+
+    if (!response.body) {
+      throw new Error("Chat stream returned no data.");
     }
 
     const contentType = response.headers.get("content-type") || "";

@@ -13,10 +13,41 @@ jest.mock("sonner", () => ({
 }));
 
 jest.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    i18n: { language: "en", dir: () => "ltr" },
-  }),
+  useTranslation: () => {
+    const dictionary: Record<string, unknown> = {
+      "pricingPage.billingNotices.success":
+        "Billing update received. Your plan status will refresh shortly.",
+      "pricingPage.billingNotices.cancel":
+        "Checkout canceled. You can pick a plan anytime.",
+      "pricingPage.billingNotices.manage": "Returned from billing portal.",
+      "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
+      "pricingPage.plans.student.features": [
+        "Premium models",
+        "Priority responses",
+        "Expanded memory limits",
+      ],
+      "pricingPage.plans.personal.features": [
+        "Premium models",
+        "Priority responses",
+        "Advanced memory insights",
+      ],
+    };
+    return {
+      t: (key: string, options?: { returnObjects?: boolean; defaultValue?: string }) => {
+        if (Object.prototype.hasOwnProperty.call(dictionary, key)) {
+          return dictionary[key];
+        }
+        if (options?.returnObjects) {
+          return [];
+        }
+        if (typeof options?.defaultValue === "string") {
+          return options.defaultValue;
+        }
+        return key;
+      },
+      i18n: { language: "en", dir: () => "ltr" },
+    };
+  },
 }));
 
 jest.mock("@/queries", () => ({
@@ -27,6 +58,11 @@ jest.mock("@/queries", () => ({
           tier: "free",
           status: "inactive",
         },
+        access: {
+          active: false,
+          expiresAt: null,
+          campaign: null,
+        },
       },
     },
   }),
@@ -35,6 +71,10 @@ jest.mock("@/queries", () => ({
   }),
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
+  }),
+  useRedeemAccessCode: () => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
   }),
 }));
 

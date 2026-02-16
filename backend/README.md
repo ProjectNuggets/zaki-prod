@@ -47,6 +47,7 @@ npm run migrate:sqlite
 - `POST /zaki/workspaces` — body `{ "name": "..." }` (requires Authorization header)
 - `POST /password-reset/request` — body `{ "email": "..." }`
 - `POST /password-reset/confirm` — body `{ "token": "...", "password": "..." }`
+- `POST /api/access-code/redeem` — body `{ "code": "..." }` (requires Authorization header)
 
 ## Notes
 
@@ -55,3 +56,11 @@ npm run migrate:sqlite
 - If `ZAKI_EMAIL_MODE=console`, verification links are logged to stdout.
 - If `ZAKI_EMAIL_MODE=non`, users are auto-verified on signup.
 - If `ZAKI_EMAIL_MODE=resend`, set `RESEND_API_KEY` and `RESEND_FROM`.
+
+## Access Code Generation
+
+Create one-time or reusable monthly access codes:
+
+```
+npm run access-code:create -- --campaign=launch --count=10 --duration=30 --max=1
+```

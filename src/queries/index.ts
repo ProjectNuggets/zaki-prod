@@ -9,5 +9,6 @@ export {
   useBillingPortal,
   useCancelSubscription,
   useDeleteAccount,
+  useRedeemAccessCode,
   billingKeys,
 } from "./useBilling";

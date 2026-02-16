@@ -7,6 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.js",
+    "access-code:create": "node scripts/create-access-code.js",
     "test": "jest --forceExit",
     "test:watch": "jest --watch"
   },

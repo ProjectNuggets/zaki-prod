@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { LogoArabicOrange } from "./icons";
-import { requestPublicSignup, requestLogin, requestPasswordReset, confirmPasswordReset } from "@/lib/api";
+import {
+  requestPublicSignup,
+  requestLogin,
+  requestPasswordReset,
+  confirmPasswordReset,
+  redeemAccessCode,
+} from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
 export function LoginScreen() {
@@ -19,6 +25,7 @@ export function LoginScreen() {
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
+  const [loginAccessCode, setLoginAccessCode] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
@@ -139,7 +146,20 @@ export function LoginScreen() {
         return;
       }
 
+      const normalizedCode = loginAccessCode.trim();
+      if (normalizedCode) {
+        const { response: codeResponse, data: codeData } = await redeemAccessCode(
+          normalizedCode,
+          data.token
+        );
+        if (!codeResponse.ok || !codeData?.success) {
+          setError(codeData?.error || "Activation code is invalid or expired.");
+          return;
+        }
+      }
+
       setToken(data.token);
+      setLoginAccessCode("");
     } catch (err) {
       setError(
         mode === "signup"
@@ -246,6 +266,20 @@ export function LoginScreen() {
                   )}
                 </button>
               </div>
+            </label>
+          )}
+
+          {mode === "login" && (
+            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+              Activation code (optional)
+              <input
+                type="text"
+                value={loginAccessCode}
+                onChange={(event) => setLoginAccessCode(event.target.value)}
+                placeholder="Access code"
+                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                autoComplete="off"
+              />
             </label>
           )}
 
@@ -368,6 +402,9 @@ export function LoginScreen() {
               setFullName("");
               setDateOfBirth("");
               setConfirmPassword("");
+            }
+            if (mode === "login") {
+              setLoginAccessCode("");
             }
           }}
         >

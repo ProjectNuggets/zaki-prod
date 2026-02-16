@@ -146,6 +146,11 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_access_codes_code_normalized
+    ON access_codes (UPPER(regexp_replace(code, '[\\s-]+', '', 'g')));
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_access_redemptions_user ON access_code_redemptions(user_id);
   `);
 

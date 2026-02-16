@@ -252,6 +252,12 @@ export async function fetchEntitlements() {
       currentPeriodEnd?: string | null;
       cancelAtPeriodEnd?: boolean;
     };
+    access?: {
+      active?: boolean;
+      readOnly?: boolean;
+      expiresAt?: string | null;
+      campaign?: string | null;
+    };
     features?: Record<string, boolean>;
     error?: string | null;
   } = {};
@@ -300,6 +306,33 @@ export async function cancelBillingSubscription() {
     cancelAtPeriodEnd?: boolean;
     currentPeriodEnd?: string | null;
     status?: string;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function redeemAccessCode(code: string, authToken?: string) {
+  const response = authToken
+    ? await backendRequest("/api/access-code/redeem", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ code }),
+      })
+    : await backendAuthRequest("/api/access-code/redeem", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+  let data: {
+    success?: boolean;
+    accessExpiresAt?: string | null;
+    campaign?: string | null;
     error?: string | null;
   } = {};
   try {

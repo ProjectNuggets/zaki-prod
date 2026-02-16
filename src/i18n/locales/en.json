@@ -215,6 +215,81 @@
       }
     }
   },
+  "pricingPage": {
+    "eyebrow": "Pricing",
+    "title": "Choose the plan that fits you",
+    "currentPlan": "You’re currently on {{plan}}",
+    "currentPlanPremium": "Manage or switch anytime.",
+    "currentPlanFree": "Upgrade when you’re ready.",
+    "billingNotices": {
+      "success": "Billing update received. Your plan status will refresh shortly.",
+      "cancel": "Checkout canceled. You can pick a plan anytime.",
+      "manage": "Returned from billing portal."
+    },
+    "managePlan": "Manage plan",
+    "statusLabel": "Status",
+    "statusValues": {
+      "active": "Active",
+      "trialing": "Trialing",
+      "past_due": "Past due",
+      "inactive": "Inactive",
+      "canceled": "Canceled"
+    },
+    "access": {
+      "title": "Access code",
+      "description": "Redeem a campaign code to activate ZAKI access for 30 days.",
+      "stateActive": "Active",
+      "stateInactive": "Inactive",
+      "placeholder": "Enter access code",
+      "apply": "Apply code",
+      "applying": "Applying...",
+      "toastActivatedUntil": "Access activated until {{date}}.",
+      "toastRedeemed": "Access code redeemed.",
+      "toastRedeemFailed": "Unable to redeem access code",
+      "summaryActive": "Access active.",
+      "summaryActiveUntil": "Access active until {{date}}.",
+      "summaryActiveCampaign": "Access active ({{campaign}}).",
+      "summaryActiveUntilCampaign": "Access active until {{date}} ({{campaign}}).",
+      "summaryInactive": "No active access code. Redeem one to keep chatting."
+    },
+    "plans": {
+      "free": {
+        "label": "Free",
+        "price": "$0",
+        "blurb": "Great for trying ZAKI and basic workflows.",
+        "features": [
+          "Core chat",
+          "Memory basics",
+          "Standard response quality"
+        ]
+      },
+      "student": {
+        "label": "Student",
+        "price": "$5 / month",
+        "blurb": "Premium features for focused learning.",
+        "features": [
+          "Premium models",
+          "Priority responses",
+          "Expanded memory limits"
+        ]
+      },
+      "personal": {
+        "label": "Personal",
+        "price": "$10 / month",
+        "blurb": "Best for everyday use and deeper context.",
+        "features": [
+          "Premium models",
+          "Priority responses",
+          "Advanced memory insights"
+        ]
+      }
+    },
+    "currentBadge": "Current",
+    "included": "Included",
+    "choose": "Choose {{plan}}",
+    "portalError": "Unable to open billing portal",
+    "checkoutError": "Checkout failed"
+  },
   "memory": {
     "saved": "memory saved",
     "toReview": "memory to review",
