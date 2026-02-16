@@ -5,6 +5,7 @@
  */
 
 import crypto from "node:crypto";
+import { z } from "zod";
 import { dbQuery, dbGet, dbAll, hasPgVector } from "../db.js";
 
 // ============================================================================
@@ -143,6 +144,67 @@ function getNovaApiBase() {
     throw new Error("NOVA_TYP_BASE_URL not configured");
   }
   return base.replace(/\/+$/, "");
+}
+
+async function filterRelevantMemories({ query, memories, allowFallback = false }) {
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedQuery || memories.length === 0) return [];
+
+  const baseUrl = (process.env.NOVA_TYP_BASE_URL || "").trim();
+  if (!baseUrl) {
+    return allowFallback ? memories : [];
+  }
+
+  const apiBase = baseUrl.replace(/\/+$/, "");
+  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
+  const payload = {
+    query: normalizedQuery,
+    memories: memories.map((m) => ({ id: m.id, content: m.content, type: m.type })),
+  };
+
+  const ResponseSchema = z.object({
+    relevant_ids: z.array(z.string()).optional(),
+  });
+
+  try {
+    const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a relevance filter. Return JSON {\"relevant_ids\": [\"id1\", ...]} for memories that are directly relevant to answering the query. If none are relevant, return an empty array. Only use ids from the provided list.",
+          },
+          { role: "user", content: JSON.stringify(payload) },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 200,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Relevance check failed: ${response.status}`);
+    }
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return [];
+    const parsed = JSON.parse(content);
+    const validated = ResponseSchema.safeParse(parsed);
+    if (!validated.success) return [];
+
+    const relevantIds = new Set(validated.data.relevant_ids || []);
+    return memories.filter((m) => relevantIds.has(m.id));
+  } catch (err) {
+    console.warn("[Memory] Relevance check failed:", err.message);
+    return allowFallback ? memories : [];
+  }
 }
 
 // ============================================================================
@@ -528,6 +590,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
   const normalizedUserId = normalizeUserId(userId);
   // First, try to find relevant memories via text search
   let memories = [];
+  let usedFallback = false;
   
   if (query) {
     memories = await dbAll(
@@ -549,9 +612,24 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
        LIMIT 10`,
       [normalizedUserId]
     );
+    usedFallback = true;
   }
   
   if (memories.length === 0) {
+    return { context: "", sources: [] };
+  }
+
+  if (query) {
+    const filtered = await filterRelevantMemories({
+      query,
+      memories,
+      allowFallback: !usedFallback,
+    });
+    if (filtered.length === 0) {
+      return { context: "", sources: [] };
+    }
+    memories = filtered;
+  } else {
     return { context: "", sources: [] };
   }
   

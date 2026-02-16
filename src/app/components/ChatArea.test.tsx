@@ -27,6 +27,22 @@ jest.mock("@/queries/useThreads", () => ({
   useMessages: jest.fn(),
 }));
 
+jest.mock("@/queries", () => ({
+  useEntitlements: () => ({
+    data: {
+      data: {
+        plan: { tier: "free", status: "inactive" },
+      },
+    },
+  }),
+  useCheckout: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useBillingPortal: () => ({
+    mutateAsync: jest.fn(),
+  }),
+}));
+
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { returnObjects?: boolean }) =>

@@ -17,14 +17,32 @@ const MemorySchema = z.object({
   polarity: z.enum(["positive", "negative", "neutral"]).optional(),
 });
 
+const ClassificationSchema = z.enum([
+  "user_statement",
+  "fictional",
+  "draft",
+  "quote",
+  "instruction",
+  "roleplay",
+]);
+
 const ExtractionResponseSchema = z.object({
-  memories: z.array(MemorySchema),
+  classification: ClassificationSchema.optional(),
+  memories: z.array(MemorySchema).optional(),
 });
 
-const DEFAULT_PROMPT = `Extract personal information from this message as structured memories.
-Only extract things about the USER (not others, not general knowledge).
+const DEFAULT_PROMPT = `You are a memory extractor.
+First classify the message as one of:
+- user_statement: The user is stating facts/preferences/emotions ABOUT THEMSELVES.
+- fictional: The user is writing fiction/hypothetical content.
+- draft: The user is drafting an email/message/content (not personal info).
+- quote: The user is quoting someone/something.
+- instruction: The user is instructing the assistant (summarize/translate/write/etc).
+- roleplay: The user is asking you to roleplay or act as someone else.
 
-Return JSON: {"memories": [{"content": "...", "type": "...", "confidence": 0.9, "conflict_key": "...", "polarity": "positive"}]}
+Only extract memories if classification is user_statement. Otherwise return empty memories.
+
+Return JSON: {"classification": "...", "memories": [{"content": "...", "type": "...", "confidence": 0.9, "conflict_key": "...", "polarity": "positive"}]}
 
 Types:
 - fact: Objective info (name, job, location)
@@ -75,6 +93,57 @@ function canonicalizeConflictKey(conflictKey) {
 
 function shouldDebug() {
   return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
+}
+
+function classifyWithHeuristics(message) {
+  const text = String(message || "").trim();
+  const lower = text.toLowerCase();
+  if (!text) return "instruction";
+
+  const roleplayPatterns = [
+    /roleplay/i,
+    /pretend you are/i,
+    /act as/i,
+    /you are a/i,
+  ];
+  if (roleplayPatterns.some((r) => r.test(text))) return "roleplay";
+
+  const draftPatterns = [
+    /write (an|a) (email|message|letter|note|reply)/i,
+    /draft (an|a) (email|message|letter|note|reply)/i,
+    /compose (an|a) (email|message|letter|note|reply)/i,
+    /rewrite (this|the)/i,
+    /proofread/i,
+  ];
+  if (draftPatterns.some((r) => r.test(text))) return "draft";
+
+  const fictionalPatterns = [
+    /write (a|an) (story|poem|novel)/i,
+    /fiction/i,
+    /character/i,
+    /imaginary/i,
+    /once upon a time/i,
+  ];
+  if (fictionalPatterns.some((r) => r.test(text))) return "fictional";
+
+  const quotePatterns = [
+    /^>/m,
+    /“[^”]+”/,
+    /"[^"]+"/,
+    /'[^']+'/,
+  ];
+  if (quotePatterns.some((r) => r.test(text))) return "quote";
+
+  const firstPersonSignals = [
+    /\bi am\b/i,
+    /\bi'm\b/i,
+    /\bmy\b/i,
+    /\bme\b/i,
+    /أنا|اسمي|عندي|لدي|أحب|احب|بحب|أكره|اكره|أفضّل|افضل/,
+  ];
+  if (firstPersonSignals.some((r) => r.test(text))) return "user_statement";
+
+  return "instruction";
 }
 
 const NON_NAME_TOKENS = new Set([
@@ -200,29 +269,45 @@ async function translatePreferenceValue(value) {
 }
 
 export async function extractFacts(message) {
+  const heuristicClass = classifyWithHeuristics(message);
   // Try LLM first
   let llmMemories = [];
+  let llmClassification = null;
   try {
-    llmMemories = await extractWithLLM(message);
+    const llmResult = await extractWithLLM(message);
+    llmMemories = llmResult.memories;
+    llmClassification = llmResult.classification || null;
   } catch (err) {
     console.warn("LLM extraction failed, using patterns:", err.message);
   }
 
-  // Always run pattern fallback for short/ambiguous messages
-  const skipTranslation = llmMemories.some((m) => m.conflictKey);
-  const patternMemories = await extractWithPatterns(message, { skipTranslation });
+  const classification = llmClassification || heuristicClass;
+
+  if (classification !== "user_statement") {
+    if (shouldDebug()) {
+      console.log(`[Memory] Skipping extraction (classification: ${classification})`);
+    }
+    return [];
+  }
+
+  // LLM-first: only run pattern fallback if LLM returns nothing
+  let patternMemories = [];
+  if (llmMemories.length === 0) {
+    const skipTranslation = llmMemories.some((m) => m.conflictKey);
+    patternMemories = await extractWithPatterns(message, {
+      skipTranslation,
+      simpleOnly: true,
+    });
+  }
 
   if (shouldDebug()) {
-    console.log(`[Memory] LLM memories: ${llmMemories.length}, pattern memories: ${patternMemories.length}`);
+    console.log(
+      `[Memory] LLM memories: ${llmMemories.length}, pattern memories: ${patternMemories.length}, classification: ${classification}`
+    );
   }
 
-  if (llmMemories.length === 0) {
-    return patternMemories;
-  }
-
-  if (patternMemories.length === 0) {
-    return llmMemories;
-  }
+  if (llmMemories.length === 0) return patternMemories;
+  if (patternMemories.length === 0) return llmMemories;
 
   // Merge with de-dupe by content + type
   const seen = new Set();
@@ -281,19 +366,24 @@ async function extractWithLLM(message) {
   
   if (!validated.success) {
     console.warn("LLM response validation failed:", validated.error);
-    return [];
+    return { classification: null, memories: [] };
   }
   
-  return validated.data.memories.map(m => ({
+  const memories = (validated.data.memories || []).map((m) => ({
     content: m.content,
     type: m.type,
     confidence: m.confidence || 0.8,
     conflictKey: canonicalizeConflictKey(m.conflict_key) || null,
     polarity: m.polarity || null,
   }));
+
+  return {
+    classification: validated.data.classification || null,
+    memories,
+  };
 }
 
-async function extractWithPatterns(message, { skipTranslation = false } = {}) {
+async function extractWithPatterns(message, { skipTranslation = false, simpleOnly = false } = {}) {
   const facts = [];
   const lower = message.toLowerCase();
   
@@ -342,15 +432,17 @@ async function extractWithPatterns(message, { skipTranslation = false } = {}) {
     });
   }
   
-  // Pattern: I want to learn ...
-  const goalMatch = message.match(/(?:i want to learn|i'm learning|i'd like to learn) (.+?)(?:\.|,)/i);
-  if (goalMatch) {
-    facts.push({
-      content: `Wants to learn ${goalMatch[1].trim()}`,
-      type: "goal",
-      confidence: 0.85,
-      polarity: "neutral",
-    });
+  if (!simpleOnly) {
+    // Pattern: I want to learn ...
+    const goalMatch = message.match(/(?:i want to learn|i'm learning|i'd like to learn) (.+?)(?:\.|,)/i);
+    if (goalMatch) {
+      facts.push({
+        content: `Wants to learn ${goalMatch[1].trim()}`,
+        type: "goal",
+        confidence: 0.85,
+        polarity: "neutral",
+      });
+    }
   }
   
   // Pattern: I work at... / I live in...

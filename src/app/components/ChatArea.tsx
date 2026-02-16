@@ -123,7 +123,7 @@ export function ChatArea() {
         : 640);
     const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
     const hasInputMetrics = inputWidth > 0 && inputTop > 0;
-    const gap = -12;
+    const gap = 8;
     const bottom = hasInputMetrics
       ? Math.max(24, viewportHeight - inputTop + gap)
       : 24;

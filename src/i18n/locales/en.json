@@ -168,6 +168,11 @@
       "Processing",
       "Working on it"
     ],
+    "copyCode": "Copy code",
+    "copyEmail": "Copy email",
+    "copyTable": "Copy table",
+    "copied": "Copied",
+    "emailLabel": "Email",
     "whyAnswer": "Why this answer?",
     "hideWhy": "Hide why",
     "usedMemory": "Used memory",
@@ -185,6 +190,31 @@
       "Turn this into a checklist"
     ]
   },
+  "billing": {
+    "upgradeTitle": "Choose your plan",
+    "upgradeSubtitle": "Student and Personal unlock premium features. You can manage or cancel anytime.",
+    "notNow": "Not now",
+    "managePlan": "Manage plan",
+    "proGate": "Premium feature — upgrade to Personal to unlock.",
+    "proBadge": "PRO",
+    "plans": {
+      "student": {
+        "label": "Student",
+        "price": "$5 / mo",
+        "desc": "Best for learners and light use."
+      },
+      "personal": {
+        "label": "Personal",
+        "price": "$10 / mo",
+        "desc": "Everyday power + priority access."
+      },
+      "pro": {
+        "label": "Pro",
+        "price": "$20 / mo",
+        "desc": "Advanced tools for power users."
+      }
+    }
+  },
   "memory": {
     "saved": "memory saved",
     "toReview": "memory to review",
@@ -195,5 +225,33 @@
     "reviewAll": "Review all memories",
     "open": "Open",
     "rememberAll": "Remember all"
+  },
+  "shared": {
+    "loading": "Loading conversation...",
+    "errorTitle": "Unable to Load",
+    "expiredTitle": "Link Expired",
+    "expiredBody": "This shared conversation link has expired and is no longer available.",
+    "protectedTitle": "Protected Conversation",
+    "protectedBody": "This conversation is password protected.",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Password",
+    "verifying": "Verifying...",
+    "viewConversation": "View Conversation",
+    "backHome": "Go to ZAKI",
+    "views": "{{count}} views",
+    "expiresIn": "Expires in {{days}} days",
+    "readOnlyBanner": "Shared by ZAKI · Read-only conversation",
+    "profileHint": "Set a profile name in Settings to show your initials in shared views.",
+    "footerNote": "This is a read-only view of a shared conversation.",
+    "footerCta": "Start your own conversation on ZAKI",
+    "errors": {
+      "invalid": "Invalid share link",
+      "notFound": "This share link does not exist",
+      "expired": "This share link has expired",
+      "failedInfo": "Failed to load share info",
+      "failedConversation": "Failed to load conversation",
+      "failedServer": "Failed to connect to server",
+      "incorrectPassword": "Incorrect password"
+    }
   }
 }

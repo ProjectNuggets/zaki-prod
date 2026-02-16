@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Lock, Calendar, Eye, ArrowLeft, AlertCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-// ChatMarkdown not currently used - using simple text rendering for share view
+import { ChatMarkdown } from './ChatMarkdown';
 import { CenterLogo } from './icons';
 import { buildApiUrl } from '@/lib/api';
+import { useTranslation } from "react-i18next";
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,6 +33,8 @@ interface ConversationData {
 type ViewState = 'loading' | 'password' | 'viewing' | 'error' | 'expired';
 
 export function SharedConversation() {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.dir?.() === "rtl" || i18n.language?.toLowerCase().startsWith("ar");
   const { token } = useParams<{ token: string }>();
   const [state, setState] = useState<ViewState>('loading');
   const [error, setError] = useState<string>('');
@@ -54,7 +57,7 @@ export function SharedConversation() {
   useEffect(() => {
     if (!token) {
       setState('error');
-      setError('Invalid share link');
+      setError(t("shared.errors.invalid"));
       return;
     }
 
@@ -65,19 +68,19 @@ export function SharedConversation() {
 
         if (response.status === 404) {
           setState('error');
-          setError('This share link does not exist');
+          setError(t("shared.errors.notFound"));
           return;
         }
 
         if (response.status === 410) {
           setState('expired');
-          setError('This share link has expired');
+          setError(t("shared.errors.expired"));
           return;
         }
 
         if (!response.ok) {
           setState('error');
-          setError(data.error || 'Failed to load share info');
+          setError(data.error || t("shared.errors.failedInfo"));
           return;
         }
 
@@ -91,7 +94,7 @@ export function SharedConversation() {
         }
       } catch (err) {
         setState('error');
-        setError('Failed to connect to server');
+        setError(t("shared.errors.failedServer"));
       }
     };
 
@@ -116,20 +119,20 @@ export function SharedConversation() {
       }
 
       if (response.status === 401) {
-        setError('Incorrect password');
+        setError(t("shared.errors.incorrectPassword"));
         setIsVerifying(false);
         return;
       }
 
       if (response.status === 410) {
         setState('expired');
-        setError('This share link has expired');
+        setError(t("shared.errors.expired"));
         return;
       }
 
       if (!response.ok) {
         setState('error');
-        setError(data.error || 'Failed to load conversation');
+        setError(data.error || t("shared.errors.failedConversation"));
         return;
       }
 
@@ -137,7 +140,7 @@ export function SharedConversation() {
       setState('viewing');
     } catch (err) {
       setState('error');
-      setError('Failed to load conversation');
+      setError(t("shared.errors.failedConversation"));
     } finally {
       setIsVerifying(false);
     }
@@ -150,7 +153,7 @@ export function SharedConversation() {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString(isRtl ? 'ar' : 'en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -168,7 +171,7 @@ export function SharedConversation() {
       <div className="min-h-screen bg-zaki-base flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="size-8 border-2 border-zaki-spinner border-t-zaki-muted rounded-full animate-spin" />
-          <div className="text-sm text-zaki-muted">Loading conversation...</div>
+          <div className="text-sm text-zaki-muted">{t("shared.loading")}</div>
         </div>
       </div>
     );
@@ -180,14 +183,14 @@ export function SharedConversation() {
       <div className="min-h-screen bg-zaki-base flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-zaki-primary border border-zaki-subtle rounded-zaki-lg p-8 text-center">
           <AlertCircle className="w-12 h-12 mx-auto text-zaki-brand mb-4" />
-          <h1 className="text-xl font-semibold text-zaki-primary mb-2">Unable to Load</h1>
+          <h1 className="text-xl font-semibold text-zaki-primary mb-2">{t("shared.errorTitle")}</h1>
           <p className="text-zaki-muted mb-6">{error}</p>
           <Link
             to="/"
             className="inline-flex items-center gap-2 zaki-btn bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Go to ZAKI
+            {t("shared.backHome")}
           </Link>
         </div>
       </div>
@@ -200,16 +203,14 @@ export function SharedConversation() {
       <div className="min-h-screen bg-zaki-base flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-zaki-primary border border-zaki-subtle rounded-zaki-lg p-8 text-center">
           <Clock className="w-12 h-12 mx-auto text-zaki-muted mb-4" />
-          <h1 className="text-xl font-semibold text-zaki-primary mb-2">Link Expired</h1>
-          <p className="text-zaki-muted mb-6">
-            This shared conversation link has expired and is no longer available.
-          </p>
+          <h1 className="text-xl font-semibold text-zaki-primary mb-2">{t("shared.expiredTitle")}</h1>
+          <p className="text-zaki-muted mb-6">{t("shared.expiredBody")}</p>
           <Link
             to="/"
             className="inline-flex items-center gap-2 zaki-btn bg-zaki-brand hover:bg-zaki-brand text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Go to ZAKI
+            {t("shared.backHome")}
           </Link>
         </div>
       </div>
@@ -228,25 +229,25 @@ export function SharedConversation() {
           </div>
           
           <h1 className="text-xl font-semibold text-zaki-primary text-center mb-2">
-            Protected Conversation
+            {t("shared.protectedTitle")}
           </h1>
           <p className="text-zaki-muted text-center mb-6">
             {shareInfo?.title && <span className="font-medium text-zaki-primary">"{shareInfo.title}"</span>}
             <br />
-            This conversation is password protected.
+            {t("shared.protectedBody")}
           </p>
 
           <form onSubmit={handlePasswordSubmit}>
             <div className="mb-4">
               <label className="block text-sm font-medium text-zaki-muted mb-2">
-                Password
+                {t("shared.passwordLabel")}
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-zaki-base border border-zaki-subtle rounded-zaki-md text-zaki-primary placeholder-zaki-muted focus:outline-none focus:border-zaki-focus transition-colors"
-                placeholder="Password"
+                placeholder={t("shared.passwordPlaceholder")}
                 autoFocus
               />
               {error && (
@@ -259,7 +260,7 @@ export function SharedConversation() {
               disabled={isVerifying || !password}
               className="w-full zaki-btn bg-zaki-brand hover:bg-zaki-brand disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white transition-colors"
             >
-              {isVerifying ? 'Verifying...' : 'View Conversation'}
+              {isVerifying ? t("shared.verifying") : t("shared.viewConversation")}
             </button>
           </form>
 
@@ -269,7 +270,7 @@ export function SharedConversation() {
               className="flex items-center justify-center gap-2 text-sm text-zaki-muted hover:text-zaki-brand transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              Go to ZAKI
+              {t("shared.backHome")}
             </Link>
           </div>
         </div>
@@ -279,7 +280,10 @@ export function SharedConversation() {
 
   // Viewing state
   return (
-    <div className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] text-zaki-primary dark:text-zaki-dark-primary">
+    <div
+      className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] text-zaki-primary dark:text-zaki-dark-primary"
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       {/* Header */}
       <header className="sticky top-0 z-10 bg-zaki-base/95 dark:bg-[#0f0b08]/95 backdrop-blur-sm border-b border-zaki-subtle dark:border-zaki-dark">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-4">
@@ -292,28 +296,28 @@ export function SharedConversation() {
             <div className="flex flex-wrap items-center gap-3 text-xs text-zaki-muted dark:text-zaki-dark-muted">
               <div className="flex items-center gap-1">
                 <Eye className="w-3.5 h-3.5" />
-                <span>{conversation?.viewCount} views</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{formatDate(conversation?.createdAt || '')}</span>
-              </div>
-              {conversation?.expiresAt && (
-                <div className="flex items-center gap-1 text-zaki-brand">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Expires in {daysUntilExpiry(conversation.expiresAt)} days</span>
-                </div>
-              )}
+              <span>{t("shared.views", { count: conversation?.viewCount ?? 0 })}</span>
             </div>
+            <div className="flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{formatDate(conversation?.createdAt || '')}</span>
+            </div>
+            {conversation?.expiresAt && (
+              <div className="flex items-center gap-1 text-zaki-brand">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{t("shared.expiresIn", { days: daysUntilExpiry(conversation.expiresAt) })}</span>
+              </div>
+            )}
+          </div>
           </div>
           
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-raised dark:bg-zaki-dark-elevated px-3 py-1 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
             <Lock className="size-3.5 text-zaki-muted dark:text-zaki-dark-muted" />
-            Shared by ZAKI · Read-only conversation
+            {t("shared.readOnlyBanner")}
           </div>
           {!sharedByName && (
             <div className="mt-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
-              Set a profile name in Settings to show your initials in shared views.
+              {t("shared.profileHint")}
             </div>
           )}
           <h1 className="mt-3 text-xl font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
@@ -347,8 +351,7 @@ export function SharedConversation() {
                     : "bg-zaki-raised dark:bg-zaki-dark-card text-zaki-primary dark:text-zaki-dark-primary"
                 )}
               >
-                {/* Use simple text rendering since ChatMarkdown uses light-mode colors */}
-                <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{msg.content}</p>
+                <ChatMarkdown content={typeof msg.content === "string" ? msg.content : ""} />
               </div>
               
               {msg.role === 'user' && (
@@ -363,13 +366,13 @@ export function SharedConversation() {
         {/* Footer */}
         <div className="mt-12 pt-8 border-t border-zaki-subtle dark:border-zaki-dark text-center">
           <p className="text-sm text-zaki-muted dark:text-zaki-dark-muted mb-4">
-            This is a read-only view of a shared conversation.
+            {t("shared.footerNote")}
           </p>
           <Link
             to="/"
             className="inline-flex items-center gap-2 zaki-btn bg-zaki-brand hover:bg-zaki-brand text-white transition-colors"
           >
-            Start your own conversation on ZAKI
+            {t("shared.footerCta")}
           </Link>
         </div>
       </main>

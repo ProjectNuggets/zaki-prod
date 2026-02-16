@@ -24,7 +24,6 @@ const envCandidates = [
 for (const envPath of envCandidates) {
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
-    break;
   }
 }
 
@@ -80,6 +79,10 @@ const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_DEFAULT_WORKSPACE_SLUG = (process.env.ZAKI_DEFAULT_WORKSPACE_SLUG || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
+const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+const STRIPE_PRICE_STUDENT = (process.env.STRIPE_PRICE_STUDENT || "").trim();
+const STRIPE_PRICE_PERSONAL = (process.env.STRIPE_PRICE_PERSONAL || "").trim();
 const SKIP_EMAIL_VERIFICATION = ["non", "none", "no"].includes(
   ZAKI_EMAIL_MODE.toLowerCase()
 );
@@ -95,14 +98,142 @@ const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+let stripe = null;
+if (STRIPE_SECRET_KEY) {
+  try {
+    const StripeModule = await import("stripe");
+    const StripeCtor = StripeModule?.default || StripeModule;
+    stripe = new StripeCtor(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+  } catch (err) {
+    console.warn("[Stripe] Stripe SDK not installed. Billing endpoints disabled.");
+  }
+}
+
+const PRICE_BY_TIER = {
+  student: STRIPE_PRICE_STUDENT,
+  personal: STRIPE_PRICE_PERSONAL,
+};
+
+const TIER_BY_PRICE = Object.entries(PRICE_BY_TIER).reduce((acc, [tier, priceId]) => {
+  if (priceId) acc[priceId] = tier;
+  return acc;
+}, {});
 
 // =============================================================================
 // SECURITY MIDDLEWARE
 // =============================================================================
 
+// Stripe webhook must use raw body (must be registered before express.json)
+app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    res.status(500).json({ error: "Stripe is not configured." });
+    return;
+  }
+  const signature = req.headers["stripe-signature"];
+  if (!signature) {
+    res.status(400).json({ error: "Missing Stripe signature." });
+    return;
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    res.status(400).send(`Webhook Error: ${err.message}`);
+    return;
+  }
+
+  try {
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      const customerId = session.customer;
+      const email = session.customer_email || session.metadata?.user_email;
+      if (customerId && email) {
+        const normalizedEmail = normalizeEmail(email);
+        const zakiUser = await dbGet(
+          "SELECT id FROM zaki_users WHERE email = $1",
+          [normalizedEmail]
+        );
+        if (zakiUser) {
+          await dbQuery(
+            `UPDATE zaki_users
+             SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
+             WHERE id = $2`,
+            [customerId, zakiUser.id]
+          );
+        }
+      }
+    }
+
+    if (
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted"
+    ) {
+      const subscription = event.data.object;
+      const customerId = subscription.customer;
+      const priceId = subscription.items?.data?.[0]?.price?.id || null;
+      const tierFromPrice = priceId ? TIER_BY_PRICE[priceId] : null;
+      const tierFromMetadata = subscription.metadata?.plan_tier;
+      const resolvedTier = resolveTier(tierFromPrice || tierFromMetadata || "free");
+      const status = subscription.status || "inactive";
+      const currentPeriodEnd = subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : null;
+      const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+
+      const user = await resolveUserByStripeCustomer(customerId, subscription.metadata?.user_email);
+      if (user) {
+        const tierToStore =
+          event.type === "customer.subscription.deleted" ? "free" : resolvedTier;
+        const statusToStore =
+          event.type === "customer.subscription.deleted" ? "canceled" : status;
+
+        await dbQuery(
+          `UPDATE zaki_users
+           SET stripe_customer_id = $1,
+               stripe_subscription_id = $2,
+               stripe_price_id = $3,
+               plan_tier = $4,
+               plan_status = $5,
+               current_period_end = $6,
+               cancel_at_period_end = $7,
+               billing_updated_at = NOW(),
+               updated_at = NOW()
+           WHERE id = $8`,
+          [
+            customerId,
+            subscription.id,
+            priceId,
+            tierToStore,
+            statusToStore,
+            currentPeriodEnd,
+            cancelAtPeriodEnd,
+            user.id,
+          ]
+        );
+      }
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error("[Stripe] Webhook handler error:", err);
+    res.status(500).json({ error: "Webhook handler failed." });
+  }
+});
+
 // Request size limits to prevent memory exhaustion
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Normalize JSON parsing failures to API-friendly responses.
+app.use((err, req, res, next) => {
+  if (err && err.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Invalid JSON payload." });
+    return;
+  }
+  next(err);
+});
 
 // Rate limiting - general API
 // Removed global limiter per requirement. Auth limiter remains below.
@@ -154,9 +285,15 @@ app.use(
 app.use((req, res, next) => {
   const start = Date.now();
   const timestamp = new Date().toISOString();
+  const incomingRequestId = req.headers["x-request-id"];
+  const requestId =
+    (typeof incomingRequestId === "string" && incomingRequestId.trim()) ||
+    crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader("X-Request-Id", requestId);
   
   // Log request start
-  console.log(`[${timestamp}] → ${req.method} ${req.path} (${req.ip})`);
+  console.log(`[${timestamp}] [${requestId}] → ${req.method} ${req.path} (${req.ip})`);
   
   res.on('finish', () => {
     const duration = Date.now() - start;
@@ -164,7 +301,7 @@ app.use((req, res, next) => {
     const statusColor = status < 400 ? '\x1b[32m' : status < 500 ? '\x1b[33m' : '\x1b[31m';
     const resetColor = '\x1b[0m';
     
-    console.log(`[${timestamp}] ← ${req.method} ${req.path} ${statusColor}${status}${resetColor} ${duration}ms`);
+    console.log(`[${timestamp}] [${requestId}] ← ${req.method} ${req.path} ${statusColor}${status}${resetColor} ${duration}ms`);
   });
   
   next();
@@ -335,9 +472,17 @@ const PasswordResetRequestSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
+const PasswordResetTokenSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/i, "Invalid reset token.");
+
 const PasswordResetConfirmSchema = z.object({
-  token: z.string().uuid("Invalid reset token"),
+  token: PasswordResetTokenSchema,
   password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+const DeleteAccountSchema = z.object({
+  confirmEmail: z.string().email("Invalid email address"),
 });
 
 // Validation helper
@@ -383,6 +528,128 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeAccessCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "");
+}
+
+function isEduEmail(email) {
+  const domain = String(email || "").split("@")[1] || "";
+  return domain.toLowerCase().endsWith(".edu");
+}
+
+function resolveTier(tier) {
+  if (tier === "pro") return "personal";
+  return tier || "free";
+}
+
+function isPaidActive(tier, status) {
+  return (
+    ["student", "personal"].includes(resolveTier(tier)) &&
+    ["active", "trialing", "past_due"].includes(status || "")
+  );
+}
+
+function getAccessStatus(zakiUser) {
+  const expiresAt = zakiUser?.access_expires_at
+    ? new Date(zakiUser.access_expires_at)
+    : null;
+  const active = expiresAt ? expiresAt.getTime() > Date.now() : false;
+  return {
+    active,
+    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    campaign: zakiUser?.access_code_campaign || null,
+  };
+}
+
+function getAppUrl() {
+  return (
+    ZAKI_APP_URL ||
+    ZAKI_PUBLIC_URL ||
+    `http://localhost:${PORT}`
+  ).replace(/\/+$/, "");
+}
+
+async function requireAuthUser(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
+    res.status(401).json({ error: "Missing authorization token." });
+    return null;
+  }
+
+  let sessionResponse;
+  try {
+    sessionResponse = await novaSessionRequest(
+      "/system/refresh-user",
+      authHeader,
+      { method: "GET" }
+    );
+  } catch (error) {
+    console.error("[Auth] Session refresh failed:", error);
+    res.status(502).json({ error: "Unable to validate session." });
+    return null;
+  }
+  const sessionData = await sessionResponse.json().catch(() => ({}));
+  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+    res.status(401).json({ error: "Invalid or expired token." });
+    return null;
+  }
+
+  const email = normalizeEmail(String(sessionData.user.username || ""));
+  if (!email) {
+    res.status(400).json({ error: "Invalid user." });
+    return null;
+  }
+
+  const zakiUser = await dbGet(
+    "SELECT * FROM zaki_users WHERE email = $1",
+    [email]
+  );
+  if (!zakiUser) {
+    res.status(404).json({ error: "ZAKI user not found." });
+    return null;
+  }
+
+  return { email, zakiUser };
+}
+
+async function resolveUserByStripeCustomer(customerId, fallbackEmail) {
+  if (!customerId) return null;
+  let user = await dbGet(
+    "SELECT id, email FROM zaki_users WHERE stripe_customer_id = $1",
+    [customerId]
+  );
+  if (user) return user;
+
+  let email = fallbackEmail;
+  if (!email && stripe) {
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer && typeof customer === "object" && "email" in customer) {
+        email = customer.email;
+      }
+    } catch (err) {
+      console.warn("[Stripe] Could not retrieve customer:", err.message);
+    }
+  }
+
+  if (!email) return null;
+  const normalizedEmail = normalizeEmail(email);
+  user = await dbGet("SELECT id, email FROM zaki_users WHERE email = $1", [
+    normalizedEmail,
+  ]);
+  if (user) {
+    await dbQuery(
+      `UPDATE zaki_users SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
+       WHERE id = $2`,
+      [customerId, user.id]
+    );
+  }
+  return user;
+}
+
 function parseFromAddress(value, fallbackEmail) {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -395,10 +662,6 @@ function parseFromAddress(value, fallbackEmail) {
     return { email, name: name || undefined };
   }
   return { email: trimmed, name: undefined };
-}
-
-function isValidEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 async function issueVerificationToken(userId) {
@@ -639,23 +902,16 @@ app.post("/api/signup", signupHandler);
 
 const passwordResetRequestHandler = async (req, res) => {
   try {
-    const { email } = req.body || {};
-    const normalizedEmail = normalizeEmail(email);
+    const validation = validateInput(PasswordResetRequestSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
 
-    if (!normalizedEmail) {
-      res.status(400).json({
-        success: false,
-        error: "Email is required.",
-      });
-      return;
-    }
-    if (!isValidEmail(normalizedEmail)) {
-      res.status(400).json({
-        success: false,
-        error: "Please enter a valid email address.",
-      });
-      return;
-    }
+    const normalizedEmail = normalizeEmail(validation.data.email);
 
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
       normalizedEmail,
@@ -698,17 +954,19 @@ app.post(
 
 const passwordResetConfirmHandler = async (req, res) => {
   try {
-    const { token, password } = req.body || {};
-    const normalizedToken = String(token || "").trim();
-    const nextPassword = String(password || "");
-
-    if (!normalizedToken || !nextPassword) {
+    const validation = validateInput(PasswordResetConfirmSchema, req.body || {});
+    if (!validation.valid) {
       res.status(400).json({
         success: false,
-        error: "Token and new password are required.",
+        error: validation.errors.map((e) => e.message).join(", "),
       });
       return;
     }
+
+    const normalizedToken = String(validation.data.token || "")
+      .trim()
+      .toLowerCase();
+    const nextPassword = String(validation.data.password || "");
 
     const record = await dbGet(
       `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at
@@ -971,37 +1229,9 @@ const ProfileSchema = z.object({
 
 const getProfileHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Missing authorization token." });
-      return;
-    }
-
-    const sessionResponse = await novaSessionRequest(
-      "/system/refresh-user",
-      authHeader,
-      { method: "GET" }
-    );
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-      res.status(401).json({ error: "Invalid or expired token." });
-      return;
-    }
-
-    const email = normalizeEmail(String(sessionData.user.username || ""));
-    if (!email) {
-      res.status(400).json({ error: "Invalid user." });
-      return;
-    }
-
-    const zakiUser = await dbGet(
-      "SELECT email, full_name FROM zaki_users WHERE email = $1",
-      [email]
-    );
-    if (!zakiUser) {
-      res.status(404).json({ error: "ZAKI user not found." });
-      return;
-    }
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { zakiUser } = authResult;
 
     res.status(200).json({
       success: true,
@@ -1018,22 +1248,9 @@ const getProfileHandler = async (req, res) => {
 
 const updateProfileHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Missing authorization token." });
-      return;
-    }
-
-    const sessionResponse = await novaSessionRequest(
-      "/system/refresh-user",
-      authHeader,
-      { method: "GET" }
-    );
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-      res.status(401).json({ error: "Invalid or expired token." });
-      return;
-    }
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { email } = authResult;
 
     const validation = validateInput(ProfileSchema, req.body || {});
     if (!validation.valid) {
@@ -1041,12 +1258,6 @@ const updateProfileHandler = async (req, res) => {
         success: false,
         error: validation.errors.map((e) => e.message).join(", "),
       });
-      return;
-    }
-
-    const email = normalizeEmail(String(sessionData.user.username || ""));
-    if (!email) {
-      res.status(400).json({ error: "Invalid user." });
       return;
     }
 
@@ -1072,34 +1283,430 @@ const updateProfileHandler = async (req, res) => {
 app.get("/api/profile", getProfileHandler);
 app.patch("/api/profile", express.json({ limit: "1mb" }), updateProfileHandler);
 
+// -----------------------------------------------------------------------------
+// Account: irreversible account deletion
+// -----------------------------------------------------------------------------
+app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { email, zakiUser } = authResult;
+
+    const validation = validateInput(DeleteAccountSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const confirmEmail = normalizeEmail(validation.data.confirmEmail);
+    if (confirmEmail !== email) {
+      res.status(400).json({
+        success: false,
+        error: "Confirmation email does not match the signed-in account.",
+      });
+      return;
+    }
+
+    // Best-effort cleanup in NOVA.TYP (non-blocking; local deletion remains source of truth).
+    if (zakiUser.nova_user_id) {
+      try {
+        const novaDelete = await novaAdminRequest(
+          `/v1/admin/users/${Number(zakiUser.nova_user_id)}`,
+          { method: "DELETE" }
+        );
+        if (!novaDelete.ok && novaDelete.status !== 404) {
+          const payload = await novaDelete.json().catch(() => ({}));
+          console.warn("[Account] NOVA delete returned non-OK:", novaDelete.status, payload);
+        }
+      } catch (err) {
+        console.warn("[Account] NOVA delete failed:", err?.message || err);
+      }
+    }
+
+    // Best-effort Stripe customer cleanup.
+    if (stripe && zakiUser.stripe_customer_id) {
+      try {
+        await stripe.customers.del(zakiUser.stripe_customer_id);
+      } catch (err) {
+        console.warn("[Account] Stripe customer delete failed:", err?.message || err);
+      }
+    }
+
+    await dbQuery("BEGIN");
+    try {
+      const deleteByEmail = async (table) => {
+        try {
+          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [email]);
+        } catch (err) {
+          // Table may not exist in older deployments; skip safely.
+          if (err?.code !== "42P01") throw err;
+        }
+      };
+      await deleteByEmail("memory_notifications");
+      await deleteByEmail("memory_conflicts");
+      await deleteByEmail("memory_confirmations");
+      await deleteByEmail("memory_triggers");
+      await deleteByEmail("memories");
+      await dbQuery("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
+      await dbQuery("COMMIT");
+    } catch (err) {
+      await dbQuery("ROLLBACK");
+      throw err;
+    }
+
+    res.status(200).json({ success: true, message: "Account deleted." });
+  } catch (error) {
+    console.error("[Account] Delete error:", error);
+    res.status(500).json({ error: error?.message || "Account delete failed." });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Billing: Stripe Checkout, Portal, Entitlements
+// -----------------------------------------------------------------------------
+const CheckoutSchema = z.object({
+  plan: z.enum(["student", "personal"]),
+});
+
+app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, res) => {
+  try {
+    if (!stripe) {
+      res.status(500).json({ error: "Stripe is not configured." });
+      return;
+    }
+
+    const validation = validateInput(CheckoutSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!email || !zakiUser) return;
+
+    const plan = validation.data.plan;
+    if (plan === "student" && !isEduEmail(email)) {
+      res.status(400).json({
+        error: "Student plan requires a .edu email address.",
+      });
+      return;
+    }
+
+    if (plan === "student") {
+      await dbQuery(
+        `UPDATE zaki_users SET student_verified = true, student_verified_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [zakiUser.id]
+      );
+    }
+
+    const priceId = PRICE_BY_TIER[plan];
+    if (!priceId) {
+      res.status(400).json({ error: "Plan is not configured." });
+      return;
+    }
+
+    let customerId = zakiUser.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email,
+        metadata: { zaki_user_id: String(zakiUser.id), user_email: email },
+      });
+      customerId = customer.id;
+      await dbQuery(
+        `UPDATE zaki_users SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
+         WHERE id = $2`,
+        [customerId, zakiUser.id]
+      );
+    }
+
+    const appUrl = getAppUrl();
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      success_url: `${appUrl}/pricing?billing=success`,
+      cancel_url: `${appUrl}/pricing?billing=cancel`,
+      metadata: { user_email: email, plan_tier: plan },
+      subscription_data: {
+        metadata: { user_email: email, plan_tier: plan },
+      },
+    });
+
+    res.status(200).json({ success: true, url: session.url });
+  } catch (error) {
+    console.error("[Billing] Checkout error:", error);
+    res.status(500).json({ error: error?.message || "Checkout failed." });
+  }
+});
+
+app.post("/api/billing/portal", express.json({ limit: "1mb" }), async (req, res) => {
+  try {
+    if (!stripe) {
+      res.status(500).json({ error: "Stripe is not configured." });
+      return;
+    }
+
+    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!email || !zakiUser) return;
+
+    let customerId = zakiUser.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email,
+        metadata: { zaki_user_id: String(zakiUser.id), user_email: email },
+      });
+      customerId = customer.id;
+      await dbQuery(
+        `UPDATE zaki_users SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
+         WHERE id = $2`,
+        [customerId, zakiUser.id]
+      );
+    }
+
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${getAppUrl()}/pricing?billing=manage`,
+    });
+
+    res.status(200).json({ success: true, url: portal.url });
+  } catch (error) {
+    console.error("[Billing] Portal error:", error);
+    res.status(500).json({ error: error?.message || "Portal failed." });
+  }
+});
+
+app.post("/api/billing/cancel", express.json({ limit: "1mb" }), async (req, res) => {
+  try {
+    if (!stripe) {
+      res.status(500).json({ error: "Stripe is not configured." });
+      return;
+    }
+
+    const { zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!zakiUser) return;
+
+    let subscriptionId = zakiUser.stripe_subscription_id || null;
+    let subscription = null;
+
+    if (!subscriptionId && zakiUser.stripe_customer_id) {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: zakiUser.stripe_customer_id,
+        status: "all",
+        limit: 10,
+      });
+      subscription =
+        subscriptions.data.find((sub) =>
+          ["active", "trialing", "past_due", "unpaid"].includes(sub.status)
+        ) || subscriptions.data[0] || null;
+      subscriptionId = subscription?.id || null;
+    }
+
+    if (!subscriptionId) {
+      res.status(400).json({ error: "No active subscription found." });
+      return;
+    }
+
+    if (!subscription) {
+      subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    }
+
+    if (!subscription || subscription.status === "canceled") {
+      res.status(400).json({ error: "Subscription is already canceled." });
+      return;
+    }
+
+    const alreadyScheduled = Boolean(subscription.cancel_at_period_end);
+    const finalSubscription = alreadyScheduled
+      ? subscription
+      : await stripe.subscriptions.update(subscriptionId, {
+          cancel_at_period_end: true,
+        });
+
+    const priceId =
+      finalSubscription.items?.data?.[0]?.price?.id || zakiUser.stripe_price_id || null;
+    const tier = resolveTier((priceId && TIER_BY_PRICE[priceId]) || zakiUser.plan_tier || "free");
+    const currentPeriodEnd = finalSubscription.current_period_end
+      ? new Date(finalSubscription.current_period_end * 1000).toISOString()
+      : zakiUser.current_period_end || null;
+
+    await dbQuery(
+      `UPDATE zaki_users
+       SET stripe_subscription_id = $1,
+           stripe_price_id = $2,
+           plan_tier = $3,
+           plan_status = $4,
+           current_period_end = $5,
+           cancel_at_period_end = true,
+           billing_updated_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $6`,
+      [
+        finalSubscription.id,
+        priceId,
+        tier,
+        finalSubscription.status || zakiUser.plan_status || "active",
+        currentPeriodEnd,
+        zakiUser.id,
+      ]
+    );
+
+    res.status(200).json({
+      success: true,
+      alreadyScheduled,
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd,
+      status: finalSubscription.status,
+    });
+  } catch (error) {
+    console.error("[Billing] Cancel subscription error:", error);
+    res.status(500).json({ error: error?.message || "Cancel subscription failed." });
+  }
+});
+
+app.get("/api/entitlements", async (req, res) => {
+  try {
+    const { zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!zakiUser) return;
+
+    const tier = resolveTier(zakiUser.plan_tier || "free");
+    const status = zakiUser.plan_status || "inactive";
+    const premiumActive = isPaidActive(tier, status);
+    const access = getAccessStatus(zakiUser);
+    const accessActive = premiumActive || access.active;
+    const readOnly = !premiumActive && !access.active;
+    const hasPersonal = premiumActive && tier === "personal";
+
+    res.status(200).json({
+      success: true,
+      plan: {
+        tier,
+        status,
+        priceId: zakiUser.stripe_price_id || null,
+        currentPeriodEnd: zakiUser.current_period_end || null,
+        cancelAtPeriodEnd: Boolean(zakiUser.cancel_at_period_end),
+      },
+      access: {
+        active: accessActive,
+        readOnly,
+        expiresAt: access.expiresAt,
+        campaign: access.campaign,
+      },
+      features: {
+        premium: premiumActive,
+        imageGeneration: hasPersonal,
+        advancedModels: premiumActive,
+        deepResearch: hasPersonal,
+        agentMode: hasPersonal,
+      },
+    });
+  } catch (error) {
+    console.error("[Billing] Entitlements error:", error);
+    res.status(500).json({ error: error?.message || "Entitlements failed." });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Access Codes (Free tier monthly activation)
+// -----------------------------------------------------------------------------
+const AccessCodeSchema = z.object({
+  code: z.string().min(4),
+});
+
+app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req, res) => {
+  try {
+    const validation = validateInput(AccessCodeSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!email || !zakiUser) return;
+
+    const code = normalizeAccessCode(validation.data.code);
+    const accessCode = await dbGet(
+      "SELECT * FROM access_codes WHERE code = $1",
+      [code]
+    );
+    if (!accessCode || !accessCode.active) {
+      res.status(404).json({ success: false, error: "Invalid access code." });
+      return;
+    }
+
+    if (accessCode.expires_at && new Date(accessCode.expires_at).getTime() < Date.now()) {
+      res.status(410).json({ success: false, error: "Access code expired." });
+      return;
+    }
+
+    if (
+      accessCode.max_redemptions !== null &&
+      Number(accessCode.redeemed_count) >= Number(accessCode.max_redemptions)
+    ) {
+      res.status(400).json({ success: false, error: "Access code already fully redeemed." });
+      return;
+    }
+
+    const now = new Date();
+    const currentExpiry = zakiUser.access_expires_at
+      ? new Date(zakiUser.access_expires_at)
+      : null;
+    const baseDate =
+      currentExpiry && currentExpiry.getTime() > now.getTime()
+        ? currentExpiry
+        : now;
+    const durationDays = Number(accessCode.duration_days || 30);
+    const expiresAt = new Date(baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+    await dbQuery(
+      `UPDATE zaki_users
+       SET access_expires_at = $1,
+           access_code_campaign = $2,
+           access_code_last = $3,
+           updated_at = NOW()
+       WHERE id = $4`,
+      [expiresAt.toISOString(), accessCode.campaign, code, zakiUser.id]
+    );
+
+    await dbQuery(
+      `INSERT INTO access_code_redemptions
+       (code_id, user_id, access_expires_at, campaign, code)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [accessCode.id, zakiUser.id, expiresAt.toISOString(), accessCode.campaign, code]
+    );
+
+    await dbQuery(
+      `UPDATE access_codes SET redeemed_count = redeemed_count + 1 WHERE id = $1`,
+      [accessCode.id]
+    );
+
+    res.status(200).json({
+      success: true,
+      accessExpiresAt: expiresAt.toISOString(),
+      campaign: accessCode.campaign,
+    });
+  } catch (error) {
+    console.error("[AccessCode] Redeem error:", error);
+    res.status(500).json({ error: error?.message || "Failed to redeem access code." });
+  }
+});
+
 const createWorkspaceHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Missing authorization token." });
-      return;
-    }
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { email, zakiUser } = authResult;
 
-    const sessionResponse = await novaSessionRequest(
-      "/system/refresh-user",
-      authHeader,
-      { method: "GET" }
-    );
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-      res.status(401).json({ error: "Invalid session." });
-      return;
-    }
-
-    const email = normalizeEmail(sessionData.user.username);
-    const zakiUser = await dbGet(
-      "SELECT * FROM zaki_users WHERE email = $1",
-      [email]
-    );
-    if (!zakiUser) {
-      res.status(404).json({ error: "ZAKI user not found." });
-      return;
-    }
     if (!zakiUser.verified) {
       res.status(403).json({ error: "Email is not verified." });
       return;
@@ -1178,36 +1785,9 @@ app.post("/api/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspace
  */
 const deleteWorkspaceHandler = async (req, res) => {
   try {
-    // Require authentication and validate session with NOVA.TYP
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Missing authorization token." });
-      return;
-    }
-
-    const sessionResponse = await novaSessionRequest(
-      "/system/refresh-user",
-      authHeader,
-      { method: "GET" }
-    );
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-      res.status(401).json({ error: "Invalid or expired token." });
-      return;
-    }
-
-    const email = String(sessionData.user.username || "");
-
-    // Get the user from zaki_users to verify they exist
-    const zakiUser = await dbGet(
-      `SELECT id, nova_user_id, verified FROM zaki_users WHERE email = $1`,
-      [email]
-    );
-
-    if (!zakiUser) {
-      res.status(404).json({ error: "ZAKI user not found." });
-      return;
-    }
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { email, zakiUser } = authResult;
 
     if (!zakiUser.verified) {
       res.status(403).json({ error: "Email is not verified." });
@@ -1347,19 +1927,29 @@ const streamChatHandler = async (req, res) => {
     }
 
     const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      console.error('[Chat] Missing authorization header');
-      return res.status(401).json({ error: "Missing authorization." });
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) {
+      console.error("[Chat] Authorization failed");
+      return;
     }
+    const userEmail = authResult.email;
+    const zakiUser = authResult.zakiUser;
+    console.log(`[Chat] User: ${userEmail}`);
 
-    // Get user from session
-    console.log('[Chat] Refreshing user session...');
-    const sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, { method: "GET" });
-    const sessionData = await sessionResponse.json().catch(() => ({}));
-    const userEmail = sessionData?.user?.username
-      ? normalizeEmail(sessionData.user.username)
-      : null;
-    console.log(`[Chat] User: ${userEmail || 'unknown'}`);
+    if (zakiUser) {
+      const tier = resolveTier(zakiUser.plan_tier || "free");
+      const status = zakiUser.plan_status || "inactive";
+      const premiumActive = isPaidActive(tier, status);
+      const access = getAccessStatus(zakiUser);
+      if (!premiumActive && !access.active) {
+        return res.status(403).json({
+          error: "Access code required.",
+          code: "access_expired",
+          message:
+            "Your access code took a coffee break. Add a fresh code to keep chatting.",
+        });
+      }
+    }
 
     const { message } = req.body || {};
     const originalMessage = String(message || "").trim();
@@ -1506,36 +2096,9 @@ app.post(
  */
 app.post("/api/memory/end-session", express.json({ limit: "5mb" }), async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    
-    const token = authHeader.slice(7);
-    let novaUserId, userEmail;
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      novaUserId = payload.id || payload.userId || payload.sub;
-      userEmail = payload.email;
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-
-    // Get email from zaki_users if not in token
-    if (!userEmail && novaUserId) {
-      const userResult = await dbQuery(
-        'SELECT email FROM zaki_users WHERE nova_user_id = $1',
-        [novaUserId]
-      );
-      if (userResult.rows.length) {
-        userEmail = userResult.rows[0].email;
-      }
-    }
-
-    if (!userEmail) {
-      return res.status(400).json({ error: "Could not determine user" });
-    }
-    userEmail = normalizeEmail(userEmail);
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const userEmail = authResult.email;
 
     const { messages, threadId, threadTitle } = req.body;
 
@@ -1575,32 +2138,9 @@ const SHARE_EXPIRY_DAYS = 10;
  */
 app.post("/api/share/create", express.json({ limit: "5mb" }), async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    
-    const token = authHeader.slice(7);
-    // Decode JWT to get user ID (simplified - in production use proper JWT verification)
-    let novaUserId;
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      novaUserId = payload.id || payload.userId || payload.sub;
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-    
-    // Look up the zaki_users.id from nova_user_id
-    const userResult = await dbQuery(
-      'SELECT id FROM zaki_users WHERE nova_user_id = $1',
-      [novaUserId]
-    );
-    
-    if (!userResult.rows.length) {
-      return res.status(401).json({ error: "User not found" });
-    }
-    
-    const zakiUserId = userResult.rows[0].id;
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const zakiUserId = authResult.zakiUser.id;
     
     const { 
       workspaceSlug, 
@@ -1658,6 +2198,41 @@ app.post("/api/share/create", express.json({ limit: "5mb" }), async (req, res) =
   } catch (error) {
     console.error("[Share] Create error:", error);
     res.status(500).json({ error: "Failed to create share link" });
+  }
+});
+
+/**
+ * GET /api/share/list
+ * List all share links for the current user
+ */
+app.get("/api/share/list", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const userId = authResult.zakiUser.id;
+
+    const shares = await dbQuery(
+      `SELECT token, title, is_password_protected, expires_at, view_count, created_at
+       FROM shared_conversations
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    res.json({
+      shares: shares.rows.map((s) => ({
+        token: s.token,
+        title: s.title,
+        isPasswordProtected: s.is_password_protected,
+        expiresAt: s.expires_at,
+        viewCount: s.view_count,
+        createdAt: s.created_at,
+        isExpired: new Date(s.expires_at) < new Date(),
+      })),
+    });
+  } catch (error) {
+    console.error("[Share] List error:", error);
+    res.status(500).json({ error: "Failed to list shares" });
   }
 });
 
@@ -1765,19 +2340,9 @@ app.post("/api/share/:token/view", express.json(), async (req, res) => {
  */
 app.delete("/api/share/:token", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    
-    const token = authHeader.slice(7);
-    let userId;
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      userId = payload.id || payload.userId || payload.sub;
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const userId = authResult.zakiUser.id;
     
     const { token: shareToken } = req.params;
     
@@ -1795,52 +2360,6 @@ app.delete("/api/share/:token", async (req, res) => {
   } catch (error) {
     console.error("[Share] Delete error:", error);
     res.status(500).json({ error: "Failed to delete share link" });
-  }
-});
-
-/**
- * GET /api/share/list
- * List all share links for the current user
- */
-app.get("/api/share/list", async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    
-    const token = authHeader.slice(7);
-    let userId;
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      userId = payload.id || payload.userId || payload.sub;
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-    
-    const shares = await dbQuery(
-      `SELECT token, title, is_password_protected, expires_at, view_count, created_at
-       FROM shared_conversations 
-       WHERE user_id = $1 
-       ORDER BY created_at DESC`,
-      [userId]
-    );
-    
-    res.json({
-      shares: shares.rows.map(s => ({
-        token: s.token,
-        title: s.title,
-        isPasswordProtected: s.is_password_protected,
-        expiresAt: s.expires_at,
-        viewCount: s.view_count,
-        createdAt: s.created_at,
-        isExpired: new Date(s.expires_at) < new Date()
-      }))
-    });
-    
-  } catch (error) {
-    console.error("[Share] List error:", error);
-    res.status(500).json({ error: "Failed to list shares" });
   }
 });
 

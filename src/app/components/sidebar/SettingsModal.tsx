@@ -1,5 +1,14 @@
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import {
+  useBillingPortal,
+  useCancelSubscription,
+  useDeleteAccount,
+  useEntitlements,
+} from "@/queries";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,6 +19,7 @@ interface SettingsModalProps {
   themePreference: "light" | "dark" | "system";
   onThemeChange: (theme: "light" | "dark" | "system") => void;
   onSave: () => void | Promise<void>;
+  onAccountDeleted: () => void;
   saving?: boolean;
 }
 
@@ -22,10 +32,29 @@ export function SettingsModal({
   themePreference,
   onThemeChange,
   onSave,
+  onAccountDeleted,
   saving = false,
 }: SettingsModalProps) {
   const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const { data: entitlementsResult } = useEntitlements();
+  const billingPortal = useBillingPortal();
+  const cancelSubscription = useCancelSubscription();
+  const deleteAccountMutation = useDeleteAccount();
+  const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
+  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
+  const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
+  const isPremium =
+    ["student", "personal", "pro"].includes(planTier) &&
+    ["active", "trialing", "past_due"].includes(planStatus);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmValue, setDeleteConfirmValue] = useState("");
+  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const canDeleteAccount =
+    normalizedEmail.length > 0 &&
+    deleteConfirmValue.trim().toLowerCase() === normalizedEmail &&
+    !deleteAccountMutation.isPending;
   const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
 
   if (!isOpen) return null;
@@ -111,16 +140,134 @@ export function SettingsModal({
             </div>
           </div>
           <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted">Plan & Billing</div>
+            <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
+              <div className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-secondary">
+                <span>Current plan</span>
+                <span className="text-zaki-primary font-semibold uppercase text-xs tracking-wider">
+                  {planTier}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-secondary">
+                <span>Status</span>
+                <span className="text-zaki-muted text-xs uppercase tracking-wider">
+                  {planStatus}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-zaki-subtle px-3 py-2 text-xs text-zaki-secondary hover:bg-zaki-hover transition-colors"
+                  onClick={() => {
+                    onClose();
+                    navigate("/pricing");
+                  }}
+                >
+                  View pricing
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full bg-zaki-brand text-white px-3 py-2 text-xs hover:bg-zaki-brand-hover transition-colors"
+                  onClick={async () => {
+                    try {
+                      await billingPortal.mutateAsync();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+                    }
+                  }}
+                >
+                  {isPremium ? "Manage plan" : "Upgrade"}
+                </button>
+                {isPremium && (
+                  <button
+                    type="button"
+                    className="rounded-full border border-zaki-strong px-3 py-2 text-xs text-zaki-brand hover:bg-zaki-error transition-colors disabled:opacity-50"
+                    onClick={async () => {
+                      try {
+                        const result = await cancelSubscription.mutateAsync();
+                        toast.success(
+                          result?.alreadyScheduled
+                            ? "Cancellation is already scheduled for period end."
+                            : "Subscription will cancel at period end."
+                        );
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Unable to cancel subscription"
+                        );
+                      }
+                    }}
+                    disabled={cancelAtPeriodEnd || cancelSubscription.isPending}
+                  >
+                    {cancelAtPeriodEnd ? "Cancellation scheduled" : "Cancel subscription"}
+                  </button>
+                )}
+              </div>
+              {cancelAtPeriodEnd && (
+                <div className="text-xs text-zaki-muted">
+                  Your plan will remain active until the current billing period ends.
+                </div>
+              )}
+            </div>
+          </div>
+          <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted">Data & Privacy</div>
             <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)]">
               <button className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-secondary hover:bg-zaki-elevated transition-colors text-left">
                 Export all data
                 <span className="text-xs text-zaki-disabled">Download your chats and files</span>
               </button>
-              <button className="flex items-center justify-between rounded-zaki-lg border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-brand hover:bg-zaki-error transition-colors text-left">
+              <button
+                className="flex items-center justify-between rounded-zaki-lg border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-brand hover:bg-zaki-error transition-colors text-left"
+                onClick={() => setDeleteConfirmOpen((open) => !open)}
+                type="button"
+              >
                 Delete account
                 <span className="text-xs text-zaki-brand">This action cannot be undone</span>
               </button>
+              {deleteConfirmOpen && (
+                <div className="rounded-zaki-lg border border-zaki-strong bg-zaki-error px-3 py-3">
+                  <p className="text-xs text-zaki-brand">
+                    Type your email to confirm permanent account deletion.
+                  </p>
+                  <input
+                    className="mt-2 w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-brand"
+                    value={deleteConfirmValue}
+                    onChange={(event) => setDeleteConfirmValue(event.target.value)}
+                    placeholder={email || "you@example.com"}
+                  />
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-zaki-subtle px-3 py-1.5 text-xs text-zaki-secondary hover:bg-zaki-hover"
+                      onClick={() => {
+                        setDeleteConfirmOpen(false);
+                        setDeleteConfirmValue("");
+                      }}
+                    >
+                      Keep account
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full bg-zaki-brand px-3 py-1.5 text-xs text-white hover:bg-zaki-brand-hover disabled:opacity-50"
+                      disabled={!canDeleteAccount}
+                      onClick={async () => {
+                        try {
+                          await deleteAccountMutation.mutateAsync(normalizedEmail);
+                          toast.success("Account deleted.");
+                          onClose();
+                          onAccountDeleted();
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error ? err.message : "Unable to delete account"
+                          );
+                        }
+                      }}
+                    >
+                      {deleteAccountMutation.isPending ? "Deleting..." : "Delete permanently"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

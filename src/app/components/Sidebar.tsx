@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import type { Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { useSpaces } from "@/queries/useSpaces";
+import { useBillingPortal, useEntitlements } from "@/queries";
 import { useTranslation } from "react-i18next";
 import { SettingsModal } from "./sidebar/SettingsModal";
 
@@ -35,8 +36,26 @@ export function Sidebar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
-  // TODO: Fetch actual plan from user profile
-  const planLabel = "FREE" as "FREE" | "PRO";
+  const { data: entitlementsResult } = useEntitlements();
+  const billingPortal = useBillingPortal();
+  const planTierRaw = entitlementsResult?.data?.plan?.tier ?? "free";
+  const planStatusRaw = entitlementsResult?.data?.plan?.status ?? "inactive";
+  const isPremium =
+    ["student", "personal", "pro"].includes(planTierRaw) &&
+    ["active", "trialing", "past_due"].includes(planStatusRaw);
+  const planLabel = String(planTierRaw || "free").toUpperCase() as
+    | "FREE"
+    | "STUDENT"
+    | "PERSONAL"
+    | "PRO";
+  const planDisplay =
+    planTierRaw === "personal"
+      ? "Personal"
+      : planTierRaw === "student"
+      ? "Student"
+      : planTierRaw === "pro"
+      ? "Pro"
+      : "Free";
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
   const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);
   const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<SidebarSpace | null>(null);
@@ -65,6 +84,11 @@ export function Sidebar() {
       if (!user?.username) return;
       setMemoryOpen(true);
     };
+    const handleOpenSettings = () => {
+      if (!user?.username) return;
+      setProfileMenuOpen(false);
+      setSettingsOpen(true);
+    };
     const handleConflictCount = (event: Event) => {
       const detail = (event as CustomEvent<{ count?: number }>).detail;
       if (typeof detail?.count === "number") {
@@ -72,9 +96,11 @@ export function Sidebar() {
       }
     };
     window.addEventListener("zaki:open-memory", handleOpenMemory);
+    window.addEventListener("zaki:open-settings", handleOpenSettings);
     window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
     return () => {
       window.removeEventListener("zaki:open-memory", handleOpenMemory);
+      window.removeEventListener("zaki:open-settings", handleOpenSettings);
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
     };
   }, [user?.username]);
@@ -497,8 +523,6 @@ export function Sidebar() {
         setSpacesError(message);
         toast.error(message);
         console.error('[Delete] Space delete error:', err);
-        // DEBUG: Log full error details
-        alert(`Delete failed: ${message}\n\nCheck console for details.\nSpace ID: ${id}`);
         return; // Don't update state on failure
       }
     }
@@ -1250,10 +1274,10 @@ export function Sidebar() {
             <div
               className={cn(
                 "text-xs font-semibold uppercase tracking-wider",
-                planLabel === "PRO" ? "text-zaki-success" : "text-zaki-success"
+                isPremium ? "text-zaki-success" : "text-zaki-success"
               )}
             >
-              {planLabel === "PRO" ? "Plus" : "Free"}
+              {planDisplay}
             </div>
           </div>
         </div>
@@ -1284,12 +1308,26 @@ export function Sidebar() {
               </div>
               <span className={cn(
                 "ml-auto text-2xs font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider",
-                planLabel === "PRO" ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-success"
+                isPremium ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-success"
               )}>
                 {planLabel}
               </span>
             </button>
             <div className="h-px bg-zaki-sunken my-1" />
+            <button
+              className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+              type="button"
+              onClick={async () => {
+                try {
+                  await billingPortal.mutateAsync();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+                }
+              }}
+            >
+              <Sparkles className="size-4 text-zaki-muted" />
+              {isPremium ? "Manage plan" : "Upgrade plan"}
+            </button>
             <button
               className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
               type="button"
@@ -1363,6 +1401,11 @@ export function Sidebar() {
         onSave={async () => {
           await saveDisplayName();
           setSettingsOpen(false);
+        }}
+        onAccountDeleted={() => {
+          setSettingsOpen(false);
+          setProfileMenuOpen(false);
+          logout();
         }}
         saving={profileSaving}
       />

@@ -1,5 +1,5 @@
 import "@/styles/fonts.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { MobileSidebar } from "./components/MobileSidebar";
@@ -8,6 +8,7 @@ import { SkipLink } from "./components/SkipLink";
 import { LoginScreen } from "./components/LoginScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
+import { OnboardingModal } from "./components/onboarding/OnboardingModal";
 import { clearAuthToken, fetchCurrentUser } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 
@@ -18,10 +19,17 @@ export default function App() {
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   
   // Auth state from Zustand
-  const { token, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
+  const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   
   // UI state from Zustand
-  const { themePreference, systemTheme, setSystemTheme, resolvedTheme } = useUIStore();
+  const {
+    themePreference,
+    systemTheme,
+    setSystemTheme,
+    resolvedTheme,
+    setMobileSidebarOpen,
+  } = useUIStore();
 
   // Sync navigation store with React Router location (without triggering re-renders)
   useEffect(() => {
@@ -120,6 +128,49 @@ export default function App() {
     };
   }, [token, setUser, setLoading, logout]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!user?.username || authLoading) return;
+    const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
+    const completed = window.localStorage.getItem(key) === "done";
+    setOnboardingOpen(!completed);
+  }, [user?.username, authLoading]);
+
+  const completeOnboarding = () => {
+    if (typeof window !== "undefined" && user?.username) {
+      const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
+      window.localStorage.setItem(key, "done");
+    }
+    setOnboardingOpen(false);
+  };
+
+  const openCreateSpace = () => {
+    window.dispatchEvent(new Event("zaki:view-spaces"));
+    window.dispatchEvent(new Event("zaki:open-create-space"));
+  };
+
+  const openMemory = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setMobileSidebarOpen(true);
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event("zaki:open-memory"));
+      }, 0);
+      return;
+    }
+    window.dispatchEvent(new Event("zaki:open-memory"));
+  };
+
+  const openSettings = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setMobileSidebarOpen(true);
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event("zaki:open-settings"));
+      }, 0);
+      return;
+    }
+    window.dispatchEvent(new Event("zaki:open-settings"));
+  };
+
   if (!token && !authLoading) {
     return <LoginScreen />;
   }
@@ -166,6 +217,14 @@ export default function App() {
         </main>
         <Toaster />
       </div>
+      <OnboardingModal
+        isOpen={onboardingOpen}
+        userName={user?.fullName || user?.username || "there"}
+        onClose={completeOnboarding}
+        onCreateSpace={openCreateSpace}
+        onOpenMemory={openMemory}
+        onOpenSettings={openSettings}
+      />
     </>
   );
 }

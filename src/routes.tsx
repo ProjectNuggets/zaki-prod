@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
 import { SharedConversation } from './app/components/SharedConversation';
+import { PricingPage } from './app/components/PricingPage';
 
 /**
  * Route structure:
@@ -37,6 +38,10 @@ export const router = createBrowserRouter([
       {
         path: 'library',
         element: <ChatArea />, // Will show library view
+      },
+      {
+        path: 'pricing',
+        element: <PricingPage />,
       },
     ],
   },

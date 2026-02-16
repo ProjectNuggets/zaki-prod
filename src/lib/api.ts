@@ -240,3 +240,86 @@ export async function updateProfile(fullName: string) {
   };
   return { response, data };
 }
+
+export async function fetchEntitlements() {
+  const response = await backendAuthRequest("/api/entitlements", { method: "GET" });
+  let data: {
+    success?: boolean;
+    plan?: {
+      tier?: string;
+      status?: string;
+      priceId?: string | null;
+      currentPeriodEnd?: string | null;
+      cancelAtPeriodEnd?: boolean;
+    };
+    features?: Record<string, boolean>;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function createCheckoutSession(plan: "student" | "personal") {
+  const response = await backendAuthRequest("/api/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({ plan }),
+  });
+  let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function createBillingPortal() {
+  const response = await backendAuthRequest("/api/billing/portal", {
+    method: "POST",
+  });
+  let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function cancelBillingSubscription() {
+  const response = await backendAuthRequest("/api/billing/cancel", {
+    method: "POST",
+  });
+  let data: {
+    success?: boolean;
+    alreadyScheduled?: boolean;
+    cancelAtPeriodEnd?: boolean;
+    currentPeriodEnd?: string | null;
+    status?: string;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function deleteAccount(confirmEmail: string) {
+  const response = await backendAuthRequest("/api/account/delete", {
+    method: "POST",
+    body: JSON.stringify({ confirmEmail }),
+  });
+  let data: { success?: boolean; message?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}

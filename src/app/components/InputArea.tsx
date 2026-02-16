@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { cn } from "@/lib/utils";
+import { useBillingPortal, useCheckout, useEntitlements } from "@/queries";
+import { toast } from "sonner";
 
 export function InputArea({
   onSend,
@@ -39,6 +41,26 @@ export function InputArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const upgradeModalRef = useFocusTrap<HTMLDivElement>(upgradeOpen);
   const wasSendingRef = useRef(isSending);
+  const { data: entitlementsResult } = useEntitlements();
+  const checkout = useCheckout();
+  const portal = useBillingPortal();
+  const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
+  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
+  const isPremium =
+    ["student", "personal"].includes(planTier) &&
+    ["active", "trialing", "past_due"].includes(planStatus);
+  const isPersonal =
+    planTier === "personal" && ["active", "trialing", "past_due"].includes(planStatus);
+
+  const gateProFeature = () => {
+    setMenuOpen(false);
+    toast(t("billing.proGate"));
+    setUpgradeOpen(true);
+  };
+  const proBadgeClass = cn(
+    "text-[10px] font-semibold uppercase tracking-wide text-zaki-success bg-zaki-success rounded-full px-2 py-0.5",
+    isRtl ? "mr-auto" : "ml-auto"
+  );
 
   // Auto-focus textarea when response completes (isSending: true → false)
   useEffect(() => {
@@ -127,19 +149,87 @@ export function InputArea({
       ? createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[1px]">
             <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
-            <div ref={upgradeModalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-              <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Upgrades are brewing</div>
-              <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
-                We only offer the FREE plan right now. Our backend goblins are forging unlimited and specialized
-                plans as we speak — with prices that won’t scare your coffee.
+            <div
+              ref={upgradeModalRef}
+              dir={isRtl ? "rtl" : "ltr"}
+              className={cn(
+                "relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5",
+                isRtl ? "text-right" : "text-left"
+              )}
+            >
+              <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                {t("billing.upgradeTitle")}
               </div>
-              <div className="mt-5 flex items-center justify-end">
+              <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
+                {t("billing.upgradeSubtitle")}
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                {[
+                  {
+                    tier: "student",
+                    label: t("billing.plans.student.label"),
+                    price: t("billing.plans.student.price"),
+                    desc: t("billing.plans.student.desc"),
+                  },
+                  {
+                    tier: "personal",
+                    label: t("billing.plans.personal.label"),
+                    price: t("billing.plans.personal.price"),
+                    desc: t("billing.plans.personal.desc"),
+                  },
+                ].map((plan) => (
+                  <button
+                    key={plan.tier}
+                    type="button"
+                    className={cn(
+                      "w-full rounded-zaki-lg border px-4 py-3 transition-colors",
+                      isRtl ? "text-right" : "text-left",
+                      plan.tier === planTier
+                        ? "border-zaki-brand bg-zaki-brand/10"
+                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
+                    )}
+                    onClick={async () => {
+                      try {
+                        await checkout.mutateAsync(plan.tier as "student" | "personal");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Checkout failed");
+                      }
+                    }}
+                  >
+                    <div className={cn("flex items-center justify-between", isRtl && "flex-row-reverse")}>
+                      <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        {plan.label}
+                      </div>
+                      <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">{plan.price}</div>
+                    </div>
+                    <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                      {plan.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className={cn("mt-5 flex items-center justify-between", isRtl && "flex-row-reverse")}>
+                <button
+                  type="button"
+                  className="text-xs text-zaki-muted hover:text-zaki-primary transition-colors"
+                  onClick={() => setUpgradeOpen(false)}
+                >
+                  {t("billing.notNow")}
+                </button>
                 <button
                   type="button"
                   className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand-hover transition-colors"
-                  onClick={() => setUpgradeOpen(false)}
+                  onClick={async () => {
+                    try {
+                      await portal.mutateAsync();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+                    }
+                  }}
                 >
-                  Sounds good
+                  {t("billing.managePlan")}
                 </button>
               </div>
             </div>
@@ -163,12 +253,24 @@ export function InputArea({
               <>
                 <button
                   type="button"
-                  className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
-                  onClick={() => setUpgradeOpen(true)}
+                  className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
+                  onClick={async () => {
+                    if (isPremium) {
+                      try {
+                        await portal.mutateAsync();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+                      }
+                    } else {
+                      setUpgradeOpen(true);
+                    }
+                  }}
                 >
-                  {t("input.upgradeCta")}
+                  {isPremium ? "Manage" : t("input.upgradeCta")}
                 </button>
-                <span className="text-zaki-secondary">{t("input.upgradeLabel")}</span>
+                <span className="text-zaki-secondary">
+                  {isPremium ? `${t("input.upgradeLabel")} · ${planTier.toUpperCase()}` : t("input.upgradeLabel")}
+                </span>
                 <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
                   <Zap className="size-3" />
                 </span>
@@ -178,13 +280,25 @@ export function InputArea({
                 <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
                   <Zap className="size-3" />
                 </span>
-                <span className="text-zaki-secondary">{t("input.upgradeLabel")}</span>
+                <span className="text-zaki-secondary">
+                  {isPremium ? `${t("input.upgradeLabel")} · ${planTier.toUpperCase()}` : t("input.upgradeLabel")}
+                </span>
                 <button
                   type="button"
-                  className="text-zaki-success font-medium hover:underline text-2xs leading-[16px]"
-                  onClick={() => setUpgradeOpen(true)}
+                  className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
+                  onClick={async () => {
+                    if (isPremium) {
+                      try {
+                        await portal.mutateAsync();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+                      }
+                    } else {
+                      setUpgradeOpen(true);
+                    }
+                  }}
                 >
-                  {t("input.upgradeCta")}
+                  {isPremium ? "Manage" : t("input.upgradeCta")}
                 </button>
               </>
             )}
@@ -295,10 +409,17 @@ export function InputArea({
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                   type="button"
                   role="menuitem"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    if (!isPersonal) {
+                      gateProFeature();
+                      return;
+                    }
+                    setMenuOpen(false);
+                  }}
                 >
                   <Sparkles className="size-4 text-zaki-muted" />
                   Generate image
+                  <span className={proBadgeClass}>{t("billing.proBadge")}</span>
                 </button>
                 <button
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
@@ -316,19 +437,33 @@ export function InputArea({
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                   type="button"
                   role="menuitem"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    if (!isPersonal) {
+                      gateProFeature();
+                      return;
+                    }
+                    setMenuOpen(false);
+                  }}
                 >
                   <Search className="size-4 text-zaki-muted" />
                   Deep research
+                  <span className={proBadgeClass}>{t("billing.proBadge")}</span>
                 </button>
                 <button
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                   type="button"
                   role="menuitem"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    if (!isPersonal) {
+                      gateProFeature();
+                      return;
+                    }
+                    setMenuOpen(false);
+                  }}
                 >
                   <Bot className="size-4 text-zaki-muted" />
                   Agent mode
+                  <span className={proBadgeClass}>{t("billing.proBadge")}</span>
                 </button>
                 <button
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
