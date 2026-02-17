@@ -115,12 +115,22 @@ export async function backendAuthRequest(
 export async function requestLogin({
   username,
   password,
+  legalConsentAccepted,
+  legalPolicyVersion,
 }: {
   username?: string;
   password: string;
+  legalConsentAccepted?: boolean;
+  legalPolicyVersion?: string;
 }) {
-  const payload: Record<string, string> = { password };
+  const payload: Record<string, string | boolean> = { password };
   if (username) payload.username = username;
+  if (typeof legalConsentAccepted === "boolean") {
+    payload.legalConsentAccepted = legalConsentAccepted;
+  }
+  if (legalPolicyVersion) {
+    payload.legalPolicyVersion = legalPolicyVersion;
+  }
 
   const response = await backendRequest("/login", {
     method: "POST",
@@ -143,15 +153,32 @@ export async function requestPublicSignup({
   password,
   name,
   dateOfBirth,
+  legalConsentAccepted,
+  legalPolicyVersion,
 }: {
   email: string;
   password: string;
   name: string;
   dateOfBirth: string;
+  legalConsentAccepted?: boolean;
+  legalPolicyVersion?: string;
 }) {
+  const payload: Record<string, string | boolean> = {
+    email,
+    password,
+    name,
+    dateOfBirth,
+  };
+  if (typeof legalConsentAccepted === "boolean") {
+    payload.legalConsentAccepted = legalConsentAccepted;
+  }
+  if (legalPolicyVersion) {
+    payload.legalPolicyVersion = legalPolicyVersion;
+  }
+
   const response = await backendRequest("/signup", {
     method: "POST",
-    body: JSON.stringify({ email, password, name, dateOfBirth }),
+    body: JSON.stringify(payload),
   });
 
   let data: {
@@ -228,6 +255,48 @@ export async function fetchProfile() {
   return { response, data };
 }
 
+export type LegalConsentStatus = {
+  success?: boolean;
+  authenticated?: boolean;
+  policyVersion?: string;
+  hasConsent?: boolean;
+  isCurrent?: boolean;
+  requiresReconsent?: boolean;
+  consentVersion?: string | null;
+  consentedAt?: string | null;
+  error?: string | null;
+};
+
+export async function fetchLegalConsentStatus(useAuth = false) {
+  const response = useAuth
+    ? await backendAuthRequest("/api/legal/consent-status", { method: "GET" })
+    : await backendRequest("/api/legal/consent-status", { method: "GET" });
+  let data: LegalConsentStatus = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function submitLegalReconsent(legalPolicyVersion: string) {
+  const response = await backendAuthRequest("/api/legal/re-consent", {
+    method: "POST",
+    body: JSON.stringify({
+      legalConsentAccepted: true,
+      legalPolicyVersion,
+    }),
+  });
+  let data: LegalConsentStatus = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
 export async function updateProfile(fullName: string) {
   const response = await backendAuthRequest("/api/profile", {
     method: "PATCH",
@@ -259,6 +328,28 @@ export async function fetchEntitlements() {
       campaign?: string | null;
     };
     features?: Record<string, boolean>;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function fetchBillingConfig() {
+  const response = await backendAuthRequest("/api/billing/config", { method: "GET" });
+  let data: {
+    success?: boolean;
+    configured?: {
+      stripeEnabled?: boolean;
+      checkoutEnabled?: boolean;
+      portalEnabled?: boolean;
+      cancelEnabled?: boolean;
+      webhookEnabled?: boolean;
+      missing?: string[];
+    };
     error?: string | null;
   } = {};
   try {
@@ -333,6 +424,204 @@ export async function redeemAccessCode(code: string, authToken?: string) {
     success?: boolean;
     accessExpiresAt?: string | null;
     campaign?: string | null;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export type AdminAccessCode = {
+  id: string;
+  code: string;
+  campaign: string;
+  durationDays: number;
+  maxRedemptions: number | null;
+  redeemedCount: number;
+  remainingRedemptions: number | null;
+  active: boolean;
+  expiresAt: string | null;
+  createdAt: string | null;
+};
+
+export type AdminMember = {
+  email: string;
+  role: "super_admin" | "admin";
+  isSuperAdmin: boolean;
+  active: boolean;
+  createdBy: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export async function listAdminMembers() {
+  const response = await backendAuthRequest("/api/admin/admins", {
+    method: "GET",
+  });
+  let data: {
+    success?: boolean;
+    actor?: {
+      email?: string;
+      role?: "super_admin" | "admin";
+      isSuperAdmin?: boolean;
+    };
+    items?: AdminMember[];
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function addAdminMember(email: string) {
+  const response = await backendAuthRequest("/api/admin/admins", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  let data: {
+    success?: boolean;
+    member?: AdminMember;
+    message?: string | null;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function removeAdminMember(email: string) {
+  const response = await backendAuthRequest(
+    `/api/admin/admins/${encodeURIComponent(email)}`,
+    {
+      method: "DELETE",
+    }
+  );
+  let data: {
+    success?: boolean;
+    member?: AdminMember;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export type AdminAccessCodeListParams = {
+  search?: string;
+  campaign?: string;
+  active?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+export type AdminAccessCodeCreatePayload = {
+  campaign: string;
+  count: number;
+  durationDays?: number;
+  maxRedemptions?: number | null;
+  expiresAt?: string | null;
+  active?: boolean;
+};
+
+export type AdminAccessCodeUpdatePayload = {
+  campaign?: string;
+  durationDays?: number;
+  maxRedemptions?: number | null;
+  expiresAt?: string | null;
+  active?: boolean;
+};
+
+export async function listAdminAccessCodes(params: AdminAccessCodeListParams = {}) {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.campaign) query.set("campaign", params.campaign);
+  if (typeof params.active === "boolean") query.set("active", String(params.active));
+  if (typeof params.limit === "number") query.set("limit", String(params.limit));
+  if (typeof params.offset === "number") query.set("offset", String(params.offset));
+
+  const queryString = query.toString();
+  const path = queryString
+    ? `/api/admin/access-codes?${queryString}`
+    : "/api/admin/access-codes";
+  const response = await backendAuthRequest(path, { method: "GET" });
+  let data: {
+    success?: boolean;
+    total?: number;
+    limit?: number;
+    offset?: number;
+    items?: AdminAccessCode[];
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function createAdminAccessCodes(payload: AdminAccessCodeCreatePayload) {
+  const response = await backendAuthRequest("/api/admin/access-codes", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  let data: {
+    success?: boolean;
+    count?: number;
+    codes?: AdminAccessCode[];
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function updateAdminAccessCode(
+  codeId: string,
+  payload: AdminAccessCodeUpdatePayload
+) {
+  const response = await backendAuthRequest(
+    `/api/admin/access-codes/${encodeURIComponent(codeId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  let data: {
+    success?: boolean;
+    code?: AdminAccessCode;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function exportAccountData() {
+  const response = await backendAuthRequest("/api/account/export", {
+    method: "GET",
+  });
+  let data: {
+    success?: boolean;
+    export?: unknown;
     error?: string | null;
   } = {};
   try {

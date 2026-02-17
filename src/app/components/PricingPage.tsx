@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { useBillingPortal, useCheckout, useEntitlements, useRedeemAccessCode } from "@/queries";
+import {
+  useBillingConfig,
+  useBillingPortal,
+  useCheckout,
+  useEntitlements,
+  useRedeemAccessCode,
+} from "@/queries";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -24,6 +30,7 @@ export function PricingPage() {
   const portal = useBillingPortal();
   const redeemAccessCode = useRedeemAccessCode();
   const { data: entitlementsResult } = useEntitlements();
+  const { data: billingConfigResult } = useBillingConfig();
   const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
   const accessActive = Boolean(entitlementsResult?.data?.access?.active);
@@ -32,6 +39,15 @@ export function PricingPage() {
   const isPremium =
     ["student", "personal"].includes(currentTier) &&
     ["active", "trialing", "past_due"].includes(planStatus);
+  const activeViaAccessCode = accessActive && !isPremium;
+  const billingConfig = billingConfigResult?.data?.configured;
+  const billingConfigLoaded = Boolean(billingConfigResult);
+  const billingPortalEnabled = billingConfigLoaded ? Boolean(billingConfig?.portalEnabled) : true;
+  const billingCheckoutEnabled = billingConfigLoaded ? Boolean(billingConfig?.checkoutEnabled) : true;
+  const billingUnavailableMessage =
+    billingConfigLoaded && (!billingPortalEnabled || !billingCheckoutEnabled)
+      ? t("pricingPage.portalError")
+      : null;
 
   const plans = useMemo(
     () =>
@@ -66,17 +82,21 @@ export function PricingPage() {
   );
 
   const currentPlanLabel = useMemo(() => {
+    if (activeViaAccessCode) {
+      return t("pricingPage.codeActivePlanLabel");
+    }
     const plan = plans.find((p) => p.tier === currentTier);
     return plan?.label ?? t("pricingPage.plans.free.label");
-  }, [currentTier, plans, t]);
+  }, [activeViaAccessCode, currentTier, plans, t]);
 
-  const localizedPlanStatus = useMemo(
-    () =>
-      t(`pricingPage.statusValues.${planStatus}`, {
-        defaultValue: planStatus,
-      }),
-    [planStatus, t]
-  );
+  const localizedPlanStatus = useMemo(() => {
+    if (activeViaAccessCode) {
+      return t("pricingPage.statusValues.code_active");
+    }
+    return t(`pricingPage.statusValues.${planStatus}`, {
+      defaultValue: planStatus,
+    });
+  }, [activeViaAccessCode, planStatus, t]);
 
   const accessExpiresLabel = useMemo(() => {
     if (!accessExpiresAt) return null;
@@ -144,7 +164,11 @@ export function PricingPage() {
           <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
             {t("pricingPage.currentPlan", { plan: currentPlanLabel })}
             {" · "}
-            {isPremium ? t("pricingPage.currentPlanPremium") : t("pricingPage.currentPlanFree")}
+            {isPremium
+              ? t("pricingPage.currentPlanPremium")
+              : activeViaAccessCode
+              ? t("pricingPage.currentPlanCodeActive")
+              : t("pricingPage.currentPlanFree")}
           </p>
           {billingNotice && (
             <div
@@ -161,9 +185,13 @@ export function PricingPage() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand-hover transition-colors"
+              className="zaki-btn zaki-btn-primary"
+              disabled={portal.isPending || !billingPortalEnabled}
               onClick={async () => {
                 try {
+                  if (!billingPortalEnabled) {
+                    throw new Error(t("pricingPage.portalError"));
+                  }
                   await portal.mutateAsync();
                 } catch (err) {
                   toast.error(
@@ -178,6 +206,9 @@ export function PricingPage() {
               {t("pricingPage.statusLabel")}: {localizedPlanStatus}
             </span>
           </div>
+          {billingUnavailableMessage && (
+            <div className="text-xs text-zaki-muted">{billingUnavailableMessage}</div>
+          )}
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -220,7 +251,7 @@ export function PricingPage() {
               />
               <button
                 type="button"
-                className="rounded-full bg-zaki-brand px-4 py-2 text-sm text-white hover:bg-zaki-brand-hover transition-colors disabled:opacity-50"
+                className="zaki-btn zaki-btn-primary disabled:opacity-50"
                 disabled={redeemAccessCode.isPending || accessCode.trim().length === 0}
                 onClick={async () => {
                   const code = accessCode.trim();
@@ -302,7 +333,7 @@ export function PricingPage() {
                   {plan.tier === "free" ? (
                     <button
                       type="button"
-                      className="w-full rounded-full border border-zaki-subtle px-3 py-2 text-xs text-zaki-secondary hover:bg-zaki-hover transition-colors"
+                      className="w-full zaki-btn-sm zaki-btn-secondary"
                       disabled
                     >
                       {t("pricingPage.included")}
@@ -310,9 +341,13 @@ export function PricingPage() {
                   ) : (
                     <button
                       type="button"
-                      className="w-full rounded-full bg-zaki-brand text-white px-3 py-2 text-xs hover:bg-zaki-brand-hover transition-colors"
+                      className="w-full zaki-btn-sm zaki-btn-primary disabled:opacity-50"
+                      disabled={checkout.isPending || !billingCheckoutEnabled}
                       onClick={async () => {
                         try {
+                          if (!billingCheckoutEnabled) {
+                            throw new Error(t("pricingPage.checkoutError"));
+                          }
                           await checkout.mutateAsync(plan.tier as "student" | "personal");
                         } catch (err) {
                           toast.error(

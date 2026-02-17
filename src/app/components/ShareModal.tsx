@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { X, Link2, Lock, Copy, Check, Loader2, Globe, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiRequest } from '@/lib/api';
-import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useTranslation } from "react-i18next";
+import { ModalShell } from "@/app/components/ui/ModalShell";
 
 interface Message {
   id: string;
@@ -37,7 +37,6 @@ export function ShareModal({
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
-  const focusTrapRef = useFocusTrap<HTMLDivElement>(isOpen);
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
 
@@ -88,7 +87,7 @@ export function ShareModal({
       }
 
       setShareUrl(data.url);
-    } catch (err) {
+    } catch {
       setError(t("share.errorCreate"));
     } finally {
       setIsCreating(false);
@@ -125,19 +124,13 @@ export function ShareModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-        onClick={handleClose}
-      />
-
-      {/* Modal */}
-      <div 
-        ref={focusTrapRef}
-        className="zaki-share-modal relative bg-white border border-zaki-subtle rounded-zaki-lg w-full max-w-md shadow-[0px_24px_60px_rgba(15,15,15,0.18)]"
-      >
-        {/* Header */}
+    <ModalShell
+      isOpen={isOpen}
+      onClose={handleClose}
+      ariaLabel={t("share.title")}
+      className="zaki-share-modal w-full max-w-md rounded-zaki-lg border border-zaki-subtle bg-white"
+    >
+      <div dir={isRtl ? "rtl" : "ltr"}>
         <div className="flex items-center justify-between p-4 border-b border-zaki-subtle bg-zaki-base">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-full bg-zaki-brand/10 flex items-center justify-center">
@@ -150,14 +143,13 @@ export function ShareModal({
           </div>
           <button
             onClick={handleClose}
-            className="p-2 hover:bg-zaki-hover rounded-lg transition-colors text-zaki-muted"
+            className="zaki-icon-btn size-9 rounded-lg"
             aria-label="Close share modal"
           >
             <X className="w-5 h-5 text-zaki-muted" />
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-4">
           {!shareUrl ? (
             <>
@@ -279,7 +271,7 @@ export function ShareModal({
               <button
                 onClick={handleCreate}
                 disabled={isCreating}
-                className="w-full zaki-btn flex items-center justify-center gap-2 bg-zaki-accent hover:bg-zaki-accent-hover disabled:bg-zaki-secondary disabled:cursor-not-allowed text-white transition-colors"
+                className="w-full zaki-btn zaki-btn-primary disabled:cursor-not-allowed"
               >
                 {isCreating ? (
                   <>
@@ -329,7 +321,7 @@ export function ShareModal({
                       "zaki-btn-sm rounded-zaki-md font-semibold transition-colors w-full sm:w-auto",
                       copied
                         ? "bg-zaki-accent text-white"
-                        : "bg-zaki-dark-elevated hover:bg-zaki-dark-elevated text-zaki-primary"
+                        : "zaki-btn-secondary"
                     )}
                   >
                     {copied ? (
@@ -363,7 +355,7 @@ export function ShareModal({
               {/* Done button */}
               <button
                 onClick={handleClose}
-                className="w-full zaki-btn bg-white border border-zaki-subtle text-zaki-primary hover:bg-zaki-hover transition-colors"
+                className="w-full zaki-btn zaki-btn-secondary"
               >
                 {t("share.done")}
               </button>
@@ -371,6 +363,6 @@ export function ShareModal({
           )}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

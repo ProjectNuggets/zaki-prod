@@ -4,9 +4,9 @@ import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiRequest } from "@/lib/api";
 import {
-  LibraryView,
   SpacesView,
   ZakiHomeView,
   ChatView,
@@ -20,12 +20,27 @@ import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
-import type { Space, Message, LibraryResult } from "@/types";
+import type { Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
 
+class ChatRequestError extends Error {
+  status: number;
+  code: string | null;
+
+  constructor(message: string, status: number, code?: string | null) {
+    super(message);
+    this.name = "ChatRequestError";
+    this.status = status;
+    this.code = code ?? null;
+  }
+}
+
+const HOME_STARTER_MESSAGE = "hello, how are you zaki";
+
 export function ChatArea() {
   const { i18n } = useTranslation();
+  const navigate = useNavigate();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   useAuthStore(); // For auth context, values used elsewhere
   const {
@@ -34,7 +49,6 @@ export function ChatArea() {
     spaceId: activeWorkspaceSlug,
     goHome,
     goToSpaces,
-    goToLibrary,
     goToThread,
     clearThread,
   } = useNavigationStore();
@@ -42,7 +56,6 @@ export function ChatArea() {
   // View states
   const showZakiHome = view === "home";
   const showSpacesView = view === "spaces";
-  const showLibraryView = view === "library";
   const showSpaceDetail = false;
 
   // Message state
@@ -51,7 +64,7 @@ export function ChatArea() {
   const [isStreaming, setIsStreaming] = useState(false);
   const historyLoadedRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [queryModeEnabled, setQueryModeEnabled] = useState(false);
 
   // Memory state - works for both auto-save and manual modes
   const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
@@ -69,7 +82,16 @@ export function ChatArea() {
   const queuedMemoryCheckRef = useRef<{ message: string; threadId?: string; mode?: "autosave" | "manual" } | null>(null);
   const memorySeenRef = useRef<Set<string>>(new Set());
   const memoryConflictSeenRef = useRef<Set<string>>(new Set());
+  const conflictCountRef = useRef(0);
+  const memoryStatusHydratedRef = useRef(false);
   const authUser = useAuthStore((s) => s.user);
+  const authUserId = useMemo(() => {
+    const fallbackEmail =
+      typeof authUser === "object" && authUser !== null
+        ? String((authUser as { email?: string }).email || "")
+        : "";
+    return String(authUser?.username || fallbackEmail).trim().toLowerCase();
+  }, [authUser]);
   
   // Memory mode: autosave (default) or manual
   const [memoryMode, setMemoryMode] = useMemoryMode();
@@ -108,6 +130,12 @@ export function ChatArea() {
   const [inputLeft, setInputLeft] = useState(0);
   const [inputWidth, setInputWidth] = useState(0);
   const [inputTop, setInputTop] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1280
+  );
+  const [viewportHeight, setViewportHeight] = useState(
+    typeof window !== "undefined" ? window.innerHeight : 800
+  );
 
   // Spaces state
   const [spacesList, setSpacesList] = useState<Space[]>([]);
@@ -118,25 +146,15 @@ export function ChatArea() {
     const left = inputWidth ? inputLeft : 16;
     const width =
       inputWidth ||
-      (typeof window !== "undefined"
-        ? Math.min(window.innerWidth - 32, 896)
-        : 640);
-    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+      Math.min(Math.max(viewportWidth - 32, 280), 896);
     const hasInputMetrics = inputWidth > 0 && inputTop > 0;
     const gap = 8;
     const bottom = hasInputMetrics
       ? Math.max(24, viewportHeight - inputTop + gap)
       : 24;
     return { left, width, bottom };
-  }, [inputLeft, inputTop, inputWidth]);
+  }, [inputLeft, inputTop, inputWidth, viewportHeight, viewportWidth]);
 
-
-  // Library state
-  const [libraryQuery, setLibraryQuery] = useState("");
-  const [librarySlug, setLibrarySlug] = useState("");
-  const [libraryResults, setLibraryResults] = useState<LibraryResult[]>([]);
-  const [libraryLoading, setLibraryLoading] = useState(false);
-  const [libraryError, setLibraryError] = useState("");
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -151,10 +169,36 @@ export function ChatArea() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRafRef = useRef<number | null>(null);
 
+  const measureInputMetrics = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const nextWidth = window.innerWidth;
+      const nextHeight = window.innerHeight;
+      setViewportWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+      setViewportHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    }
+
+    const inputEl = inputWrapRef.current;
+    if (!inputEl) return;
+    const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
+    const rect = target.getBoundingClientRect();
+    setInputHeight(rect.height);
+    setInputLeft(rect.left);
+    setInputWidth(rect.width);
+    setInputTop(rect.top);
+  }, []);
+
   // Computed values
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const showReady = !activeThreadId || messages.length === 0;
   const primarySpace = spacesList[0] ?? null;
+  const homeConversationSpaceId = useMemo(() => {
+    const zakiSpace = spacesList.find(
+      (space) => String(space.id || "").trim().toLowerCase() === "zaki"
+    );
+    if (zakiSpace?.id) return zakiSpace.id;
+    const fixedSpace = spacesList.find((space) => Boolean(space.fixed));
+    return fixedSpace?.id ?? primarySpace?.id ?? null;
+  }, [primarySpace?.id, spacesList]);
   const activeSpace = spacesList.find((space) => space.id === activeWorkspaceSlug) ?? null;
   const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
   const headerSpaceName = activeSpace?.title || "Space";
@@ -183,7 +227,7 @@ export function ChatArea() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(updateScrollIndicator);
     return () => window.cancelAnimationFrame(frame);
-  }, [messages.length, showZakiHome, showLibraryView, showSpacesView, showSpaceDetail, updateScrollIndicator]);
+  }, [messages.length, showZakiHome, showSpacesView, showSpaceDetail, updateScrollIndicator]);
 
   // Serialize chat for export
   const serializeChat = useCallback(() => {
@@ -346,8 +390,8 @@ export function ChatArea() {
         method: "POST",
         body: JSON.stringify({
           message,
+          mode: queryModeEnabled ? "query" : "chat",
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
-          ...(webSearchEnabled ? { webSearch: true } : {}),
         }),
       }
     );
@@ -357,6 +401,8 @@ export function ChatArea() {
     if (!response.ok) {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
+      let errorCode: string | null = null;
+      const requestId = response.headers.get("x-request-id");
       const errorContentType = response.headers.get("content-type") || "";
       try {
         if (errorContentType.includes("application/json")) {
@@ -365,11 +411,14 @@ export function ChatArea() {
             message?: string;
             code?: string;
           };
+          if (typeof data.code === "string" && data.code.trim()) {
+            errorCode = data.code.trim();
+          }
           if (typeof data.message === "string" && data.message.trim()) {
             message = data.message;
           } else if (typeof data.error === "string" && data.error.trim()) {
             message = data.error;
-          } else if (data.code === "access_expired") {
+          } else if (errorCode === "access_expired") {
             message = "Access code required. Redeem a fresh code to keep chatting.";
           }
         } else {
@@ -381,7 +430,10 @@ export function ChatArea() {
       } catch {
         // Keep fallback message.
       }
-      throw new Error(message);
+      if (requestId) {
+        message = `${message} (Ref: ${requestId})`;
+      }
+      throw new ChatRequestError(message, response.status, errorCode);
     }
 
     if (!response.body) {
@@ -465,7 +517,7 @@ export function ChatArea() {
         }
       }
     }
-  }, [spacesList, webSearchEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
+  }, [spacesList, queryModeEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
 
   // Check for memories - Auto-Save or Manual mode
   const flushMemoryQueue = useCallback(() => {
@@ -483,13 +535,113 @@ export function ChatArea() {
       autoDismissTimerRef.current = window.setTimeout(() => {
         setShowMemoryToast(false);
         setPendingMemories((prev) => prev.filter((m) => m._mode !== "autosave"));
-      }, 3000);
+      }, 8000);
     }
   }, [memoryMode]);
 
+  const syncMemoryStatus = useCallback(
+    async (notifyOnNewConflicts = false) => {
+      if (!authUserId) return;
+      try {
+        const statusResponse = await apiRequest("/api/memory/status");
+        if (!statusResponse.ok) return;
+        const statusData = (await statusResponse.json()) as {
+          pending?: number;
+          conflicts?: number;
+        };
+
+        const pendingCount = Math.max(0, Number(statusData.pending || 0));
+        const conflictCount = Math.max(0, Number(statusData.conflicts || 0));
+        const previousConflictCount = conflictCountRef.current;
+
+        if (!memoryStatusHydratedRef.current) {
+          memoryStatusHydratedRef.current = true;
+          if (conflictCount > 0) {
+            setShowConflictToast(true);
+          }
+        } else if (notifyOnNewConflicts && conflictCount > previousConflictCount) {
+          setShowConflictToast(true);
+        }
+
+        conflictCountRef.current = conflictCount;
+        setMemoryConflictCount(conflictCount);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("zaki:memory-conflicts-count", {
+              detail: { count: conflictCount },
+            })
+          );
+        }
+
+        if (pendingCount <= 0) {
+          setPendingMemories((prev) => {
+            const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
+            if (autosaveOnly.length === 0) {
+              setShowMemoryToast(false);
+            }
+            return autosaveOnly;
+          });
+          return;
+        }
+
+        const pendingResponse = await apiRequest("/api/memory/confirmations?limit=50");
+        if (!pendingResponse.ok) return;
+
+        const pendingData = (await pendingResponse.json()) as {
+          confirmations?: Array<{
+            id: string;
+            content: string;
+            type: string;
+          }>;
+          pending?: Array<{
+            id: string;
+            content: string;
+            type: string;
+          }>;
+        };
+        const incoming = (
+          Array.isArray(pendingData.confirmations)
+            ? pendingData.confirmations
+            : Array.isArray(pendingData.pending)
+              ? pendingData.pending
+              : []
+        ).map((memory) => ({
+          id: memory.id,
+          content: memory.content,
+          type: memory.type,
+          confirmationId: memory.id,
+          _mode: "manual" as const,
+        }));
+
+        if (incoming.length === 0) {
+          setPendingMemories((prev) => {
+            const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
+            if (autosaveOnly.length === 0) {
+              setShowMemoryToast(false);
+            }
+            return autosaveOnly;
+          });
+          return;
+        }
+
+        setPendingMemories((prev) => {
+          const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
+          const incomingById = new Map(
+            incoming.map((memory) => [memory.confirmationId || memory.id, memory])
+          );
+          const mergedManual = Array.from(incomingById.values());
+          return [...autosaveOnly, ...mergedManual];
+        });
+        setShowMemoryToast(true);
+      } catch {
+        // Sync is best-effort and should never block chat.
+      }
+    },
+    [authUserId]
+  );
+
   const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
-    // Note: username is the email in ZAKI's auth system
-    if (!authUser?.username) return;
+    if (!authUserId) return;
     if (memoryInFlightRef.current) {
       queuedMemoryCheckRef.current = { message, threadId, mode: modeOverride };
       return;
@@ -506,7 +658,6 @@ export function ChatArea() {
       const response = await apiRequest(endpoint, {
         method: "POST",
         body: JSON.stringify({
-          userId: authUser.username,
           message,
           threadId: threadId ?? activeThreadId,
         }),
@@ -518,7 +669,9 @@ export function ChatArea() {
       }
       
       const data = await response.json();
+      setMemoryError(null);
       const conflicts = data.conflicts || [];
+      const duplicates = Array.isArray(data.duplicates) ? data.duplicates : [];
       if (conflicts.length > 0) {
         const newConflicts = conflicts.filter((conflict: { id?: string }) => {
           if (!conflict?.id) return true;
@@ -527,7 +680,6 @@ export function ChatArea() {
           return true;
         });
         if (newConflicts.length > 0) {
-          setMemoryConflictCount((prev) => prev + newConflicts.length);
           setShowConflictToast(true);
         }
       }
@@ -539,6 +691,22 @@ export function ChatArea() {
           _mode: activeMode,
         })
       );
+
+      if (memories.length === 0 && duplicates.length > 0 && conflicts.length === 0) {
+        const firstDuplicate = String(duplicates[0]?.content || "").trim();
+        toast.info(
+          duplicates.length === 1 && firstDuplicate
+            ? `Already remembered: "${firstDuplicate}".`
+            : `Already remembered ${duplicates.length} memories.`
+        );
+        if (firstDuplicate && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("zaki:open-memory", {
+              detail: { query: firstDuplicate },
+            })
+          );
+        }
+      }
       
       if (memories.length > 0) {
         const uniqueMemories = memories.filter((m: { id: string; confirmationId?: string }) => {
@@ -563,23 +731,147 @@ export function ChatArea() {
       setMemoryError("Memory save failed. Retry?");
     } finally {
       memoryInFlightRef.current = false;
+      void syncMemoryStatus(true);
       if (queuedMemoryCheckRef.current) {
         const next = queuedMemoryCheckRef.current;
         queuedMemoryCheckRef.current = null;
         checkForSavedMemories(next.message, next.threadId, next.mode);
       }
     }
-  }, [authUser?.username, activeThreadId, memoryMode, flushMemoryQueue]);
+  }, [authUserId, activeThreadId, memoryMode, flushMemoryQueue, syncMemoryStatus]);
+
+  useEffect(() => {
+    if (!authUserId) {
+      conflictCountRef.current = 0;
+      memoryStatusHydratedRef.current = false;
+      setMemoryConflictCount(0);
+      setShowConflictToast(false);
+      return;
+    }
+    void syncMemoryStatus(false);
+  }, [authUserId, syncMemoryStatus]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+    let cancelled = false;
+    let reconnectTimer: number | null = null;
+    let controller: AbortController | null = null;
+
+    const connect = async () => {
+      while (!cancelled) {
+        controller = new AbortController();
+        try {
+          const response = await apiRequest("/api/memory/events", {
+            method: "GET",
+            headers: { Accept: "text/event-stream" },
+            signal: controller.signal,
+          });
+          if (!response.ok || !response.body) {
+            throw new Error(`SSE connection failed (${response.status})`);
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (!cancelled) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            let boundary = buffer.indexOf("\n\n");
+            while (boundary !== -1) {
+              const block = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+
+              let eventName = "message";
+              const dataLines = [];
+              for (const rawLine of block.split("\n")) {
+                const line = rawLine.trimEnd();
+                if (!line || line.startsWith(":")) continue;
+                if (line.startsWith("event:")) {
+                  eventName = line.slice(6).trim();
+                  continue;
+                }
+                if (line.startsWith("data:")) {
+                  dataLines.push(line.slice(5).trim());
+                }
+              }
+
+              if (eventName === "status") {
+                try {
+                  const payload = JSON.parse(dataLines.join("\n") || "{}") as {
+                    conflicts?: number;
+                  };
+                  const nextConflictCount = Math.max(
+                    0,
+                    Number(payload.conflicts || 0)
+                  );
+                  if (nextConflictCount > conflictCountRef.current) {
+                    setShowConflictToast(true);
+                  }
+                } catch {
+                  // Ignore malformed events and rely on sync fallback.
+                }
+                void syncMemoryStatus(true);
+              }
+
+              boundary = buffer.indexOf("\n\n");
+            }
+          }
+        } catch {
+          // Push updates are best-effort; focus/visibility refresh remains fallback.
+        } finally {
+          controller = null;
+        }
+
+        if (cancelled) break;
+        await new Promise<void>((resolve) => {
+          reconnectTimer = window.setTimeout(resolve, 1500);
+        });
+      }
+    };
+
+    void connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      controller?.abort();
+    };
+  }, [authUserId, syncMemoryStatus]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+
+    const handleFocus = () => {
+      void syncMemoryStatus(true);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void syncMemoryStatus(true);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [authUserId, syncMemoryStatus]);
 
   // Handle send message
-  const handleSend = useCallback(async (text: string, files: File[]) => {
+  const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
     const trimmed = text.trim();
     if (!trimmed) {
       toast.error("Message is empty");
       return;
     }
     if (isStreaming) return;
-    const resolvedWorkspaceSlug = activeWorkspaceSlug ?? primarySpace?.id ?? null;
+    const resolvedWorkspaceSlug = preferredWorkspaceSlug ?? activeWorkspaceSlug ?? primarySpace?.id ?? null;
     if (!resolvedWorkspaceSlug) {
       toast.error("Select a workspace before sending a message");
       return;
@@ -658,11 +950,16 @@ export function ChatArea() {
       // P0 Fix: Check for auto-saved memories after response
       await checkForSavedMemories(trimmed, threadId);
     } catch (error) {
+      if (error instanceof ChatRequestError && error.code === "access_expired") {
+        toast.error(error.message);
+        navigate("/pricing");
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Unable to send message");
     } finally {
       setIsStreaming(false);
     }
-  }, [activeThreadId, activeWorkspaceSlug, primarySpace?.id, isStreaming, streamChatMessage, checkForSavedMemories]);
+  }, [activeThreadId, activeWorkspaceSlug, primarySpace?.id, isStreaming, streamChatMessage, checkForSavedMemories, navigate]);
 
   const handleRegenerateMessage = useCallback(
     (message: Message) => {
@@ -702,47 +999,21 @@ export function ChatArea() {
     window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
   }, [activeWorkspaceSlug, goToSpaces, primarySpace?.id]);
 
+  const handleHomeStartConversation = useCallback(() => {
+    const workspaceSlug = homeConversationSpaceId;
+    if (!workspaceSlug) {
+      goToSpaces();
+      return;
+    }
+    handleSend(HOME_STARTER_MESSAGE, [], workspaceSlug);
+  }, [goToSpaces, handleSend, homeConversationSpaceId]);
+
   const handleExampleSelect = useCallback(
     (example: string) => {
       handleSend(example, []);
     },
     [handleSend]
   );
-
-  // Library search
-  const runLibrarySearch = useCallback(async () => {
-    if (!librarySlug || !libraryQuery.trim()) {
-      return;
-    }
-    setLibraryLoading(true);
-    setLibraryError("");
-    try {
-      const response = await apiRequest(`/v1/workspace/${librarySlug}/vector-search`, {
-        method: "POST",
-        body: JSON.stringify({
-          query: libraryQuery,
-          topN: 5,
-          scoreThreshold: 0.5,
-        }),
-      });
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          throw new Error("Vector search requires an API key.");
-        }
-        throw new Error("Search failed");
-      }
-      const data = (await response.json()) as { results?: LibraryResult[] };
-      setLibraryResults(data.results ?? []);
-    } catch (error) {
-      setLibraryError(
-        error instanceof Error
-          ? error.message
-          : "Unable to fetch results. Check your workspace slug or API configuration."
-      );
-    } finally {
-      setLibraryLoading(false);
-    }
-  }, [librarySlug, libraryQuery]);
 
   // Track previous thread for summarization on switch
   const prevThreadRef = useRef<{ id: string; workspaceSlug: string; title: string } | null>(null);
@@ -827,7 +1098,7 @@ export function ChatArea() {
   // Input offset effect
   useEffect(() => {
     const updateOffset = () => {
-      if (!showReady || showLibraryView || showSpacesView || showSpaceDetail || activeThreadId) {
+      if (!showReady || showSpacesView || showSpaceDetail || activeThreadId) {
         setInputOffset(0);
         return;
       }
@@ -850,7 +1121,7 @@ export function ChatArea() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateOffset);
     };
-  }, [showReady, showLibraryView, showSpacesView, showSpaceDetail]);
+  }, [showReady, showSpacesView, showSpaceDetail, activeThreadId]);
 
   // Track input height to pad chat list (ChatGPT-style spacing)
   useEffect(() => {
@@ -858,31 +1129,32 @@ export function ChatArea() {
     if (!inputEl) return;
     if (typeof ResizeObserver === "undefined") {
       // Fallback: single measurement without observing
-      const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
-      const rect = target.getBoundingClientRect();
-      setInputHeight(rect.height);
-      setInputLeft(rect.left);
-      setInputWidth(rect.width);
-      setInputTop(rect.top);
+      measureInputMetrics();
       return;
     }
-    const updateMetrics = () => {
-      const target = inputEl.querySelector<HTMLElement>(".zaki-input-form") ?? inputEl;
-      const rect = target.getBoundingClientRect();
-      setInputHeight(rect.height);
-      setInputLeft(rect.left);
-      setInputWidth(rect.width);
-      setInputTop(rect.top);
-    };
-    updateMetrics();
-    const observer = new ResizeObserver(updateMetrics);
+    measureInputMetrics();
+    const observer = new ResizeObserver(measureInputMetrics);
     observer.observe(inputEl);
-    window.addEventListener("resize", updateMetrics);
+    window.addEventListener("resize", measureInputMetrics);
+    window.addEventListener("scroll", measureInputMetrics, true);
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", updateMetrics);
+      window.removeEventListener("resize", measureInputMetrics);
+      window.removeEventListener("scroll", measureInputMetrics, true);
     };
-  }, [inputWrapRef]);
+  }, [measureInputMetrics]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(measureInputMetrics);
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    measureInputMetrics,
+    inputOffset,
+    showReady,
+    showSpacesView,
+    showSpaceDetail,
+    activeThreadId,
+  ]);
 
   // Click outside menu effect
   useEffect(() => {
@@ -929,11 +1201,6 @@ export function ChatArea() {
       setCreateSpaceOpen(true);
     };
 
-    const handleViewLibrary = () => {
-      goToLibrary();
-      setAttachments([]);
-    };
-
     const handleViewSpace = (event: Event) => {
       const detail = (event as CustomEvent<{ id: string }>).detail;
       if (detail?.id) {
@@ -967,7 +1234,6 @@ export function ChatArea() {
     window.addEventListener("zaki:view-spaces", handleViewSpaces);
     window.addEventListener("zaki:spaces-data", handleSpacesData);
     window.addEventListener("zaki:open-create-space", handleOpenCreateSpace);
-    window.addEventListener("zaki:view-library", handleViewLibrary);
     window.addEventListener("zaki:view-space", handleViewSpace);
     window.addEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
     window.addEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
@@ -978,13 +1244,12 @@ export function ChatArea() {
       window.removeEventListener("zaki:view-spaces", handleViewSpaces);
       window.removeEventListener("zaki:spaces-data", handleSpacesData);
       window.removeEventListener("zaki:open-create-space", handleOpenCreateSpace);
-      window.removeEventListener("zaki:view-library", handleViewLibrary);
       window.removeEventListener("zaki:view-space", handleViewSpace);
       window.removeEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
       window.removeEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
       window.removeEventListener("zaki:view-zaki-home", handleViewZakiHome);
     };
-  }, [activeWorkspaceSlug, clearThread, goHome, goToLibrary, goToSpaces, spacesList]);
+  }, [activeWorkspaceSlug, clearThread, goHome, goToSpaces, spacesList]);
 
   useEffect(() => {
     return () => {
@@ -999,22 +1264,6 @@ export function ChatArea() {
 
   // Render main content based on view
   const renderContent = () => {
-    if (showLibraryView) {
-      return (
-        <LibraryView
-          spacesList={spacesList}
-          librarySlug={librarySlug}
-          setLibrarySlug={setLibrarySlug}
-          libraryQuery={libraryQuery}
-          setLibraryQuery={setLibraryQuery}
-          libraryResults={libraryResults}
-          libraryLoading={libraryLoading}
-          libraryError={libraryError}
-          onSearch={runLibrarySearch}
-        />
-      );
-    }
-
     if (showSpacesView) {
       return (
         <SpacesView
@@ -1031,6 +1280,7 @@ export function ChatArea() {
       return (
         <ZakiHomeView
           primarySpace={primarySpace}
+          onStartConversation={handleHomeStartConversation}
           onSendExample={(example) => handleSend(example, [])}
           onGoToThread={goToThread}
           onDeleteThread={(threadId, spaceId) => {
@@ -1183,7 +1433,7 @@ export function ChatArea() {
             ref={scrollRef}
             style={{
               paddingBottom:
-                !showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail
+                !showZakiHome && !showSpacesView && !showSpaceDetail
                   ? Math.max(24, inputHeight + 24)
                   : undefined,
             }}
@@ -1203,7 +1453,7 @@ export function ChatArea() {
             {renderContent()}
           </div>
 
-          {showScrollToBottom && !showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail && (
+          {showScrollToBottom && !showZakiHome && !showSpacesView && !showSpaceDetail && (
             <div
               className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20"
               style={{ bottom: Math.max(24, inputHeight + 24 + inputOffset) + 20 }}
@@ -1226,7 +1476,7 @@ export function ChatArea() {
           )}
 
           {/* Input Area */}
-          {!showZakiHome && !showLibraryView && !showSpacesView && !showSpaceDetail && (
+          {!showZakiHome && !showSpacesView && !showSpaceDetail && (
             <div
               ref={inputWrapRef}
               className="zaki-input-float relative z-20"
@@ -1237,8 +1487,8 @@ export function ChatArea() {
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}
-                webSearchEnabled={webSearchEnabled}
-                onToggleWebSearch={() => setWebSearchEnabled((prev) => !prev)}
+                queryModeEnabled={queryModeEnabled}
+                onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
                 memoryMode={memoryMode}
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
               />
@@ -1311,7 +1561,7 @@ export function ChatArea() {
       />
 
       {/* Memory Toast - Mode-dependent rendering */}
-      {showMemoryToast && pendingMemories.length > 0 && authUser?.username && (
+      {showMemoryToast && pendingMemories.length > 0 && authUserId && (
         <MemoryRail
           memoryMode={pendingMemories.some((m) => m._mode === "manual") ? "manual" : memoryMode}
           memories={
@@ -1319,7 +1569,7 @@ export function ChatArea() {
               ? pendingMemories.filter((m) => m._mode === "manual")
               : pendingMemories.filter((m) => m._mode === "autosave")
           }
-          userId={authUser.username}
+          userId={authUserId}
           position={toastPosition}
           onResolve={(resolvedId) => {
             setPendingMemories((prev) => {
@@ -1329,6 +1579,7 @@ export function ChatArea() {
               }
               return next;
             });
+            void syncMemoryStatus(false);
           }}
           onDismiss={() => {
             setShowMemoryToast(false);
@@ -1363,7 +1614,6 @@ export function ChatArea() {
                 onClick={() => {
                   window.dispatchEvent(new Event("zaki:open-memory"));
                   setShowConflictToast(false);
-                  setMemoryConflictCount(0);
                 }}
               >
                 Review
@@ -1373,7 +1623,6 @@ export function ChatArea() {
                 className="text-zaki-muted dark:text-zaki-dark-muted font-medium hover:underline"
                 onClick={() => {
                   setShowConflictToast(false);
-                  setMemoryConflictCount(0);
                 }}
               >
                 Dismiss
@@ -1427,9 +1676,9 @@ export function ChatArea() {
       )}
 
       {/* P0 Fix: Memory Confirmation Panel - Full review UI */}
-      {authUser?.username && (
+      {authUserId && (
         <MemoryConfirmationPanel
-          userId={authUser.username}
+          userId={authUserId}
           isOpen={showMemoryPanel}
           onClose={() => setShowMemoryPanel(false)}
         />

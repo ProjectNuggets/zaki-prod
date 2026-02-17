@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { X } from "lucide-react";
+import { ModalShell } from "@/app/components/ui/ModalShell";
 
 interface EditInstructionsModalProps {
   isOpen: boolean;
@@ -15,7 +16,6 @@ export function EditInstructionsModal({
   onSave,
 }: EditInstructionsModalProps) {
   const [value, setValue] = useState(initialValue);
-  const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
 
   // Sync initial value when modal opens
   useEffect(() => {
@@ -27,10 +27,26 @@ export function EditInstructionsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-      <div className="absolute inset-0" onClick={onClose} role="button" aria-label="Close instructions edit" />
-      <div ref={modalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-        <div className="text-lg font-semibold text-zaki-primary">Edit instructions</div>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel="Edit instructions"
+      className="w-[460px]"
+    >
+      <div className="px-6 py-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+            Edit instructions
+          </div>
+          <button
+            type="button"
+            className="zaki-icon-btn size-9"
+            onClick={onClose}
+            aria-label="Close instructions edit"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
         <div className="mt-4">
           <textarea
             className="w-full rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus resize-none"
@@ -49,7 +65,7 @@ export function EditInstructionsModal({
           </button>
           <button
             type="button"
-            className="zaki-btn bg-zaki-primary text-white hover:bg-zaki-active transition-colors"
+            className="zaki-btn zaki-btn-primary"
             onClick={() => {
               onSave(value);
               onClose();
@@ -59,6 +75,6 @@ export function EditInstructionsModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

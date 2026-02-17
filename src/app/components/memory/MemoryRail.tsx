@@ -30,10 +30,14 @@ const typeLabels: Record<string, string> = {
   struggle: "Challenge",
 };
 
-export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, onResolve }: MemoryRailProps) {
+export function MemoryRail({ userId: _userId, memories, memoryMode, position, onDismiss, onResolve }: MemoryRailProps) {
   const [expanded, setExpanded] = useState(false);
   const [processing, setProcessing] = useState(false);
   const { t } = useTranslation();
+  const resolveTypeLabel = (type: string) =>
+    t(`memory.types.${type}`, {
+      defaultValue: typeLabels[type] || type,
+    });
 
   const visibleMemories = memories.slice(0, 3);
   const hasMore = memories.length > visibleMemories.length;
@@ -44,7 +48,6 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
     try {
       await apiRequest(`/api/memory/confirmations/${confirmationId}/confirm`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       onResolve(confirmationId);
     } finally {
@@ -58,7 +61,6 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
     try {
       await apiRequest(`/api/memory/confirmations/${confirmationId}/reject`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       onResolve(confirmationId);
     } finally {
@@ -71,7 +73,6 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
     try {
       await apiRequest(`/api/memory/undo/${id}`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       onResolve(id);
     } finally {
@@ -82,6 +83,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
   return (
     <div
       className="fixed z-30"
+      data-testid="memory-rail"
       style={{
         left: position.left,
         width: position.width,
@@ -109,7 +111,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
             type="button"
             className="text-zaki-muted"
             onClick={onDismiss}
-            aria-label="Dismiss memory rail"
+            aria-label={t("memory.dismissAria")}
           >
             ×
           </button>
@@ -117,7 +119,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
             type="button"
             className="text-zaki-muted"
             onClick={() => setExpanded((prev) => !prev)}
-            aria-label="Toggle memory list"
+            aria-label={t("memory.toggleAria")}
           >
             {expanded ? <ChevronDown className="size-3" /> : <ChevronUp className="size-3" />}
           </button>
@@ -131,7 +133,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
               <div key={memory.id} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-xs text-zaki-muted uppercase tracking-wider">
-                    {typeLabels[memory.type] || memory.type}
+                    {resolveTypeLabel(memory.type)}
                   </div>
                   <div className="text-sm text-zaki-primary">{memory.content}</div>
                   <div className="mt-1 flex items-center gap-3 text-xs text-zaki-muted">
@@ -163,7 +165,7 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
                       >
                         <span className="inline-flex items-center gap-1">
                           <Undo2 className="size-3" />
-                          Undo
+                          {t("memory.undo")}
                         </span>
                       </button>
                     )}
@@ -171,13 +173,15 @@ export function MemoryRail({ userId, memories, memoryMode, position, onDismiss, 
                 </div>
                 {memoryMode === "manual" && (
                   <span className="rounded-full bg-zaki-hover px-2 py-0.5 text-[10px] text-zaki-muted">
-                    Pending
+                    {t("memory.pending")}
                   </span>
                 )}
               </div>
             ))}
             {hasMore && (
-              <div className="text-2xs text-zaki-muted">+{memories.length - visibleMemories.length} more</div>
+              <div className="text-2xs text-zaki-muted">
+                +{memories.length - visibleMemories.length} {t("memory.more")}
+              </div>
             )}
           </div>
           <div className="mt-3 flex items-center justify-between text-2xs text-zaki-muted">

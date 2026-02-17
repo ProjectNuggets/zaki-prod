@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
+import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { MoreVertical, ArrowLeft, ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  MoreVertical,
+  ArrowLeft,
+  ArrowRight,
+  ShieldCheck,
+  Sparkles,
+  Brain,
+  CalendarClock,
+  AlertTriangle,
+  CheckCircle2,
+  X,
+} from "lucide-react";
 import { CenterLogo, LogoArabicOrange } from "../../icons";
 import { useAuthStore } from "@/stores";
 import type { Space } from "@/types";
 import { apiRequest } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface ZakiHomeViewProps {
   primarySpace: Space | null;
   onSendExample: (example: string) => void;
+  onStartConversation: () => void;
   onGoToThread: (spaceId: string, threadId: string) => void;
   onDeleteThread: (threadId: string, spaceId?: string) => void;
 }
@@ -56,6 +70,7 @@ function MissionCard({
   onSelect,
   icon,
   carouselHint,
+  getSlideAriaLabel,
 }: {
   label: string;
   slides: MissionSlide[];
@@ -63,6 +78,7 @@ function MissionCard({
   onSelect: (index: number) => void;
   icon?: React.ReactNode;
   carouselHint: string;
+  getSlideAriaLabel: (index: number) => string;
 }) {
   return (
     <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 shadow-zaki-lg mb-8 dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
@@ -72,12 +88,12 @@ function MissionCard({
           {label}
         </div>
       </div>
-      <div className="px-1 py-2 min-h-[160px] flex flex-col justify-between text-center">
+      <div className="px-1 py-2 min-h-[188px] flex flex-col justify-between text-center">
         <div>
-          <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+          <div className="text-xl md:text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             {slides[activeSlide]?.title}
           </div>
-          <div className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle mt-2">
+          <div className="text-base md:text-lg leading-relaxed text-zaki-secondary dark:text-zaki-dark-subtle mt-3">
             {slides[activeSlide]?.body}
           </div>
         </div>
@@ -92,7 +108,7 @@ function MissionCard({
                   : "w-3 border border-zaki-border-default bg-transparent opacity-60"
               }`}
               onClick={() => onSelect(index)}
-              aria-label={`Mission slide ${index + 1}`}
+              aria-label={getSlideAriaLabel(index + 1)}
             />
           ))}
         </div>
@@ -112,6 +128,7 @@ function ExamplesCard({
   isRtl,
   onNext,
   onSendExample,
+  nextAriaLabel,
 }: {
   label: string;
   ramadanLabel: string;
@@ -120,6 +137,7 @@ function ExamplesCard({
   isRtl: boolean;
   onNext: () => void;
   onSendExample: (example: string) => void;
+  nextAriaLabel: string;
 }) {
   const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
   return (
@@ -140,7 +158,7 @@ function ExamplesCard({
             type="button"
             className="zaki-btn-sm size-10 p-0 border border-zaki bg-white flex items-center justify-center text-zaki-brand hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:bg-[#15100e] dark:text-zaki-brand dark:hover:bg-[#1d1512]"
             onClick={onNext}
-            aria-label="Next examples"
+            aria-label={nextAriaLabel}
           >
             <ArrowIcon className="size-5" />
           </button>
@@ -219,58 +237,127 @@ function MemoryPopover({
   label,
   body,
   latestLabel,
+  closeLabel,
   onClose,
   panelRef,
+  isRtl,
+  panelStyle,
 }: {
   cards: MemoryCard[];
   news: NewsItem[];
   label: string;
   body: string;
   latestLabel: string;
+  closeLabel: string;
   onClose: () => void;
   panelRef: RefObject<HTMLDivElement>;
+  isRtl: boolean;
+  panelStyle: CSSProperties;
 }) {
+  const stageIcons = [Brain, CalendarClock, AlertTriangle, CheckCircle2];
+  const stageClasses = [
+    "border-[#dbe6f5] bg-[#f3f7fd] text-[#3f5f8a] dark:border-[#2d3f56] dark:bg-[#162130] dark:text-[#b9cde9]",
+    "border-[#e8e1cd] bg-[#f9f5e8] text-[#846f3b] dark:border-[#4d442f] dark:bg-[#221d14] dark:text-[#d8c79d]",
+    "border-[#ecd7d1] bg-[#fbf1ee] text-[#8d5144] dark:border-[#503228] dark:bg-[#251714] dark:text-[#e4b9af]",
+    "border-[#d8e9dd] bg-[#eff8f2] text-[#3e7853] dark:border-[#2c4634] dark:bg-[#15231a] dark:text-[#abd4ba]",
+  ];
+
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 mt-3 w-[520px] max-w-[calc(100vw-3rem)] rounded-zaki-2xl border border-zaki bg-zaki-raised shadow-zaki-xl px-6 py-5 z-30"
+      dir={isRtl ? "rtl" : "ltr"}
+      style={panelStyle}
+      className="fixed z-[120]"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted">
-            {label}
-          </div>
-          <div className="mt-2 text-sm text-zaki-secondary max-w-2xl">{body}</div>
-        </div>
-        <button
-          type="button"
-          className="size-8 rounded-full border border-zaki-subtle bg-white text-zaki-muted hover:bg-zaki-hover transition-colors"
-          onClick={onClose}
-          aria-label="Close memory details"
-        >
-          ×
-        </button>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {cards.map((card) => (
-          <div key={card.title} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
-            <div className="text-xs font-semibold text-zaki-primary">{card.title}</div>
-            <div className="text-xs text-zaki-muted mt-1">{card.body}</div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-6">
-        <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider">
-          {latestLabel}
-        </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          {news.map((item) => (
-            <div key={item.title} className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3">
-              <div className="text-2xs text-zaki-muted uppercase tracking-wider">{item.meta}</div>
-              <div className="text-sm text-zaki-primary font-semibold mt-1">{item.title}</div>
-              <div className="text-xs text-zaki-secondary mt-2">{item.body}</div>
+      <div className="overflow-y-auto rounded-[22px] border border-[#e7ddd2] dark:border-[#2e241d] bg-[linear-gradient(160deg,#fffcf8_0%,#fff7ef_100%)] dark:bg-[linear-gradient(160deg,#13100d_0%,#1a1410_100%)] shadow-[0px_26px_60px_rgba(13,11,10,0.24)]">
+        <div className="border-b border-[#eadfce] dark:border-[#2e241d] px-6 py-5">
+          <div className={cn("flex items-start justify-between gap-3", isRtl && "flex-row-reverse text-right")}>
+            <div className={cn(isRtl && "text-right")}>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zaki-muted dark:text-zaki-dark-muted">
+                {label}
+              </div>
+              <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle max-w-3xl leading-relaxed">
+                {body}
+              </div>
             </div>
-          ))}
+            <button
+              type="button"
+              className="size-8 rounded-full border border-[#e2d7ca] dark:border-[#413227] bg-white/85 dark:bg-[#181210] text-zaki-muted dark:text-zaki-dark-muted hover:bg-[#f5eee7] dark:hover:bg-[#241a14] transition-colors"
+              onClick={onClose}
+              aria-label={closeLabel}
+            >
+              <X className="mx-auto size-4" />
+            </button>
+          </div>
+        </div>
+        <div className="grid gap-6 p-6 lg:grid-cols-[1.32fr_0.68fr]">
+          <section className={cn(isRtl && "text-right")}>
+            <div className={cn("flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted", isRtl && "flex-row-reverse justify-end")}>
+              <Sparkles className="size-3.5 text-zaki-brand dark:text-[#ffb38f]" />
+              {label}
+            </div>
+            <div className="mt-3">
+              {cards.map((card, index) => {
+                const Icon = stageIcons[index % stageIcons.length];
+                const style = stageClasses[index % stageClasses.length];
+                return (
+                  <article
+                    key={card.title}
+                    className={cn(
+                      "py-3",
+                      index < cards.length - 1
+                        ? "border-b border-[#eadfce] dark:border-[#2e241d]"
+                        : ""
+                    )}
+                  >
+                    <div className={cn("flex items-start gap-3 w-full", isRtl && "flex-row-reverse text-right")}>
+                      <span className={cn("mt-0.5 inline-flex size-8 items-center justify-center rounded-lg border", style)}>
+                        <Icon className="size-4" />
+                      </span>
+                      <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
+                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {card.title}
+                        </div>
+                        <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle leading-relaxed">
+                          {card.body}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-[#e7ddd2] dark:border-[#2e241d] bg-white/70 dark:bg-[#17120f]/85 px-4 py-4">
+            <div className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted", isRtl && "text-right")}>
+              {latestLabel}
+            </div>
+            <div className="mt-2">
+              {news.map((item, index) => (
+                <article
+                  key={item.title}
+                  className={cn(
+                    "py-3",
+                    index < news.length - 1
+                      ? "border-b border-[#eadfce] dark:border-[#2e241d]"
+                      : "",
+                    isRtl && "text-right"
+                  )}
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                    {item.meta}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {item.title}
+                  </div>
+                  <div className="mt-1.5 text-xs text-zaki-secondary dark:text-zaki-dark-subtle leading-relaxed">
+                    {item.body}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -280,6 +367,7 @@ function MemoryPopover({
 export function ZakiHomeView({
   primarySpace,
   onSendExample,
+  onStartConversation,
   onGoToThread,
   onDeleteThread,
 }: ZakiHomeViewProps) {
@@ -287,8 +375,9 @@ export function ZakiHomeView({
   void onGoToThread;
   void onDeleteThread;
   const { user } = useAuthStore();
-  const displayName = user?.fullName?.trim() || user?.username?.trim() || "there";
   const { t, i18n } = useTranslation();
+  const displayName =
+    user?.fullName?.trim() || user?.username?.trim() || t("home.guestName");
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const [zakiMenuOpen, setZakiMenuOpen] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
@@ -298,6 +387,12 @@ export function ZakiHomeView({
   const menuRef = useRef<HTMLDivElement>(null);
   const memoryPanelRef = useRef<HTMLDivElement>(null);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
+  const [memoryPanelStyle, setMemoryPanelStyle] = useState<CSSProperties>({
+    top: 80,
+    left: 24,
+    width: 680,
+    maxHeight: 560,
+  });
   const zakiExamples = t("empty.examples", { returnObjects: true }) as string[];
   const zakiMissionSlides = t("home.missionSlides", { returnObjects: true }) as MissionSlide[];
   const zakiNews = t("home.news", { returnObjects: true }) as NewsItem[];
@@ -332,6 +427,67 @@ export function ZakiHomeView({
   }, [memoryPanelOpen]);
 
   useEffect(() => {
+    if (!memoryPanelOpen) return;
+    const updatePanelPosition = () => {
+      const button = memoryButtonRef.current;
+      if (!button || typeof window === "undefined") return;
+
+      const viewportPadding = 12;
+      const gap = 10;
+      const buttonRect = button.getBoundingClientRect();
+      const mainRect =
+        document
+          .getElementById("main-content")
+          ?.getBoundingClientRect() ?? {
+          left: viewportPadding,
+          right: window.innerWidth - viewportPadding,
+        };
+
+      const safeLeft = Math.max(viewportPadding, mainRect.left + viewportPadding);
+      const safeRight = Math.min(
+        window.innerWidth - viewportPadding,
+        mainRect.right - viewportPadding
+      );
+      const maxAllowedWidth = Math.max(340, safeRight - safeLeft);
+      const panelWidth = Math.min(680, maxAllowedWidth);
+
+      // Keep the panel attached to the trigger's right edge in both LTR/RTL,
+      // then clamp to the main content bounds so it never slides under sidebar.
+      const preferredLeft = buttonRect.right - panelWidth;
+      const left = Math.min(
+        Math.max(preferredLeft, safeLeft),
+        safeRight - panelWidth
+      );
+
+      const estimatedHeight = 560;
+      const canOpenDown =
+        buttonRect.bottom + gap + estimatedHeight <=
+        window.innerHeight - viewportPadding;
+      const top = canOpenDown
+        ? buttonRect.bottom + gap
+        : Math.max(viewportPadding, buttonRect.top - estimatedHeight - gap);
+      const maxHeight = canOpenDown
+        ? Math.max(320, window.innerHeight - top - viewportPadding)
+        : Math.max(320, buttonRect.top - viewportPadding - gap);
+
+      setMemoryPanelStyle({
+        top: Math.round(top),
+        left: Math.round(left),
+        width: Math.round(panelWidth),
+        maxHeight: Math.round(maxHeight),
+      });
+    };
+
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [memoryPanelOpen]);
+
+  useEffect(() => {
     if (!zakiMenuOpen) return;
     const handleClick = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -345,13 +501,12 @@ export function ZakiHomeView({
   }, [zakiMenuOpen]);
 
   useEffect(() => {
-    const userId = user?.username;
-    if (!userId) return;
-    apiRequest(`/api/memory/conflicts/${userId}`)
+    if (!user?.username) return;
+    apiRequest("/api/memory/status")
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
-        if (data?.count !== undefined) {
-          setConflictCount(data.count);
+        if (data?.conflicts !== undefined) {
+          setConflictCount(Math.max(0, Number(data.conflicts || 0)));
         }
       })
       .catch(() => null);
@@ -408,10 +563,11 @@ export function ZakiHomeView({
             <div className="relative">
               <button
                 type="button"
-                className="text-xs font-semibold text-zaki-brand hover:underline"
+                className="inline-flex items-center gap-1.5 rounded-full border border-zaki-subtle dark:border-[#3a2d22] bg-white/85 dark:bg-[#15100f] px-3 py-1.5 text-xs font-semibold text-zaki-brand dark:text-[#ffb38f] hover:bg-zaki-hover dark:hover:bg-[#1d1512] transition-colors"
                 onClick={() => setMemoryPanelOpen((open) => !open)}
                 ref={memoryButtonRef}
               >
+                <Sparkles className="size-3.5" />
                 {t("home.learnMemory")}
               </button>
               {memoryPanelOpen && (
@@ -422,7 +578,10 @@ export function ZakiHomeView({
                   label={t("home.memoryClarityLabel")}
                   body={t("home.memoryClarityBody")}
                   latestLabel={t("home.latestLabel")}
+                  closeLabel={t("home.closeMemoryDetailsAria")}
                   onClose={() => setMemoryPanelOpen(false)}
+                  isRtl={isRtl}
+                  panelStyle={memoryPanelStyle}
                 />
               )}
             </div>
@@ -434,12 +593,7 @@ export function ZakiHomeView({
             <button
               type="button"
               className="zaki-btn bg-zaki-accent text-white w-full sm:w-auto"
-              onClick={() => {
-                const example = zakiExamples[0];
-                if (example) {
-                  onSendExample(example);
-                }
-              }}
+              onClick={onStartConversation}
             >
               {t("empty.cta")}
             </button>
@@ -452,25 +606,36 @@ export function ZakiHomeView({
             onClick={() => setZakiMenuOpen((open) => !open)}
             aria-haspopup="menu"
             aria-expanded={zakiMenuOpen}
-            aria-label="Home menu"
+            aria-label={t("home.homeMenuAria")}
           >
             <MoreVertical className="size-4" />
           </button>
           {zakiMenuOpen && (
-            <div className="absolute right-0 mt-2 w-40 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1">
+            <div
+              className={cn(
+                "absolute mt-2 w-44 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1",
+                isRtl ? "left-0" : "right-0"
+              )}
+            >
               <button
-                className="w-full text-left px-3 py-2 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md"
+                className={cn(
+                  "w-full px-3 py-2 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md",
+                  isRtl ? "text-right" : "text-left"
+                )}
                 type="button"
                 onClick={() => window.open("https://www.chatzaki.com", "_blank", "noopener,noreferrer")}
               >
-                About ZAKI
+                {t("home.aboutZaki")}
               </button>
               <button
-                className="w-full text-left px-3 py-2 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md"
+                className={cn(
+                  "w-full px-3 py-2 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md",
+                  isRtl ? "text-right" : "text-left"
+                )}
                 type="button"
                 onClick={() => window.open("https://www.novanuggets.com", "_blank", "noopener,noreferrer")}
               >
-                About Nova Nuggets
+                {t("home.aboutNovaNuggets")}
               </button>
             </div>
           )}
@@ -490,6 +655,7 @@ export function ZakiHomeView({
         onSelect={(index) => setActiveSlide(index)}
         icon={<CenterLogo className="size-4" />}
         carouselHint={t("home.missionCarouselHint", { current: activeSlide + 1, total: zakiMissionSlides.length })}
+        getSlideAriaLabel={(index) => t("home.missionSlideAria", { index })}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -501,6 +667,7 @@ export function ZakiHomeView({
           isRtl={isRtl}
           onNext={() => setActiveExampleSet((prev) => (prev + 1) % exampleSets.length)}
           onSendExample={onSendExample}
+          nextAriaLabel={t("home.nextExamplesAria")}
         />
         <CapabilitiesCard
           capabilities={capabilities}

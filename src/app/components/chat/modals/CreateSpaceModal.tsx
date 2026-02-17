@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { File as FileIcon, X } from "lucide-react";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { ModalShell } from "@/app/components/ui/ModalShell";
 
 interface CreateSpaceModalProps {
   isOpen: boolean;
@@ -22,7 +22,6 @@ export function CreateSpaceModal({
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceInstructions, setSpaceInstructions] = useState("");
   const [spaceFiles, setSpaceFiles] = useState<File[]>([]);
-  const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
 
   if (!isOpen) return null;
 
@@ -45,11 +44,29 @@ export function CreateSpaceModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-      <div className="absolute inset-0" onClick={onClose} role="button" aria-label="Close create space" />
-      <div ref={modalRef} className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5">
-        <div className="text-lg font-semibold text-zaki-primary">Create new space</div>
-        <div className="mt-2 text-sm text-zaki-disabled">Organize chats, files, and ideas in one place.</div>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel="Create new space"
+      className="w-[460px]"
+    >
+      <div className="px-6 py-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Create new space</div>
+            <div className="mt-1 text-sm text-zaki-disabled dark:text-zaki-dark-muted">
+              Organize chats, files, and ideas in one place.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="zaki-icon-btn size-9"
+            onClick={onClose}
+            aria-label="Close create space"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
         <div className="mt-5 flex flex-col gap-3">
           <label className="text-xs text-zaki-muted">
             Space name
@@ -136,13 +153,14 @@ export function CreateSpaceModal({
           </button>
           <button
             type="button"
-            className="zaki-btn bg-zaki-secondary text-white hover:bg-zaki-brand transition-[transform,background-color] zaki-pressable"
+            className="zaki-btn zaki-btn-primary zaki-pressable"
             onClick={handleCreate}
+            disabled={spaceName.trim().length === 0}
           >
             Create space
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

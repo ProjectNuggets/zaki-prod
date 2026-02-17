@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { LogoArabicOrange } from "./icons";
 import {
@@ -7,8 +7,22 @@ import {
   requestPasswordReset,
   confirmPasswordReset,
   redeemAccessCode,
+  fetchLegalConsentStatus,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
+
+const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+
+function getInitialLegalPolicyVersion() {
+  if (typeof window !== "undefined") {
+    const value = (
+      window as Window & { __ZAKI_LEGAL_POLICY_VERSION__?: string }
+    ).__ZAKI_LEGAL_POLICY_VERSION__;
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return LEGAL_POLICY_VERSION_FALLBACK;
+}
 
 export function LoginScreen() {
   const { setToken } = useAuthStore();
@@ -26,6 +40,8 @@ export function LoginScreen() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
   const [loginAccessCode, setLoginAccessCode] = useState("");
+  const [loginLegalConsent, setLoginLegalConsent] = useState(false);
+  const [signupLegalConsent, setSignupLegalConsent] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
@@ -33,6 +49,27 @@ export function LoginScreen() {
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [legalPolicyVersion, setLegalPolicyVersion] = useState(
+    getInitialLegalPolicyVersion
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLegalConsentStatus(false)
+      .then(({ data, response }) => {
+        if (cancelled || !response.ok) return;
+        const nextVersion = String(data?.policyVersion || "").trim();
+        if (nextVersion) {
+          setLegalPolicyVersion(nextVersion);
+        }
+      })
+      .catch(() => {
+        // Keep fallback version on network failures.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const clearResetUrl = () => {
     if (typeof window === "undefined") return;
@@ -115,12 +152,18 @@ export function LoginScreen() {
           setError("Passwords do not match.");
           return;
         }
+        if (!signupLegalConsent) {
+          setError("Please accept Terms, Privacy & Compliance to create an account.");
+          return;
+        }
 
         const { data } = await requestPublicSignup({
           email: email.trim(),
           password,
           name: fullName.trim(),
           dateOfBirth: dateOfBirth.trim(),
+          legalConsentAccepted: true,
+          legalPolicyVersion,
         });
         if (!data?.success) {
           setError(data?.error || "Sign up failed. Please check your details and try again.");
@@ -136,9 +179,16 @@ export function LoginScreen() {
         return;
       }
 
+      if (!loginLegalConsent) {
+        setError("Please accept Terms, Privacy & Compliance to continue.");
+        return;
+      }
+
       const { data, response } = await requestLogin({
         username: email.trim() || undefined,
         password,
+        legalConsentAccepted: true,
+        legalPolicyVersion,
       });
       
       if (!response.ok || !data?.valid || !data?.token) {
@@ -174,8 +224,12 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-[28px] border border-zaki dark:border-[#2a2018] bg-zaki-raised dark:bg-[#0F0B0A] shadow-zaki-xl dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] p-8">
+    <div
+      dir="ltr"
+      lang="en"
+      className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] flex items-center justify-center px-4"
+    >
+      <div className="w-full max-w-md rounded-[28px] border border-zaki dark:border-[#2a2018] bg-zaki-raised dark:bg-[#0F0B0A] shadow-zaki-xl dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] p-8 text-left">
         <div className="flex items-center">
           <LogoArabicOrange />
         </div>
@@ -269,6 +323,36 @@ export function LoginScreen() {
             </label>
           )}
 
+          {(mode === "login" || mode === "signup") && (
+            <label className="flex items-start gap-3 rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base/70 dark:bg-[#14100d] px-3 py-3 text-xs font-medium text-zaki-secondary dark:text-[#c9b8a4]">
+              <input
+                type="checkbox"
+                checked={mode === "signup" ? signupLegalConsent : loginLegalConsent}
+                onChange={(event) => {
+                  if (mode === "signup") {
+                    setSignupLegalConsent(event.target.checked);
+                    return;
+                  }
+                  setLoginLegalConsent(event.target.checked);
+                }}
+                className="mt-0.5 size-4 rounded border border-zaki-strong dark:border-[#3a3026] bg-white dark:bg-[#0f0b08] accent-[#D97757]"
+                required
+              />
+              <span className="leading-relaxed">
+                I agree to the{" "}
+                <a
+                  href="/legal"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-zaki-brand hover:underline"
+                >
+                  Terms, Privacy & Compliance
+                </a>
+                .
+              </span>
+            </label>
+          )}
+
           {mode === "login" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
               Activation code (optional)
@@ -357,11 +441,13 @@ export function LoginScreen() {
             disabled={
               isLoading ||
               ((mode === "login" || mode === "signup") && password.length === 0) ||
+              (mode === "login" && !loginLegalConsent) ||
+              (mode === "signup" && !signupLegalConsent) ||
               (mode === "signup" && confirmPassword.length === 0) ||
               (mode === "reset-confirm" &&
                 (resetPassword.length === 0 || resetConfirm.length === 0))
             }
-            className="w-full zaki-btn bg-zaki-primary text-white transition-colors hover:bg-zaki-brand-hover disabled:opacity-60"
+            className="w-full zaki-btn zaki-btn-primary disabled:opacity-60"
           >
             {isLoading
               ? mode === "signup"
@@ -402,9 +488,11 @@ export function LoginScreen() {
               setFullName("");
               setDateOfBirth("");
               setConfirmPassword("");
+              setSignupLegalConsent(false);
             }
             if (mode === "login") {
               setLoginAccessCode("");
+              setLoginLegalConsent(false);
             }
           }}
         >

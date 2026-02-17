@@ -35,7 +35,7 @@ const typeLabels: Record<string, string> = {
   struggle: "Challenge",
 };
 
-export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToastProps) {
+export function MemoryToast({ userId: _userId, memories, onDismiss, position }: MemoryToastProps) {
   const [processedIds, setProcessedIds] = useState<string[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -48,7 +48,6 @@ export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToa
     try {
       await apiRequest(`/api/memory/confirmations/${confirmationId}/confirm`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       setProcessedIds(prev => [...prev, confirmationId]);
     } catch (err) {
@@ -63,7 +62,6 @@ export function MemoryToast({ userId, memories, onDismiss, position }: MemoryToa
     try {
       await apiRequest(`/api/memory/confirmations/${confirmationId}/reject`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       setProcessedIds(prev => [...prev, confirmationId]);
     } catch (err) {

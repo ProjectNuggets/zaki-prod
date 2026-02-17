@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "config:check": "node scripts/validate-runtime-config.js",
     "migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.js",
     "access-code:create": "node scripts/create-access-code.js",
-    "test": "jest --forceExit",
-    "test:watch": "jest --watch"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.mjs --forceExit",
+    "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.mjs --watch"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",

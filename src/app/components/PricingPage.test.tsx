@@ -51,6 +51,20 @@ jest.mock("react-i18next", () => ({
 }));
 
 jest.mock("@/queries", () => ({
+  useBillingConfig: () => ({
+    data: {
+      data: {
+        configured: {
+          stripeEnabled: true,
+          checkoutEnabled: true,
+          portalEnabled: true,
+          cancelEnabled: true,
+          webhookEnabled: true,
+          missing: [],
+        },
+      },
+    },
+  }),
   useEntitlements: () => ({
     data: {
       data: {
@@ -68,9 +82,11 @@ jest.mock("@/queries", () => ({
   }),
   useCheckout: () => ({
     mutateAsync: jest.fn(),
+    isPending: false,
   }),
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
+    isPending: false,
   }),
   useRedeemAccessCode: () => ({
     mutateAsync: jest.fn(),

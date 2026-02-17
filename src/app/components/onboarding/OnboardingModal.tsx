@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import { Sparkles, FolderPlus, Brain, Settings } from "lucide-react";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { cn } from "@/lib/utils";
+import { ModalShell } from "@/app/components/ui/ModalShell";
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -30,7 +30,6 @@ export function OnboardingModal({
   onOpenMemory,
   onOpenSettings,
 }: OnboardingModalProps) {
-  const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
   const [stepIndex, setStepIndex] = useState(0);
 
   const steps: Step[] = useMemo(
@@ -73,14 +72,17 @@ export function OnboardingModal({
   const current = steps[stepIndex]!;
   const Icon = current.icon;
   const isLastStep = stepIndex >= steps.length - 1;
+  const titleId = "onboarding-modal-title";
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 dark:bg-black/65 backdrop-blur-[2px]">
-      <div className="absolute inset-0" onClick={onClose} role="button" aria-label="Close onboarding" />
-      <div
-        ref={modalRef}
-        className="relative w-[680px] max-w-[calc(100%-2rem)] overflow-hidden rounded-[28px] border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#120e0b] shadow-[0px_36px_90px_rgba(15,15,15,0.22)] dark:shadow-[0px_44px_110px_rgba(0,0,0,0.62)]"
-      >
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabelledBy={titleId}
+      className="w-[680px] overflow-hidden rounded-[28px] border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#120e0b] shadow-[0px_36px_90px_rgba(15,15,15,0.22)] dark:shadow-[0px_44px_110px_rgba(0,0,0,0.62)]"
+      containerClassName="z-[70]"
+    >
+      <div className="relative">
         <div className="pointer-events-none absolute -top-20 -right-16 size-56 rounded-full bg-zaki-brand opacity-10 dark:opacity-20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-zaki-accent opacity-10 dark:opacity-20 blur-3xl" />
         <div className="relative border-b border-zaki-subtle dark:border-[#2e241b] bg-[linear-gradient(135deg,#fff7ee_0%,#f6ecdf_65%,#efe5d8_100%)] dark:bg-[linear-gradient(140deg,#21170f_0%,#18120d_58%,#120e0b_100%)] px-6 py-5">
@@ -88,7 +90,7 @@ export function OnboardingModal({
             <Sparkles className="size-3.5 text-zaki-brand" />
             Welcome
           </div>
-          <h2 className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
+          <h2 id={titleId} className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
             Let&apos;s set up your workspace, {userName}
           </h2>
           <p className="mt-1 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
@@ -126,7 +128,7 @@ export function OnboardingModal({
           <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"
-              className="rounded-full px-3 py-2 text-xs text-zaki-muted dark:text-[#b7a18b] hover:text-zaki-primary dark:hover:text-[#efe6d9] transition-colors"
+              className="zaki-btn-sm zaki-btn-ghost"
               onClick={onClose}
             >
               Skip for now
@@ -135,7 +137,7 @@ export function OnboardingModal({
               {stepIndex > 0 && (
                 <button
                   type="button"
-                  className="rounded-full border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1a140f] px-3 py-2 text-xs text-zaki-secondary dark:text-[#d4c2ae] hover:bg-zaki-hover dark:hover:bg-[#221a14] transition-colors"
+                  className="zaki-btn-sm zaki-btn-secondary"
                   onClick={() => setStepIndex((value) => value - 1)}
                 >
                   Back
@@ -143,7 +145,7 @@ export function OnboardingModal({
               )}
               <button
                 type="button"
-                className="rounded-full bg-zaki-brand px-4 py-2 text-xs text-white hover:bg-zaki-brand-hover transition-colors shadow-[0px_10px_24px_rgba(210,68,48,0.28)] dark:shadow-[0px_12px_26px_rgba(210,68,48,0.34)]"
+                className="zaki-btn-sm zaki-btn-primary"
                 onClick={() => {
                   current.onAction();
                   if (isLastStep) {
@@ -159,6 +161,6 @@ export function OnboardingModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

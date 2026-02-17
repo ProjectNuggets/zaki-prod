@@ -9,8 +9,8 @@ interface SpaceDetailViewProps {
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isStreaming: boolean;
-  webSearchEnabled: boolean;
-  onToggleWebSearch: () => void;
+  queryModeEnabled: boolean;
+  onToggleQueryMode: () => void;
   onSend: (text: string, files: File[]) => void;
   onGoToSpaces: () => void;
   onGoToThread: (spaceId: string, threadId: string) => void;
@@ -38,8 +38,8 @@ export function SpaceDetailView({
   attachments,
   setAttachments,
   isStreaming,
-  webSearchEnabled,
-  onToggleWebSearch,
+  queryModeEnabled,
+  onToggleQueryMode,
   onSend,
   onGoToSpaces,
   onGoToThread,
@@ -166,8 +166,8 @@ export function SpaceDetailView({
           attachments={attachments}
           setAttachments={setAttachments}
           isSending={isStreaming}
-          webSearchEnabled={webSearchEnabled}
-          onToggleWebSearch={onToggleWebSearch}
+          queryModeEnabled={queryModeEnabled}
+          onToggleQueryMode={onToggleQueryMode}
         />
       </div>
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

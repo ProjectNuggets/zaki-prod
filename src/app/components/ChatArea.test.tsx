@@ -6,6 +6,7 @@
 import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { ChatArea } from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
@@ -52,16 +53,23 @@ jest.mock("react-i18next", () => ({
 }));
 
 type NavState = {
-  view: "home" | "spaces" | "library" | "space-detail" | "chat";
+  view: "home" | "spaces" | "space-detail" | "chat";
   spaceId: string | null;
   threadId: string | null;
   goHome: () => void;
   goToSpaces: () => void;
-  goToLibrary: () => void;
   goToSpace: (spaceId: string) => void;
   goToThread: (spaceId: string, threadId: string) => void;
   clearThread: () => void;
 };
+
+function renderChatArea() {
+  return render(
+    <MemoryRouter>
+      <ChatArea />
+    </MemoryRouter>
+  );
+}
 
 describe("ChatArea Component", () => {
   let navState: NavState;
@@ -73,7 +81,6 @@ describe("ChatArea Component", () => {
       threadId: null,
       goHome: jest.fn(),
       goToSpaces: jest.fn(),
-      goToLibrary: jest.fn(),
       goToSpace: jest.fn(),
       goToThread: jest.fn(),
       clearThread: jest.fn(),
@@ -95,7 +102,7 @@ describe("ChatArea Component", () => {
     navState.view = "chat";
     navState.threadId = null;
 
-    render(<ChatArea />);
+    renderChatArea();
 
     expect(screen.getByText("empty.headline")).toBeInTheDocument();
   });
@@ -103,7 +110,7 @@ describe("ChatArea Component", () => {
   it("renders ZAKI home view when view=home", () => {
     navState.view = "home";
 
-    render(<ChatArea />);
+    renderChatArea();
 
     expect(screen.getByText("home.quickStartLabel")).toBeInTheDocument();
   });
@@ -118,7 +125,7 @@ describe("ChatArea Component", () => {
       isLoading: false,
     });
 
-    render(<ChatArea />);
+    renderChatArea();
 
     await waitFor(() => {
       expect(screen.getByText("Hello from history")).toBeInTheDocument();

@@ -51,6 +51,22 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_admin_members (
+      email TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'super_admin')),
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_admin_members_active_role
+    ON zaki_admin_members (active, role);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS verification_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -87,6 +103,25 @@ export async function initDb() {
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_last TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS student_verified BOOLEAN DEFAULT FALSE;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS student_verified_at TIMESTAMPTZ;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS legal_consent_at TIMESTAMPTZ;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS legal_consent_version TEXT;");
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS legal_consent_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      policy_version TEXT NOT NULL,
+      source TEXT NOT NULL,
+      consented_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ip_address TEXT,
+      user_agent TEXT
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_legal_consent_events_user
+    ON legal_consent_events (user_id, consented_at DESC);
+  `);
 
   // Shared conversations table
   await pool.query(`
@@ -360,10 +395,39 @@ export async function initDb() {
       ON memory_notifications(user_id, read, created_at DESC) 
       WHERE read = FALSE;
     `);
-    
+
     console.log("[DB] Memory notifications table ready (P0)");
   } catch (err) {
     console.warn("[DB] Memory notifications table creation failed:", err.message);
+  }
+
+  // P0: Persistent undo windows (survives restarts / multi-instance)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS memory_undo_windows (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        memory_id UUID NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_undo_windows_memory_id
+      ON memory_undo_windows(memory_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memory_undo_windows_user_active
+      ON memory_undo_windows(user_id, expires_at DESC)
+      WHERE used_at IS NULL;
+    `);
+
+    console.log("[DB] Memory undo windows table ready (P0)");
+  } catch (err) {
+    console.warn("[DB] Memory undo windows table creation failed:", err.message);
   }
 }
 

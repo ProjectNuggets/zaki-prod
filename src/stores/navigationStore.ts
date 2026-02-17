@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type ViewType = "home" | "spaces" | "library" | "space-detail" | "chat";
+type ViewType = "home" | "spaces" | "space-detail" | "chat";
 
 interface NavigationState {
   view: ViewType;
@@ -12,7 +12,6 @@ interface NavigationStore extends NavigationState {
   // Actions
   goHome: () => void;
   goToSpaces: () => void;
-  goToLibrary: () => void;
   goToSpace: (spaceId: string) => void;
   goToThread: (spaceId: string, threadId: string) => void;
   clearThread: () => void;
@@ -20,7 +19,6 @@ interface NavigationStore extends NavigationState {
   // Computed (using selectors in components)
   showZakiHome: () => boolean;
   showSpacesView: () => boolean;
-  showLibraryView: () => boolean;
   showSpaceDetail: () => boolean;
   showChatView: () => boolean;
 }
@@ -38,10 +36,6 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
     set({ view: "spaces", spaceId: null, threadId: null });
   },
   
-  goToLibrary: () => {
-    set({ view: "library", spaceId: null, threadId: null });
-  },
-  
   goToSpace: (spaceId) => {
     set({ view: "space-detail", spaceId, threadId: null });
   },
@@ -57,7 +51,6 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
   // Computed
   showZakiHome: () => get().view === "home",
   showSpacesView: () => get().view === "spaces",
-  showLibraryView: () => get().view === "library",
   showSpaceDetail: () => get().view === "space-detail",
   showChatView: () => get().view === "chat",
 }));

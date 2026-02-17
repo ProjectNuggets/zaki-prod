@@ -1,19 +1,18 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, X, Zap, ChevronDown } from "lucide-react";
+import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, FileText, X, Zap, ChevronDown, Check } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { cn } from "@/lib/utils";
 import { useBillingPortal, useCheckout, useEntitlements } from "@/queries";
 import { toast } from "sonner";
+import { ModalShell } from "@/app/components/ui/ModalShell";
 
 export function InputArea({
   onSend,
   attachments,
   setAttachments,
   isSending = false,
-  webSearchEnabled = false,
-  onToggleWebSearch,
+  queryModeEnabled = false,
+  onToggleQueryMode,
   memoryMode = "autosave",
   onToggleMemoryMode,
 }: {
@@ -21,8 +20,8 @@ export function InputArea({
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isSending?: boolean;
-  webSearchEnabled?: boolean;
-  onToggleWebSearch?: () => void;
+  queryModeEnabled?: boolean;
+  onToggleQueryMode?: () => void;
   memoryMode?: "autosave" | "manual";
   onToggleMemoryMode?: () => void;
 }) {
@@ -39,7 +38,6 @@ export function InputArea({
   const menuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const upgradeModalRef = useFocusTrap<HTMLDivElement>(upgradeOpen);
   const wasSendingRef = useRef(isSending);
   const { data: entitlementsResult } = useEntitlements();
   const checkout = useCheckout();
@@ -51,6 +49,7 @@ export function InputArea({
     ["active", "trialing", "past_due"].includes(planStatus);
   const isPersonal =
     planTier === "personal" && ["active", "trialing", "past_due"].includes(planStatus);
+  const canToggleQueryMode = typeof onToggleQueryMode === "function";
 
   const gateProFeature = () => {
     setMenuOpen(false);
@@ -144,99 +143,103 @@ export function InputArea({
     }
   }, [inputValue]);
 
-  const upgradeModal =
-    upgradeOpen && typeof document !== "undefined"
-      ? createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[1px]">
-            <div className="absolute inset-0" onClick={() => setUpgradeOpen(false)} role="button" aria-label="Close upgrade" />
-            <div
-              ref={upgradeModalRef}
-              dir={isRtl ? "rtl" : "ltr"}
+  const handleToggleQueryMode = () => {
+    if (!canToggleQueryMode) return;
+    onToggleQueryMode?.();
+    setMenuOpen(false);
+    if (queryModeEnabled) {
+      toast.success(t("input.queryMode.offToast"));
+      return;
+    }
+    toast.info(t("input.queryMode.onToast"));
+  };
+
+  const upgradeModal = (
+    <ModalShell
+      isOpen={upgradeOpen}
+      onClose={() => setUpgradeOpen(false)}
+      ariaLabel={t("billing.upgradeTitle")}
+      className={cn("w-[420px] px-6 py-5", isRtl ? "text-right" : "text-left")}
+    >
+      <div dir={isRtl ? "rtl" : "ltr"}>
+        <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+          {t("billing.upgradeTitle")}
+        </div>
+        <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
+          {t("billing.upgradeSubtitle")}
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          {[
+            {
+              tier: "student",
+              label: t("billing.plans.student.label"),
+              price: t("billing.plans.student.price"),
+              desc: t("billing.plans.student.desc"),
+            },
+            {
+              tier: "personal",
+              label: t("billing.plans.personal.label"),
+              price: t("billing.plans.personal.price"),
+              desc: t("billing.plans.personal.desc"),
+            },
+          ].map((plan) => (
+            <button
+              key={plan.tier}
+              type="button"
               className={cn(
-                "relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5",
-                isRtl ? "text-right" : "text-left"
+                "w-full rounded-zaki-lg border px-4 py-3 transition-colors",
+                isRtl ? "text-right" : "text-left",
+                plan.tier === planTier
+                  ? "border-zaki-brand bg-zaki-brand/10"
+                  : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
               )}
+              onClick={async () => {
+                try {
+                  await checkout.mutateAsync(plan.tier as "student" | "personal");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Checkout failed");
+                }
+              }}
             >
-              <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                {t("billing.upgradeTitle")}
+              <div className={cn("flex items-center justify-between", isRtl && "flex-row-reverse")}>
+                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                  {plan.label}
+                </div>
+                <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">{plan.price}</div>
               </div>
-              <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
-                {t("billing.upgradeSubtitle")}
+              <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                {plan.desc}
               </div>
+            </button>
+          ))}
+        </div>
 
-              <div className="mt-4 grid gap-3">
-                {[
-                  {
-                    tier: "student",
-                    label: t("billing.plans.student.label"),
-                    price: t("billing.plans.student.price"),
-                    desc: t("billing.plans.student.desc"),
-                  },
-                  {
-                    tier: "personal",
-                    label: t("billing.plans.personal.label"),
-                    price: t("billing.plans.personal.price"),
-                    desc: t("billing.plans.personal.desc"),
-                  },
-                ].map((plan) => (
-                  <button
-                    key={plan.tier}
-                    type="button"
-                    className={cn(
-                      "w-full rounded-zaki-lg border px-4 py-3 transition-colors",
-                      isRtl ? "text-right" : "text-left",
-                      plan.tier === planTier
-                        ? "border-zaki-brand bg-zaki-brand/10"
-                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
-                    )}
-                    onClick={async () => {
-                      try {
-                        await checkout.mutateAsync(plan.tier as "student" | "personal");
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Checkout failed");
-                      }
-                    }}
-                  >
-                    <div className={cn("flex items-center justify-between", isRtl && "flex-row-reverse")}>
-                      <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                        {plan.label}
-                      </div>
-                      <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">{plan.price}</div>
-                    </div>
-                    <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-                      {plan.desc}
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className={cn("mt-5 flex items-center justify-between", isRtl && "flex-row-reverse")}>
-                <button
-                  type="button"
-                  className="text-xs text-zaki-muted hover:text-zaki-primary transition-colors"
-                  onClick={() => setUpgradeOpen(false)}
-                >
-                  {t("billing.notNow")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full px-4 py-2 text-sm text-white bg-zaki-brand hover:bg-zaki-brand-hover transition-colors"
-                  onClick={async () => {
-                    try {
-                      await portal.mutateAsync();
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
-                    }
-                  }}
-                >
-                  {t("billing.managePlan")}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
+        <div className={cn("mt-5 flex items-center justify-between", isRtl && "flex-row-reverse")}>
+          <button
+            type="button"
+            className="zaki-btn-sm zaki-btn-ghost"
+            onClick={() => setUpgradeOpen(false)}
+          >
+            {t("billing.notNow")}
+          </button>
+          <button
+            type="button"
+            className="zaki-btn zaki-btn-primary"
+            onClick={async () => {
+              try {
+                await portal.mutateAsync();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+              }
+            }}
+          >
+            {t("billing.managePlan")}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
 
   return (
     <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
@@ -396,7 +399,7 @@ export function InputArea({
               onClick={() => setMenuOpen((open) => !open)}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-label="Add options"
+              aria-label={t("input.menu.addOptions")}
             >
               <Plus className="size-4 text-zaki-muted" />
             </button>
@@ -405,6 +408,28 @@ export function InputArea({
                 className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
                 role="menu"
               >
+                <button
+                  className={cn(
+                    "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
+                    queryModeEnabled
+                      ? "bg-zaki-accent/10 text-zaki-primary"
+                      : "text-zaki-primary hover:bg-zaki-hover",
+                    !canToggleQueryMode && "opacity-60 cursor-not-allowed"
+                  )}
+                  type="button"
+                  role="menuitem"
+                  onClick={handleToggleQueryMode}
+                  disabled={!canToggleQueryMode}
+                >
+                  <FileText className="size-4 text-zaki-muted" />
+                  {t("input.queryMode.label")}
+                  {queryModeEnabled ? (
+                    <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full bg-zaki-accent/20 px-2 py-0.5 text-[10px] font-semibold text-zaki-accent", isRtl && "ml-0 mr-auto")}>
+                      <Check className="size-3" />
+                      {t("input.queryMode.onBadge")}
+                    </span>
+                  ) : null}
+                </button>
                 <button
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                   type="button"
@@ -418,7 +443,7 @@ export function InputArea({
                   }}
                 >
                   <Sparkles className="size-4 text-zaki-muted" />
-                  Generate image
+                  {t("input.menu.generateImage")}
                   <span className={proBadgeClass}>{t("billing.proBadge")}</span>
                 </button>
                 <button
@@ -431,23 +456,7 @@ export function InputArea({
                   }}
                 >
                   <Paperclip className="size-4 text-zaki-muted" />
-                  Upload image or file
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (!isPersonal) {
-                      gateProFeature();
-                      return;
-                    }
-                    setMenuOpen(false);
-                  }}
-                >
-                  <Search className="size-4 text-zaki-muted" />
-                  Deep research
-                  <span className={proBadgeClass}>{t("billing.proBadge")}</span>
+                  {t("input.menu.uploadFile")}
                 </button>
                 <button
                   className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
@@ -462,7 +471,7 @@ export function InputArea({
                   }}
                 >
                   <Bot className="size-4 text-zaki-muted" />
-                  Agent mode
+                  {t("input.menu.agentMode")}
                   <span className={proBadgeClass}>{t("billing.proBadge")}</span>
                 </button>
                 <button
@@ -472,25 +481,28 @@ export function InputArea({
                   onClick={() => setMenuOpen(false)}
                 >
                   <GraduationCap className="size-4 text-zaki-muted" />
-                  Study and learn
+                  {t("input.menu.studyLearn")}
                 </button>
               </div>
             )}
           </div>
           <button
             type="button"
-            onClick={onToggleWebSearch}
-            className={cn(
-              "size-9 rounded-xl flex items-center justify-center border transition-colors",
-              webSearchEnabled
-                ? "bg-zaki-accent/15 border-zaki-accent/30 text-zaki-accent"
-                : "bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
-            )}
-            aria-pressed={webSearchEnabled}
-            aria-label="Toggle web search"
+            onClick={() => toast.info(t("input.webSearch.soonToast"))}
+            className="group relative size-9 rounded-xl flex items-center justify-center border transition-colors bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
+            aria-label={t("input.webSearch.ariaLabel")}
+            title={t("input.webSearch.soonTitle")}
           >
             <Search className="size-4" />
+            <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted">
+              {t("input.webSearch.soonPill")}
+            </span>
           </button>
+          {queryModeEnabled ? (
+            <span className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent">
+              {t("input.queryMode.activePill")}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={onToggleMemoryMode}
@@ -498,11 +510,19 @@ export function InputArea({
               "flex items-center gap-2 rounded-xl border px-3 py-1 text-2xs transition-colors",
               "bg-[#f6eee4] border-[#ead7c1] text-zaki-secondary hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-subtle dark:hover:bg-zaki-dark-hover"
             )}
-            title={memoryMode === "autosave" ? "Auto-save memories with 3s undo" : "Manually confirm each memory"}
+            title={
+              memoryMode === "autosave"
+                ? t("input.memoryMode.autosaveHint")
+                : t("input.memoryMode.manualHint")
+            }
           >
-            <span className="text-zaki-muted">Memory</span>
+            <span className="text-zaki-muted">{t("input.memoryMode.label")}</span>
             <span className="h-4 w-px bg-[#e4d6c4] dark:bg-zaki-dark-hover" />
-            <span className="capitalize">{memoryMode === "autosave" ? "Auto" : "Manual"}</span>
+            <span className="capitalize">
+              {memoryMode === "autosave"
+                ? t("input.memoryMode.auto")
+                : t("input.memoryMode.manual")}
+            </span>
             <ChevronDown className="size-3 text-zaki-muted" />
           </button>
           <span className="flex-1" />
@@ -510,7 +530,7 @@ export function InputArea({
             type="submit"
             className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
             disabled={isSending}
-            aria-label="Send message"
+            aria-label={t("input.sendAria")}
           >
             <ArrowUp className="size-4 text-white" />
           </button>

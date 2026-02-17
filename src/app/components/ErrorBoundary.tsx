@@ -1,5 +1,8 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { buildApiUrl } from '@/lib/api';
+
+const IS_PRODUCTION = import.meta.env.PROD;
 
 interface Props {
   children: ReactNode;
@@ -31,17 +34,26 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private logError(error: Error, errorInfo: ErrorInfo) {
-    // In production, send to error tracking service
-    // Example: Sentry, LogRocket, etc.
-    if (process.env.NODE_ENV === 'production') {
-      // Send to error tracking service
-      console.error('[ErrorBoundary] Production error logged:', {
-        error: error.message,
-        stack: error.stack,
-        componentStack: errorInfo.componentStack,
-        url: window.location.href,
-        timestamp: new Date().toISOString(),
+    if (!IS_PRODUCTION) return;
+
+    const payload = {
+      message: error.message,
+      stack: error.stack ?? null,
+      componentStack: errorInfo.componentStack ?? null,
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      void fetch(buildApiUrl('/api/telemetry/client-error'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
       });
+    } catch {
+      // Ignore telemetry failures.
     }
   }
 
@@ -77,7 +89,7 @@ export class ErrorBoundary extends Component<Props, State> {
               We encountered an unexpected error. Don't worry, your data is safe.
             </p>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <div className="mb-6 p-4 bg-gray-50 rounded-zaki-xl text-left overflow-hidden">
                 <p className="text-xs font-mono text-red-600 mb-2">
                   {this.state.error.message}

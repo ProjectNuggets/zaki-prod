@@ -1,12 +1,13 @@
 /**
  * MemoryModeToggle - User preference for memory handling
  * 
- * Auto-Save (default): Save immediately, 3s undo
+ * Auto-Save (default): Save immediately, short undo window
  * Manual: Stage for confirmation
  */
 
 import { useState, useEffect } from "react";
 import { Brain, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export type MemoryMode = "autosave" | "manual";
@@ -17,12 +18,14 @@ interface MemoryModeToggleProps {
 }
 
 export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-zaki-lg border border-zaki-subtle bg-white p-4">
       <div className="flex items-center gap-2 mb-3">
         <Brain className="h-4 w-4 text-zaki-accent" />
         <span className="text-sm font-medium text-zaki-primary">
-          Memory Mode
+          {t("memoryPanel.mode.title")}
         </span>
       </div>
       
@@ -48,10 +51,10 @@ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
                 "text-sm font-medium",
                 value === "autosave" ? "text-zaki-accent" : "text-zaki-secondary"
               )}>
-                Auto-Save
+                {t("memoryPanel.mode.autosave")}
               </p>
               <p className="text-2xs text-zaki-muted mt-1">
-                Save instantly, 3s undo
+                {t("memoryPanel.mode.autosaveHint")}
               </p>
             </div>
           </div>
@@ -81,10 +84,10 @@ export function MemoryModeToggle({ value, onChange }: MemoryModeToggleProps) {
                 "text-sm font-medium",
                 value === "manual" ? "text-zaki-brand" : "text-zaki-secondary"
               )}>
-                Manual
+                {t("memoryPanel.mode.manual")}
               </p>
               <p className="text-2xs text-zaki-muted mt-1">
-                Confirm each memory
+                {t("memoryPanel.mode.manualHint")}
               </p>
             </div>
           </div>

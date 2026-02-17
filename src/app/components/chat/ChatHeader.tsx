@@ -46,7 +46,7 @@ export function ChatHeader({
             <button
               type="button"
               onClick={onRegenerate}
-              className="size-8 flex items-center justify-center rounded-lg text-zaki-muted hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
+              className="zaki-icon-btn size-8 rounded-lg"
               aria-label="Regenerate"
             >
               <svg
@@ -68,7 +68,7 @@ export function ChatHeader({
             <button
               type="button"
               onClick={handleCopy}
-              className="size-8 flex items-center justify-center rounded-lg text-zaki-muted hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
+              className="zaki-icon-btn size-8 rounded-lg"
               aria-label={copied ? "Copied" : "Copy"}
             >
               {copied ? (
@@ -85,8 +85,8 @@ export function ChatHeader({
             <button
               type="button"
               onClick={onShare}
-              className={`size-8 flex items-center justify-center rounded-lg transition-colors ${
-                shareOpen ? "bg-zaki-hover text-zaki-brand" : "text-zaki-muted hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover"
+              className={`zaki-icon-btn size-8 rounded-lg transition-colors ${
+                shareOpen ? "bg-zaki-hover text-zaki-brand border-zaki" : ""
               }`}
               aria-label="Share"
               aria-expanded={shareOpen}
@@ -99,8 +99,8 @@ export function ChatHeader({
             <button
               type="button"
               onClick={onMenuToggle}
-              className={`size-8 flex items-center justify-center rounded-lg transition-colors ${
-                menuOpen ? "bg-zaki-hover text-zaki-brand" : "text-zaki-muted hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover"
+              className={`zaki-icon-btn size-8 rounded-lg transition-colors ${
+                menuOpen ? "bg-zaki-hover text-zaki-brand border-zaki" : ""
               }`}
               aria-label="Menu"
               aria-expanded={menuOpen}

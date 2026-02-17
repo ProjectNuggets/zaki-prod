@@ -1,13 +1,13 @@
 /**
  * Auto-Save with Undo
  * 
- * S-tier UX: Save immediately, allow 3-second undo
+ * S-tier UX: Save immediately, allow short undo window
  */
 
 import { storeMemory, deleteMemory, findConflict, createConflict } from "./operations.js";
+import { dbGet, dbQuery } from "../db.js";
 
-// Simple in-memory undo buffer (3-second TTL)
-const undoBuffer = new Map();
+const UNDO_WINDOW_MS = 8000;
 
 export async function autoSaveWithUndo({ userId, message, threadId = null }) {
   // Extract facts
@@ -62,18 +62,26 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
       if (result.duplicate) {
         duplicates.push({ content: fact.content, type: fact.type });
       } else {
+        const expiresAt = new Date(Date.now() + UNDO_WINDOW_MS).toISOString();
         saved.push({
           id: result.id,
           content: fact.content,
           type: fact.type,
-          undoUntil: Date.now() + 3000, // 3 seconds
+          undoUntil: Date.parse(expiresAt),
         });
-        
-        // Add to undo buffer
-        undoBuffer.set(result.id, {
-          userId,
-          expiresAt: Date.now() + 3000,
-        });
+
+        // Persist undo window for multi-instance reliability.
+        await dbQuery(
+          `INSERT INTO memory_undo_windows (memory_id, user_id, expires_at, used_at, created_at)
+           VALUES ($1, $2, $3, NULL, NOW())
+           ON CONFLICT (memory_id)
+           DO UPDATE SET
+             user_id = EXCLUDED.user_id,
+             expires_at = EXCLUDED.expires_at,
+             used_at = NULL,
+             created_at = NOW()`,
+          [result.id, userId, expiresAt]
+        );
       }
     } catch (err) {
       console.warn("[AutoSave] Failed:", err.message);
@@ -84,34 +92,53 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
 }
 
 export async function undoMemory({ userId, memoryId }) {
-  const bufferEntry = undoBuffer.get(memoryId);
-  
-  if (!bufferEntry) {
+  const windowRow = await dbGet(
+    `SELECT memory_id, user_id, expires_at, used_at
+     FROM memory_undo_windows
+     WHERE memory_id = $1`,
+    [memoryId]
+  );
+
+  if (!windowRow) {
     return { error: "Undo expired or not found", success: false };
   }
-  
-  if (bufferEntry.userId !== userId) {
+
+  if (String(windowRow.user_id || "") !== String(userId || "")) {
     return { error: "Unauthorized", success: false };
   }
-  
-  if (Date.now() > bufferEntry.expiresAt) {
-    undoBuffer.delete(memoryId);
+
+  if (windowRow.used_at) {
+    return { error: "Undo expired or not found", success: false };
+  }
+
+  const expiresAt = Date.parse(String(windowRow.expires_at || ""));
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+    await dbQuery(
+      `UPDATE memory_undo_windows
+       SET used_at = NOW()
+       WHERE memory_id = $1 AND used_at IS NULL`,
+      [memoryId]
+    );
     return { error: "Undo window expired", success: false };
   }
-  
-  // Delete the memory
-  await deleteMemory(memoryId, userId);
-  undoBuffer.delete(memoryId);
-  
+
+  const deleted = await deleteMemory(memoryId, userId);
+  if (!deleted) {
+    await dbQuery(
+      `UPDATE memory_undo_windows
+       SET used_at = NOW()
+       WHERE memory_id = $1 AND used_at IS NULL`,
+      [memoryId]
+    );
+    return { error: "Memory not found", success: false };
+  }
+
+  await dbQuery(
+    `UPDATE memory_undo_windows
+     SET used_at = NOW()
+     WHERE memory_id = $1 AND used_at IS NULL`,
+    [memoryId]
+  );
+
   return { success: true };
 }
-
-// Cleanup expired entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, entry] of undoBuffer.entries()) {
-    if (now > entry.expiresAt) {
-      undoBuffer.delete(id);
-    }
-  }
-}, 5000);

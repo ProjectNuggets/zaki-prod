@@ -25,7 +25,7 @@ interface AutoSaveToastProps {
 
 const UNDO_DURATION = 3000; // 3 seconds
 
-export function AutoSaveToast({ userId, memories, onDismiss, position, progress: progressOverride }: AutoSaveToastProps) {
+export function AutoSaveToast({ userId: _userId, memories, onDismiss, position, progress: progressOverride }: AutoSaveToastProps) {
   const [undoneIds, setUndoneIds] = useState<string[]>([]);
   const [progress, setProgress] = useState(100);
   const [isUndoing, setIsUndoing] = useState(false);
@@ -42,7 +42,6 @@ export function AutoSaveToast({ userId, memories, onDismiss, position, progress:
     try {
       await apiRequest(`/api/memory/undo/${id}`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       setUndoneIds(prev => [...prev, id]);
     } catch (err) {
@@ -50,7 +49,7 @@ export function AutoSaveToast({ userId, memories, onDismiss, position, progress:
     } finally {
       setIsUndoing(false);
     }
-  }, [userId, isUndoing]);
+  }, [isUndoing]);
 
   // 3-second countdown
   useEffect(() => {

@@ -6,20 +6,103 @@
   "settings": {
     "language": "Language"
   },
+  "settingsModal": {
+    "aria": {
+      "label": "Settings",
+      "close": "Close settings"
+    },
+    "header": {
+      "title": "Settings",
+      "subtitle": "Profile, preferences, and data controls"
+    },
+    "sections": {
+      "profile": "Profile",
+      "preferences": "Preferences",
+      "planBilling": "Plan & Billing",
+      "dataPrivacy": "Data & Privacy"
+    },
+    "profile": {
+      "displayName": "Display name",
+      "email": "Email"
+    },
+    "preferences": {
+      "theme": "Theme",
+      "themeOptions": {
+        "light": "Light",
+        "dark": "Dark",
+        "system": "System"
+      }
+    },
+    "plan": {
+      "currentPlan": "Current plan",
+      "status": "Status",
+      "statusValues": {
+        "active": "active",
+        "inactive": "inactive",
+        "trialing": "trialing",
+        "past_due": "past due",
+        "canceled": "canceled",
+        "unpaid": "unpaid"
+      },
+      "activeViaAccessCode": "Active via access code",
+      "until": "until",
+      "viewPricing": "View pricing",
+      "managePlan": "Manage plan",
+      "upgrade": "Upgrade",
+      "cancelSubscription": "Cancel subscription",
+      "cancellationScheduled": "Cancellation scheduled",
+      "billingUnavailable": "Billing is temporarily unavailable. Please contact support.",
+      "cancelAtPeriodEndNote": "Your plan will remain active until the current billing period ends.",
+      "errors": {
+        "billingUnavailable": "Billing is temporarily unavailable.",
+        "portalUnavailable": "Billing portal is temporarily unavailable.",
+        "openPortal": "Unable to open billing portal",
+        "cancelUnavailable": "Subscription cancellation is temporarily unavailable.",
+        "cancelSubscription": "Unable to cancel subscription"
+      },
+      "success": {
+        "cancelAlreadyScheduled": "Cancellation is already scheduled for period end.",
+        "cancelScheduled": "Subscription will cancel at period end."
+      }
+    },
+    "privacy": {
+      "preparingExport": "Preparing export...",
+      "exportAllData": "Export all data",
+      "exportHelper": "Download your chats and files",
+      "deleteAccount": "Delete account",
+      "deleteWarning": "This action cannot be undone",
+      "deletePrompt": "Type your email to confirm permanent account deletion.",
+      "emailPlaceholder": "you@example.com",
+      "keepAccount": "Keep account",
+      "deleting": "Deleting...",
+      "deletePermanently": "Delete permanently",
+      "success": {
+        "exportDownloaded": "Account export downloaded.",
+        "accountDeleted": "Account deleted."
+      },
+      "errors": {
+        "exportData": "Unable to export account data",
+        "deleteAccount": "Unable to delete account"
+      }
+    },
+    "footer": {
+      "changesApplyImmediately": "Changes apply immediately",
+      "cancel": "Cancel",
+      "saveChanges": "Save changes"
+    }
+  },
   "sidebar": {
     "searchPlaceholder": "Search spaces",
     "synced": "Synced {{time}}",
     "nav": {
       "newSpace": "New space",
       "spaces": "Spaces",
-      "library": "Library",
       "search": "Search",
       "newChat": "New chat"
     },
     "section": {
       "space": "Space",
-      "spaces": "Spaces",
-      "library": "Library"
+      "spaces": "Spaces"
     },
     "actions": {
       "createSpace": "Create Space",
@@ -27,9 +110,47 @@
     },
     "empty": {
       "noSpaces": "No spaces yet",
-      "noSpacesHelper": "Create your first space to get started"
+      "noSpacesHelper": "Create your first space to get started",
+      "noSearchResults": "No spaces match your search",
+      "noSearchResultsHelper": "Try a different space or thread name."
     },
-    "spaceSettings": "Space settings"
+    "spaceSettings": "Space settings",
+    "profile": {
+      "defaultName": "User",
+      "manage": "Manage profile",
+      "billingError": "Unable to open billing portal",
+      "saveError": "Unable to save profile",
+      "saveSuccess": "Profile updated",
+      "managePlan": "Manage plan",
+      "upgradePlan": "Upgrade plan",
+      "darkMode": "Dark mode",
+      "on": "On",
+      "off": "Off",
+      "memory": "Memory",
+      "settings": "Settings",
+      "language": "Language",
+      "help": "Need help?",
+      "logout": "Log out",
+      "terms": "v{{version}} · Terms & Conditions",
+      "planBadge": {
+        "free": "FREE",
+        "student": "STUDENT",
+        "personal": "PERSONAL",
+        "pro": "PRO",
+        "codeActive": "CODE ACTIVE"
+      }
+    },
+    "profileEditor": {
+      "dialogAria": "Profile editor",
+      "title": "Profile",
+      "subtitle": "Update your display name and photo",
+      "closeAria": "Close profile editor",
+      "upload": "Upload photo",
+      "displayName": "Display name",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "saving": "Saving..."
+    }
   },
   "empty": {
     "headline": "Ready when you are",
@@ -38,23 +159,30 @@
     "cta": "Start a new chat",
     "ctaHelper": "Next step",
     "examples": [
-      "Turn our recent updates into a confident summary.",
-      "If you were me, what would you do to get better?",
-      "Teach me about [subject] using an interactive, proven method."
+      "Remember this: I prefer concise answers and weekly plans. Start by planning my next 7 days.",
+      "Summarize this meeting into decisions, owners, deadlines, and open risks: [paste notes].",
+      "Use Query mode on my uploaded files and answer: [your question]."
     ]
   },
   "home": {
     "welcome": "Welcome back",
+    "guestName": "there",
     "memoryOn": "Memory is on",
     "memoryOnHelper": "We only store what you approve.",
     "conflictsBadge": "Conflicts {{count}}",
-    "learnMemory": "Learn how memory works",
+    "learnMemory": "See memory pipeline",
     "quickStartLabel": "Quick start",
-    "latestLabel": "Latest from ZAKI",
+    "latestLabel": "Your controls",
     "viewAll": "View all",
+    "closeMemoryDetailsAria": "Close memory details",
+    "nextExamplesAria": "Next examples",
+    "missionSlideAria": "Mission slide {{index}}",
+    "homeMenuAria": "Home menu",
+    "aboutZaki": "About ZAKI",
+    "aboutNovaNuggets": "About Nova Nuggets",
     "missionLabel": "Why we exist",
-    "memoryClarityLabel": "Memory clarity",
-    "memoryClarityBody": "ZAKI only saves what helps you. Review and manage memories anytime.",
+    "memoryClarityLabel": "Memory pipeline",
+    "memoryClarityBody": "ZAKI extracts potential memory from chat, routes it through pending review and conflict checks, then uses only approved memory in future replies.",
     "examplesLabel": "Examples",
     "examplesSets": {
       "default": "Examples",
@@ -67,16 +195,16 @@
     ],
     "quickStart": [
       {
-        "title": "Give me 5 actionable ideas for [problem].",
-        "body": "Get practical, high-impact suggestions in seconds."
+        "title": "Build my weekly execution plan from these priorities: [list].",
+        "body": "Structured plan with focus blocks, risks, and next actions."
       },
       {
-        "title": "Create a 7-day plan for [goal].",
-        "body": "Simple daily steps, prioritized and realistic."
+        "title": "Turn this brainstorm into a launch brief with milestones and owners.",
+        "body": "From raw notes to an actionable launch document."
       },
       {
-        "title": "Draft a professional email for [topic + tone].",
-        "body": "Clear, concise, and ready to send."
+        "title": "Challenge my strategy: find weak points and propose a stronger version.",
+        "body": "Get a sharp critique plus a better plan."
       }
     ],
     "missionSlides": [
@@ -96,24 +224,32 @@
     "missionCarouselHint": "Slide {{current}} of {{total}} • Auto-rotates",
     "news": [
       {
-        "title": "ZAKI Weekly",
-        "body": "Product updates, memory tips, and launch progress.",
-        "meta": "Latest"
+        "title": "Confirm or skip before save",
+        "body": "Pending memories stay in review until you press Remember or Skip.",
+        "meta": "Control"
       },
       {
-        "title": "Behind the memory engine",
-        "body": "A short note on how we keep context private and useful.",
-        "meta": "Blog"
+        "title": "Resolve contradictions explicitly",
+        "body": "When facts clash, ZAKI opens a conflict so you decide: keep existing or use new.",
+        "meta": "Safety"
       }
     ],
     "memoryCards": [
       {
-        "title": "Review saved memories",
-        "body": "Edit or delete anything ZAKI keeps."
+        "title": "Extract useful signals",
+        "body": "ZAKI detects likely facts, preferences, goals, and context from your messages."
       },
       {
-        "title": "You stay in control",
-        "body": "ZAKI asks for confirmation in manual mode."
+        "title": "Queue pending review",
+        "body": "New candidates land in Pending so you can approve or skip each one."
+      },
+      {
+        "title": "Flag conflicts",
+        "body": "If new info contradicts saved memory, ZAKI opens a conflict instead of overwriting silently."
+      },
+      {
+        "title": "Inject approved context",
+        "body": "Only approved memory is used to personalize future responses."
       }
     ],
     "capabilitiesLabel": "Capabilities",
@@ -182,6 +318,34 @@
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
     "upgradeLabel": "Access premium features",
     "upgradeCta": "Upgrade!",
+    "queryMode": {
+      "label": "Query mode",
+      "onBadge": "ON",
+      "activePill": "Query mode",
+      "onToast": "Query mode enabled: answers now use documents uploaded to this space.",
+      "offToast": "Query mode is off. Back to normal chat."
+    },
+    "webSearch": {
+      "ariaLabel": "Web search (coming soon)",
+      "soonPill": "Soon",
+      "soonTitle": "Web search is coming soon",
+      "soonToast": "Web search is coming soon. We are wiring this with NOVA.TYP."
+    },
+    "memoryMode": {
+      "label": "Memory",
+      "auto": "Auto",
+      "manual": "Manual",
+      "autosaveHint": "Auto-save memories with 8s undo",
+      "manualHint": "Manually confirm each memory"
+    },
+    "sendAria": "Send message",
+    "menu": {
+      "addOptions": "Add options",
+      "generateImage": "Generate image",
+      "uploadFile": "Upload image or file",
+      "agentMode": "Agent mode",
+      "studyLearn": "Study and learn"
+    },
     "placeholders": [
       "Ask anything",
       "Summarize our last conversation",
@@ -220,7 +384,9 @@
     "title": "Choose the plan that fits you",
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanPremium": "Manage or switch anytime.",
+    "currentPlanCodeActive": "Access code is active.",
     "currentPlanFree": "Upgrade when you’re ready.",
+    "codeActivePlanLabel": "Code active",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
       "cancel": "Checkout canceled. You can pick a plan anytime.",
@@ -233,7 +399,8 @@
       "trialing": "Trialing",
       "past_due": "Past due",
       "inactive": "Inactive",
-      "canceled": "Canceled"
+      "canceled": "Canceled",
+      "code_active": "Code active"
     },
     "access": {
       "title": "Access code",
@@ -299,7 +466,154 @@
     "skip": "Not now",
     "reviewAll": "Review all memories",
     "open": "Open",
-    "rememberAll": "Remember all"
+    "rememberAll": "Remember all",
+    "undo": "Undo",
+    "pending": "Pending",
+    "more": "more",
+    "dismissAria": "Dismiss memory rail",
+    "toggleAria": "Toggle memory list",
+    "types": {
+      "fact": "Fact",
+      "preference": "Preference",
+      "context": "Context",
+      "episode": "Episode",
+      "emotion": "Emotion",
+      "event": "Event",
+      "goal": "Goal",
+      "relationship": "Relationship",
+      "struggle": "Challenge"
+    }
+  },
+  "memoryPanel": {
+    "title": "Memories to Review",
+    "pendingCount": "{{count}} pending confirmation",
+    "loading": "Loading memories...",
+    "emptyTitle": "All caught up!",
+    "emptyBody": "ZAKI will suggest new memories as you chat.",
+    "confidence": "{{value}}% confidence",
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "forget": "Forget"
+    },
+    "footerLine1": "Confirmed memories help ZAKI understand you better.",
+    "footerLine2": "You can always review and delete memories later.",
+    "mode": {
+      "title": "Memory Mode",
+      "autosave": "Auto-Save",
+      "autosaveHint": "Save instantly, 8s undo",
+      "manual": "Manual",
+      "manualHint": "Confirm each memory"
+    }
+  },
+  "memoryViewer": {
+    "errors": {
+      "fetchPending": "Failed to fetch pending memories",
+      "loadPending": "Failed to load pending memories",
+      "fetchMemories": "Failed to fetch memories",
+      "loadMemories": "Failed to load memories",
+      "fetchConflicts": "Failed to fetch conflicts",
+      "loadConflicts": "Failed to load conflicts",
+      "confirmMemory": "Failed to confirm memory",
+      "rejectMemory": "Failed to reject memory",
+      "resolveConflict": "Failed to resolve conflict",
+      "deleteMemory": "Failed to delete memory",
+      "exportMemories": "Failed to export memories."
+    },
+    "toasts": {
+      "memoryStored": "Memory confirmed and stored.",
+      "memorySkipped": "Pending memory skipped.",
+      "incomingMemorySaved": "Incoming memory saved.",
+      "existingMemoryKept": "Existing memory kept.",
+      "memoryDeleted": "Memory deleted.",
+      "refreshing": "Refreshing memories...",
+      "exported": "Exported {{count}} memories."
+    },
+    "delete": {
+      "confirm": "Delete this memory from your memory bank? This cannot be undone.",
+      "aria": "Delete memory"
+    },
+    "errorCard": {
+      "title": "Failed to load memories",
+      "retry": "Try again"
+    },
+    "pipeline": {
+      "title": "Memory Pipeline",
+      "body": "ZAKI extracts from chat, queues manual reviews, flags contradictions, then stores approved memory for context injection.",
+      "pending": "Pending Review",
+      "stored": "Stored",
+      "conflicts": "Conflicts",
+      "visible": "Visible",
+      "stageExtract": "Extract",
+      "stageReview": "Review",
+      "stageResolve": "Resolve",
+      "stageInject": "Inject in chat"
+    },
+    "tabs": {
+      "memories": "Memories ({{count}})",
+      "pending": "Pending ({{count}})",
+      "conflicts": "Conflicts ({{count}})"
+    },
+    "pending": {
+      "loading": "Loading pending memories...",
+      "emptyTitle": "No pending memories",
+      "emptyBody": "New extractions that require review will show here.",
+      "reviewRequired": "Review required",
+      "confidence": "{{value}}% confidence",
+      "queuedAt": "Queued {{date}} - {{time}}",
+      "queuedRecent": "Queued from latest extraction",
+      "saving": "Saving..."
+    },
+    "conflicts": {
+      "loading": "Loading conflicts...",
+      "emptyTitle": "No conflicts to resolve",
+      "emptyBody": "Your stored memory is consistent.",
+      "cardTitle": "Conflict needs your decision",
+      "detectedAt": "Detected {{date}} - {{time}}",
+      "detectedRecent": "Detected from latest extraction",
+      "currentMemory": "Current Stored Memory",
+      "incomingMemory": "Incoming Memory",
+      "typeLabel": "Type",
+      "unknown": "unknown",
+      "notAvailable": "N/A",
+      "confidence": "Confidence {{value}}%",
+      "help": "Keep existing leaves memory unchanged. Use new replaces the stored version for this fact.",
+      "keepExisting": "Keep existing",
+      "useNew": "Use new memory",
+      "applying": "Applying..."
+    },
+    "memories": {
+      "searchPlaceholder": "Search stored memories",
+      "allTypes": "All types",
+      "shownCount": "{{count}} shown",
+      "emptyFilteredTitle": "No memories match current filters",
+      "emptyTitle": "No stored memories yet",
+      "emptyFilteredBody": "Try a broader search query or reset the type filter.",
+      "emptyBody": "Once confirmed or auto-saved, memories appear here and become available for relevant chat responses.",
+      "storedBadge": "Stored",
+      "threadLabel": "Thread {{id}}",
+      "loadingMore": "Loading more...",
+      "loadMore": "Load more memories"
+    },
+    "footer": {
+      "refresh": "Refresh",
+      "exportJson": "Export JSON"
+    }
+  },
+  "app": {
+    "loadingSession": "Loading session...",
+    "legal": {
+      "title": "Updated terms require your consent",
+      "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",
+      "checkboxPrefix": "I agree to the",
+      "checkboxLink": "Terms, Privacy & Compliance",
+      "errorConsentRequired": "Please accept Terms, Privacy & Compliance to continue.",
+      "errorSaveFailed": "Unable to record consent. Please try again.",
+      "signOut": "Sign out",
+      "saving": "Saving...",
+      "accept": "Accept and continue"
+    }
   },
   "shared": {
     "loading": "Loading conversation...",

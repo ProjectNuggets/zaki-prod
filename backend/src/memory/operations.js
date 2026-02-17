@@ -28,15 +28,108 @@ function normalizeText(value) {
     .trim();
 }
 
+const MAX_STORED_MEMORY_CHARS = 500;
+const MAX_METADATA_JSON_CHARS = 2000;
+const ALLOWED_MEMORY_TYPES = new Set([
+  "context",
+  "fact",
+  "preference",
+  "emotion",
+  "event",
+  "goal",
+  "relationship",
+  "struggle",
+]);
+
+function normalizeStoredContent(value) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= MAX_STORED_MEMORY_CHARS) return normalized;
+  return normalized.slice(0, MAX_STORED_MEMORY_CHARS).trim();
+}
+
+function normalizeStoredType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "context";
+  return ALLOWED_MEMORY_TYPES.has(normalized) ? normalized : "context";
+}
+
+function sanitizeStoredMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return {};
+  }
+  if (!serialized || serialized.length > MAX_METADATA_JSON_CHARS) {
+    return {};
+  }
+
+  const safe = {};
+  if (typeof value.conflictKey === "string" && value.conflictKey.trim()) {
+    safe.conflictKey = value.conflictKey.trim().slice(0, 180);
+  }
+  if (value.polarity !== undefined && value.polarity !== null) {
+    const lower = String(value.polarity).toLowerCase();
+    if (["positive", "negative", "neutral", "1", "-1", "0"].includes(lower)) {
+      safe.polarity = value.polarity;
+    }
+  }
+  if (typeof value.userVerified === "boolean") {
+    safe.userVerified = value.userVerified;
+  }
+  if (typeof value.editedFrom === "string" && value.editedFrom.trim()) {
+    safe.editedFrom = value.editedFrom.trim().slice(0, 120);
+  }
+  return safe;
+}
+
+const EN_UNCOUNTABLE_WORDS = new Set([
+  "news",
+  "series",
+  "species",
+  "chess",
+  "physics",
+  "mathematics",
+  "economics",
+]);
+
+function singularizeEnglishWord(word) {
+  const lower = String(word || "").toLowerCase();
+  if (!/^[a-z]+$/.test(lower)) return word;
+  if (EN_UNCOUNTABLE_WORDS.has(lower)) return lower;
+  if (lower.length <= 3) return lower;
+  if (lower.endsWith("ies") && lower.length > 4) {
+    return `${lower.slice(0, -3)}y`;
+  }
+  if (/(ches|shes|sses|xes|zes)$/.test(lower) && lower.length > 4) {
+    return lower.slice(0, -2);
+  }
+  if (lower.endsWith("s") && !/(ss|us|is)$/.test(lower)) {
+    return lower.slice(0, -1);
+  }
+  return lower;
+}
+
 function normalizePreferenceValue(value) {
   const normalized = normalizeText(value);
   if (!normalized) return normalized;
   const withoutEnglishArticles = normalized.replace(/^(the|a|an)\s+/, "");
-  const arabicWords = withoutEnglishArticles
+  const withoutInfinitivePrefix = withoutEnglishArticles.replace(/^to\s+/, "");
+  const words = withoutInfinitivePrefix
     .split(" ")
     .map((word) => word.replace(/^ال/, ""))
     .filter(Boolean);
-  return arabicWords.join(" ").trim();
+
+  if (words.length === 0) return "";
+
+  const normalizedWords = [...words];
+  normalizedWords[normalizedWords.length - 1] = singularizeEnglishWord(normalizedWords[normalizedWords.length - 1]);
+
+  return normalizedWords.join(" ").trim();
 }
 
 function toPolarity(value) {
@@ -62,12 +155,12 @@ function extractConflictKey(raw) {
     { regex: /^works as\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
     { regex: /i work as\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
     { regex: /my job is\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
-    { regex: /^likes\s+([^.,]+)/i, key: "preference", polarity: 1 },
-    { regex: /^dislikes\s+([^.,]+)/i, key: "preference", polarity: -1 },
+    { regex: /^likes?\s+([^.,]+)/i, key: "preference", polarity: 1 },
+    { regex: /^dislikes?\s+([^.,]+)/i, key: "preference", polarity: -1 },
     { regex: /(?:user|the user)\s+(?:likes|loves|enjoys|prefers)\s+([^.,]+)/i, key: "preference", polarity: 1 },
     { regex: /(?:user|the user)\s+(?:doesn't like|does not like|dislikes|hates)\s+([^.,]+)/i, key: "preference", polarity: -1 },
     { regex: /i (like|love|enjoy|prefer)\s+([^.,]+)/i, key: "preference", polarity: 1 },
-    { regex: /i (dont|don't|do not|dislike|hate)\s+([^.,]+)/i, key: "preference", polarity: -1 },
+    { regex: /i\s+(?:dont like|don't like|do not like|dislike|hate)\s+([^.,]+)/i, key: "preference", polarity: -1 },
     { regex: /my favorite\s+([^.,]+)/i, key: "preference", polarity: 1 },
     { regex: /i am allergic to\s+([^.,]+)/i, key: "constraint", polarity: -1 },
     { regex: /i (cant|can't|cannot) eat\s+([^.,]+)/i, key: "constraint", polarity: -1 },
@@ -136,6 +229,160 @@ function buildConflictFingerprint({ content, conflictKey, polarity }) {
     polarity: toPolarity(polarity ?? fromContent?.polarity ?? 0),
     raw: String(content || "").toLowerCase(),
   };
+}
+
+function buildSemanticMemoryKey(memory) {
+  const metadata = memory?.metadata || {};
+  const fingerprint = buildConflictFingerprint({
+    content: memory?.content,
+    conflictKey: metadata.conflictKey,
+    polarity: metadata.polarity,
+  });
+
+  if (fingerprint?.key) {
+    if (fingerprint.domain === "preference" || fingerprint.domain === "constraint") {
+      return `${fingerprint.key}:${toPolarity(fingerprint.polarity)}`;
+    }
+    if (fingerprint.domain === "identity") {
+      const identityValue = normalizeText(fingerprint.value || "");
+      return identityValue ? `${fingerprint.key}:${identityValue}` : fingerprint.key;
+    }
+    return fingerprint.key;
+  }
+
+  const type = String(memory?.type || "context").toLowerCase();
+  const normalizedContent = normalizeText(memory?.content || "");
+  if (!normalizedContent) return null;
+  return `${type}:${normalizedContent}`;
+}
+
+function dedupeMemoryRows(rows) {
+  const seen = new Set();
+  const deduped = [];
+  for (const row of rows || []) {
+    const key = buildSemanticMemoryKey(row);
+    if (!key) {
+      deduped.push(row);
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
+}
+
+function encodeMemoryCursor(row) {
+  const createdAt = row?.created_at || row?.createdAt;
+  const id = row?.id;
+  if (!createdAt || !id) return null;
+  const raw = `${new Date(createdAt).toISOString()}|${id}`;
+  return Buffer.from(raw, "utf8").toString("base64url");
+}
+
+function decodeMemoryCursor(cursor) {
+  const value = String(cursor || "").trim();
+  if (!value) return null;
+  let decoded = "";
+  try {
+    decoded = Buffer.from(value, "base64url").toString("utf8");
+  } catch {
+    try {
+      decoded = Buffer.from(value, "base64").toString("utf8");
+    } catch {
+      return null;
+    }
+  }
+  const [createdAtRaw, id] = decoded.split("|");
+  const createdAt = new Date(String(createdAtRaw || ""));
+  if (!id || Number.isNaN(createdAt.getTime())) return null;
+  return { createdAt: createdAt.toISOString(), id };
+}
+
+function isSemanticDuplicate({
+  existingFingerprint,
+  incomingFingerprint,
+  existingContent,
+  incomingContent,
+}) {
+  if (!existingFingerprint?.key || !incomingFingerprint?.key) return false;
+  if (existingFingerprint.key !== incomingFingerprint.key) return false;
+
+  if (incomingFingerprint.domain === "preference" || incomingFingerprint.domain === "constraint") {
+    const existingPolarity = toPolarity(existingFingerprint.polarity);
+    const incomingPolarity = toPolarity(incomingFingerprint.polarity);
+    if (existingPolarity && incomingPolarity) {
+      return existingPolarity === incomingPolarity;
+    }
+    // If one side has no explicit polarity but key/value match, treat as duplicate.
+    return true;
+  }
+
+  if (incomingFingerprint.domain === "identity") {
+    if (existingFingerprint.value && incomingFingerprint.value) {
+      return normalizeText(existingFingerprint.value) === normalizeText(incomingFingerprint.value);
+    }
+  }
+
+  return normalizeText(existingContent) === normalizeText(incomingContent);
+}
+
+export async function findDuplicateMemory({
+  userId,
+  content,
+  conflictKey = null,
+  polarity = null,
+}) {
+  const normalizedUserId = normalizeUserId(userId);
+  const normalizedContent = String(content || "").trim();
+  if (!normalizedUserId || !normalizedContent) return null;
+
+  const hash = hashText(normalizedContent);
+  const exact = await dbGet(
+    `SELECT id, content, type, metadata
+     FROM memories
+     WHERE user_id = $1 AND content_hash = $2
+     LIMIT 1`,
+    [normalizedUserId, hash]
+  );
+  if (exact) return exact;
+
+  const incomingFingerprint = buildConflictFingerprint({
+    content: normalizedContent,
+    conflictKey,
+    polarity,
+  });
+  if (!incomingFingerprint?.key) return null;
+
+  const existing = await dbAll(
+    `SELECT id, content, type, metadata
+     FROM memories
+     WHERE user_id = $1
+     ORDER BY created_at DESC
+     LIMIT 300`,
+    [normalizedUserId]
+  );
+
+  for (const row of existing) {
+    const metadata = row.metadata || {};
+    const existingFingerprint = buildConflictFingerprint({
+      content: row.content,
+      conflictKey: metadata.conflictKey,
+      polarity: metadata.polarity,
+    });
+    if (
+      isSemanticDuplicate({
+        existingFingerprint,
+        incomingFingerprint,
+        existingContent: row.content,
+        incomingContent: normalizedContent,
+      })
+    ) {
+      return row;
+    }
+  }
+
+  return null;
 }
 
 function getNovaApiBase() {
@@ -254,11 +501,16 @@ export async function storeMemory({
   metadata = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
-  const hash = hashText(content);
+  const normalizedContent = normalizeStoredContent(content);
+  if (!normalizedUserId || !normalizedContent) {
+    throw new Error("Invalid memory payload.");
+  }
+  const normalizedType = normalizeStoredType(type);
+  const hash = hashText(normalizedContent);
   const isPg = await checkStorage();
-  const resolvedMetadata = metadata ? { ...metadata } : {};
+  const resolvedMetadata = sanitizeStoredMetadata(metadata);
   const normalizedFingerprint = buildConflictFingerprint({
-    content,
+    content: normalizedContent,
     conflictKey: resolvedMetadata.conflictKey,
     polarity: resolvedMetadata.polarity,
   });
@@ -267,25 +519,29 @@ export async function storeMemory({
     resolvedMetadata.polarity = normalizedFingerprint.polarity ?? 0;
   }
   
-  // Check dupes
+  // Check duplicates: exact hash + semantic key/polarity.
   if (isPg) {
-    const existing = await dbGet(
-      "SELECT id FROM memories WHERE user_id = $1 AND content_hash = $2",
-      [normalizedUserId, hash]
-    );
-    if (existing) return { id: existing.id, duplicate: true };
+    const duplicate = await findDuplicateMemory({
+      userId: normalizedUserId,
+      content: normalizedContent,
+      conflictKey: resolvedMetadata.conflictKey,
+      polarity: resolvedMetadata.polarity,
+    });
+    if (duplicate?.id) {
+      return { id: duplicate.id, duplicate: true };
+    }
   }
   
   // Get embeddings (graceful degradation - S-tier)
   let embedding = null;
   try {
-    const result = await getEmbeddings(content);
+    const result = await getEmbeddings(normalizedContent);
     embedding = result.embeddings[0];
   } catch (err) {
     console.warn("[Memory] No embeddings:", err.message);
   }
 
-  const importance = importanceScore || calculateImportance(content, type);
+  const importance = importanceScore || calculateImportance(normalizedContent, normalizedType);
   const id = crypto.randomUUID();
   
   if (isPg) {
@@ -297,9 +553,9 @@ export async function storeMemory({
         [
           id,
           normalizedUserId,
-          content,
+          normalizedContent,
           hash,
-          type,
+          normalizedType,
           `[${embedding.join(",")}]`,
           importance,
           sourceThreadId,
@@ -314,9 +570,9 @@ export async function storeMemory({
         [
           id,
           normalizedUserId,
-          content,
+          normalizedContent,
           hash,
-          type,
+          normalizedType,
           importance,
           sourceThreadId,
           resolvedMetadata,
@@ -337,13 +593,44 @@ export async function deleteMemory(id, userId) {
   return result.rowCount > 0;
 }
 
-export async function getMemories(userId) {
+export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
   const normalizedUserId = normalizeUserId(userId);
-  return await dbAll(
-    `SELECT id, content, type, content_hash, metadata, created_at, importance_score as importance, source_thread_id as "threadId"
-     FROM memories WHERE user_id = $1 ORDER BY created_at DESC`,
-    [normalizedUserId]
-  );
+  const pageLimit = Math.max(1, Math.min(100, Number(limit) || 100));
+  const cursorValue = decodeMemoryCursor(cursor);
+  const fetchLimit = Math.min(pageLimit * 3, 300);
+
+  const rows = cursorValue
+    ? await dbAll(
+        `SELECT id, content, type, content_hash, metadata, created_at, importance_score as importance, source_thread_id as "threadId"
+         FROM memories
+         WHERE user_id = $1
+           AND (
+             created_at < $2::timestamptz
+             OR (created_at = $2::timestamptz AND id < $3)
+           )
+         ORDER BY created_at DESC, id DESC
+         LIMIT $4`,
+        [normalizedUserId, cursorValue.createdAt, cursorValue.id, fetchLimit]
+      )
+    : await dbAll(
+        `SELECT id, content, type, content_hash, metadata, created_at, importance_score as importance, source_thread_id as "threadId"
+         FROM memories
+         WHERE user_id = $1
+         ORDER BY created_at DESC, id DESC
+         LIMIT $2`,
+        [normalizedUserId, fetchLimit]
+      );
+
+  const deduped = dedupeMemoryRows(rows);
+  const page = deduped.slice(0, pageLimit);
+  const hasMore = deduped.length > pageLimit || rows.length >= fetchLimit;
+  const last = page[page.length - 1];
+
+  return {
+    memories: page,
+    nextCursor: hasMore && last ? encodeMemoryCursor(last) : null,
+    hasMore,
+  };
 }
 
 // ============================================================================
@@ -360,6 +647,58 @@ export async function stageMemory({
   polarity = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
+  const normalizedContent = normalizeStoredContent(content);
+  if (!normalizedUserId || !normalizedContent) {
+    return { error: "Invalid memory payload." };
+  }
+  const normalizedType = normalizeStoredType(type);
+  const normalizedFingerprint = buildConflictFingerprint({
+    content: normalizedContent,
+    conflictKey,
+    polarity,
+  });
+  const normalizedConflictKey = normalizedFingerprint?.key || conflictKey || null;
+  const normalizedPolarity =
+    normalizedFingerprint?.polarity !== undefined &&
+    normalizedFingerprint?.polarity !== null
+      ? normalizedFingerprint.polarity
+      : polarity;
+
+  // Dedupe pending queue entries so "preview/manual" doesn't stack duplicates.
+  const existingPending = await dbAll(
+    `SELECT id, content, conflict_key, polarity
+     FROM memory_confirmations
+     WHERE user_id = $1 AND status = 'pending'
+     ORDER BY created_at DESC
+     LIMIT 200`,
+    [normalizedUserId]
+  );
+  const incomingFingerprint = buildConflictFingerprint({
+    content: normalizedContent,
+    conflictKey: normalizedConflictKey,
+    polarity: normalizedPolarity,
+  });
+  for (const row of existingPending) {
+    const existingFingerprint = buildConflictFingerprint({
+      content: row.content,
+      conflictKey: row.conflict_key,
+      polarity: row.polarity,
+    });
+    if (
+      isSemanticDuplicate({
+        existingFingerprint,
+        incomingFingerprint,
+        existingContent: row.content,
+        incomingContent: normalizedContent,
+      })
+    ) {
+      return { id: row.id, status: "pending", duplicate: true };
+    }
+    if (normalizeText(row.content) === normalizeText(normalizedContent)) {
+      return { id: row.id, status: "pending", duplicate: true };
+    }
+  }
+
   const id = crypto.randomUUID();
   await dbQuery(
     `INSERT INTO memory_confirmations 
@@ -368,12 +707,12 @@ export async function stageMemory({
     [
       id,
       normalizedUserId,
-      content,
-      type,
+      normalizedContent,
+      normalizedType,
       sourceThreadId,
       null,
-      conflictKey,
-      polarity,
+      normalizedConflictKey,
+      normalizedPolarity,
       confidenceScore,
     ]
   );
@@ -388,6 +727,17 @@ export async function getPendingConfirmations(userId, limit = 50) {
      ORDER BY created_at DESC LIMIT $2`,
     [normalizedUserId, limit]
   );
+}
+
+export async function getPendingConfirmationCount(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  const row = await dbGet(
+    `SELECT COUNT(*)::int AS count
+     FROM memory_confirmations
+     WHERE user_id = $1 AND status = 'pending'`,
+    [normalizedUserId]
+  );
+  return Number(row?.count || 0);
 }
 
 export async function confirmMemory(confirmationId, userId) {
@@ -515,6 +865,31 @@ export async function createConflict({
   conflictMemory,
 }) {
   const normalizedUserId = normalizeUserId(userId);
+  const normalizedNewContent = normalizeStoredContent(newContent);
+  if (!normalizedUserId || !normalizedNewContent) {
+    throw new Error("Invalid conflict payload.");
+  }
+
+  // Dedupe pending conflicts for the same user/fact pair.
+  const pendingConflicts = await dbAll(
+    `SELECT id, new_content, conflicting_memory_id
+     FROM memory_conflicts
+     WHERE user_id = $1 AND status = 'pending'
+     ORDER BY created_at DESC
+     LIMIT 200`,
+    [normalizedUserId]
+  );
+  for (const row of pendingConflicts) {
+    const sameConflictMemory =
+      String(row.conflicting_memory_id || "") ===
+      String(conflictMemory?.memoryId || "");
+    const sameContent =
+      normalizeText(row.new_content || "") === normalizeText(normalizedNewContent);
+    if (sameConflictMemory && sameContent) {
+      return { id: row.id, duplicate: true };
+    }
+  }
+
   const id = crypto.randomUUID();
   await dbQuery(
     `INSERT INTO memory_conflicts
@@ -523,8 +898,8 @@ export async function createConflict({
     [
       id,
       normalizedUserId,
-      newContent,
-      newType,
+      normalizedNewContent,
+      normalizeStoredType(newType),
       newConfidenceScore,
       conflictMemory?.memoryId || null,
       conflictMemory?.content || null,
@@ -545,6 +920,17 @@ export async function getConflicts(userId, limit = 50) {
      LIMIT $2`,
     [normalizedUserId, limit]
   );
+}
+
+export async function getConflictCount(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  const row = await dbGet(
+    `SELECT COUNT(*)::int AS count
+     FROM memory_conflicts
+     WHERE user_id = $1 AND status = 'pending'`,
+    [normalizedUserId]
+  );
+  return Number(row?.count || 0);
 }
 
 export async function resolveConflict({ userId, conflictId, action }) {
@@ -614,6 +1000,8 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
     );
     usedFallback = true;
   }
+
+  memories = dedupeMemoryRows(memories);
   
   if (memories.length === 0) {
     return { context: "", sources: [] };

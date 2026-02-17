@@ -52,6 +52,61 @@
   background: var(--zaki-hover);
 }
 
+.zaki-btn-primary {
+  background: linear-gradient(135deg, var(--zaki-brand) 0%, var(--zaki-primary-800) 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(210, 68, 48, 0.22);
+}
+
+.zaki-btn-primary:hover {
+  background: linear-gradient(135deg, var(--zaki-brand-hover) 0%, var(--zaki-primary-900) 100%);
+  box-shadow: 0 12px 28px rgba(210, 68, 48, 0.28);
+}
+
+.zaki-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.zaki-btn-danger {
+  background: var(--zaki-brand);
+  color: #ffffff;
+  border: 1px solid rgba(210, 68, 48, 0.32);
+}
+
+.zaki-btn-danger:hover {
+  background: var(--zaki-brand-hover);
+}
+
+.zaki-btn-ghost {
+  background: transparent;
+  color: var(--zaki-text-muted);
+  border: 1px solid transparent;
+}
+
+.zaki-btn-ghost:hover {
+  color: var(--zaki-text-primary);
+  background: var(--zaki-hover);
+}
+
+.zaki-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid var(--zaki-border-subtle);
+  background: var(--zaki-surface-base);
+  color: var(--zaki-text-secondary);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.zaki-icon-btn:hover {
+  background: var(--zaki-hover);
+  border-color: var(--zaki-border-default);
+  color: var(--zaki-text-primary);
+}
+
 .dark .zaki-btn-secondary {
   background: var(--zaki-surface-dark-card);
   color: var(--zaki-text-secondary);
@@ -60,6 +115,47 @@
 
 .dark .zaki-btn-secondary:hover {
   background: var(--zaki-surface-dark-elevated);
+}
+
+.dark .zaki-btn-ghost {
+  color: var(--zaki-text-muted);
+}
+
+.dark .zaki-btn-ghost:hover {
+  color: var(--zaki-text-primary);
+}
+
+.dark .zaki-icon-btn {
+  background: var(--zaki-surface-dark-card);
+  border-color: var(--zaki-border-default);
+}
+
+.dark .zaki-icon-btn:hover {
+  background: var(--zaki-surface-dark-elevated);
+}
+
+.zaki-modal-backdrop {
+  background:
+    radial-gradient(circle at 15% 15%, rgba(210, 68, 48, 0.2), transparent 42%),
+    radial-gradient(circle at 85% 85%, rgba(33, 145, 113, 0.18), transparent 38%),
+    rgba(15, 15, 15, 0.44);
+  backdrop-filter: blur(6px);
+}
+
+.zaki-modal-panel {
+  border: 1px solid var(--zaki-border-subtle);
+  background: linear-gradient(155deg, #fffdf9 0%, #fff8ef 62%, #f7efe3 100%);
+  box-shadow:
+    0 24px 60px rgba(15, 15, 15, 0.18),
+    0 3px 12px rgba(15, 15, 15, 0.08);
+}
+
+.dark .zaki-modal-panel {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(150deg, #1d1611 0%, #15100d 60%, #120e0b 100%);
+  box-shadow:
+    0 26px 72px rgba(0, 0, 0, 0.58),
+    0 3px 16px rgba(0, 0, 0, 0.36);
 }
 
 .zaki-main-shell {

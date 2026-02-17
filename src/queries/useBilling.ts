@@ -4,6 +4,7 @@ import {
   createBillingPortal,
   createCheckoutSession,
   deleteAccount,
+  fetchBillingConfig,
   fetchEntitlements,
   redeemAccessCode,
 } from "@/lib/api";
@@ -11,6 +12,7 @@ import { useAuthStore } from "@/stores";
 
 export const billingKeys = {
   entitlements: ["billing", "entitlements"] as const,
+  config: ["billing", "config"] as const,
 };
 
 export function useEntitlements() {
@@ -20,6 +22,17 @@ export function useEntitlements() {
     queryFn: fetchEntitlements,
     enabled: Boolean(token),
     staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useBillingConfig() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: billingKeys.config,
+    queryFn: fetchBillingConfig,
+    enabled: Boolean(token),
+    staleTime: 5 * 60_000,
     retry: false,
   });
 }

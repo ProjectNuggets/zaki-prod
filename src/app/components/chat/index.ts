@@ -17,7 +17,6 @@ export { MemoryConfirmationPanel } from "../memory/MemoryConfirmationPanel";
 export { MemoryToast } from "../memory/MemoryToast";
 
 // Views
-export { LibraryView } from "./views/LibraryView";
 export { SpacesView } from "./views/SpacesView";
 export { ZakiHomeView } from "./views/ZakiHomeView";
 export { SpaceDetailView } from "./views/SpaceDetailView";

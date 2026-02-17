@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, X, Edit2, Brain, Sparkles, Lightbulb, Heart, Target, Users, CloudRain, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
@@ -38,12 +39,14 @@ const typeConfig: Record<string, { icon: typeof Brain; label: string; className:
 };
 
 export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfirmationPanelProps) {
+  const { t, i18n } = useTranslation();
   const [pending, setPending] = useState<PendingMemory[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [memoryMode, setMemoryMode] = useMemoryMode();
+  const isRtl = i18n.language?.toLowerCase().startsWith("ar");
 
   // Fetch pending confirmations
   useEffect(() => {
@@ -52,7 +55,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
     const fetchPending = async () => {
       setLoading(true);
       try {
-        const res = await apiRequest(`/api/memory/confirmations/${userId}`);
+        const res = await apiRequest("/api/memory/confirmations");
         const data = await res.json();
         // Backend returns { confirmations: [...] }, not { pending: [...] }
         setPending(data.confirmations || data.pending || []);
@@ -74,7 +77,6 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
     try {
       await apiRequest(`/api/memory/confirmations/${id}/confirm`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       setPending((prev) => prev.filter((m) => m.id !== id));
     } catch (err) {
@@ -89,7 +91,6 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
     try {
       await apiRequest(`/api/memory/confirmations/${id}/reject`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       setPending((prev) => prev.filter((m) => m.id !== id));
     } catch (err) {
@@ -112,14 +113,12 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
       // Reject original, store edited version
       await apiRequest(`/api/memory/confirmations/${id}/reject`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       });
       
       // Store edited version directly (user-verified)
       await apiRequest("/api/memory", {
         method: "POST",
         body: JSON.stringify({
-          userId,
           content: editValue.trim(),
           type: pending.find((m) => m.id === id)?.type || "context",
           metadata: { userVerified: true, editedFrom: id },
@@ -142,16 +141,16 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
       <div className="w-full max-w-lg max-h-[80vh] bg-white rounded-2xl shadow-[0px_24px_60px_rgba(15,15,15,0.18)] border border-zaki-subtle overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle bg-zaki-base">
-          <div className="flex items-center gap-3">
+          <div className={cn("flex items-center gap-3", isRtl && "flex-row-reverse")}>
             <div className="size-10 rounded-xl bg-gradient-to-br from-zaki-brand to-zaki-primary-500 flex items-center justify-center">
               <Brain className="size-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-zaki-primary">
-                Memories to Review
+                {t("memoryPanel.title")}
               </h2>
               <p className="text-sm text-zaki-muted">
-                {pending.length} pending confirmation{pending.length !== 1 ? "s" : ""}
+                {t("memoryPanel.pendingCount", { count: pending.length })}
               </p>
             </div>
           </div>
@@ -173,16 +172,16 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="size-8 border-2 border-zaki-spinner border-t-zaki-brand rounded-full animate-spin" />
-              <p className="mt-4 text-sm text-zaki-muted">Loading memories...</p>
+              <p className="mt-4 text-sm text-zaki-muted">{t("memoryPanel.loading")}</p>
             </div>
           ) : pending.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="text-4xl mb-3">✨</div>
               <p className="text-zaki-primary dark:text-[#efe6d9] font-medium">
-                All caught up!
+                {t("memoryPanel.emptyTitle")}
               </p>
               <p className="text-sm text-zaki-muted mt-1">
-                ZAKI will suggest new memories as you chat.
+                {t("memoryPanel.emptyBody")}
               </p>
             </div>
           ) : (
@@ -209,10 +208,12 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                       <div className="flex items-center gap-2 mb-3">
                         <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold", config.className)}>
                           <Icon className="size-3.5" />
-                          {config.label}
+                          {t(`memory.types.${memory.type}`, { defaultValue: config.label })}
                         </span>
                         <span className="text-2xs text-zaki-muted">
-                          {Math.round(memory.confidence_score * 100)}% confidence
+                          {t("memoryPanel.confidence", {
+                            value: Math.round(memory.confidence_score * 100),
+                          })}
                         </span>
                       </div>
 
@@ -243,14 +244,14 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                               className="flex-1 zaki-btn bg-zaki-accent hover:bg-zaki-accent-hover text-white disabled:opacity-50"
                             >
                               <Check className="size-4" />
-                              Save
+                              {t("memoryPanel.actions.save")}
                             </button>
                             <button
                               onClick={() => setEditingId(null)}
                               disabled={isLoading}
                               className="zaki-btn-sm border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover transition-colors"
                             >
-                              Cancel
+                              {t("memoryPanel.actions.cancel")}
                             </button>
                           </>
                         ) : (
@@ -261,13 +262,13 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                               className="flex-1 zaki-btn bg-zaki-accent hover:bg-zaki-accent-hover text-white disabled:opacity-50"
                             >
                               <Check className="size-4" />
-                              Remember
+                              {t("memory.remember")}
                             </button>
                             <button
                               onClick={() => startEdit(memory)}
                               disabled={isLoading}
                               className="size-9 flex items-center justify-center rounded-lg border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover transition-colors disabled:opacity-50"
-                              title="Edit"
+                              title={t("memoryPanel.actions.edit")}
                             >
                               <Edit2 className="size-4" />
                             </button>
@@ -275,7 +276,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                               onClick={() => handleReject(memory.id)}
                               disabled={isLoading}
                               className="size-9 flex items-center justify-center rounded-lg border border-zaki-subtle text-zaki-secondary hover:bg-zaki-error hover:text-zaki-brand transition-colors disabled:opacity-50"
-                              title="Forget"
+                              title={t("memoryPanel.actions.forget")}
                             >
                               <X className="size-4" />
                             </button>
@@ -293,9 +294,9 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
         {/* Footer */}
         <div className="px-6 py-3 border-t border-zaki-subtle bg-zaki-base">
           <p className="text-2xs text-zaki-muted text-center">
-            Confirmed memories help ZAKI understand you better.
+            {t("memoryPanel.footerLine1")}
             <br />
-            You can always review and delete memories later.
+            {t("memoryPanel.footerLine2")}
           </p>
         </div>
       </div>

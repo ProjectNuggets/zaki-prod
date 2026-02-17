@@ -22,11 +22,6 @@ export function useNavigation() {
     navigate('/spaces');
   };
   
-  const goToLibrary = () => {
-    store.goToLibrary();
-    navigate('/library');
-  };
-  
   const goToSpace = (spaceId: string) => {
     store.goToSpace(spaceId);
     navigate(`/spaces/${spaceId}`);
@@ -51,7 +46,6 @@ export function useNavigation() {
     // Navigation actions (with routing)
     goHome,
     goToSpaces,
-    goToLibrary,
     goToSpace,
     goToThread,
     clearThread,

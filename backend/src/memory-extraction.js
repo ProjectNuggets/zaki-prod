@@ -91,13 +91,85 @@ function canonicalizeConflictKey(conflictKey) {
   return `${domain}:${slug}`;
 }
 
+function collectPatternValues(message, regex) {
+  const values = [];
+  const seen = new Set();
+  for (const match of String(message || "").matchAll(regex)) {
+    const raw = String(match?.[1] || "").trim().replace(/\s+/g, " ");
+    if (!raw) continue;
+    const key = raw.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(raw);
+  }
+  return values;
+}
+
+function cleanPreferenceValue(value) {
+  const normalized = String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/[.,!?;:]+$/g, "")
+    .trim();
+  if (!normalized) return "";
+  return normalized.replace(/^to\s+/i, "").trim();
+}
+
+function normalizePreferenceMemory(content, polarity) {
+  const raw = String(content || "").replace(/\s+/g, " ").trim();
+  if (!raw) {
+    return {
+      content: raw,
+      value: null,
+      polarity: polarity || null,
+    };
+  }
+
+  const patterns = [
+    {
+      regex:
+        /^(?:likes?|i\s+(?:like|love|enjoy|prefer|(?:am|i'm)\s+into)|like to)\s+(.+)$/i,
+      polarity: "positive",
+    },
+    {
+      regex:
+        /^(?:dislikes?|i\s+(?:don't like|dont like|do not like|dislike|hate))\s+(.+)$/i,
+      polarity: "negative",
+    },
+  ];
+
+  let extractedValue = "";
+  let inferredPolarity = polarity || null;
+  for (const pattern of patterns) {
+    const match = raw.match(pattern.regex);
+    if (!match) continue;
+    extractedValue = match[1] || "";
+    if (!inferredPolarity) inferredPolarity = pattern.polarity;
+    break;
+  }
+
+  const value = cleanPreferenceValue(extractedValue || raw);
+  if (!value) {
+    return {
+      content: raw,
+      value: null,
+      polarity: inferredPolarity || polarity || null,
+    };
+  }
+
+  const resolvedPolarity = inferredPolarity || polarity || "positive";
+  return {
+    content: `${resolvedPolarity === "negative" ? "Dislikes" : "Likes"} ${value}`,
+    value,
+    polarity: resolvedPolarity,
+  };
+}
+
 function shouldDebug() {
   return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
 }
 
 function classifyWithHeuristics(message) {
   const text = String(message || "").trim();
-  const lower = text.toLowerCase();
   if (!text) return "instruction";
 
   const roleplayPatterns = [
@@ -135,11 +207,15 @@ function classifyWithHeuristics(message) {
   if (quotePatterns.some((r) => r.test(text))) return "quote";
 
   const firstPersonSignals = [
+    /\bi\s+(?:like|love|enjoy|prefer|hate|dislike|want|need|have|feel|live|work|study|am|was)\b/i,
+    /\bcall me\b/i,
+    /\bi go by\b/i,
     /\bi am\b/i,
     /\bi'm\b/i,
+    /\bim\b/i,
     /\bmy\b/i,
     /\bme\b/i,
-    /أنا|اسمي|عندي|لدي|أحب|احب|بحب|أكره|اكره|أفضّل|افضل/,
+    /أنا|انا|اسمي|عندي|لدي|أحب|احب|بحب|أكره|اكره|أفضّل|افضل|ما بحب|مابحب/,
   ];
   if (firstPersonSignals.some((r) => r.test(text))) return "user_statement";
 
@@ -275,29 +351,32 @@ export async function extractFacts(message) {
   let llmClassification = null;
   try {
     const llmResult = await extractWithLLM(message);
-    llmMemories = llmResult.memories;
-    llmClassification = llmResult.classification || null;
+    llmMemories = Array.isArray(llmResult?.memories) ? llmResult.memories : [];
+    llmClassification = llmResult?.classification || null;
   } catch (err) {
     console.warn("LLM extraction failed, using patterns:", err.message);
   }
 
   const classification = llmClassification || heuristicClass;
 
-  if (classification !== "user_statement") {
-    if (shouldDebug()) {
-      console.log(`[Memory] Skipping extraction (classification: ${classification})`);
-    }
-    return [];
-  }
-
   // LLM-first: only run pattern fallback if LLM returns nothing
   let patternMemories = [];
-  if (llmMemories.length === 0) {
+  const shouldRunPatterns =
+    llmMemories.length === 0 &&
+    (classification === "user_statement" || heuristicClass === "user_statement");
+  if (shouldRunPatterns) {
     const skipTranslation = llmMemories.some((m) => m.conflictKey);
     patternMemories = await extractWithPatterns(message, {
       skipTranslation,
       simpleOnly: true,
     });
+  }
+
+  if (classification !== "user_statement" && patternMemories.length === 0 && llmMemories.length === 0) {
+    if (shouldDebug()) {
+      console.log(`[Memory] Skipping extraction (classification: ${classification})`);
+    }
+    return [];
   }
 
   if (shouldDebug()) {
@@ -358,7 +437,7 @@ async function extractWithLLM(message) {
   const content = data.choices?.[0]?.message?.content;
   
   if (!content) {
-    return [];
+    return { classification: null, memories: [] };
   }
   
   const parsed = JSON.parse(content);
@@ -369,13 +448,30 @@ async function extractWithLLM(message) {
     return { classification: null, memories: [] };
   }
   
-  const memories = (validated.data.memories || []).map((m) => ({
-    content: m.content,
-    type: m.type,
-    confidence: m.confidence || 0.8,
-    conflictKey: canonicalizeConflictKey(m.conflict_key) || null,
-    polarity: m.polarity || null,
-  }));
+  const memories = (validated.data.memories || []).map((m) => {
+    const base = {
+      content: m.content,
+      type: m.type,
+      confidence: m.confidence || 0.8,
+      conflictKey: canonicalizeConflictKey(m.conflict_key) || null,
+      polarity: m.polarity || null,
+    };
+
+    if (m.type !== "preference") {
+      return base;
+    }
+
+    const normalized = normalizePreferenceMemory(base.content, base.polarity);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      conflictKey:
+        canonicalizeConflictKey(
+          base.conflictKey || (normalized.value ? `preference:${normalized.value}` : "")
+        ) || null,
+      polarity: normalized.polarity || base.polarity || "positive",
+    };
+  });
 
   return {
     classification: validated.data.classification || null,
@@ -385,7 +481,6 @@ async function extractWithLLM(message) {
 
 async function extractWithPatterns(message, { skipTranslation = false, simpleOnly = false } = {}) {
   const facts = [];
-  const lower = message.toLowerCase();
   
   // Pattern: I am/I'm ...
   const nameMatch = message.match(/(?:my name is|call me|i go by) ([a-zA-Z\s]+?)(?:\.|,|$|and)/i);
@@ -402,10 +497,14 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     }
   }
   
-  // Pattern: I love/like/enjoy ...
-  const likeMatch = message.match(/(?:i love|i like|i enjoy|i prefer|i'm into) (.+?)(?:\.|,|because|when|$)/i);
-  if (likeMatch) {
-    const value = likeMatch[1].trim();
+  // Pattern: I love/like/enjoy ... (supports repeated clauses)
+  const likeValues = collectPatternValues(
+    message,
+    /(?:i love|i like|i enjoy|i prefer|i(?:'m| am) into)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:love|like|enjoy|prefer|(?:am|\'m)\s+into)\b|[.,!?]|$)/gi
+  );
+  for (const rawValue of likeValues) {
+    const value = cleanPreferenceValue(rawValue);
+    if (!value) continue;
     const translated = skipTranslation ? null : await translatePreferenceValue(value);
     const normalizedValue = translated || value;
     facts.push({
@@ -417,10 +516,14 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     });
   }
   
-  // Pattern: I hate/don't like/dislike ...
-  const dislikeMatch = message.match(/(?:i hate|i don't like|i dislike) (.+?)(?:\.|,)/i);
-  if (dislikeMatch) {
-    const value = dislikeMatch[1].trim();
+  // Pattern: I hate/don't like/dislike ... (supports repeated clauses)
+  const dislikeValues = collectPatternValues(
+    message,
+    /(?:i hate|i don't like|i do not like|i dislike)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:hate|don't like|do not like|dislike)\b|[.,!?]|$)/gi
+  );
+  for (const rawValue of dislikeValues) {
+    const value = cleanPreferenceValue(rawValue);
+    if (!value) continue;
     const translated = skipTranslation ? null : await translatePreferenceValue(value);
     const normalizedValue = translated || value;
     facts.push({
@@ -487,30 +590,34 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
 
   const arLikeMatch = message.match(/(?:أحب|احب|أفضّل|افضل|بحب)\s+([^.,]+)/i);
   if (arLikeMatch) {
-    const value = arLikeMatch[1].trim();
-    const translated = skipTranslation ? null : await translatePreferenceValue(value);
-    const normalizedValue = translated || value;
-    facts.push({
-      content: `Likes ${value}`,
-      type: "preference",
-      confidence: 0.8,
-      conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
-      polarity: "positive",
-    });
+    const value = cleanPreferenceValue(arLikeMatch[1].trim());
+    if (value) {
+      const translated = skipTranslation ? null : await translatePreferenceValue(value);
+      const normalizedValue = translated || value;
+      facts.push({
+        content: `Likes ${value}`,
+        type: "preference",
+        confidence: 0.8,
+        conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
+        polarity: "positive",
+      });
+    }
   }
 
   const arDislikeMatch = message.match(/(?:لا أحب|لا احب|أكره|اكره|ما بحب|مابحب)\s+([^.,]+)/i);
   if (arDislikeMatch) {
-    const value = arDislikeMatch[1].trim();
-    const translated = skipTranslation ? null : await translatePreferenceValue(value);
-    const normalizedValue = translated || value;
-    facts.push({
-      content: `Dislikes ${value}`,
-      type: "preference",
-      confidence: 0.8,
-      conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
-      polarity: "negative",
-    });
+    const value = cleanPreferenceValue(arDislikeMatch[1].trim());
+    if (value) {
+      const translated = skipTranslation ? null : await translatePreferenceValue(value);
+      const normalizedValue = translated || value;
+      facts.push({
+        content: `Dislikes ${value}`,
+        type: "preference",
+        confidence: 0.8,
+        conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
+        polarity: "negative",
+      });
+    }
   }
 
   const arLiveMatch = message.match(/(?:أعيش في|أسكن في)\s+([^.,]+)/i);

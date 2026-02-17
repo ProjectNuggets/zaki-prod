@@ -48,7 +48,12 @@ export function useLogin() {
   const { setToken } = useAuthStore();
   
   return useMutation({
-    mutationFn: async (credentials: { username?: string; password: string }) => {
+    mutationFn: async (credentials: {
+      username?: string;
+      password: string;
+      legalConsentAccepted?: boolean;
+      legalPolicyVersion?: string;
+    }) => {
       const { response, data } = await requestLogin(credentials);
       
       if (!response.ok || !data.token) {

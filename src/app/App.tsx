@@ -1,26 +1,54 @@
 import "@/styles/fonts.css";
 import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Sidebar } from "./components/Sidebar";
 import { MobileSidebar } from "./components/MobileSidebar";
 import { MobileHeader } from "./components/MobileHeader";
 import { SkipLink } from "./components/SkipLink";
 import { LoginScreen } from "./components/LoginScreen";
+import { LegalPage } from "./components/LegalPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import { OnboardingModal } from "./components/onboarding/OnboardingModal";
-import { clearAuthToken, fetchCurrentUser } from "@/lib/api";
+import {
+  clearAuthToken,
+  fetchCurrentUser,
+  fetchLegalConsentStatus,
+  submitLegalReconsent,
+} from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
+
+const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+
+function getInitialLegalPolicyVersion() {
+  if (typeof window !== "undefined") {
+    const value = (
+      window as Window & { __ZAKI_LEGAL_POLICY_VERSION__?: string }
+    ).__ZAKI_LEGAL_POLICY_VERSION__;
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return LEGAL_POLICY_VERSION_FALLBACK;
+}
 
 export default function App() {
   const location = useLocation();
   const params = useParams();
   const scrollTimerRef = useRef<number | null>(null);
   const scrollTargetRef = useRef<HTMLElement | null>(null);
+  const { t } = useTranslation();
   
   // Auth state from Zustand
   const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [legalPolicyVersion, setLegalPolicyVersion] = useState(
+    getInitialLegalPolicyVersion
+  );
+  const [legalReconsentRequired, setLegalReconsentRequired] = useState(false);
+  const [legalReconsentChecked, setLegalReconsentChecked] = useState(false);
+  const [legalReconsentSubmitting, setLegalReconsentSubmitting] = useState(false);
+  const [legalReconsentError, setLegalReconsentError] = useState("");
   
   // UI state from Zustand
   const {
@@ -41,8 +69,6 @@ export default function App() {
     
     if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
-    } else if (path === '/library') {
-      store.goToLibrary();
     } else if (spaceId && threadId) {
       store.goToThread(spaceId as string, threadId as string);
     } else if (spaceId) {
@@ -136,6 +162,38 @@ export default function App() {
     setOnboardingOpen(!completed);
   }, [user?.username, authLoading]);
 
+  useEffect(() => {
+    if (!token || !user?.username || authLoading) {
+      setLegalReconsentRequired(false);
+      setLegalReconsentChecked(false);
+      setLegalReconsentError("");
+      return;
+    }
+
+    let isMounted = true;
+    fetchLegalConsentStatus(true)
+      .then(({ response, data }) => {
+        if (!isMounted || !response.ok) return;
+        const nextVersion = String(data?.policyVersion || "").trim();
+        if (nextVersion) {
+          setLegalPolicyVersion(nextVersion);
+        }
+        const requiresReconsent = Boolean(data?.requiresReconsent);
+        setLegalReconsentRequired(requiresReconsent);
+        if (!requiresReconsent) {
+          setLegalReconsentChecked(false);
+          setLegalReconsentError("");
+        }
+      })
+      .catch(() => {
+        // Keep current access if status check fails; user can continue.
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, user?.username, authLoading]);
+
   const completeOnboarding = () => {
     if (typeof window !== "undefined" && user?.username) {
       const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
@@ -171,6 +229,34 @@ export default function App() {
     window.dispatchEvent(new Event("zaki:open-settings"));
   };
 
+  const handleLegalReconsent = async () => {
+    if (!legalReconsentChecked) {
+      setLegalReconsentError(t("app.legal.errorConsentRequired"));
+      return;
+    }
+    setLegalReconsentSubmitting(true);
+    setLegalReconsentError("");
+    try {
+      const { response, data } = await submitLegalReconsent(legalPolicyVersion);
+      if (!response.ok || !data?.success || data.requiresReconsent) {
+        setLegalReconsentError(
+          data?.error || t("app.legal.errorSaveFailed")
+        );
+        return;
+      }
+      setLegalReconsentRequired(false);
+      setLegalReconsentChecked(false);
+    } catch {
+      setLegalReconsentError(t("app.legal.errorSaveFailed"));
+    } finally {
+      setLegalReconsentSubmitting(false);
+    }
+  };
+
+  if (!token && !authLoading && location.pathname === "/legal") {
+    return <LegalPage />;
+  }
+
   if (!token && !authLoading) {
     return <LoginScreen />;
   }
@@ -182,7 +268,7 @@ export default function App() {
           {/* Spinner */}
           <div className="size-8 border-2 border-[#88735A]/20 border-t-[#88735A] rounded-full animate-spin" />
           <div className="text-sm text-zaki-muted dark:text-[#c9b8a4]">
-            Loading session...
+            {t("app.loadingSession")}
           </div>
         </div>
       </div>
@@ -217,9 +303,71 @@ export default function App() {
         </main>
         <Toaster />
       </div>
+      {legalReconsentRequired && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-zaki-subtle bg-white p-6 shadow-[0px_20px_60px_rgba(0,0,0,0.35)] dark:border-[#2a2018] dark:bg-[#0F0B0A]">
+            <h2 className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
+              {t("app.legal.title")}
+            </h2>
+            <p className="mt-2 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+              {t("app.legal.body", { policyVersion: legalPolicyVersion })}
+            </p>
+            <label className="mt-4 flex items-start gap-3 rounded-zaki-md border border-zaki-strong bg-zaki-base/70 px-3 py-3 text-xs font-medium text-zaki-secondary dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#c9b8a4]">
+              <input
+                type="checkbox"
+                checked={legalReconsentChecked}
+                onChange={(event) => setLegalReconsentChecked(event.target.checked)}
+                className="mt-0.5 size-4 rounded border border-zaki-strong bg-white accent-[#D97757] dark:border-[#3a3026] dark:bg-[#0f0b08]"
+              />
+              <span className="leading-relaxed">
+                {t("app.legal.checkboxPrefix")}{" "}
+                <a
+                  href="/legal"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-zaki-brand hover:underline"
+                >
+                  {t("app.legal.checkboxLink")}
+                </a>
+                .
+              </span>
+            </label>
+            {legalReconsentError && (
+              <div className="mt-3 rounded-zaki-md border border-zaki-strong bg-zaki-error px-3 py-2 text-xs text-zaki-brand dark:border-[#3a1f1b] dark:bg-[rgba(210,68,48,0.18)] dark:text-[#ffe7e2]">
+                {legalReconsentError}
+              </div>
+            )}
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:border-[#2a2018] dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+                onClick={() => {
+                  clearAuthToken();
+                  logout();
+                  setLegalReconsentRequired(false);
+                  setLegalReconsentChecked(false);
+                  setLegalReconsentError("");
+                }}
+              >
+                {t("app.legal.signOut")}
+              </button>
+              <button
+                type="button"
+                disabled={!legalReconsentChecked || legalReconsentSubmitting}
+                className="rounded-zaki-md bg-zaki-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zaki-brand-hover disabled:opacity-60"
+                onClick={handleLegalReconsent}
+              >
+                {legalReconsentSubmitting
+                  ? t("app.legal.saving")
+                  : t("app.legal.accept")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <OnboardingModal
         isOpen={onboardingOpen}
-        userName={user?.fullName || user?.username || "there"}
+        userName={user?.fullName || user?.username || t("home.guestName")}
         onClose={completeOnboarding}
         onCreateSpace={openCreateSpace}
         onOpenMemory={openMemory}

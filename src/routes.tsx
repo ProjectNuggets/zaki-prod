@@ -3,6 +3,9 @@ import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
 import { SharedConversation } from './app/components/SharedConversation';
 import { PricingPage } from './app/components/PricingPage';
+import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPage';
+import { HelpPage } from './app/components/HelpPage';
+import { LegalPage } from './app/components/LegalPage';
 
 /**
  * Route structure:
@@ -10,7 +13,6 @@ import { PricingPage } from './app/components/PricingPage';
  * /spaces                  → Spaces list view
  * /spaces/:spaceId         → Space detail view
  * /spaces/:spaceId/threads/:threadId → Thread/chat view
- * /library                 → Document library
  * /share/:token            → Public shared conversation view
  */
 
@@ -36,12 +38,20 @@ export const router = createBrowserRouter([
         element: <ChatArea />, // Will show chat view
       },
       {
-        path: 'library',
-        element: <ChatArea />, // Will show library view
-      },
-      {
         path: 'pricing',
         element: <PricingPage />,
+      },
+      {
+        path: 'help',
+        element: <HelpPage />,
+      },
+      {
+        path: 'legal',
+        element: <LegalPage />,
+      },
+      {
+        path: 'internal/admin-access-codes',
+        element: <AdminAccessCodesPage />,
       },
     ],
   },
@@ -49,6 +59,11 @@ export const router = createBrowserRouter([
     // Public share route (outside of App layout)
     path: '/share/:token',
     element: <SharedConversation />,
+  },
+  {
+    // Backward-compatible alias
+    path: '/public/legal',
+    element: <Navigate to="/legal" replace />,
   },
   {
     // Catch-all redirect

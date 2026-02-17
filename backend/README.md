@@ -15,13 +15,30 @@ cp .env.example .env
 - `NOVA_TYP_BASE_URL` (ex: `https://typ.novanuggets.com`)
 - `NOVA_TYP_API_KEY` (admin API key from NOVA.TYP)
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
+- `ZAKI_SUPER_ADMIN_EMAILS` (comma-separated super admins; can add/remove admins)
+- `ZAKI_ADMIN_EMAILS` (legacy bootstrap allowlist; deprecated for runtime access control)
 - `ZAKI_PUBLIC_URL` (public backend URL for verification links)
 - `ZAKI_APP_URL` (public frontend URL for password reset links)
 - `ZAKI_DEFAULT_WORKSPACE_SLUG` (workspace slug to auto-assign new users)
+- `ZAKI_LEGAL_POLICY_VERSION` (current required policy version, ex: `2026-02-17.v2`)
+- `ZAKI_MEMORY_ALERT_WEBHOOK_URL` (optional webhook for memory pipeline alerts)
+- `ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN` (optional bearer token for alert webhook)
 - `ZAKI_EMAIL_MODE` (`console`, `smtp`, `resend`, or `non`)
 - `ZAKI_RESET_TTL_MINUTES` (password reset TTL in minutes)
 
-3) Install and run:
+3) Validate runtime config before deployment:
+
+```
+npm run config:check
+```
+
+Production safety notes:
+- Set `NODE_ENV=production`
+- `ZAKI_ALLOWED_ORIGINS` must contain only real frontend origins (no `localhost` or `file://`)
+- `ZAKI_LEGAL_POLICY_VERSION` must be explicitly set
+- Do not use verification bypass modes (`ZAKI_EMAIL_MODE=non|none|no`) in production
+
+4) Install and run:
 
 ```
 npm install
@@ -41,13 +58,29 @@ npm run migrate:sqlite
 ## Endpoints
 
 - `GET /health`
-- `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD" }`
+- `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD", "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }`
 - `GET /verify?token=...`
-- `POST /login` — body `{ "email": "...", "password": "..." }`
+- `POST /login` — body `{ "email": "...", "password": "...", "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }`
 - `POST /zaki/workspaces` — body `{ "name": "..." }` (requires Authorization header)
 - `POST /password-reset/request` — body `{ "email": "..." }`
 - `POST /password-reset/confirm` — body `{ "token": "...", "password": "..." }`
+- `GET /api/legal/consent-status` — returns current policy version and (if authenticated) whether re-consent is required
+- `POST /api/legal/re-consent` — body `{ "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }` (requires Authorization header)
+- `GET /api/billing/config` — returns billing capability flags for the signed-in user context (requires Authorization header)
 - `POST /api/access-code/redeem` — body `{ "code": "..." }` (requires Authorization header)
+- `GET /api/account/export` — export account, memory, and billing data (requires Authorization header)
+- `GET /api/admin/admins` — list admin members and actor role (admin auth required)
+- `POST /api/admin/admins` — add/activate admin member (super admin auth required)
+- `DELETE /api/admin/admins/:email` — remove admin member (super admin auth required)
+- `POST /api/admin/access-codes` — create access codes (admin auth required)
+- `GET /api/admin/access-codes` — list/search access codes (admin auth required)
+- `PATCH /api/admin/access-codes/:id` — update/disable access code (admin auth required)
+- `POST /api/telemetry/client-error` — ingest frontend runtime errors for production observability
+- `GET /api/admin/telemetry/memory` — inspect memory pipeline telemetry and recent alerts (admin auth required)
+
+Billing endpoints may return `503` with code `billing_unavailable` when Stripe is not configured in the runtime environment.
+
+If `ZAKI_MEMORY_ALERT_WEBHOOK_URL` is configured, memory telemetry alerts are forwarded as JSON POST requests to that endpoint.
 
 ## Notes
 
@@ -63,4 +96,45 @@ Create one-time or reusable monthly access codes:
 
 ```
 npm run access-code:create -- --campaign=launch --count=10 --duration=30 --max=1
+```
+
+## Admin Dashboard API
+
+Admin access is managed by `zaki_admin_members`.
+
+Super admins:
+- Configured by `ZAKI_SUPER_ADMIN_EMAILS`.
+- Can add/remove admins from hidden admin page/API.
+
+Admins:
+- Can manage access codes.
+- Cannot add/remove admins.
+
+Create codes:
+
+```
+POST /api/admin/access-codes
+{
+  "campaign": "launch",
+  "count": 25,
+  "durationDays": 30,
+  "maxRedemptions": 1,
+  "expiresAt": "2026-12-31",
+  "active": true
+}
+```
+
+List codes:
+
+```
+GET /api/admin/access-codes?search=LAUN&active=true&limit=50&offset=0
+```
+
+Update/deactivate code:
+
+```
+PATCH /api/admin/access-codes/:id
+{
+  "active": false
+}
 ```

@@ -22,13 +22,11 @@ export function MobileSidebar() {
     window.addEventListener("zaki:clear-thread", handleNavigation);
     window.addEventListener("zaki:view-zaki-home", handleNavigation);
     window.addEventListener("zaki:view-spaces", handleNavigation);
-    window.addEventListener("zaki:view-library", handleNavigation);
     
     return () => {
       window.removeEventListener("zaki:clear-thread", handleNavigation);
       window.removeEventListener("zaki:view-zaki-home", handleNavigation);
       window.removeEventListener("zaki:view-spaces", handleNavigation);
-      window.removeEventListener("zaki:view-library", handleNavigation);
     };
   }, [setMobileSidebarOpen]);
 

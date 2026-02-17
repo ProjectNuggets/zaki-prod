@@ -10,9 +10,24 @@ import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { initDb, dbGet, dbQuery } from "./db.js";
-import { createMemoryRoutes, buildContext } from "./memory/index.js";
+import {
+  resolveLegalPolicyVersion,
+  buildLoginSchema,
+  buildSignupSchema,
+  buildLegalConsentShape,
+  validateLegalPolicyVersion,
+  buildConsentStatus,
+} from "./legal-consent.js";
+import { validateRuntimeConfig } from "./config-validation.js";
+import { createMemoryRoutes, buildContext, findDuplicateMemory } from "./memory/index.js";
+import {
+  configureMemoryTelemetryAlerts,
+  getMemoryTelemetrySnapshot,
+  recordMemoryTelemetry,
+} from "./memory/telemetry.js";
 import { extractFacts } from "./memory-extraction.js";
 import { summarizeConversation } from "./memory-legacy.js";
+import { buildStreamUpstreamPayload, extractStreamMessage } from "./chat-proxy.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -40,20 +55,20 @@ async function previewAndNotify({ userId, message, threadId = null }) {
   let pending = 0;
   
   for (const fact of facts) {
-    // Check for duplicates
-    const hash = crypto.createHash("sha256").update(fact.content).digest("hex");
-    const existing = await dbGet(
-      "SELECT id FROM memories WHERE user_id = $1 AND content_hash = $2",
-      [userId, hash]
-    );
-    if (existing) continue;
+    const duplicate = await findDuplicateMemory({
+      userId,
+      content: fact.content,
+      conflictKey: fact.conflictKey,
+      polarity: fact.polarity,
+    });
+    if (duplicate) continue;
     
     // Stage for confirmation
     const id = crypto.randomUUID();
     await dbQuery(
-      `INSERT INTO memory_confirmations (id, user_id, content, type, source_thread_id, source_message_id, confidence_score, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW())`,
-      [id, userId, fact.content, fact.type, threadId, null, 0.8]
+      `INSERT INTO memory_confirmations (id, user_id, content, type, source_thread_id, source_message_id, conflict_key, polarity, confidence_score, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())`,
+      [id, userId, fact.content, fact.type, threadId, null, fact.conflictKey || null, fact.polarity || null, 0.8]
     );
     pending++;
   }
@@ -68,6 +83,17 @@ async function previewAndNotify({ userId, message, threadId = null }) {
   }
   
   return { pending };
+}
+
+function normalizeEmailValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseEmailCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => normalizeEmailValue(item))
+    .filter(Boolean);
 }
 
 const app = express();
@@ -92,12 +118,49 @@ const ZAKI_VERIFY_TTL_MINUTES = Number(
 const ZAKI_RESET_TTL_MINUTES = Number(
   process.env.ZAKI_RESET_TTL_MINUTES || 30
 );
+const ZAKI_LEGAL_POLICY_VERSION = resolveLegalPolicyVersion(
+  process.env.ZAKI_LEGAL_POLICY_VERSION
+);
+const MAX_STREAM_MESSAGE_CHARS = 8000;
 const ZAKI_INCLUDE_VERIFY_LINK =
   String(process.env.ZAKI_INCLUDE_VERIFY_LINK || "").toLowerCase() === "true";
+const ZAKI_MEMORY_ALERT_WEBHOOK_URL = (
+  process.env.ZAKI_MEMORY_ALERT_WEBHOOK_URL || ""
+).trim();
+const ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN = (
+  process.env.ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN || ""
+).trim();
+const ZAKI_MEMORY_ALERT_TIMEOUT_MS = Math.max(
+  500,
+  Number(process.env.ZAKI_MEMORY_ALERT_TIMEOUT_MS || 4000)
+);
+const configuredSuperAdminEmails = parseEmailCsv(
+  process.env.ZAKI_SUPER_ADMIN_EMAILS
+);
+const superAdminEmailSet = new Set(
+  configuredSuperAdminEmails.length > 0
+    ? configuredSuperAdminEmails
+    : ["as@novanuggets.com"]
+);
 const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const configReport = validateRuntimeConfig(process.env);
+if (configReport.warnings.length > 0) {
+  for (const warning of configReport.warnings) {
+    console.warn(`[Config] ${warning.key}: ${warning.message}`);
+  }
+}
+if (isProduction && !configReport.ok) {
+  const details = configReport.errors
+    .map((issue) => `${issue.key}: ${issue.message}`)
+    .join(" | ");
+  throw new Error(`[Config] Invalid production configuration. ${details}`);
+}
+
+const ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 let stripe = null;
 if (STRIPE_SECRET_KEY) {
   try {
@@ -119,6 +182,50 @@ const TIER_BY_PRICE = Object.entries(PRICE_BY_TIER).reduce((acc, [tier, priceId]
   return acc;
 }, {});
 
+function getBillingConfigStatus() {
+  const stripeEnabled = Boolean(stripe);
+  const checkoutEnabled = Boolean(
+    stripeEnabled && PRICE_BY_TIER.student && PRICE_BY_TIER.personal
+  );
+  const portalEnabled = stripeEnabled;
+  const cancelEnabled = stripeEnabled;
+  const webhookEnabled = Boolean(stripeEnabled && STRIPE_WEBHOOK_SECRET);
+  const missing = [];
+
+  if (!stripeEnabled) {
+    missing.push("stripe_secret_key");
+  }
+  if (!PRICE_BY_TIER.student) {
+    missing.push("stripe_price_student");
+  }
+  if (!PRICE_BY_TIER.personal) {
+    missing.push("stripe_price_personal");
+  }
+  if (!STRIPE_WEBHOOK_SECRET) {
+    missing.push("stripe_webhook_secret");
+  }
+
+  return {
+    stripeEnabled,
+    checkoutEnabled,
+    portalEnabled,
+    cancelEnabled,
+    webhookEnabled,
+    missing,
+  };
+}
+
+function sendBillingUnavailable(res, capability) {
+  const configured = getBillingConfigStatus();
+  res.status(503).json({
+    success: false,
+    code: "billing_unavailable",
+    capability,
+    configured,
+    error: "Billing is not configured yet. Please try again later.",
+  });
+}
+
 // =============================================================================
 // SECURITY MIDDLEWARE
 // =============================================================================
@@ -126,7 +233,11 @@ const TIER_BY_PRICE = Object.entries(PRICE_BY_TIER).reduce((acc, [tier, priceId]
 // Stripe webhook must use raw body (must be registered before express.json)
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
-    res.status(500).json({ error: "Stripe is not configured." });
+    res.status(503).json({
+      success: false,
+      code: "billing_unavailable",
+      error: "Stripe webhook is not configured.",
+    });
     return;
   }
   const signature = req.headers["stripe-signature"];
@@ -254,6 +365,68 @@ app.use('/api/login', authLimiter);
 app.use('/api/signup', authLimiter);
 app.use('/api/password-reset', authLimiter);
 
+const memoryReadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 180,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many memory read requests. Please retry in a minute." },
+});
+
+const memoryWriteLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many memory write requests. Please retry in a minute." },
+});
+
+const streamChatLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many chat requests. Please retry in a minute." },
+});
+
+const memoryReadPathMatchers = [
+  /^\/api\/memory\/health\/?$/u,
+  /^\/api\/memory\/events\/?$/u,
+  /^\/api\/memory\/list(?:\/[^/]+)?\/?$/u,
+  /^\/api\/memory\/search\/?$/u,
+  /^\/api\/memory\/confirmations(?:\/[^/]+)?\/?$/u,
+  /^\/api\/memory\/conflicts(?:\/[^/]+)?\/?$/u,
+  /^\/api\/memory\/status(?:\/[^/]+)?\/?$/u,
+  /^\/api\/memory\/context(?:\/[^/]+)?\/?$/u,
+];
+const memoryWriteMatchers = [
+  { method: "POST", matcher: /^\/api\/memory\/?$/u },
+  { method: "POST", matcher: /^\/api\/memory\/preview\/?$/u },
+  { method: "POST", matcher: /^\/api\/memory\/autosave\/?$/u },
+  { method: "POST", matcher: /^\/api\/memory\/undo\/[^/]+\/?$/u },
+  { method: "POST", matcher: /^\/api\/memory\/confirmations\/[^/]+\/confirm\/?$/u },
+  { method: "POST", matcher: /^\/api\/memory\/confirmations\/[^/]+\/reject\/?$/u },
+  { method: "POST", matcher: /^\/api\/memory\/conflicts\/[^/]+\/resolve\/?$/u },
+  { method: "DELETE", matcher: /^\/api\/memory\/[^/]+\/?$/u },
+];
+
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+  if (
+    memoryWriteMatchers.some(
+      (entry) => entry.method === req.method && entry.matcher.test(req.path)
+    )
+  ) {
+    return memoryWriteLimiter(req, res, next);
+  }
+  if (memoryReadPathMatchers.some((matcher) => matcher.test(req.path))) {
+    return memoryReadLimiter(req, res, next);
+  }
+  return next();
+});
+
 // CORS configuration
 app.use(
   cors({
@@ -282,28 +455,106 @@ app.use(
 // =============================================================================
 // REQUEST LOGGING
 // =============================================================================
+function logStructured(level, event, context = {}) {
+  const payload = {
+    ts: new Date().toISOString(),
+    level,
+    event,
+    ...context,
+  };
+  const line = JSON.stringify(payload);
+  if (level === "error") {
+    console.error(line);
+    return;
+  }
+  if (level === "warn") {
+    console.warn(line);
+    return;
+  }
+  console.log(line);
+}
+
+async function sendMemoryAlertWebhook(alert) {
+  if (!ZAKI_MEMORY_ALERT_WEBHOOK_URL) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ZAKI_MEMORY_ALERT_TIMEOUT_MS);
+  try {
+    const headers = new Headers({ "Content-Type": "application/json" });
+    if (ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN) {
+      headers.set("Authorization", `Bearer ${ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN}`);
+    }
+    const response = await fetch(ZAKI_MEMORY_ALERT_WEBHOOK_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        source: "zaki.memory.telemetry",
+        alert,
+        env: process.env.NODE_ENV || "development",
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const raw = await response.text().catch(() => "");
+      throw new Error(`Webhook returned ${response.status}${raw ? ` ${raw.slice(0, 280)}` : ""}`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+if (ZAKI_MEMORY_ALERT_WEBHOOK_URL) {
+  configureMemoryTelemetryAlerts({
+    onAlert: async (alert) => {
+      try {
+        await sendMemoryAlertWebhook(alert);
+        logStructured("warn", "memory.alert.dispatched", {
+          alertId: alert?.id || null,
+          severity: alert?.severity || null,
+        });
+      } catch (error) {
+        logStructured("error", "memory.alert.dispatch_failed", {
+          alertId: alert?.id || null,
+          severity: alert?.severity || null,
+          message: error?.message || String(error),
+        });
+      }
+    },
+  });
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
-  const timestamp = new Date().toISOString();
   const incomingRequestId = req.headers["x-request-id"];
   const requestId =
     (typeof incomingRequestId === "string" && incomingRequestId.trim()) ||
     crypto.randomUUID();
   req.requestId = requestId;
   res.setHeader("X-Request-Id", requestId);
-  
-  // Log request start
-  console.log(`[${timestamp}] [${requestId}] → ${req.method} ${req.path} (${req.ip})`);
-  
+
+  logStructured("info", "http.request.start", {
+    requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get("user-agent") || null,
+  });
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     const status = res.statusCode;
-    const statusColor = status < 400 ? '\x1b[32m' : status < 500 ? '\x1b[33m' : '\x1b[31m';
-    const resetColor = '\x1b[0m';
-    
-    console.log(`[${timestamp}] [${requestId}] ← ${req.method} ${req.path} ${statusColor}${status}${resetColor} ${duration}ms`);
+    logStructured(
+      status >= 500 ? "error" : status >= 400 ? "warn" : "info",
+      "http.request.finish",
+      {
+        requestId,
+        method: req.method,
+        path: req.path,
+        status,
+        durationMs: duration,
+      }
+    );
   });
-  
+
   next();
 });
 
@@ -452,21 +703,9 @@ app.get("/health", async (_, res) => {
 // INPUT VALIDATION SCHEMAS
 // =============================================================================
 
-const LoginSchema = z.object({
-  email: z.string().email().optional(),
-  username: z.string().email().optional(),
-  password: z.string().min(1, "Password is required"),
-}).refine(data => data.email || data.username, {
-  message: "Email or username is required",
-  path: ["email"]
-});
-
-const SignupSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  name: z.string().min(1, "Name is required").max(100),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format"),
-});
+const LoginSchema = buildLoginSchema();
+const SignupSchema = buildSignupSchema();
+const LegalReconsentSchema = z.object(buildLegalConsentShape());
 
 const PasswordResetRequestSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -485,6 +724,48 @@ const DeleteAccountSchema = z.object({
   confirmEmail: z.string().email("Invalid email address"),
 });
 
+const AccessCodeAdminCreateSchema = z.object({
+  campaign: z.string().trim().min(1, "Campaign is required").max(120),
+  count: z.coerce.number().int().min(1).max(500).default(1),
+  durationDays: z.coerce.number().int().min(1).max(3650).default(30),
+  maxRedemptions: z.union([z.coerce.number().int().min(1), z.null()]).default(1),
+  expiresAt: z.union([z.string().trim().min(1), z.null()]).optional(),
+  active: z.boolean().default(true),
+});
+
+const AccessCodeAdminListSchema = z.object({
+  campaign: z.string().trim().min(1).max(120).optional(),
+  active: z.enum(["true", "false"]).optional(),
+  search: z.string().trim().min(1).max(120).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+const AccessCodeAdminUpdateSchema = z
+  .object({
+    campaign: z.string().trim().min(1).max(120).optional(),
+    durationDays: z.coerce.number().int().min(1).max(3650).optional(),
+    maxRedemptions: z.union([z.coerce.number().int().min(1), z.null()]).optional(),
+    expiresAt: z.union([z.string().trim().min(1), z.null()]).optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value || {}).length > 0, {
+    message: "At least one field is required.",
+  });
+
+const AdminMemberUpsertSchema = z.object({
+  email: z.string().trim().email("Invalid admin email address"),
+});
+
+const ClientErrorEventSchema = z.object({
+  message: z.string().trim().min(1).max(2000),
+  stack: z.string().max(12000).optional(),
+  componentStack: z.string().max(12000).optional(),
+  url: z.string().max(3000).optional(),
+  userAgent: z.string().max(1200).optional(),
+  timestamp: z.string().max(120).optional(),
+});
+
 // Validation helper
 function validateInput(schema, data) {
   const result = schema.safeParse(data);
@@ -501,10 +782,43 @@ function validateInput(schema, data) {
   return { valid: true, data: result.data };
 }
 
+app.post("/api/telemetry/client-error", express.json({ limit: "200kb" }), async (req, res) => {
+  const validation = validateInput(ClientErrorEventSchema, req.body || {});
+  if (!validation.valid) {
+    res.status(400).json({
+      success: false,
+      error: validation.errors.map((issue) => issue.message).join(", "),
+    });
+    return;
+  }
+
+  logStructured("error", "client.error", {
+    requestId: req.requestId || null,
+    url: validation.data.url || null,
+    userAgent: validation.data.userAgent || req.get("user-agent") || null,
+    message: validation.data.message,
+    stack: validation.data.stack || null,
+    componentStack: validation.data.componentStack || null,
+    clientTimestamp: validation.data.timestamp || null,
+  });
+
+  res.status(202).json({ success: true });
+});
+
 // Initialize memory routes
-createMemoryRoutes(app);
+createMemoryRoutes(app, { requireAuthUser });
+
+app.get("/api/admin/telemetry/memory", async (req, res) => {
+  const authResult = await requireAdminUser(req, res);
+  if (!authResult) return;
+  res.json({
+    success: true,
+    telemetry: getMemoryTelemetrySnapshot(),
+  });
+});
 
 await initDb();
+await ensureSuperAdminMembersSeed();
 
 const smtpHost = (process.env.SMTP_HOST || "").trim();
 const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -525,7 +839,59 @@ const mailer =
     : null;
 
 function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return normalizeEmailValue(value);
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    const first = String(forwarded[0] || "").trim();
+    if (first) return first;
+  }
+  return req.ip || null;
+}
+
+function getLegalConsentStatus(zakiUser) {
+  if (!zakiUser) {
+    return {
+      policyVersion: ZAKI_LEGAL_POLICY_VERSION,
+      hasConsent: false,
+      isCurrent: false,
+      requiresReconsent: false,
+      consentVersion: null,
+      consentedAt: null,
+    };
+  }
+  return buildConsentStatus(zakiUser, ZAKI_LEGAL_POLICY_VERSION);
+}
+
+async function recordLegalConsent({ userId, policyVersion, source, req }) {
+  const now = new Date().toISOString();
+  await dbQuery(
+    `UPDATE zaki_users
+     SET legal_consent_at = $1,
+         legal_consent_version = $2,
+         updated_at = $3
+     WHERE id = $4`,
+    [now, policyVersion, now, userId]
+  );
+
+  await dbQuery(
+    `INSERT INTO legal_consent_events
+     (user_id, policy_version, source, consented_at, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      userId,
+      policyVersion,
+      source,
+      now,
+      getClientIp(req),
+      req.get("user-agent") || null,
+    ]
+  );
 }
 
 function normalizeAccessCode(value) {
@@ -533,6 +899,72 @@ function normalizeAccessCode(value) {
     .trim()
     .toUpperCase()
     .replace(/[\s-]+/g, "");
+}
+
+function buildGeneratedAccessCode(campaign) {
+  const prefix = String(campaign || "CODE")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 4)
+    .padEnd(4, "X");
+  const bytes = crypto.randomBytes(8);
+  let token = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    token += ACCESS_CODE_ALPHABET[bytes[i] % ACCESS_CODE_ALPHABET.length];
+  }
+  return `${prefix}${token}`;
+}
+
+function parseOptionalDateInput(value) {
+  if (value === null || value === undefined) {
+    return { ok: true, value: null };
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return { ok: true, value: null };
+  }
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? `${raw}T23:59:59.000Z`
+    : raw;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return { ok: false, error: "Invalid date value." };
+  }
+  return { ok: true, value: parsed.toISOString() };
+}
+
+function formatAccessCodeRow(row) {
+  const maxRedemptions =
+    row?.max_redemptions === null || row?.max_redemptions === undefined
+      ? null
+      : Number(row.max_redemptions);
+  const redeemedCount = Number(row?.redeemed_count || 0);
+  return {
+    id: row?.id || null,
+    code: row?.code || null,
+    campaign: row?.campaign || null,
+    durationDays: Number(row?.duration_days || 30),
+    maxRedemptions,
+    redeemedCount,
+    remainingRedemptions:
+      maxRedemptions === null ? null : Math.max(0, maxRedemptions - redeemedCount),
+    active: Boolean(row?.active),
+    expiresAt: row?.expires_at ? new Date(row.expires_at).toISOString() : null,
+    createdAt: row?.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
+function formatAdminMemberRow(row) {
+  const role = normalizeAdminRole(row?.role);
+  return {
+    email: normalizeEmail(row?.email),
+    role,
+    isSuperAdmin: role === "super_admin",
+    active: Boolean(row?.active),
+    createdBy: row?.created_by ? normalizeEmail(row.created_by) : null,
+    createdAt: row?.created_at ? new Date(row.created_at).toISOString() : null,
+    updatedAt: row?.updated_at ? new Date(row.updated_at).toISOString() : null,
+  };
 }
 
 function isEduEmail(email) {
@@ -612,7 +1044,100 @@ async function requireAuthUser(req, res) {
     return null;
   }
 
-  return { email, zakiUser };
+  return { email, zakiUser, sessionUser: sessionData.user };
+}
+
+function normalizeAdminRole(value) {
+  return String(value || "").trim().toLowerCase() === "super_admin"
+    ? "super_admin"
+    : "admin";
+}
+
+function buildAdminAuthContext(email, role, source) {
+  const normalizedRole = normalizeAdminRole(role);
+  return {
+    email,
+    role: normalizedRole,
+    isAdmin: true,
+    isSuperAdmin: normalizedRole === "super_admin",
+    source: String(source || "unknown"),
+  };
+}
+
+async function ensureSuperAdminMembersSeed() {
+  const superAdminEmails = Array.from(superAdminEmailSet.values()).filter(Boolean);
+  if (superAdminEmails.length === 0) {
+    return;
+  }
+
+  await dbQuery(
+    `UPDATE zaki_admin_members
+     SET role = 'admin',
+         updated_at = NOW()
+     WHERE role = 'super_admin'
+       AND email <> ALL($1::text[])`,
+    [superAdminEmails]
+  );
+
+  for (const email of superAdminEmails) {
+    await dbQuery(
+      `INSERT INTO zaki_admin_members (email, role, active, created_by, created_at, updated_at)
+       VALUES ($1, 'super_admin', TRUE, $1, NOW(), NOW())
+       ON CONFLICT (email)
+       DO UPDATE SET
+         role = 'super_admin',
+         active = TRUE,
+         updated_at = NOW()`,
+      [email]
+    );
+  }
+}
+
+async function resolveAdminAuthContext(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  if (superAdminEmailSet.has(normalizedEmail)) {
+    return buildAdminAuthContext(normalizedEmail, "super_admin", "super_admin_config");
+  }
+
+  const membership = await dbGet(
+    `SELECT role
+     FROM zaki_admin_members
+     WHERE email = $1
+       AND active = TRUE
+     LIMIT 1`,
+    [normalizedEmail]
+  );
+  if (!membership) return null;
+
+  return buildAdminAuthContext(normalizedEmail, membership.role, "db");
+}
+
+async function requireAdminUser(req, res) {
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return null;
+
+  const admin = await resolveAdminAuthContext(authResult.email);
+  if (!admin?.isAdmin) {
+    res.status(403).json({ error: "Admin access required." });
+    return null;
+  }
+
+  return {
+    ...authResult,
+    admin,
+  };
+}
+
+async function requireSuperAdminUser(req, res) {
+  const authResult = await requireAdminUser(req, res);
+  if (!authResult) return null;
+  if (!authResult.admin?.isSuperAdmin) {
+    res.status(403).json({ error: "Super admin access required." });
+    return null;
+  }
+  return authResult;
 }
 
 async function resolveUserByStripeCustomer(customerId, fallbackEmail) {
@@ -821,10 +1346,22 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { email, password, name, dateOfBirth } = validation.data;
+    const { email, password, name, dateOfBirth, legalPolicyVersion } = validation.data;
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     const normalizedDob = dateOfBirth;
+    const policyVersionResult = validateLegalPolicyVersion(
+      legalPolicyVersion,
+      ZAKI_LEGAL_POLICY_VERSION
+    );
+    if (!policyVersionResult.ok) {
+      res.status(409).json({
+        success: false,
+        error: policyVersionResult.error,
+      });
+      return;
+    }
+    const policyVersion = policyVersionResult.version;
 
     const now = new Date().toISOString();
     const existing = await dbGet(
@@ -864,6 +1401,13 @@ const signupHandler = async (req, res) => {
       res.status(500).json({ success: false, error: "Unable to create user." });
       return;
     }
+
+    await recordLegalConsent({
+      userId,
+      policyVersion,
+      source: "signup",
+      req,
+    });
 
     if (SKIP_EMAIL_VERIFICATION) {
       await dbQuery(
@@ -1101,8 +1645,21 @@ const loginHandler = async (req, res) => {
       return;
     }
 
-    const { email, username, password } = validation.data;
+    const { email, username, password, legalPolicyVersion } = validation.data;
     const normalizedEmail = normalizeEmail(email || username);
+    const policyVersionResult = validateLegalPolicyVersion(
+      legalPolicyVersion,
+      ZAKI_LEGAL_POLICY_VERSION
+    );
+    if (!policyVersionResult.ok) {
+      res.status(409).json({
+        valid: false,
+        token: null,
+        message: policyVersionResult.error,
+      });
+      return;
+    }
+    const policyVersion = policyVersionResult.version;
 
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
       normalizedEmail,
@@ -1211,6 +1768,14 @@ const loginHandler = async (req, res) => {
       }),
     });
     const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.token) {
+      await recordLegalConsent({
+        userId: user.id,
+        policyVersion,
+        source: "login",
+        req,
+      });
+    }
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: error?.message || "Server error." });
@@ -1219,6 +1784,91 @@ const loginHandler = async (req, res) => {
 
 app.post("/login", loginHandler);
 app.post("/api/login", loginHandler);
+
+app.get("/api/legal/consent-status", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const hasBearerToken =
+      !!authHeader && /^Bearer\s+\S+/i.test(String(authHeader));
+
+    if (!hasBearerToken) {
+      res.status(200).json({
+        success: true,
+        authenticated: false,
+        ...getLegalConsentStatus(null),
+      });
+      return;
+    }
+
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+
+    res.status(200).json({
+      success: true,
+      authenticated: true,
+      ...getLegalConsentStatus(authResult.zakiUser),
+    });
+  } catch (error) {
+    console.error("[Legal] Consent status error:", error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Unable to load consent status.",
+    });
+  }
+});
+
+app.post("/api/legal/re-consent", express.json({ limit: "100kb" }), async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(LegalReconsentSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const policyVersionResult = validateLegalPolicyVersion(
+      validation.data.legalPolicyVersion,
+      ZAKI_LEGAL_POLICY_VERSION
+    );
+    if (!policyVersionResult.ok) {
+      res.status(409).json({
+        success: false,
+        error: policyVersionResult.error,
+      });
+      return;
+    }
+
+    await recordLegalConsent({
+      userId: authResult.zakiUser.id,
+      policyVersion: policyVersionResult.version,
+      source: "reconsent",
+      req,
+    });
+
+    const refreshedUser = await dbGet(
+      `SELECT legal_consent_version, legal_consent_at
+       FROM zaki_users
+       WHERE id = $1`,
+      [authResult.zakiUser.id]
+    );
+
+    res.status(200).json({
+      success: true,
+      ...getLegalConsentStatus(refreshedUser || authResult.zakiUser),
+    });
+  } catch (error) {
+    console.error("[Legal] Re-consent error:", error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Unable to record legal consent.",
+    });
+  }
+});
 
 // -----------------------------------------------------------------------------
 // Profile: get/update display name (full_name)
@@ -1284,8 +1934,114 @@ app.get("/api/profile", getProfileHandler);
 app.patch("/api/profile", express.json({ limit: "1mb" }), updateProfileHandler);
 
 // -----------------------------------------------------------------------------
-// Account: irreversible account deletion
+// Account: export + irreversible account deletion
 // -----------------------------------------------------------------------------
+app.get("/api/account/export", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { email, zakiUser } = authResult;
+
+    const loadOptionalRows = async (sql, params = []) => {
+      try {
+        const result = await dbQuery(sql, params);
+        return result.rows;
+      } catch (error) {
+        // Older environments may not have every table.
+        if (error?.code === "42P01") return [];
+        throw error;
+      }
+    };
+
+    const [accessRedemptions, sharedConversations, memories, memoryConfirmations, memoryConflicts] =
+      await Promise.all([
+        loadOptionalRows(
+          `SELECT id, code_id, code, campaign, redeemed_at, access_expires_at
+           FROM access_code_redemptions
+           WHERE user_id = $1
+           ORDER BY redeemed_at DESC`,
+          [zakiUser.id]
+        ),
+        loadOptionalRows(
+          `SELECT id, token, workspace_slug, thread_slug, title, expires_at, view_count, created_at, conversation_snapshot
+           FROM shared_conversations
+           WHERE user_id = $1
+           ORDER BY created_at DESC`,
+          [zakiUser.id]
+        ),
+        loadOptionalRows(
+          `SELECT id, content, type, metadata, created_at, updated_at, importance_score, confidence_score, user_verified, source_thread_id, source_message_id
+           FROM memories
+           WHERE user_id = $1
+           ORDER BY created_at DESC`,
+          [email]
+        ),
+        loadOptionalRows(
+          `SELECT id, content, type, status, confidence_score, source_thread_id, source_message_id, created_at, updated_at
+           FROM memory_confirmations
+           WHERE user_id = $1
+           ORDER BY created_at DESC`,
+          [email]
+        ),
+        loadOptionalRows(
+          `SELECT id, new_content, new_type, new_confidence_score, conflicting_content, conflicting_type, status, resolution, created_at, resolved_at
+           FROM memory_conflicts
+           WHERE user_id = $1
+           ORDER BY created_at DESC`,
+          [email]
+        ),
+      ]);
+
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      account: {
+        id: zakiUser.id,
+        email: zakiUser.email,
+        fullName: zakiUser.full_name || null,
+        dateOfBirth: zakiUser.date_of_birth || null,
+        verified: Boolean(zakiUser.verified),
+        createdAt: zakiUser.created_at ? new Date(zakiUser.created_at).toISOString() : null,
+        updatedAt: zakiUser.updated_at ? new Date(zakiUser.updated_at).toISOString() : null,
+      },
+      billing: {
+        planTier: zakiUser.plan_tier || "free",
+        planStatus: zakiUser.plan_status || "inactive",
+        currentPeriodEnd: zakiUser.current_period_end
+          ? new Date(zakiUser.current_period_end).toISOString()
+          : null,
+        cancelAtPeriodEnd: Boolean(zakiUser.cancel_at_period_end),
+        stripeCustomerId: zakiUser.stripe_customer_id || null,
+        stripeSubscriptionId: zakiUser.stripe_subscription_id || null,
+        stripePriceId: zakiUser.stripe_price_id || null,
+      },
+      access: {
+        accessExpiresAt: zakiUser.access_expires_at
+          ? new Date(zakiUser.access_expires_at).toISOString()
+          : null,
+        accessCodeCampaign: zakiUser.access_code_campaign || null,
+        accessCodeLast: zakiUser.access_code_last || null,
+        redemptions: accessRedemptions,
+      },
+      sharedConversations,
+      memories: {
+        stored: memories,
+        confirmations: memoryConfirmations,
+        conflicts: memoryConflicts,
+      },
+    };
+
+    const fileDate = new Date().toISOString().slice(0, 10);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=\"zaki-account-export-${fileDate}.json\"`
+    );
+    res.status(200).json({ success: true, export: exportPayload });
+  } catch (error) {
+    console.error("[Account] Export error:", error);
+    res.status(500).json({ error: error?.message || "Account export failed." });
+  }
+});
+
 app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
@@ -1371,10 +2127,19 @@ const CheckoutSchema = z.object({
   plan: z.enum(["student", "personal"]),
 });
 
+app.get("/api/billing/config", async (req, res) => {
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return;
+  res.status(200).json({
+    success: true,
+    configured: getBillingConfigStatus(),
+  });
+});
+
 app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, res) => {
   try {
-    if (!stripe) {
-      res.status(500).json({ error: "Stripe is not configured." });
+    if (!getBillingConfigStatus().checkoutEnabled) {
+      sendBillingUnavailable(res, "checkout");
       return;
     }
 
@@ -1449,8 +2214,8 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
 
 app.post("/api/billing/portal", express.json({ limit: "1mb" }), async (req, res) => {
   try {
-    if (!stripe) {
-      res.status(500).json({ error: "Stripe is not configured." });
+    if (!getBillingConfigStatus().portalEnabled) {
+      sendBillingUnavailable(res, "portal");
       return;
     }
 
@@ -1485,8 +2250,8 @@ app.post("/api/billing/portal", express.json({ limit: "1mb" }), async (req, res)
 
 app.post("/api/billing/cancel", express.json({ limit: "1mb" }), async (req, res) => {
   try {
-    if (!stripe) {
-      res.status(500).json({ error: "Stripe is not configured." });
+    if (!getBillingConfigStatus().cancelEnabled) {
+      sendBillingUnavailable(res, "cancel");
       return;
     }
 
@@ -1614,10 +2379,359 @@ app.get("/api/entitlements", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// Access Codes (Free tier monthly activation)
+// Admins (super admin managed)
+// -----------------------------------------------------------------------------
+app.get("/api/admin/admins", async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const result = await dbQuery(
+      `SELECT email, role, active, created_by, created_at, updated_at
+       FROM zaki_admin_members
+       WHERE active = TRUE
+       ORDER BY
+         CASE WHEN role = 'super_admin' THEN 0 ELSE 1 END,
+         email ASC`
+    );
+
+    res.status(200).json({
+      success: true,
+      actor: {
+        email: authResult.email,
+        role: authResult.admin.role,
+        isSuperAdmin: authResult.admin.isSuperAdmin,
+      },
+      items: result.rows.map(formatAdminMemberRow),
+    });
+  } catch (error) {
+    console.error("[Admin] List members error:", error);
+    res.status(500).json({ error: error?.message || "Failed to load admins." });
+  }
+});
+
+app.post("/api/admin/admins", express.json({ limit: "50kb" }), async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(AdminMemberUpsertSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const email = normalizeEmail(validation.data.email);
+    if (!email) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid admin email address.",
+      });
+      return;
+    }
+
+    if (superAdminEmailSet.has(email)) {
+      const row = await dbGet(
+        `SELECT email, role, active, created_by, created_at, updated_at
+         FROM zaki_admin_members
+         WHERE email = $1`,
+        [email]
+      );
+      res.status(200).json({
+        success: true,
+        member: row ? formatAdminMemberRow(row) : formatAdminMemberRow({
+          email,
+          role: "super_admin",
+          active: true,
+          created_by: email,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+        message: "Email is reserved as super admin.",
+      });
+      return;
+    }
+
+    const result = await dbQuery(
+      `INSERT INTO zaki_admin_members (email, role, active, created_by, created_at, updated_at)
+       VALUES ($1, 'admin', TRUE, $2, NOW(), NOW())
+       ON CONFLICT (email)
+       DO UPDATE SET
+         role = 'admin',
+         active = TRUE,
+         updated_at = NOW()
+       RETURNING email, role, active, created_by, created_at, updated_at`,
+      [email, authResult.email]
+    );
+
+    res.status(201).json({
+      success: true,
+      member: formatAdminMemberRow(result.rows[0]),
+    });
+  } catch (error) {
+    console.error("[Admin] Add member error:", error);
+    res.status(500).json({ error: error?.message || "Failed to add admin." });
+  }
+});
+
+app.delete("/api/admin/admins/:email", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const email = normalizeEmail(req.params.email);
+    if (!email) {
+      res.status(400).json({ success: false, error: "Invalid admin email address." });
+      return;
+    }
+
+    if (superAdminEmailSet.has(email)) {
+      res.status(400).json({
+        success: false,
+        error: "Super admin cannot be removed from this endpoint.",
+      });
+      return;
+    }
+
+    const result = await dbQuery(
+      `UPDATE zaki_admin_members
+       SET active = FALSE,
+           updated_at = NOW()
+       WHERE email = $1
+         AND role = 'admin'
+         AND active = TRUE
+       RETURNING email, role, active, created_by, created_at, updated_at`,
+      [email]
+    );
+    if (!result.rows[0]) {
+      res.status(404).json({
+        success: false,
+        error: "Admin not found.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      member: formatAdminMemberRow(result.rows[0]),
+    });
+  } catch (error) {
+    console.error("[Admin] Remove member error:", error);
+    res.status(500).json({ error: error?.message || "Failed to remove admin." });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Access Codes (Admin + User redemption)
 // -----------------------------------------------------------------------------
 const AccessCodeSchema = z.object({
   code: z.string().min(4),
+});
+
+app.post("/api/admin/access-codes", express.json({ limit: "200kb" }), async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(AccessCodeAdminCreateSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const {
+      campaign,
+      count,
+      durationDays,
+      maxRedemptions,
+      expiresAt,
+      active,
+    } = validation.data;
+    const parsedExpiry = parseOptionalDateInput(expiresAt ?? null);
+    if (!parsedExpiry.ok) {
+      res.status(400).json({ success: false, error: parsedExpiry.error });
+      return;
+    }
+
+    const created = [];
+    for (let i = 0; i < count; i += 1) {
+      let row = null;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const code = buildGeneratedAccessCode(campaign);
+        try {
+          const result = await dbQuery(
+            `INSERT INTO access_codes
+             (code, campaign, duration_days, max_redemptions, expires_at, active)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, code, campaign, duration_days, max_redemptions, redeemed_count, expires_at, active, created_at`,
+            [
+              code,
+              campaign,
+              durationDays,
+              maxRedemptions,
+              parsedExpiry.value,
+              active,
+            ]
+          );
+          row = result.rows[0] || null;
+          break;
+        } catch (err) {
+          if (err?.code !== "23505") throw err;
+        }
+      }
+      if (!row) {
+        throw new Error("Unable to generate unique access code.");
+      }
+      created.push(formatAccessCodeRow(row));
+    }
+
+    res.status(201).json({
+      success: true,
+      count: created.length,
+      codes: created,
+    });
+  } catch (error) {
+    console.error("[AccessCode][Admin] Create error:", error);
+    res.status(500).json({ error: error?.message || "Failed to create access codes." });
+  }
+});
+
+app.get("/api/admin/access-codes", async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(AccessCodeAdminListSchema, req.query || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const { campaign, active, search, limit, offset } = validation.data;
+    const clauses = [];
+    const params = [];
+
+    if (search) {
+      params.push(`%${search}%`);
+      clauses.push(`(code ILIKE $${params.length} OR campaign ILIKE $${params.length})`);
+    }
+    if (campaign) {
+      params.push(campaign);
+      clauses.push(`campaign = $${params.length}`);
+    }
+    if (active) {
+      params.push(active === "true");
+      clauses.push(`active = $${params.length}`);
+    }
+
+    const whereSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rowsResult = await dbQuery(
+      `SELECT id, code, campaign, duration_days, max_redemptions, redeemed_count, expires_at, active, created_at
+       FROM access_codes
+       ${whereSql}
+       ORDER BY created_at DESC
+       LIMIT $${params.length + 1}
+       OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    );
+    const totalResult = await dbGet(
+      `SELECT COUNT(*)::int AS count FROM access_codes ${whereSql}`,
+      params
+    );
+
+    res.status(200).json({
+      success: true,
+      total: Number(totalResult?.count || 0),
+      limit,
+      offset,
+      items: rowsResult.rows.map(formatAccessCodeRow),
+    });
+  } catch (error) {
+    console.error("[AccessCode][Admin] List error:", error);
+    res.status(500).json({ error: error?.message || "Failed to list access codes." });
+  }
+});
+
+app.patch("/api/admin/access-codes/:id", express.json({ limit: "100kb" }), async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const codeId = String(req.params.id || "").trim();
+    const idValidation = z.string().uuid("Invalid access code id").safeParse(codeId);
+    if (!idValidation.success) {
+      res.status(400).json({ success: false, error: "Invalid access code id." });
+      return;
+    }
+
+    const validation = validateInput(AccessCodeAdminUpdateSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (validation.data.campaign !== undefined) {
+      values.push(validation.data.campaign);
+      updates.push(`campaign = $${values.length}`);
+    }
+    if (validation.data.durationDays !== undefined) {
+      values.push(validation.data.durationDays);
+      updates.push(`duration_days = $${values.length}`);
+    }
+    if (validation.data.maxRedemptions !== undefined) {
+      values.push(validation.data.maxRedemptions);
+      updates.push(`max_redemptions = $${values.length}`);
+    }
+    if (validation.data.expiresAt !== undefined) {
+      const parsedExpiry = parseOptionalDateInput(validation.data.expiresAt);
+      if (!parsedExpiry.ok) {
+        res.status(400).json({ success: false, error: parsedExpiry.error });
+        return;
+      }
+      values.push(parsedExpiry.value);
+      updates.push(`expires_at = $${values.length}`);
+    }
+    if (validation.data.active !== undefined) {
+      values.push(validation.data.active);
+      updates.push(`active = $${values.length}`);
+    }
+
+    values.push(codeId);
+    const result = await dbQuery(
+      `UPDATE access_codes
+       SET ${updates.join(", ")}
+       WHERE id = $${values.length}
+       RETURNING id, code, campaign, duration_days, max_redemptions, redeemed_count, expires_at, active, created_at`,
+      values
+    );
+    if (!result.rows[0]) {
+      res.status(404).json({ success: false, error: "Access code not found." });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      code: formatAccessCodeRow(result.rows[0]),
+    });
+  } catch (error) {
+    console.error("[AccessCode][Admin] Update error:", error);
+    res.status(500).json({ error: error?.message || "Failed to update access code." });
+  }
 });
 
 app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req, res) => {
@@ -1952,16 +3066,22 @@ const streamChatHandler = async (req, res) => {
       }
     }
 
-    const { message } = req.body || {};
-    const originalMessage = String(message || "").trim();
+    const requestPayload = req.body;
+    const originalMessage = extractStreamMessage(requestPayload);
     console.log(`[Chat] Message length: ${originalMessage.length}`);
 
     if (!originalMessage) {
       return res.status(400).json({ error: "Message is required." });
     }
+    if (originalMessage.length > MAX_STREAM_MESSAGE_CHARS) {
+      return res.status(400).json({
+        error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
+      });
+    }
+
+    const { slug, threadSlug } = req.params;
 
     let enrichedMessage = originalMessage;
-    console.log(`[Chat] Original message: ${originalMessage}`);
     let memoryInjected = false;
     let memorySources = [];
 
@@ -1984,11 +3104,11 @@ const streamChatHandler = async (req, res) => {
             content: source.content,
             type: source.type,
           }));
-          console.log(`[Memory] Injected ${memoryResult.sources.length} memories for ${userEmail}`);
-          const preview = memoryResult.context.slice(0, 220).replace(/\s+/g, " ");
-          console.log(`[Memory] Context preview: ${preview}`);
+          recordMemoryTelemetry("context.injected", memorySources.length || 1);
+          console.log(`[Memory] Injected ${memoryResult.sources.length} memories`);
         } else {
-          console.log(`[Memory] No context injected for ${userEmail}`);
+          recordMemoryTelemetry("context.miss");
+          console.log("[Memory] No context injected");
         }
 
         // Optional: Extract and stage for confirmation during stream (disabled by default)
@@ -2004,25 +3124,26 @@ const streamChatHandler = async (req, res) => {
             });
         }
       } catch (err) {
+        recordMemoryTelemetry("pipeline.error");
         console.warn("[Memory] Context injection failed:", err.message);
         // Continue without memory
       }
     }
 
-    // Forward to NOVA.TYP with enriched message
-    const { slug, threadSlug } = req.params;
+    // Forward to NOVA.TYP with enriched message + original payload fields
     const targetUrl = `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
     
     console.log(`[Chat] Forwarding to NOVA: ${targetUrl}`);
     console.log(`[Chat] Memory injected: ${memoryInjected}`);
 
+    const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
     const upstreamResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": authHeader,
       },
-      body: JSON.stringify({ message: enrichedMessage }),
+      body: JSON.stringify(upstreamPayload),
     });
 
     console.log(`[Chat] NOVA response status: ${upstreamResponse.status}`);
@@ -2030,6 +3151,13 @@ const streamChatHandler = async (req, res) => {
     // Stream the response back
     res.status(upstreamResponse.status);
     copyResponseHeaders(upstreamResponse, res);
+    res.setHeader(
+      "X-Zaki-Web-Search",
+      upstreamPayload.webSearchEnabled === true ? "1" : "0"
+    );
+    if (typeof upstreamPayload.mode === "string" && upstreamPayload.mode.trim()) {
+      res.setHeader("X-Zaki-Mode", upstreamPayload.mode.trim());
+    }
 
     if (!upstreamResponse.body) {
       res.end();
@@ -2078,11 +3206,13 @@ const streamChatHandler = async (req, res) => {
 
 app.post(
   "/workspace/:slug/thread/:threadSlug/stream-chat",
+  streamChatLimiter,
   express.json({ limit: "10mb" }),
   streamChatHandler
 );
 app.post(
   "/api/workspace/:slug/thread/:threadSlug/stream-chat",
+  streamChatLimiter,
   express.json({ limit: "10mb" }),
   streamChatHandler
 );
