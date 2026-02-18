@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: registry.digitalocean.com/alis24-registry
+  DO_REGISTRY: registry.digitalocean.com/alis24-registry
+  GHCR_REGISTRY: ghcr.io/projectnova
 
 jobs:
   build-backend:
@@ -28,8 +29,8 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/zaki-api:latest
-            ${{ env.REGISTRY }}/zaki-api:${{ github.sha }}
+            ${{ env.DO_REGISTRY }}/zaki-api:latest
+            ${{ env.DO_REGISTRY }}/zaki-api:${{ github.sha }}
           platforms: linux/amd64
 
   build-frontend:
@@ -51,23 +52,26 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/zaki-web:latest
-            ${{ env.REGISTRY }}/zaki-web:${{ github.sha }}
+            ${{ env.DO_REGISTRY }}/zaki-web:latest
+            ${{ env.DO_REGISTRY }}/zaki-web:${{ github.sha }}
           platforms: linux/amd64
           build-args: |
             VITE_ZAKI_BACKEND_URL=https://api.chatzaki.com
 
   build-website:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       
-      - name: Login to DO Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: registry.digitalocean.com
-          username: ${{ secrets.DO_REGISTRY_TOKEN }}
-          password: ${{ secrets.DO_REGISTRY_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build and push website
         uses: docker/build-push-action@v5
@@ -76,8 +80,8 @@ jobs:
           file: ./website/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/zaki-website:latest
-            ${{ env.REGISTRY }}/zaki-website:${{ github.sha }}
+            ${{ env.GHCR_REGISTRY }}/zaki-website:latest
+            ${{ env.GHCR_REGISTRY }}/zaki-website:${{ github.sha }}
           platforms: linux/amd64
 
   deploy:
