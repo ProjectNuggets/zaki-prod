@@ -7,7 +7,7 @@ on:
 
 env:
   DO_REGISTRY: registry.digitalocean.com/alis24-registry
-  GHCR_REGISTRY: ghcr.io/projectnova
+  GHCR_REGISTRY: ghcr.io/projectnuggets
 
 jobs:
   build-backend:
