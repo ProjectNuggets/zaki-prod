@@ -131,6 +131,10 @@ const ZAKI_ENABLE_SESSION_SUMMARIZATION =
   String(process.env.ZAKI_ENABLE_SESSION_SUMMARIZATION || "")
     .toLowerCase()
     .trim() === "true";
+const ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED =
+  String(process.env.ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED || "true")
+    .toLowerCase()
+    .trim() !== "false";
 const superAdminEmailSet = new Set(["as@novanuggets.com"]);
 const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
   .split(",")
@@ -625,6 +629,91 @@ async function ensureUserInDefaultWorkspace(novaUserId) {
   return { success: true };
 }
 
+async function fetchSessionWorkspaceSlugs(authHeader) {
+  const response = await novaSessionRequest("/workspaces", authHeader, {
+    method: "GET",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(data?.workspaces)) {
+    return {
+      success: false,
+      status: response.status || 502,
+      error: data?.error || data?.message || "Unable to fetch workspaces.",
+      slugs: [],
+    };
+  }
+  return {
+    success: true,
+    status: response.status,
+    slugs: data.workspaces
+      .map((workspace) => String(workspace?.slug || "").trim().toLowerCase())
+      .filter(Boolean),
+  };
+}
+
+async function workspaceVisibleForSession(authHeader, normalizedSlug) {
+  const result = await fetchSessionWorkspaceSlugs(authHeader);
+  if (!result.success) {
+    return result;
+  }
+  return {
+    success: true,
+    status: 200,
+    visible: result.slugs.includes(normalizedSlug),
+    slugs: result.slugs,
+  };
+}
+
+async function verifyWorkspaceDeleted(authHeader, normalizedSlug, attempts = 3) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const check = await workspaceVisibleForSession(authHeader, normalizedSlug);
+    if (!check.success) return check;
+    if (!check.visible) {
+      return { success: true, deleted: true };
+    }
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+  return {
+    success: true,
+    deleted: false,
+    error: "Workspace is still visible after delete verification.",
+  };
+}
+
+async function listHiddenWorkspaceSlugsForUser(userId) {
+  const result = await dbQuery(
+    `SELECT workspace_slug
+     FROM zaki_hidden_workspaces
+     WHERE user_id = $1`,
+    [userId]
+  );
+  return new Set(
+    result.rows
+      .map((row) => String(row.workspace_slug || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+async function hideWorkspaceForUser(userId, workspaceSlug, reason) {
+  await dbQuery(
+    `INSERT INTO zaki_hidden_workspaces (user_id, workspace_slug, reason, created_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (user_id, workspace_slug)
+     DO UPDATE SET reason = EXCLUDED.reason, created_at = NOW()`,
+    [userId, workspaceSlug, String(reason || "manual_fallback")]
+  );
+}
+
+async function unhideWorkspaceForUser(userId, workspaceSlug) {
+  await dbQuery(
+    `DELETE FROM zaki_hidden_workspaces
+     WHERE user_id = $1 AND workspace_slug = $2`,
+    [userId, workspaceSlug]
+  );
+}
+
 function buildProxyHeaders(req) {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
@@ -1036,6 +1125,48 @@ async function requireAuthUser(req, res) {
 
   return { email, zakiUser, sessionUser: sessionData.user };
 }
+
+const listWorkspacesHandler = async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { zakiUser } = authResult;
+    const authHeader = req.headers.authorization;
+
+    const upstream = await novaSessionRequest("/workspaces", authHeader, {
+      method: "GET",
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || !Array.isArray(data?.workspaces)) {
+      res.status(upstream.status || 502).json({
+        success: false,
+        error: data?.error || data?.message || "Unable to fetch workspaces.",
+      });
+      return;
+    }
+
+    const hiddenSlugs = await listHiddenWorkspaceSlugsForUser(zakiUser.id);
+    if (hiddenSlugs.size === 0) {
+      res.status(200).json(data);
+      return;
+    }
+
+    const filtered = data.workspaces.filter((workspace) => {
+      const slug = String(workspace?.slug || "").trim().toLowerCase();
+      return slug && !hiddenSlugs.has(slug);
+    });
+    res.status(200).json({
+      ...data,
+      workspaces: filtered,
+    });
+  } catch (error) {
+    console.error("[Workspace] listWorkspacesHandler error:", error);
+    res.status(500).json({ success: false, error: "Failed to load workspaces." });
+  }
+};
+
+app.get("/workspaces", listWorkspacesHandler);
+app.get("/api/workspaces", listWorkspacesHandler);
 
 function normalizeAdminRole(value) {
   return String(value || "").trim().toLowerCase() === "super_admin"
@@ -3078,6 +3209,9 @@ const createWorkspaceHandler = async (req, res) => {
       return;
     }
 
+    // Ensure recreated workspace is visible even if it had been locally hidden before.
+    await unhideWorkspaceForUser(zakiUser.id, String(workspaceSlug || "").trim().toLowerCase());
+
     res.status(200).json({
       workspace: createData.workspace,
       message: createData.message || "Workspace created",
@@ -3100,6 +3234,7 @@ const deleteWorkspaceHandler = async (req, res) => {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { email, zakiUser } = authResult;
+    const authHeader = req.headers.authorization;
 
     if (!zakiUser.verified) {
       res.status(403).json({ error: "Email is not verified." });
@@ -3121,6 +3256,23 @@ const deleteWorkspaceHandler = async (req, res) => {
       return;
     }
 
+    // Permission scope: only allow deleting a workspace currently visible to this session user.
+    const accessCheck = await workspaceVisibleForSession(authHeader, normalizedSlug);
+    if (!accessCheck.success) {
+      res.status(accessCheck.status || 502).json({
+        success: false,
+        error: accessCheck.error || "Unable to verify workspace permissions.",
+      });
+      return;
+    }
+    if (!accessCheck.visible) {
+      res.status(403).json({
+        success: false,
+        error: "You do not have access to delete this workspace.",
+      });
+      return;
+    }
+
     // Log the deletion attempt
     console.log(`[ZAKI] User ${email} deleting workspace ${slug}`);
 
@@ -3133,8 +3285,22 @@ const deleteWorkspaceHandler = async (req, res) => {
     const deleteData = await deleteResponse.json().catch(() => ({}));
     console.log(`[ZAKI] NOVA delete response: ${deleteResponse.status}`, deleteData);
 
-    if (!deleteResponse.ok) {
+    if (!deleteResponse.ok && deleteResponse.status !== 404) {
       console.error(`[ZAKI] Failed to delete workspace ${slug}:`, deleteData);
+      if (ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED) {
+        await hideWorkspaceForUser(
+          zakiUser.id,
+          normalizedSlug,
+          `upstream_delete_failed:${deleteResponse.status || "unknown"}`
+        );
+        res.status(200).json({
+          success: true,
+          softHidden: true,
+          message:
+            "Workspace hidden for this account. Upstream deletion is pending and will be retried by support.",
+        });
+        return;
+      }
       res.status(deleteResponse.status || 400).json({
         success: false,
         error: deleteData?.message || deleteData?.error || `NOVA API error: ${deleteResponse.status}`
@@ -3142,7 +3308,64 @@ const deleteWorkspaceHandler = async (req, res) => {
       return;
     }
 
+    // Idempotent delete semantics: treat already-deleted upstream resource as success.
+    if (deleteResponse.status === 404) {
+      console.log(`[ZAKI] Workspace ${slug} already deleted upstream (404).`);
+      await unhideWorkspaceForUser(zakiUser.id, normalizedSlug);
+      res.status(200).json({
+        success: true,
+        message: "Workspace already deleted.",
+      });
+      return;
+    }
+
+    // Strong consistency check: confirm workspace is gone for this user before reporting success.
+    const verification = await verifyWorkspaceDeleted(authHeader, normalizedSlug);
+    if (!verification.success) {
+      if (ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED) {
+        await hideWorkspaceForUser(
+          zakiUser.id,
+          normalizedSlug,
+          "verification_unavailable"
+        );
+        res.status(200).json({
+          success: true,
+          softHidden: true,
+          message:
+            "Workspace hidden for this account while deletion verification is unavailable.",
+        });
+        return;
+      }
+      res.status(502).json({
+        success: false,
+        error: verification.error || "Unable to verify workspace deletion.",
+      });
+      return;
+    }
+    if (!verification.deleted) {
+      if (ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED) {
+        await hideWorkspaceForUser(
+          zakiUser.id,
+          normalizedSlug,
+          "verification_failed"
+        );
+        res.status(200).json({
+          success: true,
+          softHidden: true,
+          message:
+            "Workspace hidden for this account. Upstream deletion could not be confirmed.",
+        });
+        return;
+      }
+      res.status(409).json({
+        success: false,
+        error: "Workspace deletion could not be confirmed. Please retry.",
+      });
+      return;
+    }
+
     console.log(`[ZAKI] Workspace ${slug} deleted successfully by ${email}`);
+    await unhideWorkspaceForUser(zakiUser.id, normalizedSlug);
 
     res.status(200).json({
       success: true,

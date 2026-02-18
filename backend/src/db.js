@@ -214,6 +214,22 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_access_redemptions_user ON access_code_redemptions(user_id);
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_hidden_workspaces (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      workspace_slug TEXT NOT NULL,
+      reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, workspace_slug)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_hidden_workspaces_user
+    ON zaki_hidden_workspaces (user_id, created_at DESC);
+  `);
+
   // Memories table with vector support
   try {
     await pool.query(`

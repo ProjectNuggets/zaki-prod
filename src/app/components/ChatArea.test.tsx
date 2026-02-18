@@ -90,8 +90,8 @@ describe("ChatArea Component", () => {
       selector ? selector(navState) : navState
     );
 
-    (useAuthStore as jest.Mock).mockImplementation((selector?: (state: { user: { username: string } }) => unknown) => {
-      const state = { user: { username: "test@example.com" } };
+    (useAuthStore as jest.Mock).mockImplementation((selector?: (state: { user: { username: string } | null }) => unknown) => {
+      const state = { user: null };
       return selector ? selector(state) : state;
     });
 

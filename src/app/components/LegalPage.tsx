@@ -40,6 +40,10 @@ export function LegalPage() {
               This page defines the baseline legal terms for ZAKI v0.1. By creating an account or
               using ZAKI, you agree to these terms.
             </p>
+            <p className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle text-left max-w-3xl">
+              ZAKI is operated by Nova Nuggets L.L.C (established 2025), headquartered in Dubai, UAE,
+              and operated on European-hosted infrastructure with GDPR-aligned controls.
+            </p>
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-zaki-subtle bg-white/75 px-3 py-2 text-xs text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
                 Policy version: <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">2026-02-17.v2</span>
@@ -93,7 +97,7 @@ export function LegalPage() {
               </p>
               <p>
                 ZAKI and TYP are operated by Nova Nuggets. Depending on request type, inference is
-                processed through Together AI. ZAKI does not provide legal, medical, tax, financial,
+                processed through third-party inference processors. ZAKI does not provide legal, medical, tax, financial,
                 or other licensed professional advice.
               </p>
             </LegalSection>
@@ -120,6 +124,10 @@ export function LegalPage() {
                 limitation, minimization, accuracy, storage limitation, integrity, and
                 confidentiality).
               </p>
+              <p>
+                We believe AI should be personal, and personal means private by default. We process
+                only what is necessary for product operation, reliability, and improvement.
+              </p>
               <p>Data categories include:</p>
               <ul className="list-disc space-y-1 pl-5 marker:text-zaki-brand">
                 <li>Account data (email, profile, auth/session metadata).</li>
@@ -129,11 +137,12 @@ export function LegalPage() {
               </ul>
               <p>
                 We use this data for service delivery, reliability, security, support, compliance,
-                product improvement, and fraud prevention.
+                product improvement, and fraud prevention, including improving cultural relevance so
+                the Arab world has its own voice in the AI era.
               </p>
               <p>
-                Service chain and roles: <span className="font-semibold">ZAKI → TYP → Together AI</span>.
-                ZAKI and TYP are our systems. Together AI is used for inference processing. We send
+                Service chain and roles: <span className="font-semibold">ZAKI → TYP → third-party inference processors</span>.
+                ZAKI and TYP are our systems. Third-party processors are used for inference processing. We send
                 only the data needed to fulfill the request.
               </p>
               <p>
@@ -188,8 +197,8 @@ export function LegalPage() {
 
             <LegalSection title="9) Third-party AI models and open-source licensing">
               <p>
-                Our current inference provider is Together AI. We currently configure models that are
-                labeled as Apache-2.0 licensed in the provider catalog at deployment time.
+                We currently configure inference models based on provider catalogs that include
+                open-source license metadata at deployment time.
               </p>
               <p>
                 Model availability and license metadata can change over time. We may update model

@@ -734,13 +734,15 @@ export function ChatArea() {
         }
 
         if (pendingCount <= 0) {
+          let hasAutosaveMemories = false;
           setPendingMemories((prev) => {
             const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
-            if (autosaveOnly.length === 0) {
-              setShowMemoryToast(false);
-            }
+            hasAutosaveMemories = autosaveOnly.length > 0;
             return autosaveOnly;
           });
+          if (!hasAutosaveMemories) {
+            setShowMemoryToast(false);
+          }
           return;
         }
 

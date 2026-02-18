@@ -146,6 +146,101 @@ See [DEPLOYMENT_BRIEFING.md](./DEPLOYMENT_BRIEFING.md) for detailed cloud deploy
 # 5. Deploy!
 ```
 
+### Production Contract (ZAKI <-> NOVA.TYP)
+
+This project depends on a few NOVA.TYP behaviors that must be present in production.
+
+1) Username format must allow email syntax (`@`)
+- ZAKI logs in users by normalized email and creates NOVA users with:
+  - `POST /v1/admin/users/new` body `{ username: "<email>", password, role: "default" }`
+- If NOVA validation blocks `@`, signup/login federation will fail.
+
+2) `/system/refresh-user` must return user identity for bearer token
+- ZAKI backend validates every authenticated request via NOVA:
+  - `GET /system/refresh-user`
+- Required response shape:
+```json
+{
+  "success": true,
+  "user": {
+    "id": 123,
+    "username": "user@example.com",
+    "role": "default"
+  }
+}
+```
+- `user.username` must map to the same email stored in `zaki_users.email`.
+
+3) Multi-user mode must be enabled in NOVA.TYP
+- Otherwise NOVA returns auth errors during user creation/login proxy flows.
+
+### Kubernetes/Ingress Notes (DigitalOcean)
+
+If frontend and backend are split (`chatzaki.com` + `api.chatzaki.com`), ensure:
+- Frontend calls `VITE_API_BASE_URL=https://api.chatzaki.com` (or your equivalent env var).
+- Backend `ZAKI_ALLOWED_ORIGINS` contains the exact website origins.
+- Ingress does not strip/alter HTTP methods on `/signup`, `/login`, `/api/*` (405 errors usually come from path/method routing mismatch).
+- TLS is enabled for both app and API hostnames.
+
+### Workspace/Thread Permission Model (Current)
+
+Current behavior in this repo:
+- Workspace create/delete is custom-routed in ZAKI backend using NOVA admin key:
+  - `POST /zaki/workspaces`
+  - `DELETE /zaki/workspaces/:slug`
+- Thread delete is **not** admin-bypassed; it uses normal proxied user permissions:
+  - `DELETE /workspace/:slug/thread/:threadSlug`
+
+Workspace delete reliability and safety now include:
+- Pre-delete permission scope check against session-visible workspaces (`GET /workspaces` with user bearer token).
+- Idempotent handling for upstream `404` (treated as already-deleted success).
+- Post-delete verification that workspace is no longer visible to that user before success response.
+- Optional fallback soft-hide (`ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED=true`) to hide a workspace for that user if upstream delete/verification fails.
+
+Implication:
+- If NOVA default users cannot delete threads, UI thread deletion fails.
+- If workspace delete appears successful but returns after refresh, deletion was not persisted upstream (NOVA still returns it on `/workspaces`).
+
+### Recommended Long-Term Stable Design
+
+1) Keep users as NOVA `default` role.
+2) Add explicit backend-owned, scoped admin routes for operations users need but NOVA blocks for default role:
+- `DELETE /api/zaki/threads/:workspaceSlug/:threadSlug` (server verifies ownership/membership, then calls NOVA admin endpoint).
+- Keep existing `POST/DELETE /zaki/workspaces*` approach.
+3) Add post-delete verification on workspace delete:
+- After admin delete call, fetch `/workspaces` once and fail if slug still exists.
+4) Add audit logging for create/delete actions (actor email, workspace/thread slug, upstream status, request id).
+
+This avoids granting broad admin rights to end users while keeping UX consistent.
+
+### Space Instructions and Files Sync (Current)
+
+Instructions:
+- Space settings update sends both `instructions` and `openAiPrompt` to:
+  - `POST /workspace/:slug/update`
+- This is proxied to NOVA.TYP, so master prompt sync depends on NOVA handling those fields.
+
+Files:
+- Space file uploads call:
+  - `POST /workspace/:slug/upload-and-embed` (fallback `POST /workspace/:slug/upload`)
+- On success, UI updates `pinnedFiles` metadata.
+- So uploaded files are sent to NOVA; `pinnedFiles` in ZAKI is UI metadata, not the source of embedding truth.
+
+### Pre-Launch Verification Checklist
+
+Run these checks in staging/prod before go-live:
+- Signup with a new email creates NOVA user (email syntax username).
+- Login returns token and `/system/refresh-user` resolves same email.
+- Create non-default workspace.
+- Delete that workspace and confirm it is absent after hard refresh.
+- If upstream delete is intentionally simulated to fail, confirm fallback behavior:
+  - delete returns success with `softHidden: true`
+  - workspace is hidden for that user on `/workspaces`
+  - other users are unaffected.
+- Create thread and delete thread as default user (or via planned scoped backend route).
+- Update space instructions and verify NOVA workspace prompt changed.
+- Upload file to space and verify document appears in NOVA workspace docs.
+
 ---
 
 ## 🎯 Current Status: BETA

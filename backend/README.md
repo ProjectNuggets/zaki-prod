@@ -20,6 +20,7 @@ cp .env.example .env
 - `ZAKI_PUBLIC_URL` (public backend URL for verification links)
 - `ZAKI_APP_URL` (public frontend URL for password reset links)
 - `ZAKI_DEFAULT_WORKSPACE_SLUG` (workspace slug to auto-assign new users)
+- `ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED` (default `true`; when NOVA delete cannot be confirmed, hide workspace from that user in ZAKI list as fallback)
 - `ZAKI_LEGAL_POLICY_VERSION` (current required policy version, ex: `2026-02-17.v2`)
 - `ZAKI_MEMORY_ALERT_WEBHOOK_URL` (optional webhook for memory pipeline alerts)
 - `ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN` (optional bearer token for alert webhook)
@@ -60,7 +61,7 @@ npm run migrate:sqlite
 - `GET /health`
 - `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD", "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }`
 - `GET /verify?token=...`
-- `POST /login` — body `{ "email": "...", "password": "...", "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }`
+- `POST /login` — body `{ "email": "...", "password": "..." }`
 - `POST /zaki/workspaces` — body `{ "name": "..." }` (requires Authorization header)
 - `POST /password-reset/request` — body `{ "email": "..." }`
 - `POST /password-reset/confirm` — body `{ "token": "...", "password": "..." }`
