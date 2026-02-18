@@ -348,6 +348,7 @@ const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // 10 attempts per hour
   skipSuccessfulRequests: true,
+  skip: (req) => req.method === 'OPTIONS', // Skip CORS preflight
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please try again later.' }
