@@ -38,6 +38,17 @@ class ChatRequestError extends Error {
 
 const HOME_STARTER_MESSAGE = "hello, how are you zaki";
 
+function isAbortError(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return message.includes("aborted") || message.includes("abort");
+  }
+  return false;
+}
+
 export function ChatArea() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
@@ -65,6 +76,7 @@ export function ChatArea() {
   const historyLoadedRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   // Memory state - works for both auto-save and manual modes
   const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
@@ -268,6 +280,49 @@ export function ChatArea() {
     }
   }, [serializeChat, headerThreadName]);
 
+  const uploadFilesToWorkspace = useCallback(
+    async (workspaceSlug: string, files: File[]) => {
+      const uploaded: Array<{ name: string; type: string; size: number }> = [];
+      for (const file of files) {
+        const createFormData = () => {
+          const formData = new FormData();
+          formData.append("file", file);
+          return formData;
+        };
+
+        let response = await apiRequest(`/workspace/${workspaceSlug}/upload-and-embed`, {
+          method: "POST",
+          body: createFormData(),
+        });
+
+        if (!response.ok) {
+          response = await apiRequest(`/workspace/${workspaceSlug}/upload`, {
+            method: "POST",
+            body: createFormData(),
+          });
+        }
+
+        if (!response.ok) {
+          const errorData = (await response.json().catch(() => ({}))) as {
+            error?: string;
+            message?: string;
+          };
+          throw new Error(
+            errorData.error || errorData.message || `Failed to upload ${file.name}.`
+          );
+        }
+
+        uploaded.push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        });
+      }
+      return uploaded;
+    },
+    []
+  );
+
   // Strip memory context prefix from user messages (injected by backend for AI context)
   const stripMemoryContext = (content: string): string => {
     // Old format: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
@@ -340,16 +395,59 @@ export function ChatArea() {
   const streamAgentInvocation = useCallback(async (
     agentUrl: string,
     threadSlug: string,
-    assistantId: string
+    assistantId: string,
+    signal?: AbortSignal
   ) => {
     return new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
       const ws = new WebSocket(agentUrl);
       let accumulated = "";
+      let settled = false;
+
+      const cleanup = () => {
+        signal?.removeEventListener("abort", handleAbort);
+      };
+
+      const resolveOnce = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+
+      const handleAbort = () => {
+        try {
+          ws.close(1000, "aborted");
+        } catch {
+          // Ignore close errors on aborted stream.
+        }
+        resolveOnce();
+      };
+
+      signal?.addEventListener("abort", handleAbort, { once: true });
 
       ws.onmessage = (event) => {
+        if (signal?.aborted) {
+          return;
+        }
         try {
           const payload = JSON.parse(event.data);
-          const chunk = payload.textResponse ?? payload.error ?? "";
+          const chunk =
+            (typeof payload.textResponse === "string" && payload.textResponse) ||
+            (typeof payload.content === "string" && payload.content) ||
+            (typeof payload.message === "string" && payload.message) ||
+            (typeof payload.error === "string" && payload.error) ||
+            "";
           if (payload.close || payload.type === "finalizeResponseStream") {
             ws.close();
             return;
@@ -363,8 +461,14 @@ export function ChatArea() {
         }
       };
 
-      ws.onerror = () => reject(new Error("Connection failed."));
-      ws.onclose = () => resolve();
+      ws.onerror = () => {
+        if (signal?.aborted) {
+          resolveOnce();
+          return;
+        }
+        rejectOnce(new Error("Connection failed."));
+      };
+      ws.onclose = () => resolveOnce();
     });
   }, [updateAssistantContent]);
 
@@ -374,11 +478,13 @@ export function ChatArea() {
     threadSlug,
     message,
     assistantId,
+    signal,
   }: {
     workspaceSlug: string;
     threadSlug: string;
     message: string;
     assistantId: string;
+    signal?: AbortSignal;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -393,6 +499,7 @@ export function ChatArea() {
           mode: queryModeEnabled ? "query" : "chat",
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
         }),
+        signal,
       }
     );
 
@@ -440,6 +547,35 @@ export function ChatArea() {
       throw new Error("Chat stream returned no data.");
     }
 
+    const readPayloadChunk = (
+      payload: Record<string, unknown>
+    ): { done?: boolean; chunk?: string } => {
+      if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
+        updateAssistantSources(
+          threadSlug,
+          assistantId,
+          payload.sources as Array<{ id: string; content: string; type: string }>
+        );
+        return {};
+      }
+
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return { done: true };
+      }
+
+      if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
+        throw new Error(payload.error.trim());
+      }
+
+      const chunk =
+        (typeof payload.textResponse === "string" && payload.textResponse) ||
+        (typeof payload.content === "string" && payload.content) ||
+        (typeof payload.message === "string" && payload.message) ||
+        "";
+
+      return chunk ? { chunk } : {};
+    };
+
     const contentType = response.headers.get("content-type") || "";
     
     // If JSON response, check for agent invocation URL
@@ -453,12 +589,13 @@ export function ChatArea() {
         (data.url as string | undefined);
       
       if (agentUrl) {
-        await streamAgentInvocation(agentUrl, threadSlug, assistantId);
+        await streamAgentInvocation(agentUrl, threadSlug, assistantId, signal);
         return;
       }
-      
-      if (typeof data.message === "string") {
-        updateAssistantContent(threadSlug, assistantId, data.message);
+
+      const result = readPayloadChunk(data);
+      if (result.chunk) {
+        updateAssistantContent(threadSlug, assistantId, result.chunk);
       }
       return;
     }
@@ -467,55 +604,78 @@ export function ChatArea() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let accumulated = "";
+    let buffer = "";
+    let streamClosed = false;
 
-    while (true) {
+    const appendChunk = (chunk: string) => {
+      if (!chunk) return;
+      accumulated += chunk;
+      updateAssistantContent(threadSlug, assistantId, accumulated);
+    };
+
+    const processRawData = (raw: string) => {
+      const value = raw.trim();
+      if (!value || value === "[DONE]") {
+        if (value === "[DONE]") streamClosed = true;
+        return;
+      }
+      try {
+        const payload = JSON.parse(value) as Record<string, unknown>;
+        const result = readPayloadChunk(payload);
+        if (result.done) {
+          streamClosed = true;
+          return;
+        }
+        if (result.chunk) {
+          appendChunk(result.chunk);
+        }
+        return;
+      } catch {
+        appendChunk(raw);
+      }
+    };
+
+    const processSseBlock = (block: string) => {
+      const normalized = block.replace(/\r/g, "");
+      const lines = normalized.split("\n");
+      const dataLines: string[] = [];
+
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+        if (!line || line.startsWith(":")) continue;
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trimStart());
+          continue;
+        }
+        // Fallback: non-SSE chunked line
+        processRawData(line);
+      }
+
+      if (dataLines.length > 0) {
+        processRawData(dataLines.join("\n"));
+      }
+    };
+
+    while (!streamClosed) {
       const { value, done } = await reader.read();
       if (done) break;
       
-      const text = decoder.decode(value, { stream: true });
-      const lines = text.split("\n");
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        // Handle SSE format: data: {...}
-        if (line.startsWith("data: ")) {
-          try {
-            const payload = JSON.parse(line.slice(6));
-            if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
-              updateAssistantSources(threadSlug, assistantId, payload.sources);
-              continue;
-            }
-            const chunk = payload.textResponse ?? payload.content ?? "";
-            if (chunk) {
-              accumulated += chunk;
-              updateAssistantContent(threadSlug, assistantId, accumulated);
-            }
-          } catch {
-            // If not JSON, treat as plain text chunk
-            accumulated += line.slice(6);
-            updateAssistantContent(threadSlug, assistantId, accumulated);
-          }
-        } else {
-          // Plain text streaming
-          try {
-            const payload = JSON.parse(line);
-            if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
-              updateAssistantSources(threadSlug, assistantId, payload.sources);
-              continue;
-            }
-            const chunk = payload.textResponse ?? payload.content ?? "";
-            if (chunk) {
-              accumulated += chunk;
-              updateAssistantContent(threadSlug, assistantId, accumulated);
-            }
-          } catch {
-            // Not JSON, use as-is
-            accumulated += line;
-            updateAssistantContent(threadSlug, assistantId, accumulated);
-          }
-        }
+      buffer += decoder.decode(value, { stream: true });
+
+      // Handle SSE event boundaries when present
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        processSseBlock(block);
+        if (streamClosed) break;
+        separatorIndex = buffer.indexOf("\n\n");
       }
+    }
+
+    const trailing = buffer.trim();
+    if (!streamClosed && trailing) {
+      processSseBlock(trailing);
     }
   }, [spacesList, queryModeEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
 
@@ -934,6 +1094,8 @@ export function ChatArea() {
 
     setAttachments([]);
     setIsStreaming(true);
+    const streamController = new AbortController();
+    streamAbortRef.current = streamController;
 
     const sendText = files.length > 0
       ? `[Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${trimmed}`
@@ -945,11 +1107,15 @@ export function ChatArea() {
         threadSlug: threadId,
         message: sendText,
         assistantId: assistantMessageId,
+        signal: streamController.signal,
       });
       
       // P0 Fix: Check for auto-saved memories after response
       await checkForSavedMemories(trimmed, threadId);
     } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
       if (error instanceof ChatRequestError && error.code === "access_expired") {
         toast.error(error.message);
         navigate("/pricing");
@@ -957,9 +1123,16 @@ export function ChatArea() {
       }
       toast.error(error instanceof Error ? error.message : "Unable to send message");
     } finally {
+      if (streamAbortRef.current === streamController) {
+        streamAbortRef.current = null;
+      }
       setIsStreaming(false);
     }
   }, [activeThreadId, activeWorkspaceSlug, primarySpace?.id, isStreaming, streamChatMessage, checkForSavedMemories, navigate]);
+
+  const handleStopStreaming = useCallback(() => {
+    streamAbortRef.current?.abort();
+  }, []);
 
   const handleRegenerateMessage = useCallback(
     (message: Message) => {
@@ -1259,6 +1432,7 @@ export function ChatArea() {
       if (autoDismissTimerRef.current) {
         window.clearTimeout(autoDismissTimerRef.current);
       }
+      streamAbortRef.current?.abort();
     };
   }, []);
 
@@ -1359,7 +1533,7 @@ export function ChatArea() {
 
         <div className="relative z-20 flex flex-col h-full">
           {/* Header / Breadcrumb */}
-          {!showZakiHome ? (
+          {!showZakiHome && !showSpacesView ? (
             <div className="px-6 py-4 flex items-center gap-2" dir="ltr">
               <span className="zaki-subheader-pill" dir={isRtl ? "rtl" : "ltr"}>
                 {headerSpaceName}
@@ -1487,6 +1661,7 @@ export function ChatArea() {
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}
+                onStop={handleStopStreaming}
                 queryModeEnabled={queryModeEnabled}
                 onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
                 memoryMode={memoryMode}
@@ -1503,20 +1678,43 @@ export function ChatArea() {
             multiple
             onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
-              if (files.length && fileUploadSpaceId) {
-                const pinnedFiles = files.map((file) => ({
-                  name: file.name,
-                  type: file.type,
-                  size: file.size,
-                }));
-                window.dispatchEvent(
-                  new CustomEvent("zaki:update-space", {
-                    detail: { id: fileUploadSpaceId, pinnedFiles },
-                  })
-                );
-              }
+              const targetSpaceId = fileUploadSpaceId;
               setFileUploadSpaceId(null);
               event.target.value = "";
+              if (!targetSpaceId || files.length === 0) return;
+
+              void uploadFilesToWorkspace(targetSpaceId, files)
+                .then((uploadedFiles) => {
+                  const existingPinned =
+                    spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
+                  const fileMap = new Map(
+                    existingPinned.map((file) => [
+                      `${file.name}:${file.size}:${file.type}`,
+                      file,
+                    ])
+                  );
+                  for (const file of uploadedFiles) {
+                    fileMap.set(`${file.name}:${file.size}:${file.type}`, file);
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent("zaki:update-space", {
+                      detail: {
+                        id: targetSpaceId,
+                        pinnedFiles: Array.from(fileMap.values()),
+                      },
+                    })
+                  );
+                  toast.success(
+                    uploadedFiles.length === 1
+                      ? `Added ${uploadedFiles[0]?.name || "file"} to workspace files.`
+                      : `Added ${uploadedFiles.length} files to workspace files.`
+                  );
+                })
+                .catch((error) => {
+                  toast.error(
+                    error instanceof Error ? error.message : "Unable to upload files."
+                  );
+                });
             }}
           />
         </div>

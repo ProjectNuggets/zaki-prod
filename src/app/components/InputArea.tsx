@@ -11,6 +11,7 @@ export function InputArea({
   attachments,
   setAttachments,
   isSending = false,
+  onStop,
   queryModeEnabled = false,
   onToggleQueryMode,
   memoryMode = "autosave",
@@ -20,6 +21,7 @@ export function InputArea({
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isSending?: boolean;
+  onStop?: () => void;
   queryModeEnabled?: boolean;
   onToggleQueryMode?: () => void;
   memoryMode?: "autosave" | "manual";
@@ -47,19 +49,7 @@ export function InputArea({
   const isPremium =
     ["student", "personal"].includes(planTier) &&
     ["active", "trialing", "past_due"].includes(planStatus);
-  const isPersonal =
-    planTier === "personal" && ["active", "trialing", "past_due"].includes(planStatus);
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
-
-  const gateProFeature = () => {
-    setMenuOpen(false);
-    toast(t("billing.proGate"));
-    setUpgradeOpen(true);
-  };
-  const proBadgeClass = cn(
-    "text-[10px] font-semibold uppercase tracking-wide text-zaki-success bg-zaki-success rounded-full px-2 py-0.5",
-    isRtl ? "mr-auto" : "ml-auto"
-  );
 
   // Auto-focus textarea when response completes (isSending: true → false)
   useEffect(() => {
@@ -435,22 +425,6 @@ export function InputArea({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    if (!isPersonal) {
-                      gateProFeature();
-                      return;
-                    }
-                    setMenuOpen(false);
-                  }}
-                >
-                  <Sparkles className="size-4 text-zaki-muted" />
-                  {t("input.menu.generateImage")}
-                  <span className={proBadgeClass}>{t("billing.proBadge")}</span>
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
                     setMenuOpen(false);
                     fileInputRef.current?.click();
                   }}
@@ -463,25 +437,48 @@ export function InputArea({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    if (!isPersonal) {
-                      gateProFeature();
-                      return;
-                    }
                     setMenuOpen(false);
+                  }}
+                >
+                  <GraduationCap className="size-4 text-zaki-muted" />
+                  {t("input.menu.studyLearn")}
+                </button>
+                <div className="my-1 h-px bg-zaki-subtle" />
+                <button
+                  className="group relative w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    toast.info(t("input.menu.comingSoonToast"));
+                  }}
+                >
+                  <Sparkles className="size-4 text-zaki-muted" />
+                  {t("input.menu.generateImage")}
+                  <span className={cn(
+                    "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    isRtl ? "left-2" : "right-2"
+                  )}>
+                    {t("input.webSearch.soonPill")}
+                  </span>
+                </button>
+                <button
+                  className="group relative w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    toast.info(t("input.menu.comingSoonToast"));
                   }}
                 >
                   <Bot className="size-4 text-zaki-muted" />
                   {t("input.menu.agentMode")}
-                  <span className={proBadgeClass}>{t("billing.proBadge")}</span>
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <GraduationCap className="size-4 text-zaki-muted" />
-                  {t("input.menu.studyLearn")}
+                  <span className={cn(
+                    "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    isRtl ? "left-2" : "right-2"
+                  )}>
+                    {t("input.webSearch.soonPill")}
+                  </span>
                 </button>
               </div>
             )}
@@ -526,14 +523,24 @@ export function InputArea({
             <ChevronDown className="size-3 text-zaki-muted" />
           </button>
           <span className="flex-1" />
-          <button
-            type="submit"
-            className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-            disabled={isSending}
-            aria-label={t("input.sendAria")}
-          >
-            <ArrowUp className="size-4 text-white" />
-          </button>
+          {isSending ? (
+            <button
+              type="button"
+              onClick={onStop}
+              className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              aria-label={t("input.stopAria")}
+            >
+              <X className="size-4 text-white" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              aria-label={t("input.sendAria")}
+            >
+              <ArrowUp className="size-4 text-white" />
+            </button>
+          )}
         </div>
         <input
           ref={fileInputRef}

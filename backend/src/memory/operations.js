@@ -272,6 +272,27 @@ function dedupeMemoryRows(rows) {
   return deduped;
 }
 
+function escapeLikePattern(value) {
+  return String(value || "").replace(/[\\%_]/g, "\\$&");
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function rankContextCandidates(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const aScore =
+      toFiniteNumber(a?.retrieval_score, 0) * 0.75 +
+      toFiniteNumber(a?.importance_score, 0.5) * 0.25;
+    const bScore =
+      toFiniteNumber(b?.retrieval_score, 0) * 0.75 +
+      toFiniteNumber(b?.importance_score, 0.5) * 0.25;
+    return bScore - aScore;
+  });
+}
+
 function encodeMemoryCursor(row) {
   const createdAt = row?.created_at || row?.createdAt;
   const id = row?.id;
@@ -974,28 +995,67 @@ export async function resolveConflict({ userId, conflictId, action }) {
 
 export async function buildContext({ userId, query, maxChars = 2000 }) {
   const normalizedUserId = normalizeUserId(userId);
-  // First, try to find relevant memories via text search
   let memories = [];
   let usedFallback = false;
-  
+
   if (query) {
-    memories = await dbAll(
-      `SELECT id, content, type, importance_score FROM memories 
-       WHERE user_id = $1 AND (content ILIKE $2 OR $2 ILIKE '%' || content || '%')
-       ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST
-       LIMIT 10`,
-      [normalizedUserId, `%${query}%`]
+    const trimmedQuery = String(query).trim();
+    const lexicalPattern = `%${escapeLikePattern(trimmedQuery)}%`;
+
+    const lexicalPromise = dbAll(
+      `SELECT id, content, type, metadata, importance_score, created_at,
+              CASE
+                WHEN LOWER(content) = LOWER($2) THEN 1.0
+                WHEN content ILIKE $3 ESCAPE '\\' THEN 0.82
+                WHEN $2 ILIKE '%' || content || '%' THEN 0.74
+                ELSE 0.6
+              END AS retrieval_score
+       FROM memories
+       WHERE user_id = $1
+         AND (content ILIKE $3 ESCAPE '\\' OR $2 ILIKE '%' || content || '%')
+       ORDER BY retrieval_score DESC, importance_score DESC, last_accessed_at DESC NULLS LAST
+       LIMIT 20`,
+      [normalizedUserId, trimmedQuery, lexicalPattern]
     );
+
+    let vectorRows = [];
+    try {
+      const storageSupportsVectors = await checkStorage();
+      if (storageSupportsVectors) {
+        const embeddingResult = await getEmbeddings(trimmedQuery);
+        const queryEmbedding = embeddingResult?.embeddings?.[0];
+        if (Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
+          const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+          vectorRows = await dbAll(
+            `SELECT id, content, type, metadata, importance_score, created_at,
+                    (1 - (embedding <=> $2::vector)) AS retrieval_score
+             FROM memories
+             WHERE user_id = $1
+               AND embedding IS NOT NULL
+             ORDER BY embedding <=> $2::vector ASC, importance_score DESC
+             LIMIT 20`,
+            [normalizedUserId, vectorLiteral]
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[Memory] Vector context lookup unavailable:", err.message);
+    }
+
+    const lexicalRows = await lexicalPromise;
+    memories = rankContextCandidates(
+      dedupeMemoryRows([...(vectorRows || []), ...(lexicalRows || [])])
+    ).slice(0, 12);
   }
-  
-  // If no query matches, or query is empty, get the most important memories
-  // This ensures we always inject context about the person (e.g., their name)
+
+  // If no relevant candidates were found, fall back to highest-signal memories.
   if (memories.length === 0) {
     memories = await dbAll(
-      `SELECT id, content, type, importance_score FROM memories 
+      `SELECT id, content, type, metadata, importance_score
+       FROM memories
        WHERE user_id = $1
        ORDER BY importance_score DESC, created_at DESC
-       LIMIT 10`,
+       LIMIT 12`,
       [normalizedUserId]
     );
     usedFallback = true;

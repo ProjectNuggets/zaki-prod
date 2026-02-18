@@ -13,6 +13,7 @@ import { LegalPage } from './app/components/LegalPage';
  * /spaces                  → Spaces list view
  * /spaces/:spaceId         → Space detail view
  * /spaces/:spaceId/threads/:threadId → Thread/chat view
+ * /reset?token=...         → Password reset entry (shows reset form in LoginScreen)
  * /share/:token            → Public shared conversation view
  */
 
@@ -36,6 +37,10 @@ export const router = createBrowserRouter([
       {
         path: 'spaces/:spaceId/threads/:threadId',
         element: <ChatArea />, // Will show chat view
+      },
+      {
+        path: 'reset',
+        element: <ChatArea />,
       },
       {
         path: 'pricing',

@@ -84,9 +84,7 @@ export function Sidebar() {
     refetch: refetchSpaces,
   } = useSpaces(!!user);
   const [spacesError, setSpacesError] = useState("");
-  const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const isDark = resolvedTheme() === "dark";
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
@@ -143,11 +141,15 @@ export function Sidebar() {
   
   // Focus trap refs for modals
   const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
-  const profileEditModalRef = useFocusTrap<HTMLDivElement>(profileEditOpen);
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
 
   const isActive = (item: string) => activeItem === item;
-  const isSpaceActive = (spaceId: string) => expandedSpace === spaceId;
+  const isSpaceActive = (spaceId: string) => {
+    if (activeItem === spaceId) return true;
+    const space = spaces.find((entry) => entry.id === spaceId);
+    if (!space) return false;
+    return space.threads.some((thread) => thread.id === activeItem);
+  };
   
   // Format relative time for "Last synced" badge
   const formatRelativeTime = (date: Date) => {
@@ -238,10 +240,12 @@ export function Sidebar() {
   }, [expandedSpace, spaces]);
 
   useEffect(() => {
-    if (!displayName) {
-      setDisplayName(user?.fullName?.trim() || user?.username?.trim() || t("sidebar.profile.defaultName"));
-    }
-  }, [user?.fullName, user?.username, displayName, t]);
+    setDisplayName(
+      user?.fullName?.trim() ||
+        user?.username?.trim() ||
+        t("sidebar.profile.defaultName")
+    );
+  }, [user?.fullName, user?.username, t]);
 
   const userName = displayName.trim() || t("sidebar.profile.defaultName");
   const userInitials = useMemo(() => {
@@ -428,7 +432,6 @@ export function Sidebar() {
   useEffect(() => {
     const anyModalOpen =
       settingsOpen ||
-      profileEditOpen ||
       memoryOpen ||
       spaceSettingsOpen ||
       Boolean(confirmDelete);
@@ -448,10 +451,6 @@ export function Sidebar() {
         setConfirmDelete(null);
         return;
       }
-      if (profileEditOpen) {
-        setProfileEditOpen(false);
-        return;
-      }
       if (memoryOpen) {
         setMemoryOpen(false);
         return;
@@ -462,7 +461,7 @@ export function Sidebar() {
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [confirmDelete, memoryOpen, profileEditOpen, settingsOpen, spaceSettingsOpen]);
+  }, [confirmDelete, memoryOpen, settingsOpen, spaceSettingsOpen]);
 
   useEffect(() => {
     const handleThreadCreated = (event: Event) => {
@@ -784,6 +783,8 @@ export function Sidebar() {
         description?: string;
       }>).detail;
       if (!detail?.id) return;
+      const targetSpace = spaces.find((space) => space.id === detail.id);
+      if (!targetSpace) return;
       setSpaces((prev) =>
         prev.map((space) =>
           space.id === detail.id
@@ -798,6 +799,38 @@ export function Sidebar() {
             : space
         )
       );
+      const updatePayload: Record<string, unknown> = {};
+      if (typeof detail.description === "string") {
+        updatePayload.description = detail.description.trim();
+      }
+      if (typeof detail.instructions === "string") {
+        const normalizedInstructions = detail.instructions.trim();
+        updatePayload.instructions = normalizedInstructions;
+        updatePayload.openAiPrompt = normalizedInstructions;
+      }
+      if (!targetSpace.fixed && typeof detail.icon === "string") {
+        updatePayload.icon = detail.icon;
+      }
+      if (!targetSpace.fixed && typeof detail.color === "string") {
+        updatePayload.color = detail.color;
+      }
+      if (Object.keys(updatePayload).length === 0) return;
+      void apiRequest(`/workspace/${detail.id}/update`, {
+        method: "POST",
+        body: JSON.stringify(updatePayload),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(
+              errorData?.error || errorData?.message || "Workspace sync failed."
+            );
+          }
+        })
+        .catch(() => {
+          toast.error("Unable to sync workspace settings. Refreshing spaces.");
+          refetchSpaces();
+        });
     };
     const handleDeleteThread = async (event: Event) => {
       const detail = (event as CustomEvent<{ id: string; spaceId?: string }>).detail;
@@ -857,12 +890,23 @@ export function Sidebar() {
       setSpaceDescriptionDraft(target.description ?? "");
       setSpaceSettingsOpen(true);
     };
+    const handleDeleteSpace = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; label?: string }>).detail;
+      const target = spaces.find((space) => space.id === detail?.id);
+      if (!target || target.fixed) return;
+      setConfirmDelete({
+        type: "space",
+        id: target.id,
+        label: target.title || detail?.label || target.id,
+      });
+    };
     window.addEventListener("zaki:create-space", handleCreateSpace);
     window.addEventListener("zaki:create-thread", handleCreateThread);
     window.addEventListener("zaki:update-space", handleUpdateSpace);
     window.addEventListener("zaki:delete-thread", handleDeleteThread);
     window.addEventListener("zaki:rename-thread", handleRenameThread);
     window.addEventListener("zaki:open-space-settings", handleOpenSpaceSettings);
+    window.addEventListener("zaki:delete-space", handleDeleteSpace);
     return () => {
       window.removeEventListener("zaki:create-space", handleCreateSpace);
       window.removeEventListener("zaki:create-thread", handleCreateThread);
@@ -870,8 +914,9 @@ export function Sidebar() {
       window.removeEventListener("zaki:delete-thread", handleDeleteThread);
       window.removeEventListener("zaki:rename-thread", handleRenameThread);
       window.removeEventListener("zaki:open-space-settings", handleOpenSpaceSettings);
+      window.removeEventListener("zaki:delete-space", handleDeleteSpace);
     };
-  }, [spaces]);
+  }, [activeItem, refetchSpaces, spaces]);
 
   return (
     <nav
@@ -1063,7 +1108,7 @@ export function Sidebar() {
             <p className="text-sm text-zaki-primary font-medium mb-1">{t("sidebar.empty.noSpaces")}</p>
             <p className="text-xs text-zaki-secondary mb-4">{t("sidebar.empty.noSpacesHelper")}</p>
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent("zaki:create-space"))}
+              onClick={openCreateSpaceFlow}
               className="flex items-center gap-2 px-3 py-2 bg-zaki-brand text-white text-sm font-medium rounded-zaki-xl hover:bg-zaki-brand-hover transition-colors"
               type="button"
             >
@@ -1366,12 +1411,8 @@ export function Sidebar() {
           }}
           data-profile-button
         >
-          <div className="size-10 bg-zaki-elevated rounded-full flex items-center justify-center text-zaki-primary font-medium text-base overflow-hidden">
-            {profileImageUrl ? (
-              <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
-            ) : (
-              userInitials
-            )}
+          <div className="size-10 bg-zaki-elevated rounded-full flex items-center justify-center text-zaki-primary font-medium text-base">
+            {userInitials}
           </div>
 	          <div className="flex-1 min-w-0">
 	            <div className="text-zaki-primary text-sm font-medium truncate">{userName}</div>
@@ -1395,20 +1436,14 @@ export function Sidebar() {
 	            role="menu"
 	            data-profile-menu
 	          >
-	            <button
-	              className={cn(profileMenuItemBase, "text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
-	              type="button"
-	              onClick={() => {
-	                setProfileMenuOpen(false);
-	                setProfileEditOpen(true);
-	              }}
-            >
-              <div className="size-7 rounded-full bg-zaki-elevated flex items-center justify-center text-xs font-medium text-zaki-primary overflow-hidden">
-                {profileImageUrl ? (
-                  <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
-                ) : (
-                  userInitials
+	            <div
+	              className={cn(
+                  "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2",
+                  isRtl ? "flex-row-reverse text-right" : "text-left"
                 )}
+            >
+              <div className="size-7 rounded-full bg-zaki-elevated flex items-center justify-center text-xs font-medium text-zaki-primary">
+                {userInitials}
               </div>
 	              <div className={cn("min-w-0", isRtl ? "text-right" : "text-left")}>
 	                <div className="text-sm text-zaki-primary font-medium truncate">{userName}</div>
@@ -1422,7 +1457,7 @@ export function Sidebar() {
 	              )}>
 	                {planLabel}
 	              </span>
-	            </button>
+	            </div>
 	            <div className="h-px bg-zaki-sunken my-1" />
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
@@ -1553,102 +1588,6 @@ export function Sidebar() {
         }}
         saving={profileSaving}
       />
-      {profileEditOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-          <div
-            className="absolute inset-0"
-            onClick={() => setProfileEditOpen(false)}
-            aria-hidden="true"
-          />
-          <div
-            ref={profileEditModalRef}
-            role="dialog"
-            aria-modal="true"
-            dir={isRtl ? "rtl" : "ltr"}
-            aria-label={t("sidebar.profileEditor.dialogAria")}
-            className="relative w-[460px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki-subtle dark:border-[#2a2018] bg-white dark:bg-[#120e0c] shadow-[0px_24px_60px_rgba(15,15,15,0.18)] dark:shadow-[0px_28px_70px_rgba(0,0,0,0.5)] px-6 py-5"
-          >
-            <div className={cn("flex items-center justify-between", isRtl && "flex-row-reverse")}>
-              <div className={cn(isRtl && "text-right")}>
-                <div className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
-                  {t("sidebar.profileEditor.title")}
-                </div>
-                <div className="text-xs text-zaki-disabled dark:text-[#bca992]">
-                  {t("sidebar.profileEditor.subtitle")}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="size-11 md:size-8 rounded-full bg-zaki-elevated dark:bg-[#1f1713] text-zaki-secondary dark:text-[#c9b8a4] hover:bg-zaki-active dark:hover:bg-[#2b2019] transition-colors"
-                onClick={() => setProfileEditOpen(false)}
-                aria-label={t("sidebar.profileEditor.closeAria")}
-              >
-                <span className="block text-lg leading-none">×</span>
-              </button>
-            </div>
-            <div className={cn("mt-5 flex items-center gap-4", isRtl && "flex-row-reverse")}>
-              <div className="size-16 rounded-full bg-zaki-elevated flex items-center justify-center text-zaki-primary font-semibold text-lg overflow-hidden">
-                {profileImageUrl ? (
-                  <img src={profileImageUrl} alt={userName} className="h-full w-full object-cover" />
-                ) : (
-                  userInitials
-                )}
-              </div>
-              <label className={cn("text-sm text-zaki-secondary dark:text-[#c9b8a4] cursor-pointer", isRtl && "text-right")}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    const nextUrl = URL.createObjectURL(file);
-                    setProfileImageUrl(nextUrl);
-                    event.target.value = "";
-                  }}
-                />
-                <span className="rounded-full border border-zaki-strong dark:border-[#3a2d24] px-3 py-2 text-xs text-zaki-secondary dark:text-[#c9b8a4] hover:bg-zaki-hover dark:hover:bg-[#1b1512] transition-colors">
-                  {t("sidebar.profileEditor.upload")}
-                </span>
-              </label>
-            </div>
-            <div className="mt-5">
-              <label className={cn("flex flex-col gap-1 text-xs text-zaki-muted dark:text-[#bca992]", isRtl && "text-right")}>
-                {t("sidebar.profileEditor.displayName")}
-                <input
-                  className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#1a1411] px-3 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] outline-none focus:border-zaki-focus"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className={cn("mt-6 flex items-center justify-end gap-2", isRtl && "flex-row-reverse")}>
-              <button
-                type="button"
-                className="zaki-btn zaki-btn-secondary"
-                onClick={() => setProfileEditOpen(false)}
-              >
-                {t("sidebar.profileEditor.cancel")}
-              </button>
-              <button
-                type="button"
-                className="zaki-btn bg-zaki-secondary text-white hover:bg-zaki-secondary transition-colors"
-                onClick={async () => {
-                  const saved = await saveDisplayName();
-                  if (saved) {
-                    setProfileEditOpen(false);
-                  }
-                }}
-                disabled={profileSaving}
-              >
-                {profileSaving
-                  ? t("sidebar.profileEditor.saving")
-                  : t("sidebar.profileEditor.save")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
           <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} aria-hidden="true" />
@@ -1789,6 +1728,7 @@ export function Sidebar() {
                   className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
                   onClick={() => {
                     setSpaceSettingsOpen(false);
+                    setSpaceSettingsTarget(null);
                     window.dispatchEvent(
                       new CustomEvent("zaki:edit-space-instructions", { detail: { id: spaceSettingsTarget.id } })
                     );
@@ -1801,6 +1741,7 @@ export function Sidebar() {
                   className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
                   onClick={() => {
                     setSpaceSettingsOpen(false);
+                    setSpaceSettingsTarget(null);
                     window.dispatchEvent(
                       new CustomEvent("zaki:upload-space-files", { detail: { id: spaceSettingsTarget.id } })
                     );
@@ -1808,6 +1749,23 @@ export function Sidebar() {
                 >
                   Add project files
                 </button>
+                {!spaceSettingsTarget.fixed && (
+                  <button
+                    type="button"
+                    className="w-full rounded-zaki-lg border border-zaki-strong bg-zaki-error px-3 py-2 text-left text-sm text-zaki-brand hover:bg-[rgba(210,68,48,0.12)] transition-colors"
+                    onClick={() => {
+                      setSpaceSettingsOpen(false);
+                      setSpaceSettingsTarget(null);
+                      setConfirmDelete({
+                        type: "space",
+                        id: spaceSettingsTarget.id,
+                        label: spaceSettingsTarget.title || spaceSettingsTarget.id,
+                      });
+                    }}
+                  >
+                    Delete space
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between px-5 py-4 border-t border-zaki-subtle dark:border-zaki-dark">
@@ -1832,6 +1790,7 @@ export function Sidebar() {
                     })
                   );
                   setSpaceSettingsOpen(false);
+                  setSpaceSettingsTarget(null);
                 }}
               >
                 Save changes
@@ -1841,6 +1800,43 @@ export function Sidebar() {
         </div>
       )}
         </>
+      )}
+      {collapsed && confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+          <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} aria-hidden="true" />
+          <div
+            ref={deleteConfirmModalRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Delete confirmation"
+            className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki bg-white shadow-[0px_24px_60px_rgba(15,15,15,0.18)] px-6 py-5"
+          >
+            <div className="text-lg font-semibold text-zaki-primary">Delete {confirmDelete.type}</div>
+            <div className="mt-2 text-sm text-zaki-secondary">
+              Deleting this {confirmDelete.type} will delete the chat and content permanently. There is no way to retrieve the content of the deleted {confirmDelete.type === "space" ? "chats in this space" : "chat"} after deletion.
+            </div>
+            <div className="mt-4 text-xs text-zaki-disabled">Selected: {confirmDelete.label}</div>
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-secondary"
+                onClick={() => setConfirmDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="zaki-btn bg-zaki-brand text-white hover:bg-zaki-brand transition-colors"
+                onClick={() => {
+                  performDelete(confirmDelete.type, confirmDelete.id);
+                  setConfirmDelete(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </nav>
   );

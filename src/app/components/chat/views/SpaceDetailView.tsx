@@ -248,7 +248,6 @@ export function SpaceDetailView({
                 <span className="font-medium text-left truncate">{thread.label}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-2xs text-zaki-disabled">Updated recently</span>
                 {spaceDetail.fixed && (
                   <button
                     type="button"

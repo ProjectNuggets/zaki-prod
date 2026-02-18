@@ -58,6 +58,16 @@ export function validateRuntimeConfig(env = process.env) {
   if (!normalize(env.NOVA_TYP_API_KEY)) {
     pushIssue(errors, "NOVA_TYP_API_KEY", "NOVA_TYP_API_KEY must be set.");
   }
+  if (
+    normalize(env.PGSSLMODE).toLowerCase() === "require" &&
+    normalize(env.PGSSL_REJECT_UNAUTHORIZED).toLowerCase() === "false"
+  ) {
+    pushIssue(
+      errors,
+      "PGSSL_REJECT_UNAUTHORIZED",
+      "PGSSL_REJECT_UNAUTHORIZED=false is not allowed when PGSSLMODE=require."
+    );
+  }
 
   if (!legalPolicyVersion) {
     pushIssue(

@@ -84,11 +84,64 @@ function canonicalizeConflictKey(conflictKey) {
   const valueRaw = rest.join(":").trim();
   if (!domain) return null;
   if (!valueRaw) return domain;
-  const slug = slugifyValue(valueRaw);
+  const normalizedValue =
+    domain === "preference" || domain === "constraint"
+      ? normalizePreferenceConflictValue(valueRaw)
+      : valueRaw;
+  const slug = slugifyValue(normalizedValue || valueRaw);
   if (!slug) {
-    return `${domain}:${valueRaw.toLowerCase()}`;
+    return `${domain}:${String(normalizedValue || valueRaw).toLowerCase()}`;
   }
   return `${domain}:${slug}`;
+}
+
+const EN_UNCOUNTABLE_WORDS = new Set([
+  "news",
+  "series",
+  "species",
+  "chess",
+  "physics",
+  "mathematics",
+  "economics",
+]);
+
+function singularizeEnglishWord(word) {
+  const lower = String(word || "").toLowerCase();
+  if (!/^[a-z]+$/.test(lower)) return lower;
+  if (EN_UNCOUNTABLE_WORDS.has(lower)) return lower;
+  if (lower.length <= 3) return lower;
+  if (lower.endsWith("ies") && lower.length > 4) {
+    return `${lower.slice(0, -3)}y`;
+  }
+  if (/(ches|shes|sses|xes|zes)$/.test(lower) && lower.length > 4) {
+    return lower.slice(0, -2);
+  }
+  if (lower.endsWith("s") && !/(ss|us|is)$/.test(lower)) {
+    return lower.slice(0, -1);
+  }
+  return lower;
+}
+
+function normalizePreferenceConflictValue(value) {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(the|a|an|to)\s+/, "");
+  if (!normalized) return "";
+
+  const words = normalized
+    .split(" ")
+    .map((word) => word.replace(/^ال/, ""))
+    .filter(Boolean);
+  if (words.length === 0) return "";
+
+  const last = words[words.length - 1];
+  words[words.length - 1] = singularizeEnglishWord(last);
+  return words.join(" ").trim();
 }
 
 function collectPatternValues(message, regex) {
@@ -385,22 +438,55 @@ export async function extractFacts(message) {
     );
   }
 
-  if (llmMemories.length === 0) return patternMemories;
-  if (patternMemories.length === 0) return llmMemories;
+  if (llmMemories.length === 0) return dedupeExtractedMemories(patternMemories);
+  if (patternMemories.length === 0) return dedupeExtractedMemories(llmMemories);
 
-  // Merge with de-dupe by content + type
-  const seen = new Set();
-  const merged = [];
-  for (const memory of [...llmMemories, ...patternMemories]) {
-    const key = `${memory.type}:${memory.content}`.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(memory);
-  }
+  const merged = dedupeExtractedMemories([...llmMemories, ...patternMemories]);
   if (shouldDebug()) {
     console.log(`[Memory] Extracted ${merged.length} total memories`);
   }
   return merged;
+}
+
+function buildExtractedMemoryKey(memory) {
+  if (!memory || typeof memory !== "object") return null;
+  const type = String(memory.type || "").toLowerCase().trim();
+  const content = String(memory.content || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  const conflictKey = canonicalizeConflictKey(memory.conflictKey || memory.conflict_key);
+  const polarity = String(memory.polarity || "").toLowerCase().trim();
+  if (conflictKey) {
+    if (
+      conflictKey.startsWith("preference:") ||
+      conflictKey.startsWith("constraint:")
+    ) {
+      return `fingerprint:${conflictKey}:${polarity || "neutral"}`;
+    }
+    return `fingerprint:${conflictKey}`;
+  }
+  if (!type && !content) return null;
+  return `content:${type}:${content}`;
+}
+
+function dedupeExtractedMemories(memories) {
+  const byKey = new Map();
+  const passthrough = [];
+
+  for (const memory of memories || []) {
+    const key = buildExtractedMemoryKey(memory);
+    if (!key) {
+      passthrough.push(memory);
+      continue;
+    }
+    const existing = byKey.get(key);
+    if (!existing || Number(memory.confidence || 0) > Number(existing.confidence || 0)) {
+      byKey.set(key, memory);
+    }
+  }
+
+  return [...byKey.values(), ...passthrough];
 }
 
 async function extractWithLLM(message) {

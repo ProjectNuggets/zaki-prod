@@ -9,7 +9,7 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { initDb, dbGet, dbQuery } from "./db.js";
+import { initDb, dbGet, dbQuery, withDbTransaction } from "./db.js";
 import {
   resolveLegalPolicyVersion,
   buildLoginSchema,
@@ -89,13 +89,6 @@ function normalizeEmailValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function parseEmailCsv(value) {
-  return String(value || "")
-    .split(",")
-    .map((item) => normalizeEmailValue(item))
-    .filter(Boolean);
-}
-
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const isProduction = process.env.NODE_ENV === "production";
@@ -134,14 +127,11 @@ const ZAKI_MEMORY_ALERT_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_MEMORY_ALERT_TIMEOUT_MS || 4000)
 );
-const configuredSuperAdminEmails = parseEmailCsv(
-  process.env.ZAKI_SUPER_ADMIN_EMAILS
-);
-const superAdminEmailSet = new Set(
-  configuredSuperAdminEmails.length > 0
-    ? configuredSuperAdminEmails
-    : ["as@novanuggets.com"]
-);
+const ZAKI_ENABLE_SESSION_SUMMARIZATION =
+  String(process.env.ZAKI_ENABLE_SESSION_SUMMARIZATION || "")
+    .toLowerCase()
+    .trim() === "true";
+const superAdminEmailSet = new Set(["as@novanuggets.com"]);
 const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -1213,17 +1203,204 @@ async function issuePasswordResetToken(userId) {
   return { token, expiresAt };
 }
 
-async function sendVerificationEmail(email, token) {
-  const baseUrl =
-    ZAKI_PUBLIC_URL ||
-    `http://localhost:${PORT}`;
+function getVerificationBaseUrl() {
+  const baseUrl = ZAKI_PUBLIC_URL || `http://localhost:${PORT}`;
   const normalizedBase = baseUrl.replace(/\/+$/, "");
-  const verifyBase = normalizedBase.endsWith("/api")
+  return normalizedBase.endsWith("/api")
     ? normalizedBase.replace(/\/api$/, "")
     : normalizedBase;
+}
+
+function getLoginRedirectUrl(verifiedState = "success") {
+  const appBaseRaw = getAppUrl();
+  const appBase = appBaseRaw.endsWith("/api")
+    ? appBaseRaw.replace(/\/api$/, "")
+    : appBaseRaw;
+  const loginUrl = new URL(appBase.endsWith("/") ? appBase : `${appBase}/`);
+  loginUrl.pathname = "/";
+  loginUrl.searchParams.set("auth", "login");
+  loginUrl.searchParams.set("verified", String(verifiedState || "success"));
+  return loginUrl.toString();
+}
+
+function getEmailLogoUrl() {
+  const appBaseRaw = getAppUrl();
+  const appBase = appBaseRaw.endsWith("/api")
+    ? appBaseRaw.replace(/\/api$/, "")
+    : appBaseRaw;
+  const normalized = appBase.replace(/\/+$/, "");
+  return `${normalized}/favicon.svg`;
+}
+
+function buildVerificationEmailHtml({ verifyUrl, logoUrl }) {
+  const expiryText = `${Math.max(1, Number(ZAKI_VERIFY_TTL_MINUTES || 60))} minutes`;
+  return `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verify your ZAKI account</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f5f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 5% 0%,#fff7ec 0%,#f4ece1 42%,#f1e8dd 100%);padding:28px 14px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e7ddd1;border-radius:20px;overflow:hidden;box-shadow:0 18px 44px rgba(38,22,7,0.10);">
+            <tr>
+              <td style="padding:24px 28px 16px 28px;background:linear-gradient(135deg,#fff8ef 0%,#f1e6d8 100%);border-bottom:1px solid #eadfce;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <div style="height:40px;width:40px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;border:1px solid #eadfce;">
+                        <img src="${logoUrl}" width="26" height="26" alt="ZAKI" style="display:block;width:26px;height:26px;" />
+                      </div>
+                    </td>
+                    <td style="padding-left:10px;vertical-align:middle;">
+                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
+                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">Account Security</div>
+                    </td>
+                  </tr>
+                </table>
+                <h1 style="margin:14px 0 0 0;font-size:25px;line-height:1.25;color:#231b14;font-weight:650;">One quick tap and you're in</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 10px 28px;">
+                <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#3b3026;">
+                  Your workspace is ready. Verify this email to unlock ZAKI and start your first conversation.
+                </p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:22px 0 20px 0;">
+                  <tr>
+                    <td style="border-radius:12px;background:linear-gradient(135deg,#df6847 0%,#c75236 100%);box-shadow:0 8px 20px rgba(199,82,54,0.35);">
+                      <a href="${verifyUrl}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;">
+                        Activate My Account
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:10px 12px;">
+                  <p style="margin:0;font-size:13px;line-height:1.6;color:#7a5f49;">
+                    This link expires in <strong>${expiryText}</strong>. If it times out, just sign up again and we will send a fresh one.
+                  </p>
+                </div>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.7;color:#6a5847;">
+                  If the button does not open, use this link:
+                </p>
+                <p style="margin:0;font-size:12px;line-height:1.7;color:#6a5847;word-break:break-all;">
+                  <a href="${verifyUrl}" style="color:#d86a4d;text-decoration:underline;">${verifyUrl}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
+                <p style="margin:0;font-size:12px;line-height:1.55;color:#7f6b59;">
+                  If this was not you, you can safely ignore this email. Need help? Reach us at <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `.trim();
+}
+
+function buildPasswordResetEmailHtml({ resetUrl, logoUrl }) {
+  const expiryText = `${Math.max(1, Number(ZAKI_RESET_TTL_MINUTES || 30))} minutes`;
+  return `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reset your ZAKI password</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f5f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 5% 0%,#fff7ec 0%,#f4ece1 42%,#f1e8dd 100%);padding:28px 14px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e7ddd1;border-radius:20px;overflow:hidden;box-shadow:0 18px 44px rgba(38,22,7,0.10);">
+            <tr>
+              <td style="padding:24px 28px 16px 28px;background:linear-gradient(135deg,#fff8ef 0%,#f1e6d8 100%);border-bottom:1px solid #eadfce;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <div style="height:40px;width:40px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;border:1px solid #eadfce;">
+                        <img src="${logoUrl}" width="26" height="26" alt="ZAKI" style="display:block;width:26px;height:26px;" />
+                      </div>
+                    </td>
+                    <td style="padding-left:10px;vertical-align:middle;">
+                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
+                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">Account Security</div>
+                    </td>
+                  </tr>
+                </table>
+                <h1 style="margin:14px 0 0 0;font-size:25px;line-height:1.25;color:#231b14;font-weight:650;">Let's get you back in</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 10px 28px;">
+                <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#3b3026;">
+                  Forgot your password? No stress. Tap below to set a fresh one and jump back into your workspace.
+                </p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:22px 0 20px 0;">
+                  <tr>
+                    <td style="border-radius:12px;background:linear-gradient(135deg,#df6847 0%,#c75236 100%);box-shadow:0 8px 20px rgba(199,82,54,0.35);">
+                      <a href="${resetUrl}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;">
+                        Reset My Password
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:10px 12px;">
+                  <p style="margin:0;font-size:13px;line-height:1.6;color:#7a5f49;">
+                    This reset link expires in <strong>${expiryText}</strong>.
+                  </p>
+                </div>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.7;color:#6a5847;">
+                  If the button does not open, use this link:
+                </p>
+                <p style="margin:0;font-size:12px;line-height:1.7;color:#6a5847;word-break:break-all;">
+                  <a href="${resetUrl}" style="color:#d86a4d;text-decoration:underline;">${resetUrl}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
+                <p style="margin:0;font-size:12px;line-height:1.55;color:#7f6b59;">
+                  If you did not request a reset, you can ignore this email. Need help? Reach us at <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `.trim();
+}
+
+async function sendVerificationEmail(email, token) {
+  const verifyBase = getVerificationBaseUrl();
   const verifyUrl = `${verifyBase}/verify?token=${token}`;
-  const subject = "Verify your ZAKI account";
-  const text = `Welcome to ZAKI! Verify your email by visiting: ${verifyUrl}`;
+  const logoUrl = getEmailLogoUrl();
+  const subject = "You are one click away from ZAKI";
+  const text = [
+    "Welcome to ZAKI.",
+    "Your workspace is ready.",
+    "One quick tap to activate your account:",
+    verifyUrl,
+    "",
+    `This link expires in ${Math.max(1, Number(ZAKI_VERIFY_TTL_MINUTES || 60))} minutes.`,
+    "",
+    "If this was not you, you can ignore this email.",
+    "Support: info@novanuggets.com",
+  ].join("\n");
+  const html = buildVerificationEmailHtml({ verifyUrl, logoUrl });
 
   if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
     if (!resendApiKey) {
@@ -1247,6 +1424,7 @@ async function sendVerificationEmail(email, token) {
           to: [email],
           subject,
           text,
+          html,
         }),
         signal: controller.signal,
       });
@@ -1265,6 +1443,7 @@ async function sendVerificationEmail(email, token) {
       to: email,
       subject,
       text,
+      html,
     });
   } else {
     console.log(`[ZAKI] Verification link for ${email}: ${verifyUrl}`);
@@ -1283,8 +1462,19 @@ async function sendPasswordResetEmail(email, token) {
     ? normalizedBase.replace(/\/api$/, "")
     : normalizedBase;
   const resetUrl = `${resetBase}/reset?token=${token}`;
-  const subject = "Reset your ZAKI password";
-  const text = `Use this link to reset your password: ${resetUrl}`;
+  const logoUrl = getEmailLogoUrl();
+  const subject = "Password reset for your ZAKI account";
+  const text = [
+    "Forgot your password? No problem.",
+    "Use this link to set a new password and get back into ZAKI:",
+    resetUrl,
+    "",
+    `This reset link expires in ${Math.max(1, Number(ZAKI_RESET_TTL_MINUTES || 30))} minutes.`,
+    "",
+    "If you did not request this, you can ignore this email.",
+    "Support: info@novanuggets.com",
+  ].join("\n");
+  const html = buildPasswordResetEmailHtml({ resetUrl, logoUrl });
 
   if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
     if (!resendApiKey) {
@@ -1308,6 +1498,7 @@ async function sendPasswordResetEmail(email, token) {
           to: [email],
           subject,
           text,
+          html,
         }),
         signal: controller.signal,
       });
@@ -1326,6 +1517,7 @@ async function sendPasswordResetEmail(email, token) {
       to: email,
       subject,
       text,
+      html,
     });
   } else {
     console.log(`[ZAKI] Password reset link for ${email}: ${resetUrl}`);
@@ -1645,21 +1837,8 @@ const loginHandler = async (req, res) => {
       return;
     }
 
-    const { email, username, password, legalPolicyVersion } = validation.data;
+    const { email, username, password } = validation.data;
     const normalizedEmail = normalizeEmail(email || username);
-    const policyVersionResult = validateLegalPolicyVersion(
-      legalPolicyVersion,
-      ZAKI_LEGAL_POLICY_VERSION
-    );
-    if (!policyVersionResult.ok) {
-      res.status(409).json({
-        valid: false,
-        token: null,
-        message: policyVersionResult.error,
-      });
-      return;
-    }
-    const policyVersion = policyVersionResult.version;
 
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
       normalizedEmail,
@@ -1768,14 +1947,6 @@ const loginHandler = async (req, res) => {
       }),
     });
     const data = await response.json().catch(() => ({}));
-    if (response.ok && data?.token) {
-      await recordLegalConsent({
-        userId: user.id,
-        policyVersion,
-        source: "login",
-        req,
-      });
-    }
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: error?.message || "Server error." });
@@ -2749,67 +2920,93 @@ app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req,
     if (!email || !zakiUser) return;
 
     const code = normalizeAccessCode(validation.data.code);
-    const accessCode = await dbGet(
-      `SELECT * FROM access_codes
-       WHERE UPPER(regexp_replace(code, '[\\s-]+', '', 'g')) = $1`,
-      [code]
-    );
-    if (!accessCode || !accessCode.active) {
-      res.status(404).json({ success: false, error: "Invalid access code." });
-      return;
-    }
+    const redeemResult = await withDbTransaction(async (client) => {
+      const accessCodeResult = await client.query(
+        `SELECT *
+         FROM access_codes
+         WHERE UPPER(regexp_replace(code, '[\\s-]+', '', 'g')) = $1
+         FOR UPDATE`,
+        [code]
+      );
+      const accessCode = accessCodeResult.rows[0];
+      if (!accessCode || !accessCode.active) {
+        return { status: 404, body: { success: false, error: "Invalid access code." } };
+      }
 
-    if (accessCode.expires_at && new Date(accessCode.expires_at).getTime() < Date.now()) {
-      res.status(410).json({ success: false, error: "Access code expired." });
-      return;
-    }
+      if (accessCode.expires_at && new Date(accessCode.expires_at).getTime() < Date.now()) {
+        return { status: 410, body: { success: false, error: "Access code expired." } };
+      }
 
-    if (
-      accessCode.max_redemptions !== null &&
-      Number(accessCode.redeemed_count) >= Number(accessCode.max_redemptions)
-    ) {
-      res.status(400).json({ success: false, error: "Access code already fully redeemed." });
-      return;
-    }
+      const incrementResult = await client.query(
+        `UPDATE access_codes
+         SET redeemed_count = redeemed_count + 1
+         WHERE id = $1
+           AND active = TRUE
+           AND (max_redemptions IS NULL OR redeemed_count < max_redemptions)
+         RETURNING id, code, campaign, duration_days, redeemed_count`,
+        [accessCode.id]
+      );
+      const incrementedCode = incrementResult.rows[0];
+      if (!incrementedCode) {
+        return {
+          status: 400,
+          body: { success: false, error: "Access code already fully redeemed." },
+        };
+      }
 
-    const now = new Date();
-    const currentExpiry = zakiUser.access_expires_at
-      ? new Date(zakiUser.access_expires_at)
-      : null;
-    const baseDate =
-      currentExpiry && currentExpiry.getTime() > now.getTime()
-        ? currentExpiry
-        : now;
-    const durationDays = Number(accessCode.duration_days || 30);
-    const expiresAt = new Date(baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      const userRowResult = await client.query(
+        `SELECT access_expires_at
+         FROM zaki_users
+         WHERE id = $1
+         FOR UPDATE`,
+        [zakiUser.id]
+      );
+      const userRow = userRowResult.rows[0];
+      if (!userRow) {
+        throw new Error("Authenticated user not found during code redemption.");
+      }
 
-    await dbQuery(
-      `UPDATE zaki_users
-       SET access_expires_at = $1,
-           access_code_campaign = $2,
-           access_code_last = $3,
-           updated_at = NOW()
-       WHERE id = $4`,
-      [expiresAt.toISOString(), accessCode.campaign, accessCode.code, zakiUser.id]
-    );
+      const now = new Date();
+      const currentExpiry = userRow.access_expires_at
+        ? new Date(userRow.access_expires_at)
+        : null;
+      const baseDate =
+        currentExpiry && currentExpiry.getTime() > now.getTime()
+          ? currentExpiry
+          : now;
+      const durationDays = Number(accessCode.duration_days || 30);
+      const expiresAt = new Date(
+        baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000
+      );
 
-    await dbQuery(
-      `INSERT INTO access_code_redemptions
-       (code_id, user_id, access_expires_at, campaign, code)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [accessCode.id, zakiUser.id, expiresAt.toISOString(), accessCode.campaign, code]
-    );
+      await client.query(
+        `UPDATE zaki_users
+         SET access_expires_at = $1,
+             access_code_campaign = $2,
+             access_code_last = $3,
+             updated_at = NOW()
+         WHERE id = $4`,
+        [expiresAt.toISOString(), accessCode.campaign, accessCode.code, zakiUser.id]
+      );
 
-    await dbQuery(
-      `UPDATE access_codes SET redeemed_count = redeemed_count + 1 WHERE id = $1`,
-      [accessCode.id]
-    );
+      await client.query(
+        `INSERT INTO access_code_redemptions
+         (code_id, user_id, access_expires_at, campaign, code)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [accessCode.id, zakiUser.id, expiresAt.toISOString(), accessCode.campaign, code]
+      );
 
-    res.status(200).json({
-      success: true,
-      accessExpiresAt: expiresAt.toISOString(),
-      campaign: accessCode.campaign,
+      return {
+        status: 200,
+        body: {
+          success: true,
+          accessExpiresAt: expiresAt.toISOString(),
+          campaign: accessCode.campaign,
+        },
+      };
     });
+
+    res.status(redeemResult.status).json(redeemResult.body);
   } catch (error) {
     console.error("[AccessCode] Redeem error:", error);
     res.status(500).json({ error: error?.message || "Failed to redeem access code." });
@@ -2909,7 +3106,20 @@ const deleteWorkspaceHandler = async (req, res) => {
       return;
     }
 
-    const { slug } = req.params;
+    const slug = String(req.params.slug || "").trim();
+    if (!slug) {
+      res.status(400).json({ success: false, error: "Workspace slug is required." });
+      return;
+    }
+    const normalizedSlug = slug.toLowerCase();
+    const defaultSlug = String(ZAKI_DEFAULT_WORKSPACE_SLUG || "zaki").trim().toLowerCase();
+    if (normalizedSlug === "zaki" || normalizedSlug === defaultSlug) {
+      res.status(400).json({
+        success: false,
+        error: "Default workspace cannot be deleted.",
+      });
+      return;
+    }
 
     // Log the deletion attempt
     console.log(`[ZAKI] User ${email} deleting workspace ${slug}`);
@@ -2957,7 +3167,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(400).json({ success: false, error: "Missing token." });
     } else {
-      res.status(400).send("Missing verification token.");
+      res.redirect(302, getLoginRedirectUrl("missing_token"));
     }
     return;
   }
@@ -2974,7 +3184,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(404).json({ success: false, error: "Invalid token." });
     } else {
-      res.status(404).send("Invalid verification token.");
+      res.redirect(302, getLoginRedirectUrl("invalid_token"));
     }
     return;
   }
@@ -2983,7 +3193,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(200).json({ success: true, message: "Already verified." });
     } else {
-      res.status(200).send("Your email is already verified. You can sign in.");
+      res.redirect(302, getLoginRedirectUrl("already_verified"));
     }
     return;
   }
@@ -2993,7 +3203,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(410).json({ success: false, error: "Token expired." });
     } else {
-      res.status(410).send("Verification link expired. Please sign up again.");
+      res.redirect(302, getLoginRedirectUrl("expired"));
     }
     return;
   }
@@ -3015,9 +3225,7 @@ const verifyHandler = async (req, res) => {
       message: "Email verified. You can sign in now.",
     });
   } else {
-    res
-      .status(200)
-      .send("Email verified. Return to ZAKI and sign in.");
+    res.redirect(302, getLoginRedirectUrl("success"));
   }
 };
 
@@ -3236,6 +3444,10 @@ app.post("/api/memory/end-session", express.json({ limit: "5mb" }), async (req, 
     if (!messages || !Array.isArray(messages) || messages.length < 3) {
       // Skip summarization for very short conversations
       return res.json({ skipped: true, reason: "conversation_too_short" });
+    }
+
+    if (!ZAKI_ENABLE_SESSION_SUMMARIZATION) {
+      return res.json({ skipped: true, reason: "disabled" });
     }
 
     // Run summarization in background (don't block the response)

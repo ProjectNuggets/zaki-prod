@@ -14,6 +14,7 @@ import { OnboardingModal } from "./components/onboarding/OnboardingModal";
 import {
   clearAuthToken,
   fetchCurrentUser,
+  fetchProfile,
   fetchLegalConsentStatus,
   submitLegalReconsent,
 } from "@/lib/api";
@@ -131,14 +132,36 @@ export default function App() {
     let isMounted = true;
     setLoading(true);
     fetchCurrentUser()
-      .then(({ data, response }) => {
+      .then(async ({ data, response }) => {
         if (!isMounted) return;
         if (!response.ok || !data?.success) {
           clearAuthToken();
           logout();
           return;
         }
-        setUser(data.user ?? null);
+        const nextUser = data.user ?? null;
+        if (!nextUser) {
+          setUser(null);
+          return;
+        }
+        let mergedUser = nextUser;
+        try {
+          const profileResult = await fetchProfile();
+          if (
+            profileResult.response.ok &&
+            profileResult.data?.success &&
+            profileResult.data.user
+          ) {
+            mergedUser = {
+              ...nextUser,
+              fullName: profileResult.data.user.fullName ?? nextUser.fullName ?? null,
+            };
+          }
+        } catch {
+          // Keep session user payload when profile lookup fails.
+        }
+        if (!isMounted) return;
+        setUser(mergedUser);
       })
       .catch(() => {
         if (!isMounted) return;

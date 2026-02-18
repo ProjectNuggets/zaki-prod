@@ -23,7 +23,7 @@ export function LegalPage() {
   const legalEmail = "info@novanuggets.com";
 
   return (
-    <div className="min-h-full px-6 py-10" dir="ltr" lang="en">
+    <div className="h-full overflow-y-auto zaki-scrollbar-fade px-6 py-10" dir="ltr" lang="en">
       <div className="mx-auto w-full max-w-5xl">
         <div className="overflow-hidden rounded-[28px] border border-zaki-subtle bg-[linear-gradient(180deg,#fffdf9_0%,#fff8ef_62%,#f6ecdf_100%)] shadow-[0px_24px_56px_rgba(15,15,15,0.1)] dark:border-[#2c221a] dark:bg-[linear-gradient(165deg,#1b140f_0%,#120f0c_58%,#0d0a08_100%)]">
           <div className="border-b border-zaki-subtle bg-[linear-gradient(130deg,#fff8ef_0%,#f4e8d9_70%,#eddcc8_100%)] px-7 py-7 dark:border-[#2c221a] dark:bg-[linear-gradient(130deg,#261d16_0%,#1a1410_65%,#130f0c_100%)]">

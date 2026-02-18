@@ -339,12 +339,14 @@
       "manualHint": "تأكيد كل ذاكرة يدويًا"
     },
     "sendAria": "إرسال الرسالة",
+    "stopAria": "إيقاف الرد",
     "menu": {
       "addOptions": "خيارات إضافية",
       "generateImage": "إنشاء صورة",
       "uploadFile": "رفع صورة أو ملف",
       "agentMode": "وضع الوكيل",
-      "studyLearn": "الدراسة والتعلّم"
+      "studyLearn": "الدراسة والتعلّم",
+      "comingSoonToast": "هذه الميزة قادمة قريبًا."
     },
     "placeholders": [
       "اسأل أي شيء",
@@ -353,6 +355,26 @@
       "اكتب رسالة أو بريدًا إلكترونيًا",
       "حوّل هذا إلى قائمة تحقق"
     ]
+  },
+  "spacesView": {
+    "title": "المساحات",
+    "searchPlaceholder": "ابحث في المساحات...",
+    "searchAria": "ابحث في المساحات",
+    "sortToggleAria": "تبديل ترتيب الفرز",
+    "sortRecent": "الترتيب: الأحدث",
+    "sortAlpha": "الترتيب: أ-ي",
+    "createCta": "إنشاء مساحة جديدة",
+    "chatsCount_one": "{{count}} محادثة",
+    "chatsCount_two": "{{count}} محادثتان",
+    "chatsCount_few": "{{count}} محادثات",
+    "chatsCount_many": "{{count}} محادثة",
+    "chatsCount_other": "{{count}} محادثة",
+    "updatedRecently": "تم التحديث مؤخرًا",
+    "startChat": "ابدأ محادثة جديدة",
+    "startChatAria": "ابدأ محادثة جديدة في هذه المساحة",
+    "spaceSettingsAria": "إعدادات {{title}}",
+    "deleteSpaceAria": "حذف {{title}}",
+    "descriptionPlaceholder": "أضف وصفًا مختصرًا..."
   },
   "billing": {
     "upgradeTitle": "اختر خطتك",

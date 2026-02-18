@@ -7,30 +7,19 @@ import {
 } from "./legal-consent.js";
 
 describe("legal consent auth schemas", () => {
-  it("requires consent fields for login", () => {
+  it("does not require consent fields for login", () => {
     const schema = buildLoginSchema();
-
-    const missingConsent = schema.safeParse({
-      username: "user@example.com",
-      password: "secret",
-    });
-    expect(missingConsent.success).toBe(false);
-
-    const falseConsent = schema.safeParse({
-      username: "user@example.com",
-      password: "secret",
-      legalConsentAccepted: false,
-      legalPolicyVersion: "2026-02-17.v2",
-    });
-    expect(falseConsent.success).toBe(false);
 
     const valid = schema.safeParse({
       username: "user@example.com",
       password: "secret",
-      legalConsentAccepted: true,
-      legalPolicyVersion: "2026-02-17.v2",
     });
     expect(valid.success).toBe(true);
+
+    const missingIdentity = schema.safeParse({
+      password: "secret",
+    });
+    expect(missingIdentity.success).toBe(false);
   });
 
   it("requires consent fields for signup", () => {

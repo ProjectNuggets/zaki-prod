@@ -40,7 +40,6 @@ export function LoginScreen() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
   const [loginAccessCode, setLoginAccessCode] = useState("");
-  const [loginLegalConsent, setLoginLegalConsent] = useState(false);
   const [signupLegalConsent, setSignupLegalConsent] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetPassword, setResetPassword] = useState("");
@@ -52,6 +51,38 @@ export function LoginScreen() {
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
     getInitialLegalPolicyVersion
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const verified = String(url.searchParams.get("verified") || "").trim();
+    const authMode = String(url.searchParams.get("auth") || "").trim();
+    if (!verified && authMode !== "login") {
+      return;
+    }
+
+    setMode("login");
+    if (verified === "success") {
+      setNotice("Email verified successfully. You can sign in now.");
+      setError("");
+    } else if (verified === "already_verified") {
+      setNotice("Email already verified. Please sign in.");
+      setError("");
+    } else if (verified === "expired") {
+      setError("Verification link expired. Please sign up again.");
+      setNotice("");
+    } else if (verified === "invalid_token") {
+      setError("Verification link is invalid. Please sign up again.");
+      setNotice("");
+    } else if (verified === "missing_token") {
+      setError("Verification token is missing. Please sign up again.");
+      setNotice("");
+    }
+
+    url.searchParams.delete("auth");
+    url.searchParams.delete("verified");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,16 +210,9 @@ export function LoginScreen() {
         return;
       }
 
-      if (!loginLegalConsent) {
-        setError("Please accept Terms, Privacy & Compliance to continue.");
-        return;
-      }
-
       const { data, response } = await requestLogin({
         username: email.trim() || undefined,
         password,
-        legalConsentAccepted: true,
-        legalPolicyVersion,
       });
       
       if (!response.ok || !data?.valid || !data?.token) {
@@ -323,18 +347,12 @@ export function LoginScreen() {
             </label>
           )}
 
-          {(mode === "login" || mode === "signup") && (
+          {mode === "signup" && (
             <label className="flex items-start gap-3 rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base/70 dark:bg-[#14100d] px-3 py-3 text-xs font-medium text-zaki-secondary dark:text-[#c9b8a4]">
               <input
                 type="checkbox"
-                checked={mode === "signup" ? signupLegalConsent : loginLegalConsent}
-                onChange={(event) => {
-                  if (mode === "signup") {
-                    setSignupLegalConsent(event.target.checked);
-                    return;
-                  }
-                  setLoginLegalConsent(event.target.checked);
-                }}
+                checked={signupLegalConsent}
+                onChange={(event) => setSignupLegalConsent(event.target.checked)}
                 className="mt-0.5 size-4 rounded border border-zaki-strong dark:border-[#3a3026] bg-white dark:bg-[#0f0b08] accent-[#D97757]"
                 required
               />
@@ -441,7 +459,6 @@ export function LoginScreen() {
             disabled={
               isLoading ||
               ((mode === "login" || mode === "signup") && password.length === 0) ||
-              (mode === "login" && !loginLegalConsent) ||
               (mode === "signup" && !signupLegalConsent) ||
               (mode === "signup" && confirmPassword.length === 0) ||
               (mode === "reset-confirm" &&
@@ -492,7 +509,6 @@ export function LoginScreen() {
             }
             if (mode === "login") {
               setLoginAccessCode("");
-              setLoginLegalConsent(false);
             }
           }}
         >

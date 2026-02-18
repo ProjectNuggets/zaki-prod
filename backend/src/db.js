@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import pg from "pg";
 
 let pool = null;
@@ -11,10 +12,34 @@ export async function initDb() {
   if (!pool) {
     const useSSL =
       String(process.env.PGSSLMODE || "").toLowerCase() === "require";
+    const sslRejectUnauthorized =
+      String(process.env.PGSSL_REJECT_UNAUTHORIZED || "true")
+        .toLowerCase()
+        .trim() !== "false";
+    const inlineCa = String(process.env.PGSSL_CA || "").trim();
+    const rootCertPath = String(process.env.PGSSLROOTCERT || "").trim();
+    const loadedCa =
+      !inlineCa && rootCertPath
+        ? fs.readFileSync(rootCertPath, "utf8")
+        : inlineCa;
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (isProduction && useSSL && !sslRejectUnauthorized) {
+      throw new Error(
+        "In production, PGSSL_REJECT_UNAUTHORIZED must not be false."
+      );
+    }
+
+    const sslConfig = useSSL
+      ? {
+          rejectUnauthorized: sslRejectUnauthorized,
+          ...(loadedCa ? { ca: loadedCa } : {}),
+        }
+      : undefined;
     const { Pool } = pg;
     pool = new Pool({
       connectionString,
-      ssl: useSSL ? { rejectUnauthorized: false } : undefined,
+      ssl: sslConfig,
     });
   }
 
@@ -450,6 +475,25 @@ export async function dbGet(text, params = []) {
 export async function dbAll(text, params = []) {
   const result = await getDb().query(text, params);
   return result.rows;
+}
+
+export async function withDbTransaction(runInTransaction) {
+  const client = await getDb().connect();
+  let committed = false;
+  try {
+    await client.query("BEGIN");
+    const result = await runInTransaction(client);
+    await client.query("COMMIT");
+    committed = true;
+    return result;
+  } catch (error) {
+    if (!committed) {
+      await client.query("ROLLBACK").catch(() => {});
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

@@ -32,6 +32,7 @@ describe("LoginScreen legal consent", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    window.history.replaceState({}, "", "/");
 
     (useAuthStore as unknown as jest.Mock).mockReturnValue({
       setToken,
@@ -68,33 +69,32 @@ describe("LoginScreen legal consent", () => {
     });
   });
 
-  it("requires consent checkbox and sends consent payload on login", async () => {
+  it("shows verification success notice from redirect query params", async () => {
+    window.history.replaceState({}, "", "/?auth=login&verified=success");
+    render(<LoginScreen />);
+    expect(
+      await screen.findByText("Email verified successfully. You can sign in now.")
+    ).toBeInTheDocument();
+  });
+
+  it("does not require consent checkbox on login and sends auth payload only", async () => {
     const user = userEvent.setup();
     render(<LoginScreen />);
 
     expect(screen.queryByText(new RegExp(`policy\\s+${policyVersion}`))).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Terms, Privacy & Compliance" })).toHaveAttribute(
-      "href",
-      "/legal"
-    );
+    expect(screen.queryByRole("link", { name: "Terms, Privacy & Compliance" })).not.toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
 
     const signInButton = screen.getByRole("button", { name: "Sign in" });
-    expect(signInButton).toBeDisabled();
-
-    await user.click(screen.getByRole("checkbox"));
     expect(signInButton).toBeEnabled();
-
     await user.click(signInButton);
 
     await waitFor(() => {
       expect(requestLogin).toHaveBeenCalledWith({
         username: "user@example.com",
         password: "Password123",
-        legalConsentAccepted: true,
-        legalPolicyVersion: policyVersion,
       });
     });
     expect(setToken).toHaveBeenCalledWith("token-123");

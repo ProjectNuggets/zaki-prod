@@ -25,7 +25,6 @@ export function buildLoginSchema() {
       email: z.string().email().optional(),
       username: z.string().email().optional(),
       password: z.string().min(1, "Password is required"),
-      ...buildLegalConsentShape(),
     })
     .refine((data) => data.email || data.username, {
       message: "Email or username is required",

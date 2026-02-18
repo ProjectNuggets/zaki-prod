@@ -339,12 +339,14 @@
       "manualHint": "Manually confirm each memory"
     },
     "sendAria": "Send message",
+    "stopAria": "Stop generating",
     "menu": {
       "addOptions": "Add options",
       "generateImage": "Generate image",
       "uploadFile": "Upload image or file",
       "agentMode": "Agent mode",
-      "studyLearn": "Study and learn"
+      "studyLearn": "Study and learn",
+      "comingSoonToast": "This feature is coming soon."
     },
     "placeholders": [
       "Ask anything",
@@ -353,6 +355,23 @@
       "Draft a message or email",
       "Turn this into a checklist"
     ]
+  },
+  "spacesView": {
+    "title": "Spaces",
+    "searchPlaceholder": "Search spaces...",
+    "searchAria": "Search spaces",
+    "sortToggleAria": "Toggle sort order",
+    "sortRecent": "Sort: recent",
+    "sortAlpha": "Sort: A-Z",
+    "createCta": "Create new space",
+    "chatsCount_one": "{{count}} chat",
+    "chatsCount_other": "{{count}} chats",
+    "updatedRecently": "Updated recently",
+    "startChat": "Start new chat",
+    "startChatAria": "Start a new chat in this space",
+    "spaceSettingsAria": "{{title}} settings",
+    "deleteSpaceAria": "Delete {{title}}",
+    "descriptionPlaceholder": "Add a short description..."
   },
   "billing": {
     "upgradeTitle": "Choose your plan",

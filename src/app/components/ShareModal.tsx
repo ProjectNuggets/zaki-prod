@@ -174,10 +174,10 @@ export function ShareModal({
                     type="button"
                     onClick={() => setShareType('public')}
                     className={cn(
-                      "flex items-center p-3 rounded-zaki-md border transition-all bg-white rtl:text-right rtl:justify-end",
+                      "flex items-center p-3 rounded-zaki-md border transition-all bg-zaki-base dark:bg-zaki-dark-elevated rtl:text-right rtl:justify-end",
                       shareType === 'public'
-                        ? "border-zaki-focus bg-zaki-selected"
-                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
+                        ? "border-zaki-focus bg-zaki-selected dark:bg-[#241c16]"
+                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover"
                     )}
                     dir={isRtl ? "rtl" : "ltr"}
                   >
@@ -203,10 +203,10 @@ export function ShareModal({
                     type="button"
                     onClick={() => setShareType('password')}
                     className={cn(
-                      "flex items-center p-3 rounded-zaki-md border transition-all bg-white rtl:text-right rtl:justify-end",
+                      "flex items-center p-3 rounded-zaki-md border transition-all bg-zaki-base dark:bg-zaki-dark-elevated rtl:text-right rtl:justify-end",
                       shareType === 'password'
-                        ? "border-zaki-focus bg-zaki-selected"
-                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
+                        ? "border-zaki-focus bg-zaki-selected dark:bg-[#241c16]"
+                        : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover"
                     )}
                     dir={isRtl ? "rtl" : "ltr"}
                   >
