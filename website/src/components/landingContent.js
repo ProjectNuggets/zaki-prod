@@ -29,6 +29,15 @@ export const content = {
       submit: "Start",
       helper: "Try writing in Arabic, English, or both.",
     },
+    earlyAccess: {
+      badge: "Early Access",
+      heading: "First 100 users get free access",
+      description: "We're opening Zaki to a small group first. Use this code when you sign up — no payment needed.",
+      code: "LAUNLC78CZB4",
+      copy: "Copy code",
+      copied: "Copied!",
+      cta: "Sign up with code →",
+    },
     why: {
       heading: "The Arab world thinks, speaks, and works differently.",
       subheading: "So why does AI still feel foreign?",
@@ -234,6 +243,15 @@ export const content = {
       ],
       submit: "ابدأ",
       helper: "اكتب بالعربية أو الإنجليزية أو بالاثنين معًا.",
+    },
+    earlyAccess: {
+      badge: "وصول مبكر",
+      heading: "أول 100 مستخدم يحصلون على وصول مجاني",
+      description: "نفتح زكي لمجموعة صغيرة أولاً. استخدم هذا الرمز عند التسجيل — بدون دفع.",
+      code: "LAUNLC78CZB4",
+      copy: "انسخ الرمز",
+      copied: "تم النسخ!",
+      cta: "سجّل بالرمز ←",
     },
     why: {
       heading: "العالم العربي يفكر ويتحدث ويعمل بطريقة مختلفة.",

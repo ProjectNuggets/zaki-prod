@@ -125,6 +125,7 @@ export function LandingApp() {
   const [isDeletingPrompt, setIsDeletingPrompt] = useState(false);
   const [openFaq, setOpenFaq] = useState(-1);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );
@@ -390,6 +391,51 @@ export function LandingApp() {
               </div>
             </div>
           </form>
+
+          {/* Early Access Banner */}
+          <div className="mx-auto mt-8 w-full max-w-[520px]">
+            <div className="relative overflow-hidden rounded-2xl border border-[#e5d3bd] bg-gradient-to-b from-[#fdf8f2] to-[#f7f0e6] px-5 py-5 shadow-[0_8px_24px_rgba(15,12,11,0.06)]">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D24430] px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white">
+                  <span className="inline-block size-1.5 animate-pulse rounded-full bg-white" />
+                  {t.earlyAccess.badge}
+                </span>
+                <span className="text-[13px] font-medium text-[#5f574d]">{t.earlyAccess.heading}</span>
+              </div>
+
+              <p className="mt-2.5 text-[13px] leading-relaxed text-[#7a6f62]">
+                {t.earlyAccess.description}
+              </p>
+
+              <div className="mt-3 flex items-center gap-2">
+                <code className="flex-1 rounded-lg border border-[#e0d4c3] bg-white px-3 py-2 text-center font-mono text-[15px] font-semibold tracking-wider text-[#2f2a24] select-all">
+                  {t.earlyAccess.code}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(t.earlyAccess.code);
+                    setCodeCopied(true);
+                    setTimeout(() => setCodeCopied(false), 2000);
+                  }}
+                  className={`whitespace-nowrap rounded-lg border px-3 py-2 text-[13px] font-medium transition ${
+                    codeCopied
+                      ? "border-[#0d9d7e] bg-[#0d9d7e]/10 text-[#0d9d7e]"
+                      : "border-[#e0d4c3] bg-white text-[#5f574d] hover:bg-[#f7f0e6]"
+                  }`}
+                >
+                  {codeCopied ? t.earlyAccess.copied : t.earlyAccess.copy}
+                </button>
+              </div>
+
+              <a
+                href={`${APP_URL}/?auth=signup`}
+                className="mt-3 block w-full rounded-xl bg-[#D24430] py-2.5 text-center text-[13px] font-semibold text-white transition hover:bg-[#be3e2d]"
+              >
+                {t.earlyAccess.cta}
+              </a>
+            </div>
+          </div>
         </section>
 
         <section className="mx-auto mt-[clamp(9rem,18vh,16rem)] max-w-[900px] md:mt-[clamp(12rem,24vh,28rem)]" id="why" ref={whyRef}>
