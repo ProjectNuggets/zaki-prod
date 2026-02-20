@@ -346,7 +346,7 @@ app.use((err, req, res, next) => {
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // 10 attempts per hour
+  max: 100, // 100 attempts per hour
   skipSuccessfulRequests: true,
   skip: (req) => req.method === 'OPTIONS', // Skip CORS preflight
   standardHeaders: true,
