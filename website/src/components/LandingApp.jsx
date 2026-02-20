@@ -35,7 +35,7 @@ function NavPill({ onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className="whitespace-nowrap px-3 py-2 text-[14px] font-medium leading-5 text-[#5c5f6a] transition hover:text-[#2c2d33]"
+      className="whitespace-nowrap px-1.5 py-2 text-[11px] font-medium leading-5 text-[#5c5f6a] transition hover:text-[#2c2d33] md:px-3 md:text-[14px]"
     >
       {children}
     </button>
@@ -152,7 +152,7 @@ export function LandingApp() {
   const switchLangHref = locale === "ar" ? "/" : "/?lang=ar";
   const dir = t.dir;
   const langFlag = locale === "ar" ? "🇸🇾" : "🇬🇧";
-  const navBarWidth = "w-[min(500px,calc(100%-24px))] md:w-[min(560px,calc(100%-24px))]";
+  const navBarWidth = "w-[calc(100%-24px)] md:w-[min(560px,calc(100%-24px))]";
   const legalBasePath = locale === "ar" ? "/ar" : "";
 
   useEffect(() => {
@@ -321,19 +321,8 @@ export function LandingApp() {
             <span className="h-[28px] w-px bg-[#d9dbe2]" aria-hidden="true" />
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#ece7df] text-[#5d5e67] md:hidden"
-            aria-label="Toggle menu"
-          >
-            {isMenuOpen ? "×" : "☰"}
-          </button>
-
           <nav
-            className={`${
-              isMenuOpen ? "flex" : "hidden"
-            } absolute left-0 right-0 top-[64px] mx-3 flex-col gap-2 rounded-2xl border border-[#ece3d6] bg-white p-3 shadow-[0_12px_30px_rgba(15,12,11,0.1)] md:static md:mx-0 md:flex md:flex-row md:items-center md:gap-1 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:pr-3 md:shadow-none`}
+            className="flex flex-row items-center gap-0.5 pr-1 md:gap-1 md:pr-3"
           >
             <NavPill onClick={() => scrollToId("horizontal-showcase")}>{t.nav.about}</NavPill>
             <NavPill onClick={() => scrollToId("features")}>{t.nav.features}</NavPill>
@@ -342,13 +331,13 @@ export function LandingApp() {
             </NavPill>
             <a
               href={`${APP_URL}/?auth=login`}
-              className="whitespace-nowrap rounded-full border border-[#cecfda] bg-[#f7f7f9] px-[18px] py-[7px] text-center text-[13px] font-semibold leading-5 text-[#24252c] transition hover:bg-white"
+              className="whitespace-nowrap rounded-full border border-[#cecfda] bg-[#f7f7f9] px-[10px] py-[5px] text-center text-[11px] font-semibold leading-5 text-[#24252c] transition hover:bg-white md:px-[18px] md:py-[7px] md:text-[13px]"
             >
               {t.nav.login}
             </a>
             <a
               href={`${APP_URL}/?auth=signup`}
-              className="whitespace-nowrap rounded-full border border-[#a33227] bg-[#d24430] px-[22px] py-[7px] text-center text-[13px] font-semibold leading-5 !text-white transition hover:bg-[#d24430] hover:!text-white visited:!text-white"
+              className="whitespace-nowrap rounded-full border border-[#a33227] bg-[#d24430] px-[12px] py-[5px] text-center text-[11px] font-semibold leading-5 !text-white transition hover:bg-[#d24430] hover:!text-white visited:!text-white md:px-[22px] md:py-[7px] md:text-[13px]"
               style={{ color: "#ffffff" }}
             >
               {t.nav.signup}
