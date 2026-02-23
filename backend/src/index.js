@@ -26,7 +26,8 @@ import {
   recordMemoryTelemetry,
 } from "./memory/telemetry.js";
 import { extractFacts } from "./memory-extraction.js";
-import { summarizeConversation } from "./memory-legacy.js";
+import { summarizeConversation } from "./memory/session-summary.js";
+import { createSessionEndHandler } from "./memory/session-end-route.js";
 import { buildStreamUpstreamPayload, extractStreamMessage } from "./chat-proxy.js";
 
 // Load environment variables from the first valid .env location.
@@ -102,6 +103,25 @@ const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_PRICE_STUDENT = (process.env.STRIPE_PRICE_STUDENT || "").trim();
 const STRIPE_PRICE_PERSONAL = (process.env.STRIPE_PRICE_PERSONAL || "").trim();
+const ZAKI_BILLING_PROVIDER = (process.env.ZAKI_BILLING_PROVIDER || "stripe")
+  .trim()
+  .toLowerCase();
+const ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT = (
+  process.env.ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT || ""
+).trim();
+const ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL = (
+  process.env.ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL || ""
+).trim();
+const ZAKI_EXTERNAL_PORTAL_URL = (process.env.ZAKI_EXTERNAL_PORTAL_URL || "").trim();
+const ZAKI_EXTERNAL_PROVIDER_LABEL = (
+  process.env.ZAKI_EXTERNAL_PROVIDER_LABEL || "Paddle"
+).trim();
+const CREEM_API_KEY = (process.env.CREEM_API_KEY || "").trim();
+const CREEM_API_BASE_URL = (process.env.CREEM_API_BASE_URL || "https://api.creem.io").trim();
+const CREEM_PRODUCT_ID_STUDENT = (process.env.CREEM_PRODUCT_ID_STUDENT || "").trim();
+const CREEM_PRODUCT_ID_PERSONAL = (process.env.CREEM_PRODUCT_ID_PERSONAL || "").trim();
+const CREEM_SUCCESS_URL = (process.env.CREEM_SUCCESS_URL || "").trim();
+const CREEM_WEBHOOK_SECRET = (process.env.CREEM_WEBHOOK_SECRET || "").trim();
 const SKIP_EMAIL_VERIFICATION = ["non", "none", "no"].includes(
   ZAKI_EMAIL_MODE.toLowerCase()
 );
@@ -176,7 +196,122 @@ const TIER_BY_PRICE = Object.entries(PRICE_BY_TIER).reduce((acc, [tier, priceId]
   return acc;
 }, {});
 
+function isStripeProviderSelected() {
+  return ZAKI_BILLING_PROVIDER === "stripe";
+}
+
+function isExternalProviderSelected() {
+  return ZAKI_BILLING_PROVIDER === "external" || ZAKI_BILLING_PROVIDER === "paddle";
+}
+
+function isCreemProviderSelected() {
+  return ZAKI_BILLING_PROVIDER === "creem";
+}
+
+function getCheckoutProviderOptions() {
+  const stripeCheckoutEnabled = Boolean(
+    stripe && PRICE_BY_TIER.student && PRICE_BY_TIER.personal
+  );
+  const externalCheckoutEnabled = Boolean(
+    ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT && ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL
+  );
+  const creemCheckoutEnabled = Boolean(
+    CREEM_API_KEY && CREEM_PRODUCT_ID_STUDENT && CREEM_PRODUCT_ID_PERSONAL
+  );
+
+  return [
+    {
+      key: "stripe",
+      label: "Stripe",
+      enabled: stripeCheckoutEnabled,
+    },
+    {
+      key: "paddle",
+      label: ZAKI_EXTERNAL_PROVIDER_LABEL || "Paddle",
+      enabled: externalCheckoutEnabled,
+    },
+    {
+      key: "creem",
+      label: "Creem",
+      enabled: creemCheckoutEnabled,
+    },
+  ];
+}
+
+function getActiveBillingProviderKey() {
+  if (isStripeProviderSelected() && stripe) return "stripe";
+  if (isCreemProviderSelected()) return "creem";
+  if (isExternalProviderSelected()) return "paddle";
+  return "none";
+}
+
 function getBillingConfigStatus() {
+  const activeProvider = getActiveBillingProviderKey();
+  const checkoutProviders = getCheckoutProviderOptions();
+  const anyCheckoutProviderEnabled = checkoutProviders.some((provider) => provider.enabled);
+  if (activeProvider === "creem") {
+    const checkoutEnabled = Boolean(
+      CREEM_API_KEY && CREEM_PRODUCT_ID_STUDENT && CREEM_PRODUCT_ID_PERSONAL
+    );
+    const missing = [];
+    if (!CREEM_API_KEY) missing.push("creem_api_key");
+    if (!CREEM_PRODUCT_ID_STUDENT) missing.push("creem_product_id_student");
+    if (!CREEM_PRODUCT_ID_PERSONAL) missing.push("creem_product_id_personal");
+    return {
+      provider: "creem",
+      requestedProvider: ZAKI_BILLING_PROVIDER,
+      checkoutProviders,
+      stripeEnabled: Boolean(stripe),
+      checkoutEnabled,
+      portalEnabled: false,
+      cancelEnabled: false,
+      webhookEnabled: Boolean(CREEM_WEBHOOK_SECRET),
+      missing,
+    };
+  }
+  if (activeProvider === "paddle") {
+    const checkoutEnabled = Boolean(
+      ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT && ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL
+    );
+    const portalEnabled = Boolean(ZAKI_EXTERNAL_PORTAL_URL);
+    const missing = [];
+    if (!ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT) missing.push("external_checkout_url_student");
+    if (!ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL) missing.push("external_checkout_url_personal");
+    if (!ZAKI_EXTERNAL_PORTAL_URL) missing.push("external_portal_url");
+    return {
+      provider: "paddle",
+      requestedProvider: ZAKI_BILLING_PROVIDER,
+      checkoutProviders,
+      stripeEnabled: Boolean(stripe),
+      checkoutEnabled,
+      portalEnabled,
+      cancelEnabled: false,
+      webhookEnabled: false,
+      missing,
+    };
+  }
+
+  if (activeProvider !== "stripe") {
+    const missing = [];
+    if (isStripeProviderSelected() && !stripe) {
+      missing.push("stripe_secret_key");
+    }
+    if (!["stripe", "external", "paddle", "creem", "none"].includes(ZAKI_BILLING_PROVIDER)) {
+      missing.push("unsupported_billing_provider");
+    }
+    return {
+      provider: activeProvider,
+      requestedProvider: ZAKI_BILLING_PROVIDER,
+      checkoutProviders,
+      stripeEnabled: Boolean(stripe),
+      checkoutEnabled: anyCheckoutProviderEnabled,
+      portalEnabled: false,
+      cancelEnabled: false,
+      webhookEnabled: false,
+      missing,
+    };
+  }
+
   const stripeEnabled = Boolean(stripe);
   const checkoutEnabled = Boolean(
     stripeEnabled && PRICE_BY_TIER.student && PRICE_BY_TIER.personal
@@ -200,8 +335,11 @@ function getBillingConfigStatus() {
   }
 
   return {
+    provider: "stripe",
+    requestedProvider: ZAKI_BILLING_PROVIDER,
+    checkoutProviders,
     stripeEnabled,
-    checkoutEnabled,
+    checkoutEnabled: anyCheckoutProviderEnabled,
     portalEnabled,
     cancelEnabled,
     webhookEnabled,
@@ -224,8 +362,239 @@ function sendBillingUnavailable(res, capability) {
 // SECURITY MIDDLEWARE
 // =============================================================================
 
+function normalizeWebhookHexSignature(input) {
+  return String(input || "")
+    .trim()
+    .replace(/^sha256=/i, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function verifyCreemWebhookSignature(rawBody, signatureHeader) {
+  if (!CREEM_WEBHOOK_SECRET) return false;
+  const received = normalizeWebhookHexSignature(signatureHeader);
+  if (!received) return false;
+  const expected = crypto
+    .createHmac("sha256", CREEM_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest("hex");
+  const receivedBuffer = Buffer.from(received, "hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  if (receivedBuffer.length !== expectedBuffer.length) return false;
+  return crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+}
+
+async function markWebhookEventProcessed(provider, eventId) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const normalizedEventId = String(eventId || "").trim();
+  if (!normalizedProvider || !normalizedEventId) return false;
+  const inserted = await dbGet(
+    `INSERT INTO billing_webhook_events (provider, event_id)
+     VALUES ($1, $2)
+     ON CONFLICT (provider, event_id) DO NOTHING
+     RETURNING id`,
+    [normalizedProvider, normalizedEventId]
+  );
+  return Boolean(inserted?.id);
+}
+
+function resolveCreemPlanTier(payload = {}) {
+  const productId =
+    payload?.product_id ||
+    payload?.product?.id ||
+    payload?.line_item?.product_id ||
+    payload?.metadata?.product_id ||
+    null;
+  const metadataTier = payload?.metadata?.plan_tier || payload?.plan_tier || null;
+  if (productId && String(productId) === String(CREEM_PRODUCT_ID_STUDENT)) {
+    return { tier: "student", productId: String(productId) };
+  }
+  if (productId && String(productId) === String(CREEM_PRODUCT_ID_PERSONAL)) {
+    return { tier: "personal", productId: String(productId) };
+  }
+  return {
+    tier: resolveTier(metadataTier || "free"),
+    productId: productId ? String(productId) : null,
+  };
+}
+
+function parseCreemDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function mapCreemStatus(type, payload = {}) {
+  const subscriptionStatus = String(payload?.status || "").toLowerCase();
+  const eventType = String(type || "").toLowerCase();
+  const cancelAtPeriodEnd = Boolean(
+    payload?.cancel_at_period_end ||
+      payload?.scheduled_cancel_at ||
+      subscriptionStatus === "scheduled_cancel"
+  );
+
+  if (
+    eventType.includes("subscription.cancel") ||
+    eventType.includes("subscription.expire") ||
+    eventType.includes("subscription.pause") ||
+    subscriptionStatus === "canceled" ||
+    subscriptionStatus === "expired" ||
+    subscriptionStatus === "paused"
+  ) {
+    return { tier: "free", status: "canceled", cancelAtPeriodEnd: false };
+  }
+
+  if (subscriptionStatus === "trialing" || eventType.includes("trialing")) {
+    return { tier: null, status: "trialing", cancelAtPeriodEnd };
+  }
+  if (subscriptionStatus === "past_due" || eventType.includes("past_due")) {
+    return { tier: null, status: "past_due", cancelAtPeriodEnd };
+  }
+
+  // Default: keep access active for paid lifecycle events.
+  return { tier: null, status: "active", cancelAtPeriodEnd };
+}
+
+async function resolveUserForCreemWebhook(payload = {}) {
+  const metadataUserId = Number(payload?.metadata?.user_id || payload?.user_id || 0);
+  if (Number.isInteger(metadataUserId) && metadataUserId > 0) {
+    const byId = await dbGet("SELECT id, email FROM zaki_users WHERE id = $1", [metadataUserId]);
+    if (byId) return byId;
+  }
+
+  const candidateEmail =
+    payload?.customer_email ||
+    payload?.customer?.email ||
+    payload?.email ||
+    payload?.metadata?.user_email ||
+    null;
+  if (!candidateEmail) return null;
+  const normalized = normalizeEmail(candidateEmail);
+  return dbGet("SELECT id, email FROM zaki_users WHERE email = $1", [normalized]);
+}
+
+async function handleCreemWebhookEvent(eventType, payload = {}) {
+  const user = await resolveUserForCreemWebhook(payload);
+  if (!user) return;
+
+  const { tier: productTier, productId } = resolveCreemPlanTier(payload);
+  const statusState = mapCreemStatus(eventType, payload);
+  const finalTier = resolveTier(statusState.tier || productTier || "free");
+  const subscriptionId =
+    payload?.subscription_id || payload?.subscription?.id || payload?.id || null;
+  const customerId =
+    payload?.customer_id || payload?.customer?.id || payload?.metadata?.customer_id || null;
+  const currentPeriodEnd =
+    parseCreemDate(payload?.current_period_end) ||
+    parseCreemDate(payload?.period_end) ||
+    parseCreemDate(payload?.renews_at) ||
+    parseCreemDate(payload?.ends_at) ||
+    null;
+
+  await dbQuery(
+    `UPDATE zaki_users
+     SET creem_customer_id = $1,
+         creem_subscription_id = $2,
+         creem_product_id = $3,
+         plan_tier = $4,
+         plan_status = $5,
+         current_period_end = $6,
+         cancel_at_period_end = $7,
+         billing_updated_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $8`,
+    [
+      customerId,
+      subscriptionId,
+      productId,
+      finalTier,
+      statusState.status,
+      currentPeriodEnd,
+      statusState.cancelAtPeriodEnd,
+      user.id,
+    ]
+  );
+}
+
+async function creemWebhookHandler(req, res) {
+  if (!CREEM_WEBHOOK_SECRET) {
+    res.status(503).json({
+      success: false,
+      code: "billing_unavailable",
+      error: "Creem webhook is not configured.",
+    });
+    return;
+  }
+
+  const signature =
+    req.headers["x-creem-signature"] ||
+    req.headers["creem-signature"] ||
+    req.headers["x-signature"];
+  if (!signature) {
+    res.status(400).json({ error: "Missing Creem signature." });
+    return;
+  }
+
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "");
+  if (!verifyCreemWebhookSignature(rawBody, signature)) {
+    res.status(401).json({ error: "Invalid Creem webhook signature." });
+    return;
+  }
+
+  let event;
+  try {
+    event = JSON.parse(rawBody.toString("utf8") || "{}");
+  } catch {
+    res.status(400).json({ error: "Invalid JSON payload." });
+    return;
+  }
+  const eventType = String(event?.eventType || event?.event_type || event?.type || "").trim();
+  const eventPayload = event?.object || event?.data || {};
+  const eventId = String(event?.id || event?.event_id || "").trim();
+  if (!eventType) {
+    res.status(400).json({ error: "Missing webhook event type." });
+    return;
+  }
+
+  try {
+    if (eventId) {
+      const shouldProcess = await markWebhookEventProcessed("creem", eventId);
+      if (!shouldProcess) {
+        res.status(200).json({ received: true, duplicate: true });
+        return;
+      }
+    }
+    if (
+      eventType.includes("subscription") ||
+      eventType.includes("checkout") ||
+      eventType.includes("payment")
+    ) {
+      await handleCreemWebhookEvent(eventType, eventPayload);
+    }
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error("[Creem] Webhook handler error:", err);
+    res.status(500).json({ error: "Webhook handler failed." });
+  }
+}
+
+// Creem webhook must use raw body (must be registered before express.json)
+app.post("/api/billing/creem/webhook", express.raw({ type: "application/json" }), creemWebhookHandler);
+// Backward-compatible alias (deployment routing convenience)
+app.post("/api/webhooks/creem", express.raw({ type: "application/json" }), creemWebhookHandler);
+
 // Stripe webhook must use raw body (must be registered before express.json)
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const billingConfig = getBillingConfigStatus();
+  if (billingConfig.provider !== "stripe") {
+    res.status(503).json({
+      success: false,
+      code: "billing_unavailable",
+      error: "Billing webhook is not configured for an active provider.",
+    });
+    return;
+  }
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
     res.status(503).json({
       success: false,
@@ -346,9 +715,8 @@ app.use((err, req, res, next) => {
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 100, // 100 attempts per hour
+  max: 100, // 10 attempts per hour
   skipSuccessfulRequests: true,
-  skip: (req) => req.method === 'OPTIONS', // Skip CORS preflight
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please try again later.' }
@@ -1295,6 +1663,400 @@ async function resolveUserByStripeCustomer(customerId, fallbackEmail) {
     );
   }
   return user;
+}
+
+async function ensureStripeCustomerId({ email, zakiUser }) {
+  let customerId = zakiUser.stripe_customer_id;
+  if (customerId) return customerId;
+  const customer = await stripe.customers.create({
+    email,
+    metadata: { zaki_user_id: String(zakiUser.id), user_email: email },
+  });
+  customerId = customer.id;
+  await dbQuery(
+    `UPDATE zaki_users SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
+     WHERE id = $2`,
+    [customerId, zakiUser.id]
+  );
+  return customerId;
+}
+
+async function syncStripeSubscriptionState({ email, zakiUser }) {
+  if (!stripe) {
+    const err = new Error("Stripe is not configured.");
+    err.status = 503;
+    throw err;
+  }
+
+  let customerId = zakiUser.stripe_customer_id || null;
+  if (!customerId) {
+    const customers = await stripe.customers.list({
+      email,
+      limit: 1,
+    });
+    customerId = customers?.data?.[0]?.id || null;
+  }
+
+  if (!customerId) {
+    return {
+      updated: false,
+      reason: "customer_not_found",
+    };
+  }
+
+  const subscriptions = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "all",
+    limit: 20,
+  });
+  const ordered = Array.isArray(subscriptions?.data) ? subscriptions.data : [];
+  const preferred =
+    ordered.find((sub) => ["active", "trialing", "past_due", "unpaid"].includes(sub.status)) ||
+    ordered.find((sub) => Boolean(sub.cancel_at_period_end)) ||
+    ordered[0] ||
+    null;
+
+  if (!preferred) {
+    await dbQuery(
+      `UPDATE zaki_users
+       SET stripe_customer_id = $1,
+           stripe_subscription_id = NULL,
+           stripe_price_id = NULL,
+           plan_tier = 'free',
+           plan_status = 'inactive',
+           current_period_end = NULL,
+           cancel_at_period_end = FALSE,
+           billing_updated_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $2`,
+      [customerId, zakiUser.id]
+    );
+    return {
+      updated: true,
+      customerId,
+      tier: "free",
+      status: "inactive",
+    };
+  }
+
+  const priceId = preferred.items?.data?.[0]?.price?.id || null;
+  const tierFromPrice = priceId ? TIER_BY_PRICE[priceId] : null;
+  const tierFromMetadata = preferred.metadata?.plan_tier || null;
+  const isCanceled = preferred.status === "canceled";
+  const tier = isCanceled
+    ? "free"
+    : resolveTier(tierFromPrice || tierFromMetadata || zakiUser.plan_tier || "free");
+  const status = isCanceled ? "canceled" : preferred.status || "inactive";
+  const currentPeriodEnd = preferred.current_period_end
+    ? new Date(preferred.current_period_end * 1000).toISOString()
+    : null;
+  const cancelAtPeriodEnd = Boolean(preferred.cancel_at_period_end);
+
+  await dbQuery(
+    `UPDATE zaki_users
+     SET stripe_customer_id = $1,
+         stripe_subscription_id = $2,
+         stripe_price_id = $3,
+         plan_tier = $4,
+         plan_status = $5,
+         current_period_end = $6,
+         cancel_at_period_end = $7,
+         billing_updated_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $8`,
+    [
+      customerId,
+      preferred.id || null,
+      priceId,
+      tier,
+      status,
+      currentPeriodEnd,
+      cancelAtPeriodEnd,
+      zakiUser.id,
+    ]
+  );
+
+  return {
+    updated: true,
+    customerId,
+    subscriptionId: preferred.id || null,
+    tier,
+    status,
+    currentPeriodEnd,
+    cancelAtPeriodEnd,
+  };
+}
+
+const billingAdapters = {
+  none: {
+    name: "none",
+    async createCheckout() {
+      throw new Error("Billing provider is not configured.");
+    },
+    async createPortal() {
+      throw new Error("Billing provider is not configured.");
+    },
+    async cancelSubscription() {
+      throw new Error("Billing provider is not configured.");
+    },
+    async cleanupCustomerOnDelete() {
+      return;
+    },
+  },
+  stripe: {
+    name: "stripe",
+    async createCheckout({ plan, email, zakiUser }) {
+      if (plan === "student" && !isEduEmail(email)) {
+        const err = new Error("Student plan requires a .edu email address.");
+        err.status = 400;
+        throw err;
+      }
+
+      if (plan === "student") {
+        await dbQuery(
+          `UPDATE zaki_users SET student_verified = true, student_verified_at = NOW(), updated_at = NOW()
+           WHERE id = $1`,
+          [zakiUser.id]
+        );
+      }
+
+      const priceId = PRICE_BY_TIER[plan];
+      if (!priceId) {
+        const err = new Error("Plan is not configured.");
+        err.status = 400;
+        throw err;
+      }
+
+      const customerId = await ensureStripeCustomerId({ email, zakiUser });
+      const appUrl = getAppUrl();
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        allow_promotion_codes: true,
+        success_url: `${appUrl}/pricing?billing=success`,
+        cancel_url: `${appUrl}/pricing?billing=cancel`,
+        metadata: { user_email: email, plan_tier: plan },
+        subscription_data: {
+          metadata: { user_email: email, plan_tier: plan },
+        },
+      });
+      return { url: session.url };
+    },
+    async createPortal({ email, zakiUser }) {
+      const customerId = await ensureStripeCustomerId({ email, zakiUser });
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${getAppUrl()}/pricing?billing=manage`,
+      });
+      return { url: portal.url };
+    },
+    async cancelSubscription({ zakiUser }) {
+      let subscriptionId = zakiUser.stripe_subscription_id || null;
+      let subscription = null;
+
+      if (!subscriptionId && zakiUser.stripe_customer_id) {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: zakiUser.stripe_customer_id,
+          status: "all",
+          limit: 10,
+        });
+        subscription =
+          subscriptions.data.find((sub) =>
+            ["active", "trialing", "past_due", "unpaid"].includes(sub.status)
+          ) || subscriptions.data[0] || null;
+        subscriptionId = subscription?.id || null;
+      }
+
+      if (!subscriptionId) {
+        const err = new Error("No active subscription found.");
+        err.status = 400;
+        throw err;
+      }
+
+      if (!subscription) {
+        subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      }
+
+      if (!subscription || subscription.status === "canceled") {
+        const err = new Error("Subscription is already canceled.");
+        err.status = 400;
+        throw err;
+      }
+
+      const alreadyScheduled = Boolean(subscription.cancel_at_period_end);
+      const finalSubscription = alreadyScheduled
+        ? subscription
+        : await stripe.subscriptions.update(subscriptionId, {
+            cancel_at_period_end: true,
+          });
+
+      const priceId =
+        finalSubscription.items?.data?.[0]?.price?.id || zakiUser.stripe_price_id || null;
+      const tier = resolveTier((priceId && TIER_BY_PRICE[priceId]) || zakiUser.plan_tier || "free");
+      const currentPeriodEnd = finalSubscription.current_period_end
+        ? new Date(finalSubscription.current_period_end * 1000).toISOString()
+        : zakiUser.current_period_end || null;
+
+      await dbQuery(
+        `UPDATE zaki_users
+         SET stripe_subscription_id = $1,
+             stripe_price_id = $2,
+             plan_tier = $3,
+             plan_status = $4,
+             current_period_end = $5,
+             cancel_at_period_end = true,
+             billing_updated_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $6`,
+        [
+          finalSubscription.id,
+          priceId,
+          tier,
+          finalSubscription.status || zakiUser.plan_status || "active",
+          currentPeriodEnd,
+          zakiUser.id,
+        ]
+      );
+
+      return {
+        alreadyScheduled,
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd,
+        status: finalSubscription.status,
+      };
+    },
+    async cleanupCustomerOnDelete({ zakiUser }) {
+      if (!stripe || !zakiUser.stripe_customer_id) return;
+      try {
+        await stripe.customers.del(zakiUser.stripe_customer_id);
+      } catch (err) {
+        console.warn("[Account] Stripe customer delete failed:", err?.message || err);
+      }
+    },
+  },
+  paddle: {
+    name: "paddle",
+    async createCheckout({ plan }) {
+      const checkoutUrl =
+        plan === "student"
+          ? ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT
+          : ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL;
+      if (!checkoutUrl) {
+        const err = new Error("External checkout URL is not configured for this plan.");
+        err.status = 503;
+        throw err;
+      }
+      return { url: checkoutUrl };
+    },
+    async createPortal() {
+      if (!ZAKI_EXTERNAL_PORTAL_URL) {
+        const err = new Error("External billing portal URL is not configured.");
+        err.status = 503;
+        throw err;
+      }
+      return { url: ZAKI_EXTERNAL_PORTAL_URL };
+    },
+    async cancelSubscription() {
+      const err = new Error("Cancel is not supported by external billing provider.");
+      err.status = 400;
+      throw err;
+    },
+    async cleanupCustomerOnDelete() {
+      return;
+    },
+  },
+  creem: {
+    name: "creem",
+    async createCheckout({ plan, email, zakiUser }) {
+      const productId =
+        plan === "student" ? CREEM_PRODUCT_ID_STUDENT : CREEM_PRODUCT_ID_PERSONAL;
+      if (!productId) {
+        const err = new Error("Creem product is not configured for this plan.");
+        err.status = 503;
+        throw err;
+      }
+      if (!CREEM_API_KEY) {
+        const err = new Error("Creem API key is not configured.");
+        err.status = 503;
+        throw err;
+      }
+
+      const appUrl = getAppUrl();
+      const successUrl = CREEM_SUCCESS_URL || `${appUrl}/pricing?billing=success`;
+      const requestId = `zaki_${zakiUser?.id || "user"}_${plan}_${Date.now()}`;
+      const body = {
+        product_id: productId,
+        request_id: requestId,
+        success_url: successUrl,
+        customer: {
+          email,
+        },
+        metadata: {
+          user_email: email,
+          user_id: String(zakiUser?.id || ""),
+          plan_tier: plan,
+        },
+      };
+
+      const response = await fetch(`${CREEM_API_BASE_URL.replace(/\/+$/, "")}/v1/checkouts`, {
+        method: "POST",
+        headers: {
+          "x-api-key": CREEM_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = new Error(
+          payload?.message || payload?.error || "Creem checkout creation failed."
+        );
+        err.status = response.status || 502;
+        throw err;
+      }
+
+      const checkoutUrl =
+        payload?.url ||
+        payload?.checkout_url ||
+        payload?.data?.url ||
+        payload?.data?.checkout_url ||
+        null;
+      if (!checkoutUrl) {
+        const err = new Error("Creem checkout URL missing in provider response.");
+        err.status = 502;
+        throw err;
+      }
+      return { url: checkoutUrl };
+    },
+    async createPortal() {
+      const err = new Error("Billing portal is not configured for Creem.");
+      err.status = 503;
+      throw err;
+    },
+    async cancelSubscription() {
+      const err = new Error("Cancel is not supported yet for Creem in this release.");
+      err.status = 400;
+      throw err;
+    },
+    async cleanupCustomerOnDelete() {
+      return;
+    },
+  },
+};
+
+function getBillingAdapter() {
+  const activeProvider = getActiveBillingProviderKey();
+  return billingAdapters[activeProvider] || billingAdapters.none;
+}
+
+function getBillingAdapterByKey(providerKey) {
+  const key = String(providerKey || "").trim().toLowerCase();
+  if (key === "stripe") return billingAdapters.stripe;
+  if (key === "paddle" || key === "external") return billingAdapters.paddle;
+  if (key === "creem") return billingAdapters.creem;
+  if (key === "none") return billingAdapters.none;
+  return null;
 }
 
 function parseFromAddress(value, fallbackEmail) {
@@ -2385,14 +3147,8 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       }
     }
 
-    // Best-effort Stripe customer cleanup.
-    if (stripe && zakiUser.stripe_customer_id) {
-      try {
-        await stripe.customers.del(zakiUser.stripe_customer_id);
-      } catch (err) {
-        console.warn("[Account] Stripe customer delete failed:", err?.message || err);
-      }
-    }
+    // Best-effort provider customer cleanup.
+    await getBillingAdapter().cleanupCustomerOnDelete({ zakiUser });
 
     await dbQuery("BEGIN");
     try {
@@ -2428,6 +3184,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
 // -----------------------------------------------------------------------------
 const CheckoutSchema = z.object({
   plan: z.enum(["student", "personal"]),
+  provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
 });
 
 app.get("/api/billing/config", async (req, res) => {
@@ -2458,60 +3215,69 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
     const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
     if (!email || !zakiUser) return;
 
+    const currentTier = resolveTier(zakiUser.plan_tier || "free");
+    const currentStatus = zakiUser.plan_status || "inactive";
+    if (isPaidActive(currentTier, currentStatus)) {
+      res.status(409).json({
+        success: false,
+        error: "You are already subscribed to an active paid plan.",
+      });
+      return;
+    }
+
     const plan = validation.data.plan;
-    if (plan === "student" && !isEduEmail(email)) {
+    const requestedProvider = String(validation.data.provider || "").trim().toLowerCase();
+    const configured = getBillingConfigStatus();
+    const availableProviders = (configured.checkoutProviders || []).filter((item) => item.enabled);
+
+    const providerToUse = requestedProvider || configured.provider;
+    const providerOption = availableProviders.find((item) => item.key === providerToUse);
+    if (!providerOption) {
       res.status(400).json({
-        error: "Student plan requires a .edu email address.",
+        success: false,
+        error:
+          requestedProvider
+            ? "Selected billing provider is not available."
+            : "No billing provider is currently available for checkout.",
       });
       return;
     }
 
-    if (plan === "student") {
-      await dbQuery(
-        `UPDATE zaki_users SET student_verified = true, student_verified_at = NOW(), updated_at = NOW()
-         WHERE id = $1`,
-        [zakiUser.id]
-      );
-    }
-
-    const priceId = PRICE_BY_TIER[plan];
-    if (!priceId) {
-      res.status(400).json({ error: "Plan is not configured." });
+    const adapter = getBillingAdapterByKey(providerOption.key);
+    if (!adapter) {
+      res.status(400).json({
+        success: false,
+        error: "Selected billing provider is not supported.",
+      });
       return;
     }
 
-    let customerId = zakiUser.stripe_customer_id;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email,
-        metadata: { zaki_user_id: String(zakiUser.id), user_email: email },
-      });
-      customerId = customer.id;
-      await dbQuery(
-        `UPDATE zaki_users SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
-         WHERE id = $2`,
-        [customerId, zakiUser.id]
-      );
-    }
-
-    const appUrl = getAppUrl();
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      allow_promotion_codes: true,
-      success_url: `${appUrl}/pricing?billing=success`,
-      cancel_url: `${appUrl}/pricing?billing=cancel`,
-      metadata: { user_email: email, plan_tier: plan },
-      subscription_data: {
-        metadata: { user_email: email, plan_tier: plan },
-      },
-    });
-
-    res.status(200).json({ success: true, url: session.url });
+    const result = await adapter.createCheckout({ plan, email, zakiUser });
+    res.status(200).json({ success: true, url: result?.url || null });
   } catch (error) {
     console.error("[Billing] Checkout error:", error);
-    res.status(500).json({ error: error?.message || "Checkout failed." });
+    res.status(error?.status || 500).json({ error: error?.message || "Checkout failed." });
+  }
+});
+
+app.post("/api/billing/sync", express.json({ limit: "256kb" }), async (req, res) => {
+  try {
+    const configured = getBillingConfigStatus();
+    if (configured.provider !== "stripe") {
+      res.status(400).json({
+        success: false,
+        error: "Billing sync is only supported for Stripe provider.",
+      });
+      return;
+    }
+    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!email || !zakiUser) return;
+
+    const result = await syncStripeSubscriptionState({ email, zakiUser });
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Billing] Sync error:", error);
+    res.status(error?.status || 500).json({ error: error?.message || "Billing sync failed." });
   }
 });
 
@@ -2525,29 +3291,11 @@ app.post("/api/billing/portal", express.json({ limit: "1mb" }), async (req, res)
     const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
     if (!email || !zakiUser) return;
 
-    let customerId = zakiUser.stripe_customer_id;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email,
-        metadata: { zaki_user_id: String(zakiUser.id), user_email: email },
-      });
-      customerId = customer.id;
-      await dbQuery(
-        `UPDATE zaki_users SET stripe_customer_id = $1, billing_updated_at = NOW(), updated_at = NOW()
-         WHERE id = $2`,
-        [customerId, zakiUser.id]
-      );
-    }
-
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: `${getAppUrl()}/pricing?billing=manage`,
-    });
-
-    res.status(200).json({ success: true, url: portal.url });
+    const result = await getBillingAdapter().createPortal({ email, zakiUser });
+    res.status(200).json({ success: true, url: result?.url || null });
   } catch (error) {
     console.error("[Billing] Portal error:", error);
-    res.status(500).json({ error: error?.message || "Portal failed." });
+    res.status(error?.status || 500).json({ error: error?.message || "Portal failed." });
   }
 });
 
@@ -2561,81 +3309,17 @@ app.post("/api/billing/cancel", express.json({ limit: "1mb" }), async (req, res)
     const { zakiUser } = (await requireAuthUser(req, res)) || {};
     if (!zakiUser) return;
 
-    let subscriptionId = zakiUser.stripe_subscription_id || null;
-    let subscription = null;
-
-    if (!subscriptionId && zakiUser.stripe_customer_id) {
-      const subscriptions = await stripe.subscriptions.list({
-        customer: zakiUser.stripe_customer_id,
-        status: "all",
-        limit: 10,
-      });
-      subscription =
-        subscriptions.data.find((sub) =>
-          ["active", "trialing", "past_due", "unpaid"].includes(sub.status)
-        ) || subscriptions.data[0] || null;
-      subscriptionId = subscription?.id || null;
-    }
-
-    if (!subscriptionId) {
-      res.status(400).json({ error: "No active subscription found." });
-      return;
-    }
-
-    if (!subscription) {
-      subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    }
-
-    if (!subscription || subscription.status === "canceled") {
-      res.status(400).json({ error: "Subscription is already canceled." });
-      return;
-    }
-
-    const alreadyScheduled = Boolean(subscription.cancel_at_period_end);
-    const finalSubscription = alreadyScheduled
-      ? subscription
-      : await stripe.subscriptions.update(subscriptionId, {
-          cancel_at_period_end: true,
-        });
-
-    const priceId =
-      finalSubscription.items?.data?.[0]?.price?.id || zakiUser.stripe_price_id || null;
-    const tier = resolveTier((priceId && TIER_BY_PRICE[priceId]) || zakiUser.plan_tier || "free");
-    const currentPeriodEnd = finalSubscription.current_period_end
-      ? new Date(finalSubscription.current_period_end * 1000).toISOString()
-      : zakiUser.current_period_end || null;
-
-    await dbQuery(
-      `UPDATE zaki_users
-       SET stripe_subscription_id = $1,
-           stripe_price_id = $2,
-           plan_tier = $3,
-           plan_status = $4,
-           current_period_end = $5,
-           cancel_at_period_end = true,
-           billing_updated_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $6`,
-      [
-        finalSubscription.id,
-        priceId,
-        tier,
-        finalSubscription.status || zakiUser.plan_status || "active",
-        currentPeriodEnd,
-        zakiUser.id,
-      ]
-    );
-
+    const result = await getBillingAdapter().cancelSubscription({ zakiUser });
     res.status(200).json({
       success: true,
-      alreadyScheduled,
-      cancelAtPeriodEnd: true,
-      currentPeriodEnd,
-      status: finalSubscription.status,
+      alreadyScheduled: Boolean(result?.alreadyScheduled),
+      cancelAtPeriodEnd: Boolean(result?.cancelAtPeriodEnd),
+      currentPeriodEnd: result?.currentPeriodEnd || null,
+      status: result?.status || "active",
     });
   } catch (error) {
     console.error("[Billing] Cancel subscription error:", error);
-    res.status(500).json({ error: error?.message || "Cancel subscription failed." });
+    res.status(error?.status || 500).json({ error: error?.message || "Cancel subscription failed." });
   }
 });
 
@@ -3657,41 +4341,15 @@ app.post(
  * POST /api/memory/end-session
  * Called when user leaves a thread - triggers conversation summarization
  */
-app.post("/api/memory/end-session", express.json({ limit: "5mb" }), async (req, res) => {
-  try {
-    const authResult = await requireAuthUser(req, res);
-    if (!authResult) return;
-    const userEmail = authResult.email;
-
-    const { messages, threadId, threadTitle } = req.body;
-
-    if (!messages || !Array.isArray(messages) || messages.length < 3) {
-      // Skip summarization for very short conversations
-      return res.json({ skipped: true, reason: "conversation_too_short" });
-    }
-
-    if (!ZAKI_ENABLE_SESSION_SUMMARIZATION) {
-      return res.json({ skipped: true, reason: "disabled" });
-    }
-
-    // Run summarization in background (don't block the response)
-    summarizeConversation({
-      userId: userEmail,
-      messages,
-      threadId,
-      threadTitle,
-    }).then((result) => {
-      console.log(`[Memory] Session ended for ${userEmail}: ${result.memories?.length || 0} memories extracted`);
-    }).catch((err) => {
-      console.warn("[Memory] Summarization failed:", err.message);
-    });
-
-    res.json({ ok: true, queued: true });
-  } catch (error) {
-    console.error("[Memory] End session error:", error);
-    res.status(500).json({ error: "Failed to process session end" });
-  }
-});
+app.post(
+  "/api/memory/end-session",
+  express.json({ limit: "5mb" }),
+  createSessionEndHandler({
+    requireAuthUser,
+    summarizeConversation,
+    isEnabled: () => ZAKI_ENABLE_SESSION_SUMMARIZATION,
+  })
+);
 
 // =============================================================================
 // SHARE CONVERSATION ROUTES

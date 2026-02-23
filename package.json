@@ -26,6 +26,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "smoke:v01": "node scripts/smoke-v01.mjs",
+    "smoke:memory-session": "node scripts/smoke-memory-session.mjs",
     "load:memory": "node scripts/load-memory.mjs",
     "ops:backup-drill": "node scripts/backup-restore-drill.mjs",
     "website:dev": "npm --prefix website run dev",

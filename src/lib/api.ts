@@ -349,6 +349,13 @@ export async function fetchBillingConfig() {
   let data: {
     success?: boolean;
     configured?: {
+      provider?: string;
+      requestedProvider?: string;
+      checkoutProviders?: Array<{
+        key?: string;
+        label?: string;
+        enabled?: boolean;
+      }>;
       stripeEnabled?: boolean;
       checkoutEnabled?: boolean;
       portalEnabled?: boolean;
@@ -366,10 +373,13 @@ export async function fetchBillingConfig() {
   return { response, data };
 }
 
-export async function createCheckoutSession(plan: "student" | "personal") {
+export async function createCheckoutSession(
+  plan: "student" | "personal",
+  provider?: "stripe" | "paddle" | "creem"
+) {
   const response = await backendAuthRequest("/api/billing/checkout", {
     method: "POST",
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({ plan, ...(provider ? { provider } : {}) }),
   });
   let data: { success?: boolean; url?: string | null; error?: string | null } = {};
   try {
@@ -402,6 +412,26 @@ export async function cancelBillingSubscription() {
     alreadyScheduled?: boolean;
     cancelAtPeriodEnd?: boolean;
     currentPeriodEnd?: string | null;
+    status?: string;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function syncBillingSubscription() {
+  const response = await backendAuthRequest("/api/billing/sync", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  let data: {
+    success?: boolean;
+    updated?: boolean;
+    tier?: string;
     status?: string;
     error?: string | null;
   } = {};

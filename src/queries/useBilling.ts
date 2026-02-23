@@ -7,6 +7,7 @@ import {
   fetchBillingConfig,
   fetchEntitlements,
   redeemAccessCode,
+  syncBillingSubscription,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
@@ -40,8 +41,15 @@ export function useBillingConfig() {
 export function useCheckout() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (plan: "student" | "personal") => {
-      const { response, data } = await createCheckoutSession(plan);
+    mutationFn: async (
+      payload:
+        | "student"
+        | "personal"
+        | { plan: "student" | "personal"; provider?: "stripe" | "paddle" | "creem" }
+    ) => {
+      const plan = typeof payload === "string" ? payload : payload.plan;
+      const provider = typeof payload === "string" ? undefined : payload.provider;
+      const { response, data } = await createCheckoutSession(plan, provider);
       if (!response.ok || !data.url) {
         throw new Error(data.error ?? "Unable to start checkout");
       }
@@ -82,6 +90,22 @@ export function useCancelSubscription() {
       const { response, data } = await cancelBillingSubscription();
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Unable to cancel subscription");
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+    },
+  });
+}
+
+export function useSyncBilling() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { response, data } = await syncBillingSubscription();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Unable to sync billing state");
       }
       return data;
     },

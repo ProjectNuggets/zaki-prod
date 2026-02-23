@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
   useBillingConfig,
   useBillingPortal,
+  useCancelSubscription,
   useCheckout,
   useEntitlements,
   useRedeemAccessCode,
+  useSyncBilling,
 } from "@/queries";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,20 +21,32 @@ type BillingNotice = {
   message: string;
 };
 
+type CheckoutProvider = {
+  key: "stripe" | "paddle" | "creem";
+  label: string;
+  enabled: boolean;
+  comingSoon?: boolean;
+};
+
 export function PricingPage() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const language = i18n.language || undefined;
   const [searchParams, setSearchParams] = useSearchParams();
+  const handledBillingStatusRef = useRef<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
   const [accessCode, setAccessCode] = useState("");
+  const [providerModalPlan, setProviderModalPlan] = useState<"student" | "personal" | null>(null);
   const checkout = useCheckout();
   const portal = useBillingPortal();
+  const cancelSubscription = useCancelSubscription();
+  const syncBilling = useSyncBilling();
   const redeemAccessCode = useRedeemAccessCode();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
   const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
+  const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
   const accessActive = Boolean(entitlementsResult?.data?.access?.active);
   const accessExpiresAt = entitlementsResult?.data?.access?.expiresAt ?? null;
   const accessCampaign = entitlementsResult?.data?.access?.campaign ?? null;
@@ -44,10 +58,46 @@ export function PricingPage() {
   const billingConfigLoaded = Boolean(billingConfigResult);
   const billingPortalEnabled = billingConfigLoaded ? Boolean(billingConfig?.portalEnabled) : true;
   const billingCheckoutEnabled = billingConfigLoaded ? Boolean(billingConfig?.checkoutEnabled) : true;
+  const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
   const billingUnavailableMessage =
-    billingConfigLoaded && (!billingPortalEnabled || !billingCheckoutEnabled)
-      ? t("pricingPage.portalError")
+    billingConfigLoaded &&
+    (!billingPortalEnabled || !billingCheckoutEnabled || (isPremium && !billingCancelEnabled))
+      ? t("pricingPage.billingUnavailable")
       : null;
+  const checkoutProviders = useMemo<CheckoutProvider[]>(() => {
+    const providerCatalog: CheckoutProvider[] = [
+      { key: "stripe", label: "Stripe", enabled: false },
+      { key: "paddle", label: "Paddle", enabled: false },
+      { key: "creem", label: "Creem", enabled: false, comingSoon: true },
+    ];
+    const configured = Array.isArray(billingConfig?.checkoutProviders)
+      ? billingConfig?.checkoutProviders
+      : [];
+    const providerMap = new Map(providerCatalog.map((provider) => [provider.key, provider]));
+    for (const provider of configured) {
+      const key = String(provider?.key || "").toLowerCase();
+      const normalizedKey = key === "external" ? "paddle" : key;
+      if (normalizedKey !== "stripe" && normalizedKey !== "paddle" && normalizedKey !== "creem")
+        continue;
+      const current = providerMap.get(normalizedKey);
+      if (!current) continue;
+      providerMap.set(normalizedKey, {
+        ...current,
+          label:
+            normalizedKey === "stripe"
+              ? "Stripe"
+              : String(provider?.label || current.label || "Provider"),
+        enabled: Boolean(provider?.enabled) && !current.comingSoon,
+      });
+    }
+    if (!billingConfigLoaded) {
+      providerMap.set("paddle", {
+        ...(providerMap.get("paddle") as CheckoutProvider),
+        enabled: true,
+      });
+    }
+    return providerCatalog.map((provider) => providerMap.get(provider.key) ?? provider);
+  }, [billingConfig?.checkoutProviders, billingCheckoutEnabled]);
 
   const plans = useMemo(
     () =>
@@ -131,12 +181,19 @@ export function PricingPage() {
   useEffect(() => {
     const status = searchParams.get("billing");
     if (!status) return;
+    if (handledBillingStatusRef.current === status) return;
+    handledBillingStatusRef.current = status;
     const notice = billingNoticeByStatus[status];
     if (!notice) return;
 
     setBillingNotice(notice);
     if (notice.tone === "success") {
       toast.success(notice.message);
+      if (status === "success") {
+        void syncBilling.mutateAsync().catch(() => {
+          // Ignore sync failures here; webhook may still arrive shortly.
+        });
+      }
     } else {
       toast(notice.message);
     }
@@ -144,7 +201,34 @@ export function PricingPage() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("billing");
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, syncBilling, billingNoticeByStatus]);
+
+  const beginCheckout = async (
+    plan: "student" | "personal",
+    provider?: "stripe" | "paddle" | "creem"
+  ) => {
+    if (!billingCheckoutEnabled) {
+      throw new Error(t("pricingPage.checkoutError"));
+    }
+    await checkout.mutateAsync({ plan, provider });
+  };
+
+  const openProviderSelection = (plan: "student" | "personal") => {
+    const available = checkoutProviders.filter(
+      (provider) => provider.enabled && !provider.comingSoon
+    );
+    if (available.length === 1) {
+      void beginCheckout(plan, available[0].key).catch((err) => {
+        toast.error(err instanceof Error ? err.message : t("pricingPage.checkoutError"));
+      });
+      return;
+    }
+    if (available.length === 0) {
+      toast.error(t("pricingPage.checkoutError"));
+      return;
+    }
+    setProviderModalPlan(plan);
+  };
 
   return (
     <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
@@ -208,6 +292,9 @@ export function PricingPage() {
           </div>
           {billingUnavailableMessage && (
             <div className="text-xs text-zaki-muted">{billingUnavailableMessage}</div>
+          )}
+          {cancelAtPeriodEnd && (
+            <div className="text-xs text-zaki-muted">{t("pricingPage.cancelAtPeriodEndNote")}</div>
           )}
         </div>
 
@@ -295,6 +382,8 @@ export function PricingPage() {
           </div>
           {plans.map((plan) => {
             const isCurrent = currentTier === plan.tier;
+            const isCurrentActivePaidPlan =
+              isPremium && plan.tier !== "free" && currentTier === plan.tier;
             return (
               <div
                 key={plan.tier}
@@ -338,17 +427,43 @@ export function PricingPage() {
                     >
                       {t("pricingPage.included")}
                     </button>
+                  ) : isCurrentActivePaidPlan ? (
+                    <button
+                      type="button"
+                      className="w-full zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(210,68,48,0.15)] transition-colors disabled:opacity-50"
+                      disabled={
+                        cancelAtPeriodEnd || cancelSubscription.isPending || !billingCancelEnabled
+                      }
+                      onClick={async () => {
+                        try {
+                          if (!billingCancelEnabled) {
+                            throw new Error(t("pricingPage.cancelUnavailable"));
+                          }
+                          const result = await cancelSubscription.mutateAsync();
+                          toast.success(
+                            result?.alreadyScheduled
+                              ? t("pricingPage.cancelAlreadyScheduled")
+                              : t("pricingPage.cancelScheduled")
+                          );
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error ? err.message : t("pricingPage.cancelError")
+                          );
+                        }
+                      }}
+                    >
+                      {cancelAtPeriodEnd
+                        ? t("pricingPage.cancellationScheduled")
+                        : t("pricingPage.cancelSubscription")}
+                    </button>
                   ) : (
                     <button
                       type="button"
                       className="w-full zaki-btn-sm zaki-btn-primary disabled:opacity-50"
-                      disabled={checkout.isPending || !billingCheckoutEnabled}
+                      disabled={checkout.isPending || isPremium}
                       onClick={async () => {
                         try {
-                          if (!billingCheckoutEnabled) {
-                            throw new Error(t("pricingPage.checkoutError"));
-                          }
-                          await checkout.mutateAsync(plan.tier as "student" | "personal");
+                          openProviderSelection(plan.tier as "student" | "personal");
                         } catch (err) {
                           toast.error(
                             err instanceof Error ? err.message : t("pricingPage.checkoutError")
@@ -356,7 +471,9 @@ export function PricingPage() {
                         }
                       }}
                     >
-                      {t("pricingPage.choose", { plan: plan.label })}
+                      {isPremium
+                        ? t("pricingPage.alreadySubscribed")
+                        : t("pricingPage.choose", { plan: plan.label })}
                     </button>
                   )}
                 </div>
@@ -365,6 +482,69 @@ export function PricingPage() {
           })}
         </div>
       </div>
+      {providerModalPlan && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.24)]">
+            <div className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              Choose payment provider
+            </div>
+            <p className="mt-1 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+              Select where you want to complete checkout.
+            </p>
+            <div className="mt-4 grid gap-2">
+              {checkoutProviders.map((provider) => (
+                <button
+                  key={provider.key}
+                  type="button"
+                  disabled={!provider.enabled || checkout.isPending || Boolean(provider.comingSoon)}
+                  className={cn(
+                    "w-full rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
+                    provider.enabled
+                      ? "border-zaki-subtle bg-zaki-base hover:bg-zaki-hover text-zaki-primary dark:bg-zaki-dark-elevated dark:text-zaki-dark-primary"
+                      : "border-zaki-subtle/60 bg-zaki-hover text-zaki-muted cursor-not-allowed"
+                  )}
+                  onClick={async () => {
+                    try {
+                      await beginCheckout(providerModalPlan, provider.key);
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error ? err.message : t("pricingPage.checkoutError")
+                      );
+                    } finally {
+                      setProviderModalPlan(null);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-medium">{provider.label}</div>
+                    {provider.comingSoon ? (
+                      <span className="rounded-full border border-zaki-subtle px-2 py-0.5 text-[10px] uppercase tracking-[0.16em]">
+                        Coming soon
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-zaki-muted mt-0.5">
+                    {provider.comingSoon
+                      ? "Locked for next release"
+                      : provider.enabled
+                      ? "Available"
+                      : "Not configured"}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-secondary"
+                onClick={() => setProviderModalPlan(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

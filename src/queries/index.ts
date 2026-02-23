@@ -8,6 +8,7 @@ export {
   useCheckout,
   useBillingPortal,
   useCancelSubscription,
+  useSyncBilling,
   useDeleteAccount,
   useRedeemAccessCode,
   billingKeys,

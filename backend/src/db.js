@@ -118,6 +118,9 @@ export async function initDb() {
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_customer_id TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_subscription_id TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_product_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_tier TEXT DEFAULT 'free';");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_status TEXT DEFAULT 'inactive';");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;");
@@ -212,6 +215,16 @@ export async function initDb() {
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_access_redemptions_user ON access_code_redemptions(user_id);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS billing_webhook_events (
+      id BIGSERIAL PRIMARY KEY,
+      provider TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(provider, event_id)
+    );
   `);
 
   await pool.query(`
