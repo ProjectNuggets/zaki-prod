@@ -1027,9 +1027,7 @@ export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerPr
                   toast.info(t("memoryViewer.toasts.refreshing"));
                   void fetchMemories();
                   void fetchPendingMemories(false);
-                  if (activeTab === "conflicts") {
-                    void fetchConflicts();
-                  }
+                  void fetchConflicts();
                 }}
                 className="inline-flex items-center gap-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:text-zaki-primary dark:hover:text-zaki-dark-primary"
               >

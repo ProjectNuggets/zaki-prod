@@ -1,17 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { extractFacts } from "./memory-extraction.js";
 
 describe("memory extraction", () => {
   const originalBaseUrl = process.env.NOVA_TYP_BASE_URL;
+  const originalWorkspaceSlug = process.env.ZAKI_DEFAULT_WORKSPACE_SLUG;
+  const originalMemoryWorkspaceSlug = process.env.ZAKI_MEMORY_WORKSPACE_SLUG;
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     process.env.NOVA_TYP_BASE_URL = "";
+    process.env.ZAKI_DEFAULT_WORKSPACE_SLUG = "zaky";
+    delete process.env.ZAKI_MEMORY_WORKSPACE_SLUG;
     global.fetch = originalFetch;
   });
 
   afterEach(() => {
     process.env.NOVA_TYP_BASE_URL = originalBaseUrl;
+    process.env.ZAKI_DEFAULT_WORKSPACE_SLUG = originalWorkspaceSlug;
+    if (originalMemoryWorkspaceSlug === undefined) {
+      delete process.env.ZAKI_MEMORY_WORKSPACE_SLUG;
+    } else {
+      process.env.ZAKI_MEMORY_WORKSPACE_SLUG = originalMemoryWorkspaceSlug;
+    }
     global.fetch = originalFetch;
   });
 
@@ -151,5 +161,50 @@ describe("memory extraction", () => {
     expect(result).toHaveLength(2);
     const polarities = result.map((item) => item.polarity).sort();
     expect(polarities).toEqual(["negative", "positive"]);
+  });
+
+  it("falls back to pattern extraction when LLM call aborts", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = async () => {
+      const error = new Error("aborted");
+      error.name = "AbortError";
+      throw error;
+    };
+
+    const result = await extractFacts("I like tea");
+    expect(result.some((item) => item.content === "Likes tea")).toBe(true);
+  });
+
+  it("falls back to workspace chat when openai-compatible route is unauthorized", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: async () => "",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          textResponse: JSON.stringify({
+            classification: "user_statement",
+            memories: [
+              {
+                content: "Likes mango",
+                type: "preference",
+                confidence: 0.9,
+                conflict_key: "preference:mango",
+                polarity: "positive",
+              },
+            ],
+          }),
+        }),
+      });
+
+    const result = await extractFacts("I like mango");
+    expect(result.some((item) => item.content === "Likes mango")).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch.mock.calls[1][0]).toContain("/api/v1/workspace/zaky/chat");
   });
 });

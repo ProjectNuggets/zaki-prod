@@ -217,8 +217,9 @@ export function PricingPage() {
     const available = checkoutProviders.filter(
       (provider) => provider.enabled && !provider.comingSoon
     );
-    if (available.length === 1) {
-      void beginCheckout(plan, available[0].key).catch((err) => {
+    const onlyProvider = available[0];
+    if (available.length === 1 && onlyProvider) {
+      void beginCheckout(plan, onlyProvider.key).catch((err) => {
         toast.error(err instanceof Error ? err.message : t("pricingPage.checkoutError"));
       });
       return;

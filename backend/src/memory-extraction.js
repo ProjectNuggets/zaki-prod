@@ -7,6 +7,16 @@
 
 import { z } from "zod";
 import { dbGet, dbQuery } from "./db.js";
+import { callNovaTypChat, parseJsonObjectFromText } from "./memory/nova-chat.js";
+
+function resolveTimeoutMs(envName, fallbackMs) {
+  const raw = Number.parseInt(String(process.env[envName] || ""), 10);
+  if (!Number.isFinite(raw)) return fallbackMs;
+  return Math.min(30_000, Math.max(500, raw));
+}
+
+const EXTRACTION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EXTRACTION_TIMEOUT_MS", 12_000);
+const TRANSLATION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_TRANSLATION_TIMEOUT_MS", 5_000);
 
 // LLM Extraction Schema
 const MemorySchema = z.object({
@@ -354,35 +364,22 @@ async function translatePreferenceValue(value) {
     return cached.translated_text;
   }
 
-  const baseUrl = (process.env.NOVA_TYP_BASE_URL || "").trim();
-  if (!baseUrl) return null;
-  const apiBase = baseUrl.replace(/\/+$/, "");
-  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
-
   try {
-    const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Translate the user preference value to a short English noun phrase. Reply with only the translation, no punctuation.",
-          },
-          { role: "user", content: raw },
-        ],
-        temperature: 0.2,
-        max_tokens: 20,
-      }),
+    const result = await callNovaTypChat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "Translate the user preference value to a short English noun phrase. Reply with only the translation, no punctuation.",
+        },
+        { role: "user", content: raw },
+      ],
+      temperature: 0.2,
+      maxTokens: 20,
+      timeoutMs: TRANSLATION_TIMEOUT_MS,
+      label: "Preference translation",
     });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const translated = data.choices?.[0]?.message?.content?.trim();
+    const translated = String(result?.content || "").trim();
     if (!translated) return null;
     await dbQuery(
       `INSERT INTO memory_translation_cache (source_text, translated_text, language, created_at, updated_at)
@@ -490,43 +487,26 @@ function dedupeExtractedMemories(memories) {
 }
 
 async function extractWithLLM(message) {
-  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
-  
-  const baseUrl = (process.env.NOVA_TYP_BASE_URL || "").trim();
-  if (!baseUrl) {
-    throw new Error("NOVA_TYP_BASE_URL not configured");
-  }
-  
-  const apiBase = baseUrl.replace(/\/+$/, "");
-  const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: DEFAULT_PROMPT },
-        { role: "user", content: message },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.1,
-    }),
+  const { content, transport } = await callNovaTypChat({
+    messages: [
+      { role: "system", content: DEFAULT_PROMPT },
+      { role: "user", content: message },
+    ],
+    jsonMode: true,
+    temperature: 0.1,
+    timeoutMs: EXTRACTION_TIMEOUT_MS,
+    label: "Memory extraction",
   });
-  
-  if (!response.ok) {
-    throw new Error(`LLM request failed: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  
+
   if (!content) {
     return { classification: null, memories: [] };
   }
-  
-  const parsed = JSON.parse(content);
+
+  if (shouldDebug()) {
+    console.log(`[Memory] Extraction transport: ${transport}`);
+  }
+
+  const parsed = parseJsonObjectFromText(content);
   const validated = ExtractionResponseSchema.safeParse(parsed);
   
   if (!validated.success) {
@@ -563,6 +543,45 @@ async function extractWithLLM(message) {
     classification: validated.data.classification || null,
     memories,
   };
+}
+
+export async function probeMemoryExtractionProvider(
+  sampleMessage = "I like coffee and I live in Dubai."
+) {
+  try {
+    const { content, transport, model } = await callNovaTypChat({
+      messages: [
+        { role: "system", content: DEFAULT_PROMPT },
+        { role: "user", content: String(sampleMessage || "").trim() || "I like coffee." },
+      ],
+      jsonMode: true,
+      temperature: 0,
+      timeoutMs: EXTRACTION_TIMEOUT_MS,
+      label: "Memory extraction probe",
+    });
+    const parsed = parseJsonObjectFromText(content);
+    const validated = ExtractionResponseSchema.safeParse(parsed);
+    if (!validated.success) {
+      return {
+        ok: false,
+        transport,
+        model,
+        error: "Extraction probe returned invalid schema.",
+      };
+    }
+    return {
+      ok: true,
+      transport,
+      model,
+      classification: validated.data.classification || null,
+      extracted: Array.isArray(validated.data.memories) ? validated.data.memories.length : 0,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
 }
 
 async function extractWithPatterns(message, { skipTranslation = false, simpleOnly = false } = {}) {

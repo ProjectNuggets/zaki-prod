@@ -7,13 +7,91 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 import { dbQuery, dbGet, dbAll, hasPgVector } from "../db.js";
+import { callNovaTypChat, parseJsonObjectFromText } from "./nova-chat.js";
 
 // ============================================================================
 // Storage Detection
 // ============================================================================
 
 export async function checkStorage() {
-  return await hasPgVector();
+  return await getCachedStorageSupport(false);
+}
+
+function resolveStorageCacheTtlMs() {
+  const raw = Number.parseInt(String(process.env.ZAKI_MEMORY_STORAGE_CACHE_TTL_MS || ""), 10);
+  if (!Number.isFinite(raw)) return 30_000;
+  return Math.min(300_000, Math.max(1_000, raw));
+}
+
+const STORAGE_CACHE_TTL_MS = resolveStorageCacheTtlMs();
+const storageSupportCache = {
+  value: null,
+  checkedAt: 0,
+};
+let storageSupportProbe = hasPgVector;
+
+async function getCachedStorageSupport(forceRefresh = false) {
+  const now = Date.now();
+  if (
+    !forceRefresh &&
+    typeof storageSupportCache.value === "boolean" &&
+    now - storageSupportCache.checkedAt < STORAGE_CACHE_TTL_MS
+  ) {
+    return storageSupportCache.value;
+  }
+  const next = await storageSupportProbe();
+  storageSupportCache.value = next;
+  storageSupportCache.checkedAt = now;
+  return next;
+}
+
+export async function refreshStorageSupportCache() {
+  return await getCachedStorageSupport(true);
+}
+
+export function setStorageSupportProbeForTests(probe) {
+  storageSupportProbe = typeof probe === "function" ? probe : hasPgVector;
+  storageSupportCache.value = null;
+  storageSupportCache.checkedAt = 0;
+}
+
+function resolveTimeoutMs(envName, fallbackMs) {
+  const raw = Number.parseInt(String(process.env[envName] || ""), 10);
+  if (!Number.isFinite(raw)) return fallbackMs;
+  return Math.min(30_000, Math.max(500, raw));
+}
+
+const RELEVANCE_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_RELEVANCE_TIMEOUT_MS", 8_000);
+const EMBEDDING_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EMBEDDING_TIMEOUT_MS", 4_500);
+
+function shouldDebug() {
+  return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
+}
+
+function isAbortError(error) {
+  if (!error || typeof error !== "object") return false;
+  return error.name === "AbortError";
+}
+
+async function fetchWithTimeout(url, options, { timeoutMs, label }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof timeout.unref === "function") {
+    timeout.unref();
+  }
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function normalizeUserId(userId) {
@@ -83,6 +161,9 @@ function sanitizeStoredMetadata(value) {
   }
   if (typeof value.editedFrom === "string" && value.editedFrom.trim()) {
     safe.editedFrom = value.editedFrom.trim().slice(0, 120);
+  }
+  if (typeof value.source === "string" && value.source.trim()) {
+    safe.source = value.source.trim().toLowerCase().slice(0, 64);
   }
   return safe;
 }
@@ -281,16 +362,139 @@ function toFiniteNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function getMemoryMetadata(memory) {
+  const metadata = memory?.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+  return metadata;
+}
+
+function getMemoryConflictDomain(memory) {
+  const metadata = getMemoryMetadata(memory);
+  const conflictKey = String(metadata?.conflictKey || "").toLowerCase().trim();
+  if (!conflictKey) return "";
+  return conflictKey.split(":")[0] || "";
+}
+
+function getMemoryConfidenceScore(memory) {
+  const explicit = toFiniteNumber(memory?.confidence_score, NaN);
+  if (Number.isFinite(explicit)) {
+    return Math.min(1, Math.max(0, explicit));
+  }
+  const metadata = getMemoryMetadata(memory);
+  if (metadata.userVerified === true) return 0.95;
+  return 0.8;
+}
+
+function getMemoryImportanceScore(memory) {
+  return Math.min(
+    1,
+    Math.max(0, toFiniteNumber(memory?.importance_score ?? memory?.importance, 0.5))
+  );
+}
+
+function getMemoryActionabilityScore(memory) {
+  const type = String(memory?.type || "").toLowerCase().trim();
+  const domain = getMemoryConflictDomain(memory);
+
+  let score = 0.1;
+  if (type === "goal") score += 0.45;
+  if (type === "preference") score += 0.35;
+  if (type === "struggle") score += 0.32;
+  if (type === "event") score += 0.18;
+  if (type === "relationship") score += 0.16;
+  if (type === "emotion") score += 0.08;
+  if (type === "fact") score += 0.06;
+
+  if (domain === "constraint") score += 0.5;
+  if (domain === "preference") score += 0.2;
+  if (domain === "identity") score += 0.06;
+
+  return Math.min(1, Math.max(0, score));
+}
+
+function rankFallbackCandidates(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const aScore =
+      getMemoryActionabilityScore(a) * 0.5 +
+      getMemoryConfidenceScore(a) * 0.3 +
+      getMemoryImportanceScore(a) * 0.2;
+    const bScore =
+      getMemoryActionabilityScore(b) * 0.5 +
+      getMemoryConfidenceScore(b) * 0.3 +
+      getMemoryImportanceScore(b) * 0.2;
+    return bScore - aScore;
+  });
+}
+
+function selectPersonalizationFallbackMemories(rows, limit = 2) {
+  const boundedLimit = Math.max(1, Math.min(5, Number(limit) || 2));
+  const ranked = rankFallbackCandidates(rows);
+  if (ranked.length === 0) return [];
+
+  const highConfidence = ranked.filter((row) => getMemoryConfidenceScore(row) >= 0.75);
+  const selectedPool = highConfidence.length > 0 ? highConfidence : ranked;
+  return selectedPool.slice(0, boundedLimit);
+}
+
 function rankContextCandidates(rows) {
   return [...(rows || [])].sort((a, b) => {
     const aScore =
-      toFiniteNumber(a?.retrieval_score, 0) * 0.75 +
-      toFiniteNumber(a?.importance_score, 0.5) * 0.25;
+      toFiniteNumber(a?.retrieval_score, 0) * 0.55 +
+      getMemoryImportanceScore(a) * 0.2 +
+      getMemoryActionabilityScore(a) * 0.2 +
+      getMemoryConfidenceScore(a) * 0.05;
     const bScore =
-      toFiniteNumber(b?.retrieval_score, 0) * 0.75 +
-      toFiniteNumber(b?.importance_score, 0.5) * 0.25;
+      toFiniteNumber(b?.retrieval_score, 0) * 0.55 +
+      getMemoryImportanceScore(b) * 0.2 +
+      getMemoryActionabilityScore(b) * 0.2 +
+      getMemoryConfidenceScore(b) * 0.05;
     return bScore - aScore;
   });
+}
+
+const sessionDeltaInjectionCache = new Map();
+const MAX_SESSION_DELTA_CACHE_SIZE = 10_000;
+
+function makeSessionDeltaCacheKey(userId, threadId) {
+  return `${normalizeUserId(userId)}::${String(threadId || "").trim().toLowerCase()}`;
+}
+
+function shouldInjectSessionDeltaForThread({ userId, currentThreadId }) {
+  const normalizedThreadId = String(currentThreadId || "").trim().toLowerCase();
+  if (!normalizedThreadId) return false;
+  const cacheKey = makeSessionDeltaCacheKey(userId, normalizedThreadId);
+  if (sessionDeltaInjectionCache.has(cacheKey)) {
+    return false;
+  }
+  sessionDeltaInjectionCache.set(cacheKey, Date.now());
+  if (sessionDeltaInjectionCache.size > MAX_SESSION_DELTA_CACHE_SIZE) {
+    const firstKey = sessionDeltaInjectionCache.keys().next().value;
+    if (firstKey) {
+      sessionDeltaInjectionCache.delete(firstKey);
+    }
+  }
+  return true;
+}
+
+function toShortSessionDeltaLine(content, maxChars = 140) {
+  const normalized = String(content || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+export function resetSessionDeltaInjectionCacheForTests() {
+  sessionDeltaInjectionCache.clear();
+}
+
+export function rankContextCandidatesForTests(rows) {
+  return rankContextCandidates(rows);
+}
+
+export function selectPersonalizationFallbackMemoriesForTests(rows, limit = 2) {
+  return selectPersonalizationFallbackMemories(rows, limit);
 }
 
 function encodeMemoryCursor(row) {
@@ -411,7 +615,8 @@ function getNovaApiBase() {
   if (!base) {
     throw new Error("NOVA_TYP_BASE_URL not configured");
   }
-  return base.replace(/\/+$/, "");
+  const normalized = base.replace(/\/+$/, "");
+  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
 }
 
 async function filterRelevantMemories({ query, memories, allowFallback = false }) {
@@ -422,9 +627,6 @@ async function filterRelevantMemories({ query, memories, allowFallback = false }
   if (!baseUrl) {
     return allowFallback ? memories : [];
   }
-
-  const apiBase = baseUrl.replace(/\/+$/, "");
-  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
   const payload = {
     query: normalizedQuery,
     memories: memories.map((m) => ({ id: m.id, content: m.content, type: m.type })),
@@ -435,35 +637,26 @@ async function filterRelevantMemories({ query, memories, allowFallback = false }
   });
 
   try {
-    const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a relevance filter. Return JSON {\"relevant_ids\": [\"id1\", ...]} for memories that are directly relevant to answering the query. If none are relevant, return an empty array. Only use ids from the provided list.",
-          },
-          { role: "user", content: JSON.stringify(payload) },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0,
-        max_tokens: 200,
-      }),
+    const { content, transport } = await callNovaTypChat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a relevance filter. Return JSON {\"relevant_ids\": [\"id1\", ...]} for memories that are directly relevant to answering the query. If none are relevant, return an empty array. Only use ids from the provided list.",
+        },
+        { role: "user", content: JSON.stringify(payload) },
+      ],
+      jsonMode: true,
+      temperature: 0,
+      maxTokens: 200,
+      timeoutMs: RELEVANCE_TIMEOUT_MS,
+      label: "Relevance check",
     });
-
-    if (!response.ok) {
-      throw new Error(`Relevance check failed: ${response.status}`);
-    }
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
     if (!content) return [];
-    const parsed = JSON.parse(content);
+    if (shouldDebug()) {
+      console.log(`[Memory] Relevance transport: ${transport}`);
+    }
+    const parsed = parseJsonObjectFromText(content);
     const validated = ResponseSchema.safeParse(parsed);
     if (!validated.success) return [];
 
@@ -484,25 +677,59 @@ export async function getEmbeddings(texts) {
   const apiBase = getNovaApiBase();
   const input = Array.isArray(texts) ? texts : [texts];
 
-  const response = await fetch(`${apiBase}/api/v1/openai/embeddings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
+  const response = await fetchWithTimeout(
+    `${apiBase}/v1/openai/embeddings`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
+      },
+      body: JSON.stringify({ model: "all-MiniLM-L6-v2", input }),
     },
-    body: JSON.stringify({ model: "all-MiniLM-L6-v2", input }),
-  });
+    {
+      timeoutMs: EMBEDDING_TIMEOUT_MS,
+      label: "Embedding request",
+    }
+  );
   
   if (!response.ok) {
     throw new Error(`Embedding failed: ${response.status}`);
   }
   
   const data = await response.json();
+  const vectors = Array.isArray(data?.embeddings)
+    ? data.embeddings
+    : Array.isArray(data?.data)
+      ? data.data
+          .map((entry) => entry?.embedding)
+          .filter((embedding) => Array.isArray(embedding))
+      : [];
+  if (vectors.length === 0) {
+    throw new Error("Embedding payload missing vectors.");
+  }
   return {
-    embeddings: data.embeddings,
+    embeddings: vectors,
     provider: "novatyp",
-    dims: 384,
+    dims: Array.isArray(vectors[0]) ? vectors[0].length : 384,
   };
+}
+
+export async function probeEmbeddingsProvider() {
+  try {
+    const result = await getEmbeddings(["memory health probe"]);
+    return {
+      ok: true,
+      provider: result.provider,
+      dims: result.dims,
+      vectors: Array.isArray(result.embeddings) ? result.embeddings.length : 0,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
 }
 
 // ============================================================================
@@ -564,13 +791,17 @@ export async function storeMemory({
 
   const importance = importanceScore || calculateImportance(normalizedContent, normalizedType);
   const id = crypto.randomUUID();
+  let storedId = id;
   
   if (isPg) {
+    let insertResult;
     if (embedding) {
-      await dbQuery(
+      insertResult = await dbQuery(
         `INSERT INTO memories 
          (id, user_id, content, content_hash, type, embedding, importance_score, source_thread_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, NOW())
+         ON CONFLICT (user_id, content_hash) DO NOTHING
+         RETURNING id`,
         [
           id,
           normalizedUserId,
@@ -584,10 +815,12 @@ export async function storeMemory({
         ]
       );
     } else {
-      await dbQuery(
+      insertResult = await dbQuery(
         `INSERT INTO memories 
          (id, user_id, content, content_hash, type, importance_score, source_thread_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (user_id, content_hash) DO NOTHING
+         RETURNING id`,
         [
           id,
           normalizedUserId,
@@ -600,9 +833,22 @@ export async function storeMemory({
         ]
       );
     }
+
+    const insertedId = insertResult?.rows?.[0]?.id;
+    if (!insertedId) {
+      const duplicate = await dbGet(
+        `SELECT id
+         FROM memories
+         WHERE user_id = $1 AND content_hash = $2
+         LIMIT 1`,
+        [normalizedUserId, hash]
+      );
+      return { id: duplicate?.id || id, duplicate: true };
+    }
+    storedId = insertedId;
   }
 
-  return { id, duplicate: false, importance };
+  return { id: storedId, duplicate: false, importance };
 }
 
 export async function deleteMemory(id, userId) {
@@ -993,8 +1239,14 @@ export async function resolveConflict({ userId, conflictId, action }) {
 // Context Building
 // ============================================================================
 
-export async function buildContext({ userId, query, maxChars = 2000 }) {
+export async function buildContext({
+  userId,
+  query,
+  maxChars = 2000,
+  currentThreadId = null,
+}) {
   const normalizedUserId = normalizeUserId(userId);
+  const normalizedThreadId = String(currentThreadId || "").trim() || null;
   let memories = [];
   let usedFallback = false;
 
@@ -1003,7 +1255,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
     const lexicalPattern = `%${escapeLikePattern(trimmedQuery)}%`;
 
     const lexicalPromise = dbAll(
-      `SELECT id, content, type, metadata, importance_score, created_at,
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
               CASE
                 WHEN LOWER(content) = LOWER($2) THEN 1.0
                 WHEN content ILIKE $3 ESCAPE '\\' THEN 0.82
@@ -1027,7 +1279,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
         if (Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
           const vectorLiteral = `[${queryEmbedding.join(",")}]`;
           vectorRows = await dbAll(
-            `SELECT id, content, type, metadata, importance_score, created_at,
+            `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
                     (1 - (embedding <=> $2::vector)) AS retrieval_score
              FROM memories
              WHERE user_id = $1
@@ -1051,7 +1303,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
   // If no relevant candidates were found, fall back to highest-signal memories.
   if (memories.length === 0) {
     memories = await dbAll(
-      `SELECT id, content, type, metadata, importance_score
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
        ORDER BY importance_score DESC, created_at DESC
@@ -1074,11 +1326,39 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
       allowFallback: !usedFallback,
     });
     if (filtered.length === 0) {
-      return { context: "", sources: [] };
+      const forcedFallback = selectPersonalizationFallbackMemories(memories, 2);
+      if (forcedFallback.length === 0) {
+        return { context: "", sources: [] };
+      }
+      memories = forcedFallback;
+    } else {
+      memories = filtered;
     }
-    memories = filtered;
   } else {
     return { context: "", sources: [] };
+  }
+
+  if (normalizedThreadId && shouldInjectSessionDeltaForThread({
+    userId: normalizedUserId,
+    currentThreadId: normalizedThreadId,
+  })) {
+    const sessionDelta = await dbGet(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+         AND metadata->>'source' = 'session_end'
+         AND ($2::text IS NULL OR COALESCE(source_thread_id, '') <> $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [normalizedUserId, normalizedThreadId]
+    );
+
+    if (sessionDelta?.id) {
+      const existingIds = new Set(memories.map((memory) => String(memory?.id || "")));
+      if (!existingIds.has(String(sessionDelta.id))) {
+        memories = [sessionDelta, ...memories];
+      }
+    }
   }
   
   // Build context string with character limit
@@ -1087,7 +1367,12 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
   const usedMemories = [];
   
   for (const m of memories) {
-    const line = `- ${m.content}\n`;
+    const metadata = getMemoryMetadata(m);
+    const isSessionDelta = metadata?.source === "session_end";
+    const lineContent = isSessionDelta
+      ? `Last time: ${toShortSessionDeltaLine(m.content)}`
+      : String(m.content || "");
+    const line = `- ${lineContent}\n`;
     if (charCount + line.length > maxChars) break;
     context += line;
     charCount += line.length;

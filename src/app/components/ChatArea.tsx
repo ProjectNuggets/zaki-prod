@@ -37,6 +37,7 @@ class ChatRequestError extends Error {
 }
 
 const HOME_STARTER_MESSAGE = "hello, how are you zaki";
+const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
 
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -96,6 +97,7 @@ export function ChatArea() {
   const memoryConflictSeenRef = useRef<Set<string>>(new Set());
   const conflictCountRef = useRef(0);
   const memoryStatusHydratedRef = useRef(false);
+  const lastMemoryStatusSyncAtRef = useRef(0);
   const authUser = useAuthStore((s) => s.user);
   const authUserId = useMemo(() => {
     const fallbackEmail =
@@ -325,6 +327,15 @@ export function ChatArea() {
 
   // Strip memory context prefix from user messages (injected by backend for AI context)
   const stripMemoryContext = (content: string): string => {
+    // V2 contract: [[ZAKI_MEMORY_CONTEXT_V2]] ... [[/ZAKI_MEMORY_CONTEXT_V2]] {user message}
+    const v2Open = "[[ZAKI_MEMORY_CONTEXT_V2]]";
+    const v2Close = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+    const v2Start = content.indexOf(v2Open);
+    const v2End = content.indexOf(v2Close);
+    if (v2Start !== -1 && v2End !== -1 && v2End > v2Start) {
+      return content.slice(v2End + v2Close.length).trim();
+    }
+
     // Old format: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
     const userMessageMarker = "[USER MESSAGE]\n";
     const memoryContextMarker = "[MEMORY CONTEXT";
@@ -802,6 +813,20 @@ export function ChatArea() {
     [authUserId]
   );
 
+  const requestMemoryStatusSync = useCallback(
+    (notifyOnNewConflicts = false, force = false) => {
+      if (!authUserId) return;
+      const now = Date.now();
+      const elapsed = now - lastMemoryStatusSyncAtRef.current;
+      if (!force && elapsed < MEMORY_STATUS_SYNC_THROTTLE_MS) {
+        return;
+      }
+      lastMemoryStatusSyncAtRef.current = now;
+      void syncMemoryStatus(notifyOnNewConflicts);
+    },
+    [authUserId, syncMemoryStatus]
+  );
+
   const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
     if (!authUserId) return;
     if (memoryInFlightRef.current) {
@@ -893,25 +918,26 @@ export function ChatArea() {
       setMemoryError("Memory save failed. Retry?");
     } finally {
       memoryInFlightRef.current = false;
-      void syncMemoryStatus(true);
+      requestMemoryStatusSync(true);
       if (queuedMemoryCheckRef.current) {
         const next = queuedMemoryCheckRef.current;
         queuedMemoryCheckRef.current = null;
         checkForSavedMemories(next.message, next.threadId, next.mode);
       }
     }
-  }, [authUserId, activeThreadId, memoryMode, flushMemoryQueue, syncMemoryStatus]);
+  }, [authUserId, activeThreadId, memoryMode, flushMemoryQueue, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId) {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
+      lastMemoryStatusSyncAtRef.current = 0;
       setMemoryConflictCount(0);
       setShowConflictToast(false);
       return;
     }
-    void syncMemoryStatus(false);
-  }, [authUserId, syncMemoryStatus]);
+    requestMemoryStatusSync(false, true);
+  }, [authUserId, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId) return;
@@ -963,19 +989,44 @@ export function ChatArea() {
               if (eventName === "status") {
                 try {
                   const payload = JSON.parse(dataLines.join("\n") || "{}") as {
+                    pending?: number;
                     conflicts?: number;
                   };
+                  const nextPendingCount = Math.max(0, Number(payload.pending || 0));
                   const nextConflictCount = Math.max(
                     0,
                     Number(payload.conflicts || 0)
                   );
+                  const previousConflictCount = conflictCountRef.current;
                   if (nextConflictCount > conflictCountRef.current) {
                     setShowConflictToast(true);
                   }
+                  conflictCountRef.current = nextConflictCount;
+                  setMemoryConflictCount(nextConflictCount);
+                  if (typeof window !== "undefined" && nextConflictCount !== previousConflictCount) {
+                    window.dispatchEvent(
+                      new CustomEvent("zaki:memory-conflicts-count", {
+                        detail: { count: nextConflictCount },
+                      })
+                    );
+                  }
+                  if (nextPendingCount <= 0) {
+                    let hasAutosaveMemories = false;
+                    setPendingMemories((prev) => {
+                      const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
+                      hasAutosaveMemories = autosaveOnly.length > 0;
+                      return autosaveOnly;
+                    });
+                    if (!hasAutosaveMemories) {
+                      setShowMemoryToast(false);
+                    }
+                  } else {
+                    requestMemoryStatusSync(true);
+                  }
                 } catch {
                   // Ignore malformed events and rely on sync fallback.
+                  requestMemoryStatusSync(true);
                 }
-                void syncMemoryStatus(true);
               }
 
               boundary = buffer.indexOf("\n\n");
@@ -1003,17 +1054,17 @@ export function ChatArea() {
       }
       controller?.abort();
     };
-  }, [authUserId, syncMemoryStatus]);
+  }, [authUserId, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId) return;
 
     const handleFocus = () => {
-      void syncMemoryStatus(true);
+      requestMemoryStatusSync(true, true);
     };
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        void syncMemoryStatus(true);
+        requestMemoryStatusSync(true, true);
       }
     };
 
@@ -1023,7 +1074,7 @@ export function ChatArea() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [authUserId, syncMemoryStatus]);
+  }, [authUserId, requestMemoryStatusSync]);
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
@@ -1112,8 +1163,8 @@ export function ChatArea() {
         signal: streamController.signal,
       });
       
-      // P0 Fix: Check for auto-saved memories after response
-      await checkForSavedMemories(trimmed, threadId);
+      // Keep chat UX responsive: memory save runs in background.
+      void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
       if (isAbortError(error)) {
         return;
@@ -1779,7 +1830,7 @@ export function ChatArea() {
               }
               return next;
             });
-            void syncMemoryStatus(false);
+            requestMemoryStatusSync(false, true);
           }}
           onDismiss={() => {
             setShowMemoryToast(false);

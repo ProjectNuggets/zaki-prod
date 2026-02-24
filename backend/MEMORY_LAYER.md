@@ -1,185 +1,81 @@
-# ZAKI Memory Layer
+# ZAKI Backend Memory Layer
 
-Semantic memory storage and retrieval for the ZAKI AI chatbot.
+Last updated: February 23, 2026
 
-## How It Works (User Experience)
+## What this layer does
 
-### The Magic ✨
+The backend memory layer provides:
+- extraction of memory facts from user messages
+- autosave/manual capture workflows
+- conflict detection + resolution
+- context retrieval for chat injection
+- realtime status updates (SSE)
 
-ZAKI now **remembers things about you** across conversations:
+Core files:
+- `src/memory/operations.js`
+- `src/memory/routes.js`
+- `src/memory/auto-save.js`
+- `src/memory/session-summary.js`
+- `src/memory/session-end-route.js`
+- `src/memory/telemetry.js`
+- `src/memory-extraction.js`
 
-1. **You chat normally** - no special commands needed
-2. **ZAKI learns** - when you mention preferences, facts about yourself, or ask it to remember something
-3. **ZAKI recalls** - in future conversations, relevant memories are automatically injected
+## Data model (high level)
 
-### Examples
+Main tables:
+- `memories`
+- `memory_confirmations`
+- `memory_conflicts`
+- `memory_notifications`
+- `memory_undo_windows`
+- `memory_triggers`
 
-| You say | ZAKI remembers |
-|---------|---------------|
-| "I prefer dark mode" | Preference: dark mode |
-| "I work at a tech startup" | Fact: works at startup |
-| "Remember that my dog's name is Max" | Fact: dog named Max |
-| "I'm interested in machine learning" | Context: interested in ML |
+Important dedupe constraint:
+- unique index on `memories(user_id, content_hash)`
 
-### What Gets Remembered
+## Operational behavior
 
-- **Preferences**: "I prefer...", "I like...", "I don't like..."
-- **Facts**: "My name is...", "I work at...", "I live in..."
-- **Explicit requests**: "Remember that...", "Don't forget..."
+### Autosave
+1. `POST /api/memory/autosave`
+2. extract facts
+3. store immediately (or classify as duplicate/conflict)
+4. write undo window (`memory_undo_windows`)
 
-### How Recall Works
+Undo window: 8 seconds.
 
-When you send a message:
-1. ZAKI searches your memories for relevant context
-2. Matching memories are injected into the conversation
-3. The AI uses this to personalize its response
+### Manual mode
+1. `POST /api/memory/preview`
+2. extracted facts are staged in `memory_confirmations`
+3. user confirms/rejects
 
-**Example flow:**
-```
-You: "What editor should I use?"
-↓
-ZAKI finds: "User prefers vim for coding" (stored earlier)
-↓
-ZAKI responds with vim-aware recommendations
-```
+### Context retrieval
+- `buildContext()` uses lexical + vector retrieval when available.
+- optional relevance filtering narrows context before injection.
+- stream-chat injects context in versioned envelope markers:
+  - `[[ZAKI_MEMORY_CONTEXT_V2]]`
+  - `[[/ZAKI_MEMORY_CONTEXT_V2]]`
 
-### Privacy
+### Session-end summary
+When enabled, `/api/memory/end-session` summarization:
+- scans recent user messages with caps
+- stores extracted memories
+- resolves contradictions into `memory_conflicts`
+- stores metadata provenance `source: "session_end"`
 
-- Memories are stored per-user (email)
-- Only you can access your memories
-- Memories persist across sessions (with pgvector) or until server restart (in-memory)
+## Reliability safeguards
 
-## Quick Start
+- timeout-protected external calls for extraction/translation/relevance/embeddings
+- memory chat calls try `v1/openai/chat/completions` first, then fallback to `v1/workspace/:slug/chat`
+- graceful fallback when provider calls fail
+- cached storage capability checks (`pgvector` support)
+- throttled frontend status sync plus SSE updates
 
-```bash
-# Development
-npm run dev
+### Runtime verification
+- `GET /api/memory/health` checks storage mode quickly.
+- `GET /api/memory/health?probe=1` (authenticated) also checks extraction + embeddings provider paths and reports which transport is active.
 
-# Production (Docker)
-docker build -t zaki-backend:latest .
-docker run -p 8787:8787 --env-file .env zaki-backend:latest
-```
+## Security and scope
 
-## Configuration
-
-Add to `.env`:
-
-```env
-# Required - NOVA.TYP (primary embedding provider)
-NOVA_TYP_BASE_URL=https://typ.novanuggets.com
-NOVA_TYP_API_KEY=your_api_key
-
-# Optional - Together.ai (fallback if NOVA.TYP unavailable)
-TOGETHER_API_KEY=tgp_v1_xxx
-```
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/memory/health` | Health check with provider status |
-| POST | `/api/memory/store` | Store a memory fragment |
-| POST | `/api/memory/search` | Semantic search |
-| POST | `/api/memory/context` | Build LLM context injection |
-| GET | `/api/memory/list/:userId` | List all memories for user |
-| DELETE | `/api/memory/:id` | Delete a memory |
-
-### Store Memory
-
-```bash
-curl -X POST http://localhost:8787/api/memory/store \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user-123",
-    "content": "User prefers dark mode",
-    "type": "preference"
-  }'
-```
-
-Memory types: `fact`, `preference`, `context`
-
-### Search Memories
-
-```bash
-curl -X POST http://localhost:8787/api/memory/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user-123",
-    "query": "What are the user preferences?",
-    "limit": 5,
-    "minScore": 0.3
-  }'
-```
-
-### Build Context for LLM
-
-```bash
-curl -X POST http://localhost:8787/api/memory/context \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user-123",
-    "query": "Tell me about the user",
-    "maxChars": 2000
-  }'
-```
-
-Returns formatted context ready for system prompt injection.
-
-## Embedding Providers
-
-| Provider | Model | Dimensions | Priority |
-|----------|-------|------------|----------|
-| NOVA.TYP | all-MiniLM-L6-v2 | 384 | Primary |
-| Together.ai | m2-bert-80M-8k-retrieval | 768 | Fallback |
-
-The system automatically falls back to Together.ai if NOVA.TYP is unavailable.
-
-⚠️ **Dimension Mismatch**: If you switch providers after storing memories, existing memories with different dimensions will be skipped during search. For production, stick with one provider.
-
-## Architecture
-
-```
-┌─────────────┐     ┌──────────────┐     ┌───────────────┐
-│   Frontend  │────▶│   Backend    │────▶│   NOVA.TYP    │
-│   (React)   │     │  (Express)   │     │  (embeddings) │
-└─────────────┘     └──────────────┘     └───────────────┘
-                           │                     │
-                           ▼                     ▼
-                    ┌──────────────┐     ┌───────────────┐
-                    │ Memory Store │     │  Together.ai  │
-                    │  (in-memory) │     │  (fallback)   │
-                    └──────────────┘     └───────────────┘
-```
-
-## Current Limitations
-
-1. **In-Memory Storage**: Memories are lost on restart. For production, replace `memoryStore` Map with PostgreSQL + pgvector.
-
-2. **No Auth on Memory Endpoints**: Currently uses `userId` from request body. Should validate against session token.
-
-3. **No Rate Limiting**: Memory endpoints don't have rate limiting.
-
-4. **Single Instance**: In-memory store doesn't sync across multiple instances.
-
-## Production Checklist
-
-- [ ] Replace in-memory store with PostgreSQL + pgvector
-- [ ] Add authentication middleware to memory endpoints
-- [ ] Add rate limiting
-- [ ] Add memory expiry/TTL
-- [ ] Integrate context injection into chat completions
-- [ ] Add memory analytics/dashboard
-
-## Testing
-
-```bash
-node test-memory.js
-```
-
-## Files
-
-- `src/memory.js` - Memory layer implementation
-- `src/index.js` - Express app with routes
-- `src/db.js` - PostgreSQL connection (for users, not memories yet)
-- `.env` - Configuration
-- `Dockerfile` - Production build
+Memory access is always tied to authenticated user identity.
+Cross-user access attempts are rejected.
+Legacy routes with `:userId` remain for compatibility but are auth-scoped.

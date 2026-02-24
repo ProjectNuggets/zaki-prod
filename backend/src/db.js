@@ -277,6 +277,21 @@ export async function initDb() {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_content_hash ON memories(user_id, content_hash);
     `);
+    // Enforce exact dedupe integrity at DB layer.
+    await pool.query(`
+      DELETE FROM memories older
+      USING memories newer
+      WHERE older.user_id = newer.user_id
+        AND older.content_hash = newer.content_hash
+        AND (
+          older.created_at < newer.created_at
+          OR (older.created_at = newer.created_at AND older.id < newer.id)
+        );
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_user_content_hash_unique
+      ON memories(user_id, content_hash);
+    `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(user_id, importance_score DESC);
     `);

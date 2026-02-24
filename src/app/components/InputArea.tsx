@@ -81,6 +81,9 @@ export function InputArea({
     }
   };
 
+  const canSend = inputValue.trim().length > 0 || attachments.length > 0;
+  const isStopMode = isSending;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     submitMessage();
@@ -523,24 +526,19 @@ export function InputArea({
             <ChevronDown className="size-3 text-zaki-muted" />
           </button>
           <span className="flex-1" />
-          {isSending ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-              aria-label={t("input.stopAria")}
-            >
+          <button
+            type={isStopMode ? "button" : "submit"}
+            onClick={isStopMode ? onStop : undefined}
+            disabled={isStopMode ? typeof onStop !== "function" : !canSend}
+            className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+            aria-label={isStopMode ? t("input.stopAria") : t("input.sendAria")}
+          >
+            {isStopMode ? (
               <X className="size-4 text-white" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-              aria-label={t("input.sendAria")}
-            >
+            ) : (
               <ArrowUp className="size-4 text-white" />
-            </button>
-          )}
+            )}
+          </button>
         </div>
         <input
           ref={fileInputRef}

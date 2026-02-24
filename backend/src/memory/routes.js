@@ -23,6 +23,7 @@ import {
   getConflictCount as getConflictCountOp,
   resolveConflict as resolveConflictOp,
   checkStorage as checkStorageOp,
+  probeEmbeddingsProvider as probeEmbeddingsProviderOp,
 } from "./operations.js";
 
 import {
@@ -30,7 +31,10 @@ import {
   undoMemory as undoMemoryOp,
 } from "./auto-save.js";
 
-import { extractFacts as extractFactsOp } from "../memory-extraction.js";
+import {
+  extractFacts as extractFactsOp,
+  probeMemoryExtractionProvider as probeMemoryExtractionProviderOp,
+} from "../memory-extraction.js";
 import {
   recordMemoryTelemetry,
   setMemoryTelemetrySseClients,
@@ -85,6 +89,12 @@ function toBoundedInt(value, { fallback, min = 1, max = Number.MAX_SAFE_INTEGER 
   return Math.min(max, Math.max(min, parsed));
 }
 
+function isTruthyQuery(value) {
+  return ["1", "true", "yes", "on", "probe", "llm", "provider"].includes(
+    String(value || "").trim().toLowerCase()
+  );
+}
+
 function normalizeMemoryType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return "context";
@@ -121,6 +131,10 @@ function sanitizeMetadataInput(metadata) {
   if (typeof metadata.editedFrom === "string") {
     const value = toBoundedString(metadata.editedFrom, { maxChars: 120 });
     if (value) safe.editedFrom = value;
+  }
+  if (typeof metadata.source === "string") {
+    const value = toBoundedString(metadata.source, { maxChars: 64 });
+    if (value) safe.source = value.toLowerCase();
   }
   return Object.keys(safe).length ? safe : null;
 }
@@ -180,6 +194,8 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     resolveConflict = resolveConflictOp,
     checkStorage = checkStorageOp,
     extractFacts = extractFactsOp,
+    probeMemoryExtractionProvider = probeMemoryExtractionProviderOp,
+    probeEmbeddingsProvider = probeEmbeddingsProviderOp,
     autoSaveWithUndo = autoSaveWithUndoOp,
     undoMemory = undoMemoryOp,
   } = dependencies || {};
@@ -282,11 +298,38 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
   app.get("/api/memory/health", async (req, res) => {
     try {
       const storage = await checkStorage();
-      res.json({
+      const includeProviderProbe =
+        isTruthyQuery(req.query?.probe) ||
+        isTruthyQuery(req.query?.provider) ||
+        isTruthyQuery(req.query?.llm);
+
+      if (includeProviderProbe) {
+        const scope = await requireMemoryUser(req, res);
+        if (!scope) return;
+      }
+
+      const payload = {
         ok: true,
         storage: storage ? "pgvector" : "fallback",
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      if (includeProviderProbe) {
+        const [extraction, embeddings] = await Promise.all([
+          probeMemoryExtractionProvider(),
+          probeEmbeddingsProvider(),
+        ]);
+        payload.provider = {
+          extraction,
+          embeddings,
+        };
+        payload.sessionSummarization = {
+          enabled: String(process.env.ZAKI_ENABLE_SESSION_SUMMARIZATION || "").toLowerCase() === "true",
+          extractionReady: Boolean(extraction?.ok),
+        };
+      }
+
+      res.json(payload);
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }

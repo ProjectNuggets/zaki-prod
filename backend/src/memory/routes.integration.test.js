@@ -62,6 +62,44 @@ function buildAuthedUser(email = OWNER_EMAIL) {
 }
 
 describe("memory routes integration", () => {
+  it("runs provider probes in health route when probe flag is enabled", async () => {
+    const app = createMockApp();
+    const checkStorage = jest.fn(async () => true);
+    const probeMemoryExtractionProvider = jest.fn(async () => ({
+      ok: true,
+      transport: "workspace_chat",
+      extracted: 1,
+    }));
+    const probeEmbeddingsProvider = jest.fn(async () => ({
+      ok: true,
+      provider: "novatyp",
+      dims: 384,
+      vectors: 1,
+    }));
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: {
+        checkStorage,
+        probeMemoryExtractionProvider,
+        probeEmbeddingsProvider,
+      },
+    });
+
+    const res = await invokeRoute(app, {
+      method: "GET",
+      path: "/api/memory/health",
+      query: { probe: "1" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(checkStorage).toHaveBeenCalledTimes(1);
+    expect(probeMemoryExtractionProvider).toHaveBeenCalledTimes(1);
+    expect(probeEmbeddingsProvider).toHaveBeenCalledTimes(1);
+    expect(res.body?.provider?.extraction?.transport).toBe("workspace_chat");
+    expect(res.body?.provider?.embeddings?.dims).toBe(384);
+  });
+
   it("stages preview memories under authenticated scope", async () => {
     const app = createMockApp();
     const extractFacts = jest.fn(async () => [

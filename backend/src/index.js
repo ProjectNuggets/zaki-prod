@@ -773,6 +773,17 @@ const memoryWriteMatchers = [
   { method: "DELETE", matcher: /^\/api\/memory\/[^/]+\/?$/u },
 ];
 
+function isLocalDevelopmentOrigin(origin) {
+  if (typeof origin !== "string" || origin.trim() === "") return false;
+  try {
+    const parsed = new URL(origin);
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
+    return ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     return next();
@@ -794,8 +805,8 @@ app.use((req, res, next) => {
 app.use(
   cors({
     origin: (origin, callback) => {
-      // In development, allow all origins
-      if (!isProduction && (!origin || allowedOrigins.length === 0)) {
+      // In development, allow non-browser/local requests and localhost loopback origins.
+      if (!isProduction && (!origin || isLocalDevelopmentOrigin(origin))) {
         return callback(null, true);
       }
       
@@ -4144,6 +4155,9 @@ app.get("/api/verify", verifyHandler);
 // Chat Integration with Memory
 // =============================================================================
 
+const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
+const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+
 /**
  * Intercept stream-chat requests to inject memory context
  * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
@@ -4209,11 +4223,16 @@ const streamChatHandler = async (req, res) => {
           userId: userEmail,
           query: originalMessage,
           maxChars: 1500,
+          currentThreadId: threadSlug,
         });
 
         if (memoryResult.context) {
-          // Prepend memory context with explicit relevance guidance + no hallucination
-          enrichedMessage = `[About this person — use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate or invent details beyond this memory.]\n${memoryResult.context}\n\n---\n\n${originalMessage}`;
+          // Versioned envelope keeps context injection parseable and easy to strip client-side.
+          enrichedMessage = `${MEMORY_CONTEXT_ENVELOPE_OPEN}
+Use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate details beyond this memory.
+${memoryResult.context}
+${MEMORY_CONTEXT_ENVELOPE_CLOSE}
+${originalMessage}`;
           memoryInjected = true;
           memorySources = (memoryResult.sources || []).map((source) => ({
             id: source.id,

@@ -131,4 +131,29 @@ describe("ChatArea Component", () => {
       expect(screen.getByText("Hello from history")).toBeInTheDocument();
     });
   });
+
+  it("strips versioned injected memory envelope from user history messages", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+
+    (useMessages as jest.Mock).mockReturnValue({
+      data: [
+        {
+          id: "m1",
+          role: "user",
+          content:
+            "[[ZAKI_MEMORY_CONTEXT_V2]]\nAbout this person:\n- Likes tea\n[[/ZAKI_MEMORY_CONTEXT_V2]]\nWhat should I do today?",
+        },
+      ],
+      isLoading: false,
+    });
+
+    renderChatArea();
+
+    await waitFor(() => {
+      expect(screen.getByText("What should I do today?")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("[[ZAKI_MEMORY_CONTEXT_V2]]")).not.toBeInTheDocument();
+  });
 });

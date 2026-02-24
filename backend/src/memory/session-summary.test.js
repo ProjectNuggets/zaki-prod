@@ -19,7 +19,7 @@ describe("session memory summarization", () => {
     );
   });
 
-  it("stores extracted memories and tracks duplicates", async () => {
+  it("stores extracted memories and skips repeated facts within the same session", async () => {
     const extractFacts = jest
       .fn()
       .mockResolvedValueOnce([
@@ -31,10 +31,7 @@ describe("session memory summarization", () => {
 
     const findConflict = jest.fn(async () => null);
     const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const storeMemory = jest
-      .fn()
-      .mockResolvedValueOnce({ id: "m1", duplicate: false })
-      .mockResolvedValueOnce({ duplicate: true });
+    const storeMemory = jest.fn().mockResolvedValueOnce({ id: "m1", duplicate: false });
 
     const result = await summarizeConversation(
       {
@@ -53,18 +50,23 @@ describe("session memory summarization", () => {
     expect(result.processedMessages).toBe(2);
     expect(result.extracted).toBe(2);
     expect(result.stored).toBe(1);
-    expect(result.duplicates).toBe(1);
+    expect(result.duplicates).toBe(0);
+    expect(result.skippedFacts).toBe(1);
     expect(result.conflicts).toBe(0);
     expect(result.errors).toBe(0);
     expect(result.storedIds).toEqual(["m1"]);
-    expect(findConflict).toHaveBeenCalledTimes(2);
+    expect(findConflict).toHaveBeenCalledTimes(1);
     expect(createConflict).not.toHaveBeenCalled();
+    expect(storeMemory).toHaveBeenCalledTimes(1);
     expect(storeMemory).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         userId: "user@example.com",
         content: "Likes coffee",
         sourceThreadId: "thread-1",
+        metadata: expect.objectContaining({
+          source: "session_end",
+        }),
       })
     );
   });
