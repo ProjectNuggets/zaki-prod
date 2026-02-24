@@ -29,6 +29,12 @@ import { extractFacts } from "./memory-extraction.js";
 import { summarizeConversation } from "./memory/session-summary.js";
 import { createSessionEndHandler } from "./memory/session-end-route.js";
 import { buildStreamUpstreamPayload, extractStreamMessage } from "./chat-proxy.js";
+import { markWebhookEventProcessed } from "./billing-webhook-events.js";
+import { createBillingHealthTracker } from "./billing-health.js";
+import {
+  resolveSyncMaxAttempts,
+  runBillingSyncWithRetries,
+} from "./billing-reconciliation.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -91,6 +97,7 @@ function normalizeEmailValue(value) {
 }
 
 const app = express();
+const billingHealth = createBillingHealthTracker();
 const PORT = Number(process.env.PORT || 8787);
 const isProduction = process.env.NODE_ENV === "production";
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
@@ -384,20 +391,6 @@ function verifyCreemWebhookSignature(rawBody, signatureHeader) {
   return crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
 }
 
-async function markWebhookEventProcessed(provider, eventId) {
-  const normalizedProvider = String(provider || "").trim().toLowerCase();
-  const normalizedEventId = String(eventId || "").trim();
-  if (!normalizedProvider || !normalizedEventId) return false;
-  const inserted = await dbGet(
-    `INSERT INTO billing_webhook_events (provider, event_id)
-     VALUES ($1, $2)
-     ON CONFLICT (provider, event_id) DO NOTHING
-     RETURNING id`,
-    [normalizedProvider, normalizedEventId]
-  );
-  return Boolean(inserted?.id);
-}
-
 function resolveCreemPlanTier(payload = {}) {
   const productId =
     payload?.product_id ||
@@ -558,9 +551,14 @@ async function creemWebhookHandler(req, res) {
   }
 
   try {
+    billingHealth.recordReceived("creem", { eventId, eventType });
     if (eventId) {
-      const shouldProcess = await markWebhookEventProcessed("creem", eventId);
+      const shouldProcess = await markWebhookEventProcessed(dbGet, {
+        provider: "creem",
+        eventId,
+      });
       if (!shouldProcess) {
+        billingHealth.recordDuplicate("creem", { eventId, eventType });
         res.status(200).json({ received: true, duplicate: true });
         return;
       }
@@ -572,8 +570,14 @@ async function creemWebhookHandler(req, res) {
     ) {
       await handleCreemWebhookEvent(eventType, eventPayload);
     }
+    billingHealth.recordProcessed("creem", { eventId, eventType });
     res.status(200).json({ received: true });
   } catch (err) {
+    billingHealth.recordFailure("creem", {
+      eventId,
+      eventType,
+      error: err?.message || String(err),
+    });
     console.error("[Creem] Webhook handler error:", err);
     res.status(500).json({ error: "Webhook handler failed." });
   }
@@ -618,6 +622,21 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
   }
 
   try {
+    const eventId = String(event?.id || "").trim();
+    const eventType = String(event?.type || "").trim();
+    billingHealth.recordReceived("stripe", { eventId, eventType });
+    if (eventId) {
+      const shouldProcess = await markWebhookEventProcessed(dbGet, {
+        provider: "stripe",
+        eventId,
+      });
+      if (!shouldProcess) {
+        billingHealth.recordDuplicate("stripe", { eventId, eventType });
+        res.status(200).json({ received: true, duplicate: true });
+        return;
+      }
+    }
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       const customerId = session.customer;
@@ -689,8 +708,14 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
       }
     }
 
+    billingHealth.recordProcessed("stripe", { eventId, eventType });
     res.json({ received: true });
   } catch (err) {
+    billingHealth.recordFailure("stripe", {
+      eventId: String(event?.id || "").trim(),
+      eventType: String(event?.type || "").trim(),
+      error: err?.message || String(err),
+    });
     console.error("[Stripe] Webhook handler error:", err);
     res.status(500).json({ error: "Webhook handler failed." });
   }
@@ -1273,6 +1298,16 @@ app.get("/api/admin/telemetry/memory", async (req, res) => {
   res.json({
     success: true,
     telemetry: getMemoryTelemetrySnapshot(),
+  });
+});
+
+app.get("/api/admin/telemetry/billing", async (req, res) => {
+  const authResult = await requireAdminUser(req, res);
+  if (!authResult) return;
+  res.json({
+    success: true,
+    configured: getBillingConfigStatus(),
+    telemetry: billingHealth.getSnapshot(),
   });
 });
 
@@ -3197,6 +3232,15 @@ const CheckoutSchema = z.object({
   plan: z.enum(["student", "personal"]),
   provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
 });
+const BillingReconcileSchema = z
+  .object({
+    userId: z.number().int().positive().optional(),
+    email: z.string().trim().email().optional(),
+    retryCount: z.number().int().min(0).max(4).optional(),
+  })
+  .refine((value) => Boolean(value?.userId || value?.email), {
+    message: "Provide userId or email.",
+  });
 
 app.get("/api/billing/config", async (req, res) => {
   const authResult = await requireAuthUser(req, res);
@@ -3284,11 +3328,83 @@ app.post("/api/billing/sync", express.json({ limit: "256kb" }), async (req, res)
     const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
     if (!email || !zakiUser) return;
 
-    const result = await syncStripeSubscriptionState({ email, zakiUser });
-    res.status(200).json({ success: true, ...result });
+    const syncResult = await runBillingSyncWithRetries(
+      () => syncStripeSubscriptionState({ email, zakiUser }),
+      {
+        maxAttempts: resolveSyncMaxAttempts(1),
+      }
+    );
+    res.status(200).json({ success: true, ...syncResult.result, attemptsUsed: syncResult.attemptsUsed });
   } catch (error) {
     console.error("[Billing] Sync error:", error);
     res.status(error?.status || 500).json({ error: error?.message || "Billing sync failed." });
+  }
+});
+
+app.post("/api/admin/billing/reconcile", express.json({ limit: "256kb" }), async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const configured = getBillingConfigStatus();
+    if (configured.provider !== "stripe") {
+      res.status(400).json({
+        success: false,
+        error: "Billing reconciliation is only supported for Stripe provider.",
+      });
+      return;
+    }
+
+    const validation = validateInput(BillingReconcileSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const byUserId = Number(validation.data.userId || 0);
+    const byEmail = validation.data.email ? normalizeEmail(validation.data.email) : "";
+    const user = byUserId
+      ? await dbGet(
+          `SELECT id, email, stripe_customer_id, plan_tier, plan_status
+           FROM zaki_users
+           WHERE id = $1`,
+          [byUserId]
+        )
+      : await dbGet(
+          `SELECT id, email, stripe_customer_id, plan_tier, plan_status
+           FROM zaki_users
+           WHERE email = $1`,
+          [byEmail]
+        );
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        error: "User not found for reconciliation.",
+      });
+      return;
+    }
+
+    const maxAttempts = resolveSyncMaxAttempts(validation.data.retryCount);
+    const syncResult = await runBillingSyncWithRetries(
+      () => syncStripeSubscriptionState({ email: user.email, zakiUser: user }),
+      { maxAttempts }
+    );
+
+    res.status(200).json({
+      success: true,
+      userId: user.id,
+      email: user.email,
+      attemptsUsed: syncResult.attemptsUsed,
+      maxAttempts: syncResult.maxAttempts,
+      ...syncResult.result,
+    });
+  } catch (error) {
+    console.error("[Billing] Reconcile error:", error);
+    res.status(error?.status || 500).json({ error: error?.message || "Billing reconciliation failed." });
   }
 });
 
