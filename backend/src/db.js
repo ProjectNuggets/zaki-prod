@@ -126,6 +126,8 @@ export async function initDb() {
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS billing_updated_at TIMESTAMPTZ;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_created_at TIMESTAMPTZ;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMPTZ;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_campaign TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_last TEXT;");

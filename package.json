@@ -30,6 +30,8 @@
     "smoke:v01": "node scripts/smoke-v01.mjs",
     "smoke:memory-session": "node scripts/smoke-memory-session.mjs",
     "smoke:billing": "node scripts/smoke-billing.mjs",
+    "stress:billing-webhook": "node scripts/stress-billing-webhook.mjs",
+    "release:check": "node scripts/release-check-next-release.mjs",
     "load:memory": "node scripts/load-memory.mjs",
     "ops:backup-drill": "node scripts/backup-restore-drill.mjs",
     "website:dev": "npm --prefix website run dev",

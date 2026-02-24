@@ -48,6 +48,7 @@ export function validateRuntimeConfig(env = process.env) {
   const legalPolicyVersion = normalize(env.ZAKI_LEGAL_POLICY_VERSION);
   const includeVerifyLink = isTruthyBoolean(env.ZAKI_INCLUDE_VERIFY_LINK);
   const memoryAlertWebhook = normalize(env.ZAKI_MEMORY_ALERT_WEBHOOK_URL);
+  const billingAlertWebhook = normalize(env.ZAKI_BILLING_ALERT_WEBHOOK_URL);
 
   const errors = [];
   const warnings = [];
@@ -90,6 +91,13 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_MEMORY_ALERT_WEBHOOK_URL",
       "ZAKI_MEMORY_ALERT_WEBHOOK_URL should start with http:// or https://."
+    );
+  }
+  if (billingAlertWebhook && !hasHttpUrl(billingAlertWebhook)) {
+    pushIssue(
+      warnings,
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL",
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL should start with http:// or https://."
     );
   }
 
@@ -178,6 +186,13 @@ export function validateRuntimeConfig(env = process.env) {
       errors,
       "ZAKI_MEMORY_ALERT_WEBHOOK_URL",
       "ZAKI_MEMORY_ALERT_WEBHOOK_URL must start with https:// in production."
+    );
+  }
+  if (billingAlertWebhook && !hasHttpsUrl(billingAlertWebhook)) {
+    pushIssue(
+      errors,
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL",
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL must start with https:// in production."
     );
   }
 
