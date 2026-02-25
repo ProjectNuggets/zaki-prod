@@ -45,11 +45,16 @@ export function useCheckout() {
       payload:
         | "student"
         | "personal"
-        | { plan: "student" | "personal"; provider?: "stripe" | "paddle" | "creem" }
+        | {
+            plan: "student" | "personal";
+            provider?: "stripe" | "paddle" | "creem";
+            interval?: "monthly" | "yearly";
+          }
     ) => {
       const plan = typeof payload === "string" ? payload : payload.plan;
       const provider = typeof payload === "string" ? undefined : payload.provider;
-      const { response, data } = await createCheckoutSession(plan, provider);
+      const interval = typeof payload === "string" ? "monthly" : payload.interval || "monthly";
+      const { response, data } = await createCheckoutSession(plan, provider, interval);
       if (!response.ok || !data.url) {
         throw new Error(data.error ?? "Unable to start checkout");
       }

@@ -33,6 +33,12 @@ import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./bi
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
 import {
+  buildStripePricingCatalog,
+  normalizeBillingInterval,
+  resolveStripePriceDetailsById,
+  resolveStripePriceForSelection,
+} from "./billing-pricing.js";
+import {
   resolveSyncMaxAttempts,
   runBillingSyncWithRetries,
 } from "./billing-reconciliation.js";
@@ -116,6 +122,8 @@ const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_PRICE_STUDENT = (process.env.STRIPE_PRICE_STUDENT || "").trim();
 const STRIPE_PRICE_PERSONAL = (process.env.STRIPE_PRICE_PERSONAL || "").trim();
+const STRIPE_PRICE_STUDENT_YEARLY = (process.env.STRIPE_PRICE_STUDENT_YEARLY || "").trim();
+const STRIPE_PRICE_PERSONAL_YEARLY = (process.env.STRIPE_PRICE_PERSONAL_YEARLY || "").trim();
 const ZAKI_BILLING_PROVIDER = (process.env.ZAKI_BILLING_PROVIDER || "stripe")
   .trim()
   .toLowerCase();
@@ -219,15 +227,19 @@ if (STRIPE_SECRET_KEY) {
   }
 }
 
-const PRICE_BY_TIER = {
-  student: STRIPE_PRICE_STUDENT,
-  personal: STRIPE_PRICE_PERSONAL,
-};
+const stripePricingCatalog = buildStripePricingCatalog({
+  studentMonthly: STRIPE_PRICE_STUDENT,
+  studentYearly: STRIPE_PRICE_STUDENT_YEARLY,
+  personalMonthly: STRIPE_PRICE_PERSONAL,
+  personalYearly: STRIPE_PRICE_PERSONAL_YEARLY,
+});
+const PRICE_BY_PLAN_INTERVAL = stripePricingCatalog.priceByPlanInterval;
+const PRICE_DETAILS_BY_ID = stripePricingCatalog.priceDetailsById;
+const TIER_BY_PRICE = stripePricingCatalog.tierByPrice;
 
-const TIER_BY_PRICE = Object.entries(PRICE_BY_TIER).reduce((acc, [tier, priceId]) => {
-  if (priceId) acc[priceId] = tier;
-  return acc;
-}, {});
+function getStripePricingAvailability() {
+  return stripePricingCatalog.pricingAvailability;
+}
 
 function isStripeProviderSelected() {
   return ZAKI_BILLING_PROVIDER === "stripe";
@@ -242,8 +254,12 @@ function isCreemProviderSelected() {
 }
 
 function getCheckoutProviderOptions() {
+  const pricingAvailability = getStripePricingAvailability();
+  const stripeHasConfiguredPrice = Object.values(pricingAvailability).some(
+    (item) => item.monthly || item.yearly
+  );
   const stripeCheckoutEnabled = Boolean(
-    stripe && PRICE_BY_TIER.student && PRICE_BY_TIER.personal
+    stripe && stripeHasConfiguredPrice
   );
   const externalCheckoutEnabled = Boolean(
     ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT && ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL
@@ -281,6 +297,10 @@ function getActiveBillingProviderKey() {
 function getBillingConfigStatus() {
   const activeProvider = getActiveBillingProviderKey();
   const checkoutProviders = getCheckoutProviderOptions();
+  const pricingAvailability = getStripePricingAvailability();
+  const stripeHasConfiguredPrice = Object.values(pricingAvailability).some(
+    (item) => item.monthly || item.yearly
+  );
   const anyCheckoutProviderEnabled = checkoutProviders.some((provider) => provider.enabled);
   if (activeProvider === "creem") {
     const checkoutEnabled = Boolean(
@@ -299,6 +319,7 @@ function getBillingConfigStatus() {
       portalEnabled: false,
       cancelEnabled: false,
       webhookEnabled: Boolean(CREEM_WEBHOOK_SECRET),
+      pricingAvailability,
       missing,
     };
   }
@@ -320,6 +341,7 @@ function getBillingConfigStatus() {
       portalEnabled,
       cancelEnabled: false,
       webhookEnabled: false,
+      pricingAvailability,
       missing,
     };
   }
@@ -341,13 +363,14 @@ function getBillingConfigStatus() {
       portalEnabled: false,
       cancelEnabled: false,
       webhookEnabled: false,
+      pricingAvailability,
       missing,
     };
   }
 
   const stripeEnabled = Boolean(stripe);
   const checkoutEnabled = Boolean(
-    stripeEnabled && PRICE_BY_TIER.student && PRICE_BY_TIER.personal
+    stripeEnabled && stripeHasConfiguredPrice
   );
   const portalEnabled = stripeEnabled;
   const cancelEnabled = stripeEnabled;
@@ -357,11 +380,17 @@ function getBillingConfigStatus() {
   if (!stripeEnabled) {
     missing.push("stripe_secret_key");
   }
-  if (!PRICE_BY_TIER.student) {
+  if (!PRICE_BY_PLAN_INTERVAL.student.monthly) {
     missing.push("stripe_price_student");
   }
-  if (!PRICE_BY_TIER.personal) {
+  if (!PRICE_BY_PLAN_INTERVAL.personal.monthly) {
     missing.push("stripe_price_personal");
+  }
+  if (!PRICE_BY_PLAN_INTERVAL.student.yearly) {
+    missing.push("stripe_price_student_yearly");
+  }
+  if (!PRICE_BY_PLAN_INTERVAL.personal.yearly) {
+    missing.push("stripe_price_personal_yearly");
   }
   if (!STRIPE_WEBHOOK_SECRET) {
     missing.push("stripe_webhook_secret");
@@ -376,6 +405,7 @@ function getBillingConfigStatus() {
     portalEnabled,
     cancelEnabled,
     webhookEnabled,
+    pricingAvailability,
     missing,
   };
 }
@@ -1800,12 +1830,15 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
       updated: true,
       customerId,
       tier: "free",
+      interval: null,
       status: "inactive",
     };
   }
 
   const priceId = preferred.items?.data?.[0]?.price?.id || null;
-  const tierFromPrice = priceId ? TIER_BY_PRICE[priceId] : null;
+  const priceDetails = resolveStripePriceDetailsById(stripePricingCatalog, priceId);
+  const tierFromPrice = priceDetails?.tier || null;
+  const intervalFromPrice = priceDetails?.interval || null;
   const tierFromMetadata = preferred.metadata?.plan_tier || null;
   const isCanceled = preferred.status === "canceled";
   const tier = isCanceled
@@ -1846,6 +1879,7 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
     customerId,
     subscriptionId: preferred.id || null,
     tier,
+    interval: intervalFromPrice,
     status,
     currentPeriodEnd,
     cancelAtPeriodEnd,
@@ -1870,7 +1904,8 @@ const billingAdapters = {
   },
   stripe: {
     name: "stripe",
-    async createCheckout({ plan, email, zakiUser }) {
+    async createCheckout({ plan, interval = "monthly", email, zakiUser }) {
+      const selectedInterval = normalizeBillingInterval(interval, "monthly");
       if (plan === "student" && !isEduEmail(email)) {
         const err = new Error("Student plan requires a .edu email address.");
         err.status = 400;
@@ -1885,9 +1920,12 @@ const billingAdapters = {
         );
       }
 
-      const priceId = PRICE_BY_TIER[plan];
+      const priceId = resolveStripePriceForSelection(stripePricingCatalog, {
+        plan,
+        interval: selectedInterval,
+      });
       if (!priceId) {
-        const err = new Error("Plan is not configured.");
+        const err = new Error("Selected billing interval is not configured for this plan.");
         err.status = 400;
         throw err;
       }
@@ -1901,9 +1939,17 @@ const billingAdapters = {
         allow_promotion_codes: true,
         success_url: `${appUrl}/pricing?billing=success`,
         cancel_url: `${appUrl}/pricing?billing=cancel`,
-        metadata: { user_email: email, plan_tier: plan },
+        metadata: {
+          user_email: email,
+          plan_tier: plan,
+          billing_interval: selectedInterval,
+        },
         subscription_data: {
-          metadata: { user_email: email, plan_tier: plan },
+          metadata: {
+            user_email: email,
+            plan_tier: plan,
+            billing_interval: selectedInterval,
+          },
         },
       });
       return { url: session.url };
@@ -1958,7 +2004,8 @@ const billingAdapters = {
 
       const priceId =
         finalSubscription.items?.data?.[0]?.price?.id || zakiUser.stripe_price_id || null;
-      const tier = resolveTier((priceId && TIER_BY_PRICE[priceId]) || zakiUser.plan_tier || "free");
+      const priceDetails = resolveStripePriceDetailsById(stripePricingCatalog, priceId);
+      const tier = resolveTier(priceDetails?.tier || zakiUser.plan_tier || "free");
       const currentPeriodEnd = finalSubscription.current_period_end
         ? new Date(finalSubscription.current_period_end * 1000).toISOString()
         : zakiUser.current_period_end || null;
@@ -3249,6 +3296,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
 // -----------------------------------------------------------------------------
 const CheckoutSchema = z.object({
   plan: z.enum(["student", "personal"]),
+  interval: z.enum(["monthly", "yearly"]).optional(),
   provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
 });
 
@@ -3291,6 +3339,7 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
     }
 
     const plan = validation.data.plan;
+    const interval = normalizeBillingInterval(validation.data.interval, "monthly");
     const requestedProvider = String(validation.data.provider || "").trim().toLowerCase();
     const configured = getBillingConfigStatus();
     const availableProviders = (configured.checkoutProviders || []).filter((item) => item.enabled);
@@ -3317,7 +3366,15 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
       return;
     }
 
-    const result = await adapter.createCheckout({ plan, email, zakiUser });
+    if (interval === "yearly" && providerOption.key !== "stripe") {
+      res.status(400).json({
+        success: false,
+        error: "Yearly billing is currently available only through Stripe checkout.",
+      });
+      return;
+    }
+
+    const result = await adapter.createCheckout({ plan, interval, email, zakiUser });
     res.status(200).json({ success: true, url: result?.url || null });
   } catch (error) {
     console.error("[Billing] Checkout error:", error);
@@ -3399,6 +3456,10 @@ app.get("/api/entitlements", async (req, res) => {
 
     const tier = resolveTier(zakiUser.plan_tier || "free");
     const status = zakiUser.plan_status || "inactive";
+    const priceDetails = resolveStripePriceDetailsById(
+      stripePricingCatalog,
+      zakiUser.stripe_price_id || null
+    );
     const premiumActive = isPaidActive(tier, status);
     const access = getAccessStatus(zakiUser);
     const accessActive = premiumActive || access.active;
@@ -3411,6 +3472,7 @@ app.get("/api/entitlements", async (req, res) => {
         tier,
         status,
         priceId: zakiUser.stripe_price_id || null,
+        interval: priceDetails?.interval || null,
         currentPeriodEnd: zakiUser.current_period_end || null,
         cancelAtPeriodEnd: Boolean(zakiUser.cancel_at_period_end),
       },

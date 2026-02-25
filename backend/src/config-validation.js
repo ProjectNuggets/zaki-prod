@@ -49,6 +49,9 @@ export function validateRuntimeConfig(env = process.env) {
   const includeVerifyLink = isTruthyBoolean(env.ZAKI_INCLUDE_VERIFY_LINK);
   const memoryAlertWebhook = normalize(env.ZAKI_MEMORY_ALERT_WEBHOOK_URL);
   const billingAlertWebhook = normalize(env.ZAKI_BILLING_ALERT_WEBHOOK_URL);
+  const billingProvider = normalize(env.ZAKI_BILLING_PROVIDER || "stripe").toLowerCase();
+  const stripePriceStudentYearly = normalize(env.STRIPE_PRICE_STUDENT_YEARLY);
+  const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
 
   const errors = [];
   const warnings = [];
@@ -98,6 +101,20 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_BILLING_ALERT_WEBHOOK_URL",
       "ZAKI_BILLING_ALERT_WEBHOOK_URL should start with http:// or https://."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceStudentYearly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_STUDENT_YEARLY",
+      "STRIPE_PRICE_STUDENT_YEARLY is not set. Student yearly checkout will be unavailable."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePricePersonalYearly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_PERSONAL_YEARLY",
+      "STRIPE_PRICE_PERSONAL_YEARLY is not set. Personal yearly checkout will be unavailable."
     );
   }
 

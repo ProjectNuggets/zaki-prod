@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type PlanTier = "free" | "student" | "personal";
+type BillingInterval = "monthly" | "yearly";
 const planTiers: PlanTier[] = ["free", "student", "personal"];
 
 type BillingNotice = {
@@ -35,8 +36,12 @@ export function PricingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const handledBillingStatusRef = useRef<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>("monthly");
   const [accessCode, setAccessCode] = useState("");
-  const [providerModalPlan, setProviderModalPlan] = useState<"student" | "personal" | null>(null);
+  const [providerModalSelection, setProviderModalSelection] = useState<{
+    plan: "student" | "personal";
+    interval: BillingInterval;
+  } | null>(null);
   const checkout = useCheckout();
   const portal = useBillingPortal();
   const cancelSubscription = useCancelSubscription();
@@ -44,6 +49,25 @@ export function PricingPage() {
   const redeemAccessCode = useRedeemAccessCode();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
+  const requestedPlanFromQuery = (() => {
+    const value = String(searchParams.get("plan") || "")
+      .trim()
+      .toLowerCase();
+    return value === "student" || value === "personal" ? value : null;
+  })();
+  const requestedIntervalFromQuery = (() => {
+    const value = String(searchParams.get("interval") || "")
+      .trim()
+      .toLowerCase();
+    return value === "yearly" || value === "monthly" ? value : null;
+  })();
+  const shouldAutoStartFromQuery = (() => {
+    const value = String(searchParams.get("autostart") || "")
+      .trim()
+      .toLowerCase();
+    return value === "1" || value === "true";
+  })();
+  const handledQueryAutoStartRef = useRef(false);
   const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
   const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
@@ -64,6 +88,18 @@ export function PricingPage() {
     (!billingPortalEnabled || !billingCheckoutEnabled || (isPremium && !billingCancelEnabled))
       ? t("pricingPage.billingUnavailable")
       : null;
+  const pricingAvailability = {
+    student: {
+      monthly: Boolean(billingConfig?.pricingAvailability?.student?.monthly ?? true),
+      yearly: Boolean(billingConfig?.pricingAvailability?.student?.yearly ?? false),
+    },
+    personal: {
+      monthly: Boolean(billingConfig?.pricingAvailability?.personal?.monthly ?? true),
+      yearly: Boolean(billingConfig?.pricingAvailability?.personal?.yearly ?? false),
+    },
+  };
+  const anyYearlyAvailable =
+    pricingAvailability.student.yearly || pricingAvailability.personal.yearly;
   const checkoutProviders = useMemo<CheckoutProvider[]>(() => {
     const providerCatalog: CheckoutProvider[] = [
       { key: "stripe", label: "Stripe", enabled: false },
@@ -97,14 +133,25 @@ export function PricingPage() {
       });
     }
     return providerCatalog.map((provider) => providerMap.get(provider.key) ?? provider);
-  }, [billingConfig?.checkoutProviders, billingCheckoutEnabled]);
+  }, [billingConfig?.checkoutProviders, billingConfigLoaded]);
 
   const plans = useMemo(
     () =>
       planTiers.map((tier) => ({
         tier,
         label: t(`pricingPage.plans.${tier}.label`),
-        price: t(`pricingPage.plans.${tier}.price`),
+        priceMonthly:
+          tier === "free"
+            ? t(`pricingPage.plans.${tier}.price`)
+            : t(`pricingPage.plans.${tier}.priceMonthly`, {
+                defaultValue: t(`pricingPage.plans.${tier}.price`),
+              }),
+        priceYearly:
+          tier === "free"
+            ? t(`pricingPage.plans.${tier}.price`)
+            : t(`pricingPage.plans.${tier}.priceYearly`, {
+                defaultValue: t(`pricingPage.plans.${tier}.price`),
+              }),
         blurb: t(`pricingPage.plans.${tier}.blurb`),
         features: t(`pricingPage.plans.${tier}.features`, {
           returnObjects: true,
@@ -203,33 +250,82 @@ export function PricingPage() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams, syncBilling, billingNoticeByStatus]);
 
+  const resolveIntervalForPlan = (
+    plan: "student" | "personal",
+    requestedInterval: BillingInterval
+  ): BillingInterval => {
+    const available = pricingAvailability[plan];
+    if (requestedInterval === "yearly" && !available.yearly) {
+      return "monthly";
+    }
+    return requestedInterval;
+  };
+
   const beginCheckout = async (
     plan: "student" | "personal",
+    interval: BillingInterval,
     provider?: "stripe" | "paddle" | "creem"
   ) => {
     if (!billingCheckoutEnabled) {
       throw new Error(t("pricingPage.checkoutError"));
     }
-    await checkout.mutateAsync({ plan, provider });
+    await checkout.mutateAsync({ plan, provider, interval });
   };
 
-  const openProviderSelection = (plan: "student" | "personal") => {
+  const openProviderSelection = (
+    plan: "student" | "personal",
+    requestedInterval: BillingInterval
+  ) => {
+    const interval = resolveIntervalForPlan(plan, requestedInterval);
+    const yearlyStripeOnly = interval === "yearly";
     const available = checkoutProviders.filter(
-      (provider) => provider.enabled && !provider.comingSoon
+      (provider) =>
+        provider.enabled &&
+        !provider.comingSoon &&
+        (!yearlyStripeOnly || provider.key === "stripe")
     );
     const onlyProvider = available[0];
     if (available.length === 1 && onlyProvider) {
-      void beginCheckout(plan, onlyProvider.key).catch((err) => {
+      void beginCheckout(plan, interval, onlyProvider.key).catch((err) => {
         toast.error(err instanceof Error ? err.message : t("pricingPage.checkoutError"));
       });
       return;
     }
     if (available.length === 0) {
-      toast.error(t("pricingPage.checkoutError"));
+      toast.error(yearlyStripeOnly ? t("pricingPage.yearlyStripeOnly") : t("pricingPage.checkoutError"));
       return;
     }
-    setProviderModalPlan(plan);
+    setProviderModalSelection({ plan, interval });
   };
+
+  useEffect(() => {
+    if (!requestedIntervalFromQuery) return;
+    setSelectedInterval((previous) =>
+      previous === requestedIntervalFromQuery ? previous : requestedIntervalFromQuery
+    );
+  }, [requestedIntervalFromQuery]);
+
+  useEffect(() => {
+    if (handledQueryAutoStartRef.current) return;
+    if (!shouldAutoStartFromQuery || !requestedPlanFromQuery) return;
+    if (!billingConfigLoaded || isPremium) return;
+
+    handledQueryAutoStartRef.current = true;
+    const requestedInterval = requestedIntervalFromQuery || "monthly";
+    openProviderSelection(requestedPlanFromQuery, requestedInterval);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("autostart");
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    billingConfigLoaded,
+    isPremium,
+    requestedIntervalFromQuery,
+    requestedPlanFromQuery,
+    searchParams,
+    setSearchParams,
+    shouldAutoStartFromQuery,
+  ]);
 
   return (
     <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
@@ -381,10 +477,70 @@ export function PricingPage() {
             </div>
             <div className="mt-3 text-xs text-zaki-muted">{accessSummary}</div>
           </div>
+          <div className="md:col-span-2 xl:col-span-3 -mt-1">
+            <div className={cn("flex flex-col gap-2", isRtl ? "items-end" : "items-start")}>
+              <span className="text-xs font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+                {t("pricingPage.intervalLabel")}
+              </span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-1 py-1">
+                <button
+                  type="button"
+                  aria-pressed={selectedInterval === "monthly"}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm transition-colors",
+                    selectedInterval === "monthly"
+                      ? "bg-zaki-brand text-white"
+                      : "text-zaki-secondary dark:text-zaki-dark-subtle"
+                  )}
+                  onClick={() => setSelectedInterval("monthly")}
+                >
+                  {t("pricingPage.interval.monthly")}
+                </button>
+                <button
+                  type="button"
+                  disabled={!anyYearlyAvailable}
+                  aria-pressed={selectedInterval === "yearly"}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm transition-colors",
+                    selectedInterval === "yearly"
+                      ? "bg-zaki-brand text-white"
+                      : "text-zaki-secondary dark:text-zaki-dark-subtle",
+                    !anyYearlyAvailable && "opacity-50 cursor-not-allowed"
+                  )}
+                  onClick={() => setSelectedInterval("yearly")}
+                >
+                  {t("pricingPage.interval.yearly")}
+                </button>
+              </div>
+              {anyYearlyAvailable ? (
+                <p className="text-xs text-zaki-muted">{t("pricingPage.yearlyValueHint")}</p>
+              ) : (
+                <p className="text-xs text-zaki-muted">{t("pricingPage.yearlyUnavailable")}</p>
+              )}
+            </div>
+          </div>
           {plans.map((plan) => {
             const isCurrent = currentTier === plan.tier;
             const isCurrentActivePaidPlan =
               isPremium && plan.tier !== "free" && currentTier === plan.tier;
+            const requestedInterval = selectedInterval;
+            const paidTier =
+              plan.tier === "student" || plan.tier === "personal" ? plan.tier : null;
+            const resolvedInterval =
+              !paidTier || requestedInterval === "monthly"
+                ? "monthly"
+                : pricingAvailability[paidTier].yearly
+                ? "yearly"
+                : "monthly";
+            const isPaidPlan = Boolean(paidTier);
+            const priceLabel =
+              !isPaidPlan || resolvedInterval === "monthly"
+                ? plan.priceMonthly
+                : plan.priceYearly;
+            const showsYearlyFallback =
+              isPaidPlan &&
+              requestedInterval === "yearly" &&
+              resolvedInterval !== "yearly";
             return (
               <div
                 key={plan.tier}
@@ -408,15 +564,21 @@ export function PricingPage() {
                     </span>
                   )}
                 </div>
-                <div className="text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                  {plan.price}
-                </div>
+                <div className="text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">{priceLabel}</div>
+                {showsYearlyFallback ? (
+                  <div className="text-2xs text-zaki-muted">{t("pricingPage.yearlyUnavailableForPlan")}</div>
+                ) : null}
                 <p className="text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
                   {plan.blurb}
                 </p>
-                <ul className="mt-2 flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                <ul
+                  className={cn(
+                    "mt-2 flex list-disc flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle",
+                    isRtl ? "pr-4" : "pl-4"
+                  )}
+                >
                   {plan.features.map((feature) => (
-                    <li key={feature}>• {feature}</li>
+                    <li key={feature}>{feature}</li>
                   ))}
                 </ul>
                 <div className="mt-auto pt-3">
@@ -464,7 +626,10 @@ export function PricingPage() {
                       disabled={checkout.isPending || isPremium}
                       onClick={async () => {
                         try {
-                          openProviderSelection(plan.tier as "student" | "personal");
+                          openProviderSelection(
+                            plan.tier as "student" | "personal",
+                            selectedInterval
+                          );
                         } catch (err) {
                           toast.error(
                             err instanceof Error ? err.message : t("pricingPage.checkoutError")
@@ -483,36 +648,57 @@ export function PricingPage() {
           })}
         </div>
       </div>
-      {providerModalPlan && (
+      {providerModalSelection && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.24)]">
+          <div
+            className={cn(
+              "w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.24)]",
+              isRtl ? "text-right" : "text-left"
+            )}
+            dir={isRtl ? "rtl" : "ltr"}
+          >
             <div className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-              Choose payment provider
+              {t("pricingPage.providerModal.title")}
             </div>
             <p className="mt-1 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-              Select where you want to complete checkout.
+              {t("pricingPage.providerModal.description")}
             </p>
+            {providerModalSelection.interval === "yearly" ? (
+              <p className="mt-2 text-xs text-zaki-muted">{t("pricingPage.yearlyStripeOnly")}</p>
+            ) : null}
             <div className="mt-4 grid gap-2">
-              {checkoutProviders.map((provider) => (
+              {checkoutProviders.map((provider) => {
+                const disabledForInterval =
+                  providerModalSelection.interval === "yearly" && provider.key !== "stripe";
+                const selectable =
+                  provider.enabled &&
+                  !provider.comingSoon &&
+                  !checkout.isPending &&
+                  !disabledForInterval;
+                return (
                 <button
                   key={provider.key}
                   type="button"
-                  disabled={!provider.enabled || checkout.isPending || Boolean(provider.comingSoon)}
+                  disabled={!selectable}
                   className={cn(
-                    "w-full rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
-                    provider.enabled
+                    "w-full rounded-xl border px-3 py-2.5 text-sm transition-colors",
+                    selectable
                       ? "border-zaki-subtle bg-zaki-base hover:bg-zaki-hover text-zaki-primary dark:bg-zaki-dark-elevated dark:text-zaki-dark-primary"
                       : "border-zaki-subtle/60 bg-zaki-hover text-zaki-muted cursor-not-allowed"
                   )}
                   onClick={async () => {
                     try {
-                      await beginCheckout(providerModalPlan, provider.key);
+                      await beginCheckout(
+                        providerModalSelection.plan,
+                        providerModalSelection.interval,
+                        provider.key
+                      );
                     } catch (err) {
                       toast.error(
                         err instanceof Error ? err.message : t("pricingPage.checkoutError")
                       );
                     } finally {
-                      setProviderModalPlan(null);
+                      setProviderModalSelection(null);
                     }
                   }}
                 >
@@ -520,27 +706,28 @@ export function PricingPage() {
                     <div className="font-medium">{provider.label}</div>
                     {provider.comingSoon ? (
                       <span className="rounded-full border border-zaki-subtle px-2 py-0.5 text-[10px] uppercase tracking-[0.16em]">
-                        Coming soon
+                        {t("pricingPage.providerModal.comingSoon")}
                       </span>
                     ) : null}
                   </div>
                   <div className="text-xs text-zaki-muted mt-0.5">
                     {provider.comingSoon
-                      ? "Locked for next release"
-                      : provider.enabled
-                      ? "Available"
-                      : "Not configured"}
+                      ? t("pricingPage.providerModal.locked")
+                      : selectable
+                      ? t("pricingPage.providerModal.available")
+                      : t("pricingPage.providerModal.notConfigured")}
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
                 className="zaki-btn zaki-btn-secondary"
-                onClick={() => setProviderModalPlan(null)}
+                onClick={() => setProviderModalSelection(null)}
               >
-                Cancel
+                {t("pricingPage.providerModal.cancel")}
               </button>
             </div>
           </div>

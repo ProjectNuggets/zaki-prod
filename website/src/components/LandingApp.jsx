@@ -119,6 +119,13 @@ function SlideVisual({ src, alt }) {
 export function LandingApp() {
   const locale = useMemo(resolveLocale, []);
   const t = content[locale] || content.en;
+  const pricing = t.pricing || {
+    heading: "",
+    subheading: "",
+    interval: { monthly: "Monthly", yearly: "Yearly" },
+    plans: [],
+    note: "",
+  };
   const prompts = t.hero.rotatingPrompts || [t.hero.placeholder];
   const [prompt, setPrompt] = useState("");
   const [promptIndex, setPromptIndex] = useState(0);
@@ -129,6 +136,7 @@ export function LandingApp() {
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );
+  const [pricingInterval, setPricingInterval] = useState("monthly");
   const [activeSlide, setActiveSlide] = useState(1);
   const [whyScale, setWhyScale] = useState(0.97);
   const [whyWeight, setWhyWeight] = useState(480);
@@ -325,11 +333,13 @@ export function LandingApp() {
           <nav
             className="flex flex-row items-center gap-0.5 pr-1 md:gap-1 md:pr-3"
           >
-            <NavPill onClick={() => scrollToId("horizontal-showcase")}>{t.nav.about}</NavPill>
-            <NavPill onClick={() => scrollToId("features")}>{t.nav.features}</NavPill>
-            <NavPill onClick={() => window.open("https://instagram.com/chat_zaki", "_blank", "noopener,noreferrer")}>
-              {t.nav.contact}
-            </NavPill>
+            <div className="hidden sm:flex items-center gap-0.5 md:gap-1">
+              <NavPill onClick={() => scrollToId("horizontal-showcase")}>{t.nav.about}</NavPill>
+              <NavPill onClick={() => scrollToId("features")}>{t.nav.features}</NavPill>
+              <NavPill onClick={() => window.open("https://instagram.com/chat_zaki", "_blank", "noopener,noreferrer")}>
+                {t.nav.contact}
+              </NavPill>
+            </div>
             <a
               href={`${APP_URL}/?auth=login`}
               className="whitespace-nowrap rounded-full border border-[#cecfda] bg-[#f7f7f9] px-[10px] py-[5px] text-center text-[11px] font-semibold leading-5 text-[#24252c] transition hover:bg-white md:px-[18px] md:py-[7px] md:text-[13px]"
@@ -642,6 +652,108 @@ export function LandingApp() {
           <p className="mx-auto mt-7 max-w-[760px] text-center text-sm font-medium leading-7 text-[#6f6255]">{t.useCases.note}</p>
         </section>
 
+        <section className="mx-auto mt-[clamp(3rem,8vh,6rem)] flex max-w-[980px] items-center justify-center">
+          <div className="grid size-[220px] place-items-center rounded-[10px] bg-[#D24430] shadow-[0_18px_36px_rgba(15,12,11,0.16)] md:size-[280px]">
+            <svg className="h-[96px] w-auto md:h-[120px]" fill="none" viewBox="0 0 44 30" xmlns="http://www.w3.org/2000/svg">
+              <path d="M43.636 10.909c0 6.025-4.884 10.909-10.909 10.909v-5.454a5.455 5.455 0 0 0 5.455-5.455H43.636ZM21.818 10.909c0 6.025-4.884 10.909-10.909 10.909v-5.454a5.455 5.455 0 0 0 5.455-5.455h5.454ZM10.909 21.818C4.885 21.818 0 16.934 0 10.909h5.455a5.455 5.455 0 0 0 5.454 5.455v5.454ZM21.818 10.909C21.818 4.885 26.702 0 32.727 0v5.455a5.455 5.455 0 0 0-5.454 5.454h-5.455Z" fill="#F7F2EA" />
+              <path d="M38.182 2.727A2.727 2.727 0 1 1 43.636 2.727 2.727 2.727 0 0 1 38.182 2.727Z" fill="#F7F2EA" />
+              <path d="M10.909 27.273a2.727 2.727 0 1 1 5.455 0 2.727 2.727 0 0 1-5.455 0Z" fill="#F7F2EA" />
+              <path d="M5.455 27.273a2.727 2.727 0 1 1 5.454 0 2.727 2.727 0 0 1-5.454 0Z" fill="#F7F2EA" />
+            </svg>
+          </div>
+        </section>
+
+        <section className="mx-auto mt-[clamp(3rem,8vh,6rem)] max-w-[980px]" id="pricing">
+          <h2 className="text-center text-[clamp(1.8rem,3.2vw,2.6rem)] font-semibold tracking-[-0.02em] text-[#2c2b32]">
+            {pricing.heading}
+          </h2>
+          <p className="mx-auto mt-3 max-w-[720px] text-center text-sm leading-7 text-[#62574b] md:text-base">
+            {pricing.subheading}
+          </p>
+
+          <div className="mt-6 flex justify-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d7c4] bg-white px-1 py-1 shadow-[0_10px_24px_rgba(15,12,11,0.06)]">
+              <button
+                type="button"
+                onClick={() => setPricingInterval("monthly")}
+                aria-pressed={pricingInterval === "monthly"}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  pricingInterval === "monthly"
+                    ? "bg-[#D24430] text-white"
+                    : "text-[#716657] hover:text-[#2f2a24]"
+                }`}
+              >
+                {pricing.interval.monthly}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPricingInterval("yearly")}
+                aria-pressed={pricingInterval === "yearly"}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  pricingInterval === "yearly"
+                    ? "bg-[#D24430] text-white"
+                    : "text-[#716657] hover:text-[#2f2a24]"
+                }`}
+              >
+                {pricing.interval.yearly}
+              </button>
+            </div>
+          </div>
+          <p className="mx-auto mt-2 max-w-[560px] whitespace-pre-line text-center text-xs font-medium text-[#b53d2d] md:text-sm">
+            {pricing.yearlyDiscount}
+          </p>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {pricing.plans.map((plan) => {
+              const priceLabel =
+                pricingInterval === "yearly" ? plan.priceYearly : plan.priceMonthly;
+              const isFeatured = plan.tier === "personal";
+              return (
+                <article
+                  key={plan.tier}
+                  className={`rounded-2xl border bg-white px-5 py-6 shadow-[0_16px_30px_rgba(15,15,15,0.06)] ${
+                    isFeatured ? "border-[#D24430]" : "border-[#e6d7c4]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[#2f2a24]">{plan.label}</div>
+                    {pricingInterval === "yearly" ? (
+                      <span className="rounded-full border border-[#f0d7b0] bg-[#fff7e8] px-2 py-0.5 text-[10px] font-semibold text-[#b97010]">
+                        {pricing.yearlyBadge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-[#2c2b32]">{priceLabel}</div>
+                  <p className="mt-2 text-xs text-[#6b5f52]">{plan.blurb}</p>
+                  <ul
+                    className={`mt-3 flex list-disc flex-col gap-1 text-xs text-[#6f6255] ${
+                      locale === "ar" ? "pr-4 text-right" : "pl-4 text-left"
+                    }`}
+                  >
+                    {plan.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-4">
+                    <a
+                      href={`${APP_URL}/pricing?auth=signup&plan=${encodeURIComponent(
+                        plan.tier
+                      )}&interval=${encodeURIComponent(pricingInterval)}&autostart=1`}
+                      className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
+                    >
+                      {plan.cta}
+                    </a>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <p className="mx-auto mt-4 max-w-[760px] text-center text-xs leading-6 text-[#7a6f62] md:text-sm">
+            {pricing.note}
+          </p>
+        </section>
+
         <section className="mx-auto mt-[clamp(4rem,10vh,8rem)] max-w-[980px]">
           <div className="rounded-[28px] border border-[#e6d7c4] bg-[#f6ecdf] px-6 py-10 text-center shadow-[0_14px_32px_rgba(15,12,11,0.06)] md:px-12 md:py-14">
             <h2 className="text-[clamp(1.8rem,3.6vw,2.8rem)] font-semibold leading-[1.2] tracking-[-0.02em] text-[#2c2b32]">
@@ -664,17 +776,6 @@ export function LandingApp() {
             <p className="mt-6 text-xs font-medium tracking-[0.02em] text-[#7a6f62] md:text-sm">
               {t.cta.trust}
             </p>
-          </div>
-        </section>
-
-        <section className="mx-auto mt-[clamp(3rem,8vh,6rem)] flex max-w-[980px] items-center justify-center">
-          <div className="grid size-[220px] place-items-center rounded-[10px] bg-[#D24430] shadow-[0_18px_36px_rgba(15,12,11,0.16)] md:size-[280px]">
-            <svg className="h-[96px] w-auto md:h-[120px]" fill="none" viewBox="0 0 44 30" xmlns="http://www.w3.org/2000/svg">
-              <path d="M43.636 10.909c0 6.025-4.884 10.909-10.909 10.909v-5.454a5.455 5.455 0 0 0 5.455-5.455H43.636ZM21.818 10.909c0 6.025-4.884 10.909-10.909 10.909v-5.454a5.455 5.455 0 0 0 5.455-5.455h5.454ZM10.909 21.818C4.885 21.818 0 16.934 0 10.909h5.455a5.455 5.455 0 0 0 5.454 5.455v5.454ZM21.818 10.909C21.818 4.885 26.702 0 32.727 0v5.455a5.455 5.455 0 0 0-5.454 5.454h-5.455Z" fill="#F7F2EA" />
-              <path d="M38.182 2.727A2.727 2.727 0 1 1 43.636 2.727 2.727 2.727 0 0 1 38.182 2.727Z" fill="#F7F2EA" />
-              <path d="M10.909 27.273a2.727 2.727 0 1 1 5.455 0 2.727 2.727 0 0 1-5.455 0Z" fill="#F7F2EA" />
-              <path d="M5.455 27.273a2.727 2.727 0 1 1 5.454 0 2.727 2.727 0 0 1-5.454 0Z" fill="#F7F2EA" />
-            </svg>
           </div>
         </section>
 

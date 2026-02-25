@@ -151,6 +151,38 @@ export const content = {
       ],
       note: "Built with memory review and user control by default.",
     },
+    pricing: {
+      heading: "Simple plans, clear value",
+      subheading: "Choose monthly or yearly billing. Yearly gives you better value.",
+      yearlyDiscount:
+        "Save ~20% and secure access all year long to your favorite\never-evolving personal assistant.",
+      yearlyBadge: "~20% off",
+      interval: {
+        monthly: "Monthly",
+        yearly: "Yearly",
+      },
+      plans: [
+        {
+          tier: "student",
+          label: "Student",
+          priceMonthly: "$5 / month",
+          priceYearly: "$50 / year",
+          blurb: "Premium features for focused learning.",
+          features: ["Premium models", "Priority responses", "Expanded memory limits"],
+          cta: "Choose Student",
+        },
+        {
+          tier: "personal",
+          label: "Personal",
+          priceMonthly: "$10 / month",
+          priceYearly: "$100 / year",
+          blurb: "Best for everyday use and deeper context.",
+          features: ["Premium models", "Priority responses", "Advanced memory insights"],
+          cta: "Choose Personal",
+        },
+      ],
+      note: "Student plans require a valid .edu email at checkout.",
+    },
     faq: {
       heading: "Gets you",
       subheading: "FAQs",
@@ -365,6 +397,38 @@ export const content = {
         },
       ],
       note: "مصمم بذاكرة قابلة للمراجعة وتحكم المستخدم من الأساس.",
+    },
+    pricing: {
+      heading: "خطط واضحة وقيمة مباشرة",
+      subheading: "اختر فوترة شهرية أو سنوية. السنوية أوفر.",
+      yearlyDiscount:
+        "وفّر حوالي 20% واحصل على وصول مضمون طوال السنة إلى مساعدك الشخصي المفضل\nالذي يتطور باستمرار.",
+      yearlyBadge: "خصم ~20%",
+      interval: {
+        monthly: "شهري",
+        yearly: "سنوي",
+      },
+      plans: [
+        {
+          tier: "student",
+          label: "طالب",
+          priceMonthly: "$5 / شهر",
+          priceYearly: "$50 / سنة",
+          blurb: "ميزات بريميوم مخصصة للتعلّم بتركيز.",
+          features: ["نماذج متقدمة", "استجابات بأولوية", "حدود ذاكرة موسعة"],
+          cta: "اختر خطة الطالب",
+        },
+        {
+          tier: "personal",
+          label: "شخصي",
+          priceMonthly: "$10 / شهر",
+          priceYearly: "$100 / سنة",
+          blurb: "الأفضل للاستخدام اليومي وسياق أعمق.",
+          features: ["نماذج متقدمة", "استجابات بأولوية", "رؤى ذاكرة متقدمة"],
+          cta: "اختر الخطة الشخصية",
+        },
+      ],
+      note: "خطة الطالب تتطلب بريد .edu صالحًا عند الدفع.",
     },
     faq: {
       heading: "بيفهمك",

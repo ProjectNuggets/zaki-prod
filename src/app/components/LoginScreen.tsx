@@ -57,31 +57,41 @@ export function LoginScreen() {
     const url = new URL(window.location.href);
     const verified = String(url.searchParams.get("verified") || "").trim();
     const authMode = String(url.searchParams.get("auth") || "").trim();
-    if (!verified && authMode !== "login") {
-      return;
+    if (authMode === "signup") {
+      setMode("signup");
+      setNotice("");
+      setError("");
+    } else if (authMode === "login") {
+      setMode("login");
+      setNotice("");
+      setError("");
     }
 
-    setMode("login");
-    if (verified === "success") {
-      setNotice("Email verified successfully. You can sign in now.");
-      setError("");
-    } else if (verified === "already_verified") {
-      setNotice("Email already verified. Please sign in.");
-      setError("");
-    } else if (verified === "expired") {
-      setError("Verification link expired. Please sign up again.");
-      setNotice("");
-    } else if (verified === "invalid_token") {
-      setError("Verification link is invalid. Please sign up again.");
-      setNotice("");
-    } else if (verified === "missing_token") {
-      setError("Verification token is missing. Please sign up again.");
-      setNotice("");
+    if (verified) {
+      setMode("login");
+      if (verified === "success") {
+        setNotice("Email verified successfully. You can sign in now.");
+        setError("");
+      } else if (verified === "already_verified") {
+        setNotice("Email already verified. Please sign in.");
+        setError("");
+      } else if (verified === "expired") {
+        setError("Verification link expired. Please sign up again.");
+        setNotice("");
+      } else if (verified === "invalid_token") {
+        setError("Verification link is invalid. Please sign up again.");
+        setNotice("");
+      } else if (verified === "missing_token") {
+        setError("Verification token is missing. Please sign up again.");
+        setNotice("");
+      }
     }
 
-    url.searchParams.delete("auth");
-    url.searchParams.delete("verified");
-    window.history.replaceState({}, "", url.pathname + url.search);
+    if (authMode || verified) {
+      url.searchParams.delete("auth");
+      url.searchParams.delete("verified");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
   }, []);
 
   useEffect(() => {

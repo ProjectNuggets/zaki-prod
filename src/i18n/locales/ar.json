@@ -415,6 +415,12 @@
       "manage": "تمت العودة من بوابة الفوترة."
     },
     "managePlan": "إدارة الخطة",
+    "intervalLabel": "دورة الفوترة",
+    "interval": {
+      "monthly": "شهري",
+      "yearly": "سنوي"
+    },
+    "yearlyValueHint": "وفّر حوالي 20% وثبّت وصولك طوال السنة.",
     "statusLabel": "الحالة",
     "statusValues": {
       "active": "نشطة",
@@ -455,6 +461,8 @@
       "student": {
         "label": "طالب",
         "price": "5$ / شهر",
+        "priceMonthly": "5$ / شهر",
+        "priceYearly": "50$ / سنة",
         "blurb": "ميزات متقدمة للدراسة والتركيز.",
         "features": [
           "نماذج متقدمة",
@@ -465,6 +473,8 @@
       "personal": {
         "label": "شخصي",
         "price": "10$ / شهر",
+        "priceMonthly": "10$ / شهر",
+        "priceYearly": "100$ / سنة",
         "blurb": "مناسب للاستخدام اليومي وسياق أعمق.",
         "features": [
           "نماذج متقدمة",
@@ -483,6 +493,18 @@
     "cancelScheduled": "سيتم إلغاء الاشتراك بنهاية الفترة.",
     "cancelAlreadyScheduled": "الإلغاء مجدول بالفعل لنهاية الفترة.",
     "billingUnavailable": "الفوترة غير متاحة مؤقتًا.",
+    "yearlyUnavailableForPlan": "التسعير السنوي غير متاح لهذه الخطة حاليًا.",
+    "yearlyUnavailable": "الفوترة السنوية غير متاحة بعد في هذه البيئة.",
+    "yearlyStripeOnly": "الفوترة السنوية متاحة حاليًا عبر Stripe فقط.",
+    "providerModal": {
+      "title": "اختر مزوّد الدفع",
+      "description": "اختر المكان الذي تريد إكمال الدفع من خلاله.",
+      "comingSoon": "قريبًا",
+      "locked": "مغلق حتى الإصدار القادم",
+      "available": "متاح",
+      "notConfigured": "غير مهيّأ",
+      "cancel": "إلغاء"
+    },
     "cancelUnavailable": "إلغاء الاشتراك غير متاح مؤقتًا.",
     "cancelError": "تعذر إلغاء الاشتراك",
     "portalError": "تعذر فتح بوابة الفوترة",

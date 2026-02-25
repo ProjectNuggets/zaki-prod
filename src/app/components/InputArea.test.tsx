@@ -3,6 +3,10 @@ import { describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { InputArea } from "./InputArea";
 
+jest.mock("react-router-dom", () => ({
+  useNavigate: () => jest.fn(),
+}));
+
 jest.mock("@/queries", () => ({
   useEntitlements: () => ({
     data: {

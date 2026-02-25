@@ -77,6 +77,13 @@ describe("LoginScreen legal consent", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens signup mode from auth=signup query params", async () => {
+    window.history.replaceState({}, "", "/pricing?auth=signup&plan=student&interval=yearly");
+    render(<LoginScreen />);
+
+    expect(await screen.findByRole("button", { name: "Create account" })).toBeInTheDocument();
+  });
+
   it("does not require consent checkbox on login and sends auth payload only", async () => {
     const user = userEvent.setup();
     render(<LoginScreen />);

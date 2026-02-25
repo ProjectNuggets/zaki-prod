@@ -20,6 +20,8 @@ jest.mock("react-i18next", () => ({
       "pricingPage.billingNotices.cancel":
         "Checkout canceled. You can pick a plan anytime.",
       "pricingPage.billingNotices.manage": "Returned from billing portal.",
+      "pricingPage.interval.monthly": "Monthly",
+      "pricingPage.interval.yearly": "Yearly",
       "pricingPage.cancelSubscription": "Cancel subscription",
       "pricingPage.cancellationScheduled": "Cancellation scheduled",
       "pricingPage.cancelScheduled": "Subscription will cancel at period end.",
@@ -27,6 +29,10 @@ jest.mock("react-i18next", () => ({
         "Cancellation is already scheduled for period end.",
       "pricingPage.cancelError": "Unable to cancel subscription",
       "pricingPage.cancelUnavailable": "Subscription cancellation is temporarily unavailable.",
+      "pricingPage.yearlyUnavailableForPlan":
+        "Yearly pricing is not available for this plan yet.",
+      "pricingPage.yearlyStripeOnly":
+        "Yearly billing is currently available only through Stripe.",
       "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
       "pricingPage.plans.student.features": [
         "Premium models",
@@ -80,6 +86,11 @@ let billingConfigData = {
       portalEnabled: true,
       cancelEnabled: true,
       webhookEnabled: true,
+      checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+      pricingAvailability: {
+        student: { monthly: true, yearly: true },
+        personal: { monthly: true, yearly: true },
+      },
       missing: [],
     },
   },
@@ -149,6 +160,11 @@ describe("PricingPage", () => {
           portalEnabled: true,
           cancelEnabled: true,
           webhookEnabled: true,
+          checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          pricingAvailability: {
+            student: { monthly: true, yearly: true },
+            personal: { monthly: true, yearly: true },
+          },
           missing: [],
         },
       },
@@ -245,5 +261,95 @@ describe("PricingPage", () => {
     expect(scheduledButton).toBeDisabled();
     expect(screen.getByText("pricingPage.cancelAtPeriodEndNote")).toBeInTheDocument();
     expect(cancelSubscriptionMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("sends yearly interval for yearly checkout selection", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "student", interval: "yearly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("falls back to monthly checkout when yearly is unavailable for student", async () => {
+    billingConfigData = {
+      data: {
+        configured: {
+          stripeEnabled: true,
+          checkoutEnabled: true,
+          portalEnabled: true,
+          cancelEnabled: true,
+          webhookEnabled: true,
+          checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          pricingAvailability: {
+            student: { monthly: true, yearly: false },
+            personal: { monthly: true, yearly: true },
+          },
+          missing: [],
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "student", interval: "monthly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("uses interval from URL query when selecting checkout", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing?interval=yearly"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "student", interval: "yearly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("autostarts checkout from URL query selection", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing?plan=personal&interval=yearly&autostart=1"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "personal", interval: "yearly", provider: "stripe" })
+      );
+    });
   });
 });

@@ -324,6 +324,7 @@ export async function fetchEntitlements() {
       tier?: string;
       status?: string;
       priceId?: string | null;
+      interval?: "monthly" | "yearly" | null;
       currentPeriodEnd?: string | null;
       cancelAtPeriodEnd?: boolean;
     };
@@ -356,6 +357,16 @@ export async function fetchBillingConfig() {
         label?: string;
         enabled?: boolean;
       }>;
+      pricingAvailability?: {
+        student?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+        personal?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+      };
       stripeEnabled?: boolean;
       checkoutEnabled?: boolean;
       portalEnabled?: boolean;
@@ -375,11 +386,12 @@ export async function fetchBillingConfig() {
 
 export async function createCheckoutSession(
   plan: "student" | "personal",
-  provider?: "stripe" | "paddle" | "creem"
+  provider?: "stripe" | "paddle" | "creem",
+  interval: "monthly" | "yearly" = "monthly"
 ) {
   const response = await backendAuthRequest("/api/billing/checkout", {
     method: "POST",
-    body: JSON.stringify({ plan, ...(provider ? { provider } : {}) }),
+    body: JSON.stringify({ plan, interval, ...(provider ? { provider } : {}) }),
   });
   let data: { success?: boolean; url?: string | null; error?: string | null } = {};
   try {

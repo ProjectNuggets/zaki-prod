@@ -1,10 +1,10 @@
 import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, FileText, X, Zap, ChevronDown, Check } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useBillingPortal, useCheckout, useEntitlements } from "@/queries";
+import { useEntitlements } from "@/queries";
 import { toast } from "sonner";
-import { ModalShell } from "@/app/components/ui/ModalShell";
 
 export function InputArea({
   onSend,
@@ -28,7 +28,6 @@ export function InputArea({
   onToggleMemoryMode?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const { t, i18n } = useTranslation();
@@ -41,9 +40,8 @@ export function InputArea({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wasSendingRef = useRef(isSending);
+  const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
-  const checkout = useCheckout();
-  const portal = useBillingPortal();
   const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
   const isPremium =
@@ -147,93 +145,6 @@ export function InputArea({
     toast.info(t("input.queryMode.onToast"));
   };
 
-  const upgradeModal = (
-    <ModalShell
-      isOpen={upgradeOpen}
-      onClose={() => setUpgradeOpen(false)}
-      ariaLabel={t("billing.upgradeTitle")}
-      className={cn("w-[420px] px-6 py-5", isRtl ? "text-right" : "text-left")}
-    >
-      <div dir={isRtl ? "rtl" : "ltr"}>
-        <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-          {t("billing.upgradeTitle")}
-        </div>
-        <div className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-muted">
-          {t("billing.upgradeSubtitle")}
-        </div>
-
-        <div className="mt-4 grid gap-3">
-          {[
-            {
-              tier: "student",
-              label: t("billing.plans.student.label"),
-              price: t("billing.plans.student.price"),
-              desc: t("billing.plans.student.desc"),
-            },
-            {
-              tier: "personal",
-              label: t("billing.plans.personal.label"),
-              price: t("billing.plans.personal.price"),
-              desc: t("billing.plans.personal.desc"),
-            },
-          ].map((plan) => (
-            <button
-              key={plan.tier}
-              type="button"
-              className={cn(
-                "w-full rounded-zaki-lg border px-4 py-3 transition-colors",
-                isRtl ? "text-right" : "text-left",
-                plan.tier === planTier
-                  ? "border-zaki-brand bg-zaki-brand/10"
-                  : "border-zaki-subtle hover:border-zaki-strong hover:bg-zaki-hover"
-              )}
-              onClick={async () => {
-                try {
-                  await checkout.mutateAsync(plan.tier as "student" | "personal");
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Checkout failed");
-                }
-              }}
-            >
-              <div className={cn("flex items-center justify-between", isRtl && "flex-row-reverse")}>
-                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                  {plan.label}
-                </div>
-                <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">{plan.price}</div>
-              </div>
-              <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-                {plan.desc}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className={cn("mt-5 flex items-center justify-between", isRtl && "flex-row-reverse")}>
-          <button
-            type="button"
-            className="zaki-btn-sm zaki-btn-ghost"
-            onClick={() => setUpgradeOpen(false)}
-          >
-            {t("billing.notNow")}
-          </button>
-          <button
-            type="button"
-            className="zaki-btn zaki-btn-primary"
-            onClick={async () => {
-              try {
-                await portal.mutateAsync();
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
-              }
-            }}
-          >
-            {t("billing.managePlan")}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-
   return (
     <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
       {/* Input Box */}
@@ -250,17 +161,7 @@ export function InputArea({
                 <button
                   type="button"
                   className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
-                  onClick={async () => {
-                    if (isPremium) {
-                      try {
-                        await portal.mutateAsync();
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
-                      }
-                    } else {
-                      setUpgradeOpen(true);
-                    }
-                  }}
+                  onClick={() => navigate("/pricing")}
                 >
                   {isPremium ? "Manage" : t("input.upgradeCta")}
                 </button>
@@ -282,17 +183,7 @@ export function InputArea({
                 <button
                   type="button"
                   className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
-                  onClick={async () => {
-                    if (isPremium) {
-                      try {
-                        await portal.mutateAsync();
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
-                      }
-                    } else {
-                      setUpgradeOpen(true);
-                    }
-                  }}
+                  onClick={() => navigate("/pricing")}
                 >
                   {isPremium ? "Manage" : t("input.upgradeCta")}
                 </button>
@@ -556,8 +447,6 @@ export function InputArea({
         </div>
         </div>
       </form>
-      {upgradeModal}
-      
       <div className="text-center mt-2">
          <p className="text-zaki-disabled text-xs" dir={isRtl ? "rtl" : "ltr"}>
            {t("input.disclaimer")}

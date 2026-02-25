@@ -412,6 +412,12 @@
       "manage": "Returned from billing portal."
     },
     "managePlan": "Manage plan",
+    "intervalLabel": "Billing cycle",
+    "interval": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "yearlyValueHint": "Save ~20% and secure access all year long.",
     "statusLabel": "Status",
     "statusValues": {
       "active": "Active",
@@ -452,6 +458,8 @@
       "student": {
         "label": "Student",
         "price": "$5 / month",
+        "priceMonthly": "$5 / month",
+        "priceYearly": "$50 / year",
         "blurb": "Premium features for focused learning.",
         "features": [
           "Premium models",
@@ -462,6 +470,8 @@
       "personal": {
         "label": "Personal",
         "price": "$10 / month",
+        "priceMonthly": "$10 / month",
+        "priceYearly": "$100 / year",
         "blurb": "Best for everyday use and deeper context.",
         "features": [
           "Premium models",
@@ -480,6 +490,18 @@
     "cancelScheduled": "Subscription will cancel at period end.",
     "cancelAlreadyScheduled": "Cancellation is already scheduled for period end.",
     "billingUnavailable": "Billing is temporarily unavailable.",
+    "yearlyUnavailableForPlan": "Yearly pricing is not available for this plan yet.",
+    "yearlyUnavailable": "Yearly billing is not available yet for this environment.",
+    "yearlyStripeOnly": "Yearly billing is currently available only through Stripe.",
+    "providerModal": {
+      "title": "Choose payment provider",
+      "description": "Select where you want to complete checkout.",
+      "comingSoon": "Coming soon",
+      "locked": "Locked for next release",
+      "available": "Available",
+      "notConfigured": "Not configured",
+      "cancel": "Cancel"
+    },
     "cancelUnavailable": "Subscription cancellation is temporarily unavailable.",
     "cancelError": "Unable to cancel subscription",
     "portalError": "Unable to open billing portal",
