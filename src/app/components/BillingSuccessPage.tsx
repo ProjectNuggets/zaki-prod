@@ -1,0 +1,155 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { useEntitlements, useSyncBilling } from "@/queries";
+import { useAuthStore } from "@/stores";
+import { cn } from "@/lib/utils";
+
+type PlanTier = "student" | "personal" | null;
+type BillingInterval = "monthly" | "yearly" | null;
+
+function normalizePlan(value: string | null): PlanTier {
+  if (value === "student" || value === "personal") return value;
+  return null;
+}
+
+function normalizeInterval(value: string | null): BillingInterval {
+  if (value === "monthly" || value === "yearly") return value;
+  return null;
+}
+
+export function BillingSuccessPage() {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
+  const [searchParams] = useSearchParams();
+  const [sharePending, setSharePending] = useState(false);
+  const syncHandledRef = useRef(false);
+  const syncBilling = useSyncBilling();
+  const { data: entitlementsResult } = useEntitlements();
+  const user = useAuthStore((s) => s.user);
+
+  const billingStatus = String(searchParams.get("billing") || "").toLowerCase();
+  const requestedPlan = normalizePlan(searchParams.get("plan"));
+  const requestedInterval = normalizeInterval(searchParams.get("interval"));
+
+  const fallbackPlan = normalizePlan(String(entitlementsResult?.data?.plan?.tier || ""));
+  const fallbackInterval = normalizeInterval(String(entitlementsResult?.data?.plan?.interval || ""));
+  const plan = requestedPlan || fallbackPlan;
+  const interval = requestedInterval || fallbackInterval;
+
+  useEffect(() => {
+    if (syncHandledRef.current) return;
+    if (billingStatus !== "success") return;
+    syncHandledRef.current = true;
+    void syncBilling.mutateAsync().catch(() => {
+      // Webhook may still finalize shortly; no blocking UX.
+    });
+  }, [billingStatus, syncBilling]);
+
+  const displayName = useMemo(() => {
+    const raw = String(user?.fullName || user?.username || "").trim();
+    if (raw) return raw;
+    return t("billingSuccess.defaultName");
+  }, [t, user?.fullName, user?.username]);
+
+  const planLabel = plan
+    ? t(`pricingPage.plans.${plan}.label`, { defaultValue: plan })
+    : t("billingSuccess.planFallback");
+  const intervalLabel = interval
+    ? t(`pricingPage.interval.${interval}`, { defaultValue: interval })
+    : t("billingSuccess.intervalFallback");
+
+  const punchlines = (t("billingSuccess.punchlines", {
+    returnObjects: true,
+  }) as string[]) || [t("billingSuccess.punchlineFallback")];
+  const punchline = punchlines[Math.max(0, displayName.length % punchlines.length)];
+
+  const shareText = t("billingSuccess.shareText", { name: displayName });
+
+  const onShare = async () => {
+    if (sharePending) return;
+    setSharePending(true);
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({
+          title: t("billingSuccess.shareTitle"),
+          text: shareText,
+          url: window.location.origin,
+        });
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${shareText} ${window.location.origin}`);
+        toast.success(t("billingSuccess.shareCopied"));
+        return;
+      }
+      toast(t("billingSuccess.shareManual"));
+    } catch {
+      // User canceled share dialog; no error toast.
+    } finally {
+      setSharePending(false);
+    }
+  };
+
+  return (
+    <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-3xl border border-[#e6d8c7] bg-[linear-gradient(180deg,#fff8f0_0%,#f9ecdb_100%)] p-7 shadow-[0_20px_36px_rgba(15,12,11,0.08)] md:p-9">
+          <div
+            className={cn(
+              "inline-flex items-center rounded-full border border-[#f0d6b0] bg-white/80 px-3 py-1 text-xs font-semibold text-[#8a6a46]",
+              isRtl ? "tracking-normal" : "uppercase tracking-[0.14em]"
+            )}
+          >
+            {t("billingSuccess.badge")}
+          </div>
+
+          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.02em] text-zaki-primary dark:text-zaki-dark-primary md:text-4xl">
+            {t("billingSuccess.title", { name: displayName })}
+          </h1>
+          <p className="mt-3 text-sm leading-7 text-zaki-secondary dark:text-zaki-dark-subtle md:text-base">
+            {t("billingSuccess.subtitle")}
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <span className="rounded-full border border-[#e4d3bf] bg-white px-3 py-1 text-xs font-medium text-[#6b5b49]">
+              {t("billingSuccess.planLabel", { plan: planLabel })}
+            </span>
+            <span className="rounded-full border border-[#e4d3bf] bg-white px-3 py-1 text-xs font-medium text-[#6b5b49]">
+              {t("billingSuccess.intervalLabel", { interval: intervalLabel })}
+            </span>
+          </div>
+
+          <p className="mt-5 rounded-2xl border border-[#ecd9c4] bg-white/70 px-4 py-3 text-sm leading-7 text-[#5f574d]">
+            {punchline}
+          </p>
+
+          <ul className={cn("mt-5 flex list-disc flex-col gap-2 text-sm text-[#5f574d]", isRtl ? "pr-5" : "pl-5")}>
+            {(t("billingSuccess.nextSteps", { returnObjects: true }) as string[]).map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link to="/" className="zaki-btn zaki-btn-primary">
+              {t("billingSuccess.actions.start")}
+            </Link>
+            <Link to="/pricing" className="zaki-btn zaki-btn-ghost">
+              {t("billingSuccess.actions.manage")}
+            </Link>
+            <button
+              type="button"
+              onClick={onShare}
+              disabled={sharePending}
+              className="zaki-btn zaki-btn-ghost"
+            >
+              {sharePending ? t("billingSuccess.actions.sharing") : t("billingSuccess.actions.share")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

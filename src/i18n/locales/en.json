@@ -507,6 +507,37 @@
     "portalError": "Unable to open billing portal",
     "checkoutError": "Checkout failed"
   },
+  "billingSuccess": {
+    "badge": "Friends circle unlocked",
+    "defaultName": "friend",
+    "title": "Congrats {{name}}! You are officially in ZAKI’s friends circle 🎉",
+    "subtitle": "You are in. Let’s think, learn, build, and maybe ship something great together.",
+    "planFallback": "Premium",
+    "intervalFallback": "Billing active",
+    "planLabel": "Plan: {{plan}}",
+    "intervalLabel": "Cycle: {{interval}}",
+    "punchlineFallback": "No more generic chatbot energy. We are building personal assistant AI, and you are early on the journey.",
+    "punchlines": [
+      "No more generic chatbot energy. You joined early, so you get front-row seats while we build.",
+      "ZAKI just got smarter by one awesome human. Yes, that is you.",
+      "Your subscription = fuel for better memory, better context, and sharper AI-agent workflows."
+    ],
+    "nextSteps": [
+      "Start a chat and tell ZAKI what you care about so it personalizes faster.",
+      "Share ZAKI with one friend who is done with generic chat AI.",
+      "Drop us feedback anytime. Early friends shape the roadmap."
+    ],
+    "actions": {
+      "start": "Start chatting",
+      "manage": "Manage plan",
+      "share": "Invite a friend",
+      "sharing": "Sharing..."
+    },
+    "shareTitle": "I joined ZAKI",
+    "shareText": "{{name}} just joined ZAKI’s friends circle. Personal assistant AI > generic chat AI. Come in early.",
+    "shareCopied": "Invite message copied. Send it to your people.",
+    "shareManual": "Copy this page link and share it with your friends."
+  },
   "memory": {
     "saved": "memory saved",
     "toReview": "memory to review",

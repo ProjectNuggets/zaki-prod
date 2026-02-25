@@ -1937,7 +1937,7 @@ const billingAdapters = {
         customer: customerId,
         line_items: [{ price: priceId, quantity: 1 }],
         allow_promotion_codes: true,
-        success_url: `${appUrl}/pricing?billing=success`,
+        success_url: `${appUrl}/pricing/success?billing=success&plan=${plan}&interval=${selectedInterval}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/pricing?billing=cancel`,
         metadata: {
           user_email: email,
@@ -2095,7 +2095,8 @@ const billingAdapters = {
       }
 
       const appUrl = getAppUrl();
-      const successUrl = CREEM_SUCCESS_URL || `${appUrl}/pricing?billing=success`;
+      const successUrl =
+        CREEM_SUCCESS_URL || `${appUrl}/pricing/success?billing=success&plan=${plan}&interval=monthly`;
       const requestId = `zaki_${zakiUser?.id || "user"}_${plan}_${Date.now()}`;
       const body = {
         product_id: productId,

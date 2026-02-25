@@ -328,7 +328,11 @@ export function PricingPage() {
   ]);
 
   return (
-    <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
+    <div
+      className="h-full overflow-y-auto overscroll-y-contain zaki-scrollbar-fade px-6 py-10"
+      style={{ WebkitOverflowScrolling: "touch" }}
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       <div className="mx-auto w-full max-w-5xl">
         <div className={cn("flex flex-col gap-3", isRtl ? "text-right" : "text-left")}>
           <div
