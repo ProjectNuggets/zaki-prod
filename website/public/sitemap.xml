@@ -1,10 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://chatzaki.com/</loc></url>
-  <url><loc>https://chatzaki.com/ar/</loc></url>
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml"
+>
+  <url>
+    <loc>https://chatzaki.com/</loc>
+    <lastmod>2026-02-25</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chatzaki.com/" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://chatzaki.com/?lang=ar" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chatzaki.com/" />
+  </url>
+  <url>
+    <loc>https://chatzaki.com/?lang=ar</loc>
+    <lastmod>2026-02-25</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://chatzaki.com/" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://chatzaki.com/?lang=ar" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chatzaki.com/" />
+  </url>
   <url><loc>https://chatzaki.com/terms/</loc></url>
   <url><loc>https://chatzaki.com/privacy/</loc></url>
   <url><loc>https://chatzaki.com/compliance/</loc></url>
   <url><loc>https://chatzaki.com/contact/</loc></url>
   <url><loc>https://chatzaki.com/faq/</loc></url>
+  <url><loc>https://chatzaki.com/ar/terms/</loc></url>
+  <url><loc>https://chatzaki.com/ar/privacy/</loc></url>
+  <url><loc>https://chatzaki.com/ar/compliance/</loc></url>
+  <url><loc>https://chatzaki.com/ar/contact/</loc></url>
+  <url><loc>https://chatzaki.com/ar/faq/</loc></url>
 </urlset>
