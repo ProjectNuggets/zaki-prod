@@ -217,6 +217,21 @@ export default function App() {
     };
   }, [token, user?.username, authLoading]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOpenOnboarding = () => {
+      setOnboardingOpen(true);
+    };
+    window.addEventListener("zaki:open-onboarding", handleOpenOnboarding);
+    return () => {
+      window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
+    };
+  }, []);
+
+  const dismissOnboarding = () => {
+    setOnboardingOpen(false);
+  };
+
   const completeOnboarding = () => {
     if (typeof window !== "undefined" && user?.username) {
       const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
@@ -391,7 +406,8 @@ export default function App() {
       <OnboardingModal
         isOpen={onboardingOpen}
         userName={user?.fullName || user?.username || t("home.guestName")}
-        onClose={completeOnboarding}
+        onDismiss={dismissOnboarding}
+        onComplete={completeOnboarding}
         onCreateSpace={openCreateSpace}
         onOpenMemory={openMemory}
         onOpenSettings={openSettings}

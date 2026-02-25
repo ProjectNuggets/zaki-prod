@@ -112,6 +112,11 @@ export function ChatArea() {
   const prevModeRef = useRef(memoryMode);
   useEffect(() => {
     if (prevModeRef.current !== memoryMode) {
+      window.dispatchEvent(
+        new CustomEvent("zaki:onboarding-memory-mode-changed", {
+          detail: { mode: memoryMode },
+        })
+      );
       // Mode changed - keep manual pending memories visible until resolved
       const hasManualPending = pendingMemories.some((m) => m._mode === "manual");
       if (prevModeRef.current === "manual" && hasManualPending) {
@@ -559,12 +564,12 @@ export function ChatArea() {
         return {};
       }
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return { done: true };
-      }
-
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
         throw new Error(payload.error.trim());
+      }
+
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return { done: true };
       }
 
       const chunk =
@@ -619,19 +624,21 @@ export function ChatArea() {
         if (value === "[DONE]") streamClosed = true;
         return;
       }
+      let payload: Record<string, unknown>;
       try {
-        const payload = JSON.parse(value) as Record<string, unknown>;
-        const result = readPayloadChunk(payload);
-        if (result.done) {
-          streamClosed = true;
-          return;
-        }
-        if (result.chunk) {
-          appendChunk(result.chunk);
-        }
-        return;
+        payload = JSON.parse(value) as Record<string, unknown>;
       } catch {
         appendChunk(raw);
+        return;
+      }
+
+      const result = readPayloadChunk(payload);
+      if (result.done) {
+        streamClosed = true;
+        return;
+      }
+      if (result.chunk) {
+        appendChunk(result.chunk);
       }
     };
 

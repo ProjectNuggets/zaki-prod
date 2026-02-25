@@ -507,6 +507,7 @@ export function InputArea({
               "flex items-center gap-2 rounded-xl border px-3 py-1 text-2xs transition-colors",
               "bg-[#f6eee4] border-[#ead7c1] text-zaki-secondary hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-subtle dark:hover:bg-zaki-dark-hover"
             )}
+            data-onboarding-id="chat-memory-mode-toggle"
             title={
               memoryMode === "autosave"
                 ? t("input.memoryMode.autosaveHint")

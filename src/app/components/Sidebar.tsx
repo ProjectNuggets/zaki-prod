@@ -98,11 +98,13 @@ export function Sidebar() {
       const nextQuery = String(detail?.query || "").trim();
       setMemorySearchQuery(nextQuery);
       setMemoryOpen(true);
+      window.dispatchEvent(new Event("zaki:onboarding-memory-opened"));
     };
     const handleOpenSettings = () => {
       if (!user?.username) return;
       setProfileMenuOpen(false);
       setSettingsOpen(true);
+      window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
     };
     const handleConflictCount = (event: Event) => {
       const detail = (event as CustomEvent<{ count?: number }>).detail;
@@ -691,6 +693,11 @@ export function Sidebar() {
       setExpandedSpace(newSpace.id);
       setActiveItem(newSpace.id);
       window.dispatchEvent(new Event("zaki:clear-thread"));
+      window.dispatchEvent(
+        new CustomEvent("zaki:onboarding-space-created", {
+          detail: { id: newSpace.id, title: newSpace.title },
+        })
+      );
     } catch (error) {
       setSpacesError("Unable to create a workspace. Check your permissions.");
     }
@@ -737,6 +744,11 @@ export function Sidebar() {
       setExpandedSpace(resolvedSpaceId);
       setActiveItem(threadId);
       goToThread(resolvedSpaceId, threadId);
+      window.dispatchEvent(
+        new CustomEvent("zaki:onboarding-thread-created", {
+          detail: { id: threadId, spaceId: resolvedSpaceId },
+        })
+      );
     } catch (error) {
       setSpacesError("Unable to create a new chat.");
     }
@@ -960,6 +972,7 @@ export function Sidebar() {
               type="button"
               title="New space"
               aria-label="Create new space"
+              data-onboarding-id="sidebar-create-space"
             >
               <AddIcon />
             </button>
@@ -1061,6 +1074,7 @@ export function Sidebar() {
           onClick={openCreateSpaceFlow}
           onMouseUp={blurButtonOnPointerClick}
           type="button"
+          data-onboarding-id="sidebar-create-space"
         >
           <div className="bg-zaki-brand-15 rounded-full size-5 flex items-center justify-center">
             <AddIcon />
@@ -1193,12 +1207,60 @@ export function Sidebar() {
                       >
                         {thread.label}
                       </button>
+                      <button
+                        type="button"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenMenu(openMenu?.id === thread.id ? null : { type: "thread", id: thread.id });
+                        }}
+                        data-menu-button
+                        aria-haspopup="menu"
+                        aria-expanded={openMenu?.id === thread.id}
+                        aria-label={`${thread.label} options`}
+                      >
+                        <MoreHorizontal className="size-4 text-zaki-muted" />
+                      </button>
+                      {openMenu?.type === "thread" && openMenu.id === thread.id && (
+                        <div
+                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          role="menu"
+                          data-menu
+                        >
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
+                            onClick={() => togglePinned("thread", thread.id)}
+                          >
+                            <Pin className="size-3.5 text-zaki-muted" />
+                            {thread.pinned ? "Unpin" : "Pinned"}
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
+                            onClick={() => startRename("thread", thread.id, thread.label)}
+                          >
+                            <Pencil className="size-3.5 text-zaki-muted" />
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-brand hover:bg-zaki-error"
+                            onClick={() => setConfirmDelete({ type: "thread", id: thread.id, label: thread.label })}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button
                     className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
+                    data-onboarding-id="sidebar-space-new-thread"
+                    data-onboarding-space-id={space.id}
                   >
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="#88735A" />
@@ -1212,7 +1274,7 @@ export function Sidebar() {
           {filteredUserSpaces.map((space) => (
             <div key={space.id}>
               <div className="relative group">
-                <button
+        <button
                   onClick={() => {
                     setExpandedSpace((prev) => (prev === space.id ? null : space.id));
                     setActiveItem(space.id);
@@ -1383,6 +1445,8 @@ export function Sidebar() {
                     className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
+                    data-onboarding-id="sidebar-space-new-thread"
+                    data-onboarding-space-id={space.id}
                   >
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="#88735A" />
@@ -1407,9 +1471,16 @@ export function Sidebar() {
 		          )}
           onClick={() => {
             setActiveItem("profile");
-            setProfileMenuOpen((open) => !open);
+            setProfileMenuOpen((open) => {
+              const nextOpen = !open;
+              if (nextOpen) {
+                window.dispatchEvent(new Event("zaki:onboarding-profile-menu-opened"));
+              }
+              return nextOpen;
+            });
           }}
           data-profile-button
+          data-onboarding-id="profile-menu-trigger"
         >
           <div className="size-10 bg-zaki-elevated rounded-full flex items-center justify-center text-zaki-primary font-medium text-base">
             {userInitials}
@@ -1487,11 +1558,25 @@ export function Sidebar() {
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              type="button"
-		              onClick={() => {
-		            setProfileMenuOpen(false);
+              onClick={() => {
+                setProfileMenuOpen(false);
+                window.dispatchEvent(new Event("zaki:open-onboarding"));
+              }}
+              data-onboarding-id="profile-menu-how-to-use"
+	            >
+	              <HelpCircle className="size-4 text-zaki-muted" />
+	              How to use
+	            </button>
+	            <button
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
+	              type="button"
+              onClick={() => {
+                setProfileMenuOpen(false);
                 setMemorySearchQuery("");
-		            setMemoryOpen(true);
-	              }}
+                setMemoryOpen(true);
+                window.dispatchEvent(new Event("zaki:onboarding-memory-opened"));
+              }}
+              data-onboarding-id="profile-menu-memory"
 	            >
 		              <Brain className="size-4 text-zaki-muted" />
 		              {t("sidebar.profile.memory")}
@@ -1507,10 +1592,12 @@ export function Sidebar() {
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              type="button"
-		              onClick={() => {
-		                setProfileMenuOpen(false);
-		                setSettingsOpen(true);
-	              }}
+              onClick={() => {
+                setProfileMenuOpen(false);
+                setSettingsOpen(true);
+                window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
+              }}
+              data-onboarding-id="profile-menu-settings"
 	            >
 	              <Settings className="size-4 text-zaki-muted" />
 	              {t("sidebar.profile.settings")}

@@ -457,6 +457,11 @@ export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerPr
         throw new Error(t("memoryViewer.errors.deleteMemory"));
       }
       setMemories((prev) => prev.filter((memory) => memory.id !== memoryId));
+      window.dispatchEvent(
+        new CustomEvent("zaki:onboarding-memory-deleted", {
+          detail: { id: memoryId },
+        })
+      );
       toast.success(t("memoryViewer.toasts.memoryDeleted"));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("memoryViewer.errors.deleteMemory");
@@ -990,6 +995,7 @@ export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerPr
                                 onClick={() => void deleteMemory(memory.id)}
                                 className="shrink-0 inline-flex size-8 items-center justify-center rounded-lg border border-transparent text-zaki-muted dark:text-zaki-dark-muted hover:border-[#f0d7d1] dark:hover:border-[#5a2e27] hover:bg-[#fff1ed] dark:hover:bg-[#2a1613] hover:text-zaki-brand transition-colors"
                                 aria-label={t("memoryViewer.delete.aria")}
+                                data-onboarding-id="memory-delete-button"
                               >
                                 <Trash2 className="size-4" />
                               </button>
