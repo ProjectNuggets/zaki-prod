@@ -11,5 +11,7 @@ export {
   useSyncBilling,
   useDeleteAccount,
   useRedeemAccessCode,
+  useAccessCodePurchaseCheckout,
+  useResendPurchasedAccessCodeEmail,
   billingKeys,
 } from "./useBilling";

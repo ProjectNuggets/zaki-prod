@@ -124,6 +124,18 @@ const STRIPE_PRICE_STUDENT = (process.env.STRIPE_PRICE_STUDENT || "").trim();
 const STRIPE_PRICE_PERSONAL = (process.env.STRIPE_PRICE_PERSONAL || "").trim();
 const STRIPE_PRICE_STUDENT_YEARLY = (process.env.STRIPE_PRICE_STUDENT_YEARLY || "").trim();
 const STRIPE_PRICE_PERSONAL_YEARLY = (process.env.STRIPE_PRICE_PERSONAL_YEARLY || "").trim();
+const STRIPE_PRICE_ACCESS_CODE_MONTHLY = (
+  process.env.STRIPE_PRICE_ACCESS_CODE_MONTHLY || ""
+).trim();
+const ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN = (
+  process.env.ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN || "paid_monthly"
+)
+  .trim()
+  .slice(0, 120);
+const ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS = Math.max(
+  1,
+  Math.min(3650, Number(process.env.ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS || 30))
+);
 const ZAKI_BILLING_PROVIDER = (process.env.ZAKI_BILLING_PROVIDER || "stripe")
   .trim()
   .toLowerCase();
@@ -298,6 +310,9 @@ function getBillingConfigStatus() {
   const activeProvider = getActiveBillingProviderKey();
   const checkoutProviders = getCheckoutProviderOptions();
   const pricingAvailability = getStripePricingAvailability();
+  const accessCodePurchaseEnabled = Boolean(
+    activeProvider === "stripe" && stripe && STRIPE_PRICE_ACCESS_CODE_MONTHLY
+  );
   const stripeHasConfiguredPrice = Object.values(pricingAvailability).some(
     (item) => item.monthly || item.yearly
   );
@@ -320,6 +335,7 @@ function getBillingConfigStatus() {
       cancelEnabled: false,
       webhookEnabled: Boolean(CREEM_WEBHOOK_SECRET),
       pricingAvailability,
+      accessCodePurchaseEnabled,
       missing,
     };
   }
@@ -342,6 +358,7 @@ function getBillingConfigStatus() {
       cancelEnabled: false,
       webhookEnabled: false,
       pricingAvailability,
+      accessCodePurchaseEnabled,
       missing,
     };
   }
@@ -364,6 +381,7 @@ function getBillingConfigStatus() {
       cancelEnabled: false,
       webhookEnabled: false,
       pricingAvailability,
+      accessCodePurchaseEnabled,
       missing,
     };
   }
@@ -406,6 +424,7 @@ function getBillingConfigStatus() {
     cancelEnabled,
     webhookEnabled,
     pricingAvailability,
+    accessCodePurchaseEnabled,
     missing,
   };
 }
@@ -713,6 +732,198 @@ app.post("/api/billing/creem/webhook", express.raw({ type: "application/json" })
 // Backward-compatible alias (deployment routing convenience)
 app.post("/api/webhooks/creem", express.raw({ type: "application/json" }), creemWebhookHandler);
 
+async function fulfillAccessCodePurchaseCheckoutSession({ session, eventId } = {}) {
+  const metadata = session?.metadata || {};
+  if (String(metadata?.fulfillment_type || "").trim() !== "access_code_purchase") {
+    return { handled: false };
+  }
+
+  const checkoutSessionId = String(session?.id || "").trim();
+  if (!checkoutSessionId) {
+    throw new Error("Stripe checkout session missing id for access-code fulfillment.");
+  }
+
+  const metadataUserId = Number(metadata?.user_id || 0);
+  const metadataUserEmail = normalizeEmail(
+    session?.customer_email ||
+      session?.customer_details?.email ||
+      metadata?.user_email ||
+      ""
+  );
+  let user = null;
+  if (Number.isInteger(metadataUserId) && metadataUserId > 0) {
+    user = await dbGet("SELECT id, email FROM zaki_users WHERE id = $1", [metadataUserId]);
+  }
+  if (!user && metadataUserEmail) {
+    user = await dbGet("SELECT id, email FROM zaki_users WHERE email = $1", [metadataUserEmail]);
+  }
+  if (!user) {
+    throw new Error(
+      `Unable to resolve user for access-code purchase session ${checkoutSessionId}.`
+    );
+  }
+
+  const defaults = getAccessCodePurchaseDefaults();
+  const campaign = String(metadata?.campaign || defaults.campaign).trim().slice(0, 120) || defaults.campaign;
+  const durationDays = Math.max(
+    1,
+    Math.min(3650, Number(metadata?.duration_days || defaults.durationDays))
+  );
+  const paymentIntent =
+    typeof session?.payment_intent === "string"
+      ? session.payment_intent
+      : session?.payment_intent?.id || null;
+  const amountTotalCents = Number.isFinite(Number(session?.amount_total))
+    ? Number(session.amount_total)
+    : null;
+  const currency = String(session?.currency || "").trim().toLowerCase() || null;
+
+  const fulfillment = await withDbTransaction(async (client) => {
+    const existingOrderResult = await client.query(
+      `SELECT id, code_id, email_status
+       FROM access_code_orders
+       WHERE checkout_session_id = $1
+       FOR UPDATE`,
+      [checkoutSessionId]
+    );
+    const existingOrder = existingOrderResult.rows[0] || null;
+    let codeRow = null;
+
+    if (existingOrder?.code_id) {
+      const existingCodeResult = await client.query(
+        `SELECT id, code, campaign, duration_days
+         FROM access_codes
+         WHERE id = $1`,
+        [existingOrder.code_id]
+      );
+      codeRow = existingCodeResult.rows[0] || null;
+    }
+
+    if (!codeRow) {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const code = buildGeneratedAccessCode(campaign);
+        try {
+          const insertCodeResult = await client.query(
+            `INSERT INTO access_codes
+             (code, campaign, duration_days, max_redemptions, active)
+             VALUES ($1, $2, $3, $4, TRUE)
+             RETURNING id, code, campaign, duration_days`,
+            [code, campaign, durationDays, defaults.maxRedemptions]
+          );
+          codeRow = insertCodeResult.rows[0] || null;
+          if (codeRow) break;
+        } catch (err) {
+          if (err?.code !== "23505") throw err;
+        }
+      }
+    }
+
+    if (!codeRow) {
+      throw new Error("Unable to generate unique paid access code.");
+    }
+
+    if (existingOrder) {
+      await client.query(
+        `UPDATE access_code_orders
+         SET user_id = $1,
+             stripe_event_id = COALESCE($2, stripe_event_id),
+             stripe_payment_intent_id = COALESCE($3, stripe_payment_intent_id),
+             amount_total_cents = COALESCE($4, amount_total_cents),
+             currency = COALESCE($5, currency),
+             campaign = $6,
+             duration_days = $7,
+             code_id = $8,
+             fulfilled_at = COALESCE(fulfilled_at, NOW()),
+             updated_at = NOW()
+         WHERE checkout_session_id = $9`,
+        [
+          user.id,
+          eventId || null,
+          paymentIntent,
+          amountTotalCents,
+          currency,
+          campaign,
+          durationDays,
+          codeRow.id,
+          checkoutSessionId,
+        ]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO access_code_orders
+         (user_id, checkout_session_id, stripe_event_id, stripe_payment_intent_id, amount_total_cents, currency, campaign, duration_days, code_id, fulfilled_at, email_status, email_attempts, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), 'pending', 0, NOW(), NOW())`,
+        [
+          user.id,
+          checkoutSessionId,
+          eventId || null,
+          paymentIntent,
+          amountTotalCents,
+          currency,
+          campaign,
+          durationDays,
+          codeRow.id,
+        ]
+      );
+    }
+
+    return {
+      campaign,
+      durationDays,
+      code: codeRow.code,
+      shouldSendEmail: existingOrder?.email_status !== "sent" || !existingOrder?.code_id,
+      email: normalizeEmail(user.email),
+    };
+  });
+
+  if (!fulfillment.shouldSendEmail) {
+    return { handled: true, emailStatus: "already_sent" };
+  }
+
+  try {
+    await sendAccessCodePurchaseEmail({
+      email: fulfillment.email,
+      code: fulfillment.code,
+      campaign: fulfillment.campaign,
+      durationDays: fulfillment.durationDays,
+    });
+    await dbQuery(
+      `UPDATE access_code_orders
+       SET email_status = 'sent',
+           email_attempts = email_attempts + 1,
+           last_email_error = NULL,
+           email_sent_at = COALESCE(email_sent_at, NOW()),
+           updated_at = NOW()
+       WHERE checkout_session_id = $1`,
+      [checkoutSessionId]
+    );
+    return { handled: true, emailStatus: "sent" };
+  } catch (error) {
+    const message = error?.message || String(error);
+    await dbQuery(
+      `UPDATE access_code_orders
+       SET email_status = 'failed',
+           email_attempts = email_attempts + 1,
+           last_email_error = $2,
+           updated_at = NOW()
+       WHERE checkout_session_id = $1`,
+      [checkoutSessionId, message]
+    );
+    await emitBillingAlert({
+      provider: "stripe",
+      id: "stripe.access_code.email_failed",
+      severity: "medium",
+      message: "Access-code purchase email delivery failed.",
+      details: {
+        checkoutSessionId,
+        eventId: eventId || null,
+        error: message,
+      },
+    });
+    return { handled: true, emailStatus: "failed" };
+  }
+}
+
 const stripeWebhookHandler = createStripeWebhookHandler({
   getBillingConfigStatus,
   stripe,
@@ -727,6 +938,7 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   resolveUserByStripeCustomer,
   resolveTier,
   tierByPrice: TIER_BY_PRICE,
+  fulfillAccessCodePurchaseCheckoutSession,
 });
 
 // Stripe webhook must use raw body (must be registered before express.json)
@@ -1571,6 +1783,21 @@ function formatAccessCodeRow(row) {
     active: Boolean(row?.active),
     expiresAt: row?.expires_at ? new Date(row.expires_at).toISOString() : null,
     createdAt: row?.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
+function getAccessCodePurchaseDefaults() {
+  const campaign = String(ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN || "paid_monthly")
+    .trim()
+    .slice(0, 120);
+  const durationDays = Math.max(
+    1,
+    Math.min(3650, Number(ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS || 30))
+  );
+  return {
+    campaign: campaign || "paid_monthly",
+    durationDays,
+    maxRedemptions: 1,
   };
 }
 
@@ -2618,6 +2845,151 @@ async function sendPasswordResetEmail(email, token) {
   }
 
   return resetUrl;
+}
+
+function buildAccessCodePurchaseEmailHtml({
+  logoUrl,
+  code,
+  campaign,
+  durationDays,
+  pricingUrl,
+}) {
+  return `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your ZAKI access code</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f5f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 5% 0%,#fff7ec 0%,#f4ece1 42%,#f1e8dd 100%);padding:28px 14px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e7ddd1;border-radius:20px;overflow:hidden;box-shadow:0 18px 44px rgba(38,22,7,0.10);">
+            <tr>
+              <td style="padding:24px 28px 16px 28px;background:linear-gradient(135deg,#fff8ef 0%,#f1e6d8 100%);border-bottom:1px solid #eadfce;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <div style="height:40px;width:40px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;border:1px solid #eadfce;">
+                        <img src="${logoUrl}" width="26" height="26" alt="ZAKI" style="display:block;width:26px;height:26px;" />
+                      </div>
+                    </td>
+                    <td style="padding-left:10px;vertical-align:middle;">
+                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
+                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">Access Code Purchase</div>
+                    </td>
+                  </tr>
+                </table>
+                <h1 style="margin:14px 0 0 0;font-size:25px;line-height:1.25;color:#231b14;font-weight:650;">Your access code is ready</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 10px 28px;">
+                <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#3b3026;">
+                  Thanks for supporting ZAKI. Use this code to unlock <strong>${durationDays} days</strong> of access.
+                </p>
+                <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:16px 12px;text-align:center;">
+                  <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#8e735b;font-weight:700;margin-bottom:6px;">Access Code</div>
+                  <div style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:28px;letter-spacing:0.08em;color:#332519;font-weight:700;">${code}</div>
+                </div>
+                <p style="margin:0;font-size:13px;line-height:1.7;color:#6a5847;">
+                  Campaign: <strong>${campaign}</strong><br />
+                  Redeem inside your pricing page: <a href="${pricingUrl}" style="color:#d86a4d;text-decoration:underline;">${pricingUrl}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
+                <p style="margin:0;font-size:12px;line-height:1.55;color:#7f6b59;">
+                  Need help? Reach us at <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `.trim();
+}
+
+async function sendAccessCodePurchaseEmail({
+  email,
+  code,
+  campaign,
+  durationDays,
+}) {
+  const appUrl = getAppUrl();
+  const appBase = appUrl.endsWith("/api") ? appUrl.replace(/\/api$/, "") : appUrl;
+  const pricingUrl = `${appBase.replace(/\/+$/, "")}/pricing`;
+  const logoUrl = getEmailLogoUrl();
+  const subject = "Your ZAKI access code is ready";
+  const text = [
+    "Thanks for supporting ZAKI.",
+    `Your access code: ${code}`,
+    `Campaign: ${campaign}`,
+    `Duration: ${durationDays} days`,
+    `Redeem here: ${pricingUrl}`,
+    "",
+    "Need help? info@novanuggets.com",
+  ].join("\n");
+  const html = buildAccessCodePurchaseEmailHtml({
+    logoUrl,
+    code,
+    campaign,
+    durationDays,
+    pricingUrl,
+  });
+
+  if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
+    if (!resendApiKey) {
+      throw new Error("RESEND_API_KEY is not configured.");
+    }
+    const from = parseFromAddress(resendFrom, "");
+    if (!from.email) {
+      throw new Error("RESEND_FROM is not configured.");
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: from.name ? `${from.name} <${from.email}>` : from.email,
+          to: [email],
+          subject,
+          text,
+          html,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Resend error (${response.status})${errorText ? `: ${errorText}` : ""}`
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  } else if (mailer) {
+    await mailer.sendMail({
+      from: smtpFrom || smtpUser || "no-reply@zaki.local",
+      to: email,
+      subject,
+      text,
+      html,
+    });
+  } else {
+    console.log(`[ZAKI] Access code for ${email}: ${code}`);
+  }
 }
 
 const signupHandler = async (req, res) => {
@@ -3752,6 +4124,126 @@ const AccessCodeSchema = z.object({
   code: z.string().min(4),
 });
 
+const AccessCodePurchaseCheckoutSchema = z.object({
+  context: z
+    .object({
+      source: z
+        .enum([
+          "website_nav",
+          "website_pricing",
+          "chat_input",
+          "settings",
+          "pricing_page",
+          "success_page",
+        ])
+        .optional(),
+    })
+    .optional(),
+});
+
+const AccessCodePurchaseResendSchema = z.object({
+  sessionId: z.string().trim().min(1).max(255),
+});
+
+app.post(
+  "/api/access-code/purchase/checkout",
+  express.json({ limit: "100kb" }),
+  async (req, res) => {
+    try {
+      const validation = validateInput(AccessCodePurchaseCheckoutSchema, req.body || {});
+      if (!validation.valid) {
+        res.status(400).json({
+          success: false,
+          error: validation.errors.map((e) => e.message).join(", "),
+        });
+        return;
+      }
+
+      const authResult = await requireAuthUser(req, res);
+      if (!authResult) return;
+      const { email, zakiUser } = authResult;
+
+      const billingConfig = getBillingConfigStatus();
+      if (!billingConfig.stripeEnabled || billingConfig.provider !== "stripe") {
+        sendBillingUnavailable(res, "checkout");
+        return;
+      }
+      if (!billingConfig.accessCodePurchaseEnabled || !STRIPE_PRICE_ACCESS_CODE_MONTHLY) {
+        res.status(503).json({
+          success: false,
+          code: "access_code_purchase_unavailable",
+          error: "Paid access-code purchase is not configured.",
+        });
+        return;
+      }
+      if (!stripe) {
+        sendBillingUnavailable(res, "checkout");
+        return;
+      }
+
+      const defaults = getAccessCodePurchaseDefaults();
+      const checkoutSource =
+        String(validation.data.context?.source || "").trim().toLowerCase() || "pricing_page";
+      const customerId = await ensureStripeCustomerId({ email, zakiUser });
+      const appUrl = getAppUrl();
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer: customerId,
+        line_items: [{ price: STRIPE_PRICE_ACCESS_CODE_MONTHLY, quantity: 1 }],
+        allow_promotion_codes: true,
+        success_url: `${appUrl}/pricing/success?billing=code_success&kind=access_code&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/pricing?billing=cancel&kind=access_code`,
+        metadata: {
+          fulfillment_type: "access_code_purchase",
+          user_id: String(zakiUser.id),
+          user_email: email,
+          campaign: defaults.campaign,
+          duration_days: String(defaults.durationDays),
+          max_redemptions: String(defaults.maxRedemptions),
+          checkout_source: checkoutSource,
+        },
+      });
+      if (!session?.url) {
+        throw new Error("Stripe checkout URL missing for access-code purchase.");
+      }
+
+      await dbQuery(
+        `INSERT INTO access_code_orders
+         (user_id, checkout_session_id, stripe_payment_intent_id, amount_total_cents, currency, campaign, duration_days, email_status, email_attempts, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 0, NOW(), NOW())
+         ON CONFLICT (checkout_session_id)
+         DO UPDATE SET
+           user_id = EXCLUDED.user_id,
+           stripe_payment_intent_id = COALESCE(EXCLUDED.stripe_payment_intent_id, access_code_orders.stripe_payment_intent_id),
+           amount_total_cents = COALESCE(EXCLUDED.amount_total_cents, access_code_orders.amount_total_cents),
+           currency = COALESCE(EXCLUDED.currency, access_code_orders.currency),
+           campaign = EXCLUDED.campaign,
+           duration_days = EXCLUDED.duration_days,
+           updated_at = NOW()`,
+        [
+          zakiUser.id,
+          session.id,
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id || null,
+          Number.isFinite(Number(session.amount_total)) ? Number(session.amount_total) : null,
+          String(session.currency || "").trim().toLowerCase() || null,
+          defaults.campaign,
+          defaults.durationDays,
+        ]
+      );
+
+      res.status(200).json({ success: true, url: session.url });
+    } catch (error) {
+      console.error("[AccessCode] Purchase checkout error:", error);
+      res.status(error?.status || 500).json({
+        success: false,
+        error: error?.message || "Unable to start access-code checkout.",
+      });
+    }
+  }
+);
+
 app.post("/api/admin/access-codes", express.json({ limit: "200kb" }), async (req, res) => {
   try {
     const authResult = await requireAdminUser(req, res);
@@ -4062,6 +4554,106 @@ app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req,
     res.status(500).json({ error: error?.message || "Failed to redeem access code." });
   }
 });
+
+app.post(
+  "/api/access-code/purchase/resend",
+  express.json({ limit: "50kb" }),
+  async (req, res) => {
+    let authUserId = null;
+    let sessionIdForUpdate = "";
+    try {
+      const validation = validateInput(AccessCodePurchaseResendSchema, req.body || {});
+      if (!validation.valid) {
+        res.status(400).json({
+          success: false,
+          error: validation.errors.map((e) => e.message).join(", "),
+        });
+        return;
+      }
+
+      const authResult = await requireAuthUser(req, res);
+      if (!authResult) return;
+      const sessionId = String(validation.data.sessionId || "").trim();
+      authUserId = authResult.zakiUser.id;
+      sessionIdForUpdate = sessionId;
+      const order = await dbGet(
+        `SELECT o.id,
+                o.checkout_session_id,
+                o.code_id,
+                o.email_status,
+                o.email_attempts,
+                o.campaign,
+                o.duration_days,
+                o.fulfilled_at,
+                c.code
+         FROM access_code_orders o
+         LEFT JOIN access_codes c ON c.id = o.code_id
+         WHERE o.checkout_session_id = $1
+           AND o.user_id = $2
+         LIMIT 1`,
+        [sessionId, authResult.zakiUser.id]
+      );
+      if (!order) {
+        res.status(404).json({
+          success: false,
+          error: "Access-code purchase session not found.",
+        });
+        return;
+      }
+      if (!order.code_id || !order.code || !order.fulfilled_at) {
+        res.status(200).json({ success: true, status: "processing" });
+        return;
+      }
+      if (String(order.email_status || "").toLowerCase() === "sent") {
+        res.status(200).json({ success: true, status: "already_sent" });
+        return;
+      }
+
+      await sendAccessCodePurchaseEmail({
+        email: normalizeEmail(authResult.email),
+        code: order.code,
+        campaign: order.campaign || getAccessCodePurchaseDefaults().campaign,
+        durationDays: Math.max(1, Number(order.duration_days || 30)),
+      });
+
+      await dbQuery(
+        `UPDATE access_code_orders
+         SET email_status = 'sent',
+             email_attempts = email_attempts + 1,
+             last_email_error = NULL,
+             email_sent_at = COALESCE(email_sent_at, NOW()),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [order.id]
+      );
+
+      res.status(200).json({ success: true, status: "sent" });
+    } catch (error) {
+      const message = error?.message || String(error);
+      if (authUserId && sessionIdForUpdate) {
+        try {
+          await dbQuery(
+            `UPDATE access_code_orders
+             SET email_status = 'failed',
+                 email_attempts = email_attempts + 1,
+                 last_email_error = $3,
+                 updated_at = NOW()
+             WHERE checkout_session_id = $1
+               AND user_id = $2`,
+            [sessionIdForUpdate, authUserId, message]
+          );
+        } catch {
+          // Best effort update.
+        }
+      }
+      console.error("[AccessCode] Purchase resend error:", error);
+      res.status(500).json({
+        success: false,
+        error: "Unable to send access-code email right now.",
+      });
+    }
+  }
+);
 
 const createWorkspaceHandler = async (req, res) => {
   try {

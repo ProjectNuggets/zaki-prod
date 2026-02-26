@@ -33,6 +33,12 @@ jest.mock("react-i18next", () => ({
         "Yearly pricing is not available for this plan yet.",
       "pricingPage.yearlyStripeOnly":
         "Yearly billing is currently available only through Stripe.",
+      "pricingPage.access.purchase.cta": "Buy gift code 🎉",
+      "pricingPage.access.purchase.unavailable":
+        "Code purchase is not enabled in this environment yet.",
+      "pricingPage.access.purchase.processing": "Opening checkout...",
+      "pricingPage.access.purchase.checkoutError":
+        "Unable to start code purchase checkout.",
       "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
       "pricingPage.plans.student.features": [
         "Premium models",
@@ -87,6 +93,7 @@ let billingConfigData = {
       cancelEnabled: true,
       webhookEnabled: true,
       checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+      accessCodePurchaseEnabled: true,
       pricingAvailability: {
         student: { monthly: true, yearly: true },
         personal: { monthly: true, yearly: true },
@@ -97,6 +104,7 @@ let billingConfigData = {
 };
 
 const checkoutMutateAsync = jest.fn();
+const accessCodePurchaseCheckoutMutateAsync = jest.fn();
 const portalMutateAsync = jest.fn();
 const syncBillingMutateAsync = jest.fn().mockResolvedValue({ success: true });
 const redeemAccessCodeMutateAsync = jest.fn();
@@ -115,6 +123,10 @@ jest.mock("@/queries", () => ({
   }),
   useCheckout: () => ({
     mutateAsync: checkoutMutateAsync,
+    isPending: false,
+  }),
+  useAccessCodePurchaseCheckout: () => ({
+    mutateAsync: accessCodePurchaseCheckoutMutateAsync,
     isPending: false,
   }),
   useBillingPortal: () => ({
@@ -161,6 +173,7 @@ describe("PricingPage", () => {
           cancelEnabled: true,
           webhookEnabled: true,
           checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          accessCodePurchaseEnabled: true,
           pricingAvailability: {
             student: { monthly: true, yearly: true },
             personal: { monthly: true, yearly: true },
@@ -292,6 +305,7 @@ describe("PricingPage", () => {
           cancelEnabled: true,
           webhookEnabled: true,
           checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          accessCodePurchaseEnabled: true,
           pricingAvailability: {
             student: { monthly: true, yearly: false },
             personal: { monthly: true, yearly: true },
@@ -351,5 +365,75 @@ describe("PricingPage", () => {
         expect.objectContaining({ plan: "personal", interval: "yearly", provider: "stripe" })
       );
     });
+  });
+
+  it("starts access-code purchase checkout from pricing card", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy gift code 🎉" }));
+
+    await waitFor(() => {
+      expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "pricing_page" })
+      );
+    });
+  });
+
+  it("autostarts access-code purchase checkout from gift intent query", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/pricing?intent=gift_code&autostart=1&source=website_pricing"]}
+      >
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "website_pricing" })
+      );
+    });
+  });
+
+  it("disables access-code purchase checkout when not configured", () => {
+    billingConfigData = {
+      data: {
+        configured: {
+          stripeEnabled: true,
+          checkoutEnabled: true,
+          portalEnabled: true,
+          cancelEnabled: true,
+          webhookEnabled: true,
+          checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          accessCodePurchaseEnabled: false,
+          pricingAvailability: {
+            student: { monthly: true, yearly: true },
+            personal: { monthly: true, yearly: true },
+          },
+          missing: [],
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Buy gift code 🎉" })).toBeDisabled();
+    expect(
+      screen.getByText("Code purchase is not enabled in this environment yet.")
+    ).toBeInTheDocument();
   });
 });

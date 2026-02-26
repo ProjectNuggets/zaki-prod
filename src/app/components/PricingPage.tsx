@@ -6,6 +6,7 @@ import {
   useBillingPortal,
   useCancelSubscription,
   useCheckout,
+  useAccessCodePurchaseCheckout,
   useEntitlements,
   useRedeemAccessCode,
   useSyncBilling,
@@ -44,6 +45,7 @@ export function PricingPage() {
     interval: BillingInterval;
   } | null>(null);
   const checkout = useCheckout();
+  const accessCodePurchaseCheckout = useAccessCodePurchaseCheckout();
   const portal = useBillingPortal();
   const cancelSubscription = useCancelSubscription();
   const syncBilling = useSyncBilling();
@@ -68,8 +70,18 @@ export function PricingPage() {
       .toLowerCase();
     return value === "1" || value === "true";
   })();
+  const requestedIntentFromQuery = (() => {
+    const value = String(searchParams.get("intent") || "")
+      .trim()
+      .toLowerCase();
+    return value === "gift_code" || value === "access_code_purchase" ? "gift_code" : null;
+  })();
+  const giftCodeIntentRequested = requestedIntentFromQuery === "gift_code";
   const handledQueryAutoStartRef = useRef(false);
+  const handledGiftIntentAutoStartRef = useRef(false);
   const trackedPricingViewRef = useRef(false);
+  const accessCodePurchaseCardRef = useRef<HTMLDivElement | null>(null);
+  const [highlightGiftCodeCard, setHighlightGiftCodeCard] = useState(false);
   const sourceFromQuery: "website_nav" | "website_pricing" | "chat_input" | "settings" | "pricing_page" | "success_page" = (() => {
     const value = String(searchParams.get("source") || "")
       .trim()
@@ -101,6 +113,9 @@ export function PricingPage() {
   const billingPortalEnabled = billingConfigLoaded ? Boolean(billingConfig?.portalEnabled) : true;
   const billingCheckoutEnabled = billingConfigLoaded ? Boolean(billingConfig?.checkoutEnabled) : true;
   const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
+  const accessCodePurchaseEnabled = billingConfigLoaded
+    ? Boolean(billingConfig?.accessCodePurchaseEnabled)
+    : false;
   const billingUnavailableMessage =
     billingConfigLoaded &&
     (!billingPortalEnabled || !billingCheckoutEnabled || (isPremium && !billingCancelEnabled))
@@ -242,6 +257,13 @@ export function PricingPage() {
     }
     return t("pricingPage.access.summaryActive");
   }, [accessActive, accessCampaign, accessExpiresLabel, t]);
+  const accessCodePurchaseHighlights = useMemo(() => {
+    const translated = t("pricingPage.access.purchase.highlights", {
+      returnObjects: true,
+    });
+    if (!Array.isArray(translated)) return [];
+    return translated.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  }, [i18n.language, t]);
 
   useEffect(() => {
     const status = searchParams.get("billing");
@@ -380,6 +402,70 @@ export function PricingPage() {
     searchParams,
     setSearchParams,
     shouldAutoStartFromQuery,
+  ]);
+
+  useEffect(() => {
+    if (!giftCodeIntentRequested || requestedPlanFromQuery) return;
+    const node = accessCodePurchaseCardRef.current;
+    if (!node) return;
+    if (typeof node.scrollIntoView === "function") {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setHighlightGiftCodeCard(true);
+    const timer = window.setTimeout(() => {
+      setHighlightGiftCodeCard(false);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [giftCodeIntentRequested, requestedPlanFromQuery]);
+
+  useEffect(() => {
+    if (handledGiftIntentAutoStartRef.current) return;
+    if (!giftCodeIntentRequested || requestedPlanFromQuery) return;
+    if (!shouldAutoStartFromQuery) return;
+    if (!billingConfigLoaded || accessCodePurchaseCheckout.isPending) return;
+
+    handledGiftIntentAutoStartRef.current = true;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("autostart");
+    setSearchParams(nextParams, { replace: true });
+
+    if (!accessCodePurchaseEnabled) {
+      toast.error(t("pricingPage.access.purchase.unavailable"));
+      return;
+    }
+
+    void trackProductEvent({
+      event: "checkout_started",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan: "free",
+      interval: null,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
+
+    void Promise.resolve(
+      accessCodePurchaseCheckout.mutateAsync({
+        source: sourceFromQuery,
+      })
+    ).catch((err) => {
+      toast.error(
+        err instanceof Error ? err.message : t("pricingPage.access.purchase.checkoutError")
+      );
+    });
+  }, [
+    accessCodePurchaseCheckout,
+    accessCodePurchaseEnabled,
+    billingConfigLoaded,
+    giftCodeIntentRequested,
+    isRtl,
+    requestedPlanFromQuery,
+    searchParams,
+    setSearchParams,
+    shouldAutoStartFromQuery,
+    sourceFromQuery,
+    t,
   ]);
 
   return (
@@ -535,6 +621,87 @@ export function PricingPage() {
               </button>
             </div>
             <div className="mt-3 text-xs text-zaki-muted">{accessSummary}</div>
+            <div
+              id="access-code-purchase"
+              ref={accessCodePurchaseCardRef}
+              className={cn(
+                "mt-4 rounded-2xl border border-[#e6c2a7] bg-gradient-to-br from-[#fff8ef] via-[#fff2e8] to-[#ffe8dc] px-4 py-4 shadow-[0px_12px_30px_rgba(200,120,70,0.16)] dark:border-[#6b4a3f] dark:from-[#2d1f1b] dark:via-[#2a1d19] dark:to-[#261a16]",
+                highlightGiftCodeCard &&
+                  "ring-2 ring-[#D24430] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
+              )}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-[36rem]">
+                  <span className="inline-flex items-center rounded-full border border-[#e2b191] bg-white/75 px-2.5 py-1 text-2xs font-medium text-[#8a4a2f] dark:border-[#8b5f50] dark:bg-[#2f221e] dark:text-[#f3b899]">
+                    {t("pricingPage.access.purchase.badge")}
+                  </span>
+                  <div className="mt-2 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {t("pricingPage.access.purchase.title")}
+                  </div>
+                  <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                    {t("pricingPage.access.purchase.description")}
+                  </p>
+                </div>
+                <span className="rounded-full border border-zaki-strong bg-white/90 px-2.5 py-1 text-2xs font-medium text-zaki-secondary dark:border-[#7a5a4e] dark:bg-[#30231e] dark:text-zaki-dark-subtle">
+                  {t("pricingPage.access.purchase.price")}
+                </span>
+              </div>
+              {accessCodePurchaseHighlights.length > 0 ? (
+                <ul
+                  className={cn(
+                    "mt-3 grid gap-1 text-2xs text-zaki-secondary dark:text-zaki-dark-subtle",
+                    isRtl ? "text-right" : "text-left"
+                  )}
+                >
+                  {accessCodePurchaseHighlights.map((highlight) => (
+                    <li key={highlight} className="leading-relaxed">
+                      {highlight}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="mt-3 text-2xs text-zaki-muted dark:text-zaki-dark-subtle">
+                {t("pricingPage.access.purchase.note")}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="zaki-btn zaki-btn-secondary disabled:opacity-50"
+                  disabled={accessCodePurchaseCheckout.isPending || !accessCodePurchaseEnabled}
+                  onClick={async () => {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: sourceFromQuery,
+                      language: isRtl ? "ar" : "en",
+                      plan: "free",
+                      interval: null,
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                    try {
+                      await accessCodePurchaseCheckout.mutateAsync({
+                        source: sourceFromQuery,
+                      });
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : t("pricingPage.access.purchase.checkoutError")
+                      );
+                    }
+                  }}
+                >
+                  {accessCodePurchaseCheckout.isPending
+                    ? t("pricingPage.access.purchase.processing")
+                    : t("pricingPage.access.purchase.cta")}
+                </button>
+                {!accessCodePurchaseEnabled ? (
+                  <span className="text-2xs text-zaki-muted">
+                    {t("pricingPage.access.purchase.unavailable")}
+                  </span>
+                ) : null}
+              </div>
+            </div>
           </div>
           <div className="md:col-span-2 xl:col-span-3 -mt-1">
             <div className={cn("flex flex-col gap-2", isRtl ? "items-end" : "items-start")}>

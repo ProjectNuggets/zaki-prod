@@ -220,6 +220,38 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS access_code_orders (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      checkout_session_id TEXT NOT NULL UNIQUE,
+      stripe_event_id TEXT,
+      stripe_payment_intent_id TEXT,
+      amount_total_cents INT,
+      currency TEXT,
+      campaign TEXT NOT NULL,
+      duration_days INT NOT NULL DEFAULT 30,
+      code_id UUID REFERENCES access_codes(id) ON DELETE SET NULL,
+      email_status TEXT NOT NULL DEFAULT 'pending' CHECK (email_status IN ('pending', 'sent', 'failed')),
+      email_attempts INT NOT NULL DEFAULT 0,
+      last_email_error TEXT,
+      fulfilled_at TIMESTAMPTZ,
+      email_sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_access_code_orders_user_created
+    ON access_code_orders (user_id, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_access_code_orders_email_status_updated
+    ON access_code_orders (email_status, updated_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS billing_webhook_events (
       id BIGSERIAL PRIMARY KEY,
       provider TEXT NOT NULL,

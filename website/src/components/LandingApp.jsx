@@ -166,6 +166,7 @@ export function LandingApp() {
     subheading: "",
     interval: { monthly: "Monthly", yearly: "Yearly" },
     plans: [],
+    oneTimeCode: null,
     note: "",
   };
   const updatesCarousel = t.updatesCarousel || {
@@ -341,6 +342,13 @@ export function LandingApp() {
           "@type": "Offer",
           category: "Personal",
           url: `${APP_URL}/pricing?auth=signup`,
+        },
+        {
+          "@type": "Offer",
+          category: "Gift Code",
+          price: "10",
+          priceCurrency: "USD",
+          url: `${APP_URL}/pricing?auth=signup&intent=gift_code&source=website_pricing`,
         },
       ],
       featureList: [
@@ -1299,7 +1307,7 @@ export function LandingApp() {
               </button>
             </div>
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
             {pricing.plans.map((plan) => {
               const priceLabel =
                 pricingInterval === "yearly" ? plan.priceYearly : plan.priceMonthly;
@@ -1307,17 +1315,12 @@ export function LandingApp() {
               return (
                 <article
                   key={plan.tier}
-                  className={`rounded-2xl border bg-white px-5 py-6 shadow-[0_16px_30px_rgba(15,15,15,0.06)] ${
+                  className={`flex h-full flex-col rounded-2xl border bg-white px-5 py-6 shadow-[0_16px_30px_rgba(15,15,15,0.06)] ${
                     isFeatured ? "border-[#D24430]" : "border-[#e6d7c4]"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-semibold text-[#2f2a24]">{plan.label}</div>
-                    {pricingInterval === "yearly" ? (
-                      <span className="rounded-full border border-[#f0d7b0] bg-[#fff7e8] px-2 py-0.5 text-[10px] font-semibold text-[#b97010]">
-                        {pricing.yearlyBadge}
-                      </span>
-                    ) : null}
                   </div>
                   <div className="mt-2 text-2xl font-semibold text-[#2c2b32]">{priceLabel}</div>
                   <p className="mt-2 text-xs text-[#6b5f52]">{plan.blurb}</p>
@@ -1330,7 +1333,7 @@ export function LandingApp() {
                       <li key={feature}>{feature}</li>
                     ))}
                   </ul>
-                  <div className="mt-4">
+                  <div className="mt-auto pt-4">
                     <a
                       href={`${APP_URL}/pricing?auth=signup&plan=${encodeURIComponent(
                         plan.tier
@@ -1343,6 +1346,37 @@ export function LandingApp() {
                 </article>
               );
             })}
+            {pricing.oneTimeCode ? (
+              <article className="flex h-full flex-col rounded-2xl border border-[#e3c6aa] bg-gradient-to-br from-[#fff9f2] via-[#fff1e5] to-[#ffe8d8] px-5 py-6 shadow-[0_16px_30px_rgba(210,68,48,0.12)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-[#2f2a24]">{pricing.oneTimeCode.label}</div>
+                  <span className="rounded-full border border-[#f3d0ab] bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-[#b97010]">
+                    {pricing.oneTimeCode.badge}
+                  </span>
+                </div>
+                <div className="mt-2 text-2xl font-semibold text-[#2c2b32]">{pricing.oneTimeCode.price}</div>
+                <p className="mt-2 text-xs text-[#6b5f52]">{pricing.oneTimeCode.blurb}</p>
+                {Array.isArray(pricing.oneTimeCode.features) && pricing.oneTimeCode.features.length > 0 ? (
+                  <ul
+                    className={`mt-3 flex list-disc flex-col gap-1 text-xs text-[#6f6255] ${
+                      locale === "ar" ? "pr-4 text-right" : "pl-4 text-left"
+                    }`}
+                  >
+                    {pricing.oneTimeCode.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="mt-auto pt-4">
+                  <a
+                    href={`${APP_URL}/pricing?auth=signup&intent=gift_code&source=website_pricing`}
+                    className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
+                  >
+                    {pricing.oneTimeCode.cta}
+                  </a>
+                </div>
+              </article>
+            ) : null}
           </div>
 
           <p className="mx-auto mt-4 max-w-[760px] text-center text-xs leading-6 text-[#7a6f62] md:text-sm">

@@ -373,6 +373,7 @@ export async function fetchBillingConfig() {
       portalEnabled?: boolean;
       cancelEnabled?: boolean;
       webhookEnabled?: boolean;
+      accessCodePurchaseEnabled?: boolean;
       missing?: string[];
     };
     error?: string | null;
@@ -403,6 +404,42 @@ export async function createCheckoutSession(
     }),
   });
   let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function createAccessCodePurchaseCheckoutSession(context?: {
+  source?: ProductTelemetrySource;
+}) {
+  const response = await backendAuthRequest("/api/access-code/purchase/checkout", {
+    method: "POST",
+    body: JSON.stringify({
+      ...(context ? { context } : {}),
+    }),
+  });
+  let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function resendPurchasedAccessCodeEmail(sessionId: string) {
+  const response = await backendAuthRequest("/api/access-code/purchase/resend", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+  let data: {
+    success?: boolean;
+    status?: "sent" | "already_sent" | "processing";
+    error?: string | null;
+  } = {};
   try {
     data = await response.json();
   } catch {

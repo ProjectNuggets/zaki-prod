@@ -17,6 +17,7 @@ describe("runtime config validation", () => {
       createBaseEnv({
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_ACCESS_CODE_MONTHLY: "",
       })
     );
 
@@ -26,6 +27,7 @@ describe("runtime config validation", () => {
       expect.arrayContaining([
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_ACCESS_CODE_MONTHLY" }),
       ])
     );
   });
@@ -40,5 +42,6 @@ describe("runtime config validation", () => {
     const warningKeys = report.warnings.map((warning) => warning.key);
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_ACCESS_CODE_MONTHLY");
   });
 });

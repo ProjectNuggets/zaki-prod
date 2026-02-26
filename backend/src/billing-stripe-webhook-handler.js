@@ -28,6 +28,7 @@ export function createStripeWebhookHandler({
   resolveUserByStripeCustomer,
   resolveTier,
   tierByPrice,
+  fulfillAccessCodePurchaseCheckoutSession,
 } = {}) {
   return async function stripeWebhookHandler(req, res) {
     const billingConfig = getBillingConfigStatus();
@@ -139,6 +140,12 @@ export function createStripeWebhookHandler({
               [customerId, zakiUser.id]
             );
           }
+        }
+        if (typeof fulfillAccessCodePurchaseCheckoutSession === "function") {
+          await fulfillAccessCodePurchaseCheckoutSession({
+            session,
+            eventId,
+          });
         }
       }
 

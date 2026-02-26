@@ -52,6 +52,7 @@ export function validateRuntimeConfig(env = process.env) {
   const billingProvider = normalize(env.ZAKI_BILLING_PROVIDER || "stripe").toLowerCase();
   const stripePriceStudentYearly = normalize(env.STRIPE_PRICE_STUDENT_YEARLY);
   const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
+  const stripePriceAccessCodeMonthly = normalize(env.STRIPE_PRICE_ACCESS_CODE_MONTHLY);
 
   const errors = [];
   const warnings = [];
@@ -115,6 +116,13 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "STRIPE_PRICE_PERSONAL_YEARLY",
       "STRIPE_PRICE_PERSONAL_YEARLY is not set. Personal yearly checkout will be unavailable."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceAccessCodeMonthly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_ACCESS_CODE_MONTHLY",
+      "STRIPE_PRICE_ACCESS_CODE_MONTHLY is not set. Access-code purchase checkout will be unavailable."
     );
   }
 

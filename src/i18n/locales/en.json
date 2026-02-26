@@ -424,7 +424,7 @@
       "monthly": "Monthly",
       "yearly": "Yearly"
     },
-    "yearlyValueHint": "Save ~20% and secure access all year long.",
+    "yearlyValueHint": "Yearly gives you stable access all year long.",
     "statusLabel": "Status",
     "statusValues": {
       "active": "Active",
@@ -442,6 +442,22 @@
       "placeholder": "Enter access code",
       "apply": "Apply code",
       "applying": "Applying...",
+      "purchase": {
+        "badge": "Gift mode",
+        "title": "Gift a 30-day ZAKI pass 🎁",
+        "description": "Help someone you care about unlock a study buddy, writing partner, and daily AI sidekick.",
+        "highlights": [
+          "📚 Perfect for exam season, focus sprints, and project deadlines.",
+          "💌 Delivered by email, easy to share with a friend or teammate.",
+          "✨ One-time purchase, single-use code, instant impact."
+        ],
+        "note": "Buy one now, keep it handy, and gift it when someone needs a boost.",
+        "price": "$10 one-time",
+        "cta": "Buy gift code 🎉",
+        "processing": "Opening checkout...",
+        "unavailable": "Code purchase is not enabled in this environment yet.",
+        "checkoutError": "Unable to start code purchase checkout."
+      },
       "toastActivatedUntil": "Access activated until {{date}}.",
       "toastRedeemed": "Access code redeemed.",
       "toastRedeemFailed": "Unable to redeem access code",
@@ -466,7 +482,7 @@
         "label": "Student",
         "price": "$5 / month",
         "priceMonthly": "$5 / month",
-        "priceYearly": "$50 / year",
+        "priceYearly": "$60 / year",
         "blurb": "Premium features for focused learning.",
         "features": [
           "Premium models",
@@ -478,7 +494,7 @@
         "label": "Personal",
         "price": "$10 / month",
         "priceMonthly": "$10 / month",
-        "priceYearly": "$100 / year",
+        "priceYearly": "$120 / year",
         "blurb": "Best for everyday use and deeper context.",
         "features": [
           "Premium models",
@@ -543,7 +559,25 @@
     "shareTitle": "I joined ZAKI",
     "shareText": "{{name}} just joined ZAKI’s friends circle. Personal assistant AI > generic chat AI. Come in early.",
     "shareCopied": "Invite message copied. Send it to your people.",
-    "shareManual": "Copy this page link and share it with your friends."
+    "shareManual": "Copy this page link and share it with your friends.",
+    "accessCode": {
+      "badge": "Access code purchase complete",
+      "title": "Done {{name}}! Your code is being delivered ✉️",
+      "subtitle": "Your 30-day activation code has been generated after payment.",
+      "punchline": "Check your inbox now. If it does not appear, use resend below.",
+      "nextSteps": [
+        "Open your email and copy the activation code.",
+        "Go to Pricing and redeem the code in the Access Code box.",
+        "Share it with a friend if you bought it for someone else."
+      ],
+      "resendCta": "Resend code email",
+      "resending": "Resending...",
+      "resendSent": "Access-code email sent.",
+      "resendAlreadySent": "Code email was already sent.",
+      "resendProcessing": "Your code is still processing. Try again in a moment.",
+      "resendMissing": "Missing checkout session. Open Pricing and try again.",
+      "resendError": "Unable to resend access-code email."
+    }
   },
   "memory": {
     "saved": "memory saved",

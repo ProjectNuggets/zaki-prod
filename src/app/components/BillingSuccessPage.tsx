@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { useEntitlements, useSyncBilling } from "@/queries";
+import { useEntitlements, useResendPurchasedAccessCodeEmail, useSyncBilling } from "@/queries";
 import { useAuthStore } from "@/stores";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
@@ -27,10 +27,14 @@ export function BillingSuccessPage() {
   const [sharePending, setSharePending] = useState(false);
   const syncHandledRef = useRef(false);
   const syncBilling = useSyncBilling();
+  const resendAccessCodeEmail = useResendPurchasedAccessCodeEmail();
   const { data: entitlementsResult } = useEntitlements();
   const user = useAuthStore((s) => s.user);
 
   const billingStatus = String(searchParams.get("billing") || "").toLowerCase();
+  const successKind = String(searchParams.get("kind") || "").toLowerCase();
+  const checkoutSessionId = String(searchParams.get("session_id") || "").trim();
+  const isAccessCodeSuccess = billingStatus === "code_success" && successKind === "access_code";
   const requestedPlan = normalizePlan(searchParams.get("plan"));
   const requestedInterval = normalizeInterval(searchParams.get("interval"));
 
@@ -102,6 +106,29 @@ export function BillingSuccessPage() {
     }
   };
 
+  const onResendAccessCodeEmail = async () => {
+    if (!checkoutSessionId) {
+      toast.error(t("billingSuccess.accessCode.resendMissing"));
+      return;
+    }
+    try {
+      const result = await resendAccessCodeEmail.mutateAsync(checkoutSessionId);
+      if (result.status === "processing") {
+        toast(t("billingSuccess.accessCode.resendProcessing"));
+        return;
+      }
+      if (result.status === "already_sent") {
+        toast(t("billingSuccess.accessCode.resendAlreadySent"));
+        return;
+      }
+      toast.success(t("billingSuccess.accessCode.resendSent"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("billingSuccess.accessCode.resendError")
+      );
+    }
+  };
+
   return (
     <div
       className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-4 py-8 sm:px-6 sm:py-10"
@@ -116,27 +143,35 @@ export function BillingSuccessPage() {
               isRtl ? "tracking-normal" : "uppercase tracking-[0.14em]"
             )}
           >
-            {t("billingSuccess.badge")}
+            {isAccessCodeSuccess
+              ? t("billingSuccess.accessCode.badge")
+              : t("billingSuccess.badge")}
           </div>
 
           <h1 className="mt-4 text-3xl font-semibold tracking-[-0.02em] text-zaki-primary md:text-4xl">
-            {t("billingSuccess.title", { name: displayName })}
+            {isAccessCodeSuccess
+              ? t("billingSuccess.accessCode.title", { name: displayName })
+              : t("billingSuccess.title", { name: displayName })}
           </h1>
           <p className="mt-3 text-sm leading-7 text-zaki-secondary md:text-base">
-            {t("billingSuccess.subtitle")}
+            {isAccessCodeSuccess
+              ? t("billingSuccess.accessCode.subtitle")
+              : t("billingSuccess.subtitle")}
           </p>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <span className="rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-medium text-zaki-secondary">
-              {t("billingSuccess.planLabel", { plan: planLabel })}
-            </span>
-            <span className="rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-medium text-zaki-secondary">
-              {t("billingSuccess.intervalLabel", { interval: intervalLabel })}
-            </span>
-          </div>
+          {!isAccessCodeSuccess ? (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-medium text-zaki-secondary">
+                {t("billingSuccess.planLabel", { plan: planLabel })}
+              </span>
+              <span className="rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-medium text-zaki-secondary">
+                {t("billingSuccess.intervalLabel", { interval: intervalLabel })}
+              </span>
+            </div>
+          ) : null}
 
           <p className="mt-5 rounded-2xl border border-zaki-strong bg-zaki-raised px-4 py-3 text-sm leading-7 text-zaki-secondary">
-            {punchline}
+            {isAccessCodeSuccess ? t("billingSuccess.accessCode.punchline") : punchline}
           </p>
 
           <ul
@@ -145,7 +180,13 @@ export function BillingSuccessPage() {
               isRtl ? "pr-5" : "pl-5"
             )}
           >
-            {(t("billingSuccess.nextSteps", { returnObjects: true }) as string[]).map((step) => (
+            {(
+              isAccessCodeSuccess
+                ? (t("billingSuccess.accessCode.nextSteps", {
+                    returnObjects: true,
+                  }) as string[])
+                : (t("billingSuccess.nextSteps", { returnObjects: true }) as string[])
+            ).map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ul>
@@ -157,14 +198,29 @@ export function BillingSuccessPage() {
             <Link to="/pricing" className="zaki-btn zaki-btn-secondary w-full sm:w-auto">
               {t("billingSuccess.actions.manage")}
             </Link>
-            <button
-              type="button"
-              onClick={onShare}
-              disabled={sharePending}
-              className="zaki-btn zaki-btn-ghost w-full border border-zaki-strong sm:w-auto"
-            >
-              {sharePending ? t("billingSuccess.actions.sharing") : t("billingSuccess.actions.share")}
-            </button>
+            {isAccessCodeSuccess ? (
+              <button
+                type="button"
+                onClick={onResendAccessCodeEmail}
+                disabled={resendAccessCodeEmail.isPending}
+                className="zaki-btn zaki-btn-ghost w-full border border-zaki-strong sm:w-auto"
+              >
+                {resendAccessCodeEmail.isPending
+                  ? t("billingSuccess.accessCode.resending")
+                  : t("billingSuccess.accessCode.resendCta")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onShare}
+                disabled={sharePending}
+                className="zaki-btn zaki-btn-ghost w-full border border-zaki-strong sm:w-auto"
+              >
+                {sharePending
+                  ? t("billingSuccess.actions.sharing")
+                  : t("billingSuccess.actions.share")}
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -289,8 +289,8 @@ export const content = {
     },
     pricing: {
       heading: "Simple plans, clear value",
-      subheading: "Choose monthly or yearly billing. Yearly gives you better value.",
-      yearlyBadge: "~20% off",
+      subheading:
+        "Choose monthly or yearly billing, or send a one-time gift code to someone who needs a smart study buddy.",
       interval: {
         monthly: "Monthly",
         yearly: "Yearly",
@@ -300,7 +300,7 @@ export const content = {
           tier: "student",
           label: "Student",
           priceMonthly: "$5 / month",
-          priceYearly: "$50 / year",
+          priceYearly: "$60 / year",
           blurb: "Premium features for focused learning.",
           features: ["Premium models", "Priority responses", "Expanded memory limits"],
           cta: "Choose Student",
@@ -309,12 +309,24 @@ export const content = {
           tier: "personal",
           label: "Personal",
           priceMonthly: "$10 / month",
-          priceYearly: "$100 / year",
+          priceYearly: "$120 / year",
           blurb: "Best for everyday use and deeper context.",
           features: ["Premium models", "Priority responses", "Advanced memory insights"],
           cta: "Choose Personal",
         },
       ],
+      oneTimeCode: {
+        label: "Gift Code",
+        badge: "🎁 One-time",
+        price: "$10 one-time",
+        blurb: "Gift someone a 30-day ZAKI pass for study, focus, and daily writing support.",
+        features: [
+          "Single-use activation code",
+          "Delivered by email after purchase",
+          "Perfect for friends and teammates"
+        ],
+        cta: "Gift a code 🎉",
+      },
       note: "Student plans require a valid .edu email at checkout.",
     },
     faq: {
@@ -670,8 +682,8 @@ export const content = {
     },
     pricing: {
       heading: "خطط واضحة وقيمة مباشرة",
-      subheading: "اختر فوترة شهرية أو سنوية. السنوية أوفر.",
-      yearlyBadge: "خصم ~20%",
+      subheading:
+        "اختر فوترة شهرية أو سنوية، أو أرسل كود هدية دفعة واحدة لشخص يحتاج Study Buddy ذكي.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
@@ -681,7 +693,7 @@ export const content = {
           tier: "student",
           label: "طالب",
           priceMonthly: "$5 / شهر",
-          priceYearly: "$50 / سنة",
+          priceYearly: "$60 / سنة",
           blurb: "ميزات بريميوم مخصصة للتعلّم بتركيز.",
           features: ["نماذج متقدمة", "استجابات بأولوية", "حدود ذاكرة موسعة"],
           cta: "اختر خطة الطالب",
@@ -690,12 +702,24 @@ export const content = {
           tier: "personal",
           label: "شخصي",
           priceMonthly: "$10 / شهر",
-          priceYearly: "$100 / سنة",
+          priceYearly: "$120 / سنة",
           blurb: "الأفضل للاستخدام اليومي وسياق أعمق.",
           features: ["نماذج متقدمة", "استجابات بأولوية", "رؤى ذاكرة متقدمة"],
           cta: "اختر الخطة الشخصية",
         },
       ],
+      oneTimeCode: {
+        label: "كود هدية",
+        badge: "🎁 دفعة واحدة",
+        price: "10$ دفعة واحدة",
+        blurb: "أهدِ شخصًا تعرفه وصول ZAKI لمدة 30 يومًا للدراسة، التركيز، والكتابة اليومية.",
+        features: [
+          "رمز تفعيل لاستخدام واحد",
+          "يصلك عبر البريد الإلكتروني بعد الدفع",
+          "مناسب للأصدقاء والزملاء"
+        ],
+        cta: "أهدِ كود 🎉",
+      },
       note: "خطة الطالب تتطلب بريد .edu صالحًا عند الدفع.",
     },
     faq: {

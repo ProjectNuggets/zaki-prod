@@ -62,6 +62,7 @@ function createDependencies({ event, constructError = null, markResult = true, r
       price_student: "student",
       price_personal: "personal",
     },
+    fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
   };
 }
 
@@ -160,5 +161,34 @@ describe("stripe webhook handler integration", () => {
       "stripe",
       expect.objectContaining({ eventId: "evt_old", eventType: "customer.subscription.updated" })
     );
+  });
+
+  it("invokes access-code purchase fulfillment callback for checkout sessions", async () => {
+    const event = {
+      id: "evt_access_1",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_access_1",
+          customer: "cus_access_1",
+          customer_email: "owner@example.com",
+          metadata: {
+            fulfillment_type: "access_code_purchase",
+            user_email: "owner@example.com",
+          },
+        },
+      },
+    };
+    const deps = createDependencies({ event, markResult: true });
+    deps.dbGet.mockResolvedValueOnce({ id: 7 });
+    const handler = createStripeWebhookHandler(deps);
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+    expect(deps.fulfillAccessCodePurchaseCheckoutSession).toHaveBeenCalledWith({
+      session: event.data.object,
+      eventId: "evt_access_1",
+    });
   });
 });
