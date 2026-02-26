@@ -1,3 +1,4 @@
+import type { ProductTelemetrySource } from "./productTelemetry";
 const TOKEN_KEY = "zaki.auth.token";
 
 type ApiRequestOptions = RequestInit & {
@@ -387,11 +388,19 @@ export async function fetchBillingConfig() {
 export async function createCheckoutSession(
   plan: "student" | "personal",
   provider?: "stripe" | "paddle" | "creem",
-  interval: "monthly" | "yearly" = "monthly"
+  interval: "monthly" | "yearly" = "monthly",
+  context?: {
+    source?: ProductTelemetrySource;
+  }
 ) {
   const response = await backendAuthRequest("/api/billing/checkout", {
     method: "POST",
-    body: JSON.stringify({ plan, interval, ...(provider ? { provider } : {}) }),
+    body: JSON.stringify({
+      plan,
+      interval,
+      ...(provider ? { provider } : {}),
+      ...(context ? { context } : {}),
+    }),
   });
   let data: { success?: boolean; url?: string | null; error?: string | null } = {};
   try {

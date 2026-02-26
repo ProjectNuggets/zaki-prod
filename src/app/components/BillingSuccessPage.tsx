@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useEntitlements, useSyncBilling } from "@/queries";
 import { useAuthStore } from "@/stores";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
 
 type PlanTier = "student" | "personal" | null;
@@ -42,10 +43,19 @@ export function BillingSuccessPage() {
     if (syncHandledRef.current) return;
     if (billingStatus !== "success") return;
     syncHandledRef.current = true;
+    void trackProductEvent({
+      event: "checkout_succeeded",
+      source: "success_page",
+      language: isRtl ? "ar" : "en",
+      plan,
+      interval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
     void syncBilling.mutateAsync().catch(() => {
       // Webhook may still finalize shortly; no blocking UX.
     });
-  }, [billingStatus, syncBilling]);
+  }, [billingStatus, interval, isRtl, plan, syncBilling]);
 
   const displayName = useMemo(() => {
     const raw = String(user?.fullName || user?.username || "").trim();
@@ -93,56 +103,65 @@ export function BillingSuccessPage() {
   };
 
   return (
-    <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
+    <div
+      className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-4 py-8 sm:px-6 sm:py-10"
+      style={{ WebkitOverflowScrolling: "touch" }}
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-3xl border border-[#e6d8c7] bg-[linear-gradient(180deg,#fff8f0_0%,#f9ecdb_100%)] p-7 shadow-[0_20px_36px_rgba(15,12,11,0.08)] md:p-9">
+        <div className="rounded-3xl border border-zaki-subtle bg-[linear-gradient(180deg,#fff8f0_0%,#f9ecdb_100%)] p-6 shadow-[0_20px_36px_rgba(15,12,11,0.08)] dark:border-zaki-dark dark:bg-[linear-gradient(180deg,#1b140f_0%,#140f0b_100%)] dark:shadow-[0_24px_52px_rgba(0,0,0,0.45)] sm:p-8 md:p-9">
           <div
             className={cn(
-              "inline-flex items-center rounded-full border border-[#f0d6b0] bg-white/80 px-3 py-1 text-xs font-semibold text-[#8a6a46]",
+              "inline-flex items-center rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-semibold text-zaki-secondary",
               isRtl ? "tracking-normal" : "uppercase tracking-[0.14em]"
             )}
           >
             {t("billingSuccess.badge")}
           </div>
 
-          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.02em] text-zaki-primary dark:text-zaki-dark-primary md:text-4xl">
+          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.02em] text-zaki-primary md:text-4xl">
             {t("billingSuccess.title", { name: displayName })}
           </h1>
-          <p className="mt-3 text-sm leading-7 text-zaki-secondary dark:text-zaki-dark-subtle md:text-base">
+          <p className="mt-3 text-sm leading-7 text-zaki-secondary md:text-base">
             {t("billingSuccess.subtitle")}
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <span className="rounded-full border border-[#e4d3bf] bg-white px-3 py-1 text-xs font-medium text-[#6b5b49]">
+            <span className="rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-medium text-zaki-secondary">
               {t("billingSuccess.planLabel", { plan: planLabel })}
             </span>
-            <span className="rounded-full border border-[#e4d3bf] bg-white px-3 py-1 text-xs font-medium text-[#6b5b49]">
+            <span className="rounded-full border border-zaki-strong bg-zaki-raised px-3 py-1 text-xs font-medium text-zaki-secondary">
               {t("billingSuccess.intervalLabel", { interval: intervalLabel })}
             </span>
           </div>
 
-          <p className="mt-5 rounded-2xl border border-[#ecd9c4] bg-white/70 px-4 py-3 text-sm leading-7 text-[#5f574d]">
+          <p className="mt-5 rounded-2xl border border-zaki-strong bg-zaki-raised px-4 py-3 text-sm leading-7 text-zaki-secondary">
             {punchline}
           </p>
 
-          <ul className={cn("mt-5 flex list-disc flex-col gap-2 text-sm text-[#5f574d]", isRtl ? "pr-5" : "pl-5")}>
+          <ul
+            className={cn(
+              "mt-5 flex list-disc flex-col gap-2 text-sm text-zaki-secondary",
+              isRtl ? "pr-5" : "pl-5"
+            )}
+          >
             {(t("billingSuccess.nextSteps", { returnObjects: true }) as string[]).map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ul>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link to="/" className="zaki-btn zaki-btn-primary">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Link to="/" className="zaki-btn zaki-btn-primary w-full sm:w-auto">
               {t("billingSuccess.actions.start")}
             </Link>
-            <Link to="/pricing" className="zaki-btn zaki-btn-ghost">
+            <Link to="/pricing" className="zaki-btn zaki-btn-secondary w-full sm:w-auto">
               {t("billingSuccess.actions.manage")}
             </Link>
             <button
               type="button"
               onClick={onShare}
               disabled={sharePending}
-              className="zaki-btn zaki-btn-ghost"
+              className="zaki-btn zaki-btn-ghost w-full border border-zaki-strong sm:w-auto"
             >
               {sharePending ? t("billingSuccess.actions.sharing") : t("billingSuccess.actions.share")}
             </button>
@@ -152,4 +171,3 @@ export function BillingSuccessPage() {
     </div>
   );
 }
-

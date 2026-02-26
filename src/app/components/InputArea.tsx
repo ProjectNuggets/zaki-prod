@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/queries";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { toast } from "sonner";
 
 export function InputArea({
@@ -146,7 +147,10 @@ export function InputArea({
   };
 
   return (
-    <div className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative">
+    <div
+      className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative"
+      style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+    >
       {/* Input Box */}
       <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir="ltr">
         <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
@@ -161,7 +165,22 @@ export function InputArea({
                 <button
                   type="button"
                   className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
-                  onClick={() => navigate("/pricing")}
+                  onClick={() => {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: "chat_input",
+                      language: isRtl ? "ar" : "en",
+                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                      interval: "monthly",
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                    navigate(
+                      isPremium
+                        ? "/pricing?source=chat_input"
+                        : "/pricing?plan=personal&interval=monthly&autostart=1&source=chat_input"
+                    );
+                  }}
                 >
                   {isPremium ? "Manage" : t("input.upgradeCta")}
                 </button>
@@ -183,7 +202,22 @@ export function InputArea({
                 <button
                   type="button"
                   className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
-                  onClick={() => navigate("/pricing")}
+                  onClick={() => {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: "chat_input",
+                      language: isRtl ? "ar" : "en",
+                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                      interval: "monthly",
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                    navigate(
+                      isPremium
+                        ? "/pricing?source=chat_input"
+                        : "/pricing?plan=personal&interval=monthly&autostart=1&source=chat_input"
+                    );
+                  }}
                 >
                   {isPremium ? "Manage" : t("input.upgradeCta")}
                 </button>
@@ -279,7 +313,7 @@ export function InputArea({
           <div className="relative" ref={menuRef}>
             <button
               type="button"
-              className="size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              className="size-11 sm:size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
               onClick={() => setMenuOpen((open) => !open)}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -380,7 +414,7 @@ export function InputArea({
           <button
             type="button"
             onClick={() => toast.info(t("input.webSearch.soonToast"))}
-            className="group relative size-9 rounded-xl flex items-center justify-center border transition-colors bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
+            className="group relative size-11 sm:size-9 rounded-xl flex items-center justify-center border transition-colors bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
             aria-label={t("input.webSearch.ariaLabel")}
             title={t("input.webSearch.soonTitle")}
           >
@@ -421,7 +455,7 @@ export function InputArea({
             type={isStopMode ? "button" : "submit"}
             onClick={isStopMode ? onStop : undefined}
             disabled={isStopMode ? typeof onStop !== "function" : !canSend}
-            className="zaki-button-bounce size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+            className="zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
             aria-label={isStopMode ? t("input.stopAria") : t("input.sendAria")}
           >
             {isStopMode ? (

@@ -788,6 +788,14 @@ const streamChatLimiter = rateLimit({
   message: { error: "Too many chat requests. Please retry in a minute." },
 });
 
+const productTelemetryLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many telemetry events. Please retry in a minute." },
+});
+
 const memoryReadPathMatchers = [
   /^\/api\/memory\/health\/?$/u,
   /^\/api\/memory\/events\/?$/u,
@@ -1294,6 +1302,31 @@ const ClientErrorEventSchema = z.object({
   timestamp: z.string().max(120).optional(),
 });
 
+const ProductEventSchema = z.object({
+  event: z.enum([
+    "pricing_viewed",
+    "upgrade_cta_clicked",
+    "checkout_started",
+    "checkout_succeeded",
+    "first_message_sent",
+    "first_memory_saved",
+    "activation_completed",
+  ]),
+  source: z.enum([
+    "website_nav",
+    "website_pricing",
+    "chat_input",
+    "settings",
+    "pricing_page",
+    "success_page",
+  ]),
+  language: z.enum(["en", "ar"]).optional(),
+  viewport: z.enum(["mobile", "tablet", "desktop"]).optional(),
+  plan: z.enum(["free", "student", "personal"]).nullable().optional(),
+  interval: z.enum(["monthly", "yearly"]).nullable().optional(),
+  timestamp: z.string().max(120).optional(),
+});
+
 // Validation helper
 function validateInput(schema, data) {
   const result = schema.safeParse(data);
@@ -1332,6 +1365,55 @@ app.post("/api/telemetry/client-error", express.json({ limit: "200kb" }), async 
 
   res.status(202).json({ success: true });
 });
+
+app.post(
+  "/api/telemetry/product-event",
+  productTelemetryLimiter,
+  express.json({ limit: "100kb" }),
+  async (req, res) => {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(ProductEventSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((issue) => issue.message).join(", "),
+      });
+      return;
+    }
+
+    const payload = validation.data;
+    try {
+      await dbQuery(
+        `INSERT INTO product_analytics_events
+          (user_id, event, source, language, viewport, plan, billing_interval, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()))`,
+        [
+          authResult.zakiUser.id,
+          payload.event,
+          payload.source,
+          payload.language || null,
+          payload.viewport || null,
+          payload.plan || null,
+          payload.interval || null,
+          payload.timestamp || null,
+        ]
+      );
+    } catch (error) {
+      logStructured("error", "product.telemetry.persist_failed", {
+        requestId: req.requestId || null,
+        userId: authResult.zakiUser.id,
+        event: payload.event,
+        source: payload.source,
+        message: error?.message || String(error),
+      });
+    }
+
+    // Non-blocking by design: product flows should not fail on telemetry issues.
+    res.status(202).json({ success: true });
+  }
+);
 
 // Initialize memory routes
 createMemoryRoutes(app, { requireAuthUser });
@@ -1904,8 +1986,9 @@ const billingAdapters = {
   },
   stripe: {
     name: "stripe",
-    async createCheckout({ plan, interval = "monthly", email, zakiUser }) {
+    async createCheckout({ plan, interval = "monthly", email, zakiUser, context }) {
       const selectedInterval = normalizeBillingInterval(interval, "monthly");
+      const checkoutSource = String(context?.source || "").trim().toLowerCase() || "pricing_page";
       if (plan === "student" && !isEduEmail(email)) {
         const err = new Error("Student plan requires a .edu email address.");
         err.status = 400;
@@ -1943,12 +2026,14 @@ const billingAdapters = {
           user_email: email,
           plan_tier: plan,
           billing_interval: selectedInterval,
+          checkout_source: checkoutSource,
         },
         subscription_data: {
           metadata: {
             user_email: email,
             plan_tier: plan,
             billing_interval: selectedInterval,
+            checkout_source: checkoutSource,
           },
         },
       });
@@ -2080,7 +2165,8 @@ const billingAdapters = {
   },
   creem: {
     name: "creem",
-    async createCheckout({ plan, email, zakiUser }) {
+    async createCheckout({ plan, email, zakiUser, context }) {
+      const checkoutSource = String(context?.source || "").trim().toLowerCase() || "pricing_page";
       const productId =
         plan === "student" ? CREEM_PRODUCT_ID_STUDENT : CREEM_PRODUCT_ID_PERSONAL;
       if (!productId) {
@@ -2109,6 +2195,7 @@ const billingAdapters = {
           user_email: email,
           user_id: String(zakiUser?.id || ""),
           plan_tier: plan,
+          checkout_source: checkoutSource,
         },
       };
 
@@ -3299,6 +3386,20 @@ const CheckoutSchema = z.object({
   plan: z.enum(["student", "personal"]),
   interval: z.enum(["monthly", "yearly"]).optional(),
   provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
+  context: z
+    .object({
+      source: z
+        .enum([
+          "website_nav",
+          "website_pricing",
+          "chat_input",
+          "settings",
+          "pricing_page",
+          "success_page",
+        ])
+        .optional(),
+    })
+    .optional(),
 });
 
 app.get("/api/billing/config", async (req, res) => {
@@ -3341,6 +3442,7 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
 
     const plan = validation.data.plan;
     const interval = normalizeBillingInterval(validation.data.interval, "monthly");
+    const context = validation.data.context || undefined;
     const requestedProvider = String(validation.data.provider || "").trim().toLowerCase();
     const configured = getBillingConfigStatus();
     const availableProviders = (configured.checkoutProviders || []).filter((item) => item.enabled);
@@ -3375,7 +3477,7 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
       return;
     }
 
-    const result = await adapter.createCheckout({ plan, interval, email, zakiUser });
+    const result = await adapter.createCheckout({ plan, interval, email, zakiUser, context });
     res.status(200).json({ success: true, url: result?.url || null });
   } catch (error) {
     console.error("[Billing] Checkout error:", error);

@@ -162,7 +162,14 @@
       "Remember this: I prefer concise answers and weekly plans. Start by planning my next 7 days.",
       "Summarize this meeting into decisions, owners, deadlines, and open risks: [paste notes].",
       "Use Query mode on my uploaded files and answer: [your question]."
-    ]
+    ],
+    "activation": {
+      "title": "Get your setup done",
+      "steps": {
+        "firstMessage": "Send your first message",
+        "firstMemory": "Save your first memory"
+      }
+    }
   },
   "home": {
     "welcome": "Welcome back",

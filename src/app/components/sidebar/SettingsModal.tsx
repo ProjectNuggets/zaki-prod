@@ -7,6 +7,7 @@ import {
   useEntitlements,
 } from "@/queries";
 import { exportAccountData } from "@/lib/api";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -224,8 +225,18 @@ export function SettingsModal({
                   type="button"
                   className="zaki-btn-sm zaki-btn-secondary"
                   onClick={() => {
+                    void trackProductEvent({
+                      event: "pricing_viewed",
+                      source: "settings",
+                      language: languageValue === "ar" ? "ar" : "en",
+                      plan:
+                        planTier === "student" || planTier === "personal" ? planTier : "free",
+                      interval: null,
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
                     onClose();
-                    navigate("/pricing");
+                    navigate("/pricing?source=settings");
                   }}
                 >
                   {t("settingsModal.plan.viewPricing")}
@@ -239,11 +250,27 @@ export function SettingsModal({
                   }
                   onClick={async () => {
                     try {
+                      if (isPremium && !billingPortalEnabled) {
+                        throw new Error(t("settingsModal.plan.errors.portalUnavailable"));
+                      }
                       if (!isPremium && !billingCheckoutEnabled) {
                         throw new Error(t("settingsModal.plan.errors.billingUnavailable"));
                       }
-                      if (isPremium && !billingPortalEnabled) {
-                        throw new Error(t("settingsModal.plan.errors.portalUnavailable"));
+                      if (!isPremium) {
+                        void trackProductEvent({
+                          event: "upgrade_cta_clicked",
+                          source: "settings",
+                          language: languageValue === "ar" ? "ar" : "en",
+                          plan: "personal",
+                          interval: "monthly",
+                        }).catch(() => {
+                          // Best-effort telemetry only.
+                        });
+                        onClose();
+                        navigate(
+                          "/pricing?plan=personal&interval=monthly&autostart=1&source=settings"
+                        );
+                        return;
                       }
                       await billingPortal.mutateAsync();
                     } catch (err) {

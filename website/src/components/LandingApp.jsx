@@ -77,7 +77,7 @@ function NavPill({ onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className="whitespace-nowrap px-2 py-1 text-[13px] font-medium leading-5 text-[#67604f] transition hover:text-[#2f2a24]"
+      className="inline-flex h-11 items-center whitespace-nowrap px-2.5 text-[13px] font-medium leading-5 text-[#67604f] transition hover:text-[#2f2a24]"
     >
       {children}
     </button>
@@ -705,31 +705,32 @@ export function LandingApp() {
           <span>{langFlag}</span>
         </a>
 
-        <header className="fixed left-1/2 top-10 z-40 flex h-[48px] w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#e7dfd3] bg-white/90 px-2 shadow-[0_2px_7px_rgba(15,12,11,0.05)] backdrop-blur-sm md:w-auto md:max-w-[calc(100%-24px)] md:px-3">
+        <header className="fixed left-1/2 top-10 z-40 flex h-[52px] w-[calc(100%-24px)] max-w-[860px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#e7dfd3] bg-white/90 px-2 shadow-[0_2px_7px_rgba(15,12,11,0.05)] backdrop-blur-sm md:w-auto md:max-w-[calc(100%-24px)] md:px-3">
           <div className="shrink-0 flex items-center">
             <Logo />
           </div>
 
-          <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-none md:overflow-visible">
-            <div className="mx-auto flex w-max items-center gap-1">
+          <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mx-auto flex w-max min-w-full items-center justify-center gap-1">
               <NavPill onClick={() => scrollToId("why")}>{t.nav.why}</NavPill>
               <NavPill onClick={() => scrollToId("horizontal-showcase")}>{t.nav.story}</NavPill>
               <NavPill onClick={() => scrollToId("contact")}>{t.nav.faq}</NavPill>
-              <a
-                href={`${APP_URL}/?auth=login`}
-                className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-3 py-1.5 text-[12px] font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
-                style={{ color: "#ffffff" }}
-              >
-                {t.hero.cta}
-              </a>
             </div>
           </nav>
+
+          <a
+            href={`${APP_URL}/pricing?auth=signup&plan=personal&interval=monthly&autostart=1&source=website_nav`}
+            className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-3.5 text-[12px] font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
+            style={{ color: "#ffffff" }}
+          >
+            {t.hero.cta}
+          </a>
 
           <div className="shrink-0 flex items-center md:hidden">
             <a
               href={switchLangHref}
               aria-label={locale === "ar" ? "Switch to English" : "Switch to Arabic"}
-              className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#ddd5ca] bg-white px-2 text-[11px] font-semibold text-[#5c5f6a]"
+              className="inline-flex h-11 min-w-11 items-center justify-center rounded-full border border-[#ddd5ca] bg-white px-2 text-[11px] font-semibold text-[#5c5f6a]"
             >
               {locale === "ar" ? "EN" : "AR"}
             </a>
@@ -1333,7 +1334,7 @@ export function LandingApp() {
                     <a
                       href={`${APP_URL}/pricing?auth=signup&plan=${encodeURIComponent(
                         plan.tier
-                      )}&interval=${encodeURIComponent(pricingInterval)}&autostart=1`}
+                      )}&interval=${encodeURIComponent(pricingInterval)}&autostart=1&source=website_pricing`}
                       className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
                     >
                       {plan.cta}

@@ -49,12 +49,22 @@ export function useCheckout() {
             plan: "student" | "personal";
             provider?: "stripe" | "paddle" | "creem";
             interval?: "monthly" | "yearly";
+            context?: {
+              source?:
+                | "website_nav"
+                | "website_pricing"
+                | "chat_input"
+                | "settings"
+                | "pricing_page"
+                | "success_page";
+            };
           }
     ) => {
       const plan = typeof payload === "string" ? payload : payload.plan;
       const provider = typeof payload === "string" ? undefined : payload.provider;
       const interval = typeof payload === "string" ? "monthly" : payload.interval || "monthly";
-      const { response, data } = await createCheckoutSession(plan, provider, interval);
+      const context = typeof payload === "string" ? undefined : payload.context;
+      const { response, data } = await createCheckoutSession(plan, provider, interval, context);
       if (!response.ok || !data.url) {
         throw new Error(data.error ?? "Unable to start checkout");
       }

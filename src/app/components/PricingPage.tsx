@@ -10,6 +10,7 @@ import {
   useRedeemAccessCode,
   useSyncBilling,
 } from "@/queries";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -68,6 +69,23 @@ export function PricingPage() {
     return value === "1" || value === "true";
   })();
   const handledQueryAutoStartRef = useRef(false);
+  const trackedPricingViewRef = useRef(false);
+  const sourceFromQuery: "website_nav" | "website_pricing" | "chat_input" | "settings" | "pricing_page" | "success_page" = (() => {
+    const value = String(searchParams.get("source") || "")
+      .trim()
+      .toLowerCase();
+    if (
+      value === "website_nav" ||
+      value === "website_pricing" ||
+      value === "chat_input" ||
+      value === "settings" ||
+      value === "pricing_page" ||
+      value === "success_page"
+    ) {
+      return value;
+    }
+    return "pricing_page";
+  })();
   const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
   const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
@@ -269,13 +287,36 @@ export function PricingPage() {
     if (!billingCheckoutEnabled) {
       throw new Error(t("pricingPage.checkoutError"));
     }
-    await checkout.mutateAsync({ plan, provider, interval });
+    void trackProductEvent({
+      event: "checkout_started",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan,
+      interval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
+    await checkout.mutateAsync({
+      plan,
+      provider,
+      interval,
+      context: { source: sourceFromQuery },
+    });
   };
 
   const openProviderSelection = (
     plan: "student" | "personal",
     requestedInterval: BillingInterval
   ) => {
+    void trackProductEvent({
+      event: "upgrade_cta_clicked",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan,
+      interval: requestedInterval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
     const interval = resolveIntervalForPlan(plan, requestedInterval);
     const yearlyStripeOnly = interval === "yearly";
     const available = checkoutProviders.filter(
@@ -297,6 +338,20 @@ export function PricingPage() {
     }
     setProviderModalSelection({ plan, interval });
   };
+
+  useEffect(() => {
+    if (trackedPricingViewRef.current) return;
+    trackedPricingViewRef.current = true;
+    void trackProductEvent({
+      event: "pricing_viewed",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan: currentTier === "student" || currentTier === "personal" ? currentTier : "free",
+      interval: selectedInterval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
+  }, [currentTier, isRtl, selectedInterval, sourceFromQuery]);
 
   useEffect(() => {
     if (!requestedIntervalFromQuery) return;
@@ -329,7 +384,7 @@ export function PricingPage() {
 
   return (
     <div
-      className="h-full overflow-y-auto overscroll-y-contain zaki-scrollbar-fade px-6 py-10"
+      className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-6 py-10"
       style={{ WebkitOverflowScrolling: "touch" }}
       dir={isRtl ? "rtl" : "ltr"}
     >

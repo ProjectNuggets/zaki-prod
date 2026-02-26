@@ -304,7 +304,7 @@ export default function App() {
       {/* Mobile sidebar drawer */}
       <MobileSidebar />
       
-      <div className="zaki-app flex flex-col md:flex-row w-full h-screen overflow-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
+      <div className="zaki-app flex flex-col md:flex-row w-full h-[100dvh] overflow-x-hidden overflow-y-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
         {/* Mobile header with hamburger menu */}
         <MobileHeader />
         

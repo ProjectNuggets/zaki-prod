@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest, updateProfile } from "@/lib/api";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -1464,6 +1465,20 @@ export function Sidebar() {
 	              type="button"
 		              onClick={async () => {
 		                try {
+                    if (!isPremium) {
+                      void trackProductEvent({
+                        event: "upgrade_cta_clicked",
+                        source: "settings",
+                        language: isRtl ? "ar" : "en",
+                        plan: "personal",
+                        interval: "monthly",
+                      }).catch(() => {
+                        // Best-effort telemetry only.
+                      });
+                      setProfileMenuOpen(false);
+                      navigate("/pricing?plan=personal&interval=monthly&autostart=1&source=settings");
+                      return;
+                    }
 		                  await billingPortal.mutateAsync();
 	                } catch (err) {
 	                  toast.error(err instanceof Error ? err.message : t("sidebar.profile.billingError"));

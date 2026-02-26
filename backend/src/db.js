@@ -230,6 +230,30 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_analytics_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      event TEXT NOT NULL,
+      source TEXT NOT NULL,
+      language TEXT,
+      viewport TEXT,
+      plan TEXT,
+      billing_interval TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_product_analytics_events_created_at
+    ON product_analytics_events (created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_product_analytics_events_user_event
+    ON product_analytics_events (user_id, event, created_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_hidden_workspaces (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

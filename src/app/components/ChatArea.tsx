@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "@/lib/api";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   SpacesView,
   ZakiHomeView,
@@ -23,6 +24,12 @@ import { toast } from "sonner";
 import type { Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
+import {
+  getActivationProgress,
+  markFirstMemorySaved,
+  markFirstMessageSent,
+  type ActivationProgress,
+} from "@/lib/retention";
 
 class ChatRequestError extends Error {
   status: number;
@@ -106,6 +113,11 @@ export function ChatArea() {
         : "";
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
+  const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
+    firstMessageSent: false,
+    firstMemorySaved: false,
+    completed: false,
+  });
   
   // Memory mode: autosave (default) or manual
   const [memoryMode, setMemoryMode] = useMemoryMode();
@@ -130,6 +142,18 @@ export function ChatArea() {
       setShowMemoryToast(true);
     }
   }, [pendingMemories]);
+
+  useEffect(() => {
+    if (!authUserId) {
+      setActivationProgress({
+        firstMessageSent: false,
+        firstMemorySaved: false,
+        completed: false,
+      });
+      return;
+    }
+    setActivationProgress(getActivationProgress(authUserId));
+  }, [authUserId]);
 
   // UI state
   const [dragActive, setDragActive] = useState(false);
@@ -903,6 +927,30 @@ export function ChatArea() {
           return true;
         });
         if (uniqueMemories.length === 0) return;
+        if (authUserId && !activationProgress.firstMemorySaved) {
+          const nextProgress = markFirstMemorySaved(authUserId);
+          setActivationProgress(nextProgress);
+          void trackProductEvent({
+            event: "first_memory_saved",
+            source: "chat_input",
+            language: isRtl ? "ar" : "en",
+            plan: null,
+            interval: null,
+          }).catch(() => {
+            // Best-effort telemetry only.
+          });
+          if (nextProgress.completed) {
+            void trackProductEvent({
+              event: "activation_completed",
+              source: "chat_input",
+              language: isRtl ? "ar" : "en",
+              plan: null,
+              interval: null,
+            }).catch(() => {
+              // Best-effort telemetry only.
+            });
+          }
+        }
         memoryQueueRef.current = [...memoryQueueRef.current, ...uniqueMemories];
         if (memoryFlushTimerRef.current) {
           window.clearTimeout(memoryFlushTimerRef.current);
@@ -925,7 +973,15 @@ export function ChatArea() {
         checkForSavedMemories(next.message, next.threadId, next.mode);
       }
     }
-  }, [authUserId, activeThreadId, memoryMode, flushMemoryQueue, requestMemoryStatusSync]);
+  }, [
+    authUserId,
+    activationProgress.firstMemorySaved,
+    activeThreadId,
+    flushMemoryQueue,
+    isRtl,
+    memoryMode,
+    requestMemoryStatusSync,
+  ]);
 
   useEffect(() => {
     if (!authUserId) {
@@ -1117,6 +1173,31 @@ export function ChatArea() {
 
     if (!threadId) return;
 
+    if (authUserId && !activationProgress.firstMessageSent) {
+      const nextProgress = markFirstMessageSent(authUserId);
+      setActivationProgress(nextProgress);
+      void trackProductEvent({
+        event: "first_message_sent",
+        source: "chat_input",
+        language: isRtl ? "ar" : "en",
+        plan: null,
+        interval: null,
+      }).catch(() => {
+        // Best-effort telemetry only.
+      });
+      if (nextProgress.completed) {
+        void trackProductEvent({
+          event: "activation_completed",
+          source: "chat_input",
+          language: isRtl ? "ar" : "en",
+          plan: null,
+          interval: null,
+        }).catch(() => {
+          // Best-effort telemetry only.
+        });
+      }
+    }
+
     const attachmentsForMessage = files
       .filter((file) => file.type.startsWith("image/"))
       .map((file) => ({
@@ -1181,7 +1262,18 @@ export function ChatArea() {
       }
       setIsStreaming(false);
     }
-  }, [activeThreadId, activeWorkspaceSlug, primarySpace?.id, isStreaming, streamChatMessage, checkForSavedMemories, navigate]);
+  }, [
+    activeThreadId,
+    activeWorkspaceSlug,
+    activationProgress.firstMessageSent,
+    authUserId,
+    checkForSavedMemories,
+    isRtl,
+    isStreaming,
+    navigate,
+    primarySpace?.id,
+    streamChatMessage,
+  ]);
 
   const handleStopStreaming = useCallback(() => {
     streamAbortRef.current?.abort();
@@ -1518,7 +1610,14 @@ export function ChatArea() {
     }
 
     if (showReady) {
-      return <ReadyState ref={readyRef} onStartChat={handleStartChat} onSelectExample={handleExampleSelect} />;
+      return (
+        <ReadyState
+          ref={readyRef}
+          onStartChat={handleStartChat}
+          onSelectExample={handleExampleSelect}
+          activationProgress={activationProgress}
+        />
+      );
     }
 
     return (
@@ -1537,7 +1636,7 @@ export function ChatArea() {
   return (
     <div
       ref={containerRef}
-      className="zaki-chat flex-1 relative flex flex-col h-full bg-transparent"
+      className="zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden"
       style={
         {
           "--zaki-input-height": `${inputHeight}px`,
@@ -1656,13 +1755,14 @@ export function ChatArea() {
 
           {/* Main Content */}
           <div
-            className="flex-1 relative z-10 overflow-y-auto zaki-scrollbar-fade"
+            className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade"
             ref={scrollRef}
             style={{
               paddingBottom:
                 !showZakiHome && !showSpacesView && !showSpaceDetail
                   ? Math.max(24, inputHeight + 24)
                   : undefined,
+              WebkitOverflowScrolling: "touch",
             }}
             onScroll={() => {
               if (!scrollRef.current) return;
