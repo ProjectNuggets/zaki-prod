@@ -116,6 +116,7 @@ const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
+const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
 const ZAKI_DEFAULT_WORKSPACE_SLUG = (process.env.ZAKI_DEFAULT_WORKSPACE_SLUG || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
 const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
@@ -2532,6 +2533,19 @@ function getVerificationBaseUrl() {
     : normalizedBase;
 }
 
+function buildVerificationUrl(token) {
+  return `${getVerificationBaseUrl()}/verify?token=${token}`;
+}
+
+function buildPasswordResetUrl(token) {
+  const baseUrl = ZAKI_APP_URL || ZAKI_PUBLIC_URL || `http://localhost:${PORT}`;
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const resetBase = normalizedBase.endsWith("/api")
+    ? normalizedBase.replace(/\/api$/, "")
+    : normalizedBase;
+  return `${resetBase}/reset?token=${token}`;
+}
+
 function getLoginRedirectUrl(verifiedState = "success") {
   const appBaseRaw = getAppUrl();
   const appBase = appBaseRaw.endsWith("/api")
@@ -2545,175 +2559,174 @@ function getLoginRedirectUrl(verifiedState = "success") {
 }
 
 function getEmailLogoUrl() {
+  if (ZAKI_EMAIL_LOGO_URL) {
+    return ZAKI_EMAIL_LOGO_URL;
+  }
   const appBaseRaw = getAppUrl();
   const appBase = appBaseRaw.endsWith("/api")
     ? appBaseRaw.replace(/\/api$/, "")
     : appBaseRaw;
   const normalized = appBase.replace(/\/+$/, "");
-  return `${normalized}/favicon.svg`;
+  return `${normalized}/assets/zaki-email-logo.png`;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildEmailShell({
+  logoUrl,
+  eyebrow,
+  title,
+  preheader = "",
+  intro,
+  primaryLabel,
+  primaryUrl,
+  bodyHtml = "",
+  footerHtml = "",
+}) {
+  const safeEyebrow = escapeHtml(eyebrow);
+  const safeTitle = escapeHtml(title);
+  const safePreheader = escapeHtml(preheader || title);
+  const safeIntro = escapeHtml(intro);
+  const safePrimaryLabel = escapeHtml(primaryLabel);
+  const safePrimaryUrl = escapeHtml(primaryUrl);
+  return `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${safeTitle}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f4eee4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
+    <div style="display:none;font-size:1px;line-height:1px;color:#f4eee4;max-height:0;max-width:0;opacity:0;overflow:hidden;visibility:hidden;">
+      ${safePreheader}
+    </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 8% -8%,#fffaf4 0%,#f4ece2 44%,#efe3d7 100%);padding:32px 14px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e9ddcf;border-radius:24px;overflow:hidden;box-shadow:0 24px 52px rgba(38,22,7,0.12);">
+            <tr>
+              <td style="padding:24px 28px 18px 28px;background:linear-gradient(130deg,#fffaf4 0%,#f2e6d7 100%);border-bottom:1px solid #eadfce;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
+                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">${safeEyebrow}</div>
+                    </td>
+                  </tr>
+                </table>
+                <h1 style="margin:14px 0 0 0;font-size:26px;line-height:1.25;color:#231b14;font-weight:650;">${safeTitle}</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 14px 28px;">
+                <p style="margin:0 0 16px 0;font-size:15px;line-height:1.7;color:#3a2f25;">
+                  ${safeIntro}
+                </p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 18px 0;">
+                  <tr>
+                    <td style="border-radius:12px;background:linear-gradient(135deg,#de6444 0%,#c64f34 100%);box-shadow:0 10px 24px rgba(198,79,52,0.34);">
+                      <a href="${safePrimaryUrl}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:650;">
+                        ${safePrimaryLabel}
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                ${bodyHtml}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
+                ${footerHtml}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `.trim();
 }
 
 function buildVerificationEmailHtml({ verifyUrl, logoUrl }) {
   const expiryText = `${Math.max(1, Number(ZAKI_VERIFY_TTL_MINUTES || 60))} minutes`;
-  return `
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Verify your ZAKI account</title>
-  </head>
-  <body style="margin:0;padding:0;background:#f5f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 5% 0%,#fff7ec 0%,#f4ece1 42%,#f1e8dd 100%);padding:28px 14px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e7ddd1;border-radius:20px;overflow:hidden;box-shadow:0 18px 44px rgba(38,22,7,0.10);">
-            <tr>
-              <td style="padding:24px 28px 16px 28px;background:linear-gradient(135deg,#fff8ef 0%,#f1e6d8 100%);border-bottom:1px solid #eadfce;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                  <tr>
-                    <td style="vertical-align:middle;">
-                      <div style="height:40px;width:40px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;border:1px solid #eadfce;">
-                        <img src="${logoUrl}" width="26" height="26" alt="ZAKI" style="display:block;width:26px;height:26px;" />
-                      </div>
-                    </td>
-                    <td style="padding-left:10px;vertical-align:middle;">
-                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
-                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">Account Security</div>
-                    </td>
-                  </tr>
-                </table>
-                <h1 style="margin:14px 0 0 0;font-size:25px;line-height:1.25;color:#231b14;font-weight:650;">One quick tap and you're in</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 28px 10px 28px;">
-                <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#3b3026;">
-                  Your workspace is ready. Verify this email to unlock ZAKI and start your first conversation.
-                </p>
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:22px 0 20px 0;">
-                  <tr>
-                    <td style="border-radius:12px;background:linear-gradient(135deg,#df6847 0%,#c75236 100%);box-shadow:0 8px 20px rgba(199,82,54,0.35);">
-                      <a href="${verifyUrl}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;">
-                        Activate My Account
-                      </a>
-                    </td>
-                  </tr>
-                </table>
-                <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:10px 12px;">
-                  <p style="margin:0;font-size:13px;line-height:1.6;color:#7a5f49;">
-                    This link expires in <strong>${expiryText}</strong>. If it times out, just sign up again and we will send a fresh one.
-                  </p>
-                </div>
-                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.7;color:#6a5847;">
-                  If the button does not open, use this link:
-                </p>
-                <p style="margin:0;font-size:12px;line-height:1.7;color:#6a5847;word-break:break-all;">
-                  <a href="${verifyUrl}" style="color:#d86a4d;text-decoration:underline;">${verifyUrl}</a>
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
-                <p style="margin:0;font-size:12px;line-height:1.55;color:#7f6b59;">
-                  If this was not you, you can safely ignore this email. Need help? Reach us at <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-  `.trim();
+  const safeUrl = escapeHtml(verifyUrl);
+  return buildEmailShell({
+    logoUrl,
+    eyebrow: "Account verification",
+    title: "Verify your email to unlock ZAKI",
+    preheader: "One quick step and your workspace is ready.",
+    intro:
+      "You are one step away. Confirm your email to activate your account and start chatting with your personal assistant.",
+    primaryLabel: "Verify email address",
+    primaryUrl: verifyUrl,
+    bodyHtml: `
+      <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:12px 13px;">
+        <p style="margin:0;font-size:13px;line-height:1.65;color:#7a5f49;">
+          This verification link expires in <strong>${escapeHtml(expiryText)}</strong>.
+        </p>
+      </div>
+      <p style="margin:0 0 10px 0;font-size:13px;line-height:1.7;color:#6a5847;">If the button does not open, use this link:</p>
+      <p style="margin:0;font-size:12px;line-height:1.7;color:#6a5847;word-break:break-all;">
+        <a href="${safeUrl}" style="color:#c75236;text-decoration:underline;">${safeUrl}</a>
+      </p>
+    `,
+    footerHtml: `
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#7f6b59;">
+        If this was not you, you can safely ignore this email. Need help? Reach us at
+        <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+      </p>
+    `,
+  });
 }
 
 function buildPasswordResetEmailHtml({ resetUrl, logoUrl }) {
   const expiryText = `${Math.max(1, Number(ZAKI_RESET_TTL_MINUTES || 30))} minutes`;
-  return `
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Reset your ZAKI password</title>
-  </head>
-  <body style="margin:0;padding:0;background:#f5f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 5% 0%,#fff7ec 0%,#f4ece1 42%,#f1e8dd 100%);padding:28px 14px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e7ddd1;border-radius:20px;overflow:hidden;box-shadow:0 18px 44px rgba(38,22,7,0.10);">
-            <tr>
-              <td style="padding:24px 28px 16px 28px;background:linear-gradient(135deg,#fff8ef 0%,#f1e6d8 100%);border-bottom:1px solid #eadfce;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                  <tr>
-                    <td style="vertical-align:middle;">
-                      <div style="height:40px;width:40px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;border:1px solid #eadfce;">
-                        <img src="${logoUrl}" width="26" height="26" alt="ZAKI" style="display:block;width:26px;height:26px;" />
-                      </div>
-                    </td>
-                    <td style="padding-left:10px;vertical-align:middle;">
-                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
-                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">Account Security</div>
-                    </td>
-                  </tr>
-                </table>
-                <h1 style="margin:14px 0 0 0;font-size:25px;line-height:1.25;color:#231b14;font-weight:650;">Let's get you back in</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 28px 10px 28px;">
-                <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#3b3026;">
-                  Forgot your password? No stress. Tap below to set a fresh one and jump back into your workspace.
-                </p>
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:22px 0 20px 0;">
-                  <tr>
-                    <td style="border-radius:12px;background:linear-gradient(135deg,#df6847 0%,#c75236 100%);box-shadow:0 8px 20px rgba(199,82,54,0.35);">
-                      <a href="${resetUrl}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;">
-                        Reset My Password
-                      </a>
-                    </td>
-                  </tr>
-                </table>
-                <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:10px 12px;">
-                  <p style="margin:0;font-size:13px;line-height:1.6;color:#7a5f49;">
-                    This reset link expires in <strong>${expiryText}</strong>.
-                  </p>
-                </div>
-                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.7;color:#6a5847;">
-                  If the button does not open, use this link:
-                </p>
-                <p style="margin:0;font-size:12px;line-height:1.7;color:#6a5847;word-break:break-all;">
-                  <a href="${resetUrl}" style="color:#d86a4d;text-decoration:underline;">${resetUrl}</a>
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
-                <p style="margin:0;font-size:12px;line-height:1.55;color:#7f6b59;">
-                  If you did not request a reset, you can ignore this email. Need help? Reach us at <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-  `.trim();
+  const safeUrl = escapeHtml(resetUrl);
+  return buildEmailShell({
+    logoUrl,
+    eyebrow: "Account security",
+    title: "Reset your ZAKI password",
+    preheader: "Use this secure link to choose a new password.",
+    intro:
+      "No stress. Use the secure link below to set a new password and get back to your workspace.",
+    primaryLabel: "Set new password",
+    primaryUrl: resetUrl,
+    bodyHtml: `
+      <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:12px 13px;">
+        <p style="margin:0;font-size:13px;line-height:1.65;color:#7a5f49;">
+          This reset link expires in <strong>${escapeHtml(expiryText)}</strong>.
+        </p>
+      </div>
+      <p style="margin:0 0 10px 0;font-size:13px;line-height:1.7;color:#6a5847;">If the button does not open, use this link:</p>
+      <p style="margin:0;font-size:12px;line-height:1.7;color:#6a5847;word-break:break-all;">
+        <a href="${safeUrl}" style="color:#c75236;text-decoration:underline;">${safeUrl}</a>
+      </p>
+    `,
+    footerHtml: `
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#7f6b59;">
+        If you did not request this reset, you can ignore this email. Need help? Reach us at
+        <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+      </p>
+    `,
+  });
 }
 
 async function sendVerificationEmail(email, token) {
-  const verifyBase = getVerificationBaseUrl();
-  const verifyUrl = `${verifyBase}/verify?token=${token}`;
+  const verifyUrl = buildVerificationUrl(token);
   const logoUrl = getEmailLogoUrl();
-  const subject = "You are one click away from ZAKI";
+  const subject = "Verify your email to start with ZAKI";
   const text = [
     "Welcome to ZAKI.",
-    "Your workspace is ready.",
-    "One quick tap to activate your account:",
+    "Confirm your email to activate your account:",
     verifyUrl,
     "",
     `This link expires in ${Math.max(1, Number(ZAKI_VERIFY_TTL_MINUTES || 60))} minutes.`,
@@ -2774,20 +2787,12 @@ async function sendVerificationEmail(email, token) {
 }
 
 async function sendPasswordResetEmail(email, token) {
-  const baseUrl =
-    ZAKI_APP_URL ||
-    ZAKI_PUBLIC_URL ||
-    `http://localhost:${PORT}`;
-  const normalizedBase = baseUrl.replace(/\/+$/, "");
-  const resetBase = normalizedBase.endsWith("/api")
-    ? normalizedBase.replace(/\/api$/, "")
-    : normalizedBase;
-  const resetUrl = `${resetBase}/reset?token=${token}`;
+  const resetUrl = buildPasswordResetUrl(token);
   const logoUrl = getEmailLogoUrl();
-  const subject = "Password reset for your ZAKI account";
+  const subject = "Reset your ZAKI password";
   const text = [
     "Forgot your password? No problem.",
-    "Use this link to set a new password and get back into ZAKI:",
+    "Use this secure link to set a new password and get back into ZAKI:",
     resetUrl,
     "",
     `This reset link expires in ${Math.max(1, Number(ZAKI_RESET_TTL_MINUTES || 30))} minutes.`,
@@ -2854,66 +2859,45 @@ function buildAccessCodePurchaseEmailHtml({
   durationDays,
   pricingUrl,
 }) {
-  return `
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Your ZAKI access code</title>
-  </head>
-  <body style="margin:0;padding:0;background:#f5f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f1914;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:radial-gradient(circle at 5% 0%,#fff7ec 0%,#f4ece1 42%,#f1e8dd 100%);padding:28px 14px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e7ddd1;border-radius:20px;overflow:hidden;box-shadow:0 18px 44px rgba(38,22,7,0.10);">
-            <tr>
-              <td style="padding:24px 28px 16px 28px;background:linear-gradient(135deg,#fff8ef 0%,#f1e6d8 100%);border-bottom:1px solid #eadfce;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                  <tr>
-                    <td style="vertical-align:middle;">
-                      <div style="height:40px;width:40px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;border:1px solid #eadfce;">
-                        <img src="${logoUrl}" width="26" height="26" alt="ZAKI" style="display:block;width:26px;height:26px;" />
-                      </div>
-                    </td>
-                    <td style="padding-left:10px;vertical-align:middle;">
-                      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9a7e62;font-weight:700;">ZAKI</div>
-                      <div style="font-size:13px;line-height:1.2;color:#705a46;font-weight:500;">Access Code Purchase</div>
-                    </td>
-                  </tr>
-                </table>
-                <h1 style="margin:14px 0 0 0;font-size:25px;line-height:1.25;color:#231b14;font-weight:650;">Your access code is ready</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 28px 10px 28px;">
-                <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#3b3026;">
-                  Thanks for supporting ZAKI. Use this code to unlock <strong>${durationDays} days</strong> of access.
-                </p>
-                <div style="margin:0 0 14px 0;border-radius:12px;border:1px solid #f1e2d5;background:#fff8f1;padding:16px 12px;text-align:center;">
-                  <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#8e735b;font-weight:700;margin-bottom:6px;">Access Code</div>
-                  <div style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:28px;letter-spacing:0.08em;color:#332519;font-weight:700;">${code}</div>
-                </div>
-                <p style="margin:0;font-size:13px;line-height:1.7;color:#6a5847;">
-                  Campaign: <strong>${campaign}</strong><br />
-                  Redeem inside your pricing page: <a href="${pricingUrl}" style="color:#d86a4d;text-decoration:underline;">${pricingUrl}</a>
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
-                <p style="margin:0;font-size:12px;line-height:1.55;color:#7f6b59;">
-                  Need help? Reach us at <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-  `.trim();
+  const safeCode = escapeHtml(code);
+  const safeCampaign = escapeHtml(campaign);
+  const safePricingUrl = escapeHtml(pricingUrl);
+  const safeDuration = escapeHtml(durationDays);
+  return buildEmailShell({
+    logoUrl,
+    eyebrow: "Gift code purchase",
+    title: "Your ZAKI gift code is ready",
+    preheader: "Share it with someone you care about, or keep it for yourself.",
+    intro: `Thanks for supporting ZAKI. This single-use code unlocks ${safeDuration} days of access.`,
+    primaryLabel: "Open pricing to redeem",
+    primaryUrl: pricingUrl,
+    bodyHtml: `
+      <div style="margin:0 0 14px 0;border-radius:14px;border:1px solid #f1e2d5;background:#fff8f1;padding:16px 12px;text-align:center;">
+        <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#8e735b;font-weight:700;margin-bottom:6px;">Your code</div>
+        <div style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:30px;letter-spacing:0.08em;color:#332519;font-weight:700;">${safeCode}</div>
+      </div>
+      <div style="border-radius:12px;border:1px solid #f1e2d5;background:#fffdf8;padding:12px;">
+        <p style="margin:0;font-size:13px;line-height:1.7;color:#6a5847;">
+          Pack: <strong>${safeCampaign}</strong><br />
+          Redemption page: <a href="${safePricingUrl}" style="color:#c75236;text-decoration:underline;">${safePricingUrl}</a>
+        </p>
+      </div>
+      <div style="margin-top:12px;border-radius:12px;border:1px solid #f1e2d5;background:#fffefb;padding:12px;">
+        <p style="margin:0 0 8px 0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#8e735b;font-weight:700;">How to redeem</p>
+        <ol style="margin:0;padding-left:18px;color:#6a5847;font-size:13px;line-height:1.7;">
+          <li>Open the pricing page.</li>
+          <li>Paste this code in the access-code field.</li>
+          <li>Tap apply and enjoy full access.</li>
+        </ol>
+      </div>
+    `,
+    footerHtml: `
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#7f6b59;">
+        You can keep this code for yourself or share it with someone you want to help. Need help? Reach us at
+        <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+      </p>
+    `,
+  });
 }
 
 async function sendAccessCodePurchaseEmail({
@@ -2926,12 +2910,12 @@ async function sendAccessCodePurchaseEmail({
   const appBase = appUrl.endsWith("/api") ? appUrl.replace(/\/api$/, "") : appUrl;
   const pricingUrl = `${appBase.replace(/\/+$/, "")}/pricing`;
   const logoUrl = getEmailLogoUrl();
-  const subject = "Your ZAKI access code is ready";
+  const subject = "Your ZAKI gift code is inside";
   const text = [
     "Thanks for supporting ZAKI.",
     `Your access code: ${code}`,
-    `Campaign: ${campaign}`,
-    `Duration: ${durationDays} days`,
+    `Pack: ${campaign}`,
+    `Duration: ${durationDays} days (single use)`,
     `Redeem here: ${pricingUrl}`,
     "",
     "Need help? info@novanuggets.com",
@@ -3080,14 +3064,20 @@ const signupHandler = async (req, res) => {
     }
 
     const { token } = await issueVerificationToken(userId);
-    const verificationLink = await sendVerificationEmail(
-      normalizedEmail,
-      token
-    );
+    const verificationLink = buildVerificationUrl(token);
+    let verificationEmailDelivered = false;
+    try {
+      await sendVerificationEmail(normalizedEmail, token);
+      verificationEmailDelivered = true;
+    } catch (emailError) {
+      console.error("[ZAKI] Verification email delivery failed:", emailError);
+    }
 
     res.status(200).json({
       success: true,
-      message: "Check your email to verify your account.",
+      message: verificationEmailDelivered
+        ? "Check your email to verify your account."
+        : "Account created. Verification email delivery is delayed. Please try again shortly.",
       verificationLink: ZAKI_INCLUDE_VERIFY_LINK ? verificationLink : undefined,
     });
   } catch (error) {
@@ -3119,20 +3109,20 @@ const passwordResetRequestHandler = async (req, res) => {
       normalizedEmail,
     ]);
 
+    let resetLink;
     if (user) {
       const { token } = await issuePasswordResetToken(user.id);
-      const resetLink = await sendPasswordResetEmail(normalizedEmail, token);
-      res.status(200).json({
-        success: true,
-        message: "If the account exists, a reset link has been sent.",
-        resetLink: ZAKI_INCLUDE_VERIFY_LINK ? resetLink : undefined,
-      });
-      return;
+      resetLink = buildPasswordResetUrl(token);
+      try {
+        await sendPasswordResetEmail(normalizedEmail, token);
+      } catch (emailError) {
+        console.error("[ZAKI] Password reset email delivery failed:", emailError);
+      }
     }
-
     res.status(200).json({
       success: true,
       message: "If the account exists, a reset link has been sent.",
+      resetLink: ZAKI_INCLUDE_VERIFY_LINK && resetLink ? resetLink : undefined,
     });
   } catch (error) {
     console.error("[ZAKI] Password reset request error:", error);
