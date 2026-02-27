@@ -14,6 +14,9 @@ cp .env.example .env
 - `DATABASE_URL` (ex: `postgres://user:pass@localhost:5433/zaki`)
 - `NOVA_TYP_BASE_URL` (ex: `https://typ.novanuggets.com`)
 - `NOVA_TYP_API_KEY` (admin API key from NOVA.TYP)
+- `ZAKI_AGENT_BACKEND_ENABLED` (`true` to enable Nullclaw adapter route)
+- `NULLCLAW_BASE_URL` (ex: `https://agent-staging.zaki.com`)
+- `NULLCLAW_INTERNAL_TOKEN` (must match Nullclaw `X-Internal-Token` allowlist)
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
 - `ZAKI_BILLING_PROVIDER` (`stripe`, `creem`, `paddle`, `external`, or `none`; default `stripe`)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
@@ -90,6 +93,7 @@ npm run migrate:sqlite
 - `PATCH /api/admin/access-codes/:id` — update/disable access code (admin auth required)
 - `POST /api/telemetry/client-error` — ingest frontend runtime errors for production observability
 - `GET /api/admin/telemetry/memory` — inspect memory pipeline telemetry and recent alerts (admin auth required)
+- `POST /api/agent/chat/stream` — authenticated SSE proxy to Nullclaw `/api/v1/chat/stream` (requires `ZAKI_AGENT_BACKEND_ENABLED=true`)
 
 Billing endpoints may return `503` with code `billing_unavailable` when Stripe is not configured in the runtime environment.
 

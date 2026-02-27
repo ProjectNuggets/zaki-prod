@@ -523,20 +523,29 @@ export function ChatArea() {
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
-
-    console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
-    const response = await apiRequest(
-      `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
-      {
-        method: "POST",
-        body: JSON.stringify({
+    const isZakiAgentSpace =
+      String(workspaceSlug || "").trim().toLowerCase() === "zaki-agent";
+    const requestPath = isZakiAgentSpace
+      ? "/api/agent/chat/stream"
+      : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
+    const requestBody = isZakiAgentSpace
+      ? {
+          message,
+          threadId: threadSlug,
+          spaceId: workspaceSlug,
+        }
+      : {
           message,
           mode: queryModeEnabled ? "query" : "chat",
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
-        }),
-        signal,
-      }
-    );
+        };
+
+    console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
+    const response = await apiRequest(requestPath, {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+      signal,
+    });
 
     console.log(`[Chat] Response status: ${response.status}`);
 
@@ -583,8 +592,29 @@ export function ChatArea() {
     }
 
     const readPayloadChunk = (
-      payload: Record<string, unknown>
+      payload: Record<string, unknown>,
+      eventType?: string
     ): { done?: boolean; chunk?: string } => {
+      if (eventType === "done") {
+        return { done: true };
+      }
+      if (eventType === "error") {
+        const msg =
+          (typeof payload.message === "string" && payload.message) ||
+          (typeof payload.error === "string" && payload.error) ||
+          "Agent stream failed.";
+        throw new Error(msg);
+      }
+
+      if (eventType === "memory_used" && Array.isArray(payload.sources)) {
+        updateAssistantSources(
+          threadSlug,
+          assistantId,
+          payload.sources as Array<{ id: string; content: string; type: string }>
+        );
+        return {};
+      }
+
       if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
@@ -603,6 +633,7 @@ export function ChatArea() {
       }
 
       const chunk =
+        (typeof payload.delta === "string" && payload.delta) ||
         (typeof payload.textResponse === "string" && payload.textResponse) ||
         (typeof payload.content === "string" && payload.content) ||
         (typeof payload.message === "string" && payload.message) ||
@@ -674,10 +705,15 @@ export function ChatArea() {
       const normalized = block.replace(/\r/g, "");
       const lines = normalized.split("\n");
       const dataLines: string[] = [];
+      let eventType = "";
 
       for (const rawLine of lines) {
         const line = rawLine.trimEnd();
         if (!line || line.startsWith(":")) continue;
+        if (line.startsWith("event:")) {
+          eventType = line.slice(6).trim();
+          continue;
+        }
         if (line.startsWith("data:")) {
           dataLines.push(line.slice(5).trimStart());
           continue;
@@ -687,7 +723,21 @@ export function ChatArea() {
       }
 
       if (dataLines.length > 0) {
-        processRawData(dataLines.join("\n"));
+        const payloadText = dataLines.join("\n");
+        try {
+          const payload = JSON.parse(payloadText) as Record<string, unknown>;
+          const result = readPayloadChunk(payload, eventType);
+          if (result.done) {
+            streamClosed = true;
+            return;
+          }
+          if (result.chunk) {
+            appendChunk(result.chunk);
+          }
+          return;
+        } catch {
+          processRawData(payloadText);
+        }
       }
     };
 

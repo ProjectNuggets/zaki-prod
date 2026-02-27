@@ -114,6 +114,12 @@ const PORT = Number(process.env.PORT || 8787);
 const isProduction = process.env.NODE_ENV === "production";
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
+const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
+const NULLCLAW_INTERNAL_TOKEN = (process.env.NULLCLAW_INTERNAL_TOKEN || "").trim();
+const ZAKI_AGENT_BACKEND_ENABLED =
+  String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
+    .toLowerCase()
+    .trim() === "true";
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
@@ -1226,6 +1232,11 @@ function getApiBase() {
   if (!NOVA_TYP_BASE_URL) return null;
   const normalized = NOVA_TYP_BASE_URL.replace(/\/+$/, "");
   return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
+}
+
+function getNullclawBase() {
+  if (!NULLCLAW_BASE_URL) return null;
+  return NULLCLAW_BASE_URL.replace(/\/+$/, "");
 }
 
 async function novaAdminRequest(path, options = {}) {
@@ -5155,6 +5166,98 @@ app.post(
   streamChatLimiter,
   express.json({ limit: "10mb" }),
   streamChatHandler
+);
+
+/**
+ * Proxy authenticated ZAKI agent chat traffic to Nullclaw.
+ * Route: POST /api/agent/chat/stream
+ */
+const agentChatStreamHandler = async (req, res) => {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+
+  try {
+    const nullclawBase = getNullclawBase();
+    if (!nullclawBase) {
+      return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
+    }
+    if (!NULLCLAW_INTERNAL_TOKEN) {
+      return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
+    }
+
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+
+    const payload = req.body;
+    const originalMessage = extractStreamMessage(payload);
+    if (!originalMessage) {
+      return res.status(400).json({ error: "Message is required." });
+    }
+    if (originalMessage.length > MAX_STREAM_MESSAGE_CHARS) {
+      return res.status(400).json({
+        error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
+      });
+    }
+
+    const userId =
+      String(authResult?.zakiUser?.id || "").trim() ||
+      normalizeEmail(String(authResult?.email || ""));
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user." });
+    }
+
+    const targetUrl = `${nullclawBase}/api/v1/chat/stream`;
+    const upstreamPayload = {
+      ...(payload && typeof payload === "object" ? payload : {}),
+      message: originalMessage,
+    };
+
+    const upstream = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
+        "X-Zaki-User-Id": userId,
+        "X-Request-Id": String(req.requestId || crypto.randomUUID()),
+      },
+      body: JSON.stringify(upstreamPayload),
+    });
+
+    res.status(upstream.status);
+    copyResponseHeaders(upstream, res);
+
+    if (!upstream.body) {
+      if (upstream.status === 409 || upstream.status === 503) {
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        const retryMessage =
+          upstream.status === 409
+            ? "agent is handling another request for this user, retry shortly"
+            : "agent is draining, retry shortly";
+        res.end(
+          `event: error\ndata: ${JSON.stringify({
+            code: upstream.status === 409 ? "ownership_lock_conflict" : "gateway_draining",
+            message: retryMessage,
+          })}\n\nevent: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`
+        );
+        return;
+      }
+      res.end();
+      return;
+    }
+
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (error) {
+    console.error("[Agent] Stream error:", error);
+    res.status(500).json({ error: error?.message || "Agent stream failed." });
+  }
+};
+
+app.post(
+  "/api/agent/chat/stream",
+  streamChatLimiter,
+  express.json({ limit: "10mb" }),
+  agentChatStreamHandler
 );
 
 // =============================================================================
