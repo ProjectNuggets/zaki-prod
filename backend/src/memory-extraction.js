@@ -52,6 +52,13 @@ First classify the message as one of:
 
 Only extract memories if classification is user_statement. Otherwise return empty memories.
 
+Extraction quality rules:
+- Each memory must be atomic: exactly one fact, preference, goal, emotion, event, relationship, or struggle per item.
+- Split compound statements into separate memories.
+- Do NOT output vague references such as "this", "that", "these", "those", "all of those", "that place", or "the above".
+- Do NOT merge preferences with plans, facts, or locations in one memory.
+- Prefer direct canonical phrasing such as "Likes travel", "Plans to travel to Dubai", "From Damascus", "Lives in Hamburg".
+
 Return JSON: {"classification": "...", "memories": [{"content": "...", "type": "...", "confidence": 0.9, "conflict_key": "...", "polarity": "positive"}]}
 
 Types:
@@ -174,7 +181,10 @@ function cleanPreferenceValue(value) {
     .replace(/[.,!?;:]+$/g, "")
     .trim();
   if (!normalized) return "";
-  return normalized.replace(/^to\s+/i, "").trim();
+  return normalized
+    .replace(/^to\s+/i, "")
+    .replace(/\s+(?:and|but)\s+i\s+(?:am|m|live|work|study|plan|want|love|like|need|feel)\b.*$/i, "")
+    .trim();
 }
 
 function normalizePreferenceMemory(content, polarity) {
@@ -225,6 +235,217 @@ function normalizePreferenceMemory(content, polarity) {
     value,
     polarity: resolvedPolarity,
   };
+}
+
+function cleanStructuredValue(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/[.,!?;:]+$/g, "")
+    .replace(/\s+(?:and|but)\s+i\s+(?:am|m|live|work|study|plan|want|love|like|need|feel)\b.*$/i, "")
+    .trim();
+}
+
+function splitListValues(value) {
+  return String(value || "")
+    .split(/\s*,\s*|\s+and\s+/i)
+    .map((part) => cleanStructuredValue(part))
+    .filter(Boolean);
+}
+
+function normalizeFactMemory(content) {
+  const raw = String(content || "").replace(/\s+/g, " ").trim();
+  if (!raw) {
+    return {
+      content: raw,
+      conflictKey: null,
+    };
+  }
+
+  const patterns = [
+    {
+      regex: /^(?:i\s+am\s+from|i'?m\s+from|im\s+from|from)\s+(.+)$/i,
+      build: (value) => ({ content: `From ${value}`, conflictKey: null }),
+    },
+    {
+      regex: /^(?:i\s+live\s+in|i'?m\s+living\s+in|im\s+living\s+in|live in|lives in)\s+(.+)$/i,
+      build: (value) => ({
+        content: `Lives in ${value}`,
+        conflictKey: canonicalizeConflictKey("identity:location"),
+      }),
+    },
+    {
+      regex: /^(?:i\s+work\s+(?:at|for)|works?\s+(?:at|for)|my job is)\s+(.+)$/i,
+      build: (value) => ({
+        content: `Works at ${value}`,
+        conflictKey: canonicalizeConflictKey("identity:occupation"),
+      }),
+    },
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern.regex);
+    if (!match) continue;
+    const value = cleanStructuredValue(match[1] || "");
+    if (!value) break;
+    return pattern.build(value);
+  }
+
+  return {
+    content: raw,
+    conflictKey: null,
+  };
+}
+
+function normalizeGoalMemory(content) {
+  const raw = String(content || "").replace(/\s+/g, " ").trim();
+  if (!raw) return { content: raw };
+
+  const patterns = [
+    {
+      regex:
+        /^(?:i\s+(?:plan|plans|am planning|m planning)\s+to\s+travel\s+to|plans?\s+to\s+travel\s+to|travel to)\s+(.+)$/i,
+      build: (value) => `Plans to travel to ${value}`,
+    },
+    {
+      regex:
+        /^(?:i\s+(?:want|would like|d like)\s+to\s+(?:travel|visit|go)\s+to|wants?\s+to\s+(?:travel|visit|go)\s+to)\s+(.+)$/i,
+      build: (value) => `Wants to visit ${value}`,
+    },
+    {
+      regex:
+        /^(?:i\s+(?:want|would like|d like)\s+to\s+learn|wants?\s+to\s+learn)\s+(.+)$/i,
+      build: (value) => `Wants to learn ${value}`,
+    },
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern.regex);
+    if (!match) continue;
+    const value = cleanStructuredValue(match[1] || "");
+    if (!value) break;
+    return { content: pattern.build(value) };
+  }
+
+  return { content: raw };
+}
+
+const LOW_SIGNAL_MEMORY_VALUES = [
+  "all of those",
+  "those",
+  "these",
+  "that",
+  "this",
+  "the above",
+  "that place",
+  "those cities",
+  "these cities",
+  "هؤلاء",
+  "هذي",
+  "هذه",
+  "هذا",
+  "تلك",
+  "هاي",
+  "كلهم",
+];
+
+function containsUnresolvedReference(value) {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return false;
+  return LOW_SIGNAL_MEMORY_VALUES.some((token) => normalized === token || normalized.includes(token));
+}
+
+function countClauseSignals(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) return 0;
+  const signals = [
+    /\blikes?\b/g,
+    /\bdislikes?\b/g,
+    /\bloves?\b/g,
+    /\benjoys?\b/g,
+    /\bprefers?\b/g,
+    /\bplans?\b/g,
+    /\bwants?\b/g,
+    /\btravels?\b/g,
+    /\bvisits?\b/g,
+    /\blives?\b/g,
+    /\bfrom\b/g,
+    /\bworks?\b/g,
+    /\bstudies?\b/g,
+    /\bfeels?\b/g,
+    /\bname is\b/g,
+  ];
+  return signals.reduce((count, pattern) => count + (normalized.match(pattern)?.length || 0), 0);
+}
+
+function isCompoundMemory(memory) {
+  const content = String(memory?.content || "").replace(/\s+/g, " ").trim();
+  if (!content) return false;
+  if (!/\b(?:and|but)\b|,/.test(content)) return false;
+  return countClauseSignals(content) > 1;
+}
+
+function isLowQualityExtractedMemory(memory) {
+  const content = String(memory?.content || "").replace(/\s+/g, " ").trim();
+  if (!content) return true;
+  if (content.length > 140) return true;
+  if (containsUnresolvedReference(content)) return true;
+  if (isCompoundMemory(memory)) return true;
+
+  if (memory?.type === "preference") {
+    const normalized = normalizePreferenceMemory(content, memory?.polarity);
+    if (!normalized.value || containsUnresolvedReference(normalized.value)) return true;
+  }
+
+  return false;
+}
+
+function normalizeExtractedMemory(memory) {
+  const base = {
+    content: String(memory?.content || "").replace(/\s+/g, " ").trim(),
+    type: memory?.type,
+    confidence: memory?.confidence || 0.8,
+    conflictKey: canonicalizeConflictKey(memory?.conflictKey || memory?.conflict_key) || null,
+    polarity: memory?.polarity || null,
+  };
+
+  if (!base.content) return null;
+
+  if (base.type === "preference") {
+    const normalized = normalizePreferenceMemory(base.content, base.polarity);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      conflictKey:
+        canonicalizeConflictKey(
+          base.conflictKey || (normalized.value ? `preference:${normalized.value}` : "")
+        ) || null,
+      polarity: normalized.polarity || base.polarity || "positive",
+    };
+  }
+
+  if (base.type === "fact") {
+    const normalized = normalizeFactMemory(base.content);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      conflictKey: normalized.conflictKey || base.conflictKey || null,
+      polarity: base.polarity || "neutral",
+    };
+  }
+
+  if (base.type === "goal") {
+    const normalized = normalizeGoalMemory(base.content);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      polarity: base.polarity || "neutral",
+    };
+  }
+
+  return base;
 }
 
 function shouldDebug() {
@@ -409,16 +630,14 @@ export async function extractFacts(message) {
 
   const classification = llmClassification || heuristicClass;
 
-  // LLM-first: only run pattern fallback if LLM returns nothing
   let patternMemories = [];
   const shouldRunPatterns =
-    llmMemories.length === 0 &&
-    (classification === "user_statement" || heuristicClass === "user_statement");
+    classification === "user_statement" || heuristicClass === "user_statement";
   if (shouldRunPatterns) {
     const skipTranslation = llmMemories.some((m) => m.conflictKey);
     patternMemories = await extractWithPatterns(message, {
       skipTranslation,
-      simpleOnly: true,
+      simpleOnly: false,
     });
   }
 
@@ -435,10 +654,10 @@ export async function extractFacts(message) {
     );
   }
 
-  if (llmMemories.length === 0) return dedupeExtractedMemories(patternMemories);
-  if (patternMemories.length === 0) return dedupeExtractedMemories(llmMemories);
+  if (llmMemories.length === 0) return finalizeExtractedMemories(patternMemories);
+  if (patternMemories.length === 0) return finalizeExtractedMemories(llmMemories);
 
-  const merged = dedupeExtractedMemories([...llmMemories, ...patternMemories]);
+  const merged = finalizeExtractedMemories([...llmMemories, ...patternMemories]);
   if (shouldDebug()) {
     console.log(`[Memory] Extracted ${merged.length} total memories`);
   }
@@ -486,6 +705,12 @@ function dedupeExtractedMemories(memories) {
   return [...byKey.values(), ...passthrough];
 }
 
+function finalizeExtractedMemories(memories) {
+  return dedupeExtractedMemories(
+    (memories || []).filter((memory) => !isLowQualityExtractedMemory(memory))
+  );
+}
+
 async function extractWithLLM(message) {
   const { content, transport } = await callNovaTypChat({
     messages: [
@@ -514,30 +739,10 @@ async function extractWithLLM(message) {
     return { classification: null, memories: [] };
   }
   
-  const memories = (validated.data.memories || []).map((m) => {
-    const base = {
-      content: m.content,
-      type: m.type,
-      confidence: m.confidence || 0.8,
-      conflictKey: canonicalizeConflictKey(m.conflict_key) || null,
-      polarity: m.polarity || null,
-    };
-
-    if (m.type !== "preference") {
-      return base;
-    }
-
-    const normalized = normalizePreferenceMemory(base.content, base.polarity);
-    return {
-      ...base,
-      content: normalized.content || base.content,
-      conflictKey:
-        canonicalizeConflictKey(
-          base.conflictKey || (normalized.value ? `preference:${normalized.value}` : "")
-        ) || null,
-      polarity: normalized.polarity || base.polarity || "positive",
-    };
-  });
+  const memories = (validated.data.memories || [])
+    .map((m) => normalizeExtractedMemory(m))
+    .filter(Boolean)
+    .filter((memory) => !isLowQualityExtractedMemory(memory));
 
   return {
     classification: validated.data.classification || null,
@@ -601,11 +806,26 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
       });
     }
   }
+
+  const originValues = collectPatternValues(
+    message,
+    /(?:i\s+am\s+from|i'?m\s+from|im\s+from)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+(?:i\s+|live|work|study|plan|want|love|like)\b|[.,!?]|$)/gi
+  );
+  for (const rawValue of originValues) {
+    const value = cleanStructuredValue(rawValue);
+    if (!value) continue;
+    facts.push({
+      content: `From ${value}`,
+      type: "fact",
+      confidence: 0.88,
+      polarity: "neutral",
+    });
+  }
   
   // Pattern: I love/like/enjoy ... (supports repeated clauses)
   const likeValues = collectPatternValues(
     message,
-    /(?:i love|i like|i enjoy|i prefer|i(?:'m| am) into)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:love|like|enjoy|prefer|(?:am|\'m)\s+into)\b|[.,!?]|$)/gi
+    /(?:i love|i like|i enjoy|i prefer|i(?:'m| am) into)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:love|like|enjoy|prefer|(?:am|\'m)\s+into|hate|don't like|do not like|dislike)\b|[.,!?]|$)/gi
   );
   for (const rawValue of likeValues) {
     const value = cleanPreferenceValue(rawValue);
@@ -624,7 +844,7 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
   // Pattern: I hate/don't like/dislike ... (supports repeated clauses)
   const dislikeValues = collectPatternValues(
     message,
-    /(?:i hate|i don't like|i do not like|i dislike)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:hate|don't like|do not like|dislike)\b|[.,!?]|$)/gi
+    /(?:i hate|i don't like|i do not like|i dislike)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:hate|don't like|do not like|dislike|love|like|enjoy|prefer|(?:am|\'m)\s+into)\b|[.,!?]|$)/gi
   );
   for (const rawValue of dislikeValues) {
     const value = cleanPreferenceValue(rawValue);
@@ -666,9 +886,13 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     });
   }
   
-  const liveMatch = message.match(/(?:i live in|i'm from|i'm living in) (.+?)(?:\.|,|now)/i);
-  if (liveMatch) {
-    const value = liveMatch[1].trim();
+  const liveValues = collectPatternValues(
+    message,
+    /(?:i\s+live\s+in|i'?m\s+living\s+in|im\s+living\s+in|(?:^|\s)live in)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+(?:i\s+|live|work|study|plan|want|love|like)\b|[.,!?]|$)/gi
+  );
+  for (const rawValue of liveValues) {
+    const value = cleanStructuredValue(rawValue);
+    if (!value) continue;
     facts.push({
       content: `Lives in ${value}`,
       type: "fact",
@@ -676,6 +900,23 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
       conflictKey: canonicalizeConflictKey("identity:location"),
       polarity: "neutral",
     });
+  }
+
+  if (!simpleOnly) {
+    const travelGoalValues = collectPatternValues(
+      message,
+      /(?:i\s+(?:plan|am planning|m planning)\s+to\s+travel\s+to|plan\s+to\s+travel\s+to|i\s+(?:want|would like|d like)\s+to\s+(?:travel|visit|go)\s+to|want\s+to\s+(?:travel|visit|go)\s+to|i\s+plan\s+to\s+visit|plan\s+to\s+visit)\s+([^.!?]+?)(?=\s+(?:and|but)\s+(?:i\s+am|i'?m|im|live|work|study|love|like)\b|[.!?]|$)/gi
+    );
+    for (const rawValue of travelGoalValues) {
+      for (const destination of splitListValues(rawValue)) {
+        facts.push({
+          content: `Plans to travel to ${destination}`,
+          type: "goal",
+          confidence: 0.86,
+          polarity: "neutral",
+        });
+      }
+    }
   }
 
   // Arabic fallback patterns

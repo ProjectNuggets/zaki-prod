@@ -106,6 +106,8 @@
     },
     "actions": {
       "createSpace": "إنشاء مساحة",
+      "expandSidebar": "توسيع الشريط الجانبي",
+      "viewSpaces": "عرض المساحات",
       "newChat": "محادثة جديدة"
     },
     "empty": {
@@ -382,6 +384,29 @@
     "spaceSettingsAria": "إعدادات {{title}}",
     "deleteSpaceAria": "حذف {{title}}",
     "descriptionPlaceholder": "أضف وصفًا مختصرًا..."
+  },
+  "createSpaceModal": {
+    "ariaLabel": "إنشاء مساحة جديدة",
+    "title": "إنشاء مساحة جديدة",
+    "subtitle": "نظّم المحادثات والملفات والأفكار في مكان واحد.",
+    "closeAria": "إغلاق إنشاء المساحة",
+    "fields": {
+      "name": "اسم المساحة",
+      "description": "الوصف",
+      "instructions": "التعليمات",
+      "pinnedDocuments": "المستندات المثبتة",
+      "uploadDocuments": "ارفع مستندات لهذه المساحة"
+    },
+    "placeholders": {
+      "name": "بحث تسويقي",
+      "description": "صف الغرض من هذه المساحة",
+      "instructions": "أضف توجيهات للمساعد داخل هذه المساحة"
+    },
+    "removeFileAria": "إزالة {{name}}",
+    "actions": {
+      "cancel": "إلغاء",
+      "create": "إنشاء مساحة"
+    }
   },
   "billing": {
     "upgradeTitle": "اختر خطتك",

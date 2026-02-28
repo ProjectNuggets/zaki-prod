@@ -106,6 +106,8 @@
     },
     "actions": {
       "createSpace": "Create Space",
+      "expandSidebar": "Expand sidebar",
+      "viewSpaces": "View spaces",
       "newChat": "New chat"
     },
     "empty": {
@@ -379,6 +381,29 @@
     "spaceSettingsAria": "{{title}} settings",
     "deleteSpaceAria": "Delete {{title}}",
     "descriptionPlaceholder": "Add a short description..."
+  },
+  "createSpaceModal": {
+    "ariaLabel": "Create new space",
+    "title": "Create new space",
+    "subtitle": "Organize chats, files, and ideas in one place.",
+    "closeAria": "Close create space",
+    "fields": {
+      "name": "Space name",
+      "description": "Description",
+      "instructions": "Instructions",
+      "pinnedDocuments": "Pinned documents",
+      "uploadDocuments": "Upload documents for this space"
+    },
+    "placeholders": {
+      "name": "Marketing research",
+      "description": "Describe what this space is for",
+      "instructions": "Add guidance for the assistant in this space"
+    },
+    "removeFileAria": "Remove {{name}}",
+    "actions": {
+      "cancel": "Cancel",
+      "create": "Create space"
+    }
   },
   "billing": {
     "upgradeTitle": "Choose your plan",

@@ -1665,7 +1665,6 @@ export function ChatArea() {
           ref={readyRef}
           onStartChat={handleStartChat}
           onSelectExample={handleExampleSelect}
-          activationProgress={activationProgress}
         />
       );
     }

@@ -943,8 +943,8 @@ export function Sidebar() {
               onClick={() => setCollapsed(false)}
               onMouseUp={blurButtonOnPointerClick}
               type="button"
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
+              title={t("sidebar.actions.expandSidebar")}
+              aria-label={t("sidebar.actions.expandSidebar")}
             >
               <SideBarIcon />
             </button>
@@ -959,8 +959,8 @@ export function Sidebar() {
               onClick={openCreateSpaceFlow}
               onMouseUp={blurButtonOnPointerClick}
               type="button"
-              title="New space"
-              aria-label="Create new space"
+              title={t("sidebar.nav.newSpace")}
+              aria-label={t("sidebar.actions.createSpace")}
             >
               <AddIcon />
             </button>
@@ -972,8 +972,8 @@ export function Sidebar() {
               onClick={openSpacesView}
               onMouseUp={blurButtonOnPointerClick}
               type="button"
-              title="Spaces"
-              aria-label="View spaces"
+              title={t("sidebar.nav.spaces")}
+              aria-label={t("sidebar.actions.viewSpaces")}
             >
               <EditIcon />
             </button>
@@ -1194,6 +1194,56 @@ export function Sidebar() {
                       >
                         {thread.label}
                       </button>
+                      <button
+                        type="button"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenMenu(
+                            openMenu?.type === "thread" && openMenu.id === thread.id
+                              ? null
+                              : { type: "thread", id: thread.id }
+                          );
+                        }}
+                        data-menu-button
+                        aria-haspopup="menu"
+                        aria-expanded={openMenu?.type === "thread" && openMenu.id === thread.id}
+                        aria-label={`${thread.label} options`}
+                      >
+                        <MoreHorizontal className="size-4 text-zaki-muted" />
+                      </button>
+                      {openMenu?.type === "thread" && openMenu.id === thread.id && (
+                        <div
+                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          role="menu"
+                          data-menu
+                        >
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
+                            onClick={() => togglePinned("thread", thread.id)}
+                          >
+                            <Pin className="size-3.5 text-zaki-muted" />
+                            {thread.pinned ? "Unpin" : "Pinned"}
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-primary hover:bg-zaki-hover"
+                            onClick={() => startRename("thread", thread.id, thread.label)}
+                          >
+                            <Pencil className="size-3.5 text-zaki-muted" />
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zaki-brand hover:bg-zaki-error"
+                            onClick={() => setConfirmDelete({ type: "thread", id: thread.id, label: thread.label })}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button

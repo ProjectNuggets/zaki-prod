@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { File as FileIcon, X } from "lucide-react";
 import { ModalShell } from "@/app/components/ui/ModalShell";
+import { useTranslation } from "react-i18next";
 
 interface CreateSpaceModalProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export function CreateSpaceModal({
   onClose,
   onCreate,
 }: CreateSpaceModalProps) {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceInstructions, setSpaceInstructions] = useState("");
@@ -47,61 +50,63 @@ export function CreateSpaceModal({
     <ModalShell
       isOpen={isOpen}
       onClose={onClose}
-      ariaLabel="Create new space"
+      ariaLabel={t("createSpaceModal.ariaLabel")}
       className="w-[460px]"
     >
-      <div className="px-6 py-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Create new space</div>
+      <div className="px-6 py-5" dir={isRtl ? "rtl" : "ltr"}>
+        <div className={isRtl ? "flex items-start justify-between gap-3 flex-row-reverse" : "flex items-start justify-between gap-3"}>
+          <div className={isRtl ? "text-right" : "text-left"}>
+            <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("createSpaceModal.title")}
+            </div>
             <div className="mt-1 text-sm text-zaki-disabled dark:text-zaki-dark-muted">
-              Organize chats, files, and ideas in one place.
+              {t("createSpaceModal.subtitle")}
             </div>
           </div>
           <button
             type="button"
             className="zaki-icon-btn size-9"
             onClick={onClose}
-            aria-label="Close create space"
+            aria-label={t("createSpaceModal.closeAria")}
           >
             <X className="size-4" />
           </button>
         </div>
         <div className="mt-5 flex flex-col gap-3">
           <label className="text-xs text-zaki-muted">
-            Space name
+            {t("createSpaceModal.fields.name")}
             <input
               className="mt-1 w-full rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
               value={spaceName}
               onChange={(event) => setSpaceName(event.target.value)}
-              placeholder="Marketing research"
+              placeholder={t("createSpaceModal.placeholders.name")}
             />
           </label>
           <label className="text-xs text-zaki-muted">
-            Description
+            {t("createSpaceModal.fields.description")}
             <textarea
               className="mt-1 w-full rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus resize-none"
               rows={3}
               value={spaceDescription}
               onChange={(event) => setSpaceDescription(event.target.value)}
-              placeholder="Describe what this space is for"
+              placeholder={t("createSpaceModal.placeholders.description")}
             />
           </label>
           <label className="text-xs text-zaki-muted">
-            Instructions
+            {t("createSpaceModal.fields.instructions")}
             <textarea
               className="mt-1 w-full rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus resize-none"
               rows={3}
               value={spaceInstructions}
               onChange={(event) => setSpaceInstructions(event.target.value)}
-              placeholder="Add guidance for the assistant in this space"
+              placeholder={t("createSpaceModal.placeholders.instructions")}
             />
           </label>
           <div className="text-xs text-zaki-muted">
-            Pinned documents
+            {t("createSpaceModal.fields.pinnedDocuments")}
             <div className="mt-2 flex flex-col gap-2">
               <label className="w-full rounded-zaki-md border border-dashed border-zaki-strong px-3 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors cursor-pointer">
-                Upload documents for this space
+                {t("createSpaceModal.fields.uploadDocuments")}
                 <input
                   type="file"
                   className="hidden"
@@ -132,7 +137,7 @@ export function CreateSpaceModal({
                         onClick={() =>
                           setSpaceFiles((prev) => prev.filter((_, i) => i !== index))
                         }
-                        aria-label={`Remove ${file.name}`}
+                        aria-label={t("createSpaceModal.removeFileAria", { name: file.name })}
                       >
                         <X className="size-3" />
                       </button>
@@ -149,7 +154,7 @@ export function CreateSpaceModal({
             className="zaki-btn zaki-btn-secondary"
             onClick={onClose}
           >
-            Cancel
+            {t("createSpaceModal.actions.cancel")}
           </button>
           <button
             type="button"
@@ -157,7 +162,7 @@ export function CreateSpaceModal({
             onClick={handleCreate}
             disabled={spaceName.trim().length === 0}
           >
-            Create space
+            {t("createSpaceModal.actions.create")}
           </button>
         </div>
       </div>

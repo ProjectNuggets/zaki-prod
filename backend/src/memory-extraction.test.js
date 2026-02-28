@@ -207,4 +207,92 @@ describe("memory extraction", () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(global.fetch.mock.calls[1][0]).toContain("/api/v1/workspace/zaky/chat");
   });
+
+  it("rejects vague compound LLM memories and preserves atomic pattern facts", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                classification: "user_statement",
+                memories: [
+                  {
+                    content: "Likes all of those cities",
+                    type: "preference",
+                    confidence: 0.92,
+                    conflict_key: "preference:allofthosecity",
+                    polarity: "positive",
+                  },
+                  {
+                    content: "Likes travel and plan to travel to Dubai",
+                    type: "preference",
+                    confidence: 0.88,
+                    conflict_key: "preference:travelandplantotraveltodubai",
+                    polarity: "positive",
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await extractFacts(
+      "I love to travel and plan to travel to Dubai, Cairo, Algeria, Riyadh and I am from Damascus but live in Hamburg and I love all of those cities."
+    );
+
+    expect(result.map((item) => item.content)).toEqual(
+      expect.arrayContaining([
+        "From Damascus",
+        "Lives in Hamburg",
+        "Plans to travel to Dubai",
+        "Plans to travel to Cairo",
+        "Plans to travel to Algeria",
+        "Plans to travel to Riyadh",
+      ])
+    );
+    expect(result.some((item) => item.content === "Likes all of those cities")).toBe(false);
+    expect(result.some((item) => item.content === "Likes travel and plan to travel to Dubai")).toBe(false);
+  });
+
+  it("drops unresolved LLM references instead of storing them as preferences", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                classification: "user_statement",
+                memories: [
+                  {
+                    content: "Likes that place",
+                    type: "preference",
+                    confidence: 0.9,
+                    conflict_key: "preference:that-place",
+                    polarity: "positive",
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await extractFacts("I like that place.");
+    expect(result).toEqual([]);
+  });
+
+  it("extracts origin and residence separately from one sentence", async () => {
+    const result = await extractFacts("I am from Damascus but live in Hamburg.");
+    expect(result.map((item) => item.content)).toEqual(
+      expect.arrayContaining(["From Damascus", "Lives in Hamburg"])
+    );
+  });
 });

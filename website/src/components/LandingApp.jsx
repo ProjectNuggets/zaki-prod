@@ -1,5 +1,35 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { content, resolveLocale } from "./landingContent";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
+
+function useInView(options = {}) {
+  const [isInView, setIsInView] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsInView(true);
+        if (!options.repeat) {
+          observer.unobserve(element);
+        }
+      } else if (options.repeat) {
+        setIsInView(false);
+      }
+    }, { threshold: 0.1, ...options });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [options.repeat, options.threshold]);
+
+  return [ref, isInView];
+}
 
 const APP_URL = "https://app.chatzaki.com";
 const SITE_URL = "https://chatzaki.com";
@@ -154,6 +184,158 @@ function SlideVisual({ src, alt }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function GsapAnimated({ children, className = "", delay = 0, direction = "up" }) {
+  const elRef = useRef(null);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          gsap.fromTo(
+            el,
+            {
+              opacity: 0,
+              y: direction === "up" ? 30 : direction === "down" ? -30 : 0,
+              scale: 0.98,
+              filter: "blur(4px)",
+            },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              filter: "blur(0px)",
+              duration: 0.9,
+              ease: "power3.out",
+              delay,
+              overwrite: true,
+            }
+          );
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [delay, direction]);
+
+  return (
+    <div ref={elRef} className={className}>
+      {children}
+    </div>
+  );
+}
+
+function AnimatedParagraph({ children, className = "", delay = 0 }) {
+  return (
+    <GsapAnimated delay={delay} className={className}>
+      {children}
+    </GsapAnimated>
+  );
+}
+
+function WhySection({ locale, t, whyScale, whyWeight }) {
+  const [containerRef, isInView] = useInView({ threshold: 0.1 });
+  const glowRef = useRef(null);
+
+  useEffect(() => {
+    const glow = glowRef.current;
+    if (!glow) return;
+
+    if (isInView) {
+      gsap.fromTo(
+        glow,
+        { opacity: 0, scale: 0.9 },
+        { opacity: 1, scale: 1, duration: 1.2, ease: "power2.out" }
+      );
+    }
+  }, [isInView]);
+
+  return (
+    <div className="relative">
+      {/* Premium background glow */}
+      <div
+        ref={glowRef}
+        className="pointer-events-none absolute -inset-8 -z-10 opacity-0"
+        style={{
+          background: 'radial-gradient(600px 400px at 50% 50%, rgba(210, 68, 48, 0.06), transparent 70%)',
+          filter: 'blur(40px)',
+        }}
+      />
+      <div
+        ref={containerRef}
+        className={`mx-auto max-w-[760px] text-[#2f3139] transition-[transform,font-weight] duration-150 ease-out will-change-transform ${
+          locale === "ar" ? "text-right" : "text-left"
+        }`}
+        style={{
+          transform: `scale(${whyScale})`,
+          transformOrigin: "top center",
+          fontWeight: whyWeight,
+          fontVariationSettings: `'wght' ${whyWeight}`,
+        }}
+      >
+      <AnimatedParagraph
+        className="text-[clamp(1.25rem,2.4vw,1.45rem)] font-semibold leading-[1.45] tracking-[-0.01em]"
+        delay={0}
+      >
+        {t.why.heading}
+      </AnimatedParagraph>
+      <AnimatedParagraph
+        className="mt-1 text-[clamp(1.25rem,2.4vw,1.45rem)] font-semibold leading-[1.45] tracking-[-0.01em]"
+        delay={0.1}
+      >
+        {t.why.subheading}
+      </AnimatedParagraph>
+
+      <AnimatedParagraph className="mt-9 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.7] text-[#3a3d48]" delay={0.2}>
+        {t.why.intro}
+      </AnimatedParagraph>
+
+      <AnimatedParagraph className="mt-8 text-[clamp(1rem,1.8vw,1.25rem)] font-semibold leading-[1.45] text-[#2f3139]" delay={0.3}>
+        {t.why.builtLine}{" "}
+        <span className="inline-flex items-center gap-1.5 align-baseline">
+          <svg
+            className="h-[18px] w-[18px] max-md:h-[16px] max-md:w-[16px]"
+            fill="none"
+            viewBox="0 0 32 32"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-label="ZAKI favicon"
+          >
+            <path d="M28 8C30.2091 8 32 6.20914 32 4C32 1.79086 30.2091 0 28 0C25.7909 0 24 1.79086 24 4C24 6.20914 25.7909 8 28 8Z" fill="#D24430"/>
+            <path d="M0 16C0 7.164 7.1632 0 16 0V8C11.5816 8 8 11.5824 8 16H0Z" fill="#D24430"/>
+            <path d="M32 16C32 24.836 24.8368 32 16 32V24C20.4184 24 24 20.4176 24 16H32Z" fill="#D24430"/>
+          </svg>
+          <span className="text-[clamp(1.125rem,2.2vw,1.5rem)] leading-none">😎</span>
+        </span>
+      </AnimatedParagraph>
+
+      <AnimatedParagraph className="mt-8 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.7] text-[#3a3d48]" delay={0.4}>
+        {t.why.description} <span className="text-[clamp(1.125rem,2.2vw,1.375rem)] leading-none">🫵🏼</span>
+      </AnimatedParagraph>
+      <AnimatedParagraph className="mt-6 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.7] text-[#3a3d48]" delay={0.5}>
+        {t.why.workflow}
+      </AnimatedParagraph>
+
+      <AnimatedParagraph className="mt-6 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.6] text-[#3a3d48]" delay={0.6}>
+        {t.why.friction}
+      </AnimatedParagraph>
+      <AnimatedParagraph className="mt-1 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.5] text-[#3a3d48]" delay={0.7}>
+        {t.why.postFriction}
+      </AnimatedParagraph>
+
+      <AnimatedParagraph className="mt-8 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.6] text-[#3a3d48]" delay={0.8}>
+        {t.why.human}{" "}
+        <span className="text-[clamp(1.125rem,2.2vw,1.5rem)] leading-none" aria-label="United Kingdom, Saudi Arabia, Lebanon, Syria">🇬🇧🇸🇦🇱🇧🇸🇾</span>
+      </AnimatedParagraph>
+      </div>
     </div>
   );
 }
@@ -836,62 +1018,12 @@ export function LandingApp() {
         </section>
 
         <section className="mx-auto mt-[clamp(9rem,18vh,16rem)] max-w-[900px] md:mt-[clamp(12rem,24vh,28rem)]" id="why" ref={whyRef}>
-          <div
-            className={`mx-auto max-w-[760px] text-[#2f3139] transition-[transform,font-weight] duration-150 ease-out will-change-transform ${
-              locale === "ar" ? "text-right" : "text-left"
-            }`}
-            style={{
-              transform: `scale(${whyScale})`,
-              transformOrigin: "top center",
-              fontWeight: whyWeight,
-              fontVariationSettings: `'wght' ${whyWeight}`,
-            }}
-          >
-            <p className="text-[clamp(1.25rem,2.4vw,1.45rem)] font-semibold leading-[1.45] tracking-[-0.01em]">
-              {t.why.heading}
-            </p>
-            <p className="mt-1 text-[clamp(1.25rem,2.4vw,1.45rem)] font-semibold leading-[1.45] tracking-[-0.01em]">
-              {t.why.subheading}
-            </p>
-
-            <p className="mt-9 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.7] text-[#3a3d48]">{t.why.intro}</p>
-
-            <p className="mt-8 text-[clamp(1rem,1.8vw,1.25rem)] font-semibold leading-[1.45] text-[#2f3139]">
-              {t.why.builtLine}{" "}
-              <span className="inline-flex items-center gap-1.5 align-baseline">
-                <svg
-                  className="h-[18px] w-[18px] max-md:h-[16px] max-md:w-[16px]"
-                  fill="none"
-                  viewBox="0 0 32 32"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-label="ZAKI favicon"
-                >
-                  <path d="M28 8C30.2091 8 32 6.20914 32 4C32 1.79086 30.2091 0 28 0C25.7909 0 24 1.79086 24 4C24 6.20914 25.7909 8 28 8Z" fill="#D24430"/>
-                  <path d="M0 16C0 7.164 7.1632 0 16 0V8C11.5816 8 8 11.5824 8 16H0Z" fill="#D24430"/>
-                  <path d="M32 16C32 24.836 24.8368 32 16 32V24C20.4184 24 24 20.4176 24 16H32Z" fill="#D24430"/>
-                </svg>
-                <span className="text-[clamp(1.125rem,2.2vw,1.5rem)] leading-none">😎</span>
-              </span>
-            </p>
-
-            <p className="mt-8 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.7] text-[#3a3d48]">
-              {t.why.description} <span className="text-[clamp(1.125rem,2.2vw,1.375rem)] leading-none">🫵🏼</span>
-            </p>
-            <p className="mt-6 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.7] text-[#3a3d48]">{t.why.workflow}</p>
-
-            <p className="mt-6 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.6] text-[#3a3d48]">{t.why.friction}</p>
-            <p className="mt-1 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.5] text-[#3a3d48]">{t.why.postFriction}</p>
-
-            <p className="mt-8 text-[clamp(1rem,1.8vw,1.25rem)] leading-[1.6] text-[#3a3d48]">
-              {t.why.human}{" "}
-              <span className="text-[clamp(1.125rem,2.2vw,1.5rem)] leading-none" aria-label="United Kingdom, Saudi Arabia, Lebanon, Syria">🇬🇧🇸🇦🇱🇧🇸🇾</span>
-            </p>
-          </div>
+          <WhySection locale={locale} t={t} whyScale={whyScale} whyWeight={whyWeight} />
         </section>
 
         <section
           id="updates-carousel"
-          className="relative z-20 mt-[clamp(4rem,9vh,7rem)] w-screen max-w-none overflow-hidden bg-[#f7f2ea] md:mt-[clamp(5rem,10vh,8rem)]"
+          className="relative z-20 mt-[clamp(10rem,22vh,18rem)] w-screen max-w-none overflow-hidden bg-[#f7f2ea] md:mt-[clamp(12rem,26vh,22rem)]"
           style={{ left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}
           ref={updatesSectionRef}
         >
