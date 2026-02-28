@@ -183,4 +183,35 @@ describe("memory context retrieval behavior", () => {
     expect(second.context).not.toContain("Last time:");
     expect(dbGetMock).toHaveBeenCalledTimes(1);
   });
+
+  it("buildFastContext uses lexical lookup only and skips provider calls", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-1",
+        content: "Likes winter city breaks",
+        type: "preference",
+        metadata: { conflictKey: "preference:winter-city-break" },
+        retrieval_score: 0.9,
+        importance_score: 0.7,
+        confidence_score: 0.9,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "I want ideas based on my winter travel preferences",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    expect(result.context).toContain("About this person:");
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.id).toBe("m-1");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });

@@ -63,6 +63,68 @@ describe("memory extraction", () => {
     expect(result[0].polarity).toBe("positive");
   });
 
+  it("normalizes prefer phrasing without leaking the raw verb into content", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                classification: "user_statement",
+                memories: [
+                  {
+                    content: "Prefers concise replies",
+                    type: "preference",
+                    confidence: 0.9,
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await extractFacts("I prefer concise replies.");
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("Prefers concise replies");
+    expect(result[0].conflictKey).toBe("preference:concise-reply");
+    expect(result[0].polarity).toBe("positive");
+  });
+
+  it("normalizes nested malformed prefer phrasing from LLM output", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                classification: "user_statement",
+                memories: [
+                  {
+                    content: "Likes Prefers concise replies",
+                    type: "preference",
+                    confidence: 0.9,
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await extractFacts("I prefer concise replies.");
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("Prefers concise replies");
+    expect(result[0].conflictKey).toBe("preference:concise-reply");
+    expect(result[0].polarity).toBe("positive");
+  });
+
   it("falls back to pattern extraction when LLM classification is not user_statement", async () => {
     process.env.NOVA_TYP_BASE_URL = "https://example.com";
     global.fetch = async () => ({

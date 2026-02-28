@@ -19,7 +19,7 @@ import {
   buildConsentStatus,
 } from "./legal-consent.js";
 import { validateRuntimeConfig } from "./config-validation.js";
-import { createMemoryRoutes, buildContext, findDuplicateMemory } from "./memory/index.js";
+import { createMemoryRoutes, buildFastContext, findDuplicateMemory } from "./memory/index.js";
 import {
   configureMemoryTelemetryAlerts,
   getMemoryTelemetrySnapshot,
@@ -187,6 +187,14 @@ const ZAKI_MEMORY_ALERT_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_MEMORY_ALERT_TIMEOUT_MS || 4000)
 );
+const ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS = Math.max(
+  250,
+  Number(process.env.ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS || 2500)
+);
+const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
+  String(process.env.ZAKI_SYNC_MEMORY_INJECTION_ENABLED || "true")
+    .toLowerCase()
+    .trim() !== "false";
 const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 45_000)
@@ -287,6 +295,23 @@ async function fetchWithTimeout(url, options = {}, timeoutMs, label = "Request")
     throw error;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function withTimeout(promise, timeoutMs, label = "Operation") {
+  let timer = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+        if (typeof timer.unref === "function") {
+          timer.unref();
+        }
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -5025,6 +5050,37 @@ app.get("/api/verify", verifyHandler);
 const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
 const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
 
+function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
+  const mode = String(requestPayload?.mode || "").trim().toLowerCase();
+  const webSearchEnabled =
+    requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true;
+  const normalizedMessage = String(message || "").trim();
+  const lower = normalizedMessage.toLowerCase();
+  const personalSignals = [
+    /\bmy\b/,
+    /\bi\b/,
+    /\bme\b/,
+    /\bmine\b/,
+    /\bfor me\b/,
+    /\babout me\b/,
+    /\bremember\b/,
+    /\bremind me\b/,
+    /\bmy preferences?\b/,
+    /\bmy memory\b/,
+    /\bmy plan\b/,
+    /(?:^|\s)(انا|أنا|لي|عندي|لدي|تذكر|ذكّرني|عنّي|بفضّل|أحب|احب)(?:\s|$)/,
+  ];
+
+  if (!ZAKI_SYNC_MEMORY_INJECTION_ENABLED) return true;
+  if (webSearchEnabled) return true;
+  if (mode === "query") return true;
+  if (normalizedMessage.length > 500) return true;
+  if (!personalSignals.some((pattern) => pattern.test(lower) || pattern.test(normalizedMessage))) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Intercept stream-chat requests to inject memory context
  * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
@@ -5082,16 +5138,25 @@ const streamChatHandler = async (req, res) => {
     let memoryInjected = false;
     let memorySources = [];
 
-    // Inject memory context if we have a user
-    if (userEmail) {
+    const skipMemoryContext = shouldSkipChatMemoryContext(requestPayload, originalMessage);
+
+    // Inject memory context if we have a user and this is not a query/web-search style request.
+    if (userEmail && !skipMemoryContext) {
       try {
+        const contextStartedAt = Date.now();
         // Build context from memory
-        const memoryResult = await buildContext({
-          userId: userEmail,
-          query: originalMessage,
-          maxChars: 1500,
-          currentThreadId: threadSlug,
-        });
+        const memoryResult = await withTimeout(
+          buildFastContext({
+            userId: userEmail,
+            query: originalMessage,
+            maxChars: 800,
+            currentThreadId: threadSlug,
+            limit: 3,
+          }),
+          ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS,
+          "Fast memory context build"
+        );
+        console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 
         if (memoryResult.context) {
           // Versioned envelope keeps context injection parseable and easy to strip client-side.
@@ -5130,6 +5195,8 @@ ${originalMessage}`;
         console.warn("[Memory] Context injection failed:", err.message);
         // Continue without memory
       }
+    } else if (skipMemoryContext) {
+      console.log("[Memory] Skipping context injection for query/web-search or long prompt");
     }
 
     // Forward to NOVA.TYP with enriched message + original payload fields

@@ -10,6 +10,7 @@ export {
   getMemories,
   searchMemories,
   buildContext,
+  buildFastContext,
   stageMemory,
   getPendingConfirmations,
   getPendingConfirmationCount,

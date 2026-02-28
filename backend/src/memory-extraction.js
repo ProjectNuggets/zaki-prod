@@ -210,25 +210,47 @@ function normalizePreferenceMemory(content, polarity) {
 
   const patterns = [
     {
-      regex:
-        /^(?:likes?|i\s+(?:like|love|enjoy|prefer|(?:am|i'm)\s+into)|like to)\s+(.+)$/i,
+      regex: /^(?:prefers?|i\s+prefer)\s+(.+)$/i,
       polarity: "positive",
+      verb: "Prefers",
+    },
+    {
+      regex:
+        /^(?:likes?|i\s+(?:like|love|enjoy|(?:am|i'm)\s+into)|like to)\s+(.+)$/i,
+      polarity: "positive",
+      verb: "Likes",
     },
     {
       regex:
         /^(?:dislikes?|i\s+(?:don't like|dont like|do not like|dislike|hate))\s+(.+)$/i,
       polarity: "negative",
+      verb: "Dislikes",
     },
   ];
 
   let extractedValue = "";
   let inferredPolarity = polarity || null;
+  let resolvedVerb = "";
   for (const pattern of patterns) {
     const match = raw.match(pattern.regex);
     if (!match) continue;
     extractedValue = match[1] || "";
     if (!inferredPolarity) inferredPolarity = pattern.polarity;
+    resolvedVerb = pattern.verb;
     break;
+  }
+
+  // Some malformed LLM outputs nest another preference verb inside the value,
+  // e.g. "Likes Prefers concise replies". In that case, the inner verb should win.
+  if (extractedValue) {
+    for (const pattern of patterns) {
+      const nestedMatch = extractedValue.match(pattern.regex);
+      if (!nestedMatch) continue;
+      extractedValue = nestedMatch[1] || extractedValue;
+      inferredPolarity = pattern.polarity;
+      resolvedVerb = pattern.verb;
+      break;
+    }
   }
 
   const value = cleanPreferenceValue(extractedValue || raw);
@@ -241,8 +263,11 @@ function normalizePreferenceMemory(content, polarity) {
   }
 
   const resolvedPolarity = inferredPolarity || polarity || "positive";
+  const verb =
+    resolvedVerb ||
+    (resolvedPolarity === "negative" ? "Dislikes" : "Likes");
   return {
-    content: `${resolvedPolarity === "negative" ? "Dislikes" : "Likes"} ${value}`,
+    content: `${verb} ${value}`,
     value,
     polarity: resolvedPolarity,
   };

@@ -106,6 +106,49 @@ function normalizeText(value) {
     .trim();
 }
 
+const FAST_CONTEXT_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "for", "with", "from", "that", "this",
+  "what", "which", "who", "how", "when", "where", "why", "are", "is", "am",
+  "was", "were", "be", "been", "being", "to", "of", "in", "on", "at", "by",
+  "my", "me", "i", "im", "i'm", "it", "its", "about", "given", "would", "could",
+  "should", "can", "you", "your", "we", "our", "they", "their",
+  "انا", "أنا", "عندي", "لدي", "عن", "في", "من", "على", "مع", "الى", "إلى", "ما",
+  "ماذا", "كيف", "هل", "هذه", "هذا", "ذلك", "تلك", "انا", "لي", "مني", "عني",
+]);
+
+function tokenizeFastContext(value) {
+  return normalizeText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => {
+      if (!token) return false;
+      if (FAST_CONTEXT_STOPWORDS.has(token)) return false;
+      if (/^[a-z0-9]+$/i.test(token) && token.length < 3) return false;
+      if (/^[\u0600-\u06FF]+$/u.test(token) && token.length < 2) return false;
+      return true;
+    });
+}
+
+function scoreFastContextMemory(memory, queryTokens) {
+  const contentTokens = new Set(tokenizeFastContext(memory?.content || ""));
+  if (contentTokens.size === 0 || queryTokens.length === 0) return 0;
+
+  let overlap = 0;
+  for (const token of queryTokens) {
+    if (contentTokens.has(token)) overlap += 1;
+  }
+  if (overlap === 0) return 0;
+
+  const domain = getMemoryConflictDomain(memory);
+  let score = overlap * 10;
+  if (domain === "identity") score += 6;
+  if (domain === "preference") score += 5;
+  if (domain === "constraint") score += 7;
+  score += Math.round(getMemoryImportanceScore(memory) * 4);
+  score += Math.round(getMemoryConfidenceScore(memory) * 3);
+  return score;
+}
+
 const MAX_STORED_MEMORY_CHARS = 500;
 const MAX_METADATA_JSON_CHARS = 2000;
 const ALLOWED_MEMORY_TYPES = new Set([
@@ -1379,6 +1422,104 @@ export async function buildContext({
     usedMemories.push(m);
   }
   
+  return { context, sources: usedMemories };
+}
+
+export async function buildFastContext({
+  userId,
+  query,
+  maxChars = 800,
+  currentThreadId = null,
+  limit = 3,
+}) {
+  const normalizedUserId = normalizeUserId(userId);
+  const normalizedThreadId = String(currentThreadId || "").trim() || null;
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedUserId || !normalizedQuery) {
+    return { context: "", sources: [] };
+  }
+
+  const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 3));
+  const queryTokens = tokenizeFastContext(normalizedQuery);
+  if (queryTokens.length === 0) {
+    return { context: "", sources: [] };
+  }
+  let memories = await dbAll(
+    `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
+            0.0 AS retrieval_score
+     FROM memories
+     WHERE user_id = $1
+     ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+     LIMIT $2`,
+    [normalizedUserId, 50]
+  );
+
+  memories = dedupeMemoryRows(memories)
+    .map((memory) => ({
+      ...memory,
+      retrieval_score: scoreFastContextMemory(memory, queryTokens),
+    }))
+    .filter((memory) => Number(memory.retrieval_score || 0) > 0)
+    .sort((a, b) => {
+      const scoreDiff = Number(b.retrieval_score || 0) - Number(a.retrieval_score || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const importanceDiff = getMemoryImportanceScore(b) - getMemoryImportanceScore(a);
+      if (importanceDiff !== 0) return importanceDiff;
+      const confidenceDiff = getMemoryConfidenceScore(b) - getMemoryConfidenceScore(a);
+      if (confidenceDiff !== 0) return confidenceDiff;
+      return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    })
+    .slice(0, boundedLimit);
+  if (memories.length === 0) {
+    return { context: "", sources: [] };
+  }
+
+  if (
+    normalizedThreadId &&
+    shouldInjectSessionDeltaForThread({
+      userId: normalizedUserId,
+      currentThreadId: normalizedThreadId,
+    })
+  ) {
+    const sessionDelta = await dbGet(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+         AND metadata->>'source' = 'session_end'
+         AND ($2::text IS NULL OR COALESCE(source_thread_id, '') <> $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [normalizedUserId, normalizedThreadId]
+    );
+    if (sessionDelta?.id) {
+      const existingIds = new Set(memories.map((memory) => String(memory?.id || "")));
+      if (!existingIds.has(String(sessionDelta.id))) {
+        memories = [sessionDelta, ...memories].slice(0, boundedLimit);
+      }
+    }
+  }
+
+  let context = "About this person:\n";
+  let charCount = context.length;
+  const usedMemories = [];
+
+  for (const memory of memories) {
+    const metadata = getMemoryMetadata(memory);
+    const isSessionDelta = metadata?.source === "session_end";
+    const lineContent = isSessionDelta
+      ? `Last time: ${toShortSessionDeltaLine(memory.content)}`
+      : String(memory.content || "");
+    const line = `- ${lineContent}\n`;
+    if (charCount + line.length > maxChars) break;
+    context += line;
+    charCount += line.length;
+    usedMemories.push(memory);
+  }
+
+  if (usedMemories.length === 0) {
+    return { context: "", sources: [] };
+  }
+
   return { context, sources: usedMemories };
 }
 
