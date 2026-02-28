@@ -336,6 +336,17 @@ function pipeReadableToResponse(readable, res, label = "Stream") {
   readable.pipe(res);
 }
 
+function writeSseComment(res, comment) {
+  if (res.destroyed || res.writableEnded) return;
+  const safeComment = String(comment || "").replace(/[\r\n]+/g, " ").trim() || "zaki-stream";
+  res.write(`: ${safeComment}\n\n`);
+}
+
+function writeSseData(res, payload) {
+  if (res.destroyed || res.writableEnded) return;
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
 function isStripeProviderSelected() {
   return ZAKI_BILLING_PROVIDER === "stripe";
 }
@@ -5238,45 +5249,28 @@ ${originalMessage}`;
       return;
     }
 
-    // Add memory injection indicator to first chunk
-    const reader = upstreamResponse.body.getReader();
-    let firstChunk = true;
-    res.on("close", () => {
-      void reader.cancel().catch(() => {
-        // Ignore cancellation errors on disconnect.
-      });
-    });
+    const contentType = String(upstreamResponse.headers.get("content-type") || "");
+    const isSse = contentType.toLowerCase().includes("text/event-stream");
+    const nodeStream = Readable.fromWeb(upstreamResponse.body);
 
-    const stream = new ReadableStream({
-      async pull(controller) {
-        try {
-          const { value, done } = await reader.read();
-          if (done) {
-            console.log('[Chat] Stream complete');
-            controller.close();
-            return;
-          }
-          
-          if (firstChunk && memoryInjected && memorySources.length > 0) {
-            const indicatorPayload = {
-              type: "memoryUsed",
-              count: memorySources.length,
-              sources: memorySources.slice(0, 5),
-            };
-            const indicator = new TextEncoder().encode(`data: ${JSON.stringify(indicatorPayload)}\n\n`);
-            controller.enqueue(indicator);
-          }
-          
-          firstChunk = false;
-          controller.enqueue(value);
-        } catch (err) {
-          console.error('[Chat] Stream error:', err.message);
-          controller.error(err);
-        }
-      },
-    });
+    if (isSse) {
+      // Flush a tiny SSE prelude immediately so the client stops looking stuck.
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      if (typeof res.flushHeaders === "function") {
+        res.flushHeaders();
+      }
+      writeSseComment(res, "zaki-stream-open");
 
-    const nodeStream = Readable.fromWeb(stream);
+      if (memoryInjected && memorySources.length > 0) {
+        writeSseData(res, {
+          type: "memoryUsed",
+          count: memorySources.length,
+          sources: memorySources.slice(0, 5),
+        });
+      }
+    }
+
     pipeReadableToResponse(nodeStream, res, "Chat stream");
   } catch (error) {
     console.error("[Chat] Stream error:", error);
