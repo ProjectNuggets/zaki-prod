@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
-import { extractFacts } from "./memory-extraction.js";
+import { extractFacts, sanitizeExtractedMemories } from "./memory-extraction.js";
 
 describe("memory extraction", () => {
   const originalBaseUrl = process.env.NOVA_TYP_BASE_URL;
@@ -294,5 +294,32 @@ describe("memory extraction", () => {
     expect(result.map((item) => item.content)).toEqual(
       expect.arrayContaining(["From Damascus", "Lives in Hamburg"])
     );
+  });
+
+  it("sanitizes mocked extracted memories defensively", () => {
+    const result = sanitizeExtractedMemories([
+      {
+        content: "Likes all of those cities",
+        type: "preference",
+        conflictKey: "preference:allofthosecity",
+        polarity: "positive",
+      },
+      {
+        content: "Plans to travel to Dubai",
+        type: "goal",
+        polarity: "neutral",
+      },
+      {
+        content: "Unknown thing",
+        type: "mystery",
+      },
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        content: "Plans to travel to Dubai",
+        type: "goal",
+      }),
+    ]);
   });
 });

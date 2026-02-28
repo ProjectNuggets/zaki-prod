@@ -1,4 +1,7 @@
-import { extractFacts as extractFactsOp } from "../memory-extraction.js";
+import {
+  extractFacts as extractFactsOp,
+  sanitizeExtractedMemories,
+} from "../memory-extraction.js";
 import {
   storeMemory as storeMemoryOp,
   findConflict as findConflictOp,
@@ -104,7 +107,7 @@ export async function summarizeConversation(
 
     let facts = [];
     try {
-      facts = await extractFacts(message);
+      facts = sanitizeExtractedMemories(await extractFacts(message));
     } catch (error) {
       result.errors += 1;
       console.warn("[Memory] Session extract failed:", error?.message || error);

@@ -187,6 +187,10 @@ const ZAKI_MEMORY_ALERT_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_MEMORY_ALERT_TIMEOUT_MS || 4000)
 );
+const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 45_000)
+);
 const ZAKI_BILLING_ALERT_WEBHOOK_URL = (
   process.env.ZAKI_BILLING_ALERT_WEBHOOK_URL || ""
 ).trim();
@@ -258,6 +262,53 @@ const TIER_BY_PRICE = stripePricingCatalog.tierByPrice;
 
 function getStripePricingAvailability() {
   return stripePricingCatalog.pricingAvailability;
+}
+
+function isAbortError(error) {
+  if (!error || typeof error !== "object") return false;
+  return error.name === "AbortError";
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs, label = "Request") {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof timeout.unref === "function") {
+    timeout.unref();
+  }
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function pipeReadableToResponse(readable, res, label = "Stream") {
+  readable.on("error", (error) => {
+    console.error(`[${label}] Pipe error:`, error);
+    if (!res.headersSent) {
+      res.status(502).json({ error: `${label} failed.` });
+      return;
+    }
+    if (!res.destroyed) {
+      res.end();
+    }
+  });
+
+  res.on("close", () => {
+    if (!readable.destroyed) {
+      readable.destroy();
+    }
+  });
+
+  readable.pipe(res);
 }
 
 function isStripeProviderSelected() {
@@ -5088,14 +5139,19 @@ ${originalMessage}`;
     console.log(`[Chat] Memory injected: ${memoryInjected}`);
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
-    const upstreamResponse = await fetch(targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": authHeader,
+    const upstreamResponse = await fetchWithTimeout(
+      targetUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader,
+        },
+        body: JSON.stringify(upstreamPayload),
       },
-      body: JSON.stringify(upstreamPayload),
-    });
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Chat upstream request"
+    );
 
     console.log(`[Chat] NOVA response status: ${upstreamResponse.status}`);
 
@@ -5118,6 +5174,11 @@ ${originalMessage}`;
     // Add memory injection indicator to first chunk
     const reader = upstreamResponse.body.getReader();
     let firstChunk = true;
+    res.on("close", () => {
+      void reader.cancel().catch(() => {
+        // Ignore cancellation errors on disconnect.
+      });
+    });
 
     const stream = new ReadableStream({
       async pull(controller) {
@@ -5148,10 +5209,13 @@ ${originalMessage}`;
       },
     });
 
-    Readable.fromWeb(stream).pipe(res);
+    const nodeStream = Readable.fromWeb(stream);
+    pipeReadableToResponse(nodeStream, res, "Chat stream");
   } catch (error) {
     console.error("[Chat] Stream error:", error);
-    res.status(500).json({ error: error?.message || "Chat stream failed." });
+    const message = error?.message || "Chat stream failed.";
+    const timedOut = /\btimed out\b/i.test(message);
+    res.status(timedOut ? 504 : 500).json({ error: message });
   }
 };
 
@@ -5213,16 +5277,21 @@ const agentChatStreamHandler = async (req, res) => {
       message: originalMessage,
     };
 
-    const upstream = await fetch(targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
-        "X-Zaki-User-Id": userId,
-        "X-Request-Id": String(req.requestId || crypto.randomUUID()),
+    const upstream = await fetchWithTimeout(
+      targetUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
+          "X-Zaki-User-Id": userId,
+          "X-Request-Id": String(req.requestId || crypto.randomUUID()),
+        },
+        body: JSON.stringify(upstreamPayload),
       },
-      body: JSON.stringify(upstreamPayload),
-    });
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Agent upstream request"
+    );
 
     res.status(upstream.status);
     copyResponseHeaders(upstream, res);
@@ -5246,10 +5315,13 @@ const agentChatStreamHandler = async (req, res) => {
       return;
     }
 
-    Readable.fromWeb(upstream.body).pipe(res);
+    const nodeStream = Readable.fromWeb(upstream.body);
+    pipeReadableToResponse(nodeStream, res, "Agent stream");
   } catch (error) {
     console.error("[Agent] Stream error:", error);
-    res.status(500).json({ error: error?.message || "Agent stream failed." });
+    const message = error?.message || "Agent stream failed.";
+    const timedOut = /\btimed out\b/i.test(message);
+    res.status(timedOut ? 504 : 500).json({ error: message });
   }
 };
 

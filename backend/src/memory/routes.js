@@ -33,6 +33,7 @@ import {
 
 import {
   extractFacts as extractFactsOp,
+  sanitizeExtractedMemories,
   probeMemoryExtractionProvider as probeMemoryExtractionProviderOp,
 } from "../memory-extraction.js";
 import {
@@ -494,7 +495,7 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
       });
       
       // Extract facts
-      const facts = await extractFacts(normalizedMessage);
+      const facts = sanitizeExtractedMemories(await extractFacts(normalizedMessage));
       recordMemoryTelemetry("extract.fact", facts.length);
       
       if (facts.length === 0) {

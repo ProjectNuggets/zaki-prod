@@ -139,7 +139,7 @@ describe("session memory summarization", () => {
     expect(result.stored).toBe(1);
     expect(result.duplicates).toBe(0);
     expect(result.conflicts).toBe(0);
-    expect(result.skippedFacts).toBe(2);
+    expect(result.skippedFacts).toBe(1);
     expect(storeMemory).toHaveBeenCalledTimes(1);
     expect(createConflict).not.toHaveBeenCalled();
   });
@@ -203,6 +203,51 @@ describe("session memory summarization", () => {
     expect(result.factsCapped).toBe(true);
     expect(result.skippedFacts).toBeGreaterThan(0);
     expect(storeMemory).toHaveBeenCalledTimes(8);
+    expect(createConflict).not.toHaveBeenCalled();
+  });
+
+  it("drops invalid extracted memories before session storage", async () => {
+    const extractFacts = jest.fn(async () => [
+      {
+        content: "Likes all of those cities",
+        type: "preference",
+        conflictKey: "preference:allofthosecity",
+        polarity: "positive",
+      },
+      {
+        content: "Plans to travel to Dubai",
+        type: "goal",
+        polarity: "neutral",
+      },
+      {
+        content: "Likes travel and plan to travel to Dubai",
+        type: "preference",
+        polarity: "positive",
+      },
+    ]);
+    const findConflict = jest.fn(async () => null);
+    const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
+
+    const result = await summarizeConversation(
+      {
+        userId: "user@example.com",
+        messages: [{ role: "user", content: "compound message" }],
+      },
+      { extractFacts, findConflict, createConflict, storeMemory }
+    );
+
+    expect(result.skipped).toBe(false);
+    expect(result.extracted).toBe(1);
+    expect(result.stored).toBe(1);
+    expect(result.skippedFacts).toBe(0);
+    expect(storeMemory).toHaveBeenCalledTimes(1);
+    expect(storeMemory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Plans to travel to Dubai",
+        type: "goal",
+      })
+    );
     expect(createConflict).not.toHaveBeenCalled();
   });
 });

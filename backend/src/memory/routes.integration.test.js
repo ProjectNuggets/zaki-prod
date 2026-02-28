@@ -147,6 +147,59 @@ describe("memory routes integration", () => {
     expect(res.body?.conflicts).toEqual([]);
   });
 
+  it("drops invalid extracted memories before staging preview results", async () => {
+    const app = createMockApp();
+    const extractFacts = jest.fn(async () => [
+      {
+        content: "Likes all of those cities",
+        type: "preference",
+        conflictKey: "preference:allofthosecity",
+        polarity: "positive",
+      },
+      {
+        content: "Plans to travel to Dubai",
+        type: "goal",
+        polarity: "neutral",
+      },
+      {
+        content: "",
+        type: "fact",
+      },
+    ]);
+    const findDuplicateMemory = jest.fn(async () => null);
+    const findConflict = jest.fn(async () => null);
+    const stageMemory = jest.fn(async () => ({ id: VALID_UUID, status: "pending" }));
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: {
+        extractFacts,
+        findDuplicateMemory,
+        findConflict,
+        stageMemory,
+      },
+    });
+
+    const res = await invokeRoute(app, {
+      method: "POST",
+      path: "/api/memory/preview",
+      body: {
+        message: "I love all of those cities and plan to travel to Dubai",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(stageMemory).toHaveBeenCalledTimes(1);
+    expect(stageMemory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Plans to travel to Dubai",
+        type: "goal",
+      })
+    );
+    expect(res.body?.pending).toHaveLength(1);
+    expect(res.body?.pending[0]?.content).toBe("Plans to travel to Dubai");
+  });
+
   it("blocks cross-tenant scoped requests on legacy path", async () => {
     const app = createMockApp();
     const getMemories = jest.fn(async () => []);

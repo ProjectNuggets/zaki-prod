@@ -36,6 +36,17 @@ const ClassificationSchema = z.enum([
   "roleplay",
 ]);
 
+const ALLOWED_EXTRACTED_TYPES = new Set([
+  "fact",
+  "preference",
+  "emotion",
+  "event",
+  "goal",
+  "relationship",
+  "struggle",
+]);
+const MAX_EXTRACTED_MEMORIES_PER_MESSAGE = 12;
+
 const ExtractionResponseSchema = z.object({
   classification: ClassificationSchema.optional(),
   memories: z.array(MemorySchema).optional(),
@@ -405,13 +416,14 @@ function isLowQualityExtractedMemory(memory) {
 function normalizeExtractedMemory(memory) {
   const base = {
     content: String(memory?.content || "").replace(/\s+/g, " ").trim(),
-    type: memory?.type,
+    type: String(memory?.type || "").trim().toLowerCase(),
     confidence: memory?.confidence || 0.8,
     conflictKey: canonicalizeConflictKey(memory?.conflictKey || memory?.conflict_key) || null,
     polarity: memory?.polarity || null,
   };
 
   if (!base.content) return null;
+  if (!ALLOWED_EXTRACTED_TYPES.has(base.type)) return null;
 
   if (base.type === "preference") {
     const normalized = normalizePreferenceMemory(base.content, base.polarity);
@@ -446,6 +458,15 @@ function normalizeExtractedMemory(memory) {
   }
 
   return base;
+}
+
+export function sanitizeExtractedMemories(memories, limit = MAX_EXTRACTED_MEMORIES_PER_MESSAGE) {
+  const boundedLimit = Math.max(1, Math.min(50, Number(limit) || MAX_EXTRACTED_MEMORIES_PER_MESSAGE));
+  const normalized = (Array.isArray(memories) ? memories : [])
+    .map((memory) => normalizeExtractedMemory(memory))
+    .filter(Boolean)
+    .filter((memory) => !isLowQualityExtractedMemory(memory));
+  return finalizeExtractedMemories(normalized).slice(0, boundedLimit);
 }
 
 function shouldDebug() {
@@ -739,10 +760,7 @@ async function extractWithLLM(message) {
     return { classification: null, memories: [] };
   }
   
-  const memories = (validated.data.memories || [])
-    .map((m) => normalizeExtractedMemory(m))
-    .filter(Boolean)
-    .filter((memory) => !isLowQualityExtractedMemory(memory));
+  const memories = sanitizeExtractedMemories(validated.data.memories || []);
 
   return {
     classification: validated.data.classification || null,
