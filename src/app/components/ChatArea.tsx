@@ -842,11 +842,7 @@ export function ChatArea() {
     }
 
     if (!response.body) {
-      throw new ChatRequestError(
-        "ZAKI didn't return a reply. Please try again.",
-        502,
-        "empty_response"
-      );
+      throw new Error("Chat stream returned no data.");
     }
 
     const readPayloadChunk = (
@@ -886,10 +882,6 @@ export function ChatArea() {
         return {};
       }
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return { done: true };
-      }
-
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
         throw new Error(payload.error.trim());
       }
@@ -904,6 +896,10 @@ export function ChatArea() {
           502,
           typeof payload.code === "string" ? payload.code : "chat_error"
         );
+      }
+
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return { done: true };
       }
 
       const chunk =
@@ -940,24 +936,6 @@ export function ChatArea() {
           assistantId,
           normalizeAssistantFormatting(message, result.chunk)
         );
-      } else if (!result.done) {
-        const error = new ChatRequestError(
-          "ZAKI didn't return a reply. Please try again.",
-          502,
-          "empty_response"
-        );
-        if (!disableResponseEnvelope && getRequestedResponseFormat(message)) {
-          await streamChatMessage({
-            workspaceSlug,
-            threadSlug,
-            message,
-            assistantId,
-            signal,
-            disableResponseEnvelope: true,
-          });
-          return;
-        }
-        throw error;
       }
       return;
     }
@@ -1060,25 +1038,6 @@ export function ChatArea() {
     }
 
     const finalized = normalizeAssistantFormatting(message, accumulated);
-    if (!finalized.trim()) {
-      const error = new ChatRequestError(
-        "ZAKI didn't return a reply. Please try again.",
-        502,
-        "empty_response"
-      );
-      if (!disableResponseEnvelope && getRequestedResponseFormat(message)) {
-        await streamChatMessage({
-          workspaceSlug,
-          threadSlug,
-          message,
-          assistantId,
-          signal,
-          disableResponseEnvelope: true,
-        });
-        return;
-      }
-      throw error;
-    }
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }

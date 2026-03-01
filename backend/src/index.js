@@ -6365,40 +6365,32 @@ ${originalMessage}`;
     }
 
     if (!upstreamResponse.body) {
-      if (isSseLikeResponse(upstreamResponse)) {
-        sendChatStreamError(res, "ZAKI didn't return a reply. Please try again.", {
-          code: "empty_response",
-        });
-        return;
-      }
-      res.status(502).json({ error: "ZAKI returned no response body.", code: "empty_response" });
+      res.end();
       return;
     }
 
     const contentType = String(upstreamResponse.headers.get("content-type") || "");
     const isSse = contentType.toLowerCase().includes("text/event-stream");
-    const isJson = contentType.toLowerCase().includes("application/json");
+    const nodeStream = Readable.fromWeb(upstreamResponse.body);
 
     if (isSse) {
-      await relaySseWithMonitoring(upstreamResponse, res, {
-        memorySources: memoryInjected ? memorySources : [],
-        logContext: chatLogContext,
-      });
-      return;
-    }
-
-    if (isJson) {
-      const payload = await upstreamResponse.text();
-      if (!payload.trim()) {
-        return res
-          .status(502)
-          .json({ error: "ZAKI didn't return a reply. Please try again.", code: "empty_response" });
+      // Flush a tiny SSE prelude immediately so the client stops looking stuck.
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      if (typeof res.flushHeaders === "function") {
+        res.flushHeaders();
       }
-      res.send(payload);
-      return;
+      writeSseComment(res, "zaki-stream-open");
+
+      if (memoryInjected && memorySources.length > 0) {
+        writeSseData(res, {
+          type: "memoryUsed",
+          count: memorySources.length,
+          sources: memorySources.slice(0, 5),
+        });
+      }
     }
 
-    const nodeStream = Readable.fromWeb(upstreamResponse.body);
     pipeReadableToResponse(nodeStream, res, "Chat stream");
   } catch (error) {
     console.error("[Chat] Stream error:", error);
