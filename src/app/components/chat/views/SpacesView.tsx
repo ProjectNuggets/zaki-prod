@@ -1,7 +1,7 @@
 import type { Space } from "@/types";
 import { Folder, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { SkeletonSpaceGrid } from "../../ui/skeleton";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -22,31 +22,8 @@ export function SpacesView({
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState("");
-  const [confirmSpaceId, setConfirmSpaceId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"recent" | "alpha">("recent");
-  const confirmRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!confirmSpaceId) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!confirmRef.current) return;
-      if (!confirmRef.current.contains(event.target as Node)) {
-        setConfirmSpaceId(null);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setConfirmSpaceId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [confirmSpaceId]);
 
   const commitDescription = (spaceId: string) => {
     window.dispatchEvent(
@@ -150,7 +127,15 @@ export function SpacesView({
             key={space.id}
             className="relative rounded-zaki-xl border border-zaki-subtle bg-white p-4 md:p-5 shadow-[0px_6px_18px_rgba(15,15,15,0.06)] cursor-pointer hover:shadow-[0px_10px_24px_rgba(15,15,15,0.08)] transition-shadow dark:bg-zaki-dark-card dark:border-zaki-dark"
             role="button"
-            onClick={() => setConfirmSpaceId(space.id)}
+            tabIndex={0}
+            aria-label={t("spacesView.startChatAria")}
+            onClick={() => onViewSpace(space.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onViewSpace(space.id);
+              }
+            }}
           >
             <div className={cn("flex flex-col sm:flex-row items-start justify-between gap-4", isRtl && "sm:flex-row-reverse")}>
               <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
@@ -164,32 +149,6 @@ export function SpacesView({
               </div>
               <div className={cn("flex flex-col items-end gap-2 w-full sm:w-[80%]", isRtl && "items-start")}>
                 <div className={cn("flex items-center justify-end gap-2 w-full", isRtl && "justify-start")}>
-                  {confirmSpaceId === space.id && (
-                    <div
-                      ref={confirmRef}
-                      className="rounded-full border border-zaki-subtle bg-white px-3 py-1 text-2xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.12)] dark:bg-zaki-dark-card dark:border-zaki-dark dark:text-zaki-dark-subtle"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={t("spacesView.startChatAria")}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setConfirmSpaceId(null);
-                        onViewSpace(space.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setConfirmSpaceId(null);
-                          onViewSpace(space.id);
-                        }
-                        if (event.key === "Escape") {
-                          setConfirmSpaceId(null);
-                        }
-                      }}
-                    >
-                      {t("spacesView.startChat")}
-                    </div>
-                  )}
                   <button
                     type="button"
                     className="size-7 rounded-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover flex items-center justify-center text-zaki-muted dark:hover:bg-zaki-dark-hover"

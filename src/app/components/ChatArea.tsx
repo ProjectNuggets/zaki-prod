@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, buildApiUrl, getApiBase } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   readResponseFormattingConfig,
@@ -180,6 +180,20 @@ function normalizeAssistantFormatting(prompt: string, content: string) {
   return text;
 }
 
+function buildAgentInvocationUrl(invocationId: string, baseHint?: string | null) {
+  const normalizedId = String(invocationId || "").trim();
+  if (!normalizedId) return null;
+
+  const candidateBase = String(baseHint || "").trim() || getApiBase();
+  const httpUrl = buildApiUrl(`/api/agent-invocation/${encodeURIComponent(normalizedId)}`);
+  const sourceUrl = candidateBase
+    ? `${candidateBase.replace(/\/+$/, "")}/api/agent-invocation/${encodeURIComponent(normalizedId)}`
+    : httpUrl;
+
+  if (!sourceUrl) return null;
+  return sourceUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+}
+
 export function ChatArea() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
@@ -248,6 +262,7 @@ export function ChatArea() {
   const historyLoadedRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
+  const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
 
   // Memory state - works for both auto-save and manual modes
@@ -819,6 +834,7 @@ export function ChatArea() {
 
           if (payload.close || payload.type === "finalizeResponseStream") {
             ws.close();
+            return;
           }
         } catch {
           // Ignore parse errors
@@ -882,6 +898,7 @@ export function ChatArea() {
     });
 
     console.log(`[Chat] Response status: ${response.status}`);
+    const agentBaseHeader = response.headers.get("x-zaki-agent-base");
 
     if (!response.ok) {
       console.error(`[Chat] Stream failed: ${response.status}`);
@@ -936,10 +953,7 @@ export function ChatArea() {
       const socketId =
         (payload.websocketUUID as string | undefined) ||
         (payload.websocketUuid as string | undefined);
-      if (socketId && typeof window !== "undefined") {
-        const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        return `${wsProtocol}//${window.location.host}/api/agent-invocation/${socketId}`;
-      }
+      if (socketId) return buildAgentInvocationUrl(socketId, agentBaseHeader);
       return null;
     };
 
@@ -970,7 +984,6 @@ export function ChatArea() {
         );
         return {};
       }
-
       if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
@@ -986,7 +999,6 @@ export function ChatArea() {
           return { agentUrl };
         }
       }
-
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
         throw new Error(payload.error.trim());
       }
@@ -1007,16 +1019,16 @@ export function ChatArea() {
         return { done: true };
       }
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return { done: true };
-      }
-
       const chunk =
         (typeof payload.delta === "string" && payload.delta) ||
         (typeof payload.textResponse === "string" && payload.textResponse) ||
         (typeof payload.content === "string" && payload.content) ||
         (typeof payload.message === "string" && payload.message) ||
         "";
+
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return chunk ? { chunk, done: true } : { done: true };
+      }
 
       return chunk ? { chunk } : {};
     };
@@ -1034,6 +1046,10 @@ export function ChatArea() {
       }
 
       const result = readPayloadChunk(data);
+      if (result.agentUrl) {
+        await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+        return;
+      }
       if (result.chunk) {
         updateAssistantContent(
           threadSlug,
@@ -1072,12 +1088,17 @@ export function ChatArea() {
       }
 
       const result = readPayloadChunk(payload);
-      if (result.done) {
+      if (result.agentUrl) {
         streamClosed = true;
+        await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
         return;
       }
       if (result.chunk) {
         appendChunk(result.chunk);
+      }
+      if (result.done) {
+        streamClosed = true;
+        return;
       }
     };
 
@@ -1683,9 +1704,16 @@ export function ChatArea() {
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
 
-    const sendText = files.length > 0
-      ? `[Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${trimmed}`
-      : trimmed;
+    const manualAgentPrefix = /^@agent\b/i.test(trimmed);
+    const agentRequested = webSearchArmed || manualAgentPrefix;
+    const normalizedText = manualAgentPrefix ? trimmed.replace(/^@agent\b\s*/i, "").trim() : trimmed;
+    const sendText = agentRequested
+      ? files.length > 0
+        ? `@agent [Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${normalizedText || trimmed}`
+        : `@agent ${normalizedText || trimmed}`.trim()
+      : files.length > 0
+        ? `[Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${trimmed}`
+        : trimmed;
 
     try {
       await streamChatMessage({
@@ -1695,6 +1723,7 @@ export function ChatArea() {
         assistantId: assistantMessageId,
         signal: streamController.signal,
       });
+      setWebSearchArmed(false);
       
       // Keep chat UX responsive: memory save runs in background.
       void checkForSavedMemories(trimmed, threadId);
@@ -1735,6 +1764,7 @@ export function ChatArea() {
     primarySpace?.id,
     streamChatMessage,
     updateAssistantError,
+    webSearchArmed,
   ]);
 
   const handleStopStreaming = useCallback(() => {
@@ -2278,6 +2308,8 @@ export function ChatArea() {
                 onStop={handleStopStreaming}
                 queryModeEnabled={queryModeEnabled}
                 onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
+                webSearchArmed={webSearchArmed}
+                onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
                 memoryMode={memoryMode}
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
               />

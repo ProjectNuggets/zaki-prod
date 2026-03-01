@@ -15,6 +15,8 @@ export function InputArea({
   onStop,
   queryModeEnabled = false,
   onToggleQueryMode,
+  webSearchArmed = false,
+  onToggleWebSearch,
   memoryMode = "autosave",
   onToggleMemoryMode,
 }: {
@@ -25,6 +27,8 @@ export function InputArea({
   onStop?: () => void;
   queryModeEnabled?: boolean;
   onToggleQueryMode?: () => void;
+  webSearchArmed?: boolean;
+  onToggleWebSearch?: () => void;
   memoryMode?: "autosave" | "manual";
   onToggleMemoryMode?: () => void;
 }) {
@@ -52,6 +56,7 @@ export function InputArea({
     ["student", "personal"].includes(planTier) &&
     ["active", "trialing", "past_due"].includes(planStatus);
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
+  const canToggleWebSearch = typeof onToggleWebSearch === "function";
 
   // Auto-focus textarea when response completes (isSending: true → false)
   useEffect(() => {
@@ -138,6 +143,9 @@ export function InputArea({
       if (isOnboardingControlsLocked) return;
       if (event.key === "Escape") {
         setMenuOpen(false);
+        if (webSearchArmed && canToggleWebSearch) {
+          onToggleWebSearch?.();
+        }
       }
     };
 
@@ -147,7 +155,7 @@ export function InputArea({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOnboardingControlsLocked]);
+  }, [isOnboardingControlsLocked, canToggleWebSearch, onToggleWebSearch, webSearchArmed]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -436,7 +444,7 @@ export function InputArea({
                     "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
                     isRtl ? "left-2" : "right-2"
                   )}>
-                    {t("input.webSearch.soonPill")}
+                    {t("input.menu.comingSoonPill")}
                   </span>
                 </button>
                 <button
@@ -457,7 +465,7 @@ export function InputArea({
                     "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
                     isRtl ? "left-2" : "right-2"
                   )}>
-                    {t("input.webSearch.soonPill")}
+                    {t("input.menu.comingSoonPill")}
                   </span>
                 </button>
               </div>
@@ -467,18 +475,44 @@ export function InputArea({
             type="button"
             onClick={() => {
               window.dispatchEvent(new CustomEvent("zaki:onboarding-web-search-clicked"));
-              toast.info(t("input.webSearch.soonToast"));
+              onToggleWebSearch?.();
             }}
-            className="group relative size-11 sm:size-9 rounded-xl flex items-center justify-center border transition-colors bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
-            aria-label={t("input.webSearch.ariaLabel")}
-            title={t("input.webSearch.soonTitle")}
+            disabled={!canToggleWebSearch}
+            className={cn(
+              "group relative size-11 sm:size-9 rounded-xl flex items-center justify-center border transition-colors",
+              webSearchArmed
+                ? "bg-zaki-accent/10 border-zaki-accent/40 text-zaki-accent"
+                : "bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover",
+              !canToggleWebSearch && "opacity-60 cursor-not-allowed"
+            )}
+            aria-label={
+              webSearchArmed
+                ? t("input.webSearch.disableAriaLabel")
+                : t("input.webSearch.enableAriaLabel")
+            }
+            title={
+              webSearchArmed
+                ? t("input.webSearch.disableTitle")
+                : t("input.webSearch.enableTitle")
+            }
             data-onboarding-id="chat-web-search-button"
           >
             <Search className="size-4" />
             <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted">
-              {t("input.webSearch.soonPill")}
+              {webSearchArmed
+                ? t("input.webSearch.onPill")
+                : t("input.webSearch.offPill")}
             </span>
           </button>
+          {webSearchArmed ? (
+            <button
+              type="button"
+              onClick={onToggleWebSearch}
+              className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent"
+            >
+              {t("input.webSearch.activePill")}
+            </button>
+          ) : null}
           {queryModeEnabled ? (
             <span className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent">
               {t("input.queryMode.activePill")}

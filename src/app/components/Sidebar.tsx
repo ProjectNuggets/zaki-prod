@@ -209,6 +209,7 @@ export function Sidebar() {
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
 
   const isActive = (item: string) => activeItem === item;
+  const isSpaceExpanded = (spaceId: string) => expandedSpace === spaceId;
   const isSpaceActive = (spaceId: string) => {
     if (activeItem === spaceId) return true;
     const space = spaces.find((entry) => entry.id === spaceId);
@@ -904,6 +905,14 @@ export function Sidebar() {
     setExpandedSpace((prev) => (prev === spaceId ? null : spaceId));
   };
 
+  const handleSpaceToggle = (spaceId: string) => {
+    const willExpand = expandedSpace !== spaceId;
+    setExpandedSpace(willExpand ? spaceId : null);
+    if (willExpand) {
+      setActiveItem(spaceId);
+    }
+  };
+
   useEffect(() => {
     const handleCreateSpace = (event: Event) => {
       const detail = (event as CustomEvent<{
@@ -1278,52 +1287,45 @@ export function Sidebar() {
           {filteredFixedSpaces.map((space) => (
             <div key={space.id}>
               <div className="relative group">
-                <button
-                  onClick={() => {
-                    setExpandedSpace((prev) => (prev === space.id ? null : space.id));
-                    setActiveItem(space.id);
-                  }}
+                <div
                   className={cn(
-                    "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
+                    "w-full flex items-center gap-2 rounded-lg transition-colors",
                     isSpaceActive(space.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
                   )}
-                  type="button"
                 >
-                  <div className="size-5 flex items-center justify-center">
-                    <div className="scale-[0.6]">
-                      <CenterLogo />
+                  <button
+                    onClick={() => handleSpaceToggle(space.id)}
+                    className={cn(
+                      "min-w-0 flex-1 flex items-center gap-2 p-1.5 text-left",
+                      isRtl && "text-right"
+                    )}
+                    type="button"
+                  >
+                    <div className="size-5 flex items-center justify-center">
+                      <div className="scale-[0.6]">
+                        <CenterLogo />
+                      </div>
                     </div>
-                  </div>
-                  <span className={cn("text-zaki-secondary text-sm font-medium flex-1", isRtl && "text-right")}>
-                    {space.title}
-                  </span>
+                    <span className={cn("text-zaki-secondary text-sm font-medium flex-1", isRtl && "text-right")}>
+                      {space.title}
+                    </span>
+                  </button>
                   {space.threads.length > 0 && (
-                    <span
+                    <button
+                      type="button"
                       className={cn(
-                        "inline-flex transition-transform",
-                        isSpaceActive(space.id) ? "rotate-0" : isRtl ? "rotate-90" : "-rotate-90"
+                        "inline-flex shrink-0 rounded-md p-1 transition-transform hover:bg-zaki-hover focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                        isSpaceExpanded(space.id) ? "rotate-0" : isRtl ? "rotate-90" : "-rotate-90"
                       )}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleSpace(space.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          toggleSpace(space.id);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
+                      onClick={() => toggleSpace(space.id)}
                       aria-label={`${space.title} threads`}
                     >
                       <ChevronDownIcon />
-                    </span>
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
-              {isSpaceActive(space.id) && (
+              {isSpaceExpanded(space.id) && (
                 <div className="pl-6 flex flex-col gap-1 mt-1">
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">
@@ -1413,89 +1415,81 @@ export function Sidebar() {
           {filteredUserSpaces.map((space) => (
             <div key={space.id}>
               <div className="relative group">
-        <button
-                  onClick={() => {
-                    setExpandedSpace((prev) => (prev === space.id ? null : space.id));
-                    setActiveItem(space.id);
-                  }}
+                <div
                   className={cn(
-                    "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
+                    "w-full flex items-center gap-2 rounded-lg transition-colors",
                     isSpaceActive(space.id) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
                   )}
-                  type="button"
                 >
-                  <div className="size-5 flex items-center justify-center">
-                    {(() => {
-                      const Icon = spaceIconMap[space.icon ?? "folder"] ?? Folder;
-                      return <Icon className="size-4" style={{ color: space.color ?? "#88735A" }} />;
-                    })()}
-                  </div>
-                  {editingItem?.type === "space" && editingItem.id === space.id ? (
-                    <input
-                      className="flex-1 bg-white border border-zaki-strong rounded-md px-2 py-1 text-sm text-zaki-secondary outline-none"
-                      value={editingValue}
-                      onChange={(event) => setEditingValue(event.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          commitRename();
-                        }
-                        if (event.key === "Escape") {
-                          setEditingItem(null);
-                        }
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <span className={cn("text-zaki-secondary text-sm font-medium flex-1", isRtl && "text-right")}>
-                      {space.title}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-1">
-                {!space.fixed && (
                   <button
+                    onClick={() => handleSpaceToggle(space.id)}
+                    className={cn(
+                      "min-w-0 flex-1 flex items-center gap-2 p-1.5 text-left",
+                      isRtl && "text-right"
+                    )}
                     type="button"
-                    className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSpaceSettingsTarget(space);
-                      setSpaceDescriptionDraft(space.description ?? "");
-                      setSpaceSettingsOpen(true);
-                    }}
-                    aria-label={`${space.title} settings`}
                   >
-                    <Settings className="size-4 text-zaki-muted" />
-                  </button>
-                )}
-                    {space.threads.length > 0 && (
-                      <span
-                        className={cn(
-                          "inline-flex transition-transform",
-                          isSpaceActive(space.id) ? "rotate-0" : isRtl ? "rotate-90" : "-rotate-90"
-                        )}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleSpace(space.id);
-                        }}
+                    <div className="size-5 flex items-center justify-center">
+                      {(() => {
+                        const Icon = spaceIconMap[space.icon ?? "folder"] ?? Folder;
+                        return <Icon className="size-4" style={{ color: space.color ?? "#88735A" }} />;
+                      })()}
+                    </div>
+                    {editingItem?.type === "space" && editingItem.id === space.id ? (
+                      <input
+                        className="flex-1 bg-white border border-zaki-strong rounded-md px-2 py-1 text-sm text-zaki-secondary outline-none"
+                        value={editingValue}
+                        onChange={(event) => setEditingValue(event.target.value)}
+                        onBlur={commitRename}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            toggleSpace(space.id);
+                          if (event.key === "Enter") {
+                            commitRename();
+                          }
+                          if (event.key === "Escape") {
+                            setEditingItem(null);
                           }
                         }}
-                        role="button"
-                        tabIndex={0}
+                        autoFocus
+                      />
+                    ) : (
+                      <span className={cn("text-zaki-secondary text-sm font-medium flex-1", isRtl && "text-right")}>
+                        {space.title}
+                      </span>
+                    )}
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {!space.fixed && (
+                      <button
+                        type="button"
+                        className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        onClick={() => {
+                          setSpaceSettingsTarget(space);
+                          setSpaceDescriptionDraft(space.description ?? "");
+                          setSpaceSettingsOpen(true);
+                        }}
+                        aria-label={`${space.title} settings`}
+                      >
+                        <Settings className="size-4 text-zaki-muted" />
+                      </button>
+                    )}
+                    {space.threads.length > 0 && (
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex shrink-0 rounded-md p-1 transition-transform hover:bg-zaki-hover focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          isSpaceExpanded(space.id) ? "rotate-0" : isRtl ? "rotate-90" : "-rotate-90"
+                        )}
+                        onClick={() => toggleSpace(space.id)}
                         aria-label={`${space.title} threads`}
                       >
                         <ChevronDownIcon />
-                      </span>
+                      </button>
                     )}
                   </div>
-                </button>
+                </div>
               </div>
 
-              {isSpaceActive(space.id) && (
+              {isSpaceExpanded(space.id) && (
                 <div className="pl-6 flex flex-col gap-1 mt-1">
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">

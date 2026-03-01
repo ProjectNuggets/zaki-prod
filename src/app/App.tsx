@@ -183,7 +183,14 @@ export default function App() {
     if (!user?.username || authLoading) return;
     const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
     const completed = window.localStorage.getItem(key) === "done";
-    setOnboardingOpen(!completed);
+    if (completed) {
+      setOnboardingOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setOnboardingOpen(true);
+    }, 900);
+    return () => window.clearTimeout(timer);
   }, [user?.username, authLoading]);
 
   useEffect(() => {

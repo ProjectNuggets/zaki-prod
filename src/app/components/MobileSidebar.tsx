@@ -7,6 +7,7 @@
 
 import { useEffect } from "react";
 import * as SheetPrimitive from "@radix-ui/react-dialog";
+import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { useUIStore } from "@/stores";
@@ -15,6 +16,11 @@ import { useTranslation } from "react-i18next";
 export function MobileSidebar() {
   const { t } = useTranslation();
   const { mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
+  const location = useLocation();
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname, setMobileSidebarOpen]);
 
   // Close mobile sidebar when navigation occurs
   useEffect(() => {

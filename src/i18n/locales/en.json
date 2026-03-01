@@ -328,6 +328,13 @@
     "copyTable": "Copy table",
     "copied": "Copied",
     "emailLabel": "Email",
+    "dropFiles": "Drop files to attach",
+    "share": "Share",
+    "shareConversation": "Share conversation",
+    "moreOptions": "More options",
+    "reviewMemories": "Review memories",
+    "exportJson": "Export JSON",
+    "scrollToBottom": "Scroll to bottom",
     "whyAnswer": "Why this answer?",
     "hideWhy": "Hide why",
     "usedMemory": "Used memory",
@@ -345,10 +352,13 @@
       "offToast": "Query mode is off. Back to normal chat."
     },
     "webSearch": {
-      "ariaLabel": "Web search (coming soon)",
-      "soonPill": "Soon",
-      "soonTitle": "Web search is coming soon",
-      "soonToast": "Web search is coming soon. We are wiring this with NOVA.TYP."
+      "enableAriaLabel": "Enable web search for the next message",
+      "disableAriaLabel": "Disable web search",
+      "enableTitle": "Use web search for the next message",
+      "disableTitle": "Turn off web search",
+      "offPill": "Web",
+      "onPill": "On",
+      "activePill": "Web search"
     },
     "memoryMode": {
       "label": "Memory",
@@ -365,6 +375,7 @@
       "uploadFile": "Upload image or file",
       "agentMode": "Agent mode",
       "studyLearn": "Study and learn",
+      "comingSoonPill": "Soon",
       "comingSoonToast": "This feature is coming soon."
     },
     "placeholders": [
@@ -374,6 +385,32 @@
       "Draft a message or email",
       "Turn this into a checklist"
     ]
+  },
+  "onboarding": {
+    "eyebrow": "Welcome",
+    "title": "Set up your workspace, {{userName}}",
+    "subtitle": "Three quick steps to make ZAKI useful from day one.",
+    "softHint": "You can keep chatting while this stays open.",
+    "skip": "Skip for now",
+    "back": "Back",
+    "finish": "Finish",
+    "steps": {
+      "space": {
+        "title": "Create your first space",
+        "body": "Spaces keep topics clean. Start with one workspace for your current project.",
+        "action": "Create a space"
+      },
+      "memory": {
+        "title": "Tune memory behavior",
+        "body": "Open Memory and review what ZAKI keeps. You stay in control of every memory.",
+        "action": "Open memory"
+      },
+      "settings": {
+        "title": "Set your defaults",
+        "body": "Adjust language, theme, and profile to match how you work.",
+        "action": "Open settings"
+      }
+    }
   },
   "spacesView": {
     "title": "Spaces",
@@ -805,6 +842,7 @@
   },
   "app": {
     "loadingSession": "Loading session...",
+    "openNavigationMenu": "Open navigation menu",
     "legal": {
       "title": "Updated terms require your consent",
       "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",

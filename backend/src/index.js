@@ -1471,6 +1471,7 @@ app.use(
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
+    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search"],
   })
 );
 
@@ -6712,6 +6713,9 @@ ${originalMessage}`;
       "X-Zaki-Web-Search",
       upstreamPayload.webSearchEnabled === true ? "1" : "0"
     );
+    if (apiBase) {
+      res.setHeader("X-Zaki-Agent-Base", apiBase.replace(/\/api$/i, ""));
+    }
     if (typeof upstreamPayload.mode === "string" && upstreamPayload.mode.trim()) {
       res.setHeader("X-Zaki-Mode", upstreamPayload.mode.trim());
     }
