@@ -132,6 +132,16 @@ export function InputArea({
   }, []);
 
   useEffect(() => {
+    const handleFocusComposer = () => {
+      textareaRef.current?.focus();
+    };
+    window.addEventListener("zaki:focus-composer", handleFocusComposer);
+    return () => {
+      window.removeEventListener("zaki:focus-composer", handleFocusComposer);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (isOnboardingControlsLocked) return;
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -422,7 +432,7 @@ export function InputArea({
                     "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
                     isRtl ? "left-2" : "right-2"
                   )}>
-                    {t("input.webSearch.soonPill")}
+                    {t("input.menu.comingSoonPill")}
                   </span>
                 </button>
                 <div className="my-1 h-px bg-zaki-subtle" />

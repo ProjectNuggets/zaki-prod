@@ -195,7 +195,7 @@ function buildAgentInvocationUrl(invocationId: string, baseHint?: string | null)
 }
 
 export function ChatArea() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const navigate = useNavigate();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const chatCopy = {
@@ -257,6 +257,7 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching">("thinking");
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
@@ -786,17 +787,11 @@ export function ChatArea() {
               return;
             }
             if (report?.type === "statusResponse") {
-              if (!accumulated && typeof report.content === "string") {
-                updateAssistantContent(threadSlug, assistantId, report.content);
-              }
               return;
             }
           }
 
           if (payload?.type === "statusResponse") {
-            if (!accumulated && typeof payload.content === "string") {
-              updateAssistantContent(threadSlug, assistantId, payload.content);
-            }
             return;
           }
 
@@ -998,6 +993,13 @@ export function ChatArea() {
         if (agentUrl) {
           return { agentUrl };
         }
+      }
+      if (
+        eventType === "status" ||
+        payload?.type === "statusResponse" ||
+        payload?.type === "toolCallInvocation"
+      ) {
+        return {};
       }
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
         throw new Error(payload.error.trim());
@@ -1700,12 +1702,12 @@ export function ChatArea() {
     }));
 
     setAttachments([]);
+    const manualAgentPrefix = /^@agent\b/i.test(trimmed);
+    const agentRequested = webSearchArmed || manualAgentPrefix;
+    setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
-
-    const manualAgentPrefix = /^@agent\b/i.test(trimmed);
-    const agentRequested = webSearchArmed || manualAgentPrefix;
     const normalizedText = manualAgentPrefix ? trimmed.replace(/^@agent\b\s*/i, "").trim() : trimmed;
     const sendText = agentRequested
       ? files.length > 0
@@ -1750,6 +1752,7 @@ export function ChatArea() {
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
+      setStreamingIndicatorMode("thinking");
       setIsStreaming(false);
     }
   }, [
@@ -2116,6 +2119,8 @@ export function ChatArea() {
         messages={messages}
         isHistoryLoading={isHistoryLoading}
         isStreaming={isStreaming}
+        streamingLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : t("chat.thinking")}
+        streamingPillLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : undefined}
         firstMessageTransition={firstMessageTransition}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}

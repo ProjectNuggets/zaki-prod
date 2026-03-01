@@ -6,6 +6,8 @@ interface StreamingMessageProps {
   content: string;
   isStreaming: boolean;
   className?: string;
+  thinkingLabel?: string;
+  thinkingPillLabel?: string;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
@@ -15,6 +17,8 @@ export function StreamingMessage({
   content,
   isStreaming,
   className,
+  thinkingLabel,
+  thinkingPillLabel,
   onCopyMessage,
   onRegenerateMessage,
   onThumbsUpMessage,
@@ -25,7 +29,7 @@ export function StreamingMessage({
   return (
     <div className={className}>
       {showThinking ? (
-        <ThinkingIndicator />
+        <ThinkingIndicator label={thinkingLabel} pillLabel={thinkingPillLabel} />
       ) : isStreaming ? (
         <StreamingBubble content={content} isStreaming />
       ) : (

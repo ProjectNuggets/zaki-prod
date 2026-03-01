@@ -316,6 +316,7 @@
   },
   "chat": {
     "thinking": "Thinking",
+    "researching": "Researching",
     "thinkingPhrases": [
       "Thinking",
       "Mulling it over",
@@ -410,6 +411,94 @@
         "body": "Adjust language, theme, and profile to match how you work.",
         "action": "Open settings"
       }
+    },
+    "guided": {
+      "categories": {
+        "spacesThreads": "Spaces + threads",
+        "searchTools": "Search + tools",
+        "memory": "Memory",
+        "helpSettings": "Help + settings"
+      },
+      "fallbackCoachmark": "Open this first. Spaces are used to organize chat threads.",
+      "hintAria": "Onboarding hint",
+      "hideTutorial": "Hide tutorial",
+      "progressComplete": "{{progress}}% complete",
+      "stepSummary": "Step {{current}} of {{total}}",
+      "taskSummary": "Task {{current}} of {{total}}",
+      "followHint": "Use hint",
+      "progressSteps": "{{current}}/{{total}}",
+      "back": "Back",
+      "next": "Next",
+      "completeAction": "Complete",
+      "close": "Close",
+      "finishTutorial": "Finish tutorial",
+      "startChatting": "Start chatting",
+      "completeBadge": "Complete",
+      "completeTitle": "You're ready, {{userName}}",
+      "completeBody": "You have the basics. Memory, Settings, and How to use stay in the profile menu whenever you need them.",
+      "optionalCloseout": "Optional later: settings + help",
+      "tasks": {
+        "spaceScopeOverview": {
+          "label": "Space-wide context",
+          "short": "Instructions and documents added here apply across the whole space. Files you attach inside a chat stay in that thread.",
+          "openLabel": "Open your first space",
+          "openShort": "Open New space first. Then you will see which context applies to the whole space versus one chat."
+        },
+        "spaceCreated": {
+          "label": "Name your space",
+          "short": "Give your space a name, then click Create space.",
+          "openLabel": "Create your first space",
+          "openShort": "Open New space to create a space for one project or topic."
+        },
+        "threadCreated": {
+          "label": "Create a new chat",
+          "short": "Inside your space, click New chat. Each thread is a separate conversation."
+        },
+        "webSearchOpened": {
+          "label": "Web search",
+          "short": "Use this button to trigger a web-assisted reply in chat."
+        },
+        "chatControlsOpened": {
+          "label": "Open chat controls",
+          "short": "Click the + button to reveal the chat controls menu."
+        },
+        "chatToolsOverview": {
+          "label": "Explore chat tools",
+          "short": "From this menu, you can use Query mode, upload files, and access study, image, and agent tools."
+        },
+        "queryModeExplained": {
+          "label": "Query mode",
+          "short": "Use Query mode when you want ZAKI to answer from the current space documents instead of relying on general chat alone."
+        },
+        "uploadFilesExplained": {
+          "label": "Upload images and files",
+          "short": "Use this to add images or files to the current thread."
+        },
+        "studyLearnExplained": {
+          "label": "Study and learn",
+          "short": "Use this when you want document-based help that prioritizes understanding and deeper exploration."
+        },
+        "generateImageExplained": {
+          "label": "Generate image",
+          "short": "Use this to create images directly inside the current chat."
+        },
+        "agentModeExplained": {
+          "label": "Agent mode",
+          "short": "Use this to hand work to an active assistant that can use tools to complete tasks."
+        },
+        "memoryToggleOverview": {
+          "label": "Memory toggle",
+          "short": "Switch between manual memory, where you confirm what ZAKI keeps, and automatic memory, where it saves useful details for you."
+        },
+        "memoryProfileOpened": {
+          "label": "Open the profile menu",
+          "short": "Click your profile card in the bottom-left corner."
+        },
+        "memoryOpened": {
+          "label": "Open Memory",
+          "short": "Open Memory from your profile menu to review what ZAKI keeps and adjust it anytime."
+        }
+      }
     }
   },
   "spacesView": {
@@ -440,6 +529,13 @@
       "instructions": "Instructions",
       "pinnedDocuments": "Pinned documents",
       "uploadDocuments": "Add files after creating the space. Uploads are embedded from the space view."
+    },
+    "scopeNotes": {
+      "sectionLabel": "Context scope",
+      "spaceWideLabel": "Space-wide",
+      "spaceWideBody": "Instructions and documents added to this space stay available across every chat in the space.",
+      "threadSpecificLabel": "Thread-specific",
+      "threadSpecificBody": "Files attached inside a chat stay in that thread only, so you can keep one-off context separate."
     },
     "placeholders": {
       "name": "Marketing research",

@@ -1597,11 +1597,11 @@ export function Sidebar() {
       {/* Footer Profile */}
       <div className="mt-4 pt-3 border-t border-zaki-subtle relative">
 	        <button
-		          type="button"
-		          className={cn(
-		            "w-full flex items-center gap-3 p-2 rounded-lg transition-colors hover:bg-zaki-hover",
-		            isRtl ? "flex-row-reverse text-right" : "text-left"
-		          )}
+			          type="button"
+			          className={cn(
+			            "w-full flex items-center gap-3 p-2 rounded-lg transition-colors hover:bg-zaki-hover",
+			            isRtl ? "flex-row-reverse text-right" : "text-left"
+			          )}
           onClick={() => {
             setActiveItem("profile");
             setProfileMenuOpen((open) => {
@@ -1611,7 +1611,9 @@ export function Sidebar() {
               }
               return nextOpen;
             });
-          }}
+	          }}
+          aria-haspopup="menu"
+          aria-expanded={profileMenuOpen}
           data-profile-button
           data-onboarding-id="profile-menu-trigger"
         >
