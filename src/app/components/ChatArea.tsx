@@ -680,6 +680,9 @@ export function ChatArea() {
       }
       const ws = new WebSocket(agentUrl);
       let accumulated = "";
+      let supportsAgentStreaming = false;
+      let hasAnswer = false;
+      let autoReplySent = false;
       let settled = false;
 
       const cleanup = () => {
@@ -717,19 +720,100 @@ export function ChatArea() {
         }
         try {
           const payload = JSON.parse(event.data);
-          const chunk =
+          if (!payload?.type && supportsAgentStreaming) {
+            return;
+          }
+
+          if (payload?.type === "WAITING_ON_INPUT") {
+            if (hasAnswer) {
+              ws.send(
+                JSON.stringify({
+                  type: "awaitingFeedback",
+                  feedback: "/exit",
+                })
+              );
+              return;
+            }
+            if (!autoReplySent) {
+              ws.send(
+                JSON.stringify({
+                  type: "awaitingFeedback",
+                  feedback: "",
+                })
+              );
+              autoReplySent = true;
+            }
+            return;
+          }
+
+          if (payload?.type === "reportStreamEvent" && payload?.content) {
+            supportsAgentStreaming = true;
+            const report = payload.content as { type?: string; content?: string };
+            if (report?.type === "removeStatusResponse") return;
+            if (report?.type === "fullTextResponse") {
+              accumulated = String(report.content || "");
+              updateAssistantContent(threadSlug, assistantId, accumulated);
+              if (accumulated) hasAnswer = true;
+              return;
+            }
+            if (report?.type === "textResponseChunk") {
+              accumulated += String(report.content || "");
+              updateAssistantContent(threadSlug, assistantId, accumulated);
+              if (accumulated) hasAnswer = true;
+              return;
+            }
+            if (report?.type === "toolCallInvocation") {
+              return;
+            }
+            if (report?.type === "statusResponse") {
+              if (!accumulated && typeof report.content === "string") {
+                updateAssistantContent(threadSlug, assistantId, report.content);
+              }
+              return;
+            }
+          }
+
+          if (payload?.type === "statusResponse") {
+            if (!accumulated && typeof payload.content === "string") {
+              updateAssistantContent(threadSlug, assistantId, payload.content);
+            }
+            return;
+          }
+
+          if (payload?.type === "toolCallInvocation") {
+            return;
+          }
+
+          if (payload?.type === "wssFailure") {
+            const errorText =
+              (typeof payload.content === "string" && payload.content) ||
+              "Agent connection failed.";
+            updateAssistantError(threadSlug, assistantId, errorText, "agent_error");
+            ws.close();
+            return;
+          }
+
+          const rawChunk =
             (typeof payload.textResponse === "string" && payload.textResponse) ||
             (typeof payload.content === "string" && payload.content) ||
             (typeof payload.message === "string" && payload.message) ||
             (typeof payload.error === "string" && payload.error) ||
             "";
+          if (rawChunk) {
+            if (
+              payload.type === "textResponse" ||
+              payload.type === "fullTextResponse"
+            ) {
+              accumulated = rawChunk;
+            } else {
+              accumulated += rawChunk;
+            }
+            updateAssistantContent(threadSlug, assistantId, accumulated);
+            if (accumulated) hasAnswer = true;
+          }
+
           if (payload.close || payload.type === "finalizeResponseStream") {
             ws.close();
-            return;
-          }
-          if (chunk) {
-            accumulated += chunk;
-            updateAssistantContent(threadSlug, assistantId, accumulated);
           }
         } catch {
           // Ignore parse errors
@@ -836,10 +920,28 @@ export function ChatArea() {
       throw new Error("Chat stream returned no data.");
     }
 
+    const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
+      const direct =
+        (payload.agentInvocationUrl as string | undefined) ||
+        (payload.invocationUrl as string | undefined) ||
+        (payload.websocketUrl as string | undefined) ||
+        (payload.wsUrl as string | undefined) ||
+        (payload.url as string | undefined);
+      if (direct) return direct;
+      const socketId =
+        (payload.websocketUUID as string | undefined) ||
+        (payload.websocketUuid as string | undefined);
+      if (socketId && typeof window !== "undefined") {
+        const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        return `${wsProtocol}//${window.location.host}/api/agent-invocation/${socketId}`;
+      }
+      return null;
+    };
+
     const readPayloadChunk = (
       payload: Record<string, unknown>,
       eventType?: string
-    ): { done?: boolean; chunk?: string } => {
+    ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       if (eventType === "done") {
         return { done: true };
       }
@@ -871,6 +973,13 @@ export function ChatArea() {
           payload.sources as Array<{ id: string; content: string; type: string }>
         );
         return {};
+      }
+
+      if (payload?.type === "agentInitWebsocketConnection") {
+        const agentUrl = resolveAgentUrl(payload);
+        if (agentUrl) {
+          return { agentUrl };
+        }
       }
 
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
@@ -908,12 +1017,7 @@ export function ChatArea() {
     // If JSON response, check for agent invocation URL
     if (contentType.includes("application/json")) {
       const data = (await response.json()) as Record<string, unknown>;
-      const agentUrl =
-        (data.agentInvocationUrl as string | undefined) ||
-        (data.invocationUrl as string | undefined) ||
-        (data.websocketUrl as string | undefined) ||
-        (data.wsUrl as string | undefined) ||
-        (data.url as string | undefined);
+      const agentUrl = resolveAgentUrl(data);
       
       if (agentUrl) {
         await streamAgentInvocation(agentUrl, threadSlug, assistantId, signal);
@@ -944,7 +1048,7 @@ export function ChatArea() {
       updateAssistantContent(threadSlug, assistantId, accumulated);
     };
 
-    const processRawData = (raw: string) => {
+    const processRawData = async (raw: string) => {
       const value = raw.trim();
       if (!value || value === "[DONE]") {
         if (value === "[DONE]") streamClosed = true;
@@ -957,6 +1061,16 @@ export function ChatArea() {
           streamClosed = true;
           return;
         }
+        if (result.agentUrl) {
+          await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore cancel errors
+          }
+          streamClosed = true;
+          return;
+        }
         if (result.chunk) {
           appendChunk(result.chunk);
         }
@@ -966,7 +1080,7 @@ export function ChatArea() {
       }
     };
 
-    const processSseBlock = (block: string) => {
+    const processSseBlock = async (block: string) => {
       const normalized = block.replace(/\r/g, "");
       const lines = normalized.split("\n");
       const dataLines: string[] = [];
@@ -984,7 +1098,7 @@ export function ChatArea() {
           continue;
         }
         // Fallback: non-SSE chunked line
-        processRawData(line);
+        await processRawData(line);
       }
 
       if (dataLines.length > 0) {
@@ -996,12 +1110,22 @@ export function ChatArea() {
             streamClosed = true;
             return;
           }
+          if (result.agentUrl) {
+            await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+            try {
+              await reader.cancel();
+            } catch {
+              // ignore cancel errors
+            }
+            streamClosed = true;
+            return;
+          }
           if (result.chunk) {
             appendChunk(result.chunk);
           }
           return;
         } catch {
-          processRawData(payloadText);
+          await processRawData(payloadText);
         }
       }
     };
@@ -1017,7 +1141,7 @@ export function ChatArea() {
       while (separatorIndex !== -1) {
         const block = buffer.slice(0, separatorIndex);
         buffer = buffer.slice(separatorIndex + 2);
-        processSseBlock(block);
+        await processSseBlock(block);
         if (streamClosed) break;
         separatorIndex = buffer.indexOf("\n\n");
       }
@@ -1025,7 +1149,7 @@ export function ChatArea() {
 
     const trailing = buffer.trim();
     if (!streamClosed && trailing) {
-      processSseBlock(trailing);
+      await processSseBlock(trailing);
     }
 
     const finalized = normalizeAssistantFormatting(message, accumulated);

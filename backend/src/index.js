@@ -340,6 +340,96 @@ function pipeReadableToResponse(readable, res, label = "Stream") {
   readable.pipe(res);
 }
 
+async function pipeSseWithAgentLinks(readable, res, label = "Stream") {
+  const agentWsBase = getAgentWsBase();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  res.on("close", () => {
+    if (!readable.destroyed) {
+      readable.destroy();
+    }
+  });
+
+  const writeBlock = (block) => {
+    if (!block || res.destroyed || res.writableEnded) return;
+    const normalized = block.replace(/\r/g, "");
+    const lines = normalized.split("\n");
+    const dataLines = [];
+    const outLines = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      } else if (line.length) {
+        outLines.push(line);
+      }
+    }
+
+    if (dataLines.length > 0) {
+      const payloadText = dataLines.join("\n");
+      let wrote = false;
+      if (payloadText && payloadText !== "[DONE]") {
+        try {
+          const payload = JSON.parse(payloadText);
+          if (
+            payload?.type === "agentInitWebsocketConnection" &&
+            payload?.websocketUUID &&
+            agentWsBase
+          ) {
+            const agentUrl = `${agentWsBase}/agent-invocation/${payload.websocketUUID}`;
+            payload.agentInvocationUrl = agentUrl;
+            payload.websocketUrl = agentUrl;
+          }
+          outLines.push(`data: ${JSON.stringify(payload)}`);
+          wrote = true;
+        } catch {
+          // fall through
+        }
+      }
+
+      if (!wrote) {
+        for (const line of dataLines) {
+          outLines.push(`data: ${line}`);
+        }
+      }
+    }
+
+    res.write(`${outLines.join("\n")}\n\n`);
+  };
+
+  try {
+    for await (const chunk of readable) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        writeBlock(block);
+        separatorIndex = buffer.indexOf("\n\n");
+      }
+    }
+
+    const trailing = buffer.trim();
+    if (trailing) {
+      writeBlock(trailing);
+    }
+    if (!res.destroyed && !res.writableEnded) {
+      res.end();
+    }
+  } catch (error) {
+    console.error(`[${label}] SSE pipe error:`, error);
+    if (!res.headersSent) {
+      res.status(502).json({ error: `${label} failed.` });
+      return;
+    }
+    if (!res.destroyed) {
+      res.end();
+    }
+  }
+}
+
 function writeSseComment(res, comment) {
   if (res.destroyed || res.writableEnded) return;
   const safeComment = String(comment || "").replace(/[\r\n]+/g, " ").trim() || "zaki-stream";
@@ -1527,6 +1617,14 @@ function getApiBase() {
   if (!NOVA_TYP_BASE_URL) return null;
   const normalized = NOVA_TYP_BASE_URL.replace(/\/+$/, "");
   return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
+}
+
+function getAgentWsBase() {
+  const apiBase = getApiBase();
+  if (!apiBase) return null;
+  if (apiBase.startsWith("https://")) return `wss://${apiBase.slice(8)}`;
+  if (apiBase.startsWith("http://")) return `ws://${apiBase.slice(7)}`;
+  return null;
 }
 
 function getNullclawBase() {
@@ -6645,7 +6743,11 @@ ${originalMessage}`;
       }
     }
 
-    pipeReadableToResponse(nodeStream, res, "Chat stream");
+    if (isSse) {
+      await pipeSseWithAgentLinks(nodeStream, res, "Chat stream");
+    } else {
+      pipeReadableToResponse(nodeStream, res, "Chat stream");
+    }
   } catch (error) {
     console.error("[Chat] Stream error:", error);
     const message = error?.message || "Chat stream failed.";
