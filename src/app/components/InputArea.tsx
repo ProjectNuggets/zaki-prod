@@ -28,12 +28,11 @@ export function InputArea({
   memoryMode?: "autosave" | "manual";
   onToggleMemoryMode?: () => void;
 }) {
-  const threadAttachmentUnavailableMessage =
-    "Thread file grounding is not live yet. Upload documents from the workspace tools so ZAKI can use them reliably.";
   const [menuOpen, setMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const { t, i18n } = useTranslation();
+  const threadAttachmentUnavailableMessage = t("input.workspaceFilesHint");
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const placeholderSuggestions = useMemo(
     () => t("input.placeholders", { returnObjects: true }) as string[],
@@ -484,6 +483,9 @@ export function InputArea({
         </div>
       </form>
       <div className="text-center mt-2">
+         <p className="text-zaki-muted text-[11px]" dir={isRtl ? "rtl" : "ltr"}>
+           {t("input.workspaceFilesHint")}
+         </p>
          <p className="text-zaki-disabled text-xs" dir={isRtl ? "rtl" : "ltr"}>
            {t("input.disclaimer")}
          </p>

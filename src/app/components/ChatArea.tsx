@@ -113,10 +113,28 @@ function getRequestedResponseFormat(prompt: string) {
   if (!text) return null;
   if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) return "table";
   if (
+    /\b(?:numbered|numbered list|steps)\b/i.test(text) ||
+    /(?:^|\s)(خطوات|مرقمة|مرقّم|numbered)(?:\s|$)/i.test(text)
+  ) {
+    return "numbered";
+  }
+  if (
     /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
     /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
   ) {
     return "bullets";
+  }
+  if (
+    /\b(?:summary|summarize|summarise)\b/i.test(text) ||
+    /(?:^|\s)(ملخص|لخص|اختصر)(?:\s|$)/i.test(text)
+  ) {
+    return "summary";
+  }
+  if (
+    /\b(?:one short sentence|one sentence|one line)\b/i.test(text) ||
+    /(?:^|\s)(جملة واحدة|سطر واحد)(?:\s|$)/i.test(text)
+  ) {
+    return "sentence";
   }
   if (
     /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
@@ -142,8 +160,24 @@ function normalizeAssistantFormatting(prompt: string, content: string) {
   const text = String(content || "").trim();
   if (!format || !text) return text;
 
-  if (format === "bullets") {
-    if (/^\s*[-*•]\s+/m.test(text)) return text;
+  if (format === "sentence" || format === "concise") {
+    const singleLine = text.replace(/\s+/g, " ").trim();
+    if (format === "sentence") {
+      return singleLine.match(/.+?[.!?؟](?:\s|$)/)?.[0]?.trim() || singleLine;
+    }
+    return singleLine;
+  }
+
+  if (format === "bullets" || format === "numbered") {
+    if (format === "bullets" && /^\s*[-*•]\s+/m.test(text)) return text;
+    if (format === "numbered" && /^\s*\d+\.\s+/m.test(text)) {
+      const numberedLines = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line, index) => `${index + 1}. ${line.replace(/^\d+\.\s*/, "")}`);
+      return numberedLines.join("\n");
+    }
     const cleaned = text.replace(/^•\s*/, "").trim();
     let parts = cleaned
       .split(/\s*;\s+/)
@@ -168,7 +202,9 @@ function normalizeAssistantFormatting(prompt: string, content: string) {
       parts = [...head, tail];
     }
     if (parts.length >= 2) {
-      return parts.map((part) => `- ${part}`).join("\n");
+      return parts
+        .map((part, index) => (format === "numbered" ? `${index + 1}. ${part}` : `- ${part}`))
+        .join("\n");
     }
   }
 
@@ -553,10 +589,35 @@ export function ChatArea() {
       updated[assistantIndex] = {
         ...existingMsg,
         content: newContent,
+        error: false,
+        errorCode: null,
       };
       return { ...prev, [threadSlug]: updated };
     });
   }, []);
+
+  const updateAssistantError = useCallback(
+    (threadSlug: string, assistantId: string, newContent: string, errorCode?: string | null) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const updated = [...threadMessages];
+        const existingMsg = updated[assistantIndex];
+        if (!existingMsg) return prev;
+        updated[assistantIndex] = {
+          ...existingMsg,
+          content: existingMsg.content?.trim()
+            ? `${existingMsg.content.trim()}\n\n${newContent}`
+            : newContent,
+          error: true,
+          errorCode: errorCode ?? null,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
 
   const updateAssistantSources = useCallback(
     (threadSlug: string, assistantId: string, sources: Array<{ id: string; content: string; type: string }>) => {
@@ -665,12 +726,14 @@ export function ChatArea() {
     message,
     assistantId,
     signal,
+    disableResponseEnvelope = false,
   }: {
     workspaceSlug: string;
     threadSlug: string;
     message: string;
     assistantId: string;
     signal?: AbortSignal;
+    disableResponseEnvelope?: boolean;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -688,6 +751,7 @@ export function ChatArea() {
       : {
           message,
           mode: queryModeEnabled ? "query" : "chat",
+          ...(disableResponseEnvelope ? { disableResponseEnvelope: true } : {}),
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
         };
 
@@ -739,7 +803,11 @@ export function ChatArea() {
     }
 
     if (!response.body) {
-      throw new Error("Chat stream returned no data.");
+      throw new ChatRequestError(
+        "ZAKI didn't return a reply. Please try again.",
+        502,
+        "empty_response"
+      );
     }
 
     const readPayloadChunk = (
@@ -754,7 +822,11 @@ export function ChatArea() {
           (typeof payload.message === "string" && payload.message) ||
           (typeof payload.error === "string" && payload.error) ||
           "Agent stream failed.";
-        throw new Error(msg);
+        throw new ChatRequestError(
+          msg,
+          502,
+          typeof payload.code === "string" ? payload.code : "chat_error"
+        );
       }
 
       if (eventType === "memory_used" && Array.isArray(payload.sources)) {
@@ -781,6 +853,18 @@ export function ChatArea() {
 
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
         throw new Error(payload.error.trim());
+      }
+
+      if (payload?.type === "error" || payload?.error === true) {
+        const errorMessage =
+          (typeof payload.message === "string" && payload.message.trim()) ||
+          (typeof payload.error === "string" && payload.error.trim()) ||
+          "ZAKI couldn't finish that reply. Please try again.";
+        throw new ChatRequestError(
+          errorMessage,
+          502,
+          typeof payload.code === "string" ? payload.code : "chat_error"
+        );
       }
 
       const chunk =
@@ -817,6 +901,24 @@ export function ChatArea() {
           assistantId,
           normalizeAssistantFormatting(message, result.chunk)
         );
+      } else if (!result.done) {
+        const error = new ChatRequestError(
+          "ZAKI didn't return a reply. Please try again.",
+          502,
+          "empty_response"
+        );
+        if (!disableResponseEnvelope && getRequestedResponseFormat(message)) {
+          await streamChatMessage({
+            workspaceSlug,
+            threadSlug,
+            message,
+            assistantId,
+            signal,
+            disableResponseEnvelope: true,
+          });
+          return;
+        }
+        throw error;
       }
       return;
     }
@@ -919,10 +1021,35 @@ export function ChatArea() {
     }
 
     const finalized = normalizeAssistantFormatting(message, accumulated);
+    if (!finalized.trim()) {
+      const error = new ChatRequestError(
+        "ZAKI didn't return a reply. Please try again.",
+        502,
+        "empty_response"
+      );
+      if (!disableResponseEnvelope && getRequestedResponseFormat(message)) {
+        await streamChatMessage({
+          workspaceSlug,
+          threadSlug,
+          message,
+          assistantId,
+          signal,
+          disableResponseEnvelope: true,
+        });
+        return;
+      }
+      throw error;
+    }
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
-  }, [spacesList, queryModeEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
+  }, [
+    spacesList,
+    queryModeEnabled,
+    streamAgentInvocation,
+    updateAssistantContent,
+    updateAssistantSources,
+  ]);
 
   // Check for memories - Auto-Save or Manual mode
   const flushMemoryQueue = useCallback(() => {
@@ -1458,6 +1585,7 @@ export function ChatArea() {
       void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
       if (isAbortError(error)) {
+        updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
         return;
       }
       if (error instanceof ChatRequestError && error.code === "access_expired") {
@@ -1465,7 +1593,15 @@ export function ChatArea() {
         navigate("/pricing");
         return;
       }
-      toast.error(error instanceof Error ? error.message : "Unable to send message");
+      const errorMessage =
+        error instanceof Error ? error.message : "ZAKI couldn't finish that reply. Please try again.";
+      updateAssistantError(
+        threadId,
+        assistantMessageId,
+        errorMessage,
+        error instanceof ChatRequestError ? error.code : "chat_error"
+      );
+      toast.error(errorMessage);
     } finally {
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
@@ -1483,6 +1619,7 @@ export function ChatArea() {
     navigate,
     primarySpace?.id,
     streamChatMessage,
+    updateAssistantError,
   ]);
 
   const handleStopStreaming = useCallback(() => {

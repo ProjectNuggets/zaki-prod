@@ -41,6 +41,8 @@ export interface Message {
   attachments?: MessageAttachment[];
   chatId?: number;
   memorySources?: MemorySource[];
+  error?: boolean;
+  errorCode?: string | null;
 }
 
 export interface MessageAttachment {

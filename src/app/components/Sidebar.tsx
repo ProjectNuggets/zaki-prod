@@ -841,7 +841,11 @@ export function Sidebar() {
         if (data.warning) {
           toast.warning(data.warning);
         } else {
-          toast.success(`${file.name} removed from the workspace.`);
+          toast.success(
+            t("sidebar.removeDocumentSuccess", {
+              name: file.name,
+            })
+          );
         }
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to remove workspace document.");
@@ -1924,6 +1928,16 @@ export function Sidebar() {
                   Add project files
                 </button>
                 <div className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white/70 dark:bg-zaki-dark-elevated px-3 py-3">
+                  <div className="mb-3 rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-zaki-base/60 dark:bg-zaki-dark-card px-3 py-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
+                      {t("sidebar.scopeTitle")}
+                    </div>
+                    <div className="mt-2 space-y-1 text-[11px] text-zaki-secondary dark:text-zaki-dark-subtle">
+                      <p>{t("sidebar.scopeMemory")}</p>
+                      <p>{t("sidebar.scopeWorkspace")}</p>
+                      <p>{t("sidebar.scopeChat")}</p>
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">

@@ -90,6 +90,7 @@ Expected result:
 1. response starts quickly
 2. no backend crash
 3. no fetch-failed path
+4. no blank assistant response
 
 ### 10. Memory recall smoke
 Store:
@@ -110,9 +111,13 @@ Expected result:
 ### 11. Generic prompt memory guard smoke
 Ask:
 1. `Help me write a concise work email asking for feedback on a document.`
+2. `Reply in one short sentence: what are the benefits of workspace instructions?`
+3. `Give me 3 numbered steps to plan a short trip.`
 
 Expected result:
 1. no irrelevant travel/location memory leakage
+2. concise prompts return visible concise content
+3. numbered formatting is preserved
 
 ### 12. Attachment UX smoke
 1. Try to use file upload from chat input.

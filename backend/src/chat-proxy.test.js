@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@jest/globals";
-import { buildStreamUpstreamPayload, extractStreamMessage } from "./chat-proxy.js";
+import {
+  buildStreamUpstreamPayload,
+  extractStreamMessage,
+  getRequestedResponseFormat,
+} from "./chat-proxy.js";
 
 describe("chat proxy payload helpers", () => {
   it("extracts and trims stream message", () => {
@@ -78,5 +82,16 @@ describe("chat proxy payload helpers", () => {
     );
 
     expect(payload.mode).toBe("chat");
+  });
+
+  it("detects numbered, sentence, and summary formatting intents", () => {
+    expect(getRequestedResponseFormat("Give me 3 numbered steps to plan a trip.")).toBe(
+      "numbered"
+    );
+    expect(
+      getRequestedResponseFormat("Reply in one short sentence: what are workspace instructions?")
+    ).toBe("sentence");
+    expect(getRequestedResponseFormat("Summarize this in one line")).toBe("summary");
+    expect(getRequestedResponseFormat("قارنها في جدول")).toBe("table");
   });
 });

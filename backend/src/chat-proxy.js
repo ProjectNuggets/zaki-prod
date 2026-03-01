@@ -15,7 +15,9 @@ const ZAKI_RESPONSE_FORMAT_GUARDRAIL = [
   "Response formatting rules:",
   "- Answer directly first.",
   "- If the user asks for a concise, brief, or short answer, keep it short by default.",
+  "- If the user asks for one short sentence or one line, return exactly one short sentence.",
   "- If the user asks for bullets, return real markdown bullet points.",
+  "- If the user asks for numbered steps, return a real markdown numbered list.",
   "- If the user asks for a table, return a markdown table only.",
   "- Avoid bloated introductions and avoid unnecessary filler.",
 ].join("\n");
@@ -45,4 +47,43 @@ export function buildStreamUpstreamPayload(body, enrichedMessage) {
   }
 
   return payload;
+}
+
+export function getRequestedResponseFormat(message = "") {
+  const text = String(message || "").trim();
+  if (!text) return null;
+  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) {
+    return "table";
+  }
+  if (
+    /\b(?:numbered|numbered list|steps)\b/i.test(text) ||
+    /(?:^|\s)(خطوات|مرقمة|مرقّم|numbered)(?:\s|$)/i.test(text)
+  ) {
+    return "numbered";
+  }
+  if (
+    /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
+    /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
+  ) {
+    return "bullets";
+  }
+  if (
+    /\b(?:summary|summarize|summarise)\b/i.test(text) ||
+    /(?:^|\s)(ملخص|لخص|اختصر)(?:\s|$)/i.test(text)
+  ) {
+    return "summary";
+  }
+  if (
+    /\b(?:one short sentence|one sentence|one line)\b/i.test(text) ||
+    /(?:^|\s)(جملة واحدة|سطر واحد)(?:\s|$)/i.test(text)
+  ) {
+    return "sentence";
+  }
+  if (
+    /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
+    /(?:^|\s)(باختصار|مختصر|بشكل مختصر)(?:\s|$)/i.test(text)
+  ) {
+    return "concise";
+  }
+  return null;
 }

@@ -28,7 +28,11 @@ import {
 import { extractFacts } from "./memory-extraction.js";
 import { summarizeConversation } from "./memory/session-summary.js";
 import { createSessionEndHandler } from "./memory/session-end-route.js";
-import { buildStreamUpstreamPayload, extractStreamMessage } from "./chat-proxy.js";
+import {
+  buildStreamUpstreamPayload,
+  extractStreamMessage,
+  getRequestedResponseFormat,
+} from "./chat-proxy.js";
 import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./billing-webhook-events.js";
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
@@ -385,6 +389,170 @@ function sendSyntheticSseReply(res, text, options = {}) {
     },
   });
   res.end();
+}
+
+function sendChatStreamError(res, message, options = {}) {
+  const payload = {
+    type: "error",
+    error: true,
+    code: String(options.code || "chat_error"),
+    message: String(message || "ZAKI couldn't finish that reply. Please try again."),
+    retryable: options.retryable !== false,
+    close: true,
+  };
+
+  if (!res.headersSent) {
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") {
+      res.flushHeaders();
+    }
+    writeSseComment(res, "zaki-stream-open");
+  }
+
+  writeSseData(res, payload);
+  if (!res.destroyed && !res.writableEnded) {
+    res.end();
+  }
+}
+
+function isSseLikeResponse(response) {
+  const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
+  return contentType.includes("text/event-stream");
+}
+
+function classifyPromptCategory(message = "", requestPayload = {}) {
+  if (isIdentityProbePrompt(message)) return "identity";
+  if (isComparisonPrompt(message)) return "comparison";
+  if (getIntrospectionMode(message)) return "introspection";
+  if (shouldSkipChatMemoryContext(requestPayload, message)) return "generic_or_query";
+  return "personal_chat";
+}
+
+function inspectSseBlockForAssistantContent(block = "") {
+  const normalized = String(block || "").replace(/\r/g, "");
+  if (!normalized.trim()) {
+    return { hasAssistantContent: false, hasError: false, done: false };
+  }
+
+  const lines = normalized.split("\n");
+  const dataLines = [];
+  let eventType = "";
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("event:")) {
+      eventType = line.slice(6).trim();
+      continue;
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+      continue;
+    }
+  }
+
+  const payloadText = dataLines.join("\n").trim();
+  if (!payloadText) {
+    return { hasAssistantContent: false, hasError: eventType === "error", done: false };
+  }
+  if (payloadText === "[DONE]") {
+    return { hasAssistantContent: false, hasError: false, done: true };
+  }
+
+  try {
+    const payload = JSON.parse(payloadText);
+    const chunk =
+      (typeof payload?.delta === "string" && payload.delta) ||
+      (typeof payload?.textResponse === "string" && payload.textResponse) ||
+      (typeof payload?.content === "string" && payload.content) ||
+      (typeof payload?.message === "string" && payload.message) ||
+      (typeof payload?.message?.content === "string" && payload.message.content) ||
+      "";
+    return {
+      hasAssistantContent: Boolean(String(chunk || "").trim()),
+      hasError: eventType === "error" || payload?.type === "error" || payload?.error === true,
+      done: payload?.close === true || payload?.type === "finalizeResponseStream",
+    };
+  } catch {
+    return {
+      hasAssistantContent: true,
+      hasError: eventType === "error",
+      done: false,
+    };
+  }
+}
+
+async function relaySseWithMonitoring(upstreamResponse, res, options = {}) {
+  const decoder = new TextDecoder("utf-8");
+  const reader = upstreamResponse.body.getReader();
+  let buffer = "";
+  let hasAssistantContent = false;
+  let sawUpstreamError = false;
+
+  if (!res.headersSent) {
+    res.status(upstreamResponse.status);
+    copyResponseHeaders(upstreamResponse, res);
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") {
+      res.flushHeaders();
+    }
+  }
+
+  writeSseComment(res, "zaki-stream-open");
+  if (Array.isArray(options.memorySources) && options.memorySources.length > 0) {
+    writeSseData(res, {
+      type: "memoryUsed",
+      count: options.memorySources.length,
+      sources: options.memorySources.slice(0, 5),
+    });
+  }
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    if (!chunk) continue;
+    if (!res.destroyed && !res.writableEnded) {
+      res.write(chunk);
+    }
+    buffer += chunk;
+    let separatorIndex = buffer.indexOf("\n\n");
+    while (separatorIndex !== -1) {
+      const block = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      const inspection = inspectSseBlockForAssistantContent(block);
+      hasAssistantContent = hasAssistantContent || inspection.hasAssistantContent;
+      sawUpstreamError = sawUpstreamError || inspection.hasError;
+      separatorIndex = buffer.indexOf("\n\n");
+    }
+  }
+
+  const trailing = buffer.trim();
+  if (trailing) {
+    const inspection = inspectSseBlockForAssistantContent(trailing);
+    hasAssistantContent = hasAssistantContent || inspection.hasAssistantContent;
+    sawUpstreamError = sawUpstreamError || inspection.hasError;
+  }
+
+  if (!hasAssistantContent && !sawUpstreamError) {
+    console.error("[Chat] Upstream ended without assistant content", options.logContext || {});
+    writeSseData(res, {
+      type: "error",
+      error: true,
+      code: "empty_response",
+      message: "ZAKI didn't return a reply. Please try again.",
+      retryable: true,
+      close: true,
+    });
+  }
+
+  if (!res.destroyed && !res.writableEnded) {
+    res.end();
+  }
 }
 
 function isStripeProviderSelected() {
@@ -5768,48 +5936,38 @@ function buildProductComparisonReply(message = "") {
   ].join("\n");
 }
 
-function getRequestedResponseFormat(message = "") {
-  const text = String(message || "").trim();
-  if (!text) return null;
-  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) {
-    return "table";
-  }
-  if (
-    /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
-    /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
-  ) {
-    return "bullets";
-  }
-  if (
-    /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
-    /(?:^|\s)(باختصار|مختصر|بشكل مختصر)(?:\s|$)/i.test(text)
-  ) {
-    return "concise";
-  }
-  return null;
-}
-
 function applyResponseFormatEnvelope(message = "") {
   const normalizedMessage = String(message || "").trim();
-  const format = getRequestedResponseFormat(normalizedMessage);
-  if (!format) return normalizedMessage;
+  try {
+    const format = getRequestedResponseFormat(normalizedMessage);
+    if (!format) return normalizedMessage;
 
-  let instruction = "";
-  if (format === "table") {
-    instruction =
-      "Return only a markdown table. Do not add an intro paragraph before the table.";
-  } else if (format === "bullets") {
-    instruction =
-      "Return a real markdown bullet list. Put each bullet on its own line starting with '- '. Do not compress bullets into one sentence.";
-  } else if (format === "concise") {
-    instruction =
-      "Keep the answer concise. Skip filler and keep the output as short as possible while still useful.";
-  }
+    let instruction = "";
+    if (format === "table") {
+      instruction =
+        "Return only a markdown table. Do not add an intro paragraph before the table.";
+    } else if (format === "bullets") {
+      instruction =
+        "Return a real markdown bullet list. Put each bullet on its own line starting with '- '. Do not compress bullets into one sentence.";
+    } else if (format === "numbered") {
+      instruction =
+        "Return a real markdown numbered list. Put each item on its own line with sequential numbers like '1.', '2.', and '3.'.";
+    } else if (format === "sentence") {
+      instruction =
+        "Return exactly one short sentence. Do not add bullets, headings, or a second sentence.";
+    } else if (format === "summary" || format === "concise") {
+      instruction =
+        "Keep the answer concise. Skip filler and keep the output as short as possible while still useful.";
+    }
 
-  return `[[ZAKI_RESPONSE_FORMAT_V1]]
+    return `[[ZAKI_RESPONSE_FORMAT_V1]]
 ${instruction}
 [[/ZAKI_RESPONSE_FORMAT_V1]]
 ${normalizedMessage}`;
+  } catch (error) {
+    console.warn("[Chat] Response format envelope skipped:", error?.message || error);
+    return normalizedMessage;
+  }
 }
 
 function matchesBoundaryPattern(text = "", phrasePattern) {
@@ -6018,6 +6176,8 @@ const streamChatHandler = async (req, res) => {
 
     const requestPayload = req.body;
     const originalMessage = extractStreamMessage(requestPayload);
+    const requestedFormat = getRequestedResponseFormat(originalMessage);
+    const promptCategory = classifyPromptCategory(originalMessage, requestPayload);
     console.log(`[Chat] Message length: ${originalMessage.length}`);
 
     if (!originalMessage) {
@@ -6077,13 +6237,31 @@ const streamChatHandler = async (req, res) => {
 
     const { slug, threadSlug } = req.params;
 
+    const disableResponseEnvelope = requestPayload?.disableResponseEnvelope === true;
     let enrichedMessage = isIdentityProbePrompt(originalMessage)
       ? applyIdentityGuardrails(originalMessage)
-      : applyResponseFormatEnvelope(originalMessage);
+      : disableResponseEnvelope
+        ? originalMessage
+        : applyResponseFormatEnvelope(originalMessage);
     let memoryInjected = false;
     let memorySources = [];
 
     const skipMemoryContext = shouldSkipChatMemoryContext(requestPayload, originalMessage);
+    const chatLogContext = {
+      workspace: slug,
+      thread: threadSlug,
+      user: userEmail,
+      promptCategory,
+      requestedFormat: requestedFormat || "plain",
+      disableResponseEnvelope,
+      skipMemoryContext,
+      mode:
+        typeof requestPayload?.mode === "string" && requestPayload.mode.trim()
+          ? requestPayload.mode.trim()
+          : "chat",
+      webSearchEnabled:
+        requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true,
+    };
 
     // Inject memory context if we have a user and this is not a query/web-search style request.
     if (userEmail && !skipMemoryContext) {
@@ -6148,7 +6326,11 @@ ${originalMessage}`;
     const targetUrl = `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
     
     console.log(`[Chat] Forwarding to NOVA: ${targetUrl}`);
-    console.log(`[Chat] Memory injected: ${memoryInjected}`);
+    console.log("[Chat] Dispatch", {
+      ...chatLogContext,
+      memoryInjected,
+      memorySourceCount: memorySources.length,
+    });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
     const upstreamResponse = await fetchWithTimeout(
@@ -6165,7 +6347,11 @@ ${originalMessage}`;
       "Chat upstream request"
     );
 
-    console.log(`[Chat] NOVA response status: ${upstreamResponse.status}`);
+    console.log("[Chat] Upstream response", {
+      ...chatLogContext,
+      upstreamStatus: upstreamResponse.status,
+      memoryInjected,
+    });
 
     // Stream the response back
     res.status(upstreamResponse.status);
@@ -6179,38 +6365,62 @@ ${originalMessage}`;
     }
 
     if (!upstreamResponse.body) {
-      res.end();
+      if (isSseLikeResponse(upstreamResponse)) {
+        sendChatStreamError(res, "ZAKI didn't return a reply. Please try again.", {
+          code: "empty_response",
+        });
+        return;
+      }
+      res.status(502).json({ error: "ZAKI returned no response body.", code: "empty_response" });
       return;
     }
 
     const contentType = String(upstreamResponse.headers.get("content-type") || "");
     const isSse = contentType.toLowerCase().includes("text/event-stream");
-    const nodeStream = Readable.fromWeb(upstreamResponse.body);
+    const isJson = contentType.toLowerCase().includes("application/json");
 
     if (isSse) {
-      // Flush a tiny SSE prelude immediately so the client stops looking stuck.
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("X-Accel-Buffering", "no");
-      if (typeof res.flushHeaders === "function") {
-        res.flushHeaders();
-      }
-      writeSseComment(res, "zaki-stream-open");
-
-      if (memoryInjected && memorySources.length > 0) {
-        writeSseData(res, {
-          type: "memoryUsed",
-          count: memorySources.length,
-          sources: memorySources.slice(0, 5),
-        });
-      }
+      await relaySseWithMonitoring(upstreamResponse, res, {
+        memorySources: memoryInjected ? memorySources : [],
+        logContext: chatLogContext,
+      });
+      return;
     }
 
+    if (isJson) {
+      const payload = await upstreamResponse.text();
+      if (!payload.trim()) {
+        return res
+          .status(502)
+          .json({ error: "ZAKI didn't return a reply. Please try again.", code: "empty_response" });
+      }
+      res.send(payload);
+      return;
+    }
+
+    const nodeStream = Readable.fromWeb(upstreamResponse.body);
     pipeReadableToResponse(nodeStream, res, "Chat stream");
   } catch (error) {
     console.error("[Chat] Stream error:", error);
     const message = error?.message || "Chat stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
-    res.status(timedOut ? 504 : 500).json({ error: message });
+    if (String(req.headers.accept || "").includes("text/event-stream")) {
+      sendChatStreamError(
+        res,
+        timedOut
+          ? "ZAKI took too long to reply. Please try again."
+          : message,
+        {
+          code: timedOut ? "upstream_timeout" : "chat_error",
+          retryable: true,
+        }
+      );
+      return;
+    }
+    res.status(timedOut ? 504 : 500).json({
+      error: message,
+      code: timedOut ? "upstream_timeout" : "chat_error",
+    });
   }
 };
 

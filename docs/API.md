@@ -2,6 +2,28 @@
 
 ## Profile
 
+## Chat Failure Contract
+
+### Streamed chat error payload
+When streamed chat cannot produce a valid assistant reply, ZAKI emits an explicit error payload instead of silently ending with empty content.
+
+**SSE payload**
+```json
+{
+  "type": "error",
+  "error": true,
+  "code": "empty_response",
+  "message": "ZAKI didn't return a reply. Please try again.",
+  "retryable": true,
+  "close": true
+}
+```
+
+Typical `code` values:
+1. `empty_response`
+2. `upstream_timeout`
+3. `chat_error`
+
 ### GET `/api/profile`
 Returns the current user profile (from `zaki_users`). Requires `Authorization: Bearer <token>`.
 

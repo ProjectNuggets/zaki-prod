@@ -117,6 +117,11 @@
       "noSearchResultsHelper": "Try a different space or thread name."
     },
     "spaceSettings": "Space settings",
+    "scopeTitle": "How context works",
+    "scopeMemory": "Memory is about you and follows your account.",
+    "scopeWorkspace": "Workspace files and instructions are shared across chats in this space.",
+    "scopeChat": "Chat attachments are not workspace knowledge in this release.",
+    "removeDocumentSuccess": "{{name}} removed from workspace knowledge. Existing conversation history may still reference prior discussion.",
     "profile": {
       "defaultName": "User",
       "manage": "Manage profile",

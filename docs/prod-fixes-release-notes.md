@@ -11,6 +11,8 @@ This branch is not a feature-expansion branch. It is a production-hardening bran
 1. Improved stream behavior so first-token response starts faster.
 2. Added stronger identity guardrails.
 3. Intercepts direct identity probes so ZAKI does not self-identify as Claude, ChatGPT, OpenAI, or Anthropic.
+4. Empty or failed chat streams now surface as explicit assistant-visible errors instead of blank replies.
+5. Response-shape handling is stricter for concise answers, bullets, numbered steps, and tables.
 
 ### 2. Memory hardening
 1. Tightened memory extraction and normalization.
@@ -76,3 +78,4 @@ This branch is not a feature-expansion branch. It is a production-hardening bran
 1. Thread-document grounding is not shipped.
 2. Memory quality is improved but not final for every compound natural-language case.
 3. Some workspace management UX still lives in the sidebar settings surface rather than a fully dedicated workspace management page.
+4. Thread history can still reference earlier discussion even after a workspace document is removed; a fresh thread reflects the updated workspace state.
