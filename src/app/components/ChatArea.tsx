@@ -290,6 +290,11 @@ export function ChatArea() {
   const prevModeRef = useRef(memoryMode);
   useEffect(() => {
     if (prevModeRef.current !== memoryMode) {
+      window.dispatchEvent(
+        new CustomEvent("zaki:onboarding-memory-mode-changed", {
+          detail: { mode: memoryMode },
+        })
+      );
       // Mode changed - keep manual pending memories visible until resolved
       const hasManualPending = pendingMemories.some((m) => m._mode === "manual");
       if (prevModeRef.current === "manual" && hasManualPending) {
@@ -1002,6 +1007,10 @@ export function ChatArea() {
         return { done: true };
       }
 
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return { done: true };
+      }
+
       const chunk =
         (typeof payload.delta === "string" && payload.delta) ||
         (typeof payload.textResponse === "string" && payload.textResponse) ||
@@ -1054,29 +1063,21 @@ export function ChatArea() {
         if (value === "[DONE]") streamClosed = true;
         return;
       }
+      let payload: Record<string, unknown>;
       try {
-        const payload = JSON.parse(value) as Record<string, unknown>;
-        const result = readPayloadChunk(payload);
-        if (result.done) {
-          streamClosed = true;
-          return;
-        }
-        if (result.agentUrl) {
-          await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
-          try {
-            await reader.cancel();
-          } catch {
-            // ignore cancel errors
-          }
-          streamClosed = true;
-          return;
-        }
-        if (result.chunk) {
-          appendChunk(result.chunk);
-        }
-        return;
+        payload = JSON.parse(value) as Record<string, unknown>;
       } catch {
         appendChunk(raw);
+        return;
+      }
+
+      const result = readPayloadChunk(payload);
+      if (result.done) {
+        streamClosed = true;
+        return;
+      }
+      if (result.chunk) {
+        appendChunk(result.chunk);
       }
     };
 

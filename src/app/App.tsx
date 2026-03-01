@@ -43,6 +43,7 @@ export default function App() {
   // Auth state from Zustand
   const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [showOnboardingDonePopup, setShowOnboardingDonePopup] = useState(false);
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
     getInitialLegalPolicyVersion
   );
@@ -217,12 +218,28 @@ export default function App() {
     };
   }, [token, user?.username, authLoading]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOpenOnboarding = () => {
+      setOnboardingOpen(true);
+    };
+    window.addEventListener("zaki:open-onboarding", handleOpenOnboarding);
+    return () => {
+      window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
+    };
+  }, []);
+
+  const dismissOnboarding = () => {
+    setOnboardingOpen(false);
+  };
+
   const completeOnboarding = () => {
     if (typeof window !== "undefined" && user?.username) {
       const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
       window.localStorage.setItem(key, "done");
     }
     setOnboardingOpen(false);
+    setShowOnboardingDonePopup(true);
   };
 
   const openCreateSpace = () => {
@@ -391,11 +408,27 @@ export default function App() {
       <OnboardingModal
         isOpen={onboardingOpen}
         userName={user?.fullName || user?.username || t("home.guestName")}
-        onClose={completeOnboarding}
+        onDismiss={dismissOnboarding}
+        onComplete={completeOnboarding}
         onCreateSpace={openCreateSpace}
         onOpenMemory={openMemory}
         onOpenSettings={openSettings}
       />
+      {showOnboardingDonePopup && (
+        <div className="fixed inset-0 z-[95] pointer-events-none flex items-center justify-center">
+          <div className="pointer-events-auto relative w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-5 py-4 shadow-[0px_24px_60px_rgba(15,15,15,0.2)]">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setShowOnboardingDonePopup(false)}
+              className="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md text-zaki-muted hover:bg-zaki-hover dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
+            >
+              <span className="text-sm leading-none">×</span>
+            </button>
+            <div className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">You’re all set!</div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

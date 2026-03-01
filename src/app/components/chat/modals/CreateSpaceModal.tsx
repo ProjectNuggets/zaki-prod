@@ -117,6 +117,7 @@ export function CreateSpaceModal({
             className="zaki-btn zaki-btn-primary zaki-pressable"
             onClick={handleCreate}
             disabled={spaceName.trim().length === 0}
+            data-onboarding-id="create-space-submit"
           >
             {t("createSpaceModal.actions.create")}
           </button>
