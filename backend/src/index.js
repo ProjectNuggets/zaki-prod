@@ -1693,6 +1693,16 @@ async function proxyMultipartDocumentUpload(req, folderName) {
   });
 }
 
+function isUnsupportedDocumentTypeError(message = "") {
+  const normalized = String(message || "").toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes("not supported") ||
+    normalized.includes("unsupported") ||
+    normalized.includes("cannot be assumed as text file type")
+  );
+}
+
 async function listHiddenWorkspaceSlugsForUser(userId) {
   const result = await dbQuery(
     `SELECT workspace_slug
@@ -5214,8 +5224,13 @@ const uploadWorkspaceDocumentHandler = async (req, res, { embedIntoWorkspace }) 
     const uploadData = await uploadResponse.json().catch(() => ({}));
 
     if (!uploadResponse.ok || uploadData?.success === false) {
-      res.status(uploadResponse.status || 400).json({
-        error: uploadData?.error || uploadData?.message || "Unable to upload document.",
+      const upstreamMessage =
+        uploadData?.error || uploadData?.message || "Unable to upload document.";
+      const status = isUnsupportedDocumentTypeError(upstreamMessage)
+        ? 400
+        : (uploadResponse.status || 400);
+      res.status(status).json({
+        error: upstreamMessage,
       });
       return;
     }
@@ -5730,37 +5745,46 @@ function getIntrospectionMode(message = "") {
   return null;
 }
 
+function normalizeDisplayMemoryValue(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\bRyadh\b/gi, "Riyadh")
+    .replace(/\bto\s*$/i, "")
+    .trim();
+}
+
 function formatKnownMemory(content = "", prefersArabic = false) {
   const text = String(content || "").trim();
   if (!text) return "";
   if (/^Lives in\s+(.+)$/i.test(text)) {
-    const place = text.replace(/^Lives in\s+/i, "");
+    const place = normalizeDisplayMemoryValue(text.replace(/^Lives in\s+/i, ""));
     return prefersArabic ? `تعيش في ${place}` : `You live in ${place}`;
   }
   if (/^From\s+(.+)$/i.test(text)) {
-    const place = text.replace(/^From\s+/i, "");
+    const place = normalizeDisplayMemoryValue(text.replace(/^From\s+/i, ""));
     return prefersArabic ? `أنت من ${place}` : `You're from ${place}`;
   }
   if (/^Likes\s+(.+)$/i.test(text)) {
-    const value = text.replace(/^Likes\s+/i, "");
+    const value = normalizeDisplayMemoryValue(text.replace(/^Likes\s+/i, ""));
     return prefersArabic ? `تحب ${value}` : `You like ${value}`;
   }
   if (/^Prefers\s+(.+)$/i.test(text)) {
-    const value = text.replace(/^Prefers\s+/i, "");
+    const value = normalizeDisplayMemoryValue(text.replace(/^Prefers\s+/i, ""));
     return prefersArabic ? `تفضّل ${value}` : `You prefer ${value}`;
   }
   if (/^Plans to travel to\s+(.+)$/i.test(text)) {
-    const place = text.replace(/^Plans to travel to\s+/i, "");
+    const place = normalizeDisplayMemoryValue(text.replace(/^Plans to travel to\s+/i, ""));
     return prefersArabic ? `تخطط للسفر إلى ${place}` : `You're planning to travel to ${place}`;
   }
-  return text;
+  return normalizeDisplayMemoryValue(text);
 }
 
 function buildIntrospectionReply(mode, sources = [], message = "") {
   const prefersArabic = /[\u0600-\u06FF]/u.test(String(message || ""));
   const normalized = sources
     .map((source) => formatKnownMemory(source?.content, prefersArabic))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index);
 
   if (mode === "location") {
     const location = normalized[0];
