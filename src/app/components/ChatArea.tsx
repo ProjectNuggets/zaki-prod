@@ -108,6 +108,73 @@ function splitFilesByAcceptedTypes(
   return { valid, invalid };
 }
 
+function getRequestedResponseFormat(prompt: string) {
+  const text = String(prompt || "").trim();
+  if (!text) return null;
+  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) return "table";
+  if (
+    /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
+    /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
+  ) {
+    return "bullets";
+  }
+  if (
+    /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
+    /(?:^|\s)(باختصار|مختصر|بشكل مختصر)(?:\s|$)/i.test(text)
+  ) {
+    return "concise";
+  }
+  return null;
+}
+
+function getRequestedBulletCount(prompt: string) {
+  const text = String(prompt || "").trim();
+  if (!text) return null;
+  const match = text.match(/\b(\d+)\s+bullets?\b/i);
+  if (match) return Number(match[1]);
+  const arabicNumberMatch = text.match(/(\d+)\s+(?:نقاط|بنقاط)/i);
+  if (arabicNumberMatch) return Number(arabicNumberMatch[1]);
+  return null;
+}
+
+function normalizeAssistantFormatting(prompt: string, content: string) {
+  const format = getRequestedResponseFormat(prompt);
+  const text = String(content || "").trim();
+  if (!format || !text) return text;
+
+  if (format === "bullets") {
+    if (/^\s*[-*•]\s+/m.test(text)) return text;
+    const cleaned = text.replace(/^•\s*/, "").trim();
+    let parts = cleaned
+      .split(/\s*;\s+/)
+      .map((part) => part.trim().replace(/[.,\s]+$/g, ""))
+      .filter(Boolean);
+    if (parts.length < 2) {
+      parts = cleaned
+        .split(/,\s+(?=(?:and\s+)?(?:they|you|it|this|that|these|those)\b)/i)
+        .map((part) => part.trim().replace(/^(and|و)\s+/i, "").replace(/[.,\s]+$/g, ""))
+        .filter(Boolean);
+    }
+    if (parts.length < 2) {
+      parts = cleaned
+        .split(/\s*,\s+/)
+        .map((part) => part.trim().replace(/^(and|و)\s+/i, "").replace(/[.,\s]+$/g, ""))
+        .filter(Boolean);
+    }
+    const requestedCount = getRequestedBulletCount(prompt);
+    if (requestedCount && parts.length > requestedCount) {
+      const head = parts.slice(0, requestedCount - 1);
+      const tail = parts.slice(requestedCount - 1).join(", ");
+      parts = [...head, tail];
+    }
+    if (parts.length >= 2) {
+      return parts.map((part) => `- ${part}`).join("\n");
+    }
+  }
+
+  return text;
+}
+
 export function ChatArea() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
@@ -745,7 +812,11 @@ export function ChatArea() {
 
       const result = readPayloadChunk(data);
       if (result.chunk) {
-        updateAssistantContent(threadSlug, assistantId, result.chunk);
+        updateAssistantContent(
+          threadSlug,
+          assistantId,
+          normalizeAssistantFormatting(message, result.chunk)
+        );
       }
       return;
     }
@@ -845,6 +916,11 @@ export function ChatArea() {
     const trailing = buffer.trim();
     if (!streamClosed && trailing) {
       processSseBlock(trailing);
+    }
+
+    const finalized = normalizeAssistantFormatting(message, accumulated);
+    if (finalized && finalized !== accumulated) {
+      updateAssistantContent(threadSlug, assistantId, finalized);
     }
   }, [spacesList, queryModeEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
 

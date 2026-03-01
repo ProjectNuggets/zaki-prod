@@ -387,6 +387,57 @@ describe("memory context retrieval behavior", () => {
     expect(result.sources).toHaveLength(3);
     expect(result.context).toContain("Lives in Hamburg");
     expect(result.context).toContain("Likes travel");
-    expect(result.context).toContain("Plans to travel to Ryadh");
+    expect(result.context).toContain("Plans to travel to Riyadh");
+  });
+
+  it("buildFastContext treats Arabic introspection prompts as introspection and includes identity memory", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-pref",
+        content: "Likes travel to",
+        type: "preference",
+        metadata: { conflictKey: "preference:travelyouknow" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:28.779Z",
+      },
+      {
+        id: "m-live",
+        content: "Lives in hamburg",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+        created_at: "2026-02-28T22:23:27.779Z",
+      },
+      {
+        id: "m-goal",
+        content: "Plans to travel to Ryadh",
+        type: "goal",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.9,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:26.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "شو بتعرف عني؟",
+      maxChars: 500,
+      limit: 3,
+    });
+
+    expect(result.context).toContain("Lives in Hamburg");
+    expect(result.context).toContain("Likes travel");
+    expect(result.context).toContain("Plans to travel to Riyadh");
   });
 });

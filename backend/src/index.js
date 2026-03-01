@@ -5725,21 +5725,119 @@ function buildIdentityProbeReply(message = "") {
   const text = String(message || "").trim();
   const prefersArabic = /[\u0600-\u06FF]/u.test(text);
   if (prefersArabic) {
-    return "أنا زكي، مساعد شخصي عربي-أول. لست Claude ولا ChatGPT، ولا أقدّم هوية مزوّد أو نموذج طرف ثالث داخل المحادثة. إذا أردت، اسألني كيف أستطيع مساعدتك.";
+    return "أنا زكي من Nova Nuggets، مساعد شخصي عربي-أول. لست Claude ولا ChatGPT، ولا أقدّم هوية مزوّد أو نموذج طرف ثالث داخل المحادثة. إذا أردت، اسألني كيف أستطيع مساعدتك.";
   }
-  return "I’m ZAKI, an Arabic-first personal AI assistant. I’m not Claude or ChatGPT, and I don’t present a third-party provider or model identity inside the chat. Ask me what you want help with.";
+  return "I’m ZAKI from Nova Nuggets, an Arabic-first personal AI assistant. I’m not Claude or ChatGPT, and I don’t present a third-party provider or model identity inside the chat. Ask me what you want help with.";
+}
+
+function isComparisonPrompt(message = "") {
+  const text = String(message || "").trim();
+  if (!text) return false;
+  return [
+    /\bcompare\b.*\b(chatgpt|claude|zaki)\b/i,
+    /\b(chatgpt|claude|zaki)\b.*\bcompare\b/i,
+    /\bcomparison\b.*\b(chatgpt|claude|zaki)\b/i,
+    /\btable\b.*\b(chatgpt|claude|zaki)\b/i,
+    /(?:^|\s)(قارن|مقارنة|جدول مقارنة)(?:\s|:|-|$).*(ChatGPT|Claude|ZAKI)/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+function buildProductComparisonReply(message = "") {
+  const prefersArabic = /[\u0600-\u06FF]/u.test(String(message || ""));
+  if (prefersArabic) {
+    return [
+      "| الجانب | ChatGPT | Claude | ZAKI |",
+      "|---|---|---|---|",
+      "| الذاكرة | تعتمد غالباً على ذاكرة المنتج العامة كما يقدّمها مزوّده | تعتمد على قدرات المنتج العامة كما يقدّمها مزوّده | ذاكرة شخصية أكثر شفافية وقابلة للمراجعة داخل المنتج |",
+      "| مساحة العمل | ملفات وسياق على مستوى المحادثة أو المنتج | ملفات وسياق على مستوى المحادثة أو المنتج | تعليمات ثابتة وملفات مشتركة على مستوى الـ workspace |",
+      "| التحكم | جيد لكن أقل وضوحاً في فصل الذاكرة عن سياق العمل | جيد لكن أقل وضوحاً في فصل الذاكرة عن سياق العمل | أوضح في فصل: ذاكرتك الشخصية مقابل معرفة الـ workspace |",
+      "| أفضل استخدام | مساعد عام واسع الاستخدام | كتابة وتحليل عام | مساعد شخصي مع memory واضحة وworkspaces عملية |",
+      "",
+      "هذه مقارنة على مستوى تجربة المنتج، وليست مقارنة رسمية للمواصفات الداخلية أو أرقام النماذج.",
+    ].join("\n");
+  }
+  return [
+    "| Area | ChatGPT | Claude | ZAKI |",
+    "|---|---|---|---|",
+    "| Memory | Product-level memory experience from its provider | Product-level memory experience from its provider | More explicit personal memory with user-visible review and control |",
+    "| Workspace model | Files and context depend on the product flow | Files and context depend on the product flow | Persistent workspace instructions plus shared workspace documents |",
+    "| Control | Strong general-purpose UX, but less explicit separation of personal memory vs workspace knowledge | Strong general-purpose UX, but less explicit separation of personal memory vs workspace knowledge | Clearer separation between your personal memory and workspace knowledge |",
+    "| Best fit | Broad everyday assistant use | Broad writing and analysis use | Personal assistant workflows with transparent memory and workspaces |",
+    "",
+    "This is a product-experience comparison, not an official benchmark of internal model specs or private provider details.",
+  ].join("\n");
+}
+
+function getRequestedResponseFormat(message = "") {
+  const text = String(message || "").trim();
+  if (!text) return null;
+  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) {
+    return "table";
+  }
+  if (
+    /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
+    /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
+  ) {
+    return "bullets";
+  }
+  if (
+    /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
+    /(?:^|\s)(باختصار|مختصر|بشكل مختصر)(?:\s|$)/i.test(text)
+  ) {
+    return "concise";
+  }
+  return null;
+}
+
+function applyResponseFormatEnvelope(message = "") {
+  const normalizedMessage = String(message || "").trim();
+  const format = getRequestedResponseFormat(normalizedMessage);
+  if (!format) return normalizedMessage;
+
+  let instruction = "";
+  if (format === "table") {
+    instruction =
+      "Return only a markdown table. Do not add an intro paragraph before the table.";
+  } else if (format === "bullets") {
+    instruction =
+      "Return a real markdown bullet list. Put each bullet on its own line starting with '- '. Do not compress bullets into one sentence.";
+  } else if (format === "concise") {
+    instruction =
+      "Keep the answer concise. Skip filler and keep the output as short as possible while still useful.";
+  }
+
+  return `[[ZAKI_RESPONSE_FORMAT_V1]]
+${instruction}
+[[/ZAKI_RESPONSE_FORMAT_V1]]
+${normalizedMessage}`;
+}
+
+function matchesBoundaryPattern(text = "", phrasePattern) {
+  return new RegExp(`(?:^|[\\s:;,.!?؟،-])(?:${phrasePattern})(?:[\\s:;,.!?؟،-]|$)`, "i").test(
+    String(text || "")
+  );
 }
 
 function getIntrospectionMode(message = "") {
   const text = String(message || "").trim();
   if (!text) return null;
-  if (/\bwhat do you know about me\b/i.test(text) || /\bwhat do you remember about me\b/i.test(text) || /(?:^|\s)(شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني)(?:\s|$)/.test(text)) {
+  if (
+    /\bwhat do you know about me\b/i.test(text) ||
+    /\bwhat do you remember about me\b/i.test(text) ||
+    matchesBoundaryPattern(text, "شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني|شو بتعرفي عني")
+  ) {
     return "summary";
   }
-  if (/\bwhere do i live\b/i.test(text) || /(?:^|\s)(وين بعيش|وين ساكن)(?:\s|$)/.test(text)) {
+  if (
+    /\bwhere do i live\b/i.test(text) ||
+    matchesBoundaryPattern(text, "وين بعيش|وين ساكن|وين ساكنة")
+  ) {
     return "location";
   }
-  if (/\bwhere am i from\b/i.test(text) || /(?:^|\s)(من وين أنا|من وين انا|من أين أنا|من اين انا)(?:\s|$)/.test(text)) {
+  if (
+    /\bwhere am i from\b/i.test(text) ||
+    matchesBoundaryPattern(text, "من وين أنا|من وين انا|من أين أنا|من اين انا")
+  ) {
     return "origin";
   }
   return null;
@@ -5753,30 +5851,59 @@ function normalizeDisplayMemoryValue(value = "") {
     .trim();
 }
 
+function translateMemoryValueToArabic(value = "") {
+  let next = normalizeDisplayMemoryValue(value);
+  if (!next) return "";
+  const replacements = [
+    [/\btravel\b/gi, "السفر"],
+    [/\bconcise replies\b/gi, "الردود المختصرة"],
+    [/\bHamburg\b/g, "هامبورغ"],
+    [/\bDamascus\b/g, "دمشق"],
+    [/\bRiyadh\b/g, "الرياض"],
+    [/\bAlgeria\b/g, "الجزائر"],
+    [/\bCairo\b/g, "القاهرة"],
+    [/\bDubai\b/g, "دبي"],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    next = next.replace(pattern, replacement);
+  }
+  return next.trim();
+}
+
 function formatKnownMemory(content = "", prefersArabic = false) {
   const text = String(content || "").trim();
   if (!text) return "";
   if (/^Lives in\s+(.+)$/i.test(text)) {
-    const place = normalizeDisplayMemoryValue(text.replace(/^Lives in\s+/i, ""));
+    const place = prefersArabic
+      ? translateMemoryValueToArabic(text.replace(/^Lives in\s+/i, ""))
+      : normalizeDisplayMemoryValue(text.replace(/^Lives in\s+/i, ""));
     return prefersArabic ? `تعيش في ${place}` : `You live in ${place}`;
   }
   if (/^From\s+(.+)$/i.test(text)) {
-    const place = normalizeDisplayMemoryValue(text.replace(/^From\s+/i, ""));
+    const place = prefersArabic
+      ? translateMemoryValueToArabic(text.replace(/^From\s+/i, ""))
+      : normalizeDisplayMemoryValue(text.replace(/^From\s+/i, ""));
     return prefersArabic ? `أنت من ${place}` : `You're from ${place}`;
   }
   if (/^Likes\s+(.+)$/i.test(text)) {
-    const value = normalizeDisplayMemoryValue(text.replace(/^Likes\s+/i, ""));
+    const value = prefersArabic
+      ? translateMemoryValueToArabic(text.replace(/^Likes\s+/i, ""))
+      : normalizeDisplayMemoryValue(text.replace(/^Likes\s+/i, ""));
     return prefersArabic ? `تحب ${value}` : `You like ${value}`;
   }
   if (/^Prefers\s+(.+)$/i.test(text)) {
-    const value = normalizeDisplayMemoryValue(text.replace(/^Prefers\s+/i, ""));
+    const value = prefersArabic
+      ? translateMemoryValueToArabic(text.replace(/^Prefers\s+/i, ""))
+      : normalizeDisplayMemoryValue(text.replace(/^Prefers\s+/i, ""));
     return prefersArabic ? `تفضّل ${value}` : `You prefer ${value}`;
   }
   if (/^Plans to travel to\s+(.+)$/i.test(text)) {
-    const place = normalizeDisplayMemoryValue(text.replace(/^Plans to travel to\s+/i, ""));
+    const place = prefersArabic
+      ? translateMemoryValueToArabic(text.replace(/^Plans to travel to\s+/i, ""))
+      : normalizeDisplayMemoryValue(text.replace(/^Plans to travel to\s+/i, ""));
     return prefersArabic ? `تخطط للسفر إلى ${place}` : `You're planning to travel to ${place}`;
   }
-  return normalizeDisplayMemoryValue(text);
+  return prefersArabic ? translateMemoryValueToArabic(text) : normalizeDisplayMemoryValue(text);
 }
 
 function buildIntrospectionReply(mode, sources = [], message = "") {
@@ -5907,6 +6034,11 @@ const streamChatHandler = async (req, res) => {
       return;
     }
 
+    if (isComparisonPrompt(originalMessage)) {
+      sendSyntheticSseReply(res, buildProductComparisonReply(originalMessage));
+      return;
+    }
+
     const introspectionMode = getIntrospectionMode(originalMessage);
     if (userEmail && introspectionMode) {
       try {
@@ -5947,7 +6079,7 @@ const streamChatHandler = async (req, res) => {
 
     let enrichedMessage = isIdentityProbePrompt(originalMessage)
       ? applyIdentityGuardrails(originalMessage)
-      : originalMessage;
+      : applyResponseFormatEnvelope(originalMessage);
     let memoryInjected = false;
     let memorySources = [];
 

@@ -7,8 +7,17 @@ const ZAKI_IDENTITY_GUARDRAIL = [
   "- You are ZAKI, not Claude, ChatGPT, Gemini, or any other third-party assistant.",
   "- Never claim to be Anthropic, OpenAI, or any other model provider.",
   "- Never guess the underlying model or provider.",
-  "- If asked who you are, answer that you are ZAKI, an Arabic-first personal AI assistant.",
+  "- If asked who you are, answer that you are ZAKI from Nova Nuggets, an Arabic-first personal AI assistant.",
   "- If asked about your model or company, answer at the product level as ZAKI and avoid naming a provider or model unless explicitly supplied in the user's visible product context.",
+].join("\n");
+
+const ZAKI_RESPONSE_FORMAT_GUARDRAIL = [
+  "Response formatting rules:",
+  "- Answer directly first.",
+  "- If the user asks for a concise, brief, or short answer, keep it short by default.",
+  "- If the user asks for bullets, return real markdown bullet points.",
+  "- If the user asks for a table, return a markdown table only.",
+  "- Avoid bloated introductions and avoid unnecessary filler.",
 ].join("\n");
 
 export function extractStreamMessage(body) {
@@ -21,8 +30,8 @@ export function buildStreamUpstreamPayload(body, enrichedMessage) {
   payload.message = enrichedMessage;
   const existingPromptPrefix = String(payload.promptPrefix || "").trim();
   payload.promptPrefix = existingPromptPrefix
-    ? `${ZAKI_IDENTITY_GUARDRAIL}\n\n${existingPromptPrefix}`
-    : ZAKI_IDENTITY_GUARDRAIL;
+    ? `${ZAKI_IDENTITY_GUARDRAIL}\n\n${ZAKI_RESPONSE_FORMAT_GUARDRAIL}\n\n${existingPromptPrefix}`
+    : `${ZAKI_IDENTITY_GUARDRAIL}\n\n${ZAKI_RESPONSE_FORMAT_GUARDRAIL}`;
 
   // Frontend compatibility: accept both keys, normalize to the NOVA key.
   if (typeof payload.webSearchEnabled !== "boolean" && typeof payload.webSearch === "boolean") {

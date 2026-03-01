@@ -113,6 +113,25 @@ function stripPreferenceFillers(value) {
     .trim();
 }
 
+const CANONICAL_ENTITY_REPLACEMENTS = [
+  { regex: /\bryadh\b/gi, value: "Riyadh" },
+  { regex: /\briyadh\b/gi, value: "Riyadh" },
+  { regex: /\bdamascus\b/gi, value: "Damascus" },
+  { regex: /\bhamburg\b/gi, value: "Hamburg" },
+  { regex: /\bcairo\b/gi, value: "Cairo" },
+  { regex: /\bdubai\b/gi, value: "Dubai" },
+  { regex: /\balgeria\b/gi, value: "Algeria" },
+];
+
+function canonicalizeEntityValue(value) {
+  let next = String(value || "").replace(/\s+/g, " ").trim();
+  if (!next) return "";
+  for (const replacement of CANONICAL_ENTITY_REPLACEMENTS) {
+    next = next.replace(replacement.regex, replacement.value);
+  }
+  return next.trim();
+}
+
 const FAST_CONTEXT_STOPWORDS = new Set([
   "the", "a", "an", "and", "or", "but", "for", "with", "from", "that", "this",
   "what", "which", "who", "how", "when", "where", "why", "are", "is", "am",
@@ -260,7 +279,9 @@ function normalizePreferenceValue(value) {
   const normalized = normalizeText(stripPreferenceFillers(value));
   if (!normalized) return normalized;
   const withoutEnglishArticles = normalized.replace(/^(the|a|an)\s+/, "");
-  const withoutInfinitivePrefix = withoutEnglishArticles.replace(/^to\s+/, "");
+  const withoutInfinitivePrefix = withoutEnglishArticles
+    .replace(/^to\s+/, "")
+    .replace(/\bto\b$/i, "");
   const words = withoutInfinitivePrefix
     .split(" ")
     .map((word) => word.replace(/^ال/, ""))
@@ -272,6 +293,43 @@ function normalizePreferenceValue(value) {
   normalizedWords[normalizedWords.length - 1] = singularizeEnglishWord(normalizedWords[normalizedWords.length - 1]);
 
   return normalizedWords.join(" ").trim();
+}
+
+function normalizeStoredMemoryContent(content, type = "context", metadata = null) {
+  const normalizedType = normalizeStoredType(type);
+  const conflictKey = metadata && typeof metadata === "object" ? metadata.conflictKey : null;
+  const base = normalizeStoredContent(content);
+  if (!base) return "";
+
+  if (normalizedType === "preference") {
+    const fingerprint = buildConflictFingerprint({
+      content: base,
+      conflictKey,
+      polarity: metadata?.polarity,
+    });
+    const polarity = fingerprint?.polarity ?? 1;
+    const value = normalizePreferenceValue(fingerprint?.value || base);
+    if (!value) return base;
+    if (polarity < 0) return `Dislikes ${canonicalizeEntityValue(value)}`;
+    if (/\bprefer/i.test(base)) return `Prefers ${canonicalizeEntityValue(value)}`;
+    return `Likes ${canonicalizeEntityValue(value)}`;
+  }
+
+  if (normalizedType === "goal") {
+    const match = base.match(/^Plans to travel to\s+(.+)$/i);
+    if (match) {
+      return `Plans to travel to ${canonicalizeEntityValue(match[1])}`;
+    }
+  }
+
+  if (normalizedType === "fact") {
+    const liveMatch = base.match(/^Lives in\s+(.+)$/i);
+    if (liveMatch) return `Lives in ${canonicalizeEntityValue(liveMatch[1])}`;
+    const fromMatch = base.match(/^From\s+(.+)$/i);
+    if (fromMatch) return `From ${canonicalizeEntityValue(fromMatch[1])}`;
+  }
+
+  return canonicalizeEntityValue(base);
 }
 
 function chooseNormalizedPreferenceValue(keyValue, contentValue) {
@@ -412,12 +470,14 @@ function scoreMemoryRowPreference(row) {
   const retrieval = toFiniteNumber(row?.retrieval_score, 0);
   const importance = getMemoryImportanceScore(row);
   const confidence = getMemoryConfidenceScore(row);
+  const normalizationPenalty = toFiniteNumber(row?._normalizationPenalty, 0);
   return (
     retrieval * 100 +
     importance * 10 +
     confidence * 5 -
     normalizedContent.length * 0.01 -
-    (hasFiller ? 8 : 0)
+    (hasFiller ? 8 : 0) -
+    normalizationPenalty * 4
   );
 }
 
@@ -451,7 +511,7 @@ function isMemoryIntrospectionQuery(query) {
     /\bwho am i\b/i,
     /\bwhere do i live\b/i,
     /\bwhere am i from\b/i,
-    /(?:^|\s)(شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني|وين بعيش|من وين أنا)(?:\s|$)/,
+    /(?:^|[\s:;,.!?؟،-])(شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني|وين بعيش|من وين أنا|من وين انا|وين ساكن|وين ساكنة)(?:[\s:;,.!?؟،-]|$)/,
   ].some((pattern) => pattern.test(text));
 }
 
@@ -461,7 +521,7 @@ function isLocationIntrospectionQuery(query) {
   return [
     /\bwhere do i live\b/i,
     /\bwhere am i from\b/i,
-    /(?:^|\s)(وين بعيش|من وين أنا|من وين انا|وين ساكن)(?:\s|$)/,
+    /(?:^|[\s:;,.!?؟،-])(وين بعيش|من وين أنا|من وين انا|وين ساكن|وين ساكنة)(?:[\s:;,.!?؟،-]|$)/,
   ].some((pattern) => pattern.test(text));
 }
 
@@ -470,7 +530,7 @@ function isOriginIntrospectionQuery(query) {
   if (!text) return false;
   return [
     /\bwhere am i from\b/i,
-    /(?:^|\s)(من وين أنا|من وين انا|من أين أنا|من اين انا)(?:\s|$)/,
+    /(?:^|[\s:;,.!?؟،-])(من وين أنا|من وين انا|من أين أنا|من اين انا)(?:[\s:;,.!?؟،-]|$)/,
   ].some((pattern) => pattern.test(text));
 }
 
@@ -500,6 +560,33 @@ function selectDiverseIntrospectionMemories(rows, limit = 3) {
   }
 
   return picks.slice(0, Math.max(1, Math.min(5, Number(limit) || 3)));
+}
+
+function normalizeMemoryRowForUse(row) {
+  if (!row || typeof row !== "object") return row;
+  const metadata = getMemoryMetadata(row);
+  const originalContent = String(row.content || "");
+  const originalConflictKey = String(metadata.conflictKey || "");
+  const normalizedContent = normalizeStoredMemoryContent(row.content, row.type, metadata);
+  const nextMetadata = { ...metadata };
+  const fingerprint = buildConflictFingerprint({
+    content: normalizedContent,
+    conflictKey: nextMetadata.conflictKey,
+    polarity: nextMetadata.polarity,
+  });
+  if (fingerprint?.key) {
+    nextMetadata.conflictKey = fingerprint.key;
+    nextMetadata.polarity = fingerprint.polarity ?? nextMetadata.polarity ?? 0;
+  }
+  const normalizationPenalty =
+    (normalizedContent !== originalContent ? 1 : 0) +
+    (String(nextMetadata.conflictKey || "") !== originalConflictKey ? 1 : 0);
+  return {
+    ...row,
+    content: normalizedContent,
+    metadata: nextMetadata,
+    _normalizationPenalty: normalizationPenalty,
+  };
 }
 
 function escapeLikePattern(value) {
@@ -898,7 +985,7 @@ export async function storeMemory({
   metadata = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
-  const normalizedContent = normalizeStoredContent(content);
+  const normalizedContent = normalizeStoredMemoryContent(content, type, metadata);
   if (!normalizedUserId || !normalizedContent) {
     throw new Error("Invalid memory payload.");
   }
@@ -1063,7 +1150,7 @@ export async function stageMemory({
   polarity = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
-  const normalizedContent = normalizeStoredContent(content);
+  const normalizedContent = normalizeStoredMemoryContent(content, type, { conflictKey, polarity });
   if (!normalizedUserId || !normalizedContent) {
     return { error: "Invalid memory payload." };
   }
@@ -1563,7 +1650,7 @@ export async function buildFastContext({
     [normalizedUserId, 50]
   );
 
-  memories = dedupeMemoryRows(memories)
+  memories = dedupeMemoryRows(memories.map((memory) => normalizeMemoryRowForUse(memory)))
     .map((memory) => ({
       ...memory,
       retrieval_score: introspectionQuery
@@ -1602,14 +1689,14 @@ export async function buildFastContext({
   }
 
   if (introspectionQuery && memories.length === 0) {
-    const fallbackRows = await dbAll(
+    const fallbackRows = (await dbAll(
       `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
        ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
        LIMIT 12`,
       [normalizedUserId]
-    );
+    )).map((row) => normalizeMemoryRowForUse(row));
     memories = originIntrospectionQuery
       ? selectDiverseIntrospectionMemories(
           fallbackRows.filter((row) => String(row?.content || "").toLowerCase().startsWith("from ")),
@@ -1624,14 +1711,14 @@ export async function buildFastContext({
   }
   if (!introspectionQuery && memories.length === 0) {
     memories = selectPersonalizationFallbackMemories(
-      await dbAll(
+      (await dbAll(
         `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
          FROM memories
          WHERE user_id = $1
          ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
          LIMIT 12`,
         [normalizedUserId]
-      ),
+      )).map((row) => normalizeMemoryRowForUse(row)),
       boundedLimit
     );
   }
@@ -1686,6 +1773,25 @@ export async function buildFastContext({
   }
 
   return { context, sources: usedMemories };
+}
+
+export function normalizeMemoryRecordForMaintenance(row) {
+  const metadata = sanitizeStoredMetadata(row?.metadata || {});
+  const content = normalizeStoredMemoryContent(row?.content, row?.type, metadata);
+  const fingerprint = buildConflictFingerprint({
+    content,
+    conflictKey: metadata.conflictKey,
+    polarity: metadata.polarity,
+  });
+  if (fingerprint?.key) {
+    metadata.conflictKey = fingerprint.key;
+    metadata.polarity = fingerprint.polarity ?? metadata.polarity ?? 0;
+  }
+  return {
+    content,
+    type: normalizeStoredType(row?.type),
+    metadata,
+  };
 }
 
 export async function searchMemories({ userId, query, limit = 5 }) {
