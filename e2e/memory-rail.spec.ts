@@ -4,6 +4,20 @@ const AUTH_TOKEN_KEY = "zaki.auth.token";
 const LOCALE_KEY = "zaki:locale";
 
 async function mockApi(page: Page) {
+  await page.route("**/api/profile", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        user: {
+          username: "e2e@example.com",
+          fullName: "E2E User",
+        },
+      }),
+    });
+  });
+
   await page.route("**/system/refresh-user", async (route) => {
     await route.fulfill({
       status: 200,
@@ -106,6 +120,27 @@ async function mockApi(page: Page) {
         "cache-control": "no-cache",
       },
       body: `event: status\ndata: {"pending":1,"conflicts":0}\n\n`,
+    });
+  });
+
+  await page.route("**/api/documents/accepted-file-types", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        types: {
+          "text/plain": [".txt"],
+          "application/pdf": [".pdf"],
+        },
+      }),
+    });
+  });
+
+  await page.route("**/api/telemetry/product-event", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true }),
     });
   });
 }

@@ -100,7 +100,7 @@ export function CreateSpaceModal({
           <div className="text-xs text-zaki-muted">
             {t("createSpaceModal.fields.pinnedDocuments")}
             <div className="mt-2 rounded-zaki-md border border-dashed border-zaki-strong px-3 py-2 text-sm text-zaki-secondary">
-              Add files after creating the space. Uploads are embedded from the space view.
+              {t("createSpaceModal.fields.uploadDocuments")}
             </div>
           </div>
         </div>

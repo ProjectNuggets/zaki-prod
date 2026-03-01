@@ -13,6 +13,12 @@ import {
   fetchLegalConsentStatus,
 } from "@/lib/api";
 
+jest.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    i18n: { language: "en", dir: () => "ltr" },
+  }),
+}));
+
 jest.mock("@/stores", () => ({
   useAuthStore: jest.fn(),
 }));
@@ -72,6 +78,7 @@ describe("LoginScreen legal consent", () => {
   it("shows verification success notice from redirect query params", async () => {
     window.history.replaceState({}, "", "/?auth=login&verified=success");
     render(<LoginScreen />);
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
     expect(
       await screen.findByText("Email verified successfully. You can sign in now.")
     ).toBeInTheDocument();
@@ -80,6 +87,7 @@ describe("LoginScreen legal consent", () => {
   it("opens signup mode from auth=signup query params", async () => {
     window.history.replaceState({}, "", "/pricing?auth=signup&plan=student&interval=yearly");
     render(<LoginScreen />);
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     expect(await screen.findByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
@@ -87,6 +95,7 @@ describe("LoginScreen legal consent", () => {
   it("does not require consent checkbox on login and sends auth payload only", async () => {
     const user = userEvent.setup();
     render(<LoginScreen />);
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     expect(screen.queryByText(new RegExp(`policy\\s+${policyVersion}`))).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Terms, Privacy & Compliance" })).not.toBeInTheDocument();
@@ -110,6 +119,7 @@ describe("LoginScreen legal consent", () => {
   it("requires consent checkbox and sends consent payload on signup", async () => {
     const user = userEvent.setup();
     render(<LoginScreen />);
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
 

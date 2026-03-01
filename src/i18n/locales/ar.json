@@ -400,7 +400,7 @@
       "description": "الوصف",
       "instructions": "التعليمات",
       "pinnedDocuments": "المستندات المثبتة",
-      "uploadDocuments": "ارفع مستندات لهذه المساحة"
+      "uploadDocuments": "أضف الملفات بعد إنشاء المساحة. سيتم تضمين الرفع من داخل عرض المساحة."
     },
     "placeholders": {
       "name": "بحث تسويقي",
@@ -412,6 +412,49 @@
       "cancel": "إلغاء",
       "create": "إنشاء مساحة"
     }
+  },
+  "spaceDetailView": {
+    "backToSpaces": "كل المساحات",
+    "appearance": "المظهر",
+    "privateBadge": "خاصة",
+    "newChat": "محادثة جديدة",
+    "fileStatus": {
+      "embedded": "مضمّن",
+      "processing": "قيد المعالجة",
+      "failed": "فشل"
+    },
+    "projectFiles": {
+      "title": "ملفات المشروع",
+      "fixed": "زكي ليس مشروعًا",
+      "count_one": "{{count}} ملف",
+      "count_two": "{{count}} ملفان",
+      "count_few": "{{count}} ملفات",
+      "count_many": "{{count}} ملفًا",
+      "count_other": "{{count}} ملف",
+      "upload": "رفع",
+      "documentTypeFallback": "مستند",
+      "empty": "ارفع مستندات لتدعيم هذه المساحة. تبقى الملفات المضمّنة مرتبطة بكل المساحة."
+    },
+    "instructions": {
+      "title": "التعليمات",
+      "fixed": "زكي لا يأخذ تعليماته من أحد.",
+      "empty": "أضف توجيهات لهذه المساحة.",
+      "edit": "تعديل",
+      "editAria": "تعديل التعليمات"
+    },
+    "threads": {
+      "title": "المحادثات في هذه المساحة",
+      "total_one": "{{count}} إجمالًا",
+      "total_two": "{{count}} إجمالًا",
+      "total_few": "{{count}} إجمالًا",
+      "total_many": "{{count}} إجمالًا",
+      "total_other": "{{count}} إجمالًا",
+      "delete": "حذف",
+      "empty": "لا توجد محادثات بعد. ابدأ واحدة من الأعلى."
+    }
+  },
+  "mobileSidebar": {
+    "ariaLabel": "قائمة التنقل"
   },
   "billing": {
     "upgradeTitle": "اختر خطتك",

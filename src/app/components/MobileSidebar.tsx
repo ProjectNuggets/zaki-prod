@@ -10,8 +10,10 @@ import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { useUIStore } from "@/stores";
+import { useTranslation } from "react-i18next";
 
 export function MobileSidebar() {
+  const { t } = useTranslation();
   const { mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
 
   // Close mobile sidebar when navigation occurs
@@ -50,7 +52,7 @@ export function MobileSidebar() {
             "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
             "data-[state=closed]:duration-300 data-[state=open]:duration-300"
           )}
-          aria-label="Navigation menu"
+          aria-label={t("mobileSidebar.ariaLabel")}
         >
           {/* Force sidebar to non-collapsed in mobile drawer */}
           <div className="h-full [&_.zaki-sidebar]:w-full [&_.zaki-sidebar]:!w-full">

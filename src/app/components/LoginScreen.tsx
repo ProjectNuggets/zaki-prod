@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { LogoArabicOrange } from "./icons";
 import {
   requestPublicSignup,
@@ -13,6 +14,163 @@ import { useAuthStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
 
+const AUTH_COPY = {
+  en: {
+    title: {
+      signup: "Create your account",
+      resetRequest: "Reset your password",
+      resetConfirm: "Set a new password",
+      login: "Welcome back",
+    },
+    fields: {
+      fullName: "Full name",
+      dateOfBirth: "Date of birth",
+      email: "Email",
+      password: "Password",
+      confirmPassword: "Confirm password",
+      newPassword: "New password",
+      confirmNewPassword: "Confirm new password",
+      accessCode: "Activation code (optional)",
+    },
+    placeholders: {
+      fullName: "Full name",
+      email: "Email address",
+      password: "Password",
+      confirmPassword: "Confirm password",
+      newPassword: "New password",
+      confirmNewPassword: "Confirm new password",
+      accessCode: "Access code",
+    },
+    resetHint: "Enter your new password below.",
+    consent: {
+      prefix: "I agree to the",
+      link: "Terms, Privacy & Compliance",
+    },
+    actions: {
+      forgotPassword: "Forgot password?",
+      createAccount: "Create account",
+      creatingAccount: "Creating account...",
+      sendResetLink: "Send reset link",
+      sendingResetLink: "Sending link...",
+      updatePassword: "Update password",
+      updatingPassword: "Updating password...",
+      signIn: "Sign in",
+      signingIn: "Signing in...",
+      haveAccount: "Have an account? Sign in",
+      newHere: "New here? Create an account",
+      backToSignIn: "Back to sign in",
+    },
+    aria: {
+      hidePassword: "Hide password",
+      showPassword: "Show password",
+    },
+    notices: {
+      verifiedSuccess: "Email verified successfully. You can sign in now.",
+      verifiedAlready: "Email already verified. Please sign in.",
+      resetSent: "If the account exists, a reset link has been sent.",
+      passwordUpdated: "Password updated. You can sign in now.",
+      verifyEmail: "Check your email to verify your account.",
+      verificationLink: "Verification link (dev):",
+    },
+    errors: {
+      verificationExpired: "Verification link expired. Please sign up again.",
+      verificationInvalid: "Verification link is invalid. Please sign up again.",
+      verificationMissing: "Verification token is missing. Please sign up again.",
+      emailRequired: "Email is required.",
+      resetTokenMissing: "Reset token is missing.",
+      passwordRequired: "Password is required.",
+      passwordsMismatch: "Passwords do not match.",
+      resetFailed: "Unable to reset your password. Please request a new link.",
+      fullNameRequired: "Full name is required.",
+      dateOfBirthRequired: "Date of birth is required.",
+      consentRequired: "Please accept Terms, Privacy & Compliance to create an account.",
+      signupFailed: "Sign up failed. Please check your details and try again.",
+      loginFailed: "Login failed. Check your credentials and try again.",
+      activationCodeInvalid: "Activation code is invalid or expired.",
+      genericSignupFailed: "Sign up failed. Please try again.",
+      genericResetFailed: "Password reset failed. Please try again.",
+      genericLoginFailed: "Login failed. Please try again.",
+    },
+  },
+  ar: {
+    title: {
+      signup: "أنشئ حسابك",
+      resetRequest: "إعادة تعيين كلمة المرور",
+      resetConfirm: "عيّن كلمة مرور جديدة",
+      login: "مرحبًا بعودتك",
+    },
+    fields: {
+      fullName: "الاسم الكامل",
+      dateOfBirth: "تاريخ الميلاد",
+      email: "البريد الإلكتروني",
+      password: "كلمة المرور",
+      confirmPassword: "تأكيد كلمة المرور",
+      newPassword: "كلمة المرور الجديدة",
+      confirmNewPassword: "تأكيد كلمة المرور الجديدة",
+      accessCode: "رمز التفعيل (اختياري)",
+    },
+    placeholders: {
+      fullName: "الاسم الكامل",
+      email: "البريد الإلكتروني",
+      password: "كلمة المرور",
+      confirmPassword: "تأكيد كلمة المرور",
+      newPassword: "كلمة المرور الجديدة",
+      confirmNewPassword: "تأكيد كلمة المرور الجديدة",
+      accessCode: "رمز التفعيل",
+    },
+    resetHint: "أدخل كلمة المرور الجديدة أدناه.",
+    consent: {
+      prefix: "أوافق على",
+      link: "الشروط والخصوصية والامتثال",
+    },
+    actions: {
+      forgotPassword: "هل نسيت كلمة المرور؟",
+      createAccount: "إنشاء الحساب",
+      creatingAccount: "جارٍ إنشاء الحساب...",
+      sendResetLink: "إرسال رابط إعادة التعيين",
+      sendingResetLink: "جارٍ إرسال الرابط...",
+      updatePassword: "تحديث كلمة المرور",
+      updatingPassword: "جارٍ تحديث كلمة المرور...",
+      signIn: "تسجيل الدخول",
+      signingIn: "جارٍ تسجيل الدخول...",
+      haveAccount: "لديك حساب؟ سجّل الدخول",
+      newHere: "جديد هنا؟ أنشئ حسابًا",
+      backToSignIn: "العودة إلى تسجيل الدخول",
+    },
+    aria: {
+      hidePassword: "إخفاء كلمة المرور",
+      showPassword: "إظهار كلمة المرور",
+    },
+    notices: {
+      verifiedSuccess: "تم تأكيد البريد الإلكتروني بنجاح. يمكنك تسجيل الدخول الآن.",
+      verifiedAlready: "تم تأكيد البريد الإلكتروني مسبقًا. سجّل الدخول.",
+      resetSent: "إذا كان الحساب موجودًا، فقد تم إرسال رابط إعادة التعيين.",
+      passwordUpdated: "تم تحديث كلمة المرور. يمكنك تسجيل الدخول الآن.",
+      verifyEmail: "تحقق من بريدك الإلكتروني لتأكيد الحساب.",
+      verificationLink: "رابط التحقق (بيئة التطوير):",
+    },
+    errors: {
+      verificationExpired: "انتهت صلاحية رابط التحقق. يرجى إنشاء حساب جديد.",
+      verificationInvalid: "رابط التحقق غير صالح. يرجى إنشاء حساب جديد.",
+      verificationMissing: "رمز التحقق مفقود. يرجى إنشاء حساب جديد.",
+      emailRequired: "البريد الإلكتروني مطلوب.",
+      resetTokenMissing: "رمز إعادة التعيين مفقود.",
+      passwordRequired: "كلمة المرور مطلوبة.",
+      passwordsMismatch: "كلمتا المرور غير متطابقتين.",
+      resetFailed: "تعذر إعادة تعيين كلمة المرور. اطلب رابطًا جديدًا.",
+      fullNameRequired: "الاسم الكامل مطلوب.",
+      dateOfBirthRequired: "تاريخ الميلاد مطلوب.",
+      consentRequired: "يرجى الموافقة على الشروط والخصوصية والامتثال لإنشاء الحساب.",
+      signupFailed: "فشل إنشاء الحساب. يرجى مراجعة بياناتك والمحاولة مرة أخرى.",
+      loginFailed: "فشل تسجيل الدخول. تحقق من بياناتك ثم حاول مرة أخرى.",
+      activationCodeInvalid: "رمز التفعيل غير صالح أو منتهي الصلاحية.",
+      genericSignupFailed: "فشل إنشاء الحساب. حاول مرة أخرى.",
+      genericResetFailed: "فشلت إعادة تعيين كلمة المرور. حاول مرة أخرى.",
+      genericLoginFailed: "فشل تسجيل الدخول. حاول مرة أخرى.",
+    },
+  },
+} as const;
+
 function getInitialLegalPolicyVersion() {
   if (typeof window !== "undefined") {
     const value = (
@@ -25,7 +183,11 @@ function getInitialLegalPolicyVersion() {
 }
 
 export function LoginScreen() {
+  const { i18n } = useTranslation();
   const { setToken } = useAuthStore();
+  const locale = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
+  const isRtl = locale === "ar";
+  const copy = useMemo(() => AUTH_COPY[locale], [locale]);
   const initialToken =
     typeof window !== "undefined" &&
     window.location.pathname.startsWith("/reset")
@@ -70,19 +232,19 @@ export function LoginScreen() {
     if (verified) {
       setMode("login");
       if (verified === "success") {
-        setNotice("Email verified successfully. You can sign in now.");
+        setNotice(copy.notices.verifiedSuccess);
         setError("");
       } else if (verified === "already_verified") {
-        setNotice("Email already verified. Please sign in.");
+        setNotice(copy.notices.verifiedAlready);
         setError("");
       } else if (verified === "expired") {
-        setError("Verification link expired. Please sign up again.");
+        setError(copy.errors.verificationExpired);
         setNotice("");
       } else if (verified === "invalid_token") {
-        setError("Verification link is invalid. Please sign up again.");
+        setError(copy.errors.verificationInvalid);
         setNotice("");
       } else if (verified === "missing_token") {
-        setError("Verification token is missing. Please sign up again.");
+        setError(copy.errors.verificationMissing);
         setNotice("");
       }
     }
@@ -92,7 +254,7 @@ export function LoginScreen() {
       url.searchParams.delete("verified");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
-  }, []);
+  }, [copy]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,28 +290,28 @@ export function LoginScreen() {
     try {
       if (mode === "reset-request") {
         if (!email.trim()) {
-          setError("Email is required.");
+          setError(copy.errors.emailRequired);
           return;
         }
         const { data } = await requestPasswordReset(email.trim());
         setNotice(
           data?.message ||
-            "If the account exists, a reset link has been sent."
+            copy.notices.resetSent
         );
         return;
       }
 
       if (mode === "reset-confirm") {
         if (!resetToken) {
-          setError("Reset token is missing.");
+          setError(copy.errors.resetTokenMissing);
           return;
         }
         if (!resetPassword) {
-          setError("Password is required.");
+          setError(copy.errors.passwordRequired);
           return;
         }
         if (resetPassword !== resetConfirm) {
-          setError("Passwords do not match.");
+          setError(copy.errors.passwordsMismatch);
           return;
         }
 
@@ -158,12 +320,10 @@ export function LoginScreen() {
           password: resetPassword,
         });
         if (!response.ok || !data?.success) {
-          setError(
-            "Unable to reset your password. Please request a new link."
-          );
+          setError(copy.errors.resetFailed);
           return;
         }
-        setNotice(data?.message || "Password updated. You can sign in now.");
+        setNotice(data?.message || copy.notices.passwordUpdated);
         setResetPassword("");
         setResetConfirm("");
         setResetToken("");
@@ -174,27 +334,27 @@ export function LoginScreen() {
 
       if (mode === "signup") {
         if (!fullName.trim()) {
-          setError("Full name is required.");
+          setError(copy.errors.fullNameRequired);
           return;
         }
         if (!dateOfBirth.trim()) {
-          setError("Date of birth is required.");
+          setError(copy.errors.dateOfBirthRequired);
           return;
         }
         if (!email.trim()) {
-          setError("Email is required.");
+          setError(copy.errors.emailRequired);
           return;
         }
         if (!password) {
-          setError("Password is required.");
+          setError(copy.errors.passwordRequired);
           return;
         }
         if (password !== confirmPassword) {
-          setError("Passwords do not match.");
+          setError(copy.errors.passwordsMismatch);
           return;
         }
         if (!signupLegalConsent) {
-          setError("Please accept Terms, Privacy & Compliance to create an account.");
+          setError(copy.errors.consentRequired);
           return;
         }
 
@@ -207,14 +367,14 @@ export function LoginScreen() {
           legalPolicyVersion,
         });
         if (!data?.success) {
-          setError(data?.error || "Sign up failed. Please check your details and try again.");
+          setError(data?.error || copy.errors.signupFailed);
           return;
         }
 
         setNotice(
           data?.verificationLink
-            ? `Verification link (dev): ${data.verificationLink}`
-            : data?.message || "Check your email to verify your account."
+            ? `${copy.notices.verificationLink} ${data.verificationLink}`
+            : data?.message || copy.notices.verifyEmail
         );
         setMode("login");
         return;
@@ -226,7 +386,7 @@ export function LoginScreen() {
       });
       
       if (!response.ok || !data?.valid || !data?.token) {
-        setError(data?.message || "Login failed. Check your credentials and try again.");
+        setError(data?.message || copy.errors.loginFailed);
         return;
       }
 
@@ -237,7 +397,7 @@ export function LoginScreen() {
           data.token
         );
         if (!codeResponse.ok || !codeData?.success) {
-          setError(codeData?.error || "Activation code is invalid or expired.");
+          setError(codeData?.error || copy.errors.activationCodeInvalid);
           return;
         }
       }
@@ -247,10 +407,10 @@ export function LoginScreen() {
     } catch (err) {
       setError(
         mode === "signup"
-          ? "Sign up failed. Please try again."
+          ? copy.errors.genericSignupFailed
           : mode === "reset-request" || mode === "reset-confirm"
-            ? "Password reset failed. Please try again."
-            : "Login failed. Please try again."
+            ? copy.errors.genericResetFailed
+            : copy.errors.genericLoginFailed
       );
     } finally {
       setIsLoading(false);
@@ -259,39 +419,39 @@ export function LoginScreen() {
 
   return (
     <div
-      dir="ltr"
-      lang="en"
+      dir={isRtl ? "rtl" : "ltr"}
+      lang={locale}
       className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] flex items-center justify-center px-4"
     >
-      <div className="w-full max-w-md rounded-[28px] border border-zaki dark:border-[#2a2018] bg-zaki-raised dark:bg-[#0F0B0A] shadow-zaki-xl dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] p-8 text-left">
+      <div className={`w-full max-w-md rounded-[28px] border border-zaki dark:border-[#2a2018] bg-zaki-raised dark:bg-[#0F0B0A] shadow-zaki-xl dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] p-8 ${isRtl ? "text-right" : "text-left"}`}>
         <div className="flex items-center">
           <LogoArabicOrange />
         </div>
         <h1 className="mt-2 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
           {mode === "signup"
-            ? "Create your account"
+            ? copy.title.signup
             : mode === "reset-request"
-              ? "Reset your password"
+              ? copy.title.resetRequest
               : mode === "reset-confirm"
-                ? "Set a new password"
-                : "Welcome back"}
+                ? copy.title.resetConfirm
+                : copy.title.login}
         </h1>
         {mode === "login" && null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {mode === "reset-confirm" && (
             <div className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base dark:bg-[#14100d] px-3 py-2 text-xs text-zaki-secondary dark:text-[#c9b8a4]">
-              Enter your new password below.
+              {copy.resetHint}
             </div>
           )}
           {mode === "signup" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              Full name
+              {copy.fields.fullName}
               <input
                 type="text"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder="Full name"
+                placeholder={copy.placeholders.fullName}
                 className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="name"
                 required
@@ -300,7 +460,7 @@ export function LoginScreen() {
           )}
           {mode === "signup" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              Date of birth
+              {copy.fields.dateOfBirth}
               <input
                 type="date"
                 value={dateOfBirth}
@@ -315,12 +475,12 @@ export function LoginScreen() {
             mode === "signup" ||
             mode === "reset-request") && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              Email
+              {copy.fields.email}
               <input
                 type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="Email address"
+                placeholder={copy.placeholders.email}
                 className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="email"
                 required
@@ -330,13 +490,13 @@ export function LoginScreen() {
 
           {(mode === "login" || mode === "signup") && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              Password
+              {copy.fields.password}
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Password"
+                  placeholder={copy.placeholders.password}
                   className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 pr-12 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
@@ -345,7 +505,7 @@ export function LoginScreen() {
                   type="button"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-zaki-muted hover:text-zaki-secondary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? copy.aria.hidePassword : copy.aria.showPassword}
                 >
                   {showPassword ? (
                     <EyeOff className="size-4" />
@@ -367,14 +527,14 @@ export function LoginScreen() {
                 required
               />
               <span className="leading-relaxed">
-                I agree to the{" "}
+                {copy.consent.prefix}{" "}
                 <a
                   href="/legal"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-semibold text-zaki-brand hover:underline"
                 >
-                  Terms, Privacy & Compliance
+                  {copy.consent.link}
                 </a>
                 .
               </span>
@@ -383,12 +543,12 @@ export function LoginScreen() {
 
           {mode === "login" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              Activation code (optional)
+              {copy.fields.accessCode}
               <input
                 type="text"
                 value={loginAccessCode}
                 onChange={(event) => setLoginAccessCode(event.target.value)}
-                placeholder="Access code"
+                placeholder={copy.placeholders.accessCode}
                 className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="off"
               />
@@ -405,18 +565,18 @@ export function LoginScreen() {
                 setMode("reset-request");
               }}
             >
-              Forgot password?
+              {copy.actions.forgotPassword}
             </button>
           )}
 
           {mode === "signup" && (
             <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              Confirm password
+              {copy.fields.confirmPassword}
               <input
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Confirm password"
+                placeholder={copy.placeholders.confirmPassword}
                 className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="new-password"
                 required
@@ -427,24 +587,24 @@ export function LoginScreen() {
           {mode === "reset-confirm" && (
             <>
               <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-                New password
+                {copy.fields.newPassword}
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetPassword}
                   onChange={(event) => setResetPassword(event.target.value)}
-                  placeholder="New password"
+                  placeholder={copy.placeholders.newPassword}
                   className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete="new-password"
                   required
                 />
               </label>
               <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-                Confirm new password
+                {copy.fields.confirmNewPassword}
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetConfirm}
                   onChange={(event) => setResetConfirm(event.target.value)}
-                  placeholder="Confirm new password"
+                  placeholder={copy.placeholders.confirmNewPassword}
                   className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete="new-password"
                   required
@@ -478,19 +638,19 @@ export function LoginScreen() {
           >
             {isLoading
               ? mode === "signup"
-                ? "Creating account..."
+                ? copy.actions.creatingAccount
                 : mode === "reset-request"
-                  ? "Sending link..."
+                  ? copy.actions.sendingResetLink
                   : mode === "reset-confirm"
-                    ? "Updating password..."
-                    : "Signing in..."
+                    ? copy.actions.updatingPassword
+                    : copy.actions.signingIn
               : mode === "signup"
-                ? "Create account"
+                ? copy.actions.createAccount
                 : mode === "reset-request"
-                  ? "Send reset link"
+                  ? copy.actions.sendResetLink
                   : mode === "reset-confirm"
-                    ? "Update password"
-                    : "Sign in"}
+                    ? copy.actions.updatePassword
+                    : copy.actions.signIn}
           </button>
         </form>
 
@@ -523,10 +683,10 @@ export function LoginScreen() {
           }}
         >
           {mode === "signup"
-            ? "Have an account? Sign in"
+            ? copy.actions.haveAccount
             : mode === "login"
-              ? "New here? Create an account"
-              : "Back to sign in"}
+              ? copy.actions.newHere
+              : copy.actions.backToSignIn}
         </button>
       </div>
     </div>

@@ -397,7 +397,7 @@
       "description": "Description",
       "instructions": "Instructions",
       "pinnedDocuments": "Pinned documents",
-      "uploadDocuments": "Upload documents for this space"
+      "uploadDocuments": "Add files after creating the space. Uploads are embedded from the space view."
     },
     "placeholders": {
       "name": "Marketing research",
@@ -409,6 +409,43 @@
       "cancel": "Cancel",
       "create": "Create space"
     }
+  },
+  "spaceDetailView": {
+    "backToSpaces": "All spaces",
+    "appearance": "Appearance",
+    "privateBadge": "Private",
+    "newChat": "New chat",
+    "fileStatus": {
+      "embedded": "Embedded",
+      "processing": "Processing",
+      "failed": "Failed"
+    },
+    "projectFiles": {
+      "title": "Project files",
+      "fixed": "ZAKI is not a project",
+      "count_one": "{{count}} file",
+      "count_other": "{{count}} files",
+      "upload": "Upload",
+      "documentTypeFallback": "document",
+      "empty": "Upload documents to ground this workspace. Embedded files stay with the whole space."
+    },
+    "instructions": {
+      "title": "Instructions",
+      "fixed": "ZAKI doesn't take instructions from anyone.",
+      "empty": "Add guidance for this space.",
+      "edit": "Edit",
+      "editAria": "Edit instructions"
+    },
+    "threads": {
+      "title": "Chats in this space",
+      "total_one": "{{count}} total",
+      "total_other": "{{count}} total",
+      "delete": "Delete",
+      "empty": "No chats yet. Start one above."
+    }
+  },
+  "mobileSidebar": {
+    "ariaLabel": "Navigation menu"
   },
   "billing": {
     "upgradeTitle": "Choose your plan",

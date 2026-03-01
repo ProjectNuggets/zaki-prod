@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
 import { CenterLogo } from "../../icons";
 import { InputArea } from "../../InputArea";
+import { useTranslation } from "react-i18next";
 import type { PinnedFileStatus, Space } from "@/types";
 
 interface SpaceDetailViewProps {
@@ -33,20 +34,20 @@ const iconOptions = [
 
 const colorOptions = ["#E24A3B", "#F57C1F", "#F2B705", "#20A559", "#2F7EEA", "#7B4BE4", "#FF6FB1"];
 
-const fileStatusTone: Record<PinnedFileStatus, { chip: string; label: string; dot: string }> = {
+const fileStatusTone: Record<PinnedFileStatus, { chip: string; labelKey: string; dot: string }> = {
   embedded: {
     chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    label: "Embedded",
+    labelKey: "spaceDetailView.fileStatus.embedded",
     dot: "bg-emerald-500",
   },
   processing: {
     chip: "bg-amber-50 text-amber-700 border border-amber-200",
-    label: "Processing",
+    labelKey: "spaceDetailView.fileStatus.processing",
     dot: "bg-amber-500",
   },
   failed: {
     chip: "bg-rose-50 text-rose-700 border border-rose-200",
-    label: "Failed",
+    labelKey: "spaceDetailView.fileStatus.failed",
     dot: "bg-rose-500",
   },
 };
@@ -67,6 +68,8 @@ export function SpaceDetailView({
   onEditInstructions,
   onUploadFiles,
 }: SpaceDetailViewProps) {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement>(null);
 
@@ -92,14 +95,15 @@ export function SpaceDetailView({
   }, [iconPickerOpen]);
 
   return (
-    <div className="px-4 sm:px-6 md:px-10 py-8 max-w-6xl mx-auto w-full">
+    <div className="px-4 sm:px-6 md:px-10 py-8 max-w-6xl mx-auto w-full" dir={isRtl ? "rtl" : "ltr"}>
       <button
         type="button"
         className="text-xs text-zaki-muted hover:text-zaki-secondary mb-4 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 rounded px-2 py-1"
         onClick={onGoToSpaces}
-        aria-label="Back to all spaces"
+        aria-label={t("spaceDetailView.backToSpaces")}
       >
-        ← All spaces
+        {isRtl ? "→ " : "← "}
+        {t("spaceDetailView.backToSpaces")}
       </button>
       <div className="flex flex-col md:flex-row md:items-start gap-4">
         <div className="relative">
@@ -128,7 +132,7 @@ export function SpaceDetailView({
               className="absolute top-14 left-0 w-[240px] rounded-zaki-xl border border-zaki-subtle bg-white text-zaki-primary shadow-[0px_18px_36px_rgba(15,15,15,0.16)] p-3 z-30"
             >
               <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider mb-3">
-                Appearance
+                {t("spaceDetailView.appearance")}
               </div>
               <div className="flex items-center gap-2 mb-3">
                 {colorOptions.map((color) => (
@@ -164,18 +168,22 @@ export function SpaceDetailView({
           )}
         </div>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${isRtl ? "justify-end" : ""}`}>
             <div className="text-lg font-semibold text-zaki-primary">{spaceDetail.title}</div>
-            <span className="text-2xs uppercase tracking-wide rounded-full bg-zaki-sunken text-zaki-secondary px-2 py-0.5">Private</span>
+            <span className="text-2xs uppercase tracking-wide rounded-full bg-zaki-sunken text-zaki-secondary px-2 py-0.5">
+              {t("spaceDetailView.privateBadge")}
+            </span>
           </div>
-          <div className="text-sm text-zaki-disabled mt-1">{spaceDetail.description}</div>
+          <div className={`text-sm text-zaki-disabled mt-1 ${isRtl ? "text-right" : ""}`}>
+            {spaceDetail.description}
+          </div>
         </div>
         <button
           type="button"
           className="zaki-btn w-full md:w-auto bg-zaki-secondary text-white hover:bg-zaki-brand active:scale-[0.98] transition-[transform,background-color]"
           onClick={() => onCreateThread(spaceDetail.id)}
         >
-          New chat
+          {t("spaceDetailView.newChat")}
         </button>
       </div>
       <div className="mt-6">
@@ -192,9 +200,13 @@ export function SpaceDetailView({
         <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Project files</div>
+              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">
+                {t("spaceDetailView.projectFiles.title")}
+              </div>
               <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"}`}>
-                {spaceDetail.fixed ? "ZAKI is not a project" : `${spaceDetail.pinnedFiles?.length ?? 0} files`}
+                {spaceDetail.fixed
+                  ? t("spaceDetailView.projectFiles.fixed")
+                  : t("spaceDetailView.projectFiles.count", { count: spaceDetail.pinnedFiles?.length ?? 0 })}
               </div>
             </div>
             {!spaceDetail.fixed && (
@@ -203,7 +215,7 @@ export function SpaceDetailView({
                 className="zaki-btn-sm bg-white border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover"
                 onClick={onUploadFiles}
               >
-                Upload
+                {t("spaceDetailView.projectFiles.upload")}
               </button>
             )}
           </div>
@@ -222,21 +234,21 @@ export function SpaceDetailView({
                         <div className="truncate text-sm font-medium text-zaki-primary">{file.name}</div>
                         <div className="mt-1 flex items-center gap-2 text-2xs text-zaki-muted">
                           <span className={`size-1.5 rounded-full ${tone.dot}`} />
-                          <span>{file.type || "document"}</span>
+                          <span>{file.type || t("spaceDetailView.projectFiles.documentTypeFallback")}</span>
                         </div>
                         {status === "failed" && file.error && (
                           <div className="mt-1 text-2xs text-rose-700">{file.error}</div>
                         )}
                       </div>
                       <span className={`shrink-0 rounded-full px-2 py-1 text-2xs font-semibold ${tone.chip}`}>
-                        {tone.label}
+                        {t(tone.labelKey)}
                       </span>
                     </div>
                   );
                 })
               ) : (
                 <div className="rounded-zaki-md border border-dashed border-zaki-subtle px-3 py-3 text-sm text-zaki-muted">
-                  Upload documents to ground this workspace. Embedded files stay with the whole space.
+                  {t("spaceDetailView.projectFiles.empty")}
                 </div>
               )}
             </div>
@@ -245,9 +257,13 @@ export function SpaceDetailView({
         <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Instructions</div>
+              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">
+                {t("spaceDetailView.instructions.title")}
+              </div>
               <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"} line-clamp-2`}>
-                {spaceDetail.fixed ? "ZAKI doesn't take instructions from anyone." : (spaceDetail.instructions || "Add guidance for this space.")}
+                {spaceDetail.fixed
+                  ? t("spaceDetailView.instructions.fixed")
+                  : (spaceDetail.instructions || t("spaceDetailView.instructions.empty"))}
               </div>
             </div>
             {!spaceDetail.fixed && (
@@ -255,9 +271,9 @@ export function SpaceDetailView({
                 type="button"
                 className="zaki-btn-sm bg-white border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover"
                 onClick={() => onEditInstructions(spaceDetail.instructions || "")}
-                aria-label="Edit instructions"
+                aria-label={t("spaceDetailView.instructions.editAria")}
               >
-                Edit
+                {t("spaceDetailView.instructions.edit")}
               </button>
             )}
           </div>
@@ -266,8 +282,12 @@ export function SpaceDetailView({
 
       <div className="mt-6 rounded-zaki-xl border border-zaki bg-zaki-raised p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Chats in this space</div>
-          <div className="text-2xs text-zaki-muted">{(spaceDetail.threads ?? []).length} total</div>
+          <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">
+            {t("spaceDetailView.threads.title")}
+          </div>
+          <div className="text-2xs text-zaki-muted">
+            {t("spaceDetailView.threads.total", { count: (spaceDetail.threads ?? []).length })}
+          </div>
         </div>
         <div className="flex flex-col divide-y divide-zaki-subtle">
           {(spaceDetail.threads ?? []).map((thread) => (
@@ -298,14 +318,16 @@ export function SpaceDetailView({
                       onDeleteThread(thread.id);
                     }}
                   >
-                    Delete
+                    {t("spaceDetailView.threads.delete")}
                   </button>
                 )}
               </div>
             </div>
           ))}
           {(!spaceDetail.threads || spaceDetail.threads.length === 0) && (
-            <div className="text-sm text-zaki-disabled py-4">No chats yet. Start one above.</div>
+            <div className="text-sm text-zaki-disabled py-4">
+              {t("spaceDetailView.threads.empty")}
+            </div>
           )}
         </div>
       </div>

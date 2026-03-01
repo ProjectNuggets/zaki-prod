@@ -215,6 +215,45 @@ export function ChatArea() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
+  const chatCopy = {
+    spaceFallback: isRtl ? "مساحة" : "Space",
+    newChat: isRtl ? "محادثة جديدة" : "New chat",
+    copied: isRtl ? "تم النسخ إلى الحافظة" : "Copied to clipboard",
+    copyFailed: isRtl ? "تعذر نسخ الرسالة" : "Unable to copy message",
+    exported: isRtl ? "تم تصدير المحادثة" : "Chat exported",
+    exportFailed: isRtl ? "تعذر تصدير هذه المحادثة" : "Unable to export this chat",
+    dragPrompt: isRtl ? "أسقط الملفات داخل المساحة ليتم استخدامها" : "Drop files into a workspace to ground them",
+    shareConversationAria: isRtl ? "مشاركة المحادثة" : "Share conversation",
+    shareConversation: isRtl ? "مشاركة" : "Share",
+    moreOptionsAria: isRtl ? "خيارات إضافية" : "More options",
+    reviewMemoriesAria: isRtl ? "مراجعة الذكريات" : "Review memories",
+    reviewMemories: isRtl ? "مراجعة الذكريات" : "Review Memories",
+    exportJsonAria: isRtl ? "تصدير المحادثة بصيغة JSON" : "Export conversation as JSON",
+    exportJson: isRtl ? "تصدير JSON" : "Export JSON",
+    scrollToBottomAria: isRtl ? "الانتقال إلى آخر المحادثة" : "Scroll to bottom",
+    unsupportedType: (hint?: string) =>
+      hint
+        ? isRtl
+          ? `نوع الملف غير مدعوم. استخدم أحد الأنواع التالية: ${hint}.`
+          : `Unsupported type. Use one of: ${hint}.`
+        : isRtl
+          ? "نوع الملف غير مدعوم."
+          : "Unsupported file type.",
+    unsupportedUploadToast: (hint?: string) =>
+      hint
+        ? isRtl
+          ? `نوع الملف غير مدعوم. ارفع أحد الأنواع التالية: ${hint}.`
+          : `Unsupported file type. Upload one of: ${hint}.`
+        : isRtl
+          ? "نوع الملف غير مدعوم لرفع ملفات المساحة."
+          : "Unsupported file type for workspace upload.",
+    addedFile: (name: string) =>
+      isRtl ? `تمت إضافة ${name} إلى ملفات المساحة.` : `Added ${name} to workspace files.`,
+    addedFiles: (count: number) =>
+      isRtl ? `تمت إضافة ${count} ملفات إلى ملفات المساحة.` : `Added ${count} files to workspace files.`,
+    uploadFailed: isRtl ? "فشل الرفع." : "Upload failed.",
+    unableToUpload: isRtl ? "تعذر رفع الملفات." : "Unable to upload files.",
+  };
   useAuthStore(); // For auth context, values used elsewhere
   const {
     view,
@@ -418,18 +457,18 @@ export function ChatArea() {
   }, [primarySpace?.id, spacesList]);
   const activeSpace = spacesList.find((space) => space.id === activeWorkspaceSlug) ?? null;
   const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
-  const headerSpaceName = activeSpace?.title || "Space";
-  const headerThreadName = activeThread?.label || "New chat";
+  const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
+  const headerThreadName = activeThread?.label || chatCopy.newChat;
 
   const handleCopyMessage = useCallback(async (message: Message) => {
     if (!message.content) return;
     try {
       await navigator.clipboard.writeText(message.content);
-      toast.success("Copied to clipboard");
+      toast.success(chatCopy.copied);
     } catch {
-      toast.error("Unable to copy message");
+      toast.error(chatCopy.copyFailed);
     }
-  }, []);
+  }, [chatCopy.copied, chatCopy.copyFailed]);
 
   const updateScrollIndicator = useCallback(() => {
     const el = scrollRef.current;
@@ -477,13 +516,13 @@ export function ChatArea() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast.success("Chat exported");
+      toast.success(chatCopy.exported);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to export this chat");
+      toast.error(error instanceof Error ? error.message : chatCopy.exportFailed);
     } finally {
       setMenuOpen(false);
     }
-  }, [serializeChat, headerThreadName]);
+  }, [chatCopy.exportFailed, chatCopy.exported, headerThreadName, serializeChat]);
 
   const uploadFilesToWorkspace = useCallback(
     async (workspaceSlug: string, files: File[]) => {
@@ -2020,7 +2059,7 @@ export function ChatArea() {
       {dragActive && (
         <div className="absolute inset-0 z-30 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
           <div className="rounded-zaki-lg border border-zaki bg-white px-5 py-3 text-sm text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.12)]">
-            Drop files into a workspace to ground them
+            {chatCopy.dragPrompt}
           </div>
         </div>
       )}
@@ -2043,10 +2082,10 @@ export function ChatArea() {
                   type="button"
                   className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                   onClick={handleShare}
-                  aria-label="Share conversation"
+                  aria-label={chatCopy.shareConversationAria}
                 >
                   <Share2 className="size-4 text-zaki-muted" />
-                  Share
+                  {chatCopy.shareConversation}
                 </button>
                 <button
                   type="button"
@@ -2054,7 +2093,7 @@ export function ChatArea() {
                   onClick={() => setMenuOpen((open) => !open)}
                   aria-haspopup="menu"
                   aria-expanded={menuOpen}
-                  aria-label="More options"
+                  aria-label={chatCopy.moreOptionsAria}
                 >
                   <MoreVertical className="size-4" />
                 </button>
@@ -2071,10 +2110,10 @@ export function ChatArea() {
                         setMenuOpen(false);
                         setShowMemoryPanel(true);
                       }}
-                      aria-label="Review memories"
+                      aria-label={chatCopy.reviewMemoriesAria}
                     >
                       <Brain className="size-4 text-zaki-muted" />
-                      Review Memories
+                      {chatCopy.reviewMemories}
                       {pendingMemories.length > 0 && (
                         <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
                           {pendingMemories.length}
@@ -2086,10 +2125,10 @@ export function ChatArea() {
                       className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                       role="menuitem"
                       onClick={handleExport}
-                      aria-label="Export conversation as JSON"
+                      aria-label={chatCopy.exportJsonAria}
                     >
                       <Download className="size-4 text-zaki-muted" />
-                      Export JSON
+                      {chatCopy.exportJson}
                     </button>
                   </div>
                 )}
@@ -2141,7 +2180,7 @@ export function ChatArea() {
                   autoScrollRef.current = true;
                   setShowScrollToBottom(false);
                 }}
-                aria-label="Scroll to bottom"
+                aria-label={chatCopy.scrollToBottomAria}
               >
                 <ChevronDown className="size-5 mx-auto" />
               </button>
@@ -2200,9 +2239,7 @@ export function ChatArea() {
                     type: file.type || "document",
                     size: Number(file.size || 0),
                     status: "failed",
-                    error: acceptedWorkspaceHint
-                      ? `Unsupported type. Use one of: ${acceptedWorkspaceHint}.`
-                      : "Unsupported file type.",
+                    error: chatCopy.unsupportedType(acceptedWorkspaceHint),
                   });
                 }
                 window.dispatchEvent(
@@ -2213,11 +2250,7 @@ export function ChatArea() {
                     },
                   })
                 );
-                toast.error(
-                  acceptedWorkspaceHint
-                    ? `Unsupported file type. Upload one of: ${acceptedWorkspaceHint}.`
-                    : "Unsupported file type for workspace upload."
-                );
+                toast.error(chatCopy.unsupportedUploadToast(acceptedWorkspaceHint));
               }
               if (valid.length === 0) return;
 
@@ -2263,8 +2296,8 @@ export function ChatArea() {
                   );
                   toast.success(
                     uploadedFiles.length === 1
-                      ? `Added ${uploadedFiles[0]?.name || "file"} to workspace files.`
-                      : `Added ${uploadedFiles.length} files to workspace files.`
+                      ? chatCopy.addedFile(uploadedFiles[0]?.name || (isRtl ? "الملف" : "file"))
+                      : chatCopy.addedFiles(uploadedFiles.length)
                   );
                 })
                 .catch((error) => {
@@ -2277,7 +2310,7 @@ export function ChatArea() {
                       type: file.type || "document",
                       size: Number(file.size || 0),
                       status: "failed",
-                      error: error instanceof Error ? error.message : "Upload failed.",
+                      error: error instanceof Error ? error.message : chatCopy.uploadFailed,
                     });
                   }
                   window.dispatchEvent(
@@ -2289,7 +2322,7 @@ export function ChatArea() {
                     })
                   );
                   toast.error(
-                    error instanceof Error ? error.message : "Unable to upload files."
+                    error instanceof Error ? error.message : chatCopy.unableToUpload
                   );
                 });
             }}

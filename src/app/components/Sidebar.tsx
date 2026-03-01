@@ -23,24 +23,39 @@ import { SettingsModal } from "./sidebar/SettingsModal";
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 const APP_VERSION = "1.5.69";
-const fileStatusTone = {
-  embedded: {
-    chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    label: "Embedded",
-  },
-  processing: {
-    chip: "bg-amber-50 text-amber-700 border border-amber-200",
-    label: "Processing",
-  },
-  failed: {
-    chip: "bg-rose-50 text-rose-700 border border-rose-200",
-    label: "Failed",
-  },
-} as const;
 
 export function Sidebar() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
+  const fileStatusTone = {
+    embedded: {
+      chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      label: isRtl ? "مضمّن" : "Embedded",
+    },
+    processing: {
+      chip: "bg-amber-50 text-amber-700 border border-amber-200",
+      label: isRtl ? "قيد المعالجة" : "Processing",
+    },
+    failed: {
+      chip: "bg-rose-50 text-rose-700 border border-rose-200",
+      label: isRtl ? "فشل" : "Failed",
+    },
+  } as const;
+  const sidebarCopy = {
+    justNow: isRtl ? "الآن" : "just now",
+    oneMinuteAgo: isRtl ? "منذ دقيقة" : "1 min ago",
+    minutesAgo: (count: number) => (isRtl ? `منذ ${count} دقائق` : `${count} min ago`),
+    oneHourAgo: isRtl ? "منذ ساعة" : "1 hour ago",
+    hoursAgo: (count: number) => (isRtl ? `منذ ${count} ساعات` : `${count} hours ago`),
+    today: isRtl ? "اليوم" : "today",
+    memoryTitle: isRtl ? "ذاكرتك" : "Your Memory",
+    memorySubtitle: isRtl ? "ما الذي يتذكره ZAKI عنك" : "What ZAKI remembers about you",
+    closeMemoryAria: isRtl ? "إغلاق الذاكرة" : "Close memory",
+    closeSpaceSettingsAria: isRtl ? "إغلاق إعدادات المساحة" : "Close space settings",
+    description: isRtl ? "الوصف" : "Description",
+    descriptionPlaceholder: isRtl ? "صف ما الذي خُصصت له هذه المساحة..." : "Describe what this space is for...",
+    workspaceTools: isRtl ? "أدوات المساحة" : "Workspace tools",
+  };
   // Get state from stores
   const { user, logout, setUser } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
@@ -198,13 +213,13 @@ export function Sidebar() {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "just now";
-    if (diffMins === 1) return "1 min ago";
-    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffMins < 1) return sidebarCopy.justNow;
+    if (diffMins === 1) return sidebarCopy.oneMinuteAgo;
+    if (diffMins < 60) return sidebarCopy.minutesAgo(diffMins);
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return "1 hour ago";
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    return "today";
+    if (diffHours === 1) return sidebarCopy.oneHourAgo;
+    if (diffHours < 24) return sidebarCopy.hoursAgo(diffHours);
+    return sidebarCopy.today;
   };
   const spaceIconMap: Record<string, typeof Folder> = {
     folder: Folder,
@@ -1825,8 +1840,8 @@ export function Sidebar() {
                   <Brain className="size-5 text-white" />
                 </div>
                 <div>
-                  <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">Your Memory</div>
-                  <div className="text-xs text-zaki-disabled dark:text-zaki-dark-muted">What ZAKI remembers about you</div>
+                  <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">{sidebarCopy.memoryTitle}</div>
+                  <div className="text-xs text-zaki-disabled dark:text-zaki-dark-muted">{sidebarCopy.memorySubtitle}</div>
                 </div>
               </div>
               <button
@@ -1836,7 +1851,7 @@ export function Sidebar() {
                   setMemoryOpen(false);
                   setMemorySearchQuery("");
                 }}
-                aria-label="Close memory"
+                aria-label={sidebarCopy.closeMemoryAria}
               >
                 <span className="block text-lg leading-none">×</span>
               </button>
@@ -1878,21 +1893,21 @@ export function Sidebar() {
                   setSpaceSettingsOpen(false);
                   setSpaceSettingsTarget(null);
                 }}
-                aria-label="Close space settings"
+                aria-label={sidebarCopy.closeSpaceSettingsAria}
               >
                 <span className="block text-lg leading-none">×</span>
               </button>
             </div>
             <div className="px-5 py-4 flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">Description</label>
+                <label className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{sidebarCopy.description}</label>
                 <textarea
                   className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
                   rows={3}
                   maxLength={200}
                   value={spaceDescriptionDraft}
                   onChange={(event) => setSpaceDescriptionDraft(event.target.value)}
-                  placeholder="Describe what this space is for…"
+                  placeholder={sidebarCopy.descriptionPlaceholder}
                 />
                 <div className="text-[10px] text-zaki-muted text-right">
                   {spaceDescriptionDraft.length}/200
@@ -1900,7 +1915,7 @@ export function Sidebar() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">Workspace tools</div>
+                <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{sidebarCopy.workspaceTools}</div>
                 <button
                   type="button"
                   className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
