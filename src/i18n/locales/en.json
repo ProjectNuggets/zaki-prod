@@ -454,7 +454,7 @@
   },
   "billing": {
     "upgradeTitle": "Choose your plan",
-    "upgradeSubtitle": "Student and Personal unlock premium features. You can manage or cancel anytime.",
+    "upgradeSubtitle": "Unlock a faster, more personal ZAKI. Manage or cancel anytime.",
     "notNow": "Not now",
     "managePlan": "Manage plan",
     "proGate": "Premium feature — upgrade to Personal to unlock.",
@@ -462,13 +462,13 @@
     "plans": {
       "student": {
         "label": "Student",
-        "price": "$5 / mo",
-        "desc": "Best for learners and light use."
+        "price": "$8 / mo",
+        "desc": "For students who want sharper study help, writing support, and better focus."
       },
       "personal": {
         "label": "Personal",
-        "price": "$10 / mo",
-        "desc": "Everyday power + priority access."
+        "price": "$13 / mo",
+        "desc": "For everyday work and life when you want ZAKI to feel like your assistant."
       },
       "pro": {
         "label": "Pro",
@@ -478,12 +478,13 @@
     }
   },
   "pricingPage": {
-    "eyebrow": "Pricing",
-    "title": "Choose the plan that fits you",
+    "eyebrow": "Plans",
+    "title": "Choose the plan that makes ZAKI feel personal",
+    "subtitle": "Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.",
     "currentPlan": "You’re currently on {{plan}}",
-    "currentPlanPremium": "Manage or switch anytime.",
+    "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Upgrade when you’re ready.",
+    "currentPlanFree": "Start free, then upgrade when you want more from ZAKI.",
     "codeActivePlanLabel": "Code active",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
@@ -515,17 +516,17 @@
       "apply": "Apply code",
       "applying": "Applying...",
       "purchase": {
-        "badge": "Gift mode",
-        "title": "Gift a 30-day ZAKI pass 🎁",
-        "description": "Help someone you care about unlock a study buddy, writing partner, and daily AI sidekick.",
+        "badge": "Gift a month",
+        "title": "Gift a 30-day ZAKI pass",
+        "description": "A thoughtful gift for a student, friend, or teammate who needs a sharp personal AI assistant for a month.",
         "highlights": [
-          "📚 Perfect for exam season, focus sprints, and project deadlines.",
-          "💌 Delivered by email, easy to share with a friend or teammate.",
-          "✨ One-time purchase, single-use code, instant impact."
+          "Perfect for exam season, writing sprints, and deadline-heavy weeks.",
+          "Delivered by email as a single-use code you can forward instantly.",
+          "A simple one-time purchase for one month of premium access."
         ],
-        "note": "Buy one now, keep it handy, and gift it when someone needs a boost.",
-        "price": "$10 one-time",
-        "cta": "Buy gift code 🎉",
+        "note": "Buy it once, keep it ready, and send it when someone needs real help.",
+        "price": "$15 one-time",
+        "cta": "Buy 1-month gift code",
         "processing": "Opening checkout...",
         "unavailable": "Code purchase is not enabled in this environment yet.",
         "checkoutError": "Unable to start code purchase checkout."
@@ -552,29 +553,31 @@
       },
       "student": {
         "label": "Student",
-        "price": "$5 / month",
-        "priceMonthly": "$5 / month",
-        "priceYearly": "$60 / year",
-        "blurb": "Premium features for focused learning.",
+        "price": "$8 / month",
+        "priceMonthly": "$8 / month",
+        "priceYearly": "$96 / year",
+        "blurb": "For focused studying, clearer writing, and better support across your coursework.",
         "features": [
-          "Premium models",
-          "Priority responses",
-          "Expanded memory limits"
+          "Premium models for better answers",
+          "Priority responses during busy hours",
+          "Stronger help with notes, drafts, and study sessions"
         ]
       },
       "personal": {
         "label": "Personal",
-        "price": "$10 / month",
-        "priceMonthly": "$10 / month",
-        "priceYearly": "$120 / year",
-        "blurb": "Best for everyday use and deeper context.",
+        "price": "$13 / month",
+        "priceMonthly": "$13 / month",
+        "priceYearly": "$156 / year",
+        "blurb": "For everyday work and life when you want ZAKI to remember context and move faster with you.",
         "features": [
-          "Premium models",
-          "Priority responses",
-          "Advanced memory insights"
+          "Premium models with richer reasoning",
+          "Priority responses and stronger context",
+          "More personal memory and assistant-style support"
         ]
       }
     },
+    "studentEligibilityTitle": "Student plan eligibility:",
+    "studentEligibilityBody": "use your .edu email at checkout, or email any proof of enrollment for manual verification at",
     "currentBadge": "Current",
     "included": "Included",
     "alreadySubscribed": "Already subscribed",

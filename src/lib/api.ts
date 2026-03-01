@@ -551,6 +551,12 @@ export type AdminMember = {
   updatedAt: string | null;
 };
 
+export type AdminStudentVerificationUser = {
+  email: string;
+  studentVerified: boolean;
+  studentVerifiedAt: string | null;
+};
+
 export async function listAdminMembers() {
   const response = await backendAuthRequest("/api/admin/admins", {
     method: "GET",
@@ -602,6 +608,46 @@ export async function removeAdminMember(email: string) {
   let data: {
     success?: boolean;
     member?: AdminMember;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function getAdminStudentVerification(email: string) {
+  const query = new URLSearchParams({ email });
+  const response = await backendAuthRequest(
+    `/api/admin/student-verification?${query.toString()}`,
+    {
+      method: "GET",
+    }
+  );
+  let data: {
+    success?: boolean;
+    user?: AdminStudentVerificationUser;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function updateAdminStudentVerification(email: string, verified: boolean) {
+  const response = await backendAuthRequest("/api/admin/student-verification", {
+    method: "POST",
+    body: JSON.stringify({ email, verified }),
+  });
+  let data: {
+    success?: boolean;
+    user?: AdminStudentVerificationUser;
+    message?: string | null;
     error?: string | null;
   } = {};
   try {

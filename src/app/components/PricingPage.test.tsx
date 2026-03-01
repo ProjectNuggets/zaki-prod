@@ -33,7 +33,7 @@ jest.mock("react-i18next", () => ({
         "Yearly pricing is not available for this plan yet.",
       "pricingPage.yearlyStripeOnly":
         "Yearly billing is currently available only through Stripe.",
-      "pricingPage.access.purchase.cta": "Buy gift code 🎉",
+      "pricingPage.access.purchase.cta": "Buy 1-month gift code",
       "pricingPage.access.purchase.unavailable":
         "Code purchase is not enabled in this environment yet.",
       "pricingPage.access.purchase.processing": "Opening checkout...",
@@ -41,14 +41,14 @@ jest.mock("react-i18next", () => ({
         "Unable to start code purchase checkout.",
       "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
       "pricingPage.plans.student.features": [
-        "Premium models",
-        "Priority responses",
-        "Expanded memory limits",
+        "Premium models for better answers",
+        "Priority responses during busy hours",
+        "Stronger help with notes, drafts, and study sessions",
       ],
       "pricingPage.plans.personal.features": [
-        "Premium models",
-        "Priority responses",
-        "Advanced memory insights",
+        "Premium models with richer reasoning",
+        "Priority responses and stronger context",
+        "More personal memory and assistant-style support",
       ],
     };
     return {
@@ -376,7 +376,7 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Buy gift code 🎉" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buy 1-month gift code" }));
 
     await waitFor(() => {
       expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
@@ -431,7 +431,7 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("button", { name: "Buy gift code 🎉" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Buy 1-month gift code" })).toBeDisabled();
     expect(
       screen.getByText("Code purchase is not enabled in this environment yet.")
     ).toBeInTheDocument();

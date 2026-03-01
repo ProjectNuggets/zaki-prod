@@ -362,15 +362,22 @@ export function InputArea({
                   {t("input.menu.uploadFile")}
                 </button>
                 <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  className="group relative w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
                   type="button"
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
+                    toast.info(t("input.menu.comingSoonToast"));
                   }}
                 >
                   <GraduationCap className="size-4 text-zaki-muted" />
                   {t("input.menu.studyLearn")}
+                  <span className={cn(
+                    "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    isRtl ? "left-2" : "right-2"
+                  )}>
+                    {t("input.webSearch.soonPill")}
+                  </span>
                 </button>
                 <div className="my-1 h-px bg-zaki-subtle" />
                 <button

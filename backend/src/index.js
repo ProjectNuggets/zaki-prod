@@ -2450,6 +2450,10 @@ function isEduEmail(email) {
   return domain.toLowerCase().endsWith(".edu");
 }
 
+function isStudentEligible(zakiUser, email) {
+  return Boolean(zakiUser?.student_verified) || isEduEmail(email);
+}
+
 function resolveTier(tier) {
   if (tier === "pro") return "personal";
   return tier || "free";
@@ -2850,8 +2854,10 @@ const billingAdapters = {
     async createCheckout({ plan, interval = "monthly", email, zakiUser, context }) {
       const selectedInterval = normalizeBillingInterval(interval, "monthly");
       const checkoutSource = String(context?.source || "").trim().toLowerCase() || "pricing_page";
-      if (plan === "student" && !isEduEmail(email)) {
-        const err = new Error("Student plan requires a .edu email address.");
+      if (plan === "student" && !isStudentEligible(zakiUser, email)) {
+        const err = new Error(
+          "Student plan requires a .edu email or manual verification. Email proof of enrollment to info@novanuggets.com."
+        );
         err.status = 400;
         throw err;
       }
@@ -4737,6 +4743,91 @@ app.delete("/api/admin/admins/:email", async (req, res) => {
   } catch (error) {
     console.error("[Admin] Remove member error:", error);
     res.status(500).json({ error: error?.message || "Failed to remove admin." });
+  }
+});
+
+app.get("/api/admin/student-verification", async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const email = normalizeEmail(req.query?.email);
+    if (!email) {
+      res.status(400).json({ success: false, error: "Valid email is required." });
+      return;
+    }
+
+    const row = await dbGet(
+      `SELECT email, student_verified, student_verified_at
+       FROM zaki_users
+       WHERE email = $1`,
+      [email]
+    );
+
+    if (!row) {
+      res.status(404).json({ success: false, error: "User not found." });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        email: normalizeEmail(row.email),
+        studentVerified: Boolean(row.student_verified),
+        studentVerifiedAt: row.student_verified_at
+          ? new Date(row.student_verified_at).toISOString()
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error("[Admin] Student verification lookup error:", error);
+    res.status(500).json({ error: error?.message || "Failed to load student verification." });
+  }
+});
+
+app.post("/api/admin/student-verification", express.json({ limit: "50kb" }), async (req, res) => {
+  try {
+    const authResult = await requireAdminUser(req, res);
+    if (!authResult) return;
+
+    const email = normalizeEmail(req.body?.email);
+    if (!email) {
+      res.status(400).json({ success: false, error: "Valid email is required." });
+      return;
+    }
+    const verified = Boolean(req.body?.verified);
+
+    const result = await dbQuery(
+      `UPDATE zaki_users
+       SET student_verified = $2,
+           student_verified_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
+           updated_at = NOW()
+       WHERE email = $1
+       RETURNING email, student_verified, student_verified_at`,
+      [email, verified]
+    );
+
+    if (!result.rows[0]) {
+      res.status(404).json({ success: false, error: "User not found." });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        email: normalizeEmail(result.rows[0].email),
+        studentVerified: Boolean(result.rows[0].student_verified),
+        studentVerifiedAt: result.rows[0].student_verified_at
+          ? new Date(result.rows[0].student_verified_at).toISOString()
+          : null,
+      },
+      message: verified
+        ? "Student verification granted."
+        : "Student verification removed.",
+    });
+  } catch (error) {
+    console.error("[Admin] Student verification update error:", error);
+    res.status(500).json({ error: error?.message || "Failed to update student verification." });
   }
 });
 

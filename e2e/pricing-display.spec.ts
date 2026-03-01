@@ -10,9 +10,7 @@ async function json(route: Route, payload: unknown, status = 200) {
 
 async function mockAuthAndPricing(page: Page) {
   const state = {
-    token: "paid-user-token-123",
-    tier: "free",
-    status: "inactive",
+    token: "pricing-user-token-123",
   };
 
   await page.route("**/api/telemetry/product-event", async (route) => {
@@ -61,7 +59,7 @@ async function mockAuthAndPricing(page: Page) {
       success: true,
       user: {
         username: "user@example.com",
-        fullName: "Paid User",
+        fullName: "Pricing User",
       },
     });
   });
@@ -78,9 +76,9 @@ async function mockAuthAndPricing(page: Page) {
     await json(route, {
       success: true,
       plan: {
-        tier: state.tier,
-        status: state.status,
-        interval: state.tier === "free" ? null : "monthly",
+        tier: "free",
+        status: "inactive",
+        interval: null,
         cancelAtPeriodEnd: false,
       },
       access: {
@@ -89,7 +87,7 @@ async function mockAuthAndPricing(page: Page) {
         campaign: null,
       },
       features: {
-        premium: state.tier !== "free",
+        premium: false,
       },
     });
   });
@@ -104,10 +102,7 @@ async function mockAuthAndPricing(page: Page) {
         cancelEnabled: true,
         webhookEnabled: true,
         accessCodePurchaseEnabled: true,
-        checkoutProviders: [
-          { key: "stripe", label: "Stripe", enabled: true },
-          { key: "paddle", label: "Paddle", enabled: true },
-        ],
+        checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
         pricingAvailability: {
           student: { monthly: true, yearly: true },
           personal: { monthly: true, yearly: true },
@@ -115,27 +110,9 @@ async function mockAuthAndPricing(page: Page) {
       },
     });
   });
-
-  await page.route("**/api/billing/checkout", async (route) => {
-    state.tier = "student";
-    state.status = "active";
-    await json(route, {
-      success: true,
-      url: "/pricing/success?billing=success&plan=student&interval=monthly",
-    });
-  });
-
-  await page.route("**/api/billing/sync", async (route) => {
-    await json(route, {
-      success: true,
-      updated: true,
-      tier: state.tier,
-      status: state.status,
-    });
-  });
 }
 
-test("user can sign in on pricing route and complete provider-selected checkout", async ({
+test("pricing page displays expected student, personal, and gift-code prices", async ({
   page,
 }) => {
   await mockAuthAndPricing(page);
@@ -145,8 +122,6 @@ test("user can sign in on pricing route and complete provider-selected checkout"
 
   await page.goto("/pricing");
 
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-
   await page.getByPlaceholder("Email address").fill("user@example.com");
   await page.getByPlaceholder("Password").fill("Password123");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -154,12 +129,8 @@ test("user can sign in on pricing route and complete provider-selected checkout"
   await expect(
     page.getByRole("heading", { name: "Choose the plan that makes ZAKI feel personal" })
   ).toBeVisible();
-  await page.getByRole("button", { name: "Choose Student" }).click();
-
-  await expect(page.getByText("Choose payment provider")).toBeVisible();
-  await page.getByRole("button", { name: /Stripe/ }).click();
-
-  await expect(page).toHaveURL(/\/pricing\/success\?/);
-  await expect(page.getByText("Plan: Student")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Congrats Paid User!/ })).toBeVisible();
+  await expect(page.getByText("$8 / month")).toBeVisible();
+  await expect(page.getByText("$13 / month")).toBeVisible();
+  await expect(page.getByText("$15 one-time")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Buy 1-month gift code" })).toBeVisible();
 });

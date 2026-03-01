@@ -35,6 +35,7 @@ export function PricingPage() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const language = i18n.language || undefined;
+  const supportEmail = "info@novanuggets.com";
   const [searchParams, setSearchParams] = useSearchParams();
   const handledBillingStatusRef = useRef<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
@@ -487,6 +488,9 @@ export function PricingPage() {
           <h1 className="text-3xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             {t("pricingPage.title")}
           </h1>
+          <p className="max-w-3xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+            {t("pricingPage.subtitle")}
+          </p>
           <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
             {t("pricingPage.currentPlan", { plan: currentPlanLabel })}
             {" · "}
@@ -797,6 +801,20 @@ export function PricingPage() {
                 <p className="text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
                   {plan.blurb}
                 </p>
+                {plan.tier === "student" ? (
+                  <div className="rounded-xl border border-[#e7d5c4] bg-[#fff8ef] px-3 py-2 text-[11px] leading-relaxed text-zaki-secondary dark:border-[#3a2b22] dark:bg-[#1f1712] dark:text-zaki-dark-subtle">
+                    <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      {t("pricingPage.studentEligibilityTitle")}
+                    </span>{" "}
+                    {t("pricingPage.studentEligibilityBody")}{" "}
+                    <a
+                      className="font-semibold text-zaki-brand underline underline-offset-2"
+                      href={`mailto:${supportEmail}?subject=${encodeURIComponent("Student verification for ZAKI")}`}
+                    >
+                      {supportEmail}
+                    </a>
+                  </div>
+                ) : null}
                 <ul
                   className={cn(
                     "mt-2 flex list-disc flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle",
