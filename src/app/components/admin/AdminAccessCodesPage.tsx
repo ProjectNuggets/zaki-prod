@@ -11,6 +11,10 @@ import {
   removeAdminMember,
   updateAdminAccessCode,
 } from "@/lib/api";
+import {
+  readResponseFormattingConfig,
+  writeResponseFormattingConfig,
+} from "@/lib/responseFormatting";
 import { useAuthStore } from "@/stores";
 
 type ActiveFilter = "all" | "active" | "inactive";
@@ -44,6 +48,7 @@ export function AdminAccessCodesPage() {
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
   const [removingAdminEmail, setRemovingAdminEmail] = useState<string | null>(null);
+  const [disableResponseEnvelope, setDisableResponseEnvelope] = useState(false);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,6 +145,12 @@ export function AdminAccessCodesPage() {
   useEffect(() => {
     void loadAdminMembers();
   }, [loadAdminMembers]);
+
+  useEffect(() => {
+    setDisableResponseEnvelope(
+      readResponseFormattingConfig().disableResponseEnvelope
+    );
+  }, []);
 
   if (!token) {
     return <Navigate to="/" replace />;
@@ -298,9 +309,51 @@ export function AdminAccessCodesPage() {
     }
   };
 
+  const onToggleResponseEnvelope = () => {
+    const nextValue = !disableResponseEnvelope;
+    setDisableResponseEnvelope(nextValue);
+    writeResponseFormattingConfig({
+      disableResponseEnvelope: nextValue,
+    });
+    toast.success(
+      nextValue
+        ? "Response envelope disabled for this browser."
+        : "Response envelope restored for this browser."
+    );
+  };
+
   return (
     <div className="h-full overflow-y-auto zaki-scrollbar-fade px-6 py-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">Formatting</div>
+              <h2 className="mt-2 text-xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                Response Envelope Override
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                Browser-local testing switch for the backend response envelope. Turn it off here to
+                let TYP respond without the `ZAKI_RESPONSE_FORMAT_V1` wrapper.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleResponseEnvelope}
+              className="zaki-btn zaki-btn-secondary"
+            >
+              {disableResponseEnvelope ? "Envelope Off" : "Envelope On"}
+            </button>
+          </div>
+          <div className="mt-4 rounded-xl border border-zaki-subtle bg-zaki-hover px-4 py-3 text-sm text-zaki-secondary dark:bg-zaki-dark-bg/40 dark:text-zaki-dark-subtle">
+            Current browser state:{" "}
+            <span className="font-medium text-zaki-primary dark:text-zaki-dark-primary">
+              {disableResponseEnvelope ? "disabled" : "enabled"}
+            </span>
+            . This does not change server defaults for other users.
+          </div>
+        </section>
+
         <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

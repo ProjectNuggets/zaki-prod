@@ -28,6 +28,7 @@ describe("chat proxy payload helpers", () => {
     expect(payload.attachments).toEqual([{ name: "image.png" }]);
     expect(payload.promptPrefix).toContain("You are ZAKI");
     expect(payload.promptPrefix).toContain("Act as a tutor");
+    expect(payload.promptPrefix).not.toContain("Response formatting rules:");
   });
 
   it("adds identity guardrails when no prompt prefix exists", () => {
@@ -41,6 +42,7 @@ describe("chat proxy payload helpers", () => {
 
     expect(payload.promptPrefix).toContain("You are ZAKI");
     expect(payload.promptPrefix).toContain("Never claim to be Anthropic");
+    expect(payload.promptPrefix).not.toContain("Response formatting rules:");
   });
 
   it("maps webSearch compatibility flag to webSearchEnabled", () => {
@@ -84,14 +86,14 @@ describe("chat proxy payload helpers", () => {
     expect(payload.mode).toBe("chat");
   });
 
-  it("detects numbered, sentence, and summary formatting intents", () => {
-    expect(getRequestedResponseFormat("Give me 3 numbered steps to plan a trip.")).toBe(
-      "numbered"
-    );
+  it("detects the balanced formatting intents only", () => {
+    expect(getRequestedResponseFormat("Give me the answer in bullets")).toBe("bullets");
+    expect(getRequestedResponseFormat("Keep it brief and concise")).toBe("concise");
+    expect(getRequestedResponseFormat("قارنها في جدول")).toBe("table");
+    expect(getRequestedResponseFormat("Give me 3 numbered steps to plan a trip.")).toBeNull();
     expect(
       getRequestedResponseFormat("Reply in one short sentence: what are workspace instructions?")
-    ).toBe("sentence");
-    expect(getRequestedResponseFormat("Summarize this in one line")).toBe("summary");
-    expect(getRequestedResponseFormat("قارنها في جدول")).toBe("table");
+    ).toBe("concise");
+    expect(getRequestedResponseFormat("Summarize this in one line")).toBeNull();
   });
 });

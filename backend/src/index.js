@@ -5949,13 +5949,7 @@ function applyResponseFormatEnvelope(message = "") {
     } else if (format === "bullets") {
       instruction =
         "Return a real markdown bullet list. Put each bullet on its own line starting with '- '. Do not compress bullets into one sentence.";
-    } else if (format === "numbered") {
-      instruction =
-        "Return a real markdown numbered list. Put each item on its own line with sequential numbers like '1.', '2.', and '3.'.";
-    } else if (format === "sentence") {
-      instruction =
-        "Return exactly one short sentence. Do not add bullets, headings, or a second sentence.";
-    } else if (format === "summary" || format === "concise") {
+    } else if (format === "concise") {
       instruction =
         "Keep the answer concise. Skip filler and keep the output as short as possible while still useful.";
     }

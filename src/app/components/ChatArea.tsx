@@ -8,6 +8,11 @@ import { useNavigate } from "react-router-dom";
 import { apiRequest } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
+  readResponseFormattingConfig,
+  RESPONSE_FORMATTING_EVENT,
+  type ResponseFormattingConfig,
+} from "@/lib/responseFormatting";
+import {
   SpacesView,
   ZakiHomeView,
   ChatView,
@@ -113,28 +118,10 @@ function getRequestedResponseFormat(prompt: string) {
   if (!text) return null;
   if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) return "table";
   if (
-    /\b(?:numbered|numbered list|steps)\b/i.test(text) ||
-    /(?:^|\s)(خطوات|مرقمة|مرقّم|numbered)(?:\s|$)/i.test(text)
-  ) {
-    return "numbered";
-  }
-  if (
     /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
     /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
   ) {
     return "bullets";
-  }
-  if (
-    /\b(?:summary|summarize|summarise)\b/i.test(text) ||
-    /(?:^|\s)(ملخص|لخص|اختصر)(?:\s|$)/i.test(text)
-  ) {
-    return "summary";
-  }
-  if (
-    /\b(?:one short sentence|one sentence|one line)\b/i.test(text) ||
-    /(?:^|\s)(جملة واحدة|سطر واحد)(?:\s|$)/i.test(text)
-  ) {
-    return "sentence";
   }
   if (
     /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
@@ -160,24 +147,8 @@ function normalizeAssistantFormatting(prompt: string, content: string) {
   const text = String(content || "").trim();
   if (!format || !text) return text;
 
-  if (format === "sentence" || format === "concise") {
-    const singleLine = text.replace(/\s+/g, " ").trim();
-    if (format === "sentence") {
-      return singleLine.match(/.+?[.!?؟](?:\s|$)/)?.[0]?.trim() || singleLine;
-    }
-    return singleLine;
-  }
-
-  if (format === "bullets" || format === "numbered") {
-    if (format === "bullets" && /^\s*[-*•]\s+/m.test(text)) return text;
-    if (format === "numbered" && /^\s*\d+\.\s+/m.test(text)) {
-      const numberedLines = text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line, index) => `${index + 1}. ${line.replace(/^\d+\.\s*/, "")}`);
-      return numberedLines.join("\n");
-    }
+  if (format === "bullets") {
+    if (/^\s*[-*•]\s+/m.test(text)) return text;
     const cleaned = text.replace(/^•\s*/, "").trim();
     let parts = cleaned
       .split(/\s*;\s+/)
@@ -202,9 +173,7 @@ function normalizeAssistantFormatting(prompt: string, content: string) {
       parts = [...head, tail];
     }
     if (parts.length >= 2) {
-      return parts
-        .map((part, index) => (format === "numbered" ? `${index + 1}. ${part}` : `- ${part}`))
-        .join("\n");
+      return parts.map((part) => `- ${part}`).join("\n");
     }
   }
 
@@ -274,6 +243,8 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [responseFormattingConfig, setResponseFormattingConfig] =
+    useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
@@ -347,6 +318,24 @@ export function ChatArea() {
     }
     setActivationProgress(getActivationProgress(authUserId));
   }, [authUserId]);
+
+  useEffect(() => {
+    const syncResponseFormattingConfig = () => {
+      setResponseFormattingConfig(readResponseFormattingConfig());
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== "zaki.responseFormattingConfig") return;
+      syncResponseFormattingConfig();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(RESPONSE_FORMATTING_EVENT, syncResponseFormattingConfig);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(RESPONSE_FORMATTING_EVENT, syncResponseFormattingConfig);
+    };
+  }, []);
 
   // UI state
   const [dragActive, setDragActive] = useState(false);
@@ -776,6 +765,8 @@ export function ChatArea() {
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
+    const shouldDisableResponseEnvelope =
+      responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
     const isZakiAgentSpace =
       String(workspaceSlug || "").trim().toLowerCase() === "zaki-agent";
     const requestPath = isZakiAgentSpace
@@ -790,7 +781,7 @@ export function ChatArea() {
       : {
           message,
           mode: queryModeEnabled ? "query" : "chat",
-          ...(disableResponseEnvelope ? { disableResponseEnvelope: true } : {}),
+          ...(shouldDisableResponseEnvelope ? { disableResponseEnvelope: true } : {}),
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
         };
 
@@ -1043,6 +1034,7 @@ export function ChatArea() {
     }
   }, [
     spacesList,
+    responseFormattingConfig.disableResponseEnvelope,
     queryModeEnabled,
     streamAgentInvocation,
     updateAssistantContent,
