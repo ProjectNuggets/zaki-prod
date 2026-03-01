@@ -106,6 +106,10 @@ export function Sidebar() {
       setSettingsOpen(true);
       window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
     };
+    const handleCloseMemory = () => {
+      setMemoryOpen(false);
+      setMemorySearchQuery("");
+    };
     const handleConflictCount = (event: Event) => {
       const detail = (event as CustomEvent<{ count?: number }>).detail;
       if (typeof detail?.count === "number") {
@@ -113,10 +117,12 @@ export function Sidebar() {
       }
     };
     window.addEventListener("zaki:open-memory", handleOpenMemory);
+    window.addEventListener("zaki:close-memory", handleCloseMemory);
     window.addEventListener("zaki:open-settings", handleOpenSettings);
     window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
     return () => {
       window.removeEventListener("zaki:open-memory", handleOpenMemory);
+      window.removeEventListener("zaki:close-memory", handleCloseMemory);
       window.removeEventListener("zaki:open-settings", handleOpenSettings);
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
     };
@@ -1726,6 +1732,7 @@ export function Sidebar() {
             role="dialog"
             aria-modal="true"
             aria-label="Memory viewer"
+            data-onboarding-id="memory-viewer-dialog"
             className="relative w-[720px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] dark:shadow-[0px_34px_90px_rgba(0,0,0,0.55)] overflow-hidden"
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle dark:border-zaki-dark bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] dark:bg-[linear-gradient(140deg,#21170f_0%,#16110d_58%,#120e0b_100%)]">

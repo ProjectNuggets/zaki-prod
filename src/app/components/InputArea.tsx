@@ -28,6 +28,7 @@ export function InputArea({
   onToggleMemoryMode?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -106,13 +107,31 @@ export function InputArea({
   }, [previews]);
 
   useEffect(() => {
+    const handleOnboardingControlsState = (event: Event) => {
+      const detail = (event as CustomEvent<{ locked?: boolean; forceOpen?: boolean }>).detail;
+      const locked = Boolean(detail?.locked);
+      setIsOnboardingControlsLocked(locked);
+      if (detail?.forceOpen) {
+        setMenuOpen(true);
+      }
+    };
+
+    window.addEventListener("zaki:onboarding-controls-menu-state", handleOnboardingControlsState);
+    return () => {
+      window.removeEventListener("zaki:onboarding-controls-menu-state", handleOnboardingControlsState);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (isOnboardingControlsLocked) return;
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
+      if (isOnboardingControlsLocked) return;
       if (event.key === "Escape") {
         setMenuOpen(false);
       }
@@ -124,7 +143,7 @@ export function InputArea({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, []);
+  }, [isOnboardingControlsLocked]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -136,7 +155,9 @@ export function InputArea({
   const handleToggleQueryMode = () => {
     if (!canToggleQueryMode) return;
     onToggleQueryMode?.();
-    setMenuOpen(false);
+    if (!isOnboardingControlsLocked) {
+      setMenuOpen(false);
+    }
     if (queryModeEnabled) {
       toast.success(t("input.queryMode.offToast"));
       return;
@@ -386,10 +407,19 @@ export function InputArea({
             <button
               type="button"
               className="size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-              onClick={() => setMenuOpen((open) => !open)}
+              onClick={() =>
+                setMenuOpen((open) => {
+                  const nextOpen = isOnboardingControlsLocked ? true : !open;
+                  if (nextOpen) {
+                    window.dispatchEvent(new CustomEvent("zaki:onboarding-chat-controls-opened"));
+                  }
+                  return nextOpen;
+                })
+              }
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-label={t("input.menu.addOptions")}
+              data-onboarding-id="chat-controls-button"
             >
               <Plus className="size-4 text-zaki-muted" />
             </button>
@@ -410,6 +440,7 @@ export function InputArea({
                   role="menuitem"
                   onClick={handleToggleQueryMode}
                   disabled={!canToggleQueryMode}
+                  data-onboarding-id="chat-control-query-mode"
                 >
                   <FileText className="size-4 text-zaki-muted" />
                   {t("input.queryMode.label")}
@@ -425,9 +456,12 @@ export function InputArea({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMenuOpen(false);
+                    if (!isOnboardingControlsLocked) {
+                      setMenuOpen(false);
+                    }
                     fileInputRef.current?.click();
                   }}
+                  data-onboarding-id="chat-control-upload-file"
                 >
                   <Paperclip className="size-4 text-zaki-muted" />
                   {t("input.menu.uploadFile")}
@@ -437,8 +471,11 @@ export function InputArea({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMenuOpen(false);
+                    if (!isOnboardingControlsLocked) {
+                      setMenuOpen(false);
+                    }
                   }}
+                  data-onboarding-id="chat-control-study-learn"
                 >
                   <GraduationCap className="size-4 text-zaki-muted" />
                   {t("input.menu.studyLearn")}
@@ -449,9 +486,12 @@ export function InputArea({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMenuOpen(false);
+                    if (!isOnboardingControlsLocked) {
+                      setMenuOpen(false);
+                    }
                     toast.info(t("input.menu.comingSoonToast"));
                   }}
+                  data-onboarding-id="chat-control-generate-image"
                 >
                   <Sparkles className="size-4 text-zaki-muted" />
                   {t("input.menu.generateImage")}
@@ -467,9 +507,12 @@ export function InputArea({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMenuOpen(false);
+                    if (!isOnboardingControlsLocked) {
+                      setMenuOpen(false);
+                    }
                     toast.info(t("input.menu.comingSoonToast"));
                   }}
+                  data-onboarding-id="chat-control-agent-mode"
                 >
                   <Bot className="size-4 text-zaki-muted" />
                   {t("input.menu.agentMode")}
@@ -485,10 +528,14 @@ export function InputArea({
           </div>
           <button
             type="button"
-            onClick={() => toast.info(t("input.webSearch.soonToast"))}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("zaki:onboarding-web-search-clicked"));
+              toast.info(t("input.webSearch.soonToast"));
+            }}
             className="group relative size-9 rounded-xl flex items-center justify-center border transition-colors bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover"
             aria-label={t("input.webSearch.ariaLabel")}
             title={t("input.webSearch.soonTitle")}
+            data-onboarding-id="chat-web-search-button"
           >
             <Search className="size-4" />
             <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted">
