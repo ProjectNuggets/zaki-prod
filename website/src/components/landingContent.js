@@ -9,7 +9,7 @@ export const content = {
       switchLang: "AR",
     },
     hero: {
-      title: "Meet Zaki, the AI designed from our culture with personality, to understand you.",
+      title: "Meet ZAKI: The personal AI shaped by our culture, built to understand you.",
       hint: "Your ideas just found their favorite thinking partner.",
       cta: "Try ZAKI",
       pricingCta: "See pricing",
@@ -264,13 +264,13 @@ export const content = {
     cta: {
       heading: "Ready for AI that feels made for you?",
       subheading:
-        "Start with Zaki now and get context-aware answers shaped by language,\nculture, and your workflow.",
+        "Start with ZAKI today and experience a personal AI that truly understands\nyour language, culture, and daily workflow.",
       primary: "Get started now",
-      secondary: "Try Zaki",
+      secondary: "Try ZAKI",
       trust: "Memory you control • Built for high-impact work",
     },
     useCases: {
-      heading: "Where Zaki fits best",
+      heading: "Where ZAKI fits best",
       items: [
         {
           title: "Work",

@@ -890,12 +890,12 @@ export function LandingApp() {
         <a
           href={switchLangHref}
           aria-label={locale === "ar" ? "Switch to English" : "Switch to Arabic"}
-          className="fixed right-4 top-10 z-50 hidden h-10 w-10 items-center justify-center rounded-full border border-[#ddd5ca] bg-white/95 text-xl shadow-[0_2px_8px_rgba(15,12,11,0.1)] transition-transform duration-200 hover:scale-105 md:inline-flex md:right-8"
+          className="fixed right-4 top-4 md:top-10 z-50 hidden h-10 w-10 items-center justify-center rounded-full border border-[#ddd5ca] bg-white/95 text-xl shadow-[0_2px_8px_rgba(15,12,11,0.1)] transition-transform duration-200 hover:scale-105 md:inline-flex md:right-8"
         >
           <span>{langFlag}</span>
         </a>
 
-        <header className="fixed left-1/2 top-10 z-40 flex h-[52px] w-[calc(100%-24px)] max-w-[860px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#e7dfd3] bg-white/90 px-2 shadow-[0_2px_7px_rgba(15,12,11,0.05)] backdrop-blur-sm md:w-auto md:max-w-[calc(100%-24px)] md:px-3">
+        <header className="fixed left-1/2 top-4 md:top-10 z-40 flex h-[52px] w-[calc(100%-24px)] max-w-[860px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#e7dfd3] bg-white/90 px-2 shadow-[0_2px_7px_rgba(15,12,11,0.05)] backdrop-blur-sm md:w-auto md:max-w-[calc(100%-24px)] md:px-3">
           <div className="shrink-0 flex items-center">
             <Logo />
           </div>
@@ -910,7 +910,7 @@ export function LandingApp() {
 
           <a
             href={`${APP_URL}/pricing?auth=signup&plan=personal&interval=monthly&autostart=1&source=website_nav`}
-            className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-3.5 text-[12px] font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
+            className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-3.5 text-[14px] font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white"
             style={{ color: "#ffffff" }}
           >
             {t.hero.cta}
@@ -927,8 +927,8 @@ export function LandingApp() {
           </div>
         </header>
 
-        <section id="about" className="relative mx-auto mt-[clamp(190px,22vh,320px)] max-w-[920px] text-center md:mt-[clamp(220px,24vh,340px)]">
-          <h1 className="text-balance text-[clamp(2rem,5vw,3.625rem)] font-semibold leading-[1.13] tracking-[-0.03em] text-[#312920]">
+        <section id="about" className="relative mx-auto mt-[clamp(140px,20vh,320px)] max-w-[920px] text-center md:mt-[clamp(220px,24vh,340px)]">
+          <h1 className="text-balance text-[clamp(2rem,5vw,3.625rem)] font-semibold leading-[1.13] tracking-[-0.04em] text-[#231F1C]">
             {t.hero.title}
           </h1>
 
@@ -949,7 +949,7 @@ export function LandingApp() {
                   value={prompt}
                   readOnly
                   placeholder=""
-                  className="h-[44px] w-full resize-none bg-transparent px-1 py-1.5 text-sm leading-6 text-[#B28D67] outline-none placeholder:text-[#B28D67]"
+                  className="h-[44px] w-full resize-none bg-transparent px-1 py-1.5 text-[15px] leading-6 text-[#88735A] font-medium outline-none placeholder:text-[#B28D67]"
                 />
 
                 <div className="flex items-center justify-between px-1 pt-2">
@@ -962,7 +962,7 @@ export function LandingApp() {
 
                   <button
                     type="submit"
-                    className="inline-flex size-8 items-center justify-center rounded-[10px] bg-[#5a4a36] text-sm text-white transition hover:bg-[#483b2a]"
+                    className="inline-flex size-8 items-center justify-center rounded-[10px] bg-[#5a4a36] text-sm text-white shadow-sm transition-all hover:bg-[#483b2a] hover:shadow-md hover:-translate-y-0.5"
                     aria-label={t.hero.submit}
                   >↑</button>
                 </div>
@@ -993,7 +993,7 @@ export function LandingApp() {
               <button
                 type="button"
                 onClick={() => scrollToId("pricing")}
-                className="mt-4 block w-full rounded-xl bg-[#D24430] py-2.5 text-center text-[13px] font-semibold text-white transition hover:bg-[#be3e2d]"
+                className="mt-4 block w-full rounded-xl bg-[#D24430] py-3 text-center text-[14px] font-semibold text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5"
               >
                 {t.earlyAccess.cta}
               </button>
@@ -1470,7 +1470,7 @@ export function LandingApp() {
                       href={`${APP_URL}/pricing?auth=signup&plan=${encodeURIComponent(
                         plan.tier
                       )}&interval=${encodeURIComponent(pricingInterval)}&autostart=1&source=website_pricing`}
-                      className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
+                      className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white"
                     >
                       {plan.cta}
                     </a>
@@ -1502,7 +1502,7 @@ export function LandingApp() {
                 <div className="mt-auto pt-4">
                   <a
                     href={`${APP_URL}/pricing?auth=signup&intent=gift_code&source=website_pricing`}
-                    className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white"
+                    className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white"
                   >
                     {pricing.oneTimeCode.cta}
                   </a>
@@ -1528,7 +1528,7 @@ export function LandingApp() {
             <div className="mt-8 flex items-center justify-center">
               <a
                 href={`${APP_URL}/?auth=signup`}
-                className="inline-flex items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-7 py-3 text-sm font-semibold !text-white transition hover:bg-[#be3e2d] hover:!text-white visited:!text-white"
+                className="inline-flex items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-7 py-3 text-sm font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white visited:!text-white"
                 style={{ color: "#ffffff" }}
               >
                 {t.cta.primary}
