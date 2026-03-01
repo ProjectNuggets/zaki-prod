@@ -9,7 +9,7 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { initDb, dbGet, dbQuery, withDbTransaction } from "./db.js";
+import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
 import {
   resolveLegalPolicyVersion,
   buildLoginSchema,
@@ -1758,10 +1758,121 @@ function normalizeWorkspacePayload(workspace) {
   return {
     ...workspace,
     instructions: String(workspace.openAiPrompt || "").trim(),
-    pinnedFiles: documents.map(({ location, source, title, ...file }) => file),
+    pinnedFiles: documents.map((document) => ({ ...document })),
     documents,
     threads,
   };
+}
+
+function normalizeWorkspaceSlugValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function getWorkspaceMetadata(workspaceSlug) {
+  const normalizedSlug = normalizeWorkspaceSlugValue(workspaceSlug);
+  if (!normalizedSlug) return null;
+  return dbGet(
+    `SELECT workspace_slug, description, icon, color, updated_by, created_at, updated_at
+     FROM zaki_workspace_metadata
+     WHERE workspace_slug = $1`,
+    [normalizedSlug]
+  );
+}
+
+async function listWorkspaceMetadata(workspaceSlugs = []) {
+  const normalizedSlugs = Array.from(
+    new Set(
+      workspaceSlugs
+        .map((slug) => normalizeWorkspaceSlugValue(slug))
+        .filter(Boolean)
+    )
+  );
+  if (normalizedSlugs.length === 0) {
+    return new Map();
+  }
+  const rows = await dbAll(
+    `SELECT workspace_slug, description, icon, color, updated_by, created_at, updated_at
+     FROM zaki_workspace_metadata
+     WHERE workspace_slug = ANY($1::text[])`,
+    [normalizedSlugs]
+  );
+  return new Map(rows.map((row) => [normalizeWorkspaceSlugValue(row.workspace_slug), row]));
+}
+
+function mergeWorkspaceMetadata(workspace, metadata) {
+  if (!workspace) return null;
+  if (!metadata) return workspace;
+  return {
+    ...workspace,
+    description:
+      typeof metadata.description === "string" ? metadata.description : workspace.description,
+    icon: typeof metadata.icon === "string" ? metadata.icon : workspace.icon,
+    color: typeof metadata.color === "string" ? metadata.color : workspace.color,
+  };
+}
+
+function buildLocalWorkspaceMetadataPayload(body = {}) {
+  const payload = {};
+  if (typeof body.description === "string") {
+    payload.description = body.description.trim();
+  }
+  if (typeof body.icon === "string") {
+    payload.icon = body.icon.trim();
+  }
+  if (typeof body.color === "string") {
+    payload.color = body.color.trim();
+  }
+  return payload;
+}
+
+async function upsertWorkspaceMetadata(workspaceSlug, metadata = {}, updatedBy = null) {
+  const normalizedSlug = normalizeWorkspaceSlugValue(workspaceSlug);
+  if (!normalizedSlug) return null;
+  const hasWritableField = ["description", "icon", "color"].some((key) =>
+    Object.prototype.hasOwnProperty.call(metadata, key)
+  );
+  if (!hasWritableField) {
+    return getWorkspaceMetadata(normalizedSlug);
+  }
+
+  const current = await getWorkspaceMetadata(normalizedSlug);
+  const nextDescription = Object.prototype.hasOwnProperty.call(metadata, "description")
+    ? metadata.description
+    : current?.description ?? null;
+  const nextIcon = Object.prototype.hasOwnProperty.call(metadata, "icon")
+    ? metadata.icon
+    : current?.icon ?? null;
+  const nextColor = Object.prototype.hasOwnProperty.call(metadata, "color")
+    ? metadata.color
+    : current?.color ?? null;
+
+  const result = await dbQuery(
+    `INSERT INTO zaki_workspace_metadata (
+       workspace_slug,
+       description,
+       icon,
+       color,
+       updated_by,
+       created_at,
+       updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+     ON CONFLICT (workspace_slug) DO UPDATE
+     SET description = EXCLUDED.description,
+         icon = EXCLUDED.icon,
+         color = EXCLUDED.color,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = NOW()
+     RETURNING workspace_slug, description, icon, color, updated_by, created_at, updated_at`,
+    [
+      normalizedSlug,
+      nextDescription ?? null,
+      nextIcon ?? null,
+      nextColor ?? null,
+      updatedBy ? String(updatedBy).trim().toLowerCase() : null,
+    ]
+  );
+  return result.rows[0] ?? null;
 }
 
 function extractWorkspaceFromUpstream(data) {
@@ -2434,18 +2545,21 @@ const listWorkspacesHandler = async (req, res) => {
     }
 
     const hiddenSlugs = await listHiddenWorkspaceSlugsForUser(zakiUser.id);
-    if (hiddenSlugs.size === 0) {
-      res.status(200).json(data);
-      return;
-    }
-
     const filtered = data.workspaces.filter((workspace) => {
       const slug = String(workspace?.slug || "").trim().toLowerCase();
-      return slug && !hiddenSlugs.has(slug);
+      return slug && (hiddenSlugs.size === 0 || !hiddenSlugs.has(slug));
     });
+    const metadataBySlug = await listWorkspaceMetadata(
+      filtered.map((workspace) => workspace?.slug)
+    );
     res.status(200).json({
       ...data,
-      workspaces: filtered,
+      workspaces: filtered.map((workspace) =>
+        mergeWorkspaceMetadata(
+          workspace,
+          metadataBySlug.get(normalizeWorkspaceSlugValue(workspace?.slug))
+        )
+      ),
     });
   } catch (error) {
     console.error("[Workspace] listWorkspacesHandler error:", error);
@@ -5173,7 +5287,10 @@ const getWorkspaceDetailHandler = async (req, res) => {
       method: "GET",
     });
     const data = await response.json().catch(() => ({}));
-    const workspace = normalizeWorkspacePayload(extractWorkspaceFromUpstream(data));
+    const workspace = mergeWorkspaceMetadata(
+      normalizeWorkspacePayload(extractWorkspaceFromUpstream(data)),
+      await getWorkspaceMetadata(access.slug)
+    );
 
     if (!response.ok || !workspace) {
       res.status(response.status || 400).json({
@@ -5200,29 +5317,67 @@ const updateWorkspaceHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const payload = buildWorkspaceMutationPayload(req.body || {});
-    if (Object.keys(payload).length === 0) {
+    const upstreamPayload = buildWorkspaceMutationPayload(req.body || {});
+    const localMetadataPayload = buildLocalWorkspaceMetadataPayload(req.body || {});
+    if (
+      Object.keys(upstreamPayload).length === 0 &&
+      Object.keys(localMetadataPayload).length === 0
+    ) {
       res.status(400).json({ error: "No supported workspace updates provided." });
       return;
     }
 
-    const response = await novaAdminRequest(`/v1/workspace/${access.slug}/update`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json().catch(() => ({}));
-    const workspace = normalizeWorkspacePayload(extractWorkspaceFromUpstream(data));
+    let workspace = null;
+    let upstreamMessage = null;
 
-    if (!response.ok || !workspace) {
-      res.status(response.status || 400).json({
-        error: data?.error || data?.message || "Unable to update workspace.",
+    if (Object.keys(upstreamPayload).length > 0) {
+      const response = await novaAdminRequest(`/v1/workspace/${access.slug}/update`, {
+        method: "POST",
+        body: JSON.stringify(upstreamPayload),
       });
-      return;
+      const data = await response.json().catch(() => ({}));
+      workspace = normalizeWorkspacePayload(extractWorkspaceFromUpstream(data));
+
+      if (!response.ok || !workspace) {
+        res.status(response.status || 400).json({
+          error: data?.error || data?.message || "Unable to update workspace.",
+        });
+        return;
+      }
+
+      upstreamMessage = data?.message || null;
     }
+
+    let metadata = null;
+    if (Object.keys(localMetadataPayload).length > 0) {
+      metadata = await upsertWorkspaceMetadata(
+        access.slug,
+        localMetadataPayload,
+        access.email
+      );
+    } else {
+      metadata = await getWorkspaceMetadata(access.slug);
+    }
+
+    if (!workspace) {
+      const detailResponse = await novaAdminRequest(`/v1/workspace/${access.slug}`, {
+        method: "GET",
+      });
+      const detailData = await detailResponse.json().catch(() => ({}));
+      workspace = normalizeWorkspacePayload(extractWorkspaceFromUpstream(detailData));
+      if (!detailResponse.ok || !workspace) {
+        res.status(detailResponse.status || 400).json({
+          error: detailData?.error || detailData?.message || "Unable to load workspace.",
+        });
+        return;
+      }
+    }
+
+    workspace = mergeWorkspaceMetadata(workspace, metadata);
 
     res.status(200).json({
       workspace,
-      message: data?.message || null,
+      message: upstreamMessage,
     });
   } catch (error) {
     console.error("[Workspace] Update error:", error);
@@ -5557,6 +5712,7 @@ const createWorkspaceHandler = async (req, res) => {
       res.status(400).json({ error: "Workspace name is required." });
       return;
     }
+    const localMetadataPayload = buildLocalWorkspaceMetadataPayload(req.body || {});
 
     const createResponse = await novaAdminRequest("/v1/workspace/new", {
       method: "POST",
@@ -5601,6 +5757,11 @@ const createWorkspaceHandler = async (req, res) => {
         normalizedWorkspace = updatedWorkspace;
       }
     }
+    const metadata =
+      Object.keys(localMetadataPayload).length > 0
+        ? await upsertWorkspaceMetadata(workspaceSlug, localMetadataPayload, email)
+        : await getWorkspaceMetadata(workspaceSlug);
+    normalizedWorkspace = mergeWorkspaceMetadata(normalizedWorkspace, metadata);
 
     res.status(200).json({
       workspace: normalizedWorkspace,
@@ -5702,6 +5863,10 @@ const deleteWorkspaceHandler = async (req, res) => {
     if (deleteResponse.status === 404) {
       console.log(`[ZAKI] Workspace ${slug} already deleted upstream (404).`);
       await unhideWorkspaceForUser(zakiUser.id, normalizedSlug);
+      await dbQuery(
+        `DELETE FROM zaki_workspace_metadata WHERE workspace_slug = $1`,
+        [normalizedSlug]
+      );
       res.status(200).json({
         success: true,
         message: "Workspace already deleted.",
@@ -5756,6 +5921,10 @@ const deleteWorkspaceHandler = async (req, res) => {
 
     console.log(`[ZAKI] Workspace ${slug} deleted successfully by ${email}`);
     await unhideWorkspaceForUser(zakiUser.id, normalizedSlug);
+    await dbQuery(
+      `DELETE FROM zaki_workspace_metadata WHERE workspace_slug = $1`,
+      [normalizedSlug]
+    );
 
     res.status(200).json({
       success: true,

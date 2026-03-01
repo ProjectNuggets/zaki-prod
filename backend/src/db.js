@@ -92,6 +92,18 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_workspace_metadata (
+      workspace_slug TEXT PRIMARY KEY,
+      description TEXT,
+      icon TEXT,
+      color TEXT,
+      updated_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS verification_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

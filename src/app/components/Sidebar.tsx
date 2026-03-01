@@ -1940,7 +1940,7 @@ export function Sidebar() {
                     );
                   }}
                 >
-                  Add project files
+                  {t("sidebar.addWorkspaceFiles")}
                 </button>
                 <div className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white/70 dark:bg-zaki-dark-elevated px-3 py-3">
                   <div className="mb-3 rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-zaki-base/60 dark:bg-zaki-dark-card px-3 py-2">
@@ -1956,12 +1956,12 @@ export function Sidebar() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                        Project files
+                        {t("sidebar.workspaceFilesTitle")}
                       </div>
                       <div className="mt-1 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
                         {workspaceTypeHint
-                          ? `Supported types: ${workspaceTypeHint}`
-                          : "Supported document types are loaded from TYP."}
+                          ? t("sidebar.workspaceFilesHintWithTypes", { types: workspaceTypeHint })
+                          : t("sidebar.workspaceFilesHint")}
                       </div>
                     </div>
                     <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
@@ -2006,7 +2006,7 @@ export function Sidebar() {
                       })
                     ) : (
                       <div className="rounded-zaki-md border border-dashed border-zaki-subtle dark:border-zaki-dark px-3 py-3 text-sm text-zaki-muted dark:text-zaki-dark-muted">
-                        No workspace documents yet. Upload files here to make them available across chats in this space.
+                        {t("sidebar.workspaceFilesEmpty")}
                       </div>
                     )}
                   </div>
