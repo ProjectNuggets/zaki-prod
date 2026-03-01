@@ -28,6 +28,8 @@ export function InputArea({
   memoryMode?: "autosave" | "manual";
   onToggleMemoryMode?: () => void;
 }) {
+  const threadAttachmentUnavailableMessage =
+    "Thread file grounding is not live yet. Upload documents from the workspace tools so ZAKI can use them reliably.";
   const [menuOpen, setMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -354,7 +356,7 @@ export function InputArea({
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    fileInputRef.current?.click();
+                    toast.info(threadAttachmentUnavailableMessage);
                   }}
                 >
                   <Paperclip className="size-4 text-zaki-muted" />

@@ -21,7 +21,7 @@ import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
-import type { Space, Message } from "@/types";
+import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
 import {
@@ -45,6 +45,8 @@ class ChatRequestError extends Error {
 
 const HOME_STARTER_MESSAGE = "hello, how are you zaki";
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
+const THREAD_ATTACHMENT_UNAVAILABLE_MESSAGE =
+  "Thread file grounding is not live yet. Upload documents from the workspace tools so ZAKI can actually use them.";
 
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -55,6 +57,55 @@ function isAbortError(error: unknown) {
     return message.includes("aborted") || message.includes("abort");
   }
   return false;
+}
+
+function getFileExtension(name: string) {
+  const normalized = String(name || "").trim().toLowerCase();
+  const dotIndex = normalized.lastIndexOf(".");
+  return dotIndex >= 0 ? normalized.slice(dotIndex) : "";
+}
+
+function formatAcceptedTypeHint(types: Record<string, string[]>) {
+  return Array.from(
+    new Set(
+      Object.values(types || {})
+        .flat()
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  )
+    .slice(0, 8)
+    .join(", ");
+}
+
+function splitFilesByAcceptedTypes(
+  files: File[],
+  acceptedTypes: Record<string, string[]>
+) {
+  const mimeTypes = new Set(Object.keys(acceptedTypes || {}).map((value) => value.toLowerCase()));
+  const extensions = new Set(
+    Object.values(acceptedTypes || {})
+      .flat()
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  if (mimeTypes.size === 0 && extensions.size === 0) {
+    return { valid: files, invalid: [] as File[] };
+  }
+
+  const valid: File[] = [];
+  const invalid: File[] = [];
+  for (const file of files) {
+    const mime = String(file.type || "").trim().toLowerCase();
+    const extension = getFileExtension(file.name);
+    if ((mime && mimeTypes.has(mime)) || (extension && extensions.has(extension))) {
+      valid.push(file);
+    } else {
+      invalid.push(file);
+    }
+  }
+  return { valid, invalid };
 }
 
 export function ChatArea() {
@@ -179,6 +230,10 @@ export function ChatArea() {
   const [spacesList, setSpacesList] = useState<Space[]>([]);
   const [editSpaceId, setEditSpaceId] = useState<string | null>(null);
   const [fileUploadSpaceId, setFileUploadSpaceId] = useState<string | null>(null);
+  const [acceptedWorkspaceTypes, setAcceptedWorkspaceTypes] = useState<Record<string, string[]>>(
+    {}
+  );
+  const [acceptedWorkspaceHint, setAcceptedWorkspaceHint] = useState("");
 
   const toastPosition = useMemo(() => {
     const left = inputWidth ? inputLeft : 16;
@@ -192,6 +247,27 @@ export function ChatArea() {
       : 24;
     return { left, width, bottom };
   }, [inputLeft, inputTop, inputWidth, viewportHeight, viewportWidth]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiRequest("/api/documents/accepted-file-types")
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json().catch(() => ({}))) as {
+          types?: Record<string, string[]>;
+        };
+        if (cancelled) return;
+        const nextTypes = data.types && typeof data.types === "object" ? data.types : {};
+        setAcceptedWorkspaceTypes(nextTypes);
+        setAcceptedWorkspaceHint(formatAcceptedTypeHint(nextTypes));
+      })
+      .catch(() => {
+        // Best-effort only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
 
   // Refs
@@ -308,7 +384,7 @@ export function ChatArea() {
 
   const uploadFilesToWorkspace = useCallback(
     async (workspaceSlug: string, files: File[]) => {
-      const uploaded: Array<{ name: string; type: string; size: number }> = [];
+      const uploaded: PinnedFile[] = [];
       for (const file of files) {
         const createFormData = () => {
           const formData = new FormData();
@@ -338,10 +414,18 @@ export function ChatArea() {
           );
         }
 
+        const responseData = (await response.json().catch(() => ({}))) as {
+          files?: Array<{ name?: string; type?: string; size?: number; status?: "embedded" | "processing" | "failed"; location?: string | null; source?: string | null; title?: string | null }>;
+        };
+        const normalizedFile = responseData.files?.[0];
         uploaded.push({
-          name: file.name,
-          type: file.type,
-          size: file.size,
+          name: normalizedFile?.name || file.name,
+          type: normalizedFile?.type || file.type || "document",
+          size: Number(normalizedFile?.size || file.size || 0),
+          status: normalizedFile?.status || "embedded",
+          location: normalizedFile?.location ?? null,
+          source: normalizedFile?.source ?? null,
+          title: normalizedFile?.title ?? null,
         });
       }
       return uploaded;
@@ -1715,7 +1799,7 @@ export function ChatArea() {
         setDragActive(false);
         const files = Array.from(event.dataTransfer.files ?? []);
         if (files.length) {
-          setAttachments((prev) => [...prev, ...files]);
+          toast.info(THREAD_ATTACHMENT_UNAVAILABLE_MESSAGE);
         }
       }}
     >
@@ -1723,7 +1807,7 @@ export function ChatArea() {
       {dragActive && (
         <div className="absolute inset-0 z-30 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
           <div className="rounded-zaki-lg border border-zaki bg-white px-5 py-3 text-sm text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.12)]">
-            Drop files to attach
+            Drop files into a workspace to ground them
           </div>
         </div>
       )}
@@ -1878,6 +1962,7 @@ export function ChatArea() {
             type="file"
             className="hidden"
             multiple
+            accept={Object.values(acceptedWorkspaceTypes).flat().join(",")}
             onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
               const targetSpaceId = fileUploadSpaceId;
@@ -1885,10 +1970,67 @@ export function ChatArea() {
               event.target.value = "";
               if (!targetSpaceId || files.length === 0) return;
 
-              void uploadFilesToWorkspace(targetSpaceId, files)
+              const { valid, invalid } = splitFilesByAcceptedTypes(
+                files,
+                acceptedWorkspaceTypes
+              );
+              const existingPinned =
+                spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
+
+              if (invalid.length > 0) {
+                const invalidMap = new Map(
+                  existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+                );
+                for (const file of invalid) {
+                  invalidMap.set(`${file.name}:${file.size}:${file.type}`, {
+                    name: file.name,
+                    type: file.type || "document",
+                    size: Number(file.size || 0),
+                    status: "failed",
+                    error: acceptedWorkspaceHint
+                      ? `Unsupported type. Use one of: ${acceptedWorkspaceHint}.`
+                      : "Unsupported file type.",
+                  });
+                }
+                window.dispatchEvent(
+                  new CustomEvent("zaki:update-space", {
+                    detail: {
+                      id: targetSpaceId,
+                      pinnedFiles: Array.from(invalidMap.values()),
+                    },
+                  })
+                );
+                toast.error(
+                  acceptedWorkspaceHint
+                    ? `Unsupported file type. Upload one of: ${acceptedWorkspaceHint}.`
+                    : "Unsupported file type for workspace upload."
+                );
+              }
+              if (valid.length === 0) return;
+
+              const processingFiles: PinnedFile[] = valid.map((file) => ({
+                name: file.name,
+                type: file.type || "document",
+                size: Number(file.size || 0),
+                status: "processing",
+              }));
+              const processingMap = new Map(
+                existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+              );
+              for (const file of processingFiles) {
+                processingMap.set(`${file.name}:${file.size}:${file.type}`, file);
+              }
+              window.dispatchEvent(
+                new CustomEvent("zaki:update-space", {
+                  detail: {
+                    id: targetSpaceId,
+                    pinnedFiles: Array.from(processingMap.values()),
+                  },
+                })
+              );
+
+              void uploadFilesToWorkspace(targetSpaceId, valid)
                 .then((uploadedFiles) => {
-                  const existingPinned =
-                    spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
                   const fileMap = new Map(
                     existingPinned.map((file) => [
                       `${file.name}:${file.size}:${file.type}`,
@@ -1913,6 +2055,26 @@ export function ChatArea() {
                   );
                 })
                 .catch((error) => {
+                  const failedMap = new Map(
+                    existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+                  );
+                  for (const file of valid) {
+                    failedMap.set(`${file.name}:${file.size}:${file.type}`, {
+                      name: file.name,
+                      type: file.type || "document",
+                      size: Number(file.size || 0),
+                      status: "failed",
+                      error: error instanceof Error ? error.message : "Upload failed.",
+                    });
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent("zaki:update-space", {
+                      detail: {
+                        id: targetSpaceId,
+                        pinnedFiles: Array.from(failedMap.values()),
+                      },
+                    })
+                  );
                   toast.error(
                     error instanceof Error ? error.message : "Unable to upload files."
                   );

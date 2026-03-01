@@ -2,6 +2,15 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+const ZAKI_IDENTITY_GUARDRAIL = [
+  "Identity rules for this assistant:",
+  "- You are ZAKI, not Claude, ChatGPT, Gemini, or any other third-party assistant.",
+  "- Never claim to be Anthropic, OpenAI, or any other model provider.",
+  "- Never guess the underlying model or provider.",
+  "- If asked who you are, answer that you are ZAKI, an Arabic-first personal AI assistant.",
+  "- If asked about your model or company, answer at the product level as ZAKI and avoid naming a provider or model unless explicitly supplied in the user's visible product context.",
+].join("\n");
+
 export function extractStreamMessage(body) {
   if (!isPlainObject(body)) return "";
   return String(body.message || "").trim();
@@ -10,6 +19,10 @@ export function extractStreamMessage(body) {
 export function buildStreamUpstreamPayload(body, enrichedMessage) {
   const payload = isPlainObject(body) ? { ...body } : {};
   payload.message = enrichedMessage;
+  const existingPromptPrefix = String(payload.promptPrefix || "").trim();
+  payload.promptPrefix = existingPromptPrefix
+    ? `${ZAKI_IDENTITY_GUARDRAIL}\n\n${existingPromptPrefix}`
+    : ZAKI_IDENTITY_GUARDRAIL;
 
   // Frontend compatibility: accept both keys, normalize to the NOVA key.
   if (typeof payload.webSearchEnabled !== "boolean" && typeof payload.webSearch === "boolean") {

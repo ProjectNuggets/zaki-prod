@@ -13,7 +13,7 @@ import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { SkeletonSpaceList } from "./ui/skeleton";
 import { toast } from "sonner";
-import type { Space, Thread } from "@/types";
+import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { useSpaces } from "@/queries/useSpaces";
 import { useBillingPortal, useEntitlements } from "@/queries";
@@ -23,6 +23,20 @@ import { SettingsModal } from "./sidebar/SettingsModal";
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 const APP_VERSION = "1.5.69";
+const fileStatusTone = {
+  embedded: {
+    chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    label: "Embedded",
+  },
+  processing: {
+    chip: "bg-amber-50 text-amber-700 border border-amber-200",
+    label: "Processing",
+  },
+  failed: {
+    chip: "bg-rose-50 text-rose-700 border border-rose-200",
+    label: "Failed",
+  },
+} as const;
 
 export function Sidebar() {
   const { t, i18n } = useTranslation();
@@ -90,6 +104,8 @@ export function Sidebar() {
   const isDark = resolvedTheme() === "dark";
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
   const [spaceSearchQuery, setSpaceSearchQuery] = useState("");
+  const [workspaceTypeHint, setWorkspaceTypeHint] = useState("");
+  const [removingDocumentKey, setRemovingDocumentKey] = useState<string | null>(null);
   const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
 
   useEffect(() => {
@@ -139,6 +155,31 @@ export function Sidebar() {
       active = false;
     };
   }, [profileMenuOpen, user?.username]);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest("/api/documents/accepted-file-types")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!active || !data?.types || typeof data.types !== "object") return;
+        const extensions = Array.from(
+          new Set(
+            Object.values(data.types)
+              .flat()
+              .map((value) => String(value || "").trim().toLowerCase())
+              .filter(Boolean)
+          )
+        );
+        setWorkspaceTypeHint(extensions.slice(0, 8).join(", "));
+      })
+      .catch(() => {
+        if (!active) return;
+        setWorkspaceTypeHint("");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   
   // Focus trap refs for modals
   const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
@@ -465,6 +506,15 @@ export function Sidebar() {
   }, [confirmDelete, memoryOpen, settingsOpen, spaceSettingsOpen]);
 
   useEffect(() => {
+    if (!spaceSettingsTarget) return;
+    const refreshedSpace = spaces.find((space) => space.id === spaceSettingsTarget.id);
+    if (!refreshedSpace) return;
+    if (refreshedSpace !== spaceSettingsTarget) {
+      setSpaceSettingsTarget(refreshedSpace);
+    }
+  }, [spaceSettingsTarget, spaces]);
+
+  useEffect(() => {
     const handleThreadCreated = (event: Event) => {
       const detail = (event as CustomEvent<{ id: string; label: string; spaceId?: string }>).detail;
       if (!detail?.id) {
@@ -661,20 +711,29 @@ export function Sidebar() {
     name?: string,
     description?: string,
     instructions?: string,
-    pinnedFiles?: { name: string; type: string; size: number }[]
+    pinnedFiles?: PinnedFile[]
   ) => {
     const trimmedName = name?.trim();
     if (!trimmedName) return;
     try {
       const response = await apiRequest("/zaki/workspaces", {
         method: "POST",
-        body: JSON.stringify({ name: trimmedName }),
+        body: JSON.stringify({
+          name: trimmedName,
+          instructions: instructions ?? "",
+        }),
       });
       if (!response.ok) {
         throw new Error("Failed to create workspace.");
       }
       const data = (await response.json()) as {
-        workspace?: { slug: string; name: string; description?: string };
+        workspace?: {
+          slug: string;
+          name: string;
+          description?: string;
+          instructions?: string;
+          openAiPrompt?: string;
+        };
       };
       if (!data.workspace) {
         throw new Error("Workspace not returned.");
@@ -683,7 +742,11 @@ export function Sidebar() {
         id: data.workspace.slug,
         title: data.workspace.name,
         description: description ?? data.workspace.description ?? "Workspace",
-        instructions: instructions ?? "",
+        instructions:
+          data.workspace.instructions ??
+          data.workspace.openAiPrompt ??
+          instructions ??
+          "",
         pinnedFiles: pinnedFiles ?? [],
         pinned: false,
         threads: [],
@@ -743,6 +806,52 @@ export function Sidebar() {
     }
   };
 
+  const removeWorkspaceDocument = useCallback(
+    async (spaceId: string, file: PinnedFile) => {
+      const location = String(file.location || "").trim();
+      if (!location) {
+        toast.error("This file cannot be removed because its document path is missing.");
+        return;
+      }
+
+      setRemovingDocumentKey(`${spaceId}:${location}`);
+      try {
+        const response = await apiRequest(`/workspace/${spaceId}/documents/remove`, {
+          method: "POST",
+          body: JSON.stringify({ locations: [location] }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          warning?: string | null;
+          workspace?: { pinnedFiles?: PinnedFile[] };
+        };
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to remove workspace document.");
+        }
+
+        const nextPinnedFiles = data.workspace?.pinnedFiles ?? [];
+        setSpaces((prev) =>
+          prev.map((space) =>
+            space.id === spaceId ? { ...space, pinnedFiles: nextPinnedFiles } : space
+          )
+        );
+        setSpaceSettingsTarget((prev) =>
+          prev && prev.id === spaceId ? { ...prev, pinnedFiles: nextPinnedFiles } : prev
+        );
+        if (data.warning) {
+          toast.warning(data.warning);
+        } else {
+          toast.success(`${file.name} removed from the workspace.`);
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to remove workspace document.");
+      } finally {
+        setRemovingDocumentKey(null);
+      }
+    },
+    []
+  );
+
   const handleQuickCreateThread = useCallback(() => {
     const targetSpaceId = resolveThreadTargetSpace();
     if (!targetSpaceId) {
@@ -764,7 +873,7 @@ export function Sidebar() {
         name?: string;
         description?: string;
         instructions?: string;
-        pinnedFiles?: { name: string; type: string; size: number }[];
+        pinnedFiles?: PinnedFile[];
       }>).detail;
       createSpace(detail?.name, detail?.description, detail?.instructions, detail?.pinnedFiles);
     };
@@ -778,7 +887,7 @@ export function Sidebar() {
       const detail = (event as CustomEvent<{
         id: string;
         instructions?: string;
-        pinnedFiles?: { name: string; type: string; size: number }[];
+        pinnedFiles?: PinnedFile[];
         icon?: string;
         color?: string;
         description?: string;
@@ -1814,6 +1923,65 @@ export function Sidebar() {
                 >
                   Add project files
                 </button>
+                <div className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white/70 dark:bg-zaki-dark-elevated px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        Project files
+                      </div>
+                      <div className="mt-1 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                        {workspaceTypeHint
+                          ? `Supported types: ${workspaceTypeHint}`
+                          : "Supported document types are loaded from TYP."}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                      {spaceSettingsTarget.pinnedFiles?.length ?? 0} files
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {(spaceSettingsTarget.pinnedFiles ?? []).length > 0 ? (
+                      (spaceSettingsTarget.pinnedFiles ?? []).map((file) => {
+                        const status = file.status ?? "embedded";
+                        const tone = fileStatusTone[status];
+                        const removeKey = `${spaceSettingsTarget.id}:${String(file.location || "")}`;
+                        return (
+                          <div
+                            key={`${file.name}:${file.size}:${file.type}:${file.location ?? ""}`}
+                            className="flex items-start justify-between gap-3 rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
+                                {file.name}
+                              </div>
+                              <div className="mt-1 flex items-center gap-2 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                                <span>{file.type || "document"}</span>
+                                <span className={`rounded-full px-2 py-0.5 font-semibold ${tone.chip}`}>
+                                  {tone.label}
+                                </span>
+                              </div>
+                              {status === "failed" && file.error && (
+                                <div className="mt-1 text-[11px] text-rose-700">{file.error}</div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-full border border-zaki-subtle dark:border-zaki-dark px-2.5 py-1 text-[11px] text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover disabled:opacity-50"
+                              onClick={() => removeWorkspaceDocument(spaceSettingsTarget.id, file)}
+                              disabled={!file.location || removingDocumentKey === removeKey}
+                            >
+                              {removingDocumentKey === removeKey ? "Removing..." : "Remove"}
+                            </button>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-zaki-md border border-dashed border-zaki-subtle dark:border-zaki-dark px-3 py-3 text-sm text-zaki-muted dark:text-zaki-dark-muted">
+                        No workspace documents yet. Upload files here to make them available across chats in this space.
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {!spaceSettingsTarget.fixed && (
                   <button
                     type="button"

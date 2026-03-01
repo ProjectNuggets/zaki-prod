@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
-import type { Space, Thread } from "@/types";
+import type { PinnedFile, Space, Thread } from "@/types";
 
 // Keys
 export const spaceKeys = {
@@ -18,11 +18,16 @@ interface WorkspaceResponse {
   icon?: string;
   color?: string;
   instructions?: string;
+  openAiPrompt?: string;
+  pinnedFiles?: PinnedFile[];
+  threads?: ThreadResponse[];
 }
 
 interface ThreadResponse {
-  slug: string;
-  name: string;
+  slug?: string;
+  name?: string;
+  id?: string;
+  label?: string;
 }
 
 // Fetchers
@@ -39,14 +44,19 @@ async function fetchSpaces(): Promise<Space[]> {
   const spacesWithThreads = await Promise.all(
     workspaces.map(async (ws, index) => {
       let threads: Thread[] = [];
+      let instructions = ws.instructions ?? ws.openAiPrompt ?? "";
+      let pinnedFiles = ws.pinnedFiles ?? [];
       try {
-        const threadsRes = await apiRequest(`/workspace/${ws.slug}/threads`);
-        if (threadsRes.ok) {
-          const threadsData = await threadsRes.json() as { threads?: ThreadResponse[] };
-          threads = (threadsData.threads ?? []).map((t) => ({
-            id: t.slug,
-            label: t.name,
-          }));
+        const detailRes = await apiRequest(`/workspace/${ws.slug}`);
+        if (detailRes.ok) {
+          const detailData = (await detailRes.json()) as { workspace?: WorkspaceResponse };
+          const detail = detailData.workspace;
+          instructions = detail?.instructions ?? detail?.openAiPrompt ?? instructions;
+          pinnedFiles = detail?.pinnedFiles ?? pinnedFiles;
+          threads = (detail?.threads ?? []).map((t) => ({
+            id: t.slug ?? t.id ?? "",
+            label: t.name ?? t.label ?? "Thread",
+          })).filter((thread) => thread.id);
         }
       } catch {
         // Ignore thread fetch failures
@@ -58,7 +68,8 @@ async function fetchSpaces(): Promise<Space[]> {
         description: ws.description,
         icon: ws.icon,
         color: ws.color,
-        instructions: ws.instructions,
+        instructions,
+        pinnedFiles,
         fixed: index === 0,
         threads,
       } satisfies Space;
@@ -97,7 +108,8 @@ async function createSpace(space: {
     description: ws.description,
     icon: ws.icon,
     color: ws.color,
-    instructions: ws.instructions,
+    instructions: ws.instructions ?? ws.openAiPrompt ?? "",
+    pinnedFiles: ws.pinnedFiles ?? [],
     threads: [],
   };
 }
@@ -134,7 +146,8 @@ async function updateSpace(
     description: ws.description,
     icon: ws.icon,
     color: ws.color,
-    instructions: ws.instructions,
+    instructions: ws.instructions ?? ws.openAiPrompt ?? "",
+    pinnedFiles: ws.pinnedFiles ?? [],
     threads: updates.threads ?? [],
   };
 }

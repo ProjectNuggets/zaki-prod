@@ -125,6 +125,36 @@ describe("memory extraction", () => {
     expect(result[0].polarity).toBe("positive");
   });
 
+  it("strips conversational filler from preference memories", async () => {
+    process.env.NOVA_TYP_BASE_URL = "https://example.com";
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                classification: "user_statement",
+                memories: [
+                  {
+                    content: "Likes travel you know",
+                    type: "preference",
+                    confidence: 0.9,
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await extractFacts("I like travel, you know.");
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("Likes travel");
+    expect(result[0].conflictKey).toBe("preference:travel");
+  });
+
   it("falls back to pattern extraction when LLM classification is not user_statement", async () => {
     process.env.NOVA_TYP_BASE_URL = "https://example.com";
     global.fetch = async () => ({

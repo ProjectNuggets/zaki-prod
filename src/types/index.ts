@@ -21,10 +21,17 @@ export interface Space {
   threads?: Thread[];
 }
 
+export type PinnedFileStatus = "embedded" | "processing" | "failed";
+
 export interface PinnedFile {
   name: string;
   type: string;
   size: number;
+  status?: PinnedFileStatus;
+  location?: string | null;
+  source?: string | null;
+  title?: string | null;
+  error?: string | null;
 }
 
 export interface Message {

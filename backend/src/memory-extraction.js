@@ -194,7 +194,9 @@ function cleanPreferenceValue(value) {
   if (!normalized) return "";
   return normalized
     .replace(/^to\s+/i, "")
+    .replace(/\b(?:you know|kind of|sort of|basically|i guess|you know what i mean)\b/gi, " ")
     .replace(/\s+(?:and|but)\s+i\s+(?:am|m|live|work|study|plan|want|love|like|need|feel)\b.*$/i, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 

@@ -106,6 +106,13 @@ function normalizeText(value) {
     .trim();
 }
 
+function stripPreferenceFillers(value) {
+  return String(value || "")
+    .replace(/\b(?:you know|kind of|sort of|basically|i guess|you know what i mean)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const FAST_CONTEXT_STOPWORDS = new Set([
   "the", "a", "an", "and", "or", "but", "for", "with", "from", "that", "this",
   "what", "which", "who", "how", "when", "where", "why", "are", "is", "am",
@@ -120,6 +127,17 @@ function tokenizeFastContext(value) {
   return normalizeText(value)
     .split(" ")
     .map((token) => token.trim())
+    .map((token) => {
+      const lower = token.toLowerCase();
+      if (["live", "lives", "living"].includes(lower)) return "live";
+      if (["travel", "travels", "traveling", "travelling", "traveled", "travelled"].includes(lower)) {
+        return "travel";
+      }
+      if (["riyadh", "ryadh"].includes(lower)) return "riyadh";
+      if (["prefer", "prefers", "preference", "preferences"].includes(lower)) return "prefer";
+      if (["work", "works", "working"].includes(lower)) return "work";
+      return singularizeEnglishWord(lower);
+    })
     .filter((token) => {
       if (!token) return false;
       if (FAST_CONTEXT_STOPWORDS.has(token)) return false;
@@ -239,7 +257,7 @@ function singularizeEnglishWord(word) {
 }
 
 function normalizePreferenceValue(value) {
-  const normalized = normalizeText(value);
+  const normalized = normalizeText(stripPreferenceFillers(value));
   if (!normalized) return normalized;
   const withoutEnglishArticles = normalized.replace(/^(the|a|an)\s+/, "");
   const withoutInfinitivePrefix = withoutEnglishArticles.replace(/^to\s+/, "");
@@ -254,6 +272,14 @@ function normalizePreferenceValue(value) {
   normalizedWords[normalizedWords.length - 1] = singularizeEnglishWord(normalizedWords[normalizedWords.length - 1]);
 
   return normalizedWords.join(" ").trim();
+}
+
+function chooseNormalizedPreferenceValue(keyValue, contentValue) {
+  const normalizedKey = normalizePreferenceValue(keyValue || "");
+  const normalizedContent = normalizePreferenceValue(contentValue || "");
+  if (!normalizedKey) return normalizedContent;
+  if (!normalizedContent) return normalizedKey;
+  return normalizedContent.length <= normalizedKey.length ? normalizedContent : normalizedKey;
 }
 
 function toPolarity(value) {
@@ -339,7 +365,7 @@ function buildConflictFingerprint({ content, conflictKey, polarity }) {
   const fromContent = extractConflictKey(content);
   const normalizedValue =
     domain === "preference" || domain === "constraint"
-      ? normalizePreferenceValue(valueFromKey || fromContent?.value)
+      ? chooseNormalizedPreferenceValue(valueFromKey, fromContent?.value)
       : (fromContent?.value || valueFromKey || null);
   const normalizedKeyValue =
     domain === "preference" || domain === "constraint"
@@ -380,20 +406,100 @@ function buildSemanticMemoryKey(memory) {
   return `${type}:${normalizedContent}`;
 }
 
+function scoreMemoryRowPreference(row) {
+  const normalizedContent = normalizeText(row?.content || "");
+  const hasFiller = /\b(?:you know|kind of|sort of|basically|i guess)\b/i.test(String(row?.content || ""));
+  const retrieval = toFiniteNumber(row?.retrieval_score, 0);
+  const importance = getMemoryImportanceScore(row);
+  const confidence = getMemoryConfidenceScore(row);
+  return (
+    retrieval * 100 +
+    importance * 10 +
+    confidence * 5 -
+    normalizedContent.length * 0.01 -
+    (hasFiller ? 8 : 0)
+  );
+}
+
 function dedupeMemoryRows(rows) {
-  const seen = new Set();
-  const deduped = [];
+  const dedupedByKey = new Map();
+  const passthrough = [];
   for (const row of rows || []) {
     const key = buildSemanticMemoryKey(row);
     if (!key) {
-      deduped.push(row);
+      passthrough.push(row);
       continue;
     }
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(row);
+    const existing = dedupedByKey.get(key);
+    if (!existing) {
+      dedupedByKey.set(key, row);
+      continue;
+    }
+    if (scoreMemoryRowPreference(row) > scoreMemoryRowPreference(existing)) {
+      dedupedByKey.set(key, row);
+    }
   }
-  return deduped;
+  return [...passthrough, ...dedupedByKey.values()];
+}
+
+function isMemoryIntrospectionQuery(query) {
+  const text = String(query || "").trim();
+  if (!text) return false;
+  return [
+    /\bwhat do you know about me\b/i,
+    /\bwhat do you remember about me\b/i,
+    /\bwho am i\b/i,
+    /\bwhere do i live\b/i,
+    /\bwhere am i from\b/i,
+    /(?:^|\s)(شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني|وين بعيش|من وين أنا)(?:\s|$)/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isLocationIntrospectionQuery(query) {
+  const text = String(query || "").trim();
+  if (!text) return false;
+  return [
+    /\bwhere do i live\b/i,
+    /\bwhere am i from\b/i,
+    /(?:^|\s)(وين بعيش|من وين أنا|من وين انا|وين ساكن)(?:\s|$)/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isOriginIntrospectionQuery(query) {
+  const text = String(query || "").trim();
+  if (!text) return false;
+  return [
+    /\bwhere am i from\b/i,
+    /(?:^|\s)(من وين أنا|من وين انا|من أين أنا|من اين انا)(?:\s|$)/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function selectDiverseIntrospectionMemories(rows, limit = 3) {
+  const ranked = rankFallbackCandidates(dedupeMemoryRows(rows));
+  if (ranked.length === 0) return [];
+
+  const picks = [];
+  const usedIds = new Set();
+  const takeFirst = (predicate) => {
+    const hit = ranked.find((row) => !usedIds.has(String(row?.id || "")) && predicate(row));
+    if (!hit) return;
+    usedIds.add(String(hit.id || ""));
+    picks.push(hit);
+  };
+
+  takeFirst((row) => getMemoryConflictDomain(row) === "identity");
+  takeFirst((row) => String(row?.type || "").toLowerCase() === "preference");
+  takeFirst((row) => String(row?.type || "").toLowerCase() === "goal");
+
+  for (const row of ranked) {
+    if (picks.length >= limit) break;
+    const id = String(row?.id || "");
+    if (!id || usedIds.has(id)) continue;
+    usedIds.add(id);
+    picks.push(row);
+  }
+
+  return picks.slice(0, Math.max(1, Math.min(5, Number(limit) || 3)));
 }
 
 function escapeLikePattern(value) {
@@ -1440,8 +1546,11 @@ export async function buildFastContext({
   }
 
   const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 3));
+  const introspectionQuery = isMemoryIntrospectionQuery(normalizedQuery);
+  const locationIntrospectionQuery = isLocationIntrospectionQuery(normalizedQuery);
+  const originIntrospectionQuery = isOriginIntrospectionQuery(normalizedQuery);
   const queryTokens = tokenizeFastContext(normalizedQuery);
-  if (queryTokens.length === 0) {
+  if (queryTokens.length === 0 && !introspectionQuery) {
     return { context: "", sources: [] };
   }
   let memories = await dbAll(
@@ -1457,9 +1566,11 @@ export async function buildFastContext({
   memories = dedupeMemoryRows(memories)
     .map((memory) => ({
       ...memory,
-      retrieval_score: scoreFastContextMemory(memory, queryTokens),
+      retrieval_score: introspectionQuery
+        ? scoreFastContextMemory(memory, queryTokens) + getMemoryConfidenceScore(memory) * 2
+        : scoreFastContextMemory(memory, queryTokens),
     }))
-    .filter((memory) => Number(memory.retrieval_score || 0) > 0)
+    .filter((memory) => introspectionQuery || Number(memory.retrieval_score || 0) > 0)
     .sort((a, b) => {
       const scoreDiff = Number(b.retrieval_score || 0) - Number(a.retrieval_score || 0);
       if (scoreDiff !== 0) return scoreDiff;
@@ -1468,8 +1579,62 @@ export async function buildFastContext({
       const confidenceDiff = getMemoryConfidenceScore(b) - getMemoryConfidenceScore(a);
       if (confidenceDiff !== 0) return confidenceDiff;
       return String(b.created_at || "").localeCompare(String(a.created_at || ""));
-    })
-    .slice(0, boundedLimit);
+    });
+
+  if (originIntrospectionQuery) {
+    const originOnly = memories.filter(
+      (memory) => String(memory?.content || "").toLowerCase().startsWith("from ")
+    );
+    if (originOnly.length > 0) {
+      memories = originOnly.slice(0, 1);
+    }
+  } else if (locationIntrospectionQuery) {
+    const locationOnly = memories.filter(
+      (memory) => getMemoryConflictDomain(memory) === "identity"
+    );
+    if (locationOnly.length > 0) {
+      memories = locationOnly.slice(0, 1);
+    }
+  } else if (introspectionQuery) {
+    memories = selectDiverseIntrospectionMemories(memories, boundedLimit);
+  } else {
+    memories = memories.slice(0, boundedLimit);
+  }
+
+  if (introspectionQuery && memories.length === 0) {
+    const fallbackRows = await dbAll(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+       ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+       LIMIT 12`,
+      [normalizedUserId]
+    );
+    memories = originIntrospectionQuery
+      ? selectDiverseIntrospectionMemories(
+          fallbackRows.filter((row) => String(row?.content || "").toLowerCase().startsWith("from ")),
+          1
+        )
+      : locationIntrospectionQuery
+      ? selectDiverseIntrospectionMemories(
+          fallbackRows.filter((row) => getMemoryConflictDomain(row) === "identity"),
+          1
+        )
+      : selectDiverseIntrospectionMemories(fallbackRows, boundedLimit);
+  }
+  if (!introspectionQuery && memories.length === 0) {
+    memories = selectPersonalizationFallbackMemories(
+      await dbAll(
+        `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+         FROM memories
+         WHERE user_id = $1
+         ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+         LIMIT 12`,
+        [normalizedUserId]
+      ),
+      boundedLimit
+    );
+  }
   if (memories.length === 0) {
     return { context: "", sources: [] };
   }

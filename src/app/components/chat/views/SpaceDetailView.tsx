@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
 import { CenterLogo } from "../../icons";
 import { InputArea } from "../../InputArea";
-import type { Space } from "@/types";
+import type { PinnedFileStatus, Space } from "@/types";
 
 interface SpaceDetailViewProps {
   spaceDetail: Space;
@@ -32,6 +32,24 @@ const iconOptions = [
 ];
 
 const colorOptions = ["#E24A3B", "#F57C1F", "#F2B705", "#20A559", "#2F7EEA", "#7B4BE4", "#FF6FB1"];
+
+const fileStatusTone: Record<PinnedFileStatus, { chip: string; label: string; dot: string }> = {
+  embedded: {
+    chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    label: "Embedded",
+    dot: "bg-emerald-500",
+  },
+  processing: {
+    chip: "bg-amber-50 text-amber-700 border border-amber-200",
+    label: "Processing",
+    dot: "bg-amber-500",
+  },
+  failed: {
+    chip: "bg-rose-50 text-rose-700 border border-rose-200",
+    label: "Failed",
+    dot: "bg-rose-500",
+  },
+};
 
 export function SpaceDetailView({
   spaceDetail,
@@ -172,7 +190,7 @@ export function SpaceDetailView({
       </div>
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">Project files</div>
               <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"}`}>
@@ -180,26 +198,49 @@ export function SpaceDetailView({
               </div>
             </div>
             {!spaceDetail.fixed && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="zaki-btn-sm bg-white border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover"
-                  onClick={onUploadFiles}
-                >
-                  Upload
-                </button>
-                <button
-                  type="button"
-                  className="zaki-btn-sm bg-transparent text-zaki-brand hover:text-zaki-brand"
-                  onClick={() => {
-                    onUpdateSpace(spaceDetail.id, { pinnedFiles: [] });
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
+              <button
+                type="button"
+                className="zaki-btn-sm bg-white border border-zaki-subtle text-zaki-secondary hover:bg-zaki-hover"
+                onClick={onUploadFiles}
+              >
+                Upload
+              </button>
             )}
           </div>
+          {!spaceDetail.fixed && (
+            <div className="mt-4 space-y-2">
+              {(spaceDetail.pinnedFiles ?? []).length > 0 ? (
+                (spaceDetail.pinnedFiles ?? []).map((file) => {
+                  const status = file.status ?? "embedded";
+                  const tone = fileStatusTone[status];
+                  return (
+                    <div
+                      key={`${file.name}:${file.size}:${file.type}`}
+                      className="flex items-start justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-zaki-raised/70 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-zaki-primary">{file.name}</div>
+                        <div className="mt-1 flex items-center gap-2 text-2xs text-zaki-muted">
+                          <span className={`size-1.5 rounded-full ${tone.dot}`} />
+                          <span>{file.type || "document"}</span>
+                        </div>
+                        {status === "failed" && file.error && (
+                          <div className="mt-1 text-2xs text-rose-700">{file.error}</div>
+                        )}
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-2xs font-semibold ${tone.chip}`}>
+                        {tone.label}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="rounded-zaki-md border border-dashed border-zaki-subtle px-3 py-3 text-sm text-zaki-muted">
+                  Upload documents to ground this workspace. Embedded files stay with the whole space.
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
           <div className="flex items-center justify-between">

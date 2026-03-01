@@ -19,12 +19,24 @@ describe("chat proxy payload helpers", () => {
       "enriched"
     );
 
-    expect(payload).toEqual({
-      message: "enriched",
-      mode: "chat",
-      attachments: [{ name: "image.png" }],
-      promptPrefix: "Act as a tutor",
-    });
+    expect(payload.message).toBe("enriched");
+    expect(payload.mode).toBe("chat");
+    expect(payload.attachments).toEqual([{ name: "image.png" }]);
+    expect(payload.promptPrefix).toContain("You are ZAKI");
+    expect(payload.promptPrefix).toContain("Act as a tutor");
+  });
+
+  it("adds identity guardrails when no prompt prefix exists", () => {
+    const payload = buildStreamUpstreamPayload(
+      {
+        message: "hello",
+        mode: "chat",
+      },
+      "hello"
+    );
+
+    expect(payload.promptPrefix).toContain("You are ZAKI");
+    expect(payload.promptPrefix).toContain("Never claim to be Anthropic");
   });
 
   it("maps webSearch compatibility flag to webSearchEnabled", () => {

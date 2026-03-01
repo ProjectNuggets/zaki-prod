@@ -214,4 +214,179 @@ describe("memory context retrieval behavior", () => {
     expect(result.sources[0]?.id).toBe("m-1");
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it("buildFastContext retrieves identity location for direct location questions", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Hamburg",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "where do I live?",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.content).toBe("Lives in Hamburg");
+    expect(result.context).toContain("Lives in Hamburg");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("buildFastContext retrieves origin facts for direct origin questions", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-from",
+        content: "From Damascus",
+        type: "fact",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+      },
+      {
+        id: "m-live",
+        content: "Lives in Hamburg",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "where am I from?",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.content).toBe("From Damascus");
+    expect(result.context).toContain("From Damascus");
+    expect(result.context).not.toContain("Lives in Hamburg");
+  });
+
+  it("buildFastContext prefers clean memory variants for introspection prompts", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-noisy",
+        content: "Likes travel you know",
+        type: "preference",
+        metadata: { conflictKey: "preference:travelyouknow" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+      {
+        id: "m-clean",
+        content: "Likes travel",
+        type: "preference",
+        metadata: { conflictKey: "preference:travel" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:30.524Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "what do you know about me?",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.id).toBe("m-clean");
+    expect(result.context).toContain("Likes travel");
+    expect(result.context).not.toContain("Likes travel you know");
+  });
+
+  it("buildFastContext returns a diverse memory set for introspection prompts", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-goal-1",
+        content: "Plans to travel to Ryadh",
+        type: "goal",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.9,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+      {
+        id: "m-goal-2",
+        content: "Plans to travel to Algeria",
+        type: "goal",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.9,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:29.779Z",
+      },
+      {
+        id: "m-pref",
+        content: "Likes travel",
+        type: "preference",
+        metadata: { conflictKey: "preference:travel" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:28.779Z",
+      },
+      {
+        id: "m-live",
+        content: "Lives in Hamburg",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+        created_at: "2026-02-28T22:23:27.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "what do you know about me?",
+      maxChars: 500,
+      limit: 3,
+    });
+
+    expect(result.sources).toHaveLength(3);
+    expect(result.context).toContain("Lives in Hamburg");
+    expect(result.context).toContain("Likes travel");
+    expect(result.context).toContain("Plans to travel to Ryadh");
+  });
 });

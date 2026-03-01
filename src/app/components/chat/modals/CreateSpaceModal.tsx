@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { File as FileIcon, X } from "lucide-react";
+import { X } from "lucide-react";
 import { ModalShell } from "@/app/components/ui/ModalShell";
 import { useTranslation } from "react-i18next";
+import type { PinnedFile } from "@/types";
 
 interface CreateSpaceModalProps {
   isOpen: boolean;
@@ -10,7 +11,7 @@ interface CreateSpaceModalProps {
     name: string;
     description: string;
     instructions: string;
-    pinnedFiles: { name: string; type: string; size: number }[];
+    pinnedFiles: PinnedFile[];
   }) => void;
 }
 
@@ -24,7 +25,6 @@ export function CreateSpaceModal({
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceInstructions, setSpaceInstructions] = useState("");
-  const [spaceFiles, setSpaceFiles] = useState<File[]>([]);
 
   if (!isOpen) return null;
 
@@ -33,16 +33,11 @@ export function CreateSpaceModal({
       name: spaceName,
       description: spaceDescription,
       instructions: spaceInstructions,
-      pinnedFiles: spaceFiles.map((file) => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      })),
+      pinnedFiles: [],
     });
     setSpaceName("");
     setSpaceDescription("");
     setSpaceInstructions("");
-    setSpaceFiles([]);
     onClose();
   };
 
@@ -104,47 +99,8 @@ export function CreateSpaceModal({
           </label>
           <div className="text-xs text-zaki-muted">
             {t("createSpaceModal.fields.pinnedDocuments")}
-            <div className="mt-2 flex flex-col gap-2">
-              <label className="w-full rounded-zaki-md border border-dashed border-zaki-strong px-3 py-2 text-sm text-zaki-secondary hover:bg-zaki-hover transition-colors cursor-pointer">
-                {t("createSpaceModal.fields.uploadDocuments")}
-                <input
-                  type="file"
-                  className="hidden"
-                  multiple
-                  onChange={(event) => {
-                    const files = Array.from(event.target.files ?? []);
-                    if (files.length) {
-                      setSpaceFiles((prev) => [...prev, ...files]);
-                    }
-                    event.target.value = "";
-                  }}
-                />
-              </label>
-              {spaceFiles.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {spaceFiles.map((file, index) => (
-                    <div
-                      key={`${file.name}-${index}`}
-                      className="flex items-center justify-between rounded-zaki-md border border-zaki bg-zaki-elevated px-3 py-2 text-xs text-zaki-secondary"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileIcon className="size-4 text-zaki-muted" />
-                        <span className="max-w-[200px] truncate">{file.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="text-zaki-muted hover:text-zaki-secondary"
-                        onClick={() =>
-                          setSpaceFiles((prev) => prev.filter((_, i) => i !== index))
-                        }
-                        aria-label={t("createSpaceModal.removeFileAria", { name: file.name })}
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="mt-2 rounded-zaki-md border border-dashed border-zaki-strong px-3 py-2 text-sm text-zaki-secondary">
+              Add files after creating the space. Uploads are embedded from the space view.
             </div>
           </div>
         </div>
