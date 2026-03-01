@@ -481,6 +481,11 @@
     "eyebrow": "Plans",
     "title": "Choose the plan that makes ZAKI feel personal",
     "subtitle": "Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.",
+    "highlights": [
+      "Student: $8/mo with .edu or manual verification",
+      "Personal: $13/mo for everyday assistant use",
+      "Gift a month: $15 one-time"
+    ],
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",

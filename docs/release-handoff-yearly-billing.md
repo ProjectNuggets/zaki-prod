@@ -13,7 +13,7 @@
   - `STRIPE_PRICE_PERSONAL_YEARLY`
 - New interval-aware Stripe pricing catalog and lookup helpers.
 - `POST /api/billing/checkout` now accepts optional `interval` (`monthly` default).
-- `.edu` eligibility remains enforced for all student checkouts (monthly + yearly).
+- Student eligibility is `.edu` or manual verification (`student_verified`) for monthly + yearly.
 - Stripe checkout metadata now includes `billing_interval`.
 - Sync/entitlements derive interval via `stripe_price_id` mapping.
 - `GET /api/billing/config` now includes `configured.pricingAvailability`:
@@ -29,9 +29,12 @@
 - Yearly checkout path restricted to Stripe provider.
 
 ## Required Stripe inputs
-Provide these before enabling yearly in production:
+Provide these before enabling pricing in production:
+- Student monthly Stripe price ID -> `STRIPE_PRICE_STUDENT=price_1T40ht1CujkYBN77y4T61VjX`
 - Student yearly Stripe price ID -> `STRIPE_PRICE_STUDENT_YEARLY=price_1T4g1L1CujkYBN77jp9hQTDV`
-- Personal yearly Stripe price ID -> `STRIPE_PRICE_PERSONAL_YEARLY=price_1T4g0l1CujkYBN77K3qk5gvU`
+- Personal monthly Stripe price ID -> `STRIPE_PRICE_PERSONAL=price_1T6CFu1CujkYBN77O7JWWFhc`
+- Personal yearly Stripe price ID -> `STRIPE_PRICE_PERSONAL_YEARLY=price_1T6CHR1CujkYBN77SaxD21T7`
+- Access-code purchase Stripe price ID -> `STRIPE_PRICE_ACCESS_CODE_MONTHLY=price_1T6CIm1CujkYBN778pLtnDoJ`
 
 ## Deployment sequence
 1. Deploy backend + frontend with yearly env vars unset (safe no-op for yearly).
@@ -58,10 +61,12 @@ Provide these before enabling yearly in production:
 
 ## Staging matrix to execute
 1. Student monthly checkout succeeds for `.edu`.
-2. Student yearly checkout succeeds for `.edu`.
-3. Student yearly rejected for non-`.edu`.
-4. Personal monthly checkout succeeds.
-5. Personal yearly checkout succeeds.
-6. Missing yearly env for one tier blocks only that tier yearly path.
-7. Webhook updates plan tier/status and interval correctly.
-8. Active paid user gets portal-first switching path (no duplicate checkout).
+2. Student monthly checkout succeeds for manually verified student account.
+3. Student yearly checkout succeeds for `.edu`.
+4. Student yearly checkout succeeds for manually verified student account.
+5. Student yearly rejected for non-`.edu` and not manually verified.
+6. Personal monthly checkout succeeds.
+7. Personal yearly checkout succeeds.
+8. Missing yearly env for one tier blocks only that tier yearly path.
+9. Webhook updates plan tier/status and interval correctly.
+10. Active paid user gets portal-first switching path (no duplicate checkout).

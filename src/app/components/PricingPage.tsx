@@ -491,6 +491,16 @@ export function PricingPage() {
           <p className="max-w-3xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
             {t("pricingPage.subtitle")}
           </p>
+          <div className="flex flex-wrap gap-2">
+            {(t("pricingPage.highlights", { returnObjects: true }) as string[]).map((item) => (
+              <span
+                key={item}
+                className="inline-flex rounded-full border border-zaki-subtle bg-white px-3 py-1 text-xs text-zaki-secondary dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-subtle"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
           <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
             {t("pricingPage.currentPlan", { plan: currentPlanLabel })}
             {" · "}

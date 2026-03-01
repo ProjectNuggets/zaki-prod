@@ -288,9 +288,9 @@ export const content = {
       note: "Built with memory review and user control by default.",
     },
     pricing: {
-      heading: "Simple plans, clear value",
+      heading: "Simple plans for a more personal ZAKI",
       subheading:
-        "Choose monthly or yearly billing, or send a one-time gift code to someone who needs a smart study buddy.",
+        "Start free, upgrade when you want more, or gift one focused month of ZAKI to someone who needs a real personal AI assistant.",
       interval: {
         monthly: "Monthly",
         yearly: "Yearly",
@@ -299,35 +299,43 @@ export const content = {
         {
           tier: "student",
           label: "Student",
-          priceMonthly: "$5 / month",
-          priceYearly: "$60 / year",
-          blurb: "Premium features for focused learning.",
-          features: ["Premium models", "Priority responses", "Expanded memory limits"],
+          priceMonthly: "$8 / month",
+          priceYearly: "$96 / year",
+          blurb: "For focused studying, clearer writing, and better support across coursework.",
+          features: [
+            "Premium models for better answers",
+            "Priority responses during busy hours",
+            "Stronger help with notes, drafts, and study sessions"
+          ],
           cta: "Choose Student",
         },
         {
           tier: "personal",
           label: "Personal",
-          priceMonthly: "$10 / month",
-          priceYearly: "$120 / year",
-          blurb: "Best for everyday use and deeper context.",
-          features: ["Premium models", "Priority responses", "Advanced memory insights"],
+          priceMonthly: "$13 / month",
+          priceYearly: "$156 / year",
+          blurb: "For everyday work and life when you want ZAKI to feel like your assistant.",
+          features: [
+            "Premium models with richer reasoning",
+            "Priority responses and stronger context",
+            "More personal memory and assistant-style support"
+          ],
           cta: "Choose Personal",
         },
       ],
       oneTimeCode: {
         label: "Gift Code",
         badge: "🎁 One-time",
-        price: "$10 one-time",
-        blurb: "Gift someone a 30-day ZAKI pass for study, focus, and daily writing support.",
+        price: "$15 one-time",
+        blurb: "Gift someone a 30-day ZAKI pass for studying, writing, focus, and daily support.",
         features: [
           "Single-use activation code",
           "Delivered by email after purchase",
           "Perfect for friends and teammates"
         ],
-        cta: "Gift a code 🎉",
+        cta: "Buy 1-month gift code",
       },
-      note: "Student plans require a valid .edu email at checkout.",
+      note: "Student requires a .edu email or manual verification with proof of enrollment.",
     },
     faq: {
       heading: "FAQs",
@@ -681,9 +689,9 @@ export const content = {
       note: "مصمم بذاكرة قابلة للمراجعة وتحكم المستخدم من الأساس.",
     },
     pricing: {
-      heading: "خطط واضحة وقيمة مباشرة",
+      heading: "خطط بسيطة لنسخة أكثر شخصية من زكي",
       subheading:
-        "اختر فوترة شهرية أو سنوية، أو أرسل كود هدية دفعة واحدة لشخص يحتاج Study Buddy ذكي.",
+        "ابدأ مجانًا، ثم قم بالترقية عندما تريد المزيد، أو أهدِ شهرًا واحدًا من زكي لشخص يحتاج مساعد AI شخصي فعلاً.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
@@ -692,35 +700,43 @@ export const content = {
         {
           tier: "student",
           label: "طالب",
-          priceMonthly: "$5 / شهر",
-          priceYearly: "$60 / سنة",
-          blurb: "ميزات بريميوم مخصصة للتعلّم بتركيز.",
-          features: ["نماذج متقدمة", "استجابات بأولوية", "حدود ذاكرة موسعة"],
+          priceMonthly: "$8 / شهر",
+          priceYearly: "$96 / سنة",
+          blurb: "للدراسة المركزة والكتابة الأوضح ومساندة أفضل عبر المقررات.",
+          features: [
+            "نماذج متقدمة لإجابات أفضل",
+            "استجابات بأولوية في الأوقات المزدحمة",
+            "مساعدة أقوى مع الملاحظات والمسودات وجلسات الدراسة"
+          ],
           cta: "اختر خطة الطالب",
         },
         {
           tier: "personal",
           label: "شخصي",
-          priceMonthly: "$10 / شهر",
-          priceYearly: "$120 / سنة",
-          blurb: "الأفضل للاستخدام اليومي وسياق أعمق.",
-          features: ["نماذج متقدمة", "استجابات بأولوية", "رؤى ذاكرة متقدمة"],
+          priceMonthly: "$13 / شهر",
+          priceYearly: "$156 / سنة",
+          blurb: "للعمل والحياة اليومية عندما تريد أن يبدو زكي كمساعدك الشخصي.",
+          features: [
+            "نماذج متقدمة بمنطق أغنى",
+            "استجابات بأولوية وسياق أقوى",
+            "ذاكرة أكثر شخصية ودعم أقرب لأسلوب المساعد الشخصي"
+          ],
           cta: "اختر الخطة الشخصية",
         },
       ],
       oneTimeCode: {
         label: "كود هدية",
         badge: "🎁 دفعة واحدة",
-        price: "10$ دفعة واحدة",
-        blurb: "أهدِ شخصًا تعرفه وصول ZAKI لمدة 30 يومًا للدراسة، التركيز، والكتابة اليومية.",
+        price: "15$ دفعة واحدة",
+        blurb: "أهدِ شخصًا تعرفه وصول ZAKI لمدة 30 يومًا للدراسة، الكتابة، التركيز، والدعم اليومي.",
         features: [
           "رمز تفعيل لاستخدام واحد",
           "يصلك عبر البريد الإلكتروني بعد الدفع",
           "مناسب للأصدقاء والزملاء"
         ],
-        cta: "أهدِ كود 🎉",
+        cta: "اشترِ كود هدية لشهر",
       },
-      note: "خطة الطالب تتطلب بريد .edu صالحًا عند الدفع.",
+      note: "خطة الطالب تتطلب بريد .edu أو تحققًا يدويًا مع إثبات دراسة.",
     },
     faq: {
       heading: "الأسئلة الشائعة",
