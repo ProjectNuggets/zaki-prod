@@ -1728,17 +1728,38 @@ function getRequestHeaderValue(req, name) {
   return String(value || "").trim();
 }
 
+function getOriginProtocol(value) {
+  if (!/^https?:\/\//i.test(value || "")) return "";
+  try {
+    return new URL(value).protocol.replace(":", "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLocalHostName(host) {
+  const normalized = String(host || "")
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "");
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized.endsWith(".local")
+  );
+}
+
 function getPublicRequestBase(req) {
   const origin = getRequestHeaderValue(req, "origin");
-  let originProto = "";
-  if (/^https?:\/\//i.test(origin)) {
-    try {
-      originProto = new URL(origin).protocol.replace(":", "").toLowerCase();
-    } catch {
-      originProto = "";
-    }
-  }
+  const referer = getRequestHeaderValue(req, "referer");
+  const originProto = getOriginProtocol(origin);
+  const refererProto = getOriginProtocol(referer);
   const forwardedProto = getRequestHeaderValue(req, "x-forwarded-proto")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const forwardedScheme = getRequestHeaderValue(req, "x-forwarded-scheme")
     .split(",")[0]
     .trim()
     .toLowerCase();
@@ -1748,7 +1769,12 @@ function getPublicRequestBase(req) {
   const host = forwardedHost || getRequestHeaderValue(req, "host");
   if (!host) return null;
   const proto =
-    forwardedProto || originProto || (req?.socket?.encrypted ? "https" : "http");
+    forwardedProto ||
+    forwardedScheme ||
+    originProto ||
+    refererProto ||
+    (req?.socket?.encrypted ? "https" : "") ||
+    (isLocalHostName(host) ? "http" : "https");
   return `${proto}://${host}`;
 }
 
