@@ -35,6 +35,8 @@ const APP_URL = "https://app.chatzaki.com";
 const SITE_URL = "https://chatzaki.com";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
 const SEO_UPDATED_AT = "2026-03-02T00:00:00Z";
+const FEEDBACK_CLIENT_ID_KEY = "zaki.website.feedback.client_id";
+const WEBSITE_API_BASE_URL = String(import.meta.env.VITE_WEBSITE_API_BASE_URL || "").trim();
 const HORIZONTAL_SLIDE_IMAGES = [
   { src: "/slides/1.png" },
   { src: "/slides/2.png" },
@@ -43,6 +45,54 @@ const HORIZONTAL_SLIDE_IMAGES = [
   { src: "/slides/5.png" },
   { src: "/slides/6.png" },
 ];
+
+function getWebsiteApiBase() {
+  if (WEBSITE_API_BASE_URL) {
+    return WEBSITE_API_BASE_URL.replace(/\/+$/, "");
+  }
+  if (typeof window === "undefined") return APP_URL;
+  const { hostname, protocol } = window.location;
+  const isProductionWebsiteHost =
+    hostname === "chatzaki.com" ||
+    hostname === "www.chatzaki.com" ||
+    hostname.endsWith(".chatzaki.com");
+  if (!isProductionWebsiteHost) {
+    return `${protocol}//${hostname}:8787`;
+  }
+  return APP_URL;
+}
+
+function getFeedbackClientId() {
+  if (typeof window === "undefined") return "preview_client_id";
+  try {
+    const existing = window.localStorage.getItem(FEEDBACK_CLIENT_ID_KEY);
+    if (existing) return existing;
+    const rawId =
+      typeof window.crypto?.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `anon_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+    const normalized = rawId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    window.localStorage.setItem(FEEDBACK_CLIENT_ID_KEY, normalized);
+    return normalized;
+  } catch {
+    return `anon_${Math.random().toString(36).slice(2, 14)}`;
+  }
+}
+
+function formatRelativeTime(locale, value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
+  const rtf = new Intl.RelativeTimeFormat(locale === "ar" ? "ar" : "en", { numeric: "auto" });
+  if (diffMinutes < 60) return rtf.format(-diffMinutes, "minute");
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return rtf.format(-diffHours, "hour");
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 30) return rtf.format(-diffDays, "day");
+  const diffMonths = Math.round(diffDays / 30);
+  return rtf.format(-diffMonths, "month");
+}
 
 function upsertMeta(attr, key, content) {
   if (typeof document === "undefined") return;
@@ -242,7 +292,7 @@ function AnimatedParagraph({ children, className = "", delay = 0 }) {
   );
 }
 
-function SocialProofStack({ socialProof, locale }) {
+function SocialProofStack({ socialProof, locale, onPromptStart, onPromptEnd }) {
   if (!socialProof?.label) return null;
 
   const avatars = Array.isArray(socialProof.avatars) ? socialProof.avatars.slice(0, 4) : [];
@@ -251,7 +301,13 @@ function SocialProofStack({ socialProof, locale }) {
     <div
       className="group mt-4"
     >
-      <div className="relative overflow-hidden rounded-[22px] border border-[#eadfce] bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,239,228,0.96))] px-4 py-3 text-center shadow-[0_14px_32px_rgba(15,12,11,0.06)] transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_18px_38px_rgba(15,12,11,0.1)]">
+      <button
+        type="button"
+        onClick={onPromptStart}
+        onMouseLeave={onPromptEnd}
+        onBlur={onPromptEnd}
+        className="relative w-full overflow-hidden rounded-[22px] border border-[#eadfce] bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,239,228,0.96))] px-4 py-3 text-center shadow-[0_14px_32px_rgba(15,12,11,0.06)] transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_18px_38px_rgba(15,12,11,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+      >
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-10 top-0 h-10 rounded-full bg-[radial-gradient(circle,rgba(210,68,48,0.14),transparent_72%)] opacity-70 blur-xl"
@@ -271,12 +327,287 @@ function SocialProofStack({ socialProof, locale }) {
             +300
           </span>
         </div>
-        <p className="relative mt-3 text-[12px] font-semibold leading-5 text-[#5f574d]">
+        <p className="relative mt-3 text-center text-[12px] font-semibold leading-5 text-[#5f574d]">
           {socialProof.label}
         </p>
-        <p className="relative mt-1 text-[11px] leading-5 text-[#8b7b69] opacity-0 transition-all duration-300 group-hover:opacity-100">
-          {socialProof.hoverLabel}
-        </p>
+        <div
+          className="grid grid-rows-[0fr] overflow-hidden opacity-0 transition-[grid-template-rows,opacity,margin] duration-300 ease-out group-hover:mt-1 group-hover:grid-rows-[1fr] group-hover:opacity-100"
+        >
+          <p className="min-h-0 text-center text-[11px] leading-5 text-[#8b7b69]">
+            {socialProof.hoverLabel}
+          </p>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function FeedbackBoard({ t, locale }) {
+  const feedback = t.feedback || {};
+  const maxFeedbackChars = 240;
+  const [items, setItems] = useState([]);
+  const [sort, setSort] = useState("top");
+  const [body, setBody] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const clientIdRef = useRef(getFeedbackClientId());
+
+  const normalizeFeedbackError = useCallback(
+    (error, fallback) => {
+      if (!error || typeof error !== "object") return fallback;
+      const message = error instanceof Error ? error.message : "";
+      if (
+        !message ||
+        message === "Failed to fetch" ||
+        message === "Load failed" ||
+        message.includes("NetworkError")
+      ) {
+        return fallback;
+      }
+      return message;
+    },
+    []
+  );
+
+  const loadFeedback = useCallback(async (selectedSort) => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({
+        sort: selectedSort,
+        viewerId: clientIdRef.current,
+      });
+      const response = await fetch(`${getWebsiteApiBase()}/api/website-feedback?${params.toString()}`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || feedback.errorLoad || "Unable to load feedback right now.");
+      }
+      setItems(Array.isArray(payload.items) ? payload.items : []);
+    } catch (fetchError) {
+      setError(normalizeFeedbackError(fetchError, feedback.errorLoad || "Unable to load feedback right now."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [feedback.errorLoad, normalizeFeedbackError]);
+
+  useEffect(() => {
+    loadFeedback(sort);
+  }, [loadFeedback, sort]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (body.trim().length < 8 || isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch(`${getWebsiteApiBase()}/api/website-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          body: body.slice(0, maxFeedbackChars),
+          displayName,
+          clientId: clientIdRef.current,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.item) {
+        throw new Error(payload?.error || feedback.errorSubmit || "Unable to post feedback right now.");
+      }
+      setItems((current) => [payload.item, ...current.filter((item) => item.id !== payload.item.id)]);
+      setBody("");
+      setDisplayName("");
+      setSuccess(feedback.success || "Your idea is live.");
+      if (sort !== "newest") {
+        setSort("newest");
+      }
+    } catch (submitError) {
+      setError(
+        normalizeFeedbackError(submitError, feedback.errorSubmit || "Unable to post feedback right now.")
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVote = async (id, value) => {
+    setError("");
+    try {
+      const response = await fetch(`${getWebsiteApiBase()}/api/website-feedback/${encodeURIComponent(id)}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          value,
+          clientId: clientIdRef.current,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.item) {
+        throw new Error(payload?.error || feedback.errorVote || "Unable to register that vote right now.");
+      }
+      setItems((current) => current.map((item) => (item.id === payload.item.id ? payload.item : item)));
+    } catch (voteError) {
+      setError(
+        normalizeFeedbackError(voteError, feedback.errorVote || "Unable to register that vote right now.")
+      );
+    }
+  };
+
+  return (
+    <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,350px)_minmax(0,1fr)]">
+      <div
+        className={`rounded-[22px] border border-[#ead9c3] bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(250,242,231,0.94))] p-4 shadow-[0_14px_28px_rgba(15,12,11,0.045)] ${
+          locale === "ar" ? "text-right" : "text-left"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ab7c56]">
+              {feedback.title}
+            </p>
+            <p className="mt-1 text-sm text-[#71695d]">{feedback.subtitle}</p>
+          </div>
+        </div>
+
+        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-[#302c28]">{feedback.promptLabel}</span>
+            <textarea
+              value={body}
+              onChange={(event) => setBody(event.target.value.slice(0, maxFeedbackChars))}
+              placeholder={feedback.promptPlaceholder}
+              rows={5}
+              maxLength={maxFeedbackChars}
+              className="min-h-[120px] max-h-[120px] w-full resize-none rounded-[18px] border border-[#e7d7c2] bg-white/90 px-4 py-3 text-sm leading-6 text-[#2f2a24] outline-none transition focus:border-[#D24430] focus:ring-2 focus:ring-[#D24430]/15"
+            />
+            <span className="mt-2 block text-[11px] text-[#8b7b69]">
+              {body.length}/{maxFeedbackChars} {feedback.countLabel}
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[#655a4c]">{feedback.nameLabel}</span>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder={feedback.namePlaceholder}
+              className="w-full rounded-[15px] border border-[#e7d7c2] bg-white/90 px-4 py-3 text-sm text-[#2f2a24] outline-none transition focus:border-[#D24430] focus:ring-2 focus:ring-[#D24430]/15"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={isSubmitting || body.trim().length < 8}
+            className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-6 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#b03020] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {isSubmitting ? feedback.posting : feedback.submit}
+          </button>
+        </form>
+
+        {success ? <p className="mt-3 text-sm text-[#2d7c59]">{success}</p> : null}
+        {error ? <p className="mt-3 text-sm text-[#b23a2a]">{error}</p> : null}
+      </div>
+
+      <div className="rounded-[22px] border border-[#ead9c3] bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(250,242,231,0.94))] p-4 shadow-[0_14px_28px_rgba(15,12,11,0.045)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className={locale === "ar" ? "text-right" : "text-left"}>
+            <p className="text-sm font-semibold text-[#2f2a24]">{feedback.joinPrompt}</p>
+          </div>
+          <div className="inline-flex rounded-full border border-[#e5d3bc] bg-white/85 p-1">
+            {[
+              { key: "top", label: feedback.sortTop },
+              { key: "newest", label: feedback.sortNewest },
+            ].map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setSort(option.key)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  sort === option.key
+                    ? "bg-[#d24430] text-white shadow-sm"
+                    : "text-[#7a6f62] hover:text-[#2f2a24]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2.5">
+          {isLoading ? (
+            <div className="rounded-[20px] border border-dashed border-[#e3cfb5] bg-white/60 px-4 py-10 text-center text-sm text-[#7a6f62]">
+              {feedback.loading}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="rounded-[20px] border border-dashed border-[#e3cfb5] bg-white/60 px-4 py-10 text-center text-sm text-[#7a6f62]">
+              {feedback.empty}
+            </div>
+          ) : (
+            items.map((item) => {
+              const scoreTone =
+                item.score > 0 ? "text-[#ad3a2b]" : item.score < 0 ? "text-[#6d655a]" : "text-[#8d816f]";
+              return (
+                <article
+                  key={item.id}
+                  className="rounded-[18px] border border-[#eadfce] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(252,247,241,0.86))] px-4 py-3.5 shadow-[0_10px_22px_rgba(15,12,11,0.04)] transition-transform duration-200 hover:-translate-y-0.5"
+                >
+                  <div className={locale === "ar" ? "text-right" : "text-left"}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="flex-1 text-[15px] leading-7 text-[#2f2a24] md:text-[15.5px]">{item.body}</p>
+                      <div
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#ead9c3] bg-[#fcf7f1] px-1.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                      >
+                        <button
+                          type="button"
+                          aria-label={feedback.voteDown}
+                          onClick={() => handleVote(item.id, -1)}
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold transition ${
+                            item.viewerVote === -1
+                              ? "border-[#7a6f62] bg-[#7a6f62] text-white shadow-[0_6px_14px_rgba(122,111,98,0.2)]"
+                              : "border-transparent bg-white text-[#9a8772] hover:border-[#e3c7a7] hover:text-[#7a6f62]"
+                          }`}
+                        >
+                          <span className="-mt-px">▼</span>
+                        </button>
+                        <span
+                          className={`min-w-[1.75rem] text-center text-[11px] font-bold tracking-[0.04em] ${scoreTone}`}
+                        >
+                          {item.score}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={feedback.voteUp}
+                          onClick={() => handleVote(item.id, 1)}
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold transition ${
+                            item.viewerVote === 1
+                              ? "border-[#d24430] bg-[#d24430] text-white shadow-[0_6px_14px_rgba(210,68,48,0.22)]"
+                              : "border-transparent bg-white text-[#9a8772] hover:border-[#e3c7a7] hover:text-[#d24430]"
+                          }`}
+                        >
+                          <span className="-mt-px">▲</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      className={`mt-3 flex items-center gap-2 text-[11px] text-[#8c7f70] ${locale === "ar" ? "flex-row-reverse" : ""}`}
+                    >
+                      <span className="rounded-full bg-[#f5ede2] px-2.5 py-1 font-semibold text-[#5c5348]">
+                        {item.displayName || feedback.anonymous}
+                      </span>
+                      <span>•</span>
+                      <span>{formatRelativeTime(locale, item.createdAt)}</span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
@@ -414,12 +745,14 @@ export function LandingApp() {
   const [activeSlide, setActiveSlide] = useState(1);
   const [activeUpdateSlide, setActiveUpdateSlide] = useState(1);
   const [isUpdatesDragging, setIsUpdatesDragging] = useState(false);
+  const [isSocialProofPrompting, setIsSocialProofPrompting] = useState(false);
   const [whyScale, setWhyScale] = useState(0.97);
   const [whyWeight, setWhyWeight] = useState(480);
   const whyRef = useRef(null);
   const updatesSectionRef = useRef(null);
   const updatesViewportRef = useRef(null);
   const updatesTrackRef = useRef(null);
+  const socialProofPromptTimeoutRef = useRef(null);
   const updatesCarouselRef = useRef(null);
   const updatesGsapRef = useRef(null);
   const updatesOffsetRef = useRef(0);
@@ -436,6 +769,21 @@ export function LandingApp() {
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  const handleSocialProofPromptStart = useCallback(() => {
+    setIsSocialProofPrompting(true);
+    if (socialProofPromptTimeoutRef.current) {
+      window.clearTimeout(socialProofPromptTimeoutRef.current);
+    }
+    socialProofPromptTimeoutRef.current = window.setTimeout(() => {
+      setIsSocialProofPrompting(false);
+      socialProofPromptTimeoutRef.current = null;
+    }, 1600);
+  }, []);
+
+  const handleSocialProofPromptEnd = useCallback(() => {
+    // Hover/focus should not clear the CTA prompt immediately; only the timed click state should own it.
+  }, []);
 
   const submitPrompt = (event) => {
     event.preventDefault();
@@ -756,6 +1104,9 @@ export function LandingApp() {
     });
     return () => {
       mounted = false;
+      if (socialProofPromptTimeoutRef.current) {
+        window.clearTimeout(socialProofPromptTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -938,9 +1289,14 @@ export function LandingApp() {
         </a>
 
         <header className="fixed left-1/2 top-4 md:top-10 z-40 flex h-[52px] w-[calc(100%-24px)] max-w-[860px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#e7dfd3] bg-white/90 px-2 shadow-[0_2px_7px_rgba(15,12,11,0.05)] backdrop-blur-sm md:w-auto md:max-w-[calc(100%-24px)] md:px-3">
-          <div className="shrink-0 flex items-center">
+          <button
+            type="button"
+            onClick={() => scrollToId("about")}
+            className="shrink-0 flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D24430] focus-visible:ring-offset-2"
+            aria-label="Back to top"
+          >
             <Logo />
-          </div>
+          </button>
 
           <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="mx-auto flex w-max min-w-full items-center justify-center gap-1">
@@ -1032,15 +1388,24 @@ export function LandingApp() {
                 ))}
               </ul>
 
+              <SocialProofStack
+                socialProof={t.earlyAccess.socialProof}
+                locale={locale}
+                onPromptStart={handleSocialProofPromptStart}
+                onPromptEnd={handleSocialProofPromptEnd}
+              />
               <button
                 type="button"
                 onClick={() => scrollToId("pricing")}
-                className="mt-4 block w-full rounded-xl bg-[#D24430] py-3 text-center text-[14px] font-semibold text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5"
+                className={`mt-4 block w-full rounded-xl py-3 text-center text-[14px] font-semibold text-white shadow-sm transition-all ${
+                  isSocialProofPrompting
+                    ? "bg-[#b03020] shadow-md -translate-y-0.5 ring-2 ring-[#D24430]/30 ring-offset-2"
+                    : "bg-[#D24430] hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5"
+                }`}
               >
                 {t.earlyAccess.cta}
               </button>
               <p className="mt-2 text-center text-[12px] text-[#8a7d6f]">{t.earlyAccess.secondary}</p>
-              <SocialProofStack socialProof={t.earlyAccess.socialProof} locale={locale} />
               <div className="mt-3 rounded-xl border border-[#e7dbc9] bg-white/70 px-3 py-2">
                 <div className="text-[12px] font-semibold text-[#5f574d]">{t.earlyAccess.campaignLabel}</div>
                 <p className="mt-1 text-[12px] leading-relaxed text-[#6f6255]">{t.earlyAccess.campaignTeaser}</p>
@@ -1560,27 +1925,20 @@ export function LandingApp() {
         </section>
 
         <section className="mx-auto mt-[clamp(4rem,10vh,8rem)] max-w-[980px]">
-          <div className="rounded-[28px] border border-[#e6d7c4] bg-[#f6ecdf] px-6 py-10 text-center shadow-[0_14px_32px_rgba(15,12,11,0.06)] md:px-12 md:py-14">
+          <div className="group rounded-[28px] border border-[#e6d7c4] bg-[#f6ecdf] px-6 py-8 text-center shadow-[0_14px_32px_rgba(15,12,11,0.06)] md:px-12 md:py-9">
             <h2 className="text-[clamp(1.8rem,3.6vw,2.8rem)] font-semibold leading-[1.2] tracking-[-0.02em] text-[#2c2b32]">
               {t.cta.heading}
             </h2>
             <p className="mx-auto mt-4 max-w-[760px] whitespace-pre-line text-[clamp(1rem,1.5vw,1.2rem)] leading-8 text-[#575b66]">
               {t.cta.subheading}
             </p>
+            <FeedbackBoard t={t} locale={locale} />
 
-            <div className="mt-8 flex items-center justify-center">
-              <a
-                href={`${APP_URL}/?auth=signup`}
-                className="inline-flex items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-7 py-3 text-sm font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white visited:!text-white"
-                style={{ color: "#ffffff" }}
-              >
-                {t.cta.primary}
-              </a>
+            <div className="grid grid-rows-[0fr] overflow-hidden opacity-0 transition-[grid-template-rows,opacity,margin] duration-300 ease-out group-hover:mt-4 group-hover:grid-rows-[1fr] group-hover:opacity-100">
+              <p className="min-h-0 text-center text-xs font-medium tracking-[0.08em] text-[#D24430] md:text-sm">
+                {t.cta.hoverLine}
+              </p>
             </div>
-
-            <p className="mt-6 text-xs font-medium tracking-[0.02em] text-[#7a6f62] md:text-sm">
-              {t.cta.trust}
-            </p>
           </div>
         </section>
 

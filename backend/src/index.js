@@ -225,10 +225,19 @@ const ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED =
     .toLowerCase()
     .trim() !== "false";
 const superAdminEmailSet = new Set(["as@novanuggets.com"]);
-const allowedOrigins = (process.env.ZAKI_ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      "https://chatzaki.com",
+      "https://www.chatzaki.com",
+      ZAKI_APP_URL || "https://app.chatzaki.com",
+      ...(process.env.ZAKI_ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ].filter(Boolean)
+  )
+);
 const billingAlertDispatcher = createBillingAlertDispatcher({
   webhookUrl: ZAKI_BILLING_ALERT_WEBHOOK_URL,
   webhookToken: ZAKI_BILLING_ALERT_WEBHOOK_TOKEN,
@@ -1466,6 +1475,22 @@ const productTelemetryLimiter = rateLimit({
   message: { error: "Too many telemetry events. Please retry in a minute." },
 });
 
+const websiteFeedbackPostLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many feedback posts. Please retry a bit later." },
+});
+
+const websiteFeedbackVoteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many votes. Please slow down for a minute." },
+});
+
 const memoryReadPathMatchers = [
   /^\/api\/memory\/health\/?$/u,
   /^\/api\/memory\/events\/?$/u,
@@ -2314,6 +2339,29 @@ const ProductEventSchema = z.object({
   timestamp: z.string().max(120).optional(),
 });
 
+const WebsiteFeedbackClientIdSchema = z
+  .string()
+  .trim()
+  .min(12)
+  .max(120)
+  .regex(/^[a-zA-Z0-9_-]+$/, "Invalid client id");
+
+const WebsiteFeedbackListSchema = z.object({
+  sort: z.enum(["top", "newest"]).optional(),
+  viewerId: WebsiteFeedbackClientIdSchema.optional(),
+});
+
+const WebsiteFeedbackCreateSchema = z.object({
+  body: z.string().trim().min(8).max(240),
+  displayName: z.string().trim().max(40).optional().or(z.literal("")),
+  clientId: WebsiteFeedbackClientIdSchema,
+});
+
+const WebsiteFeedbackVoteSchema = z.object({
+  value: z.union([z.literal(1), z.literal(-1)]),
+  clientId: WebsiteFeedbackClientIdSchema,
+});
+
 // Validation helper
 function validateInput(schema, data) {
   const result = schema.safeParse(data);
@@ -2329,6 +2377,160 @@ function validateInput(schema, data) {
   }
   return { valid: true, data: result.data };
 }
+
+function normalizeWebsiteFeedbackPost(row) {
+  return {
+    id: String(row.id),
+    body: String(row.body || ""),
+    displayName: String(row.display_name || "").trim() || null,
+    score: Number(row.score || 0),
+    upvotes: Number(row.upvotes || 0),
+    downvotes: Number(row.downvotes || 0),
+    viewerVote:
+      row.viewer_vote === null || typeof row.viewer_vote === "undefined"
+        ? 0
+        : Number(row.viewer_vote || 0),
+    createdAt: row.created_at,
+  };
+}
+
+async function listWebsiteFeedbackPosts({ sort = "top", viewerId = null } = {}) {
+  const orderBy =
+    sort === "newest"
+      ? `p.created_at DESC, score DESC, p.id DESC`
+      : `score DESC, upvotes DESC, p.created_at DESC, p.id DESC`;
+  const rows = await dbAll(
+    `
+      SELECT
+        p.id,
+        p.body,
+        p.display_name,
+        p.created_at,
+        COALESCE(SUM(v.value), 0) AS score,
+        COALESCE(SUM(CASE WHEN v.value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+        COALESCE(SUM(CASE WHEN v.value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+        MAX(CASE WHEN v.client_id = $1 THEN v.value ELSE NULL END) AS viewer_vote
+      FROM website_feedback_posts p
+      LEFT JOIN website_feedback_votes v ON v.post_id = p.id
+      WHERE p.status = 'visible'
+      GROUP BY p.id
+      ORDER BY ${orderBy}
+      LIMIT 24
+    `,
+    [viewerId]
+  );
+  return rows.map(normalizeWebsiteFeedbackPost);
+}
+
+async function getWebsiteFeedbackPostById(id, viewerId = null) {
+  const row = await dbGet(
+    `
+      SELECT
+        p.id,
+        p.body,
+        p.display_name,
+        p.created_at,
+        COALESCE(SUM(v.value), 0) AS score,
+        COALESCE(SUM(CASE WHEN v.value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+        COALESCE(SUM(CASE WHEN v.value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+        MAX(CASE WHEN v.client_id = $2 THEN v.value ELSE NULL END) AS viewer_vote
+      FROM website_feedback_posts p
+      LEFT JOIN website_feedback_votes v ON v.post_id = p.id
+      WHERE p.id = $1
+        AND p.status = 'visible'
+      GROUP BY p.id
+    `,
+    [id, viewerId]
+  );
+  return row ? normalizeWebsiteFeedbackPost(row) : null;
+}
+
+app.get("/api/website-feedback", async (req, res) => {
+  const validation = validateInput(WebsiteFeedbackListSchema, req.query || {});
+  if (!validation.valid) {
+    res.status(400).json({ success: false, error: validation.errors.map((issue) => issue.message).join(", ") });
+    return;
+  }
+
+  try {
+    const items = await listWebsiteFeedbackPosts({
+      sort: validation.data.sort || "top",
+      viewerId: validation.data.viewerId || null,
+    });
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error("[Website Feedback] list failed:", error);
+    res.status(500).json({ success: false, error: "Unable to load feedback right now." });
+  }
+});
+
+app.post("/api/website-feedback", websiteFeedbackPostLimiter, express.json({ limit: "50kb" }), async (req, res) => {
+  const validation = validateInput(WebsiteFeedbackCreateSchema, req.body || {});
+  if (!validation.valid) {
+    res.status(400).json({ success: false, error: validation.errors.map((issue) => issue.message).join(", ") });
+    return;
+  }
+
+  const body = validation.data.body.replace(/\s+/g, " ").trim();
+  const displayName = String(validation.data.displayName || "").replace(/\s+/g, " ").trim() || null;
+
+  try {
+    const inserted = await dbGet(
+      `
+        INSERT INTO website_feedback_posts (body, display_name)
+        VALUES ($1, $2)
+        RETURNING id
+      `,
+      [body, displayName]
+    );
+    const item = await getWebsiteFeedbackPostById(inserted.id, validation.data.clientId);
+    res.status(201).json({ success: true, item });
+  } catch (error) {
+    console.error("[Website Feedback] create failed:", error);
+    res.status(500).json({ success: false, error: "Unable to post feedback right now." });
+  }
+});
+
+app.post(
+  "/api/website-feedback/:id/vote",
+  websiteFeedbackVoteLimiter,
+  express.json({ limit: "20kb" }),
+  async (req, res) => {
+    const id = String(req.params.id || "").trim();
+    const validation = validateInput(WebsiteFeedbackVoteSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({ success: false, error: validation.errors.map((issue) => issue.message).join(", ") });
+      return;
+    }
+
+    try {
+      const postExists = await dbGet(
+        `SELECT id FROM website_feedback_posts WHERE id = $1 AND status = 'visible'`,
+        [id]
+      );
+      if (!postExists) {
+        res.status(404).json({ success: false, error: "Feedback post not found." });
+        return;
+      }
+
+      await dbQuery(
+        `
+          INSERT INTO website_feedback_votes (post_id, client_id, value)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (post_id, client_id)
+          DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+        `,
+        [id, validation.data.clientId, validation.data.value]
+      );
+
+      const item = await getWebsiteFeedbackPostById(id, validation.data.clientId);
+      res.json({ success: true, item });
+    } catch (error) {
+      console.error("[Website Feedback] vote failed:", error);
+      res.status(500).json({ success: false, error: "Unable to register that vote right now." });
+    }
+  }
+);
 
 app.post("/api/telemetry/client-error", express.json({ limit: "200kb" }), async (req, res) => {
   const validation = validateInput(ClientErrorEventSchema, req.body || {});

@@ -298,6 +298,38 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS website_feedback_posts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      body TEXT NOT NULL,
+      display_name TEXT,
+      status TEXT NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_website_feedback_posts_visible_created
+    ON website_feedback_posts (status, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS website_feedback_votes (
+      post_id UUID NOT NULL REFERENCES website_feedback_posts(id) ON DELETE CASCADE,
+      client_id TEXT NOT NULL,
+      value SMALLINT NOT NULL CHECK (value IN (-1, 1)),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (post_id, client_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_website_feedback_votes_post
+    ON website_feedback_votes (post_id, updated_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_hidden_workspaces (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
