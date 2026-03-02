@@ -351,7 +351,7 @@ describe("PricingPage", () => {
     });
   });
 
-  it("autostarts checkout from URL query selection", async () => {
+  it("does not autostart checkout from URL query selection", async () => {
     render(
       <MemoryRouter initialEntries={["/pricing?plan=personal&interval=yearly&autostart=1"]}>
         <Routes>
@@ -359,6 +359,12 @@ describe("PricingPage", () => {
         </Routes>
       </MemoryRouter>
     );
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).not.toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[1]);
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
@@ -385,7 +391,7 @@ describe("PricingPage", () => {
     });
   });
 
-  it("autostarts access-code purchase checkout from gift intent query", async () => {
+  it("does not autostart access-code purchase checkout from gift intent query", async () => {
     render(
       <MemoryRouter
         initialEntries={["/pricing?intent=gift_code&autostart=1&source=website_pricing"]}
@@ -395,6 +401,12 @@ describe("PricingPage", () => {
         </Routes>
       </MemoryRouter>
     );
+
+    await waitFor(() => {
+      expect(accessCodePurchaseCheckoutMutateAsync).not.toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy 1-month gift code" }));
 
     await waitFor(() => {
       expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(

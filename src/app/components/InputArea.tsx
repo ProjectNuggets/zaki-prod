@@ -1,4 +1,4 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, Bot, GraduationCap, File as FileIcon, FileText, X, Zap, ChevronDown, Check } from "lucide-react";
+import { Plus, ArrowUp, Sparkles, Paperclip, Search, GraduationCap, File as FileIcon, FileText, X, Zap, ChevronDown, Check } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -34,11 +34,10 @@ export function InputArea({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const { t, i18n } = useTranslation();
-  const threadAttachmentUnavailableMessage = t("input.workspaceFilesHint");
+  const threadAttachmentUnavailableMessage = t("input.uploadUnavailableToast");
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const placeholderSuggestions = useMemo(
     () => t("input.placeholders", { returnObjects: true }) as string[],
@@ -216,17 +215,13 @@ export function InputArea({
                     }).catch(() => {
                       // Best-effort telemetry only.
                     });
-                    navigate(
-                      isPremium
-                        ? "/pricing?source=chat_input"
-                        : "/pricing?plan=personal&interval=monthly&autostart=1&source=chat_input"
-                    );
+                    navigate("/pricing?source=chat_input");
                   }}
                 >
-                  {isPremium ? "Manage" : t("input.upgradeCta")}
+                  {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
                 </button>
                 <span className="text-zaki-secondary">
-                  {isPremium ? `${t("input.upgradeLabel")} · ${planTier.toUpperCase()}` : t("input.upgradeLabel")}
+                  {t("input.upgradeLabel")}
                 </span>
                 <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
                   <Zap className="size-3" />
@@ -238,7 +233,7 @@ export function InputArea({
                   <Zap className="size-3" />
                 </span>
                 <span className="text-zaki-secondary">
-                  {isPremium ? `${t("input.upgradeLabel")} · ${planTier.toUpperCase()}` : t("input.upgradeLabel")}
+                  {t("input.upgradeLabel")}
                 </span>
                 <button
                   type="button"
@@ -253,14 +248,10 @@ export function InputArea({
                     }).catch(() => {
                       // Best-effort telemetry only.
                     });
-                    navigate(
-                      isPremium
-                        ? "/pricing?source=chat_input"
-                        : "/pricing?plan=personal&interval=monthly&autostart=1&source=chat_input"
-                    );
+                    navigate("/pricing?source=chat_input");
                   }}
                 >
-                  {isPremium ? "Manage" : t("input.upgradeCta")}
+                  {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
                 </button>
               </>
             )}
@@ -457,27 +448,6 @@ export function InputArea({
                     {t("input.menu.comingSoonPill")}
                   </span>
                 </button>
-                <button
-                  className="group relative w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (!isOnboardingControlsLocked) {
-                      setMenuOpen(false);
-                    }
-                    toast.info(t("input.menu.comingSoonToast"));
-                  }}
-                  data-onboarding-id="chat-control-agent-mode"
-                >
-                  <Bot className="size-4 text-zaki-muted" />
-                  {t("input.menu.agentMode")}
-                  <span className={cn(
-                    "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
-                    isRtl ? "left-2" : "right-2"
-                  )}>
-                    {t("input.menu.comingSoonPill")}
-                  </span>
-                </button>
               </div>
             )}
           </div>
@@ -583,9 +553,6 @@ export function InputArea({
         </div>
       </form>
       <div className="text-center mt-2">
-         <p className="text-zaki-muted text-[11px]" dir={isRtl ? "rtl" : "ltr"}>
-           {t("input.workspaceFilesHint")}
-         </p>
          <p className="text-zaki-disabled text-xs" dir={isRtl ? "rtl" : "ltr"}>
            {t("input.disclaimer")}
          </p>

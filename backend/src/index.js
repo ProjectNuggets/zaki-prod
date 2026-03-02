@@ -821,6 +821,73 @@ function getBillingConfigStatus() {
   };
 }
 
+let stripePricingDisplayCache = {
+  expiresAt: 0,
+  value: null,
+};
+
+async function getStripePricingDisplayCatalog() {
+  if (!stripe) return null;
+
+  const now = Date.now();
+  if (stripePricingDisplayCache.value && stripePricingDisplayCache.expiresAt > now) {
+    return stripePricingDisplayCache.value;
+  }
+
+  const priceRefs = [
+    ["student", "monthly", PRICE_BY_PLAN_INTERVAL.student.monthly],
+    ["student", "yearly", PRICE_BY_PLAN_INTERVAL.student.yearly],
+    ["personal", "monthly", PRICE_BY_PLAN_INTERVAL.personal.monthly],
+    ["personal", "yearly", PRICE_BY_PLAN_INTERVAL.personal.yearly],
+    ["access", "monthly", STRIPE_PRICE_ACCESS_CODE_MONTHLY],
+  ].filter(([, , priceId]) => String(priceId || "").trim());
+
+  const results = await Promise.allSettled(
+    priceRefs.map(async ([tier, interval, priceId]) => {
+      const price = await stripe.prices.retrieve(priceId);
+      return {
+        tier,
+        interval,
+        priceId,
+        unitAmount: price?.unit_amount ?? null,
+        currency: String(price?.currency || "").trim().toLowerCase() || null,
+      };
+    })
+  );
+
+  const catalog = {
+    student: { monthly: null, yearly: null },
+    personal: { monthly: null, yearly: null },
+    access: { monthly: null },
+  };
+
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const entry = result.value;
+    if (!entry?.tier || !entry?.interval) continue;
+    if (entry.tier === "access") {
+      catalog.access.monthly = {
+        priceId: entry.priceId,
+        unitAmount: entry.unitAmount,
+        currency: entry.currency,
+      };
+      continue;
+    }
+    catalog[entry.tier][entry.interval] = {
+      priceId: entry.priceId,
+      unitAmount: entry.unitAmount,
+      currency: entry.currency,
+    };
+  }
+
+  stripePricingDisplayCache = {
+    value: catalog,
+    expiresAt: now + 5 * 60 * 1000,
+  };
+
+  return catalog;
+}
+
 function sendBillingUnavailable(res, capability) {
   const configured = getBillingConfigStatus();
   res.status(503).json({
@@ -4505,9 +4572,15 @@ const CheckoutSchema = z.object({
 app.get("/api/billing/config", async (req, res) => {
   const authResult = await requireAuthUser(req, res);
   if (!authResult) return;
+  const configured = getBillingConfigStatus();
+  const pricingCatalog =
+    configured.provider === "stripe" ? await getStripePricingDisplayCatalog() : null;
   res.status(200).json({
     success: true,
-    configured: getBillingConfigStatus(),
+    configured: {
+      ...configured,
+      pricingCatalog,
+    },
   });
 });
 

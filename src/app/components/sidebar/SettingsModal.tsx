@@ -1,7 +1,6 @@
 import { ModalShell } from "@/app/components/ui/ModalShell";
 import {
   useBillingConfig,
-  useBillingPortal,
   useCancelSubscription,
   useDeleteAccount,
   useEntitlements,
@@ -43,7 +42,6 @@ export function SettingsModal({
   const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
-  const billingPortal = useBillingPortal();
   const cancelSubscription = useCancelSubscription();
   const deleteAccountMutation = useDeleteAccount();
   const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
@@ -244,40 +242,18 @@ export function SettingsModal({
                 <button
                   type="button"
                   className="zaki-btn-sm zaki-btn-primary"
-                  disabled={
-                    billingPortal.isPending ||
-                    (isPremium ? !billingPortalEnabled : !billingCheckoutEnabled)
-                  }
-                  onClick={async () => {
-                    try {
-                      if (isPremium && !billingPortalEnabled) {
-                        throw new Error(t("settingsModal.plan.errors.portalUnavailable"));
-                      }
-                      if (!isPremium && !billingCheckoutEnabled) {
-                        throw new Error(t("settingsModal.plan.errors.billingUnavailable"));
-                      }
-                      if (!isPremium) {
-                        void trackProductEvent({
-                          event: "upgrade_cta_clicked",
-                          source: "settings",
-                          language: languageValue === "ar" ? "ar" : "en",
-                          plan: "personal",
-                          interval: "monthly",
-                        }).catch(() => {
-                          // Best-effort telemetry only.
-                        });
-                        onClose();
-                        navigate(
-                          "/pricing?plan=personal&interval=monthly&autostart=1&source=settings"
-                        );
-                        return;
-                      }
-                      await billingPortal.mutateAsync();
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error ? err.message : t("settingsModal.plan.errors.openPortal")
-                      );
-                    }
+                  onClick={() => {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: "settings",
+                      language: languageValue === "ar" ? "ar" : "en",
+                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                      interval: "monthly",
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                    onClose();
+                    navigate("/pricing?source=settings");
                   }}
                 >
                   {isPremium ? t("settingsModal.plan.managePlan") : t("settingsModal.plan.upgrade")}

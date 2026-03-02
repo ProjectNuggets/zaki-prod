@@ -374,6 +374,19 @@ export async function fetchBillingConfig() {
       cancelEnabled?: boolean;
       webhookEnabled?: boolean;
       accessCodePurchaseEnabled?: boolean;
+      pricingCatalog?: {
+        student?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        personal?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        access?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+      };
       missing?: string[];
     };
     error?: string | null;

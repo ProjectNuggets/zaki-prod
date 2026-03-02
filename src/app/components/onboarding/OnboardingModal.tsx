@@ -129,7 +129,8 @@ export function OnboardingModal({
   onOpenMemory,
   onOpenSettings,
 }: OnboardingModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const spotlightMaskId = useId();
   const [isDesktop, setIsDesktop] = useState(
     typeof window === "undefined"
@@ -829,7 +830,12 @@ export function OnboardingModal({
 
   if (showFinalScreen) {
     return (
-      <div className="fixed bottom-4 right-4 z-[90] w-[min(292px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] border border-[#ead8c0] bg-[#fffaf6]/96 shadow-[0px_18px_42px_rgba(52,36,24,0.14)] backdrop-blur dark:border-[#3a2b1f] dark:bg-[#120e0b]/94">
+      <div
+        className={cn(
+          "fixed bottom-4 z-[90] w-[min(292px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] border border-[#ead8c0] bg-[#fffaf6]/96 shadow-[0px_18px_42px_rgba(52,36,24,0.14)] backdrop-blur dark:border-[#3a2b1f] dark:bg-[#120e0b]/94",
+          isRtl ? "left-4" : "right-4"
+        )}
+      >
         <div className="pointer-events-none absolute -top-10 right-4 size-24 rounded-full bg-[#f4c59d]/40 blur-2xl dark:bg-[#5b3f25]/35" />
         <div className="pointer-events-none absolute -bottom-8 left-3 size-16 rounded-full bg-[#f08f6a]/25 blur-2xl dark:bg-[#6f3b28]/30" />
         <div className="relative border-b border-[#efe0cc] px-3.5 py-3 dark:border-[#2e241b]">
@@ -928,7 +934,12 @@ export function OnboardingModal({
         </>
       )}
 
-      <div className="fixed bottom-4 right-4 z-[90] w-[min(286px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] border border-[#ead8c0] bg-[#fffaf6]/96 shadow-[0px_18px_42px_rgba(52,36,24,0.14)] backdrop-blur dark:border-[#3a2b1f] dark:bg-[#120e0b]/94">
+      <div
+        className={cn(
+          "fixed bottom-4 z-[90] w-[min(286px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] border border-[#ead8c0] bg-[#fffaf6]/96 shadow-[0px_18px_42px_rgba(52,36,24,0.14)] backdrop-blur dark:border-[#3a2b1f] dark:bg-[#120e0b]/94",
+          isRtl ? "left-4" : "right-4"
+        )}
+      >
         <div className="border-b border-[#efe0cc] px-3.5 py-3 dark:border-[#2e241b]">
           <div className="flex items-start justify-between gap-2.5">
             <div className="inline-flex items-center gap-1.5 rounded-full border border-[#ebdcc9] bg-[#fffdf9] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7350] dark:border-[#2e241b] dark:bg-[#17120e] dark:text-[#c9b8a4]">

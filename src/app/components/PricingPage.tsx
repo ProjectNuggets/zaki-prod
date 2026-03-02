@@ -65,12 +65,6 @@ export function PricingPage() {
       .toLowerCase();
     return value === "yearly" || value === "monthly" ? value : null;
   })();
-  const shouldAutoStartFromQuery = (() => {
-    const value = String(searchParams.get("autostart") || "")
-      .trim()
-      .toLowerCase();
-    return value === "1" || value === "true";
-  })();
   const requestedIntentFromQuery = (() => {
     const value = String(searchParams.get("intent") || "")
       .trim()
@@ -78,8 +72,6 @@ export function PricingPage() {
     return value === "gift_code" || value === "access_code_purchase" ? "gift_code" : null;
   })();
   const giftCodeIntentRequested = requestedIntentFromQuery === "gift_code";
-  const handledQueryAutoStartRef = useRef(false);
-  const handledGiftIntentAutoStartRef = useRef(false);
   const trackedPricingViewRef = useRef(false);
   const accessCodePurchaseCardRef = useRef<HTMLDivElement | null>(null);
   const [highlightGiftCodeCard, setHighlightGiftCodeCard] = useState(false);
@@ -134,6 +126,64 @@ export function PricingPage() {
   };
   const anyYearlyAvailable =
     pricingAvailability.student.yearly || pricingAvailability.personal.yearly;
+  const formatCurrencyAmount = (unitAmount?: number | null, currency?: string | null) => {
+    if (typeof unitAmount !== "number" || !Number.isFinite(unitAmount) || !currency) return null;
+    try {
+      return new Intl.NumberFormat(language, {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: unitAmount % 100 === 0 ? 0 : 2,
+        maximumFractionDigits: unitAmount % 100 === 0 ? 0 : 2,
+      }).format(unitAmount / 100);
+    } catch {
+      return null;
+    }
+  };
+  const getCatalogPlanPriceLabel = (
+    plan: "student" | "personal",
+    interval: BillingInterval,
+    fallback: string
+  ) => {
+    const entry = billingConfig?.pricingCatalog?.[plan]?.[interval];
+    const formatted = formatCurrencyAmount(entry?.unitAmount, entry?.currency);
+    if (!formatted) return fallback;
+    return t("pricingPage.priceWithSuffix", {
+      price: formatted,
+      suffix: t(`pricingPage.priceSuffix.${interval}`),
+    });
+  };
+  const accessCodePriceLabel = (() => {
+    const entry = billingConfig?.pricingCatalog?.access?.monthly;
+    const formatted = formatCurrencyAmount(entry?.unitAmount, entry?.currency);
+    if (!formatted) return t("pricingPage.access.purchase.price");
+    return t("pricingPage.priceWithSuffix", {
+      price: formatted,
+      suffix: t("pricingPage.priceSuffix.oneTime"),
+    });
+  })();
+  const pricingHighlights = [
+    t("pricingPage.highlightsTemplates.student", {
+      price: getCatalogPlanPriceLabel(
+        "student",
+        "monthly",
+        t("pricingPage.plans.student.priceMonthly", {
+          defaultValue: t("pricingPage.plans.student.price"),
+        })
+      ),
+    }),
+    t("pricingPage.highlightsTemplates.personal", {
+      price: getCatalogPlanPriceLabel(
+        "personal",
+        "monthly",
+        t("pricingPage.plans.personal.priceMonthly", {
+          defaultValue: t("pricingPage.plans.personal.price"),
+        })
+      ),
+    }),
+    t("pricingPage.highlightsTemplates.gift", {
+      price: accessCodePriceLabel,
+    }),
+  ];
   const checkoutProviders = useMemo<CheckoutProvider[]>(() => {
     const providerCatalog: CheckoutProvider[] = [
       { key: "stripe", label: "Stripe", enabled: false },
@@ -384,28 +434,6 @@ export function PricingPage() {
   }, [requestedIntervalFromQuery]);
 
   useEffect(() => {
-    if (handledQueryAutoStartRef.current) return;
-    if (!shouldAutoStartFromQuery || !requestedPlanFromQuery) return;
-    if (!billingConfigLoaded || isPremium) return;
-
-    handledQueryAutoStartRef.current = true;
-    const requestedInterval = requestedIntervalFromQuery || "monthly";
-    openProviderSelection(requestedPlanFromQuery, requestedInterval);
-
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("autostart");
-    setSearchParams(nextParams, { replace: true });
-  }, [
-    billingConfigLoaded,
-    isPremium,
-    requestedIntervalFromQuery,
-    requestedPlanFromQuery,
-    searchParams,
-    setSearchParams,
-    shouldAutoStartFromQuery,
-  ]);
-
-  useEffect(() => {
     if (!giftCodeIntentRequested || requestedPlanFromQuery) return;
     const node = accessCodePurchaseCardRef.current;
     if (!node) return;
@@ -418,56 +446,6 @@ export function PricingPage() {
     }, 2200);
     return () => window.clearTimeout(timer);
   }, [giftCodeIntentRequested, requestedPlanFromQuery]);
-
-  useEffect(() => {
-    if (handledGiftIntentAutoStartRef.current) return;
-    if (!giftCodeIntentRequested || requestedPlanFromQuery) return;
-    if (!shouldAutoStartFromQuery) return;
-    if (!billingConfigLoaded || accessCodePurchaseCheckout.isPending) return;
-
-    handledGiftIntentAutoStartRef.current = true;
-
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("autostart");
-    setSearchParams(nextParams, { replace: true });
-
-    if (!accessCodePurchaseEnabled) {
-      toast.error(t("pricingPage.access.purchase.unavailable"));
-      return;
-    }
-
-    void trackProductEvent({
-      event: "checkout_started",
-      source: sourceFromQuery,
-      language: isRtl ? "ar" : "en",
-      plan: "free",
-      interval: null,
-    }).catch(() => {
-      // Best-effort telemetry only.
-    });
-
-    void Promise.resolve(
-      accessCodePurchaseCheckout.mutateAsync({
-        source: sourceFromQuery,
-      })
-    ).catch((err) => {
-      toast.error(
-        err instanceof Error ? err.message : t("pricingPage.access.purchase.checkoutError")
-      );
-    });
-  }, [
-    accessCodePurchaseCheckout,
-    accessCodePurchaseEnabled,
-    billingConfigLoaded,
-    giftCodeIntentRequested,
-    isRtl,
-    requestedPlanFromQuery,
-    searchParams,
-    setSearchParams,
-    shouldAutoStartFromQuery,
-    sourceFromQuery,
-    t,
-  ]);
 
   return (
     <div
@@ -492,7 +470,7 @@ export function PricingPage() {
             {t("pricingPage.subtitle")}
           </p>
           <div className="flex flex-wrap gap-2">
-            {(t("pricingPage.highlights", { returnObjects: true }) as string[]).map((item) => (
+            {pricingHighlights.map((item) => (
               <span
                 key={item}
                 className="inline-flex rounded-full border border-zaki-subtle bg-white px-3 py-1 text-xs text-zaki-secondary dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-subtle"
@@ -657,7 +635,7 @@ export function PricingPage() {
                   </p>
                 </div>
                 <span className="rounded-full border border-zaki-strong bg-white/90 px-2.5 py-1 text-2xs font-medium text-zaki-secondary dark:border-[#7a5a4e] dark:bg-[#30231e] dark:text-zaki-dark-subtle">
-                  {t("pricingPage.access.purchase.price")}
+                  {accessCodePriceLabel}
                 </span>
               </div>
               {accessCodePurchaseHighlights.length > 0 ? (
@@ -775,8 +753,14 @@ export function PricingPage() {
             const isPaidPlan = Boolean(paidTier);
             const priceLabel =
               !isPaidPlan || resolvedInterval === "monthly"
-                ? plan.priceMonthly
-                : plan.priceYearly;
+                ? isPaidPlan
+                  ? getCatalogPlanPriceLabel(
+                      paidTier,
+                      "monthly",
+                      plan.priceMonthly
+                    )
+                  : plan.priceMonthly
+                : getCatalogPlanPriceLabel(paidTier, "yearly", plan.priceYearly);
             const showsYearlyFallback =
               isPaidPlan &&
               requestedInterval === "yearly" &&

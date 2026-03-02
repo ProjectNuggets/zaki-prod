@@ -35,7 +35,9 @@ export function useBillingConfig() {
     queryKey: billingKeys.config,
     queryFn: fetchBillingConfig,
     enabled: Boolean(token),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }

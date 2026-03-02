@@ -5,7 +5,7 @@ import {
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiRequest, updateProfile } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore, useSpacesStore } from "@/stores";
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { useSpaces } from "@/queries/useSpaces";
-import { useBillingPortal, useEntitlements } from "@/queries";
+import { useEntitlements } from "@/queries";
 import { useTranslation } from "react-i18next";
 import { SettingsModal } from "./sidebar/SettingsModal";
 
@@ -71,7 +71,6 @@ export function Sidebar() {
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
-  const billingPortal = useBillingPortal();
   const planTierRaw = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatusRaw = entitlementsResult?.data?.plan?.status ?? "inactive";
   const accessActive = Boolean(entitlementsResult?.data?.access?.active);
@@ -1665,34 +1664,25 @@ export function Sidebar() {
 	              </span>
 	            </div>
 	            <div className="h-px bg-zaki-sunken my-1" />
-	            <button
+	            <Link
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
-	              type="button"
-		              onClick={async () => {
-		                try {
-                    if (!isPremium) {
-                      void trackProductEvent({
-                        event: "upgrade_cta_clicked",
-                        source: "settings",
-                        language: isRtl ? "ar" : "en",
-                        plan: "personal",
-                        interval: "monthly",
-                      }).catch(() => {
-                        // Best-effort telemetry only.
-                      });
-                      setProfileMenuOpen(false);
-                      navigate("/pricing?plan=personal&interval=monthly&autostart=1&source=settings");
-                      return;
-                    }
-		                  await billingPortal.mutateAsync();
-	                } catch (err) {
-	                  toast.error(err instanceof Error ? err.message : t("sidebar.profile.billingError"));
-	                }
+	              to="/pricing?source=settings"
+		              onClick={() => {
+		                void trackProductEvent({
+                    event: "upgrade_cta_clicked",
+                    source: "settings",
+                    language: isRtl ? "ar" : "en",
+                    plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                    interval: "monthly",
+                  }).catch(() => {
+                    // Best-effort telemetry only.
+                  });
+                  setProfileMenuOpen(false);
 	              }}
 	            >
 	              <Sparkles className="size-4 text-zaki-muted" />
 	              {isPremium ? t("sidebar.profile.managePlan") : t("sidebar.profile.upgradePlan")}
-		            </button>
+		            </Link>
 		            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              type="button"
@@ -1704,18 +1694,6 @@ export function Sidebar() {
 		                {isDark ? t("sidebar.profile.on") : t("sidebar.profile.off")}
 		              </span>
 		            </button>
-	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
-	              type="button"
-              onClick={() => {
-                setProfileMenuOpen(false);
-                window.dispatchEvent(new Event("zaki:open-onboarding"));
-              }}
-              data-onboarding-id="profile-menu-how-to-use"
-	            >
-	              <HelpCircle className="size-4 text-zaki-muted" />
-	              How to use
-	            </button>
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              type="button"
@@ -1762,6 +1740,18 @@ export function Sidebar() {
 	              <Globe className="size-4 text-zaki-muted" />
 	              {t("sidebar.profile.language")}
 		            </button>
+	            <button
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
+	              type="button"
+              onClick={() => {
+                setProfileMenuOpen(false);
+                window.dispatchEvent(new Event("zaki:open-onboarding"));
+              }}
+              data-onboarding-id="profile-menu-how-to-use"
+	            >
+	              <HelpCircle className="size-4 text-zaki-muted" />
+	              {t("sidebar.profile.howToUse")}
+	            </button>
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              type="button"

@@ -1433,7 +1433,7 @@ export function ChatArea() {
         memoryFlushTimerRef.current = window.setTimeout(() => {
           flushMemoryQueue();
           memoryFlushTimerRef.current = null;
-        }, 600);
+        }, 150);
       }
     } catch (err) {
       // Silent fail - not critical for chat
