@@ -110,15 +110,24 @@ async function previewAndNotify({ userId, message, threadId = null }) {
   return { pending };
 }
 
+const PORT = Number(process.env.PORT || 8787);
+const isProduction = process.env.NODE_ENV === "production";
+const TRUST_PROXY_SETTING = (() => {
+  const raw = String(process.env.ZAKI_TRUST_PROXY || "").trim().toLowerCase();
+  if (!raw) return isProduction ? 1 : false;
+  if (["false", "0", "off", "no"].includes(raw)) return false;
+  if (["true", "on", "yes"].includes(raw)) return 1;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : raw;
+})();
+
 function normalizeEmailValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 const app = express();
-app.set("trust proxy", true);
+app.set("trust proxy", TRUST_PROXY_SETTING);
 const billingHealth = createBillingHealthTracker();
-const PORT = Number(process.env.PORT || 8787);
-const isProduction = process.env.NODE_ENV === "production";
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
@@ -389,7 +398,7 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
             payload?.websocketUUID &&
             agentWsBase
           ) {
-            const agentUrl = `${agentWsBase}/agent-invocation/${payload.websocketUUID}`;
+            const agentUrl = `${agentWsBase}/api/agent-invocation/${payload.websocketUUID}`;
             payload.agentInvocationUrl = agentUrl;
             payload.websocketUrl = agentUrl;
           }
@@ -1728,8 +1737,38 @@ function getRequestHeaderValue(req, name) {
   return String(value || "").trim();
 }
 
-function getPublicAgentWsBase(req) {
+function getOriginProtocol(value) {
+  if (!/^https?:\/\//i.test(value || "")) return "";
+  try {
+    return new URL(value).protocol.replace(":", "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLocalHostName(host) {
+  const normalized = String(host || "")
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "");
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized.endsWith(".local")
+  );
+}
+
+function getPublicRequestBase(req) {
+  const origin = getRequestHeaderValue(req, "origin");
+  const referer = getRequestHeaderValue(req, "referer");
+  const originProto = getOriginProtocol(origin);
+  const refererProto = getOriginProtocol(referer);
   const forwardedProto = getRequestHeaderValue(req, "x-forwarded-proto")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const forwardedScheme = getRequestHeaderValue(req, "x-forwarded-scheme")
     .split(",")[0]
     .trim()
     .toLowerCase();
@@ -1738,8 +1777,20 @@ function getPublicAgentWsBase(req) {
     .trim();
   const host = forwardedHost || getRequestHeaderValue(req, "host");
   if (!host) return null;
-  const proto = forwardedProto || (req?.socket?.encrypted ? "https" : "http");
-  return `${proto === "https" ? "wss" : "ws"}://${host}`;
+  const proto =
+    forwardedProto ||
+    forwardedScheme ||
+    originProto ||
+    refererProto ||
+    (req?.socket?.encrypted ? "https" : "") ||
+    (isLocalHostName(host) ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+function getPublicAgentWsBase(req) {
+  const publicBase = getPublicRequestBase(req);
+  if (!publicBase) return null;
+  return publicBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
 }
 
 function getNullclawBase() {
@@ -6970,7 +7021,10 @@ ${originalMessage}`;
       "X-Zaki-Web-Search",
       upstreamPayload.webSearchEnabled === true ? "1" : "0"
     );
-    if (apiBase) {
+    const publicRequestBase = getPublicRequestBase(req);
+    if (publicRequestBase) {
+      res.setHeader("X-Zaki-Agent-Base", publicRequestBase);
+    } else if (apiBase) {
       res.setHeader("X-Zaki-Agent-Base", apiBase.replace(/\/api$/i, ""));
     }
     if (typeof upstreamPayload.mode === "string" && upstreamPayload.mode.trim()) {
@@ -7448,6 +7502,27 @@ app.all("*", async (req, res) => {
 const server = http.createServer(app);
 const agentProxyWss = new WebSocketServer({ noServer: true });
 
+function isValidWebSocketCloseCode(code) {
+  return (
+    Number.isInteger(code) &&
+    ((code >= 1000 && code <= 1014 && ![1004, 1005, 1006].includes(code)) ||
+      (code >= 3000 && code <= 4999))
+  );
+}
+
+function normalizeWebSocketCloseCode(code, fallback = 1000) {
+  const numeric = typeof code === "number" ? code : Number(code);
+  return isValidWebSocketCloseCode(numeric) ? numeric : fallback;
+}
+
+function normalizeWebSocketCloseReason(reason, fallback = "normal_closure") {
+  const text = String(reason || fallback).trim() || fallback;
+  // WebSocket close reasons must be <= 123 bytes.
+  return Buffer.byteLength(text, "utf8") <= 123
+    ? text
+    : Buffer.from(text, "utf8").subarray(0, 123).toString("utf8");
+}
+
 agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
   const agentWsBase = getAgentWsBase();
   if (!agentWsBase) {
@@ -7463,7 +7538,10 @@ agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
       clientSocket.readyState === clientSocket.OPEN ||
       clientSocket.readyState === clientSocket.CONNECTING
     ) {
-      clientSocket.close(code, reason);
+      clientSocket.close(
+        normalizeWebSocketCloseCode(code, 1011),
+        normalizeWebSocketCloseReason(reason, "agent_proxy_failed")
+      );
     }
   };
 
@@ -7472,7 +7550,10 @@ agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
       upstreamSocket.readyState === upstreamSocket.OPEN ||
       upstreamSocket.readyState === upstreamSocket.CONNECTING
     ) {
-      upstreamSocket.close(code, reason);
+      upstreamSocket.close(
+        normalizeWebSocketCloseCode(code, 1000),
+        normalizeWebSocketCloseReason(reason, "client_closed")
+      );
     }
   };
 
@@ -7498,7 +7579,10 @@ agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
       clientSocket.readyState === clientSocket.OPEN ||
       clientSocket.readyState === clientSocket.CONNECTING
     ) {
-      clientSocket.close(code || 1000, reason?.toString() || "upstream_closed");
+      clientSocket.close(
+        normalizeWebSocketCloseCode(code, 1000),
+        normalizeWebSocketCloseReason(reason?.toString(), "upstream_closed")
+      );
     }
   });
 

@@ -1244,6 +1244,8 @@ export function LandingApp() {
 
   const onUpdatesDesktopPointerDown = (event) => {
     if (!isDesktop || event.pointerType !== "mouse" || event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("a, button")) return;
     updatesDraggingRef.current = true;
     setIsUpdatesDragging(true);
     updatesDragStartXRef.current = event.clientX;

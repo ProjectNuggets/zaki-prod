@@ -2081,19 +2081,6 @@ export function Sidebar() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
-                        <Folder className="size-3.5" />
-                      </span>
-                      <div>
-                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                          {t("sidebar.contextSummaryThreadLabel")}
-                        </div>
-                        <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                          {t("sidebar.contextSummaryThreadBody")}
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
 

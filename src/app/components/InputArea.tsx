@@ -37,7 +37,6 @@ export function InputArea({
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const { t, i18n } = useTranslation();
-  const threadAttachmentUnavailableMessage = t("input.uploadUnavailableToast");
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const placeholderSuggestions = useMemo(
     () => t("input.placeholders", { returnObjects: true }) as string[],
@@ -398,7 +397,7 @@ export function InputArea({
                     if (!isOnboardingControlsLocked) {
                       setMenuOpen(false);
                     }
-                    toast.info(threadAttachmentUnavailableMessage);
+                    window.dispatchEvent(new CustomEvent("zaki:upload-active-space-files"));
                   }}
                   data-onboarding-id="chat-control-upload-file"
                 >
