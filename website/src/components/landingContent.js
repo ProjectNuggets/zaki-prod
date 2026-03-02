@@ -863,12 +863,15 @@ export const content = {
   },
 };
 
-export function resolveLocale() {
-  if (typeof window === "undefined") return "en";
+export function resolveLocale(search = "", pathname = "") {
+  if (typeof window !== "undefined" && !search && !pathname) {
+    search = window.location.search;
+    pathname = window.location.pathname;
+  }
 
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(search || "");
   const queryLang = params.get("lang");
   if (queryLang === "ar" || queryLang === "en") return queryLang;
 
-  return window.location.pathname.startsWith("/ar") ? "ar" : "en";
+  return String(pathname || "").startsWith("/ar") ? "ar" : "en";
 }
