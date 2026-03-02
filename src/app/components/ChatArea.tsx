@@ -1858,12 +1858,21 @@ export function ChatArea() {
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
     const normalizedText = manualAgentPrefix ? trimmed.replace(/^@agent\b\s*/i, "").trim() : trimmed;
+    const searchAgentInstruction = normalizedText
+      ? `@agent search the web for ${normalizedText}`.trim()
+      : "@agent search the web";
+    const attachmentLabel =
+      files.length > 0 ? `[Attachments: ${files.map((file) => file.name).join(", ")}]` : "";
     const sendText = agentRequested
-      ? files.length > 0
-        ? `@agent [Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${normalizedText || trimmed}`
-        : `@agent ${normalizedText || trimmed}`.trim()
+      ? manualAgentPrefix
+        ? files.length > 0
+          ? `@agent ${attachmentLabel}\n\n${normalizedText || trimmed}`.trim()
+          : `@agent ${normalizedText || trimmed}`.trim()
+        : files.length > 0
+          ? `${searchAgentInstruction}\n\n${attachmentLabel}`.trim()
+          : searchAgentInstruction
       : files.length > 0
-        ? `[Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${trimmed}`
+        ? `${attachmentLabel}\n\n${trimmed}`
         : trimmed;
 
     try {
