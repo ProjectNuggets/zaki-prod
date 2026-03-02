@@ -6,13 +6,14 @@
 
 import { storeMemory, deleteMemory, findConflict, createConflict } from "./operations.js";
 import { dbGet, dbQuery } from "../db.js";
+import { sanitizeExtractedMemories } from "../memory-extraction.js";
 
 const UNDO_WINDOW_MS = 8000;
 
 export async function autoSaveWithUndo({ userId, message, threadId = null }) {
   // Extract facts
   const { extractFacts } = await import("../memory-extraction.js");
-  const facts = await extractFacts(message);
+  const facts = sanitizeExtractedMemories(await extractFacts(message));
   
   if (facts.length === 0) {
     return { saved: [], duplicates: [], conflicts: [] };

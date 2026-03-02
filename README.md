@@ -110,6 +110,11 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/zaki
 NOVA_TYP_BASE_URL=http://localhost:3000/api
 NOVA_TYP_API_KEY=your_nova_admin_key
 ZAKI_EMAIL_MODE=console
+
+# Optional: ZAKI-agent (Nullclaw) backend adapter
+ZAKI_AGENT_BACKEND_ENABLED=true
+NULLCLAW_BASE_URL=http://localhost:8788
+NULLCLAW_INTERNAL_TOKEN=replace_me
 ```
 
 **Frontend** (`.env`):
@@ -238,6 +243,30 @@ Run these checks in staging/prod before go-live:
   - workspace is hidden for that user on `/workspaces`
   - other users are unaffected.
 - Create thread and delete thread as default user (or via planned scoped backend route).
+
+### Memory Session Smoke Test (API-level)
+
+Use this before each release to validate end-session memory behavior from a real user perspective.
+
+Command:
+```bash
+SMOKE_BASE_URL=https://api.chatzaki.com \
+SMOKE_USER_EMAIL=verified-user@example.com \
+SMOKE_USER_PASSWORD='your-password' \
+npm run smoke:memory-session
+```
+
+What it validates:
+- short conversation is skipped (`conversation_too_short`)
+- valid session is accepted (`ok: true, queued: true`)
+- new preference memory is persisted
+- repeating same preference does not create duplicates
+- opposite preference creates a memory conflict
+- optional auto-resolve conflict (`SMOKE_AUTO_RESOLVE_CONFLICT=true|false`)
+
+Notes:
+- requires `ZAKI_ENABLE_SESSION_SUMMARIZATION=true` on backend
+- user must be verified and able to login
 - Update space instructions and verify NOVA workspace prompt changed.
 - Upload file to space and verify document appears in NOVA workspace docs.
 

@@ -6,10 +6,12 @@
  */
 
 import { Menu } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { LogoArabicOrange } from "./icons";
 import { useUIStore } from "@/stores";
 
 export function MobileHeader() {
+  const { t } = useTranslation();
   const { toggleMobileSidebar } = useUIStore();
 
   return (
@@ -18,7 +20,7 @@ export function MobileHeader() {
         type="button"
         onClick={toggleMobileSidebar}
         className="p-2 -ml-2 rounded-zaki-md hover:bg-zaki-hover dark:hover:bg-[#21180f] transition-colors"
-        aria-label="Open navigation menu"
+        aria-label={t("app.openNavigationMenu")}
       >
         <Menu className="size-5 text-zaki-secondary dark:text-[#c9b8a4]" />
       </button>

@@ -1,17 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
   useBillingConfig,
   useBillingPortal,
+  useCancelSubscription,
   useCheckout,
+  useAccessCodePurchaseCheckout,
   useEntitlements,
   useRedeemAccessCode,
+  useSyncBilling,
 } from "@/queries";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type PlanTier = "free" | "student" | "personal";
+type BillingInterval = "monthly" | "yearly";
 const planTiers: PlanTier[] = ["free", "student", "personal"];
 
 type BillingNotice = {
@@ -19,20 +24,76 @@ type BillingNotice = {
   message: string;
 };
 
+type CheckoutProvider = {
+  key: "stripe" | "paddle" | "creem";
+  label: string;
+  enabled: boolean;
+  comingSoon?: boolean;
+};
+
 export function PricingPage() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const language = i18n.language || undefined;
+  const supportEmail = "info@novanuggets.com";
   const [searchParams, setSearchParams] = useSearchParams();
+  const handledBillingStatusRef = useRef<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>("monthly");
   const [accessCode, setAccessCode] = useState("");
+  const [providerModalSelection, setProviderModalSelection] = useState<{
+    plan: "student" | "personal";
+    interval: BillingInterval;
+  } | null>(null);
   const checkout = useCheckout();
+  const accessCodePurchaseCheckout = useAccessCodePurchaseCheckout();
   const portal = useBillingPortal();
+  const cancelSubscription = useCancelSubscription();
+  const syncBilling = useSyncBilling();
   const redeemAccessCode = useRedeemAccessCode();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
+  const requestedPlanFromQuery = (() => {
+    const value = String(searchParams.get("plan") || "")
+      .trim()
+      .toLowerCase();
+    return value === "student" || value === "personal" ? value : null;
+  })();
+  const requestedIntervalFromQuery = (() => {
+    const value = String(searchParams.get("interval") || "")
+      .trim()
+      .toLowerCase();
+    return value === "yearly" || value === "monthly" ? value : null;
+  })();
+  const requestedIntentFromQuery = (() => {
+    const value = String(searchParams.get("intent") || "")
+      .trim()
+      .toLowerCase();
+    return value === "gift_code" || value === "access_code_purchase" ? "gift_code" : null;
+  })();
+  const giftCodeIntentRequested = requestedIntentFromQuery === "gift_code";
+  const trackedPricingViewRef = useRef(false);
+  const accessCodePurchaseCardRef = useRef<HTMLDivElement | null>(null);
+  const [highlightGiftCodeCard, setHighlightGiftCodeCard] = useState(false);
+  const sourceFromQuery: "website_nav" | "website_pricing" | "chat_input" | "settings" | "pricing_page" | "success_page" = (() => {
+    const value = String(searchParams.get("source") || "")
+      .trim()
+      .toLowerCase();
+    if (
+      value === "website_nav" ||
+      value === "website_pricing" ||
+      value === "chat_input" ||
+      value === "settings" ||
+      value === "pricing_page" ||
+      value === "success_page"
+    ) {
+      return value;
+    }
+    return "pricing_page";
+  })();
   const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
   const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
+  const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
   const accessActive = Boolean(entitlementsResult?.data?.access?.active);
   const accessExpiresAt = entitlementsResult?.data?.access?.expiresAt ?? null;
   const accessCampaign = entitlementsResult?.data?.access?.campaign ?? null;
@@ -44,17 +105,137 @@ export function PricingPage() {
   const billingConfigLoaded = Boolean(billingConfigResult);
   const billingPortalEnabled = billingConfigLoaded ? Boolean(billingConfig?.portalEnabled) : true;
   const billingCheckoutEnabled = billingConfigLoaded ? Boolean(billingConfig?.checkoutEnabled) : true;
+  const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
+  const accessCodePurchaseEnabled = billingConfigLoaded
+    ? Boolean(billingConfig?.accessCodePurchaseEnabled)
+    : false;
   const billingUnavailableMessage =
-    billingConfigLoaded && (!billingPortalEnabled || !billingCheckoutEnabled)
-      ? t("pricingPage.portalError")
+    billingConfigLoaded &&
+    (!billingPortalEnabled || !billingCheckoutEnabled || (isPremium && !billingCancelEnabled))
+      ? t("pricingPage.billingUnavailable")
       : null;
+  const pricingAvailability = {
+    student: {
+      monthly: Boolean(billingConfig?.pricingAvailability?.student?.monthly ?? true),
+      yearly: Boolean(billingConfig?.pricingAvailability?.student?.yearly ?? false),
+    },
+    personal: {
+      monthly: Boolean(billingConfig?.pricingAvailability?.personal?.monthly ?? true),
+      yearly: Boolean(billingConfig?.pricingAvailability?.personal?.yearly ?? false),
+    },
+  };
+  const anyYearlyAvailable =
+    pricingAvailability.student.yearly || pricingAvailability.personal.yearly;
+  const formatCurrencyAmount = (unitAmount?: number | null, currency?: string | null) => {
+    if (typeof unitAmount !== "number" || !Number.isFinite(unitAmount) || !currency) return null;
+    try {
+      return new Intl.NumberFormat(language, {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: unitAmount % 100 === 0 ? 0 : 2,
+        maximumFractionDigits: unitAmount % 100 === 0 ? 0 : 2,
+      }).format(unitAmount / 100);
+    } catch {
+      return null;
+    }
+  };
+  const getCatalogPlanPriceLabel = (
+    plan: "student" | "personal",
+    interval: BillingInterval,
+    fallback: string
+  ) => {
+    const entry = billingConfig?.pricingCatalog?.[plan]?.[interval];
+    const formatted = formatCurrencyAmount(entry?.unitAmount, entry?.currency);
+    if (!formatted) return fallback;
+    return t("pricingPage.priceWithSuffix", {
+      price: formatted,
+      suffix: t(`pricingPage.priceSuffix.${interval}`),
+    });
+  };
+  const accessCodePriceLabel = (() => {
+    const entry = billingConfig?.pricingCatalog?.access?.monthly;
+    const formatted = formatCurrencyAmount(entry?.unitAmount, entry?.currency);
+    if (!formatted) return t("pricingPage.access.purchase.price");
+    return t("pricingPage.priceWithSuffix", {
+      price: formatted,
+      suffix: t("pricingPage.priceSuffix.oneTime"),
+    });
+  })();
+  const pricingHighlights = [
+    t("pricingPage.highlightsTemplates.student", {
+      price: getCatalogPlanPriceLabel(
+        "student",
+        "monthly",
+        t("pricingPage.plans.student.priceMonthly", {
+          defaultValue: t("pricingPage.plans.student.price"),
+        })
+      ),
+    }),
+    t("pricingPage.highlightsTemplates.personal", {
+      price: getCatalogPlanPriceLabel(
+        "personal",
+        "monthly",
+        t("pricingPage.plans.personal.priceMonthly", {
+          defaultValue: t("pricingPage.plans.personal.price"),
+        })
+      ),
+    }),
+    t("pricingPage.highlightsTemplates.gift", {
+      price: accessCodePriceLabel,
+    }),
+  ];
+  const checkoutProviders = useMemo<CheckoutProvider[]>(() => {
+    const providerCatalog: CheckoutProvider[] = [
+      { key: "stripe", label: "Stripe", enabled: false },
+      { key: "paddle", label: "Paddle", enabled: false },
+      { key: "creem", label: "Creem", enabled: false, comingSoon: true },
+    ];
+    const configured = Array.isArray(billingConfig?.checkoutProviders)
+      ? billingConfig?.checkoutProviders
+      : [];
+    const providerMap = new Map(providerCatalog.map((provider) => [provider.key, provider]));
+    for (const provider of configured) {
+      const key = String(provider?.key || "").toLowerCase();
+      const normalizedKey = key === "external" ? "paddle" : key;
+      if (normalizedKey !== "stripe" && normalizedKey !== "paddle" && normalizedKey !== "creem")
+        continue;
+      const current = providerMap.get(normalizedKey);
+      if (!current) continue;
+      providerMap.set(normalizedKey, {
+        ...current,
+          label:
+            normalizedKey === "stripe"
+              ? "Stripe"
+              : String(provider?.label || current.label || "Provider"),
+        enabled: Boolean(provider?.enabled) && !current.comingSoon,
+      });
+    }
+    if (!billingConfigLoaded) {
+      providerMap.set("paddle", {
+        ...(providerMap.get("paddle") as CheckoutProvider),
+        enabled: true,
+      });
+    }
+    return providerCatalog.map((provider) => providerMap.get(provider.key) ?? provider);
+  }, [billingConfig?.checkoutProviders, billingConfigLoaded]);
 
   const plans = useMemo(
     () =>
       planTiers.map((tier) => ({
         tier,
         label: t(`pricingPage.plans.${tier}.label`),
-        price: t(`pricingPage.plans.${tier}.price`),
+        priceMonthly:
+          tier === "free"
+            ? t(`pricingPage.plans.${tier}.price`)
+            : t(`pricingPage.plans.${tier}.priceMonthly`, {
+                defaultValue: t(`pricingPage.plans.${tier}.price`),
+              }),
+        priceYearly:
+          tier === "free"
+            ? t(`pricingPage.plans.${tier}.price`)
+            : t(`pricingPage.plans.${tier}.priceYearly`, {
+                defaultValue: t(`pricingPage.plans.${tier}.price`),
+              }),
         blurb: t(`pricingPage.plans.${tier}.blurb`),
         features: t(`pricingPage.plans.${tier}.features`, {
           returnObjects: true,
@@ -127,16 +308,30 @@ export function PricingPage() {
     }
     return t("pricingPage.access.summaryActive");
   }, [accessActive, accessCampaign, accessExpiresLabel, t]);
+  const accessCodePurchaseHighlights = useMemo(() => {
+    const translated = t("pricingPage.access.purchase.highlights", {
+      returnObjects: true,
+    });
+    if (!Array.isArray(translated)) return [];
+    return translated.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  }, [i18n.language, t]);
 
   useEffect(() => {
     const status = searchParams.get("billing");
     if (!status) return;
+    if (handledBillingStatusRef.current === status) return;
+    handledBillingStatusRef.current = status;
     const notice = billingNoticeByStatus[status];
     if (!notice) return;
 
     setBillingNotice(notice);
     if (notice.tone === "success") {
       toast.success(notice.message);
+      if (status === "success") {
+        void syncBilling.mutateAsync().catch(() => {
+          // Ignore sync failures here; webhook may still arrive shortly.
+        });
+      }
     } else {
       toast(notice.message);
     }
@@ -144,10 +339,120 @@ export function PricingPage() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("billing");
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, syncBilling, billingNoticeByStatus]);
+
+  const resolveIntervalForPlan = (
+    plan: "student" | "personal",
+    requestedInterval: BillingInterval
+  ): BillingInterval => {
+    const available = pricingAvailability[plan];
+    if (requestedInterval === "yearly" && !available.yearly) {
+      return "monthly";
+    }
+    return requestedInterval;
+  };
+
+  const beginCheckout = async (
+    plan: "student" | "personal",
+    interval: BillingInterval,
+    provider?: "stripe" | "paddle" | "creem"
+  ) => {
+    if (!billingCheckoutEnabled) {
+      throw new Error(t("pricingPage.checkoutError"));
+    }
+    void trackProductEvent({
+      event: "checkout_started",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan,
+      interval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
+    await checkout.mutateAsync({
+      plan,
+      provider,
+      interval,
+      context: { source: sourceFromQuery },
+    });
+  };
+
+  const openProviderSelection = (
+    plan: "student" | "personal",
+    requestedInterval: BillingInterval
+  ) => {
+    void trackProductEvent({
+      event: "upgrade_cta_clicked",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan,
+      interval: requestedInterval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
+    const interval = resolveIntervalForPlan(plan, requestedInterval);
+    const yearlyStripeOnly = interval === "yearly";
+    const available = checkoutProviders.filter(
+      (provider) =>
+        provider.enabled &&
+        !provider.comingSoon &&
+        (!yearlyStripeOnly || provider.key === "stripe")
+    );
+    const onlyProvider = available[0];
+    if (available.length === 1 && onlyProvider) {
+      void beginCheckout(plan, interval, onlyProvider.key).catch((err) => {
+        toast.error(err instanceof Error ? err.message : t("pricingPage.checkoutError"));
+      });
+      return;
+    }
+    if (available.length === 0) {
+      toast.error(yearlyStripeOnly ? t("pricingPage.yearlyStripeOnly") : t("pricingPage.checkoutError"));
+      return;
+    }
+    setProviderModalSelection({ plan, interval });
+  };
+
+  useEffect(() => {
+    if (trackedPricingViewRef.current) return;
+    trackedPricingViewRef.current = true;
+    void trackProductEvent({
+      event: "pricing_viewed",
+      source: sourceFromQuery,
+      language: isRtl ? "ar" : "en",
+      plan: currentTier === "student" || currentTier === "personal" ? currentTier : "free",
+      interval: selectedInterval,
+    }).catch(() => {
+      // Best-effort telemetry only.
+    });
+  }, [currentTier, isRtl, selectedInterval, sourceFromQuery]);
+
+  useEffect(() => {
+    if (!requestedIntervalFromQuery) return;
+    setSelectedInterval((previous) =>
+      previous === requestedIntervalFromQuery ? previous : requestedIntervalFromQuery
+    );
+  }, [requestedIntervalFromQuery]);
+
+  useEffect(() => {
+    if (!giftCodeIntentRequested || requestedPlanFromQuery) return;
+    const node = accessCodePurchaseCardRef.current;
+    if (!node) return;
+    if (typeof node.scrollIntoView === "function") {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setHighlightGiftCodeCard(true);
+    const timer = window.setTimeout(() => {
+      setHighlightGiftCodeCard(false);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [giftCodeIntentRequested, requestedPlanFromQuery]);
 
   return (
-    <div className="min-h-full px-6 py-10" dir={isRtl ? "rtl" : "ltr"}>
+    <div
+      className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-6 py-10"
+      style={{ WebkitOverflowScrolling: "touch" }}
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       <div className="mx-auto w-full max-w-5xl">
         <div className={cn("flex flex-col gap-3", isRtl ? "text-right" : "text-left")}>
           <div
@@ -161,6 +466,19 @@ export function PricingPage() {
           <h1 className="text-3xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             {t("pricingPage.title")}
           </h1>
+          <p className="max-w-3xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+            {t("pricingPage.subtitle")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {pricingHighlights.map((item) => (
+              <span
+                key={item}
+                className="inline-flex rounded-full border border-zaki-subtle bg-white px-3 py-1 text-xs text-zaki-secondary dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-subtle"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
           <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
             {t("pricingPage.currentPlan", { plan: currentPlanLabel })}
             {" · "}
@@ -208,6 +526,9 @@ export function PricingPage() {
           </div>
           {billingUnavailableMessage && (
             <div className="text-xs text-zaki-muted">{billingUnavailableMessage}</div>
+          )}
+          {cancelAtPeriodEnd && (
+            <div className="text-xs text-zaki-muted">{t("pricingPage.cancelAtPeriodEndNote")}</div>
           )}
         </div>
 
@@ -292,9 +613,158 @@ export function PricingPage() {
               </button>
             </div>
             <div className="mt-3 text-xs text-zaki-muted">{accessSummary}</div>
+            <div
+              id="access-code-purchase"
+              ref={accessCodePurchaseCardRef}
+              className={cn(
+                "mt-4 rounded-2xl border border-[#e6c2a7] bg-gradient-to-br from-[#fff8ef] via-[#fff2e8] to-[#ffe8dc] px-4 py-4 shadow-[0px_12px_30px_rgba(200,120,70,0.16)] dark:border-[#6b4a3f] dark:from-[#2d1f1b] dark:via-[#2a1d19] dark:to-[#261a16]",
+                highlightGiftCodeCard &&
+                  "ring-2 ring-[#D24430] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
+              )}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-[36rem]">
+                  <span className="inline-flex items-center rounded-full border border-[#e2b191] bg-white/75 px-2.5 py-1 text-2xs font-medium text-[#8a4a2f] dark:border-[#8b5f50] dark:bg-[#2f221e] dark:text-[#f3b899]">
+                    {t("pricingPage.access.purchase.badge")}
+                  </span>
+                  <div className="mt-2 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {t("pricingPage.access.purchase.title")}
+                  </div>
+                  <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                    {t("pricingPage.access.purchase.description")}
+                  </p>
+                </div>
+                <span className="rounded-full border border-zaki-strong bg-white/90 px-2.5 py-1 text-2xs font-medium text-zaki-secondary dark:border-[#7a5a4e] dark:bg-[#30231e] dark:text-zaki-dark-subtle">
+                  {accessCodePriceLabel}
+                </span>
+              </div>
+              {accessCodePurchaseHighlights.length > 0 ? (
+                <ul
+                  className={cn(
+                    "mt-3 grid gap-1 text-2xs text-zaki-secondary dark:text-zaki-dark-subtle",
+                    isRtl ? "text-right" : "text-left"
+                  )}
+                >
+                  {accessCodePurchaseHighlights.map((highlight) => (
+                    <li key={highlight} className="leading-relaxed">
+                      {highlight}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="mt-3 text-2xs text-zaki-muted dark:text-zaki-dark-subtle">
+                {t("pricingPage.access.purchase.note")}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="zaki-btn zaki-btn-secondary disabled:opacity-50"
+                  disabled={accessCodePurchaseCheckout.isPending || !accessCodePurchaseEnabled}
+                  onClick={async () => {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: sourceFromQuery,
+                      language: isRtl ? "ar" : "en",
+                      plan: "free",
+                      interval: null,
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                    try {
+                      await accessCodePurchaseCheckout.mutateAsync({
+                        source: sourceFromQuery,
+                      });
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : t("pricingPage.access.purchase.checkoutError")
+                      );
+                    }
+                  }}
+                >
+                  {accessCodePurchaseCheckout.isPending
+                    ? t("pricingPage.access.purchase.processing")
+                    : t("pricingPage.access.purchase.cta")}
+                </button>
+                {!accessCodePurchaseEnabled ? (
+                  <span className="text-2xs text-zaki-muted">
+                    {t("pricingPage.access.purchase.unavailable")}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          <div className="md:col-span-2 xl:col-span-3 -mt-1">
+            <div className={cn("flex flex-col gap-2", isRtl ? "items-end" : "items-start")}>
+              <span className="text-xs font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+                {t("pricingPage.intervalLabel")}
+              </span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-1 py-1">
+                <button
+                  type="button"
+                  aria-pressed={selectedInterval === "monthly"}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm transition-colors",
+                    selectedInterval === "monthly"
+                      ? "bg-zaki-brand text-white"
+                      : "text-zaki-secondary dark:text-zaki-dark-subtle"
+                  )}
+                  onClick={() => setSelectedInterval("monthly")}
+                >
+                  {t("pricingPage.interval.monthly")}
+                </button>
+                <button
+                  type="button"
+                  disabled={!anyYearlyAvailable}
+                  aria-pressed={selectedInterval === "yearly"}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm transition-colors",
+                    selectedInterval === "yearly"
+                      ? "bg-zaki-brand text-white"
+                      : "text-zaki-secondary dark:text-zaki-dark-subtle",
+                    !anyYearlyAvailable && "opacity-50 cursor-not-allowed"
+                  )}
+                  onClick={() => setSelectedInterval("yearly")}
+                >
+                  {t("pricingPage.interval.yearly")}
+                </button>
+              </div>
+              {anyYearlyAvailable ? (
+                <p className="text-xs text-zaki-muted">{t("pricingPage.yearlyValueHint")}</p>
+              ) : (
+                <p className="text-xs text-zaki-muted">{t("pricingPage.yearlyUnavailable")}</p>
+              )}
+            </div>
           </div>
           {plans.map((plan) => {
             const isCurrent = currentTier === plan.tier;
+            const isCurrentActivePaidPlan =
+              isPremium && plan.tier !== "free" && currentTier === plan.tier;
+            const requestedInterval = selectedInterval;
+            const paidTier =
+              plan.tier === "student" || plan.tier === "personal" ? plan.tier : null;
+            const resolvedInterval =
+              !paidTier || requestedInterval === "monthly"
+                ? "monthly"
+                : pricingAvailability[paidTier].yearly
+                ? "yearly"
+                : "monthly";
+            const isPaidPlan = Boolean(paidTier);
+            const priceLabel =
+              !isPaidPlan || resolvedInterval === "monthly"
+                ? isPaidPlan
+                  ? getCatalogPlanPriceLabel(
+                      paidTier || "personal",
+                      "monthly",
+                      plan.priceMonthly
+                    )
+                  : plan.priceMonthly
+                : getCatalogPlanPriceLabel(paidTier || "personal", "yearly", plan.priceYearly);
+            const showsYearlyFallback =
+              isPaidPlan &&
+              requestedInterval === "yearly" &&
+              resolvedInterval !== "yearly";
             return (
               <div
                 key={plan.tier}
@@ -318,15 +788,35 @@ export function PricingPage() {
                     </span>
                   )}
                 </div>
-                <div className="text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                  {plan.price}
-                </div>
+                <div className="text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">{priceLabel}</div>
+                {showsYearlyFallback ? (
+                  <div className="text-2xs text-zaki-muted">{t("pricingPage.yearlyUnavailableForPlan")}</div>
+                ) : null}
                 <p className="text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
                   {plan.blurb}
                 </p>
-                <ul className="mt-2 flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                {plan.tier === "student" ? (
+                  <div className="rounded-xl border border-[#e7d5c4] bg-[#fff8ef] px-3 py-2 text-[11px] leading-relaxed text-zaki-secondary dark:border-[#3a2b22] dark:bg-[#1f1712] dark:text-zaki-dark-subtle">
+                    <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      {t("pricingPage.studentEligibilityTitle")}
+                    </span>{" "}
+                    {t("pricingPage.studentEligibilityBody")}{" "}
+                    <a
+                      className="font-semibold text-zaki-brand underline underline-offset-2"
+                      href={`mailto:${supportEmail}?subject=${encodeURIComponent("Student verification for ZAKI")}`}
+                    >
+                      {supportEmail}
+                    </a>
+                  </div>
+                ) : null}
+                <ul
+                  className={cn(
+                    "mt-2 flex list-disc flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle",
+                    isRtl ? "pr-4" : "pl-4"
+                  )}
+                >
                   {plan.features.map((feature) => (
-                    <li key={feature}>• {feature}</li>
+                    <li key={feature}>{feature}</li>
                   ))}
                 </ul>
                 <div className="mt-auto pt-3">
@@ -338,17 +828,46 @@ export function PricingPage() {
                     >
                       {t("pricingPage.included")}
                     </button>
+                  ) : isCurrentActivePaidPlan ? (
+                    <button
+                      type="button"
+                      className="w-full zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(210,68,48,0.15)] transition-colors disabled:opacity-50"
+                      disabled={
+                        cancelAtPeriodEnd || cancelSubscription.isPending || !billingCancelEnabled
+                      }
+                      onClick={async () => {
+                        try {
+                          if (!billingCancelEnabled) {
+                            throw new Error(t("pricingPage.cancelUnavailable"));
+                          }
+                          const result = await cancelSubscription.mutateAsync();
+                          toast.success(
+                            result?.alreadyScheduled
+                              ? t("pricingPage.cancelAlreadyScheduled")
+                              : t("pricingPage.cancelScheduled")
+                          );
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error ? err.message : t("pricingPage.cancelError")
+                          );
+                        }
+                      }}
+                    >
+                      {cancelAtPeriodEnd
+                        ? t("pricingPage.cancellationScheduled")
+                        : t("pricingPage.cancelSubscription")}
+                    </button>
                   ) : (
                     <button
                       type="button"
                       className="w-full zaki-btn-sm zaki-btn-primary disabled:opacity-50"
-                      disabled={checkout.isPending || !billingCheckoutEnabled}
+                      disabled={checkout.isPending || isPremium}
                       onClick={async () => {
                         try {
-                          if (!billingCheckoutEnabled) {
-                            throw new Error(t("pricingPage.checkoutError"));
-                          }
-                          await checkout.mutateAsync(plan.tier as "student" | "personal");
+                          openProviderSelection(
+                            plan.tier as "student" | "personal",
+                            selectedInterval
+                          );
                         } catch (err) {
                           toast.error(
                             err instanceof Error ? err.message : t("pricingPage.checkoutError")
@@ -356,7 +875,9 @@ export function PricingPage() {
                         }
                       }}
                     >
-                      {t("pricingPage.choose", { plan: plan.label })}
+                      {isPremium
+                        ? t("pricingPage.alreadySubscribed")
+                        : t("pricingPage.choose", { plan: plan.label })}
                     </button>
                   )}
                 </div>
@@ -365,6 +886,91 @@ export function PricingPage() {
           })}
         </div>
       </div>
+      {providerModalSelection && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
+          <div
+            className={cn(
+              "w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.24)]",
+              isRtl ? "text-right" : "text-left"
+            )}
+            dir={isRtl ? "rtl" : "ltr"}
+          >
+            <div className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("pricingPage.providerModal.title")}
+            </div>
+            <p className="mt-1 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("pricingPage.providerModal.description")}
+            </p>
+            {providerModalSelection.interval === "yearly" ? (
+              <p className="mt-2 text-xs text-zaki-muted">{t("pricingPage.yearlyStripeOnly")}</p>
+            ) : null}
+            <div className="mt-4 grid gap-2">
+              {checkoutProviders.map((provider) => {
+                const disabledForInterval =
+                  providerModalSelection.interval === "yearly" && provider.key !== "stripe";
+                const selectable =
+                  provider.enabled &&
+                  !provider.comingSoon &&
+                  !checkout.isPending &&
+                  !disabledForInterval;
+                return (
+                <button
+                  key={provider.key}
+                  type="button"
+                  disabled={!selectable}
+                  className={cn(
+                    "w-full rounded-xl border px-3 py-2.5 text-sm transition-colors",
+                    selectable
+                      ? "border-zaki-subtle bg-zaki-base hover:bg-zaki-hover text-zaki-primary dark:bg-zaki-dark-elevated dark:text-zaki-dark-primary"
+                      : "border-zaki-subtle/60 bg-zaki-hover text-zaki-muted cursor-not-allowed"
+                  )}
+                  onClick={async () => {
+                    try {
+                      await beginCheckout(
+                        providerModalSelection.plan,
+                        providerModalSelection.interval,
+                        provider.key
+                      );
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error ? err.message : t("pricingPage.checkoutError")
+                      );
+                    } finally {
+                      setProviderModalSelection(null);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-medium">{provider.label}</div>
+                    {provider.comingSoon ? (
+                      <span className="rounded-full border border-zaki-subtle px-2 py-0.5 text-[10px] uppercase tracking-[0.16em]">
+                        {t("pricingPage.providerModal.comingSoon")}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-zaki-muted mt-0.5">
+                    {provider.comingSoon
+                      ? t("pricingPage.providerModal.locked")
+                      : selectable
+                      ? t("pricingPage.providerModal.available")
+                      : t("pricingPage.providerModal.notConfigured")}
+                  </div>
+                </button>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-secondary"
+                onClick={() => setProviderModalSelection(null)}
+              >
+                {t("pricingPage.providerModal.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

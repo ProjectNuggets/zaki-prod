@@ -1,3 +1,4 @@
+import type { ProductTelemetrySource } from "./productTelemetry";
 const TOKEN_KEY = "zaki.auth.token";
 
 type ApiRequestOptions = RequestInit & {
@@ -324,6 +325,7 @@ export async function fetchEntitlements() {
       tier?: string;
       status?: string;
       priceId?: string | null;
+      interval?: "monthly" | "yearly" | null;
       currentPeriodEnd?: string | null;
       cancelAtPeriodEnd?: boolean;
     };
@@ -349,11 +351,42 @@ export async function fetchBillingConfig() {
   let data: {
     success?: boolean;
     configured?: {
+      provider?: string;
+      requestedProvider?: string;
+      checkoutProviders?: Array<{
+        key?: string;
+        label?: string;
+        enabled?: boolean;
+      }>;
+      pricingAvailability?: {
+        student?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+        personal?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+      };
       stripeEnabled?: boolean;
       checkoutEnabled?: boolean;
       portalEnabled?: boolean;
       cancelEnabled?: boolean;
       webhookEnabled?: boolean;
+      accessCodePurchaseEnabled?: boolean;
+      pricingCatalog?: {
+        student?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        personal?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        access?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+      };
       missing?: string[];
     };
     error?: string | null;
@@ -366,12 +399,60 @@ export async function fetchBillingConfig() {
   return { response, data };
 }
 
-export async function createCheckoutSession(plan: "student" | "personal") {
+export async function createCheckoutSession(
+  plan: "student" | "personal",
+  provider?: "stripe" | "paddle" | "creem",
+  interval: "monthly" | "yearly" = "monthly",
+  context?: {
+    source?: ProductTelemetrySource;
+  }
+) {
   const response = await backendAuthRequest("/api/billing/checkout", {
     method: "POST",
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({
+      plan,
+      interval,
+      ...(provider ? { provider } : {}),
+      ...(context ? { context } : {}),
+    }),
   });
   let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function createAccessCodePurchaseCheckoutSession(context?: {
+  source?: ProductTelemetrySource;
+}) {
+  const response = await backendAuthRequest("/api/access-code/purchase/checkout", {
+    method: "POST",
+    body: JSON.stringify({
+      ...(context ? { context } : {}),
+    }),
+  });
+  let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function resendPurchasedAccessCodeEmail(sessionId: string) {
+  const response = await backendAuthRequest("/api/access-code/purchase/resend", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+  let data: {
+    success?: boolean;
+    status?: "sent" | "already_sent" | "processing";
+    error?: string | null;
+  } = {};
   try {
     data = await response.json();
   } catch {
@@ -402,6 +483,26 @@ export async function cancelBillingSubscription() {
     alreadyScheduled?: boolean;
     cancelAtPeriodEnd?: boolean;
     currentPeriodEnd?: string | null;
+    status?: string;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function syncBillingSubscription() {
+  const response = await backendAuthRequest("/api/billing/sync", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  let data: {
+    success?: boolean;
+    updated?: boolean;
+    tier?: string;
     status?: string;
     error?: string | null;
   } = {};
@@ -463,6 +564,12 @@ export type AdminMember = {
   updatedAt: string | null;
 };
 
+export type AdminStudentVerificationUser = {
+  email: string;
+  studentVerified: boolean;
+  studentVerifiedAt: string | null;
+};
+
 export async function listAdminMembers() {
   const response = await backendAuthRequest("/api/admin/admins", {
     method: "GET",
@@ -514,6 +621,46 @@ export async function removeAdminMember(email: string) {
   let data: {
     success?: boolean;
     member?: AdminMember;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function getAdminStudentVerification(email: string) {
+  const query = new URLSearchParams({ email });
+  const response = await backendAuthRequest(
+    `/api/admin/student-verification?${query.toString()}`,
+    {
+      method: "GET",
+    }
+  );
+  let data: {
+    success?: boolean;
+    user?: AdminStudentVerificationUser;
+    error?: string | null;
+  } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function updateAdminStudentVerification(email: string, verified: boolean) {
+  const response = await backendAuthRequest("/api/admin/student-verification", {
+    method: "POST",
+    body: JSON.stringify({ email, verified }),
+  });
+  let data: {
+    success?: boolean;
+    user?: AdminStudentVerificationUser;
+    message?: string | null;
     error?: string | null;
   } = {};
   try {

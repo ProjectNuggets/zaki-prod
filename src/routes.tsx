@@ -3,6 +3,7 @@ import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
 import { SharedConversation } from './app/components/SharedConversation';
 import { PricingPage } from './app/components/PricingPage';
+import { BillingSuccessPage } from './app/components/BillingSuccessPage';
 import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPage';
 import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
       {
         path: 'pricing',
         element: <PricingPage />,
+      },
+      {
+        path: 'pricing/success',
+        element: <BillingSuccessPage />,
       },
       {
         path: 'help',

@@ -3,17 +3,16 @@ export const content = {
     lang: "en",
     dir: "ltr",
     nav: {
-      about: "About",
-      features: "Features",
-      contact: "Contact",
-      login: "Log in",
-      signup: "Sign up",
+      why: "Why",
+      story: "Story",
+      faq: "FAQs",
       switchLang: "AR",
     },
     hero: {
-      title: "Meet Zaki, the AI designed from our culture with personality, to understand you.",
+      title: "Meet ZAKI: The personal AI shaped by our culture, built to understand you.",
       hint: "Your ideas just found their favorite thinking partner.",
-      cta: "Start here!",
+      cta: "Try ZAKI",
+      pricingCta: "See pricing",
       placeholder: "How can I help you today?",
       rotatingPrompts: [
         "Plan my week in 20 minutes with clear priorities.",
@@ -30,13 +29,27 @@ export const content = {
       helper: "Try writing in Arabic, English, or both.",
     },
     earlyAccess: {
-      badge: "Early Access",
-      heading: "First 100 users get free access",
-      description: "We're opening Zaki to a small group first. Use this code when you sign up — no payment needed.",
-      code: "LAUNLC78CZB4",
-      copy: "Copy code",
-      copied: "Copied!",
-      cta: "Sign up with code →",
+      badge: "🎉 ZAKI is 1 week old",
+      heading: "Start your relationship with ZAKI today",
+      description:
+        "ZAKI is now live. Subscribe and start building a personal, memory-aware workflow that evolves with you.",
+      socialProof: {
+        label: "300+ early users joined in week one",
+        hoverLabel: "Join the early community shaping ZAKI before full rollout.",
+        avatars: ["AN", "SK", "RM", "LM"],
+      },
+      highlights: [
+        "Personal assistant, not just a chatbot",
+        "Culturally-aware conversations",
+        "Memory with full user control"
+      ],
+      cta: "🚀 Subscribe now",
+      secondary: "Jump to plans below to choose Student or Personal.",
+      campaignLabel: "✨ Coming soon: ZAKI Inner Circle",
+      campaignTeaser:
+        "A limited campaign for early supporters who believe AI should be personal, culturally aware, and always user-controlled. 🧠🌍🔐",
+      instagramNote:
+        "Want a free access code?\nDM us on Instagram after follow + share to request access codes:",
     },
     why: {
       heading: "The Arab world thinks, speaks, and works differently.",
@@ -56,6 +69,134 @@ export const content = {
         "Spaces keep projects organized with cleaner collaboration.",
         "Memory keeps useful context so work continues naturally.",
         "Designed for speed, clarity, and real daily workflows.",
+      ],
+    },
+    updatesCarousel: {
+      heading: "Inside ZAKI: Building In Public",
+      subheading: "Build updates and AI signals, shared as we go.",
+      batchLabel: "Week 1",
+      statusLabels: {
+        done: "Done",
+        next: "Next",
+      },
+      slides: [
+        {
+          id: "launch",
+          tag: "launch",
+          title: "Launch: Ramadan Day One",
+          description:
+            "ZAKI opened to real users on day one of Ramadan, marking our first public cohort.",
+          dateLabel: "Launch week",
+          emoji: "🚀",
+          status: "done",
+          ramadanBadge: {
+            label: "🌙 Ramadan Kareem",
+          },
+          link: {
+            label: "Follow the journey",
+            url: "https://instagram.com/chatzaki.ai",
+          },
+        },
+        {
+          id: "first-24h-thanks",
+          tag: "milestone",
+          title: "Thank you, early friends 🫶",
+          description:
+            "First 24h: 200+ registrations and 1,000+ website views. You made this real. Spread the word, we are done with generic chat AI.",
+          dateLabel: "First 24h",
+          emoji: "🎉",
+          status: "done",
+          link: {
+            label: "Spread the word",
+            url: "https://instagram.com/chatzaki.ai",
+          },
+        },
+        {
+          id: "week-one-stable",
+          tag: "milestone",
+          title: "Week One: Stability Locked",
+          description:
+            "We tightened reliability, improved response quality, and made daily conversations meaningfully smoother.",
+          dateLabel: "Week 1",
+          emoji: "🛠️",
+          status: "done",
+        },
+        {
+          id: "payments-websearch",
+          tag: "feature",
+          title: "Payments + Web Search, Live",
+          description:
+            "Subscriptions are live and web search is integrated, making ZAKI stronger for real everyday workflows.",
+          dateLabel: "This week",
+          emoji: "💳",
+          status: "done",
+          link: {
+            label: "Explore plans",
+            url: "https://app.chatzaki.com/pricing?auth=signup",
+          },
+        },
+        {
+          id: "openclaw-personal-agent",
+          tag: "feature",
+          title: "Personal agent signal: OpenClaw",
+          description:
+            "OpenClaw reflects the shift from chat-only tools to personal agents that can reason across user context and act more proactively.",
+          dateLabel: "Ecosystem watch",
+          emoji: "🤖",
+          status: "done",
+          link: {
+            label: "Explore OpenClaw",
+            url: "https://openclaw.ai",
+          },
+        },
+        {
+          id: "world-monitor-open-source",
+          tag: "feature",
+          title: "Open-source signal: World Monitor",
+          description:
+            "World Monitor, built by Anghami co-founder Elie Habib, is open source and moving fast. Build-in-public momentum is real.",
+          dateLabel: "Regional builder signal",
+          emoji: "🌍",
+          status: "done",
+          link: {
+            label: "See project",
+            url: "https://worldmonitor.app",
+          },
+        },
+        {
+          id: "sovereign-ai-shift",
+          tag: "feature",
+          title: "Industry shift: local-first, sovereign AI",
+          description:
+            "More teams are choosing deploy-anywhere and local inference paths for privacy and control. This is exactly where ZAKI is heading.",
+          dateLabel: "Strategy signal",
+          emoji: "🔐",
+          status: "done",
+        },
+        {
+          id: "agent-planning",
+          tag: "next",
+          title: "Next Up: Agent Workflows",
+          description:
+            "Next week we test agent-powered flows so ZAKI can help execute tasks, not only discuss them.",
+          dateLabel: "Next week",
+          emoji: "🤖",
+          status: "next",
+        },
+        {
+          id: "weekly-newsroom",
+          tag: "next",
+          title: "Weekly newsroom updates",
+          description:
+            "We publish product progress and relevant AI signals every week on our way to the ultimate personal assistant AI.",
+          dateLabel: "Stay tuned",
+          emoji: "📣",
+          status: "next",
+          link: {
+            label: "Follow updates",
+            url: "https://instagram.com/chatzaki.ai",
+          },
+        },
       ],
     },
     features: {
@@ -128,13 +269,38 @@ export const content = {
     cta: {
       heading: "Ready for AI that feels made for you?",
       subheading:
-        "Start with Zaki now and get context-aware answers shaped by language,\nculture, and your workflow.",
-      primary: "Get started now",
-      secondary: "Try Zaki",
-      trust: "Memory you control • Built for high-impact work",
+        "Tell us what you want in AI next.\nWe will make it happen together.",
+      primary: "Share feedback",
+      secondary: "Try ZAKI",
+      hoverLine: "Impossible is nothing.",
+    },
+    feedback: {
+      title: "Help shape ZAKI",
+      subtitle: "Simple, public, and anonymous by default.",
+      promptLabel: "What should ZAKI build next?",
+      promptPlaceholder:
+        "Share a feature idea, friction point, or workflow you want ZAKI to support...",
+      nameLabel: "Name (optional)",
+      namePlaceholder: "Anonymous by default",
+      submit: "Post feedback",
+      posting: "Posting...",
+      sortTop: "Top",
+      sortNewest: "Newest",
+      voteUp: "Upvote",
+      voteDown: "Downvote",
+      anonymous: "Anonymous",
+      empty: "No ideas posted yet. Be the first to shape what ZAKI builds next.",
+      errorLoad: "Unable to load feedback right now.",
+      errorSubmit: "Unable to post feedback right now.",
+      errorVote: "Unable to register that vote right now.",
+      success: "Your idea is live.",
+      joinPrompt: "Join the community shaping what comes next.",
+      legalNote: "No login required. Optional name only if you want public credit.",
+      loading: "Loading feedback...",
+      countLabel: "characters",
     },
     useCases: {
-      heading: "Where Zaki fits best",
+      heading: "Where ZAKI fits best",
       items: [
         {
           title: "Work",
@@ -151,8 +317,58 @@ export const content = {
       ],
       note: "Built with memory review and user control by default.",
     },
+    pricing: {
+      heading: "Simple plans for a more personal ZAKI",
+      subheading:
+        "Start free, upgrade when you want more, or gift one focused month of ZAKI to someone who needs a real personal AI assistant.",
+      interval: {
+        monthly: "Monthly",
+        yearly: "Yearly",
+      },
+      plans: [
+        {
+          tier: "student",
+          label: "Student",
+          priceMonthly: "$8 / month",
+          priceYearly: "$96 / year",
+          blurb: "For focused studying, clearer writing, and better support across coursework.",
+          features: [
+            "Premium models for better answers",
+            "Priority responses during busy hours",
+            "Stronger help with notes, drafts, and study sessions"
+          ],
+          cta: "Choose Student",
+        },
+        {
+          tier: "personal",
+          label: "Personal",
+          priceMonthly: "$13 / month",
+          priceYearly: "$150 / year",
+          blurb: "For everyday work and life when you want ZAKI to feel like your assistant.",
+          features: [
+            "Premium models with richer reasoning",
+            "Priority responses and stronger context",
+            "More personal memory and assistant-style support"
+          ],
+          cta: "Choose Personal",
+        },
+      ],
+      oneTimeCode: {
+        label: "Gift Code",
+        badge: "🎁 One-time",
+        price: "$15 one-time",
+        blurb: "Gift someone a 30-day ZAKI pass for studying, writing, focus, and daily support.",
+        features: [
+          "Single-use activation code",
+          "Delivered by email after purchase",
+          "Perfect for friends and teammates"
+        ],
+        cta: "Buy 1-month gift code",
+      },
+      note: "Student requires a .edu email or manual verification with proof of enrollment.",
+    },
     faq: {
-      heading: "Gets you",
+      heading: "FAQs",
       subheading: "FAQs",
       items: [
         {
@@ -218,17 +434,16 @@ export const content = {
     lang: "ar",
     dir: "rtl",
     nav: {
-      about: "عن زكي",
-      features: "المزايا",
-      contact: "تواصل",
-      login: "تسجيل الدخول",
-      signup: "إنشاء حساب",
+      why: "لماذا",
+      story: "القصة",
+      faq: "الأسئلة",
       switchLang: "EN",
     },
     hero: {
       title: "تعرّف على زكي، ذكاء اصطناعي من ثقافتنا وبشخصية تفهمك.",
       hint: "أفكارك لقت شريكها المفضل.",
-      cta: "ابدأ من هنا!",
+      cta: "جرّب زكي",
+      pricingCta: "عرض الأسعار",
       placeholder: "كيف يمكنني مساعدتك اليوم؟",
       rotatingPrompts: [
         "رتّب أسبوعي بخطة واضحة وأولويات عملية.",
@@ -245,13 +460,27 @@ export const content = {
       helper: "اكتب بالعربية أو الإنجليزية أو بالاثنين معًا.",
     },
     earlyAccess: {
-      badge: "وصول مبكر",
-      heading: "أول 100 مستخدم يحصلون على وصول مجاني",
-      description: "نفتح زكي لمجموعة صغيرة أولاً. استخدم هذا الرمز عند التسجيل — بدون دفع.",
-      code: "LAUNLC78CZB4",
-      copy: "انسخ الرمز",
-      copied: "تم النسخ!",
-      cta: "سجّل بالرمز ←",
+      badge: "🎉 زكي صار له أسبوع واحد",
+      heading: "ابدأ مع زكي من اليوم",
+      description:
+        "زكي أصبح متاحًا الآن. اشترك وابدأ تجربة شخصية مع ذاكرة تتطور معك.",
+      socialProof: {
+        label: "انضم أكثر من 300 مستخدم مبكر خلال الأسبوع الأول",
+        hoverLabel: "انضم إلى المجتمع المبكر الذي يشكّل زكي قبل الإطلاق الكامل.",
+        avatars: ["أن", "سك", "رم", "لم"],
+      },
+      highlights: [
+        "مساعد شخصي، وليس مجرد chatbot",
+        "محادثات واعية بالسياق والثقافة",
+        "ذاكرة تحت تحكمك الكامل"
+      ],
+      cta: "🚀 اشترك الآن",
+      secondary: "انزل للخطط بالأسفل واختر Student أو Personal.",
+      campaignLabel: "✨ قريبًا: دائرة زكي المقرّبة",
+      campaignTeaser:
+        "حملة محدودة للداعمين الأوائل ممن يؤمنون أن الذكاء الاصطناعي يجب أن يكون شخصيًا، واعيًا ثقافيًا، وتحت تحكم المستخدم بالكامل. 🧠🌍🔐",
+      instagramNote:
+        "بدك كود وصول مجاني؟\nراسلنا على إنستغرام بعد المتابعة + المشاركة لطلب أكواد الوصول:",
     },
     why: {
       heading: "العالم العربي يفكر ويتحدث ويعمل بطريقة مختلفة.",
@@ -260,17 +489,145 @@ export const content = {
         "في منطقة غنية بالثقافة والخصوصية والسياق، كثير من الأدوات لا تفهم التفاصيل. لا تدرك كيف نتحدث، ماذا نقصد، وكيف ننجز أعمالنا فعليًا.",
       builtLine: "لهذا بنينا زكي.",
       description:
-        "ذكاء اصطناعي واعٍ ثقافيًا ومصمم بطابع شخصي، وطبقة الذاكرة فيه مبنية لتكون تحت إدارتك وتحكمك.",
+        "AI واعٍ ثقافيًا ومصمم ليكون شخصيًا، مع طبقة ذاكرة تبقى تحت إدارتك وتحكمك.",
       workflow:
         "خطط يومك، اكتب، فكّر، ترجم، وقرّر بشكل طبيعي وسلس.",
-      friction: "بدون تعقيد. بدون أوامر مربكة.",
-      postFriction: "وإذا لحقته… بتلقى تعليقاته ذكية وخفيفة.",
-      human: "ذكاء يبدو محليًا، مفيدًا، وإنسانيًا.",
+      friction: "بدون تعقيد. بدون Prompts مربكة.",
+      postFriction: "وإذا لحقته… بتلاحظ تعليقاته الذكية والخفيفة.",
+      human: "ذكاء محلي، مفيد، وإنساني.",
       points: [
         "مصمم لفهم السياق العربي والمحادثات متعددة اللغات.",
         "المساحات ترتب العمل والمشاريع بصورة أوضح.",
         "الذاكرة تحفظ ما يهمك مع تدفق مراجعة واضح.",
         "تجربة سريعة وواضحة تناسب العمل اليومي.",
+      ],
+    },
+    updatesCarousel: {
+      heading: "داخل زكي: نبني على المكشوف",
+      subheading: "آخر تحديثات المنتج وإشارات AI المهمة، بنشاركها أولًا بأول.",
+      batchLabel: "الأسبوع 1",
+      statusLabels: {
+        done: "تم",
+        next: "القادم",
+      },
+      slides: [
+        {
+          id: "launch",
+          tag: "launch",
+          title: "الإطلاق: أول يوم من رمضان",
+          description:
+            "انطلق زكي مع مستخدمين حقيقيين منذ اليوم الأول من رمضان، كأول دفعة استخدام علني.",
+          dateLabel: "أسبوع الإطلاق",
+          emoji: "🚀",
+          status: "done",
+          ramadanBadge: {
+            label: "🌙 رمضان كريم",
+          },
+          link: {
+            label: "تابع الرحلة",
+            url: "https://instagram.com/chatzaki.ai",
+          },
+        },
+        {
+          id: "first-24h-thanks",
+          tag: "milestone",
+          title: "شكرًا يا أصدقاء البداية 🫶",
+          description:
+            "خلال أول 24 ساعة: +200 تسجيل و+1000 زيارة للموقع. أنتم من صنع البداية. انشروا زكي، خلّونا ننتقل من chat AI العام إلى Personal Assistant AI.",
+          dateLabel: "أول 24 ساعة",
+          emoji: "🎉",
+          status: "done",
+          link: {
+            label: "انشرها مع أصحابك",
+            url: "https://instagram.com/chatzaki.ai",
+          },
+        },
+        {
+          id: "week-one-stable",
+          tag: "milestone",
+          title: "الأسبوع الأول: تثبيت الأساس",
+          description:
+            "رفعنا الاعتمادية، حسّنا جودة الردود، وجعلنا التجربة اليومية أكثر سلاسة.",
+          dateLabel: "الأسبوع الأول",
+          emoji: "🛠️",
+          status: "done",
+        },
+        {
+          id: "payments-websearch",
+          tag: "feature",
+          title: "الدفع + بحث الويب: متاح الآن",
+          description:
+            "الفوترة أصبحت مباشرة وتم دمج بحث الويب، ليصبح زكي أقوى في الاستخدام اليومي العملي.",
+          dateLabel: "هذا الأسبوع",
+          emoji: "💳",
+          status: "done",
+          link: {
+            label: "اكتشف الخطط",
+            url: "https://app.chatzaki.com/pricing?auth=signup",
+          },
+        },
+        {
+          id: "openclaw-personal-agent",
+          tag: "feature",
+          title: "إشارة AI Agent: OpenClaw",
+          description:
+            "OpenClaw يعكس تحوّل السوق من chatbots إلى AI Agents يفهمون سياق المستخدم ويتصرفون بشكل استباقي.",
+          dateLabel: "متابعة المنظومة",
+          emoji: "🤖",
+          status: "done",
+          link: {
+            label: "استكشف OpenClaw",
+            url: "https://openclaw.ai",
+          },
+        },
+        {
+          id: "world-monitor-open-source",
+          tag: "feature",
+          title: "إشارة مفتوحة المصدر: World Monitor",
+          description:
+            "مشروع World Monitor من تطوير إيلي حبيب، الشريك المؤسس لأنغامي، مفتوح المصدر ويتطور بسرعة. البناء العلني يصنع فرقًا.",
+          dateLabel: "إشارة من المنطقة",
+          emoji: "🌍",
+          status: "done",
+          link: {
+            label: "شاهد المشروع",
+            url: "https://worldmonitor.app",
+          },
+        },
+        {
+          id: "sovereign-ai-shift",
+          tag: "feature",
+          title: "تحول السوق: ذكاء محلي وسيادي",
+          description:
+            "المزيد من الفرق يتجه إلى تشغيل محلي ومسارات نشر مرنة لضمان الخصوصية والتحكم. وهذا يتطابق مع اتجاه زكي.",
+          dateLabel: "إشارة استراتيجية",
+          emoji: "🔐",
+          status: "done",
+        },
+        {
+          id: "agent-planning",
+          tag: "next",
+          title: "القادم: مسارات AI Agents",
+          description:
+            "الأسبوع القادم سنختبر مسارات مدعومة بـ AI Agents لينتقل زكي من المحادثة إلى المساعدة التنفيذية.",
+          dateLabel: "الأسبوع القادم",
+          emoji: "🤖",
+          status: "next",
+        },
+        {
+          id: "weekly-newsroom",
+          tag: "next",
+          title: "تحديثات غرفة الأخبار أسبوعيًا",
+          description:
+            "ننشر تقدم المنتج وإشارات AI المهمة كل أسبوع في طريقنا لبناء أفضل Personal Assistant AI.",
+          dateLabel: "ترقّبوا",
+          emoji: "📣",
+          status: "next",
+          link: {
+            label: "تابع التحديثات",
+            url: "https://instagram.com/chatzaki.ai",
+          },
+        },
       ],
     },
     features: {
@@ -341,12 +698,37 @@ export const content = {
       ],
     },
     cta: {
-      heading: "جاهز لذكاء اصطناعي يفهمك فعلاً؟",
+      heading: "جاهز لذكاء اصطناعي يبدو وكأنه صُمّم لك؟",
       subheading:
-        "ابدأ مع زكي الآن واحصل على إجابات واعية بالسياق،\nمصاغة باللغة والثقافة وطبيعة عملك.",
-      primary: "ابدأ الآن",
+        "قل لنا ماذا تريد بعد ذلك في الذكاء الاصطناعي.\nوسنصنعه معًا.",
+      primary: "شارك رأيك",
       secondary: "جرّب زكي",
-      trust: "ذاكرة تحت تحكمك • مصمم لأعمال عالية التأثير",
+      hoverLine: "المستحيل ليس شيئًا.",
+    },
+    feedback: {
+      title: "ساعدنا في تشكيل زكي",
+      subtitle: "بسيطة، علنية، ومجهولة افتراضيًا.",
+      promptLabel: "ماذا تريد أن يبني زكي بعد ذلك؟",
+      promptPlaceholder:
+        "شارك ميزة تريدها، أو مشكلة مزعجة، أو سير عمل تتمنى أن يدعمه زكي...",
+      nameLabel: "الاسم (اختياري)",
+      namePlaceholder: "مجهول بشكل افتراضي",
+      submit: "انشر الفكرة",
+      posting: "جارٍ النشر...",
+      sortTop: "الأعلى",
+      sortNewest: "الأحدث",
+      voteUp: "تصويت إيجابي",
+      voteDown: "تصويت سلبي",
+      anonymous: "مجهول",
+      empty: "لا توجد أفكار منشورة بعد. كن أول من يؤثر على ما سيبنيه زكي لاحقًا.",
+      errorLoad: "تعذر تحميل الآراء الآن.",
+      errorSubmit: "تعذر نشر الرأي الآن.",
+      errorVote: "تعذر تسجيل هذا التصويت الآن.",
+      success: "أصبحت فكرتك ظاهرة الآن.",
+      joinPrompt: "انضم إلى المجتمع الذي يشكل ما سيأتي بعد ذلك.",
+      legalNote: "لا حاجة لتسجيل الدخول. أضف اسمك فقط إذا أردت أن نذكره علنًا.",
+      loading: "جارٍ تحميل الآراء...",
+      countLabel: "حرف",
     },
     useCases: {
       heading: "وين زكي بيفيدك أكثر",
@@ -366,8 +748,58 @@ export const content = {
       ],
       note: "مصمم بذاكرة قابلة للمراجعة وتحكم المستخدم من الأساس.",
     },
+    pricing: {
+      heading: "خطط بسيطة لنسخة أكثر شخصية من زكي",
+      subheading:
+        "ابدأ مجانًا، ثم قم بالترقية عندما تريد المزيد، أو أهدِ شهرًا واحدًا من زكي لشخص يحتاج مساعد AI شخصي فعلاً.",
+      interval: {
+        monthly: "شهري",
+        yearly: "سنوي",
+      },
+      plans: [
+        {
+          tier: "student",
+          label: "طالب",
+          priceMonthly: "$8 / شهر",
+          priceYearly: "$96 / سنة",
+          blurb: "للدراسة المركزة والكتابة الأوضح ومساندة أفضل عبر المقررات.",
+          features: [
+            "نماذج متقدمة لإجابات أفضل",
+            "استجابات بأولوية في الأوقات المزدحمة",
+            "مساعدة أقوى مع الملاحظات والمسودات وجلسات الدراسة"
+          ],
+          cta: "اختر خطة الطالب",
+        },
+        {
+          tier: "personal",
+          label: "شخصي",
+          priceMonthly: "$13 / شهر",
+          priceYearly: "$150 / سنة",
+          blurb: "للعمل والحياة اليومية عندما تريد أن يبدو زكي كمساعدك الشخصي.",
+          features: [
+            "نماذج متقدمة بمنطق أغنى",
+            "استجابات بأولوية وسياق أقوى",
+            "ذاكرة أكثر شخصية ودعم أقرب لأسلوب المساعد الشخصي"
+          ],
+          cta: "اختر الخطة الشخصية",
+        },
+      ],
+      oneTimeCode: {
+        label: "كود هدية",
+        badge: "🎁 دفعة واحدة",
+        price: "15$ دفعة واحدة",
+        blurb: "أهدِ شخصًا تعرفه وصول ZAKI لمدة 30 يومًا للدراسة، الكتابة، التركيز، والدعم اليومي.",
+        features: [
+          "رمز تفعيل لاستخدام واحد",
+          "يصلك عبر البريد الإلكتروني بعد الدفع",
+          "مناسب للأصدقاء والزملاء"
+        ],
+        cta: "اشترِ كود هدية لشهر",
+      },
+      note: "خطة الطالب تتطلب بريد .edu أو تحققًا يدويًا مع إثبات دراسة.",
+    },
     faq: {
-      heading: "بيفهمك",
+      heading: "الأسئلة الشائعة",
       subheading: "الأسئلة الشائعة",
       items: [
         {

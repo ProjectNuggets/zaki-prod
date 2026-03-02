@@ -92,6 +92,18 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_workspace_metadata (
+      workspace_slug TEXT PRIMARY KEY,
+      description TEXT,
+      icon TEXT,
+      color TEXT,
+      updated_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS verification_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -118,11 +130,16 @@ export async function initDb() {
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_customer_id TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_subscription_id TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_product_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_tier TEXT DEFAULT 'free';");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_status TEXT DEFAULT 'inactive';");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS billing_updated_at TIMESTAMPTZ;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_created_at TIMESTAMPTZ;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMPTZ;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_campaign TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_last TEXT;");
@@ -215,6 +232,104 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS access_code_orders (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      checkout_session_id TEXT NOT NULL UNIQUE,
+      stripe_event_id TEXT,
+      stripe_payment_intent_id TEXT,
+      amount_total_cents INT,
+      currency TEXT,
+      campaign TEXT NOT NULL,
+      duration_days INT NOT NULL DEFAULT 30,
+      code_id UUID REFERENCES access_codes(id) ON DELETE SET NULL,
+      email_status TEXT NOT NULL DEFAULT 'pending' CHECK (email_status IN ('pending', 'sent', 'failed')),
+      email_attempts INT NOT NULL DEFAULT 0,
+      last_email_error TEXT,
+      fulfilled_at TIMESTAMPTZ,
+      email_sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_access_code_orders_user_created
+    ON access_code_orders (user_id, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_access_code_orders_email_status_updated
+    ON access_code_orders (email_status, updated_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS billing_webhook_events (
+      id BIGSERIAL PRIMARY KEY,
+      provider TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(provider, event_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_analytics_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      event TEXT NOT NULL,
+      source TEXT NOT NULL,
+      language TEXT,
+      viewport TEXT,
+      plan TEXT,
+      billing_interval TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_product_analytics_events_created_at
+    ON product_analytics_events (created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_product_analytics_events_user_event
+    ON product_analytics_events (user_id, event, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS website_feedback_posts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      body TEXT NOT NULL,
+      display_name TEXT,
+      status TEXT NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_website_feedback_posts_visible_created
+    ON website_feedback_posts (status, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS website_feedback_votes (
+      post_id UUID NOT NULL REFERENCES website_feedback_posts(id) ON DELETE CASCADE,
+      client_id TEXT NOT NULL,
+      value SMALLINT NOT NULL CHECK (value IN (-1, 1)),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (post_id, client_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_website_feedback_votes_post
+    ON website_feedback_votes (post_id, updated_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_hidden_workspaces (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -263,6 +378,21 @@ export async function initDb() {
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_content_hash ON memories(user_id, content_hash);
+    `);
+    // Enforce exact dedupe integrity at DB layer.
+    await pool.query(`
+      DELETE FROM memories older
+      USING memories newer
+      WHERE older.user_id = newer.user_id
+        AND older.content_hash = newer.content_hash
+        AND (
+          older.created_at < newer.created_at
+          OR (older.created_at = newer.created_at AND older.id < newer.id)
+        );
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_user_content_hash_unique
+      ON memories(user_id, content_hash);
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(user_id, importance_score DESC);

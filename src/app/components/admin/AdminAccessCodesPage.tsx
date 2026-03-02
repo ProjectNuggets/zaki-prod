@@ -5,12 +5,19 @@ import {
   addAdminMember,
   AdminAccessCode,
   AdminMember,
+  AdminStudentVerificationUser,
   createAdminAccessCodes,
+  getAdminStudentVerification,
   listAdminMembers,
   listAdminAccessCodes,
   removeAdminMember,
+  updateAdminStudentVerification,
   updateAdminAccessCode,
 } from "@/lib/api";
+import {
+  readResponseFormattingConfig,
+  writeResponseFormattingConfig,
+} from "@/lib/responseFormatting";
 import { useAuthStore } from "@/stores";
 
 type ActiveFilter = "all" | "active" | "inactive";
@@ -44,6 +51,12 @@ export function AdminAccessCodesPage() {
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
   const [removingAdminEmail, setRemovingAdminEmail] = useState<string | null>(null);
+  const [disableResponseEnvelope, setDisableResponseEnvelope] = useState(false);
+  const [studentEmailInput, setStudentEmailInput] = useState("");
+  const [studentRecord, setStudentRecord] = useState<AdminStudentVerificationUser | null>(null);
+  const [studentLookupError, setStudentLookupError] = useState<string | null>(null);
+  const [isStudentLookupLoading, setIsStudentLookupLoading] = useState(false);
+  const [isStudentUpdateLoading, setIsStudentUpdateLoading] = useState(false);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,6 +153,12 @@ export function AdminAccessCodesPage() {
   useEffect(() => {
     void loadAdminMembers();
   }, [loadAdminMembers]);
+
+  useEffect(() => {
+    setDisableResponseEnvelope(
+      readResponseFormattingConfig().disableResponseEnvelope
+    );
+  }, []);
 
   if (!token) {
     return <Navigate to="/" replace />;
@@ -298,9 +317,198 @@ export function AdminAccessCodesPage() {
     }
   };
 
+  const onToggleResponseEnvelope = () => {
+    const nextValue = !disableResponseEnvelope;
+    setDisableResponseEnvelope(nextValue);
+    writeResponseFormattingConfig({
+      disableResponseEnvelope: nextValue,
+    });
+    toast.success(
+      nextValue
+        ? "Response envelope disabled for this browser."
+        : "Response envelope restored for this browser."
+    );
+  };
+
+  const lookupStudentVerification = async () => {
+    const email = studentEmailInput.trim().toLowerCase();
+    if (!email) {
+      toast.error("Student email is required.");
+      return;
+    }
+
+    setIsStudentLookupLoading(true);
+    setStudentLookupError(null);
+    try {
+      const { response, data } = await getAdminStudentVerification(email);
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok || !data.success || !data.user) {
+        throw new Error(data.error ?? "Unable to load student verification.");
+      }
+      setStudentRecord(data.user);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to load student verification.";
+      setStudentRecord(null);
+      setStudentLookupError(message);
+      toast.error(message);
+    } finally {
+      setIsStudentLookupLoading(false);
+    }
+  };
+
+  const setStudentVerification = async (verified: boolean) => {
+    const email = studentRecord?.email || studentEmailInput.trim().toLowerCase();
+    if (!email) {
+      toast.error("Student email is required.");
+      return;
+    }
+
+    setIsStudentUpdateLoading(true);
+    try {
+      const { response, data } = await updateAdminStudentVerification(email, verified);
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok || !data.success || !data.user) {
+        throw new Error(data.error ?? "Unable to update student verification.");
+      }
+      setStudentRecord(data.user);
+      setStudentLookupError(null);
+      toast.success(data.message || "Student verification updated.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to update student verification."
+      );
+    } finally {
+      setIsStudentUpdateLoading(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto zaki-scrollbar-fade px-6 py-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">Formatting</div>
+              <h2 className="mt-2 text-xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                Response Envelope Override
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                Browser-local testing switch for the backend response envelope. Turn it off here to
+                let TYP respond without the `ZAKI_RESPONSE_FORMAT_V1` wrapper.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleResponseEnvelope}
+              className="zaki-btn zaki-btn-secondary"
+            >
+              {disableResponseEnvelope ? "Envelope Off" : "Envelope On"}
+            </button>
+          </div>
+          <div className="mt-4 rounded-xl border border-zaki-subtle bg-zaki-hover px-4 py-3 text-sm text-zaki-secondary dark:bg-zaki-dark-bg/40 dark:text-zaki-dark-subtle">
+            Current browser state:{" "}
+            <span className="font-medium text-zaki-primary dark:text-zaki-dark-primary">
+              {disableResponseEnvelope ? "disabled" : "enabled"}
+            </span>
+            . This does not change server defaults for other users.
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">Billing</div>
+              <h2 className="mt-2 text-xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                Student Verification
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                Mark a user as manually eligible for the Student plan when support has reviewed
+                their enrollment proof.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[280px] flex-1 flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+              Student email
+              <input
+                type="email"
+                value={studentEmailInput}
+                onChange={(event) => setStudentEmailInput(event.target.value)}
+                className="rounded-xl border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"
+                placeholder="student@example.edu"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={isStudentLookupLoading}
+              className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                void lookupStudentVerification();
+              }}
+            >
+              {isStudentLookupLoading ? "Checking..." : "Check status"}
+            </button>
+          </div>
+
+          {studentLookupError ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+              {studentLookupError}
+            </div>
+          ) : null}
+
+          {studentRecord ? (
+            <div className="mt-4 rounded-xl border border-zaki-subtle bg-zaki-hover px-4 py-4 dark:bg-zaki-dark-bg/40">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {studentRecord.email}
+                  </div>
+                  <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                    Status: {studentRecord.studentVerified ? "Verified" : "Not verified"}
+                    {studentRecord.studentVerifiedAt
+                      ? ` · Updated ${formatTimestamp(studentRecord.studentVerifiedAt)}`
+                      : ""}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={isStudentUpdateLoading || studentRecord.studentVerified}
+                    className="zaki-btn zaki-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => {
+                      void setStudentVerification(true);
+                    }}
+                  >
+                    {isStudentUpdateLoading && !studentRecord.studentVerified
+                      ? "Saving..."
+                      : "Mark verified"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isStudentUpdateLoading || !studentRecord.studentVerified}
+                    className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => {
+                      void setStudentVerification(false);
+                    }}
+                  >
+                    {isStudentUpdateLoading && studentRecord.studentVerified
+                      ? "Saving..."
+                      : "Remove verification"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
         <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

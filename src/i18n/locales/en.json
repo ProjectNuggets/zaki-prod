@@ -97,6 +97,7 @@
     "nav": {
       "newSpace": "New space",
       "spaces": "Spaces",
+      "zakiBot": "ZAKI Bot",
       "search": "Search",
       "newChat": "New chat"
     },
@@ -106,6 +107,8 @@
     },
     "actions": {
       "createSpace": "Create Space",
+      "expandSidebar": "Expand sidebar",
+      "viewSpaces": "View spaces",
       "newChat": "New chat"
     },
     "empty": {
@@ -115,6 +118,16 @@
       "noSearchResultsHelper": "Try a different space or thread name."
     },
     "spaceSettings": "Space settings",
+    "scopeTitle": "How context works",
+    "scopeMemory": "Memory is personal to you and follows your account.",
+    "scopeWorkspace": "Workspace instructions and workspace files become shared context for every chat inside this space.",
+    "scopeChat": "Chat attachments only help that single conversation. They do not become reusable workspace knowledge.",
+    "addWorkspaceFiles": "Add workspace knowledge files",
+    "workspaceFilesTitle": "Workspace knowledge files",
+    "workspaceFilesHintWithTypes": "These files are embedded once and can be used across chats in this space. Supported types: {{types}}",
+    "workspaceFilesHint": "These files are embedded once and can be used across chats in this space.",
+    "workspaceFilesEmpty": "No workspace knowledge files yet. Upload files here when you want them available across chats in this space.",
+    "removeDocumentSuccess": "{{name}} removed from workspace knowledge. Existing conversation history may still reference prior discussion.",
     "profile": {
       "defaultName": "User",
       "manage": "Manage profile",
@@ -129,6 +142,7 @@
       "memory": "Memory",
       "settings": "Settings",
       "language": "Language",
+      "howToUse": "How to use",
       "help": "Need help?",
       "logout": "Log out",
       "terms": "v{{version}} · Terms & Conditions",
@@ -162,7 +176,14 @@
       "Remember this: I prefer concise answers and weekly plans. Start by planning my next 7 days.",
       "Summarize this meeting into decisions, owners, deadlines, and open risks: [paste notes].",
       "Use Query mode on my uploaded files and answer: [your question]."
-    ]
+    ],
+    "activation": {
+      "title": "Get your setup done",
+      "steps": {
+        "firstMessage": "Send your first message",
+        "firstMemory": "Save your first memory"
+      }
+    }
   },
   "home": {
     "welcome": "Welcome back",
@@ -297,6 +318,7 @@
   },
   "chat": {
     "thinking": "Thinking",
+    "researching": "Researching",
     "thinkingPhrases": [
       "Thinking",
       "Mulling it over",
@@ -309,6 +331,13 @@
     "copyTable": "Copy table",
     "copied": "Copied",
     "emailLabel": "Email",
+    "dropFiles": "Drop files to attach",
+    "share": "Share",
+    "shareConversation": "Share conversation",
+    "moreOptions": "More options",
+    "reviewMemories": "Review memories",
+    "exportJson": "Export JSON",
+    "scrollToBottom": "Scroll to bottom",
     "whyAnswer": "Why this answer?",
     "hideWhy": "Hide why",
     "usedMemory": "Used memory",
@@ -316,7 +345,8 @@
   },
   "input": {
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
-    "upgradeLabel": "Access premium features",
+    "uploadUnavailableToast": "Add files to the space when you want them available across chats.",
+    "upgradeLabel": "ZAKI the chat",
     "upgradeCta": "Upgrade!",
     "queryMode": {
       "label": "Query mode",
@@ -326,10 +356,13 @@
       "offToast": "Query mode is off. Back to normal chat."
     },
     "webSearch": {
-      "ariaLabel": "Web search (coming soon)",
-      "soonPill": "Soon",
-      "soonTitle": "Web search is coming soon",
-      "soonToast": "Web search is coming soon. We are wiring this with NOVA.TYP."
+      "enableAriaLabel": "Enable web search for the next message",
+      "disableAriaLabel": "Disable web search",
+      "enableTitle": "Use web search for the next message",
+      "disableTitle": "Turn off web search",
+      "offPill": "Web",
+      "onPill": "On",
+      "activePill": "Web search"
     },
     "memoryMode": {
       "label": "Memory",
@@ -346,6 +379,7 @@
       "uploadFile": "Upload image or file",
       "agentMode": "Agent mode",
       "studyLearn": "Study and learn",
+      "comingSoonPill": "Soon",
       "comingSoonToast": "This feature is coming soon."
     },
     "placeholders": [
@@ -355,6 +389,120 @@
       "Draft a message or email",
       "Turn this into a checklist"
     ]
+  },
+  "onboarding": {
+    "eyebrow": "Welcome",
+    "title": "Set up your workspace, {{userName}}",
+    "subtitle": "Three quick steps to make ZAKI useful from day one.",
+    "softHint": "You can keep chatting while this stays open.",
+    "skip": "Skip for now",
+    "back": "Back",
+    "finish": "Finish",
+    "steps": {
+      "space": {
+        "title": "Create your first space",
+        "body": "Spaces keep topics clean. Start with one workspace for your current project.",
+        "action": "Create a space"
+      },
+      "memory": {
+        "title": "Tune memory behavior",
+        "body": "Open Memory and review what ZAKI keeps. You stay in control of every memory.",
+        "action": "Open memory"
+      },
+      "settings": {
+        "title": "Set your defaults",
+        "body": "Adjust language, theme, and profile to match how you work.",
+        "action": "Open settings"
+      }
+    },
+    "guided": {
+      "categories": {
+        "spacesThreads": "Spaces + threads",
+        "searchTools": "Search + tools",
+        "memory": "Memory",
+        "helpSettings": "Help + settings"
+      },
+      "fallbackCoachmark": "Open this first. Spaces are used to organize chat threads.",
+      "hintAria": "Onboarding hint",
+      "hideTutorial": "Hide tutorial",
+      "progressComplete": "{{progress}}% complete",
+      "stepSummary": "Step {{current}} of {{total}}",
+      "taskSummary": "Task {{current}} of {{total}}",
+      "followHint": "Use hint",
+      "progressSteps": "{{current}}/{{total}}",
+      "back": "Back",
+      "next": "Next",
+      "completeAction": "Complete",
+      "close": "Close",
+      "finishTutorial": "Finish tutorial",
+      "startChatting": "Start chatting",
+      "completeBadge": "Complete",
+      "completeTitle": "You're ready, {{userName}}",
+      "completeBody": "You have the basics. Memory, Settings, and How to use stay in the profile menu whenever you need them.",
+      "optionalCloseout": "Optional later: settings + help",
+      "tasks": {
+        "spaceScopeOverview": {
+          "label": "Space-wide context",
+          "short": "Instructions and documents added here apply across the whole space. Files you attach inside a chat stay in that thread.",
+          "openLabel": "Open your first space",
+          "openShort": "Open New space first. Then you will see which context applies to the whole space versus one chat."
+        },
+        "spaceCreated": {
+          "label": "Name your space",
+          "short": "Give your space a name, then click Create space.",
+          "openLabel": "Create your first space",
+          "openShort": "Open New space to create a space for one project or topic."
+        },
+        "threadCreated": {
+          "label": "Create a new chat",
+          "short": "Inside your space, click New chat. Each thread is a separate conversation."
+        },
+        "webSearchOpened": {
+          "label": "Web search",
+          "short": "Use this button to trigger a web-assisted reply in chat."
+        },
+        "chatControlsOpened": {
+          "label": "Open chat controls",
+          "short": "Click the + button to reveal the chat controls menu."
+        },
+        "chatToolsOverview": {
+          "label": "Explore chat tools",
+          "short": "From this menu, you can use Query mode, upload files, and access study, image, and agent tools."
+        },
+        "queryModeExplained": {
+          "label": "Query mode",
+          "short": "Use Query mode when you want ZAKI to answer from the current space documents instead of relying on general chat alone."
+        },
+        "uploadFilesExplained": {
+          "label": "Upload images and files",
+          "short": "Use this to add images or files to the current thread."
+        },
+        "studyLearnExplained": {
+          "label": "Study and learn",
+          "short": "Use this when you want document-based help that prioritizes understanding and deeper exploration."
+        },
+        "generateImageExplained": {
+          "label": "Generate image",
+          "short": "Use this to create images directly inside the current chat."
+        },
+        "agentModeExplained": {
+          "label": "Agent mode",
+          "short": "Use this to hand work to an active assistant that can use tools to complete tasks."
+        },
+        "memoryToggleOverview": {
+          "label": "Memory toggle",
+          "short": "Switch between manual memory, where you confirm what ZAKI keeps, and automatic memory, where it saves useful details for you."
+        },
+        "memoryProfileOpened": {
+          "label": "Open the profile menu",
+          "short": "Click your profile card in the bottom-left corner."
+        },
+        "memoryOpened": {
+          "label": "Open Memory",
+          "short": "Open Memory from your profile menu to review what ZAKI keeps and adjust it anytime."
+        }
+      }
+    }
   },
   "spacesView": {
     "title": "Spaces",
@@ -373,9 +521,76 @@
     "deleteSpaceAria": "Delete {{title}}",
     "descriptionPlaceholder": "Add a short description..."
   },
+  "createSpaceModal": {
+    "ariaLabel": "Create new space",
+    "title": "Create new space",
+    "subtitle": "Organize chats, files, and ideas in one place.",
+    "closeAria": "Close create space",
+    "fields": {
+      "name": "Space name",
+      "description": "Description",
+      "instructions": "Instructions",
+      "pinnedDocuments": "Pinned documents",
+      "uploadDocuments": "Add files after creating the space. Uploads are embedded from the space view."
+    },
+    "scopeNotes": {
+      "sectionLabel": "Context scope",
+      "spaceWideLabel": "Space-wide",
+      "spaceWideBody": "Instructions and documents added to this space stay available across every chat in the space.",
+      "threadSpecificLabel": "Thread-specific",
+      "threadSpecificBody": "Files attached inside a chat stay in that thread only, so you can keep one-off context separate."
+    },
+    "placeholders": {
+      "name": "Marketing research",
+      "description": "Describe what this space is for",
+      "instructions": "Add guidance for the assistant in this space"
+    },
+    "removeFileAria": "Remove {{name}}",
+    "actions": {
+      "cancel": "Cancel",
+      "create": "Create space"
+    }
+  },
+  "spaceDetailView": {
+    "backToSpaces": "All spaces",
+    "appearance": "Appearance",
+    "privateBadge": "Private",
+    "newChat": "New chat",
+    "fileStatus": {
+      "embedded": "Embedded",
+      "processing": "Processing",
+      "failed": "Failed"
+    },
+    "projectFiles": {
+      "title": "Project files",
+      "fixed": "ZAKI is not a project",
+      "count_one": "{{count}} file",
+      "count_other": "{{count}} files",
+      "upload": "Upload",
+      "documentTypeFallback": "document",
+      "empty": "Upload documents to ground this workspace. Embedded files stay with the whole space."
+    },
+    "instructions": {
+      "title": "Instructions",
+      "fixed": "ZAKI doesn't take instructions from anyone.",
+      "empty": "Add guidance for this space.",
+      "edit": "Edit",
+      "editAria": "Edit instructions"
+    },
+    "threads": {
+      "title": "Chats in this space",
+      "total_one": "{{count}} total",
+      "total_other": "{{count}} total",
+      "delete": "Delete",
+      "empty": "No chats yet. Start one above."
+    }
+  },
+  "mobileSidebar": {
+    "ariaLabel": "Navigation menu"
+  },
   "billing": {
     "upgradeTitle": "Choose your plan",
-    "upgradeSubtitle": "Student and Personal unlock premium features. You can manage or cancel anytime.",
+    "upgradeSubtitle": "Unlock a faster, more personal ZAKI. Manage or cancel anytime.",
     "notNow": "Not now",
     "managePlan": "Manage plan",
     "proGate": "Premium feature — upgrade to Personal to unlock.",
@@ -383,13 +598,13 @@
     "plans": {
       "student": {
         "label": "Student",
-        "price": "$5 / mo",
-        "desc": "Best for learners and light use."
+        "price": "$8 / mo",
+        "desc": "For students who want sharper study help, writing support, and better focus."
       },
       "personal": {
         "label": "Personal",
-        "price": "$10 / mo",
-        "desc": "Everyday power + priority access."
+        "price": "$13 / mo",
+        "desc": "For everyday work and life when you want ZAKI to feel like your assistant."
       },
       "pro": {
         "label": "Pro",
@@ -399,12 +614,18 @@
     }
   },
   "pricingPage": {
-    "eyebrow": "Pricing",
-    "title": "Choose the plan that fits you",
+    "eyebrow": "Plans",
+    "title": "Choose the plan that makes ZAKI feel personal",
+    "subtitle": "Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.",
+    "highlightsTemplates": {
+      "student": "Student: {{price}} with .edu or manual verification",
+      "personal": "Personal: {{price}} for everyday assistant use",
+      "gift": "Gift a month: {{price}}"
+    },
     "currentPlan": "You’re currently on {{plan}}",
-    "currentPlanPremium": "Manage or switch anytime.",
+    "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Upgrade when you’re ready.",
+    "currentPlanFree": "Start free, then upgrade when you want more from ZAKI.",
     "codeActivePlanLabel": "Code active",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
@@ -412,6 +633,18 @@
       "manage": "Returned from billing portal."
     },
     "managePlan": "Manage plan",
+    "intervalLabel": "Billing cycle",
+    "interval": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "priceWithSuffix": "{{price}} {{suffix}}",
+    "priceSuffix": {
+      "monthly": "/ month",
+      "yearly": "/ year",
+      "oneTime": "one-time"
+    },
+    "yearlyValueHint": "Yearly gives you stable access all year long.",
     "statusLabel": "Status",
     "statusValues": {
       "active": "Active",
@@ -429,6 +662,22 @@
       "placeholder": "Enter access code",
       "apply": "Apply code",
       "applying": "Applying...",
+      "purchase": {
+        "badge": "Gift a month",
+        "title": "Gift a 30-day ZAKI pass",
+        "description": "A thoughtful gift for a student, friend, or teammate who needs a sharp personal AI assistant for a month.",
+        "highlights": [
+          "Perfect for exam season, writing sprints, and deadline-heavy weeks.",
+          "Delivered by email as a single-use code you can forward instantly.",
+          "A simple one-time purchase for one month of premium access."
+        ],
+        "note": "Buy it once, keep it ready, and send it when someone needs real help.",
+        "price": "$15 one-time",
+        "cta": "Buy 1-month gift code",
+        "processing": "Opening checkout...",
+        "unavailable": "Code purchase is not enabled in this environment yet.",
+        "checkoutError": "Unable to start code purchase checkout."
+      },
       "toastActivatedUntil": "Access activated until {{date}}.",
       "toastRedeemed": "Access code redeemed.",
       "toastRedeemFailed": "Unable to redeem access code",
@@ -451,30 +700,106 @@
       },
       "student": {
         "label": "Student",
-        "price": "$5 / month",
-        "blurb": "Premium features for focused learning.",
+        "price": "$8 / month",
+        "priceMonthly": "$8 / month",
+        "priceYearly": "$96 / year",
+        "blurb": "For focused studying, clearer writing, and better support across your coursework.",
         "features": [
-          "Premium models",
-          "Priority responses",
-          "Expanded memory limits"
+          "Premium models for better answers",
+          "Priority responses during busy hours",
+          "Stronger help with notes, drafts, and study sessions"
         ]
       },
       "personal": {
         "label": "Personal",
-        "price": "$10 / month",
-        "blurb": "Best for everyday use and deeper context.",
+        "price": "$13 / month",
+        "priceMonthly": "$13 / month",
+        "priceYearly": "$156 / year",
+        "blurb": "For everyday work and life when you want ZAKI to remember context and move faster with you.",
         "features": [
-          "Premium models",
-          "Priority responses",
-          "Advanced memory insights"
+          "Premium models with richer reasoning",
+          "Priority responses and stronger context",
+          "More personal memory and assistant-style support"
         ]
       }
     },
+    "studentEligibilityTitle": "Student plan eligibility:",
+    "studentEligibilityBody": "use your .edu email at checkout, or email any proof of enrollment for manual verification at",
     "currentBadge": "Current",
     "included": "Included",
+    "alreadySubscribed": "Already subscribed",
     "choose": "Choose {{plan}}",
+    "cancelSubscription": "Cancel subscription",
+    "cancellationScheduled": "Cancellation scheduled",
+    "cancelAtPeriodEndNote": "Your plan will remain active until the current billing period ends.",
+    "cancelScheduled": "Subscription will cancel at period end.",
+    "cancelAlreadyScheduled": "Cancellation is already scheduled for period end.",
+    "billingUnavailable": "Billing is temporarily unavailable.",
+    "yearlyUnavailableForPlan": "Yearly pricing is not available for this plan yet.",
+    "yearlyUnavailable": "Yearly billing is not available yet for this environment.",
+    "yearlyStripeOnly": "Yearly billing is currently available only through Stripe.",
+    "providerModal": {
+      "title": "Choose payment provider",
+      "description": "Select where you want to complete checkout.",
+      "comingSoon": "Coming soon",
+      "locked": "Locked for next release",
+      "available": "Available",
+      "notConfigured": "Not configured",
+      "cancel": "Cancel"
+    },
+    "cancelUnavailable": "Subscription cancellation is temporarily unavailable.",
+    "cancelError": "Unable to cancel subscription",
     "portalError": "Unable to open billing portal",
     "checkoutError": "Checkout failed"
+  },
+  "billingSuccess": {
+    "badge": "Friends circle unlocked",
+    "defaultName": "friend",
+    "title": "Congrats {{name}}! You are officially in ZAKI’s friends circle 🎉",
+    "subtitle": "You are in. Let’s think, learn, build, and maybe ship something great together.",
+    "planFallback": "Premium",
+    "intervalFallback": "Billing active",
+    "planLabel": "Plan: {{plan}}",
+    "intervalLabel": "Cycle: {{interval}}",
+    "punchlineFallback": "No more generic chatbot energy. We are building personal assistant AI, and you are early on the journey.",
+    "punchlines": [
+      "No more generic chatbot energy. You joined early, so you get front-row seats while we build.",
+      "ZAKI just got smarter by one awesome human. Yes, that is you.",
+      "Your subscription = fuel for better memory, better context, and sharper AI-agent workflows."
+    ],
+    "nextSteps": [
+      "Start a chat and tell ZAKI what you care about so it personalizes faster.",
+      "Share ZAKI with one friend who is done with generic chat AI.",
+      "Drop us feedback anytime. Early friends shape the roadmap."
+    ],
+    "actions": {
+      "start": "Start chatting",
+      "manage": "Manage plan",
+      "share": "Invite a friend",
+      "sharing": "Sharing..."
+    },
+    "shareTitle": "I joined ZAKI",
+    "shareText": "{{name}} just joined ZAKI’s friends circle. Personal assistant AI > generic chat AI. Come in early.",
+    "shareCopied": "Invite message copied. Send it to your people.",
+    "shareManual": "Copy this page link and share it with your friends.",
+    "accessCode": {
+      "badge": "Access code purchase complete",
+      "title": "Done {{name}}! Your code is being delivered ✉️",
+      "subtitle": "Your 30-day activation code has been generated after payment.",
+      "punchline": "Check your inbox now. If it does not appear, use resend below.",
+      "nextSteps": [
+        "Open your email and copy the activation code.",
+        "Go to Pricing and redeem the code in the Access Code box.",
+        "Share it with a friend if you bought it for someone else."
+      ],
+      "resendCta": "Resend code email",
+      "resending": "Resending...",
+      "resendSent": "Access-code email sent.",
+      "resendAlreadySent": "Code email was already sent.",
+      "resendProcessing": "Your code is still processing. Try again in a moment.",
+      "resendMissing": "Missing checkout session. Open Pricing and try again.",
+      "resendError": "Unable to resend access-code email."
+    }
   },
   "memory": {
     "saved": "memory saved",
@@ -622,6 +947,7 @@
   },
   "app": {
     "loadingSession": "Loading session...",
+    "openNavigationMenu": "Open navigation menu",
     "legal": {
       "title": "Updated terms require your consent",
       "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",

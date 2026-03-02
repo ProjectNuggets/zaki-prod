@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelBillingSubscription,
+  createAccessCodePurchaseCheckoutSession,
   createBillingPortal,
   createCheckoutSession,
   deleteAccount,
   fetchBillingConfig,
   fetchEntitlements,
   redeemAccessCode,
+  resendPurchasedAccessCodeEmail,
+  syncBillingSubscription,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
@@ -32,7 +35,9 @@ export function useBillingConfig() {
     queryKey: billingKeys.config,
     queryFn: fetchBillingConfig,
     enabled: Boolean(token),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }
@@ -40,8 +45,30 @@ export function useBillingConfig() {
 export function useCheckout() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (plan: "student" | "personal") => {
-      const { response, data } = await createCheckoutSession(plan);
+    mutationFn: async (
+      payload:
+        | "student"
+        | "personal"
+        | {
+            plan: "student" | "personal";
+            provider?: "stripe" | "paddle" | "creem";
+            interval?: "monthly" | "yearly";
+            context?: {
+              source?:
+                | "website_nav"
+                | "website_pricing"
+                | "chat_input"
+                | "settings"
+                | "pricing_page"
+                | "success_page";
+            };
+          }
+    ) => {
+      const plan = typeof payload === "string" ? payload : payload.plan;
+      const provider = typeof payload === "string" ? undefined : payload.provider;
+      const interval = typeof payload === "string" ? "monthly" : payload.interval || "monthly";
+      const context = typeof payload === "string" ? undefined : payload.context;
+      const { response, data } = await createCheckoutSession(plan, provider, interval, context);
       if (!response.ok || !data.url) {
         throw new Error(data.error ?? "Unable to start checkout");
       }
@@ -91,6 +118,22 @@ export function useCancelSubscription() {
   });
 }
 
+export function useSyncBilling() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { response, data } = await syncBillingSubscription();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Unable to sync billing state");
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+    },
+  });
+}
+
 export function useDeleteAccount() {
   return useMutation({
     mutationFn: async (confirmEmail: string) => {
@@ -115,6 +158,43 @@ export function useRedeemAccessCode() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+    },
+  });
+}
+
+export function useAccessCodePurchaseCheckout() {
+  return useMutation({
+    mutationFn: async (context?: {
+      source?:
+        | "website_nav"
+        | "website_pricing"
+        | "chat_input"
+        | "settings"
+        | "pricing_page"
+        | "success_page";
+    }) => {
+      const { response, data } = await createAccessCodePurchaseCheckoutSession(context);
+      if (!response.ok || !data.url) {
+        throw new Error(data.error ?? "Unable to start access-code checkout");
+      }
+      return data.url;
+    },
+    onSuccess: (url) => {
+      if (typeof window !== "undefined") {
+        window.location.href = url;
+      }
+    },
+  });
+}
+
+export function useResendPurchasedAccessCodeEmail() {
+  return useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { response, data } = await resendPurchasedAccessCodeEmail(sessionId);
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Unable to resend access-code email");
+      }
+      return data;
     },
   });
 }

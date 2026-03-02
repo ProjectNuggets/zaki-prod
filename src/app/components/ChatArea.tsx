@@ -5,7 +5,13 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, buildApiUrl, getApiBase } from "@/lib/api";
+import { trackProductEvent } from "@/lib/productTelemetry";
+import {
+  readResponseFormattingConfig,
+  RESPONSE_FORMATTING_EVENT,
+  type ResponseFormattingConfig,
+} from "@/lib/responseFormatting";
 import {
   SpacesView,
   ZakiHomeView,
@@ -20,9 +26,15 @@ import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
-import type { Space, Message } from "@/types";
+import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
+import {
+  getActivationProgress,
+  markFirstMemorySaved,
+  markFirstMessageSent,
+  type ActivationProgress,
+} from "@/lib/retention";
 
 class ChatRequestError extends Error {
   status: number;
@@ -37,6 +49,9 @@ class ChatRequestError extends Error {
 }
 
 const HOME_STARTER_MESSAGE = "hello, how are you zaki";
+const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
+const THREAD_ATTACHMENT_UNAVAILABLE_MESSAGE =
+  "Thread file grounding is not live yet. Upload documents from the workspace tools so ZAKI can actually use them.";
 
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -49,10 +64,179 @@ function isAbortError(error: unknown) {
   return false;
 }
 
+function getFileExtension(name: string) {
+  const normalized = String(name || "").trim().toLowerCase();
+  const dotIndex = normalized.lastIndexOf(".");
+  return dotIndex >= 0 ? normalized.slice(dotIndex) : "";
+}
+
+function formatAcceptedTypeHint(types: Record<string, string[]>) {
+  return Array.from(
+    new Set(
+      Object.values(types || {})
+        .flat()
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  )
+    .slice(0, 8)
+    .join(", ");
+}
+
+function splitFilesByAcceptedTypes(
+  files: File[],
+  acceptedTypes: Record<string, string[]>
+) {
+  const mimeTypes = new Set(Object.keys(acceptedTypes || {}).map((value) => value.toLowerCase()));
+  const extensions = new Set(
+    Object.values(acceptedTypes || {})
+      .flat()
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  if (mimeTypes.size === 0 && extensions.size === 0) {
+    return { valid: files, invalid: [] as File[] };
+  }
+
+  const valid: File[] = [];
+  const invalid: File[] = [];
+  for (const file of files) {
+    const mime = String(file.type || "").trim().toLowerCase();
+    const extension = getFileExtension(file.name);
+    if ((mime && mimeTypes.has(mime)) || (extension && extensions.has(extension))) {
+      valid.push(file);
+    } else {
+      invalid.push(file);
+    }
+  }
+  return { valid, invalid };
+}
+
+function getRequestedResponseFormat(prompt: string) {
+  const text = String(prompt || "").trim();
+  if (!text) return null;
+  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) return "table";
+  if (
+    /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
+    /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
+  ) {
+    return "bullets";
+  }
+  if (
+    /\b(?:concise|brief|short|briefly)\b/i.test(text) ||
+    /(?:^|\s)(باختصار|مختصر|بشكل مختصر)(?:\s|$)/i.test(text)
+  ) {
+    return "concise";
+  }
+  return null;
+}
+
+function getRequestedBulletCount(prompt: string) {
+  const text = String(prompt || "").trim();
+  if (!text) return null;
+  const match = text.match(/\b(\d+)\s+bullets?\b/i);
+  if (match) return Number(match[1]);
+  const arabicNumberMatch = text.match(/(\d+)\s+(?:نقاط|بنقاط)/i);
+  if (arabicNumberMatch) return Number(arabicNumberMatch[1]);
+  return null;
+}
+
+function normalizeAssistantFormatting(prompt: string, content: string) {
+  const format = getRequestedResponseFormat(prompt);
+  const text = String(content || "").trim();
+  if (!format || !text) return text;
+
+  if (format === "bullets") {
+    if (/^\s*[-*•]\s+/m.test(text)) return text;
+    const cleaned = text.replace(/^•\s*/, "").trim();
+    let parts = cleaned
+      .split(/\s*;\s+/)
+      .map((part) => part.trim().replace(/[.,\s]+$/g, ""))
+      .filter(Boolean);
+    if (parts.length < 2) {
+      parts = cleaned
+        .split(/,\s+(?=(?:and\s+)?(?:they|you|it|this|that|these|those)\b)/i)
+        .map((part) => part.trim().replace(/^(and|و)\s+/i, "").replace(/[.,\s]+$/g, ""))
+        .filter(Boolean);
+    }
+    if (parts.length < 2) {
+      parts = cleaned
+        .split(/\s*,\s+/)
+        .map((part) => part.trim().replace(/^(and|و)\s+/i, "").replace(/[.,\s]+$/g, ""))
+        .filter(Boolean);
+    }
+    const requestedCount = getRequestedBulletCount(prompt);
+    if (requestedCount && parts.length > requestedCount) {
+      const head = parts.slice(0, requestedCount - 1);
+      const tail = parts.slice(requestedCount - 1).join(", ");
+      parts = [...head, tail];
+    }
+    if (parts.length >= 2) {
+      return parts.map((part) => `- ${part}`).join("\n");
+    }
+  }
+
+  return text;
+}
+
+function buildAgentInvocationUrl(invocationId: string, baseHint?: string | null) {
+  const normalizedId = String(invocationId || "").trim();
+  if (!normalizedId) return null;
+
+  const candidateBase = String(baseHint || "").trim() || getApiBase();
+  const httpUrl = buildApiUrl(`/api/agent-invocation/${encodeURIComponent(normalizedId)}`);
+  const sourceUrl = candidateBase
+    ? `${candidateBase.replace(/\/+$/, "")}/api/agent-invocation/${encodeURIComponent(normalizedId)}`
+    : httpUrl;
+
+  if (!sourceUrl) return null;
+  return sourceUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+}
+
 export function ChatArea() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const navigate = useNavigate();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
+  const chatCopy = {
+    spaceFallback: isRtl ? "مساحة" : "Space",
+    newChat: isRtl ? "محادثة جديدة" : "New chat",
+    copied: isRtl ? "تم النسخ إلى الحافظة" : "Copied to clipboard",
+    copyFailed: isRtl ? "تعذر نسخ الرسالة" : "Unable to copy message",
+    exported: isRtl ? "تم تصدير المحادثة" : "Chat exported",
+    exportFailed: isRtl ? "تعذر تصدير هذه المحادثة" : "Unable to export this chat",
+    dragPrompt: isRtl ? "أسقط الملفات داخل المساحة ليتم استخدامها" : "Drop files into a workspace to ground them",
+    shareConversationAria: isRtl ? "مشاركة المحادثة" : "Share conversation",
+    shareConversation: isRtl ? "مشاركة" : "Share",
+    moreOptionsAria: isRtl ? "خيارات إضافية" : "More options",
+    reviewMemoriesAria: isRtl ? "مراجعة الذكريات" : "Review memories",
+    reviewMemories: isRtl ? "مراجعة الذكريات" : "Review Memories",
+    exportJsonAria: isRtl ? "تصدير المحادثة بصيغة JSON" : "Export conversation as JSON",
+    exportJson: isRtl ? "تصدير JSON" : "Export JSON",
+    scrollToBottomAria: isRtl ? "الانتقال إلى آخر المحادثة" : "Scroll to bottom",
+    unsupportedType: (hint?: string) =>
+      hint
+        ? isRtl
+          ? `نوع الملف غير مدعوم. استخدم أحد الأنواع التالية: ${hint}.`
+          : `Unsupported type. Use one of: ${hint}.`
+        : isRtl
+          ? "نوع الملف غير مدعوم."
+          : "Unsupported file type.",
+    unsupportedUploadToast: (hint?: string) =>
+      hint
+        ? isRtl
+          ? `نوع الملف غير مدعوم. ارفع أحد الأنواع التالية: ${hint}.`
+          : `Unsupported file type. Upload one of: ${hint}.`
+        : isRtl
+          ? "نوع الملف غير مدعوم لرفع ملفات المساحة."
+          : "Unsupported file type for workspace upload.",
+    addedFile: (name: string) =>
+      isRtl ? `تمت إضافة ${name} إلى ملفات المساحة.` : `Added ${name} to workspace files.`,
+    addedFiles: (count: number) =>
+      isRtl ? `تمت إضافة ${count} ملفات إلى ملفات المساحة.` : `Added ${count} files to workspace files.`,
+    uploadFailed: isRtl ? "فشل الرفع." : "Upload failed.",
+    unableToUpload: isRtl ? "تعذر رفع الملفات." : "Unable to upload files.",
+  };
   useAuthStore(); // For auth context, values used elsewhere
   const {
     view,
@@ -73,9 +257,13 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching">("thinking");
+  const [responseFormattingConfig, setResponseFormattingConfig] =
+    useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
+  const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
 
   // Memory state - works for both auto-save and manual modes
@@ -96,6 +284,7 @@ export function ChatArea() {
   const memoryConflictSeenRef = useRef<Set<string>>(new Set());
   const conflictCountRef = useRef(0);
   const memoryStatusHydratedRef = useRef(false);
+  const lastMemoryStatusSyncAtRef = useRef(0);
   const authUser = useAuthStore((s) => s.user);
   const authUserId = useMemo(() => {
     const fallbackEmail =
@@ -104,6 +293,11 @@ export function ChatArea() {
         : "";
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
+  const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
+    firstMessageSent: false,
+    firstMemorySaved: false,
+    completed: false,
+  });
   
   // Memory mode: autosave (default) or manual
   const [memoryMode, setMemoryMode] = useMemoryMode();
@@ -112,6 +306,11 @@ export function ChatArea() {
   const prevModeRef = useRef(memoryMode);
   useEffect(() => {
     if (prevModeRef.current !== memoryMode) {
+      window.dispatchEvent(
+        new CustomEvent("zaki:onboarding-memory-mode-changed", {
+          detail: { mode: memoryMode },
+        })
+      );
       // Mode changed - keep manual pending memories visible until resolved
       const hasManualPending = pendingMemories.some((m) => m._mode === "manual");
       if (prevModeRef.current === "manual" && hasManualPending) {
@@ -128,6 +327,36 @@ export function ChatArea() {
       setShowMemoryToast(true);
     }
   }, [pendingMemories]);
+
+  useEffect(() => {
+    if (!authUserId) {
+      setActivationProgress({
+        firstMessageSent: false,
+        firstMemorySaved: false,
+        completed: false,
+      });
+      return;
+    }
+    setActivationProgress(getActivationProgress(authUserId));
+  }, [authUserId]);
+
+  useEffect(() => {
+    const syncResponseFormattingConfig = () => {
+      setResponseFormattingConfig(readResponseFormattingConfig());
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== "zaki.responseFormattingConfig") return;
+      syncResponseFormattingConfig();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(RESPONSE_FORMATTING_EVENT, syncResponseFormattingConfig);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(RESPONSE_FORMATTING_EVENT, syncResponseFormattingConfig);
+    };
+  }, []);
 
   // UI state
   const [dragActive, setDragActive] = useState(false);
@@ -153,6 +382,10 @@ export function ChatArea() {
   const [spacesList, setSpacesList] = useState<Space[]>([]);
   const [editSpaceId, setEditSpaceId] = useState<string | null>(null);
   const [fileUploadSpaceId, setFileUploadSpaceId] = useState<string | null>(null);
+  const [acceptedWorkspaceTypes, setAcceptedWorkspaceTypes] = useState<Record<string, string[]>>(
+    {}
+  );
+  const [acceptedWorkspaceHint, setAcceptedWorkspaceHint] = useState("");
 
   const toastPosition = useMemo(() => {
     const left = inputWidth ? inputLeft : 16;
@@ -166,6 +399,27 @@ export function ChatArea() {
       : 24;
     return { left, width, bottom };
   }, [inputLeft, inputTop, inputWidth, viewportHeight, viewportWidth]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiRequest("/api/documents/accepted-file-types")
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json().catch(() => ({}))) as {
+          types?: Record<string, string[]>;
+        };
+        if (cancelled) return;
+        const nextTypes = data.types && typeof data.types === "object" ? data.types : {};
+        setAcceptedWorkspaceTypes(nextTypes);
+        setAcceptedWorkspaceHint(formatAcceptedTypeHint(nextTypes));
+      })
+      .catch(() => {
+        // Best-effort only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
 
   // Refs
@@ -213,18 +467,18 @@ export function ChatArea() {
   }, [primarySpace?.id, spacesList]);
   const activeSpace = spacesList.find((space) => space.id === activeWorkspaceSlug) ?? null;
   const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
-  const headerSpaceName = activeSpace?.title || "Space";
-  const headerThreadName = activeThread?.label || "New chat";
+  const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
+  const headerThreadName = activeThread?.label || chatCopy.newChat;
 
   const handleCopyMessage = useCallback(async (message: Message) => {
     if (!message.content) return;
     try {
       await navigator.clipboard.writeText(message.content);
-      toast.success("Copied to clipboard");
+      toast.success(chatCopy.copied);
     } catch {
-      toast.error("Unable to copy message");
+      toast.error(chatCopy.copyFailed);
     }
-  }, []);
+  }, [chatCopy.copied, chatCopy.copyFailed]);
 
   const updateScrollIndicator = useCallback(() => {
     const el = scrollRef.current;
@@ -272,17 +526,17 @@ export function ChatArea() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast.success("Chat exported");
+      toast.success(chatCopy.exported);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to export this chat");
+      toast.error(error instanceof Error ? error.message : chatCopy.exportFailed);
     } finally {
       setMenuOpen(false);
     }
-  }, [serializeChat, headerThreadName]);
+  }, [chatCopy.exportFailed, chatCopy.exported, headerThreadName, serializeChat]);
 
   const uploadFilesToWorkspace = useCallback(
     async (workspaceSlug: string, files: File[]) => {
-      const uploaded: Array<{ name: string; type: string; size: number }> = [];
+      const uploaded: PinnedFile[] = [];
       for (const file of files) {
         const createFormData = () => {
           const formData = new FormData();
@@ -312,10 +566,18 @@ export function ChatArea() {
           );
         }
 
+        const responseData = (await response.json().catch(() => ({}))) as {
+          files?: Array<{ name?: string; type?: string; size?: number; status?: "embedded" | "processing" | "failed"; location?: string | null; source?: string | null; title?: string | null }>;
+        };
+        const normalizedFile = responseData.files?.[0];
         uploaded.push({
-          name: file.name,
-          type: file.type,
-          size: file.size,
+          name: normalizedFile?.name || file.name,
+          type: normalizedFile?.type || file.type || "document",
+          size: Number(normalizedFile?.size || file.size || 0),
+          status: normalizedFile?.status || "embedded",
+          location: normalizedFile?.location ?? null,
+          source: normalizedFile?.source ?? null,
+          title: normalizedFile?.title ?? null,
         });
       }
       return uploaded;
@@ -325,6 +587,15 @@ export function ChatArea() {
 
   // Strip memory context prefix from user messages (injected by backend for AI context)
   const stripMemoryContext = (content: string): string => {
+    // V2 contract: [[ZAKI_MEMORY_CONTEXT_V2]] ... [[/ZAKI_MEMORY_CONTEXT_V2]] {user message}
+    const v2Open = "[[ZAKI_MEMORY_CONTEXT_V2]]";
+    const v2Close = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+    const v2Start = content.indexOf(v2Open);
+    const v2End = content.indexOf(v2Close);
+    if (v2Start !== -1 && v2End !== -1 && v2End > v2Start) {
+      return content.slice(v2End + v2Close.length).trim();
+    }
+
     // Old format: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
     const userMessageMarker = "[USER MESSAGE]\n";
     const memoryContextMarker = "[MEMORY CONTEXT";
@@ -367,10 +638,35 @@ export function ChatArea() {
       updated[assistantIndex] = {
         ...existingMsg,
         content: newContent,
+        error: false,
+        errorCode: null,
       };
       return { ...prev, [threadSlug]: updated };
     });
   }, []);
+
+  const updateAssistantError = useCallback(
+    (threadSlug: string, assistantId: string, newContent: string, errorCode?: string | null) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const updated = [...threadMessages];
+        const existingMsg = updated[assistantIndex];
+        if (!existingMsg) return prev;
+        updated[assistantIndex] = {
+          ...existingMsg,
+          content: existingMsg.content?.trim()
+            ? `${existingMsg.content.trim()}\n\n${newContent}`
+            : newContent,
+          error: true,
+          errorCode: errorCode ?? null,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
 
   const updateAssistantSources = useCallback(
     (threadSlug: string, assistantId: string, sources: Array<{ id: string; content: string; type: string }>) => {
@@ -405,6 +701,9 @@ export function ChatArea() {
       }
       const ws = new WebSocket(agentUrl);
       let accumulated = "";
+      let supportsAgentStreaming = false;
+      let hasAnswer = false;
+      let autoReplySent = false;
       let settled = false;
 
       const cleanup = () => {
@@ -442,19 +741,95 @@ export function ChatArea() {
         }
         try {
           const payload = JSON.parse(event.data);
-          const chunk =
+          if (!payload?.type && supportsAgentStreaming) {
+            return;
+          }
+
+          if (payload?.type === "WAITING_ON_INPUT") {
+            if (hasAnswer) {
+              ws.send(
+                JSON.stringify({
+                  type: "awaitingFeedback",
+                  feedback: "/exit",
+                })
+              );
+              return;
+            }
+            if (!autoReplySent) {
+              ws.send(
+                JSON.stringify({
+                  type: "awaitingFeedback",
+                  feedback: "",
+                })
+              );
+              autoReplySent = true;
+            }
+            return;
+          }
+
+          if (payload?.type === "reportStreamEvent" && payload?.content) {
+            supportsAgentStreaming = true;
+            const report = payload.content as { type?: string; content?: string };
+            if (report?.type === "removeStatusResponse") return;
+            if (report?.type === "fullTextResponse") {
+              accumulated = String(report.content || "");
+              updateAssistantContent(threadSlug, assistantId, accumulated);
+              if (accumulated) hasAnswer = true;
+              return;
+            }
+            if (report?.type === "textResponseChunk") {
+              accumulated += String(report.content || "");
+              updateAssistantContent(threadSlug, assistantId, accumulated);
+              if (accumulated) hasAnswer = true;
+              return;
+            }
+            if (report?.type === "toolCallInvocation") {
+              return;
+            }
+            if (report?.type === "statusResponse") {
+              return;
+            }
+          }
+
+          if (payload?.type === "statusResponse") {
+            return;
+          }
+
+          if (payload?.type === "toolCallInvocation") {
+            return;
+          }
+
+          if (payload?.type === "wssFailure") {
+            const errorText =
+              (typeof payload.content === "string" && payload.content) ||
+              "Agent connection failed.";
+            updateAssistantError(threadSlug, assistantId, errorText, "agent_error");
+            ws.close();
+            return;
+          }
+
+          const rawChunk =
             (typeof payload.textResponse === "string" && payload.textResponse) ||
             (typeof payload.content === "string" && payload.content) ||
             (typeof payload.message === "string" && payload.message) ||
             (typeof payload.error === "string" && payload.error) ||
             "";
+          if (rawChunk) {
+            if (
+              payload.type === "textResponse" ||
+              payload.type === "fullTextResponse"
+            ) {
+              accumulated = rawChunk;
+            } else {
+              accumulated += rawChunk;
+            }
+            updateAssistantContent(threadSlug, assistantId, accumulated);
+            if (accumulated) hasAnswer = true;
+          }
+
           if (payload.close || payload.type === "finalizeResponseStream") {
             ws.close();
             return;
-          }
-          if (chunk) {
-            accumulated += chunk;
-            updateAssistantContent(threadSlug, assistantId, accumulated);
           }
         } catch {
           // Ignore parse errors
@@ -479,31 +854,46 @@ export function ChatArea() {
     message,
     assistantId,
     signal,
+    disableResponseEnvelope = false,
   }: {
     workspaceSlug: string;
     threadSlug: string;
     message: string;
     assistantId: string;
     signal?: AbortSignal;
+    disableResponseEnvelope?: boolean;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
-
-    console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
-    const response = await apiRequest(
-      `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
-      {
-        method: "POST",
-        body: JSON.stringify({
+    const shouldDisableResponseEnvelope =
+      responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
+    const isZakiAgentSpace =
+      String(workspaceSlug || "").trim().toLowerCase() === "zaki-agent";
+    const requestPath = isZakiAgentSpace
+      ? "/api/agent/chat/stream"
+      : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
+    const requestBody = isZakiAgentSpace
+      ? {
+          message,
+          threadId: threadSlug,
+          spaceId: workspaceSlug,
+        }
+      : {
           message,
           mode: queryModeEnabled ? "query" : "chat",
+          ...(shouldDisableResponseEnvelope ? { disableResponseEnvelope: true } : {}),
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
-        }),
-        signal,
-      }
-    );
+        };
+
+    console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
+    const response = await apiRequest(requestPath, {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+      signal,
+    });
 
     console.log(`[Chat] Response status: ${response.status}`);
+    const agentBaseHeader = response.headers.get("x-zaki-agent-base");
 
     if (!response.ok) {
       console.error(`[Chat] Stream failed: ${response.status}`);
@@ -547,9 +937,48 @@ export function ChatArea() {
       throw new Error("Chat stream returned no data.");
     }
 
+    const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
+      const direct =
+        (payload.agentInvocationUrl as string | undefined) ||
+        (payload.invocationUrl as string | undefined) ||
+        (payload.websocketUrl as string | undefined) ||
+        (payload.wsUrl as string | undefined) ||
+        (payload.url as string | undefined);
+      if (direct) return direct;
+      const socketId =
+        (payload.websocketUUID as string | undefined) ||
+        (payload.websocketUuid as string | undefined);
+      if (socketId) return buildAgentInvocationUrl(socketId, agentBaseHeader);
+      return null;
+    };
+
     const readPayloadChunk = (
-      payload: Record<string, unknown>
-    ): { done?: boolean; chunk?: string } => {
+      payload: Record<string, unknown>,
+      eventType?: string
+    ): { done?: boolean; chunk?: string; agentUrl?: string } => {
+      if (eventType === "done") {
+        return { done: true };
+      }
+      if (eventType === "error") {
+        const msg =
+          (typeof payload.message === "string" && payload.message) ||
+          (typeof payload.error === "string" && payload.error) ||
+          "Agent stream failed.";
+        throw new ChatRequestError(
+          msg,
+          502,
+          typeof payload.code === "string" ? payload.code : "chat_error"
+        );
+      }
+
+      if (eventType === "memory_used" && Array.isArray(payload.sources)) {
+        updateAssistantSources(
+          threadSlug,
+          assistantId,
+          payload.sources as Array<{ id: string; content: string; type: string }>
+        );
+        return {};
+      }
       if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
@@ -559,19 +988,49 @@ export function ChatArea() {
         return {};
       }
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return { done: true };
+      if (payload?.type === "agentInitWebsocketConnection") {
+        const agentUrl = resolveAgentUrl(payload);
+        if (agentUrl) {
+          return { agentUrl };
+        }
       }
-
+      if (
+        eventType === "status" ||
+        payload?.type === "statusResponse" ||
+        payload?.type === "toolCallInvocation"
+      ) {
+        return {};
+      }
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
         throw new Error(payload.error.trim());
       }
 
+      if (payload?.type === "error" || payload?.error === true) {
+        const errorMessage =
+          (typeof payload.message === "string" && payload.message.trim()) ||
+          (typeof payload.error === "string" && payload.error.trim()) ||
+          "ZAKI couldn't finish that reply. Please try again.";
+        throw new ChatRequestError(
+          errorMessage,
+          502,
+          typeof payload.code === "string" ? payload.code : "chat_error"
+        );
+      }
+
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return { done: true };
+      }
+
       const chunk =
+        (typeof payload.delta === "string" && payload.delta) ||
         (typeof payload.textResponse === "string" && payload.textResponse) ||
         (typeof payload.content === "string" && payload.content) ||
         (typeof payload.message === "string" && payload.message) ||
         "";
+
+      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
+        return chunk ? { chunk, done: true } : { done: true };
+      }
 
       return chunk ? { chunk } : {};
     };
@@ -581,12 +1040,7 @@ export function ChatArea() {
     // If JSON response, check for agent invocation URL
     if (contentType.includes("application/json")) {
       const data = (await response.json()) as Record<string, unknown>;
-      const agentUrl =
-        (data.agentInvocationUrl as string | undefined) ||
-        (data.invocationUrl as string | undefined) ||
-        (data.websocketUrl as string | undefined) ||
-        (data.wsUrl as string | undefined) ||
-        (data.url as string | undefined);
+      const agentUrl = resolveAgentUrl(data);
       
       if (agentUrl) {
         await streamAgentInvocation(agentUrl, threadSlug, assistantId, signal);
@@ -594,8 +1048,16 @@ export function ChatArea() {
       }
 
       const result = readPayloadChunk(data);
+      if (result.agentUrl) {
+        await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+        return;
+      }
       if (result.chunk) {
-        updateAssistantContent(threadSlug, assistantId, result.chunk);
+        updateAssistantContent(
+          threadSlug,
+          assistantId,
+          normalizeAssistantFormatting(message, result.chunk)
+        );
       }
       return;
     }
@@ -613,46 +1075,82 @@ export function ChatArea() {
       updateAssistantContent(threadSlug, assistantId, accumulated);
     };
 
-    const processRawData = (raw: string) => {
+    const processRawData = async (raw: string) => {
       const value = raw.trim();
       if (!value || value === "[DONE]") {
         if (value === "[DONE]") streamClosed = true;
         return;
       }
+      let payload: Record<string, unknown>;
       try {
-        const payload = JSON.parse(value) as Record<string, unknown>;
-        const result = readPayloadChunk(payload);
-        if (result.done) {
-          streamClosed = true;
-          return;
-        }
-        if (result.chunk) {
-          appendChunk(result.chunk);
-        }
-        return;
+        payload = JSON.parse(value) as Record<string, unknown>;
       } catch {
         appendChunk(raw);
+        return;
+      }
+
+      const result = readPayloadChunk(payload);
+      if (result.agentUrl) {
+        streamClosed = true;
+        await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+        return;
+      }
+      if (result.chunk) {
+        appendChunk(result.chunk);
+      }
+      if (result.done) {
+        streamClosed = true;
+        return;
       }
     };
 
-    const processSseBlock = (block: string) => {
+    const processSseBlock = async (block: string) => {
       const normalized = block.replace(/\r/g, "");
       const lines = normalized.split("\n");
       const dataLines: string[] = [];
+      let eventType = "";
 
       for (const rawLine of lines) {
         const line = rawLine.trimEnd();
         if (!line || line.startsWith(":")) continue;
+        if (line.startsWith("event:")) {
+          eventType = line.slice(6).trim();
+          continue;
+        }
         if (line.startsWith("data:")) {
           dataLines.push(line.slice(5).trimStart());
           continue;
         }
         // Fallback: non-SSE chunked line
-        processRawData(line);
+        await processRawData(line);
       }
 
       if (dataLines.length > 0) {
-        processRawData(dataLines.join("\n"));
+        const payloadText = dataLines.join("\n");
+        try {
+          const payload = JSON.parse(payloadText) as Record<string, unknown>;
+          const result = readPayloadChunk(payload, eventType);
+          if (result.done) {
+            streamClosed = true;
+            return;
+          }
+          if (result.agentUrl) {
+            await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+            try {
+              await reader.cancel();
+            } catch {
+              // ignore cancel errors
+            }
+            streamClosed = true;
+            return;
+          }
+          if (result.chunk) {
+            appendChunk(result.chunk);
+          }
+          return;
+        } catch {
+          await processRawData(payloadText);
+        }
       }
     };
 
@@ -667,7 +1165,7 @@ export function ChatArea() {
       while (separatorIndex !== -1) {
         const block = buffer.slice(0, separatorIndex);
         buffer = buffer.slice(separatorIndex + 2);
-        processSseBlock(block);
+        await processSseBlock(block);
         if (streamClosed) break;
         separatorIndex = buffer.indexOf("\n\n");
       }
@@ -675,9 +1173,21 @@ export function ChatArea() {
 
     const trailing = buffer.trim();
     if (!streamClosed && trailing) {
-      processSseBlock(trailing);
+      await processSseBlock(trailing);
     }
-  }, [spacesList, queryModeEnabled, streamAgentInvocation, updateAssistantContent, updateAssistantSources]);
+
+    const finalized = normalizeAssistantFormatting(message, accumulated);
+    if (finalized && finalized !== accumulated) {
+      updateAssistantContent(threadSlug, assistantId, finalized);
+    }
+  }, [
+    spacesList,
+    responseFormattingConfig.disableResponseEnvelope,
+    queryModeEnabled,
+    streamAgentInvocation,
+    updateAssistantContent,
+    updateAssistantSources,
+  ]);
 
   // Check for memories - Auto-Save or Manual mode
   const flushMemoryQueue = useCallback(() => {
@@ -802,6 +1312,20 @@ export function ChatArea() {
     [authUserId]
   );
 
+  const requestMemoryStatusSync = useCallback(
+    (notifyOnNewConflicts = false, force = false) => {
+      if (!authUserId) return;
+      const now = Date.now();
+      const elapsed = now - lastMemoryStatusSyncAtRef.current;
+      if (!force && elapsed < MEMORY_STATUS_SYNC_THROTTLE_MS) {
+        return;
+      }
+      lastMemoryStatusSyncAtRef.current = now;
+      void syncMemoryStatus(notifyOnNewConflicts);
+    },
+    [authUserId, syncMemoryStatus]
+  );
+
   const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
     if (!authUserId) return;
     if (memoryInFlightRef.current) {
@@ -878,6 +1402,30 @@ export function ChatArea() {
           return true;
         });
         if (uniqueMemories.length === 0) return;
+        if (authUserId && !activationProgress.firstMemorySaved) {
+          const nextProgress = markFirstMemorySaved(authUserId);
+          setActivationProgress(nextProgress);
+          void trackProductEvent({
+            event: "first_memory_saved",
+            source: "chat_input",
+            language: isRtl ? "ar" : "en",
+            plan: null,
+            interval: null,
+          }).catch(() => {
+            // Best-effort telemetry only.
+          });
+          if (nextProgress.completed) {
+            void trackProductEvent({
+              event: "activation_completed",
+              source: "chat_input",
+              language: isRtl ? "ar" : "en",
+              plan: null,
+              interval: null,
+            }).catch(() => {
+              // Best-effort telemetry only.
+            });
+          }
+        }
         memoryQueueRef.current = [...memoryQueueRef.current, ...uniqueMemories];
         if (memoryFlushTimerRef.current) {
           window.clearTimeout(memoryFlushTimerRef.current);
@@ -885,7 +1433,7 @@ export function ChatArea() {
         memoryFlushTimerRef.current = window.setTimeout(() => {
           flushMemoryQueue();
           memoryFlushTimerRef.current = null;
-        }, 600);
+        }, 150);
       }
     } catch (err) {
       // Silent fail - not critical for chat
@@ -893,25 +1441,34 @@ export function ChatArea() {
       setMemoryError("Memory save failed. Retry?");
     } finally {
       memoryInFlightRef.current = false;
-      void syncMemoryStatus(true);
+      requestMemoryStatusSync(true);
       if (queuedMemoryCheckRef.current) {
         const next = queuedMemoryCheckRef.current;
         queuedMemoryCheckRef.current = null;
         checkForSavedMemories(next.message, next.threadId, next.mode);
       }
     }
-  }, [authUserId, activeThreadId, memoryMode, flushMemoryQueue, syncMemoryStatus]);
+  }, [
+    authUserId,
+    activationProgress.firstMemorySaved,
+    activeThreadId,
+    flushMemoryQueue,
+    isRtl,
+    memoryMode,
+    requestMemoryStatusSync,
+  ]);
 
   useEffect(() => {
     if (!authUserId) {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
+      lastMemoryStatusSyncAtRef.current = 0;
       setMemoryConflictCount(0);
       setShowConflictToast(false);
       return;
     }
-    void syncMemoryStatus(false);
-  }, [authUserId, syncMemoryStatus]);
+    requestMemoryStatusSync(false, true);
+  }, [authUserId, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId) return;
@@ -963,19 +1520,44 @@ export function ChatArea() {
               if (eventName === "status") {
                 try {
                   const payload = JSON.parse(dataLines.join("\n") || "{}") as {
+                    pending?: number;
                     conflicts?: number;
                   };
+                  const nextPendingCount = Math.max(0, Number(payload.pending || 0));
                   const nextConflictCount = Math.max(
                     0,
                     Number(payload.conflicts || 0)
                   );
+                  const previousConflictCount = conflictCountRef.current;
                   if (nextConflictCount > conflictCountRef.current) {
                     setShowConflictToast(true);
                   }
+                  conflictCountRef.current = nextConflictCount;
+                  setMemoryConflictCount(nextConflictCount);
+                  if (typeof window !== "undefined" && nextConflictCount !== previousConflictCount) {
+                    window.dispatchEvent(
+                      new CustomEvent("zaki:memory-conflicts-count", {
+                        detail: { count: nextConflictCount },
+                      })
+                    );
+                  }
+                  if (nextPendingCount <= 0) {
+                    let hasAutosaveMemories = false;
+                    setPendingMemories((prev) => {
+                      const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
+                      hasAutosaveMemories = autosaveOnly.length > 0;
+                      return autosaveOnly;
+                    });
+                    if (!hasAutosaveMemories) {
+                      setShowMemoryToast(false);
+                    }
+                  } else {
+                    requestMemoryStatusSync(true);
+                  }
                 } catch {
                   // Ignore malformed events and rely on sync fallback.
+                  requestMemoryStatusSync(true);
                 }
-                void syncMemoryStatus(true);
               }
 
               boundary = buffer.indexOf("\n\n");
@@ -1003,17 +1585,17 @@ export function ChatArea() {
       }
       controller?.abort();
     };
-  }, [authUserId, syncMemoryStatus]);
+  }, [authUserId, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId) return;
 
     const handleFocus = () => {
-      void syncMemoryStatus(true);
+      requestMemoryStatusSync(true, true);
     };
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        void syncMemoryStatus(true);
+        requestMemoryStatusSync(true, true);
       }
     };
 
@@ -1023,7 +1605,7 @@ export function ChatArea() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [authUserId, syncMemoryStatus]);
+  }, [authUserId, requestMemoryStatusSync]);
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
@@ -1066,6 +1648,31 @@ export function ChatArea() {
 
     if (!threadId) return;
 
+    if (authUserId && !activationProgress.firstMessageSent) {
+      const nextProgress = markFirstMessageSent(authUserId);
+      setActivationProgress(nextProgress);
+      void trackProductEvent({
+        event: "first_message_sent",
+        source: "chat_input",
+        language: isRtl ? "ar" : "en",
+        plan: null,
+        interval: null,
+      }).catch(() => {
+        // Best-effort telemetry only.
+      });
+      if (nextProgress.completed) {
+        void trackProductEvent({
+          event: "activation_completed",
+          source: "chat_input",
+          language: isRtl ? "ar" : "en",
+          plan: null,
+          interval: null,
+        }).catch(() => {
+          // Best-effort telemetry only.
+        });
+      }
+    }
+
     const attachmentsForMessage = files
       .filter((file) => file.type.startsWith("image/"))
       .map((file) => ({
@@ -1095,13 +1702,20 @@ export function ChatArea() {
     }));
 
     setAttachments([]);
+    const manualAgentPrefix = /^@agent\b/i.test(trimmed);
+    const agentRequested = webSearchArmed || manualAgentPrefix;
+    setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
-
-    const sendText = files.length > 0
-      ? `[Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${trimmed}`
-      : trimmed;
+    const normalizedText = manualAgentPrefix ? trimmed.replace(/^@agent\b\s*/i, "").trim() : trimmed;
+    const sendText = agentRequested
+      ? files.length > 0
+        ? `@agent [Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${normalizedText || trimmed}`
+        : `@agent ${normalizedText || trimmed}`.trim()
+      : files.length > 0
+        ? `[Attachments: ${files.map((file) => file.name).join(", ")}]\n\n${trimmed}`
+        : trimmed;
 
     try {
       await streamChatMessage({
@@ -1111,11 +1725,13 @@ export function ChatArea() {
         assistantId: assistantMessageId,
         signal: streamController.signal,
       });
+      setWebSearchArmed(false);
       
-      // P0 Fix: Check for auto-saved memories after response
-      await checkForSavedMemories(trimmed, threadId);
+      // Keep chat UX responsive: memory save runs in background.
+      void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
       if (isAbortError(error)) {
+        updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
         return;
       }
       if (error instanceof ChatRequestError && error.code === "access_expired") {
@@ -1123,14 +1739,36 @@ export function ChatArea() {
         navigate("/pricing");
         return;
       }
-      toast.error(error instanceof Error ? error.message : "Unable to send message");
+      const errorMessage =
+        error instanceof Error ? error.message : "ZAKI couldn't finish that reply. Please try again.";
+      updateAssistantError(
+        threadId,
+        assistantMessageId,
+        errorMessage,
+        error instanceof ChatRequestError ? error.code : "chat_error"
+      );
+      toast.error(errorMessage);
     } finally {
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
+      setStreamingIndicatorMode("thinking");
       setIsStreaming(false);
     }
-  }, [activeThreadId, activeWorkspaceSlug, primarySpace?.id, isStreaming, streamChatMessage, checkForSavedMemories, navigate]);
+  }, [
+    activeThreadId,
+    activeWorkspaceSlug,
+    activationProgress.firstMessageSent,
+    authUserId,
+    checkForSavedMemories,
+    isRtl,
+    isStreaming,
+    navigate,
+    primarySpace?.id,
+    streamChatMessage,
+    updateAssistantError,
+    webSearchArmed,
+  ]);
 
   const handleStopStreaming = useCallback(() => {
     streamAbortRef.current?.abort();
@@ -1467,7 +2105,13 @@ export function ChatArea() {
     }
 
     if (showReady) {
-      return <ReadyState ref={readyRef} onStartChat={handleStartChat} onSelectExample={handleExampleSelect} />;
+      return (
+        <ReadyState
+          ref={readyRef}
+          onStartChat={handleStartChat}
+          onSelectExample={handleExampleSelect}
+        />
+      );
     }
 
     return (
@@ -1475,6 +2119,8 @@ export function ChatArea() {
         messages={messages}
         isHistoryLoading={isHistoryLoading}
         isStreaming={isStreaming}
+        streamingLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : t("chat.thinking")}
+        streamingPillLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : undefined}
         firstMessageTransition={firstMessageTransition}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
@@ -1486,7 +2132,7 @@ export function ChatArea() {
   return (
     <div
       ref={containerRef}
-      className="zaki-chat flex-1 relative flex flex-col h-full bg-transparent"
+      className="zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden"
       style={
         {
           "--zaki-input-height": `${inputHeight}px`,
@@ -1516,7 +2162,7 @@ export function ChatArea() {
         setDragActive(false);
         const files = Array.from(event.dataTransfer.files ?? []);
         if (files.length) {
-          setAttachments((prev) => [...prev, ...files]);
+          toast.info(THREAD_ATTACHMENT_UNAVAILABLE_MESSAGE);
         }
       }}
     >
@@ -1524,7 +2170,7 @@ export function ChatArea() {
       {dragActive && (
         <div className="absolute inset-0 z-30 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
           <div className="rounded-zaki-lg border border-zaki bg-white px-5 py-3 text-sm text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.12)]">
-            Drop files to attach
+            {chatCopy.dragPrompt}
           </div>
         </div>
       )}
@@ -1547,10 +2193,10 @@ export function ChatArea() {
                   type="button"
                   className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                   onClick={handleShare}
-                  aria-label="Share conversation"
+                  aria-label={chatCopy.shareConversationAria}
                 >
                   <Share2 className="size-4 text-zaki-muted" />
-                  Share
+                  {chatCopy.shareConversation}
                 </button>
                 <button
                   type="button"
@@ -1558,7 +2204,7 @@ export function ChatArea() {
                   onClick={() => setMenuOpen((open) => !open)}
                   aria-haspopup="menu"
                   aria-expanded={menuOpen}
-                  aria-label="More options"
+                  aria-label={chatCopy.moreOptionsAria}
                 >
                   <MoreVertical className="size-4" />
                 </button>
@@ -1575,10 +2221,10 @@ export function ChatArea() {
                         setMenuOpen(false);
                         setShowMemoryPanel(true);
                       }}
-                      aria-label="Review memories"
+                      aria-label={chatCopy.reviewMemoriesAria}
                     >
                       <Brain className="size-4 text-zaki-muted" />
-                      Review Memories
+                      {chatCopy.reviewMemories}
                       {pendingMemories.length > 0 && (
                         <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
                           {pendingMemories.length}
@@ -1590,10 +2236,10 @@ export function ChatArea() {
                       className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                       role="menuitem"
                       onClick={handleExport}
-                      aria-label="Export conversation as JSON"
+                      aria-label={chatCopy.exportJsonAria}
                     >
                       <Download className="size-4 text-zaki-muted" />
-                      Export JSON
+                      {chatCopy.exportJson}
                     </button>
                   </div>
                 )}
@@ -1605,13 +2251,14 @@ export function ChatArea() {
 
           {/* Main Content */}
           <div
-            className="flex-1 relative z-10 overflow-y-auto zaki-scrollbar-fade"
+            className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade"
             ref={scrollRef}
             style={{
               paddingBottom:
                 !showZakiHome && !showSpacesView && !showSpaceDetail
                   ? Math.max(24, inputHeight + 24)
                   : undefined,
+              WebkitOverflowScrolling: "touch",
             }}
             onScroll={() => {
               if (!scrollRef.current) return;
@@ -1644,7 +2291,7 @@ export function ChatArea() {
                   autoScrollRef.current = true;
                   setShowScrollToBottom(false);
                 }}
-                aria-label="Scroll to bottom"
+                aria-label={chatCopy.scrollToBottomAria}
               >
                 <ChevronDown className="size-5 mx-auto" />
               </button>
@@ -1666,6 +2313,8 @@ export function ChatArea() {
                 onStop={handleStopStreaming}
                 queryModeEnabled={queryModeEnabled}
                 onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
+                webSearchArmed={webSearchArmed}
+                onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
                 memoryMode={memoryMode}
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
               />
@@ -1678,6 +2327,7 @@ export function ChatArea() {
             type="file"
             className="hidden"
             multiple
+            accept={Object.values(acceptedWorkspaceTypes).flat().join(",")}
             onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
               const targetSpaceId = fileUploadSpaceId;
@@ -1685,10 +2335,61 @@ export function ChatArea() {
               event.target.value = "";
               if (!targetSpaceId || files.length === 0) return;
 
-              void uploadFilesToWorkspace(targetSpaceId, files)
+              const { valid, invalid } = splitFilesByAcceptedTypes(
+                files,
+                acceptedWorkspaceTypes
+              );
+              const existingPinned =
+                spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
+
+              if (invalid.length > 0) {
+                const invalidMap = new Map(
+                  existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+                );
+                for (const file of invalid) {
+                  invalidMap.set(`${file.name}:${file.size}:${file.type}`, {
+                    name: file.name,
+                    type: file.type || "document",
+                    size: Number(file.size || 0),
+                    status: "failed",
+                    error: chatCopy.unsupportedType(acceptedWorkspaceHint),
+                  });
+                }
+                window.dispatchEvent(
+                  new CustomEvent("zaki:update-space", {
+                    detail: {
+                      id: targetSpaceId,
+                      pinnedFiles: Array.from(invalidMap.values()),
+                    },
+                  })
+                );
+                toast.error(chatCopy.unsupportedUploadToast(acceptedWorkspaceHint));
+              }
+              if (valid.length === 0) return;
+
+              const processingFiles: PinnedFile[] = valid.map((file) => ({
+                name: file.name,
+                type: file.type || "document",
+                size: Number(file.size || 0),
+                status: "processing",
+              }));
+              const processingMap = new Map(
+                existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+              );
+              for (const file of processingFiles) {
+                processingMap.set(`${file.name}:${file.size}:${file.type}`, file);
+              }
+              window.dispatchEvent(
+                new CustomEvent("zaki:update-space", {
+                  detail: {
+                    id: targetSpaceId,
+                    pinnedFiles: Array.from(processingMap.values()),
+                  },
+                })
+              );
+
+              void uploadFilesToWorkspace(targetSpaceId, valid)
                 .then((uploadedFiles) => {
-                  const existingPinned =
-                    spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
                   const fileMap = new Map(
                     existingPinned.map((file) => [
                       `${file.name}:${file.size}:${file.type}`,
@@ -1708,13 +2409,33 @@ export function ChatArea() {
                   );
                   toast.success(
                     uploadedFiles.length === 1
-                      ? `Added ${uploadedFiles[0]?.name || "file"} to workspace files.`
-                      : `Added ${uploadedFiles.length} files to workspace files.`
+                      ? chatCopy.addedFile(uploadedFiles[0]?.name || (isRtl ? "الملف" : "file"))
+                      : chatCopy.addedFiles(uploadedFiles.length)
                   );
                 })
                 .catch((error) => {
+                  const failedMap = new Map(
+                    existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+                  );
+                  for (const file of valid) {
+                    failedMap.set(`${file.name}:${file.size}:${file.type}`, {
+                      name: file.name,
+                      type: file.type || "document",
+                      size: Number(file.size || 0),
+                      status: "failed",
+                      error: error instanceof Error ? error.message : chatCopy.uploadFailed,
+                    });
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent("zaki:update-space", {
+                      detail: {
+                        id: targetSpaceId,
+                        pinnedFiles: Array.from(failedMap.values()),
+                      },
+                    })
+                  );
                   toast.error(
-                    error instanceof Error ? error.message : "Unable to upload files."
+                    error instanceof Error ? error.message : chatCopy.unableToUpload
                   );
                 });
             }}
@@ -1779,7 +2500,7 @@ export function ChatArea() {
               }
               return next;
             });
-            void syncMemoryStatus(false);
+            requestMemoryStatusSync(false, true);
           }}
           onDismiss={() => {
             setShowMemoryToast(false);

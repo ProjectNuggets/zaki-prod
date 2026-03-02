@@ -4,13 +4,14 @@ import { useTranslation } from "react-i18next";
 
 export const ReadyState = forwardRef<
   HTMLDivElement,
-  { onStartChat?: () => void; onSelectExample?: (example: string) => void }
->(function ReadyState(
-  { onStartChat, onSelectExample },
-  ref
-) {
+  {
+    onStartChat?: () => void;
+    onSelectExample?: (example: string) => void;
+  }
+>(function ReadyState({ onStartChat, onSelectExample }, ref) {
   const { t } = useTranslation();
   const examples = t("empty.examples", { returnObjects: true }) as string[];
+
   return (
     <div className="min-h-full flex flex-col items-center justify-center px-4 py-16 pb-32">
       <div ref={ref} className="flex flex-col items-center gap-2 mb-6">
