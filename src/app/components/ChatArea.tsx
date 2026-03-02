@@ -50,9 +50,6 @@ class ChatRequestError extends Error {
 
 const HOME_STARTER_MESSAGE = "hello, how are you zaki";
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
-const THREAD_ATTACHMENT_UNAVAILABLE_MESSAGE =
-  "Thread file grounding is not live yet. Upload documents from the workspace tools so ZAKI can actually use them.";
-
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return true;
@@ -583,6 +580,129 @@ export function ChatArea() {
       return uploaded;
     },
     []
+  );
+
+  const beginWorkspaceUpload = useCallback(
+    (spaceId?: string | null) => {
+      const resolvedSpaceId = spaceId ?? activeWorkspaceSlug ?? primarySpace?.id ?? null;
+      if (!resolvedSpaceId) {
+        toast.error(isRtl ? "اختر مساحة أولًا لإضافة الملفات." : "Select a space before adding files.");
+        return;
+      }
+      setFileUploadSpaceId(resolvedSpaceId);
+      fileInputRef.current?.click();
+    },
+    [activeWorkspaceSlug, isRtl, primarySpace?.id]
+  );
+
+  const handleWorkspaceFilesSelected = useCallback(
+    (targetSpaceId: string, files: File[]) => {
+      if (!targetSpaceId || files.length === 0) return;
+
+      const { valid, invalid } = splitFilesByAcceptedTypes(files, acceptedWorkspaceTypes);
+      const existingPinned =
+        spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
+
+      if (invalid.length > 0) {
+        const invalidMap = new Map(
+          existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+        );
+        for (const file of invalid) {
+          invalidMap.set(`${file.name}:${file.size}:${file.type}`, {
+            name: file.name,
+            type: file.type || "document",
+            size: Number(file.size || 0),
+            status: "failed",
+            error: chatCopy.unsupportedType(acceptedWorkspaceHint),
+          });
+        }
+        window.dispatchEvent(
+          new CustomEvent("zaki:update-space", {
+            detail: {
+              id: targetSpaceId,
+              pinnedFiles: Array.from(invalidMap.values()),
+            },
+          })
+        );
+        toast.error(chatCopy.unsupportedUploadToast(acceptedWorkspaceHint));
+      }
+      if (valid.length === 0) return;
+
+      const processingFiles: PinnedFile[] = valid.map((file) => ({
+        name: file.name,
+        type: file.type || "document",
+        size: Number(file.size || 0),
+        status: "processing",
+      }));
+      const processingMap = new Map(
+        existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+      );
+      for (const file of processingFiles) {
+        processingMap.set(`${file.name}:${file.size}:${file.type}`, file);
+      }
+      window.dispatchEvent(
+        new CustomEvent("zaki:update-space", {
+          detail: {
+            id: targetSpaceId,
+            pinnedFiles: Array.from(processingMap.values()),
+          },
+        })
+      );
+
+      void uploadFilesToWorkspace(targetSpaceId, valid)
+        .then((uploadedFiles) => {
+          const fileMap = new Map(
+            existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+          );
+          for (const file of uploadedFiles) {
+            fileMap.set(`${file.name}:${file.size}:${file.type}`, file);
+          }
+          window.dispatchEvent(
+            new CustomEvent("zaki:update-space", {
+              detail: {
+                id: targetSpaceId,
+                pinnedFiles: Array.from(fileMap.values()),
+              },
+            })
+          );
+          toast.success(
+            uploadedFiles.length === 1
+              ? chatCopy.addedFile(uploadedFiles[0]?.name || (isRtl ? "الملف" : "file"))
+              : chatCopy.addedFiles(uploadedFiles.length)
+          );
+        })
+        .catch((error) => {
+          const failedMap = new Map(
+            existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
+          );
+          for (const file of valid) {
+            failedMap.set(`${file.name}:${file.size}:${file.type}`, {
+              name: file.name,
+              type: file.type || "document",
+              size: Number(file.size || 0),
+              status: "failed",
+              error: error instanceof Error ? error.message : chatCopy.uploadFailed,
+            });
+          }
+          window.dispatchEvent(
+            new CustomEvent("zaki:update-space", {
+              detail: {
+                id: targetSpaceId,
+                pinnedFiles: Array.from(failedMap.values()),
+              },
+            })
+          );
+          toast.error(error instanceof Error ? error.message : chatCopy.unableToUpload);
+        });
+    },
+    [
+      acceptedWorkspaceHint,
+      acceptedWorkspaceTypes,
+      chatCopy,
+      isRtl,
+      spacesList,
+      uploadFilesToWorkspace,
+    ]
   );
 
   // Strip memory context prefix from user messages (injected by backend for AI context)
@@ -2034,8 +2154,11 @@ export function ChatArea() {
     const handleUploadSpaceFiles = (event: Event) => {
       const detail = (event as CustomEvent<{ id: string }>).detail;
       if (!detail?.id) return;
-      setFileUploadSpaceId(detail.id);
-      fileInputRef.current?.click();
+      beginWorkspaceUpload(detail.id);
+    };
+
+    const handleUploadActiveSpaceFiles = () => {
+      beginWorkspaceUpload();
     };
 
     const handleViewZakiHome = () => {
@@ -2050,6 +2173,7 @@ export function ChatArea() {
     window.addEventListener("zaki:view-space", handleViewSpace);
     window.addEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
     window.addEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
+    window.addEventListener("zaki:upload-active-space-files", handleUploadActiveSpaceFiles);
     window.addEventListener("zaki:view-zaki-home", handleViewZakiHome);
 
     return () => {
@@ -2060,9 +2184,10 @@ export function ChatArea() {
       window.removeEventListener("zaki:view-space", handleViewSpace);
       window.removeEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
       window.removeEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
+      window.removeEventListener("zaki:upload-active-space-files", handleUploadActiveSpaceFiles);
       window.removeEventListener("zaki:view-zaki-home", handleViewZakiHome);
     };
-  }, [activeWorkspaceSlug, clearThread, goHome, goToSpaces, spacesList]);
+  }, [beginWorkspaceUpload, clearThread, goHome, goToSpaces, spacesList]);
 
   useEffect(() => {
     return () => {
@@ -2161,7 +2286,12 @@ export function ChatArea() {
         setDragActive(false);
         const files = Array.from(event.dataTransfer.files ?? []);
         if (files.length) {
-          toast.info(THREAD_ATTACHMENT_UNAVAILABLE_MESSAGE);
+          const targetSpaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
+          if (!targetSpaceId) {
+            toast.error(isRtl ? "اختر مساحة أولًا لإضافة الملفات." : "Select a space before adding files.");
+            return;
+          }
+          handleWorkspaceFilesSelected(targetSpaceId, files);
         }
       }}
     >
@@ -2333,110 +2463,7 @@ export function ChatArea() {
               setFileUploadSpaceId(null);
               event.target.value = "";
               if (!targetSpaceId || files.length === 0) return;
-
-              const { valid, invalid } = splitFilesByAcceptedTypes(
-                files,
-                acceptedWorkspaceTypes
-              );
-              const existingPinned =
-                spacesList.find((space) => space.id === targetSpaceId)?.pinnedFiles ?? [];
-
-              if (invalid.length > 0) {
-                const invalidMap = new Map(
-                  existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
-                );
-                for (const file of invalid) {
-                  invalidMap.set(`${file.name}:${file.size}:${file.type}`, {
-                    name: file.name,
-                    type: file.type || "document",
-                    size: Number(file.size || 0),
-                    status: "failed",
-                    error: chatCopy.unsupportedType(acceptedWorkspaceHint),
-                  });
-                }
-                window.dispatchEvent(
-                  new CustomEvent("zaki:update-space", {
-                    detail: {
-                      id: targetSpaceId,
-                      pinnedFiles: Array.from(invalidMap.values()),
-                    },
-                  })
-                );
-                toast.error(chatCopy.unsupportedUploadToast(acceptedWorkspaceHint));
-              }
-              if (valid.length === 0) return;
-
-              const processingFiles: PinnedFile[] = valid.map((file) => ({
-                name: file.name,
-                type: file.type || "document",
-                size: Number(file.size || 0),
-                status: "processing",
-              }));
-              const processingMap = new Map(
-                existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
-              );
-              for (const file of processingFiles) {
-                processingMap.set(`${file.name}:${file.size}:${file.type}`, file);
-              }
-              window.dispatchEvent(
-                new CustomEvent("zaki:update-space", {
-                  detail: {
-                    id: targetSpaceId,
-                    pinnedFiles: Array.from(processingMap.values()),
-                  },
-                })
-              );
-
-              void uploadFilesToWorkspace(targetSpaceId, valid)
-                .then((uploadedFiles) => {
-                  const fileMap = new Map(
-                    existingPinned.map((file) => [
-                      `${file.name}:${file.size}:${file.type}`,
-                      file,
-                    ])
-                  );
-                  for (const file of uploadedFiles) {
-                    fileMap.set(`${file.name}:${file.size}:${file.type}`, file);
-                  }
-                  window.dispatchEvent(
-                    new CustomEvent("zaki:update-space", {
-                      detail: {
-                        id: targetSpaceId,
-                        pinnedFiles: Array.from(fileMap.values()),
-                      },
-                    })
-                  );
-                  toast.success(
-                    uploadedFiles.length === 1
-                      ? chatCopy.addedFile(uploadedFiles[0]?.name || (isRtl ? "الملف" : "file"))
-                      : chatCopy.addedFiles(uploadedFiles.length)
-                  );
-                })
-                .catch((error) => {
-                  const failedMap = new Map(
-                    existingPinned.map((file) => [`${file.name}:${file.size}:${file.type}`, file])
-                  );
-                  for (const file of valid) {
-                    failedMap.set(`${file.name}:${file.size}:${file.type}`, {
-                      name: file.name,
-                      type: file.type || "document",
-                      size: Number(file.size || 0),
-                      status: "failed",
-                      error: error instanceof Error ? error.message : chatCopy.uploadFailed,
-                    });
-                  }
-                  window.dispatchEvent(
-                    new CustomEvent("zaki:update-space", {
-                      detail: {
-                        id: targetSpaceId,
-                        pinnedFiles: Array.from(failedMap.values()),
-                      },
-                    })
-                  );
-                  toast.error(
-                    error instanceof Error ? error.message : chatCopy.unableToUpload
-                  );
-                });
+              handleWorkspaceFilesSelected(targetSpaceId, files);
             }}
           />
         </div>
