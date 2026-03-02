@@ -1954,6 +1954,9 @@ export function Sidebar() {
                 <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted mt-1 truncate">
                   {spaceSettingsTarget.title}
                 </div>
+                <div className="mt-2 text-[11px] text-zaki-disabled dark:text-zaki-dark-muted">
+                  {t("sidebar.spaceSettingsSubtitle")}
+                </div>
               </div>
               <button
                 type="button"
@@ -1967,9 +1970,11 @@ export function Sidebar() {
                 <span className="block text-lg leading-none">×</span>
               </button>
             </div>
-            <div className="px-5 py-4 flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{sidebarCopy.description}</label>
+            <div className="px-5 py-4 flex flex-col gap-5">
+              <section className="flex flex-col gap-2">
+                <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{t("sidebar.basics")}</div>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{sidebarCopy.description}</span>
                 <textarea
                   className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
                   rows={3}
@@ -1981,123 +1986,188 @@ export function Sidebar() {
                 <div className="text-[10px] text-zaki-muted text-right">
                   {spaceDescriptionDraft.length}/200
                 </div>
-              </div>
+                </label>
+              </section>
 
-              <div className="flex flex-col gap-2">
-                <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{sidebarCopy.workspaceTools}</div>
-                <button
-                  type="button"
-                  className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
-                  onClick={() => {
-                    setSpaceSettingsOpen(false);
-                    setSpaceSettingsTarget(null);
-                    window.dispatchEvent(
-                      new CustomEvent("zaki:edit-space-instructions", { detail: { id: spaceSettingsTarget.id } })
-                    );
-                  }}
-                >
-                  Edit instructions
-                </button>
-                <button
-                  type="button"
-                  className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-left text-sm text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
-                  onClick={() => {
-                    setSpaceSettingsOpen(false);
-                    setSpaceSettingsTarget(null);
-                    window.dispatchEvent(
-                      new CustomEvent("zaki:upload-space-files", { detail: { id: spaceSettingsTarget.id } })
-                    );
-                  }}
-                >
-                  {t("sidebar.addWorkspaceFiles")}
-                </button>
-                <div className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white/70 dark:bg-zaki-dark-elevated px-3 py-3">
-                  <div className="mb-3 rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-zaki-base/60 dark:bg-zaki-dark-card px-3 py-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
-                      {t("sidebar.scopeTitle")}
-                    </div>
-                    <div className="mt-2 space-y-1 text-[11px] text-zaki-secondary dark:text-zaki-dark-subtle">
-                      <p>{t("sidebar.scopeMemory")}</p>
-                      <p>{t("sidebar.scopeWorkspace")}</p>
-                      <p>{t("sidebar.scopeChat")}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                        {t("sidebar.workspaceFilesTitle")}
-                      </div>
-                      <div className="mt-1 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                        {workspaceTypeHint
-                          ? t("sidebar.workspaceFilesHintWithTypes", { types: workspaceTypeHint })
-                          : t("sidebar.workspaceFilesHint")}
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                      {spaceSettingsTarget.pinnedFiles?.length ?? 0} files
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {(spaceSettingsTarget.pinnedFiles ?? []).length > 0 ? (
-                      (spaceSettingsTarget.pinnedFiles ?? []).map((file) => {
-                        const status = file.status ?? "embedded";
-                        const tone = fileStatusTone[status];
-                        const removeKey = `${spaceSettingsTarget.id}:${String(file.location || "")}`;
-                        return (
-                          <div
-                            key={`${file.name}:${file.size}:${file.type}:${file.location ?? ""}`}
-                            className="flex items-start justify-between gap-3 rounded-zaki-md border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
-                                {file.name}
-                              </div>
-                              <div className="mt-1 flex items-center gap-2 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                                <span>{file.type || "document"}</span>
-                                <span className={`rounded-full px-2 py-0.5 font-semibold ${tone.chip}`}>
-                                  {tone.label}
-                                </span>
-                              </div>
-                              {status === "failed" && file.error && (
-                                <div className="mt-1 text-[11px] text-rose-700">{file.error}</div>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              className="shrink-0 rounded-full border border-zaki-subtle dark:border-zaki-dark px-2.5 py-1 text-[11px] text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover disabled:opacity-50"
-                              onClick={() => removeWorkspaceDocument(spaceSettingsTarget.id, file)}
-                              disabled={!file.location || removingDocumentKey === removeKey}
-                            >
-                              {removingDocumentKey === removeKey ? "Removing..." : "Remove"}
-                            </button>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="rounded-zaki-md border border-dashed border-zaki-subtle dark:border-zaki-dark px-3 py-3 text-sm text-zaki-muted dark:text-zaki-dark-muted">
-                        {t("sidebar.workspaceFilesEmpty")}
-                      </div>
-                    )}
+              <section className="flex flex-col gap-3">
+                <div>
+                  <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{t("sidebar.sharedContext")}</div>
+                  <div className="mt-1 text-[11px] text-zaki-disabled dark:text-zaki-dark-muted">
+                    {t("sidebar.sharedContextSubtitle")}
                   </div>
                 </div>
-                {!spaceSettingsTarget.fixed && (
+                <div className="grid gap-3">
                   <button
                     type="button"
-                    className="w-full rounded-zaki-lg border border-zaki-strong bg-zaki-error px-3 py-2 text-left text-sm text-zaki-brand hover:bg-[rgba(210,68,48,0.12)] transition-colors"
+                    className="w-full rounded-zaki-xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3.5 py-3 text-left hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
                     onClick={() => {
                       setSpaceSettingsOpen(false);
                       setSpaceSettingsTarget(null);
-                      setConfirmDelete({
-                        type: "space",
-                        id: spaceSettingsTarget.id,
-                        label: spaceSettingsTarget.title || spaceSettingsTarget.id,
-                      });
+                      window.dispatchEvent(
+                        new CustomEvent("zaki:edit-space-instructions", { detail: { id: spaceSettingsTarget.id } })
+                      );
                     }}
                   >
-                    Delete space
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {t("sidebar.instructionsTitle")}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                          {t("sidebar.instructionsBody")}
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
+                        {t("sidebar.editAction")}
+                      </span>
+                    </div>
                   </button>
+
+                  <button
+                    type="button"
+                    className="w-full rounded-zaki-xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3.5 py-3 text-left hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
+                    onClick={() => {
+                      setSpaceSettingsOpen(false);
+                      setSpaceSettingsTarget(null);
+                      window.dispatchEvent(
+                        new CustomEvent("zaki:upload-space-files", { detail: { id: spaceSettingsTarget.id } })
+                      );
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {t("sidebar.knowledgeFilesTitle")}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                          {t("sidebar.knowledgeFilesBody")}
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
+                        {t("sidebar.filesBadge", { count: spaceSettingsTarget.pinnedFiles?.length ?? 0 })}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="rounded-zaki-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base/50 dark:bg-zaki-dark-elevated px-3.5 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
+                    {t("sidebar.contextSummaryTitle")}
+                  </div>
+                  <div className="mt-3 space-y-2.5">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
+                        <Brain className="size-3.5" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {t("sidebar.contextSummaryMemoryLabel")}
+                        </div>
+                        <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                          {t("sidebar.contextSummaryMemoryBody")}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
+                        <FileText className="size-3.5" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {t("sidebar.contextSummarySpaceLabel")}
+                        </div>
+                        <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                          {t("sidebar.contextSummarySpaceBody")}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
+                        <Folder className="size-3.5" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {t("sidebar.contextSummaryThreadLabel")}
+                        </div>
+                        <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                          {t("sidebar.contextSummaryThreadBody")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {(spaceSettingsTarget.pinnedFiles ?? []).length > 0 ? (
+                    (spaceSettingsTarget.pinnedFiles ?? []).map((file) => {
+                      const status = file.status ?? "embedded";
+                      const tone = fileStatusTone[status];
+                      const removeKey = `${spaceSettingsTarget.id}:${String(file.location || "")}`;
+                      return (
+                        <div
+                          key={`${file.name}:${file.size}:${file.type}:${file.location ?? ""}`}
+                          className="flex items-start justify-between gap-3 rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
+                              {file.name}
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                              <span>{file.type || "document"}</span>
+                              <span className={`rounded-full px-2 py-0.5 font-semibold ${tone.chip}`}>
+                                {tone.label}
+                              </span>
+                            </div>
+                            {status === "failed" && file.error && (
+                              <div className="mt-1 text-[11px] text-rose-700">{file.error}</div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-full border border-zaki-subtle dark:border-zaki-dark px-2.5 py-1 text-[11px] text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover disabled:opacity-50"
+                            onClick={() => removeWorkspaceDocument(spaceSettingsTarget.id, file)}
+                            disabled={!file.location || removingDocumentKey === removeKey}
+                          >
+                            {removingDocumentKey === removeKey
+                              ? t("sidebar.removingAction")
+                              : t("sidebar.removeAction")}
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-zaki-lg border border-dashed border-zaki-subtle dark:border-zaki-dark px-3 py-3 text-sm text-zaki-muted dark:text-zaki-dark-muted">
+                      {t("sidebar.workspaceFilesEmpty")}
+                    </div>
+                  )}
+                </div>
+
+                {!spaceSettingsTarget.fixed && (
+                  <section className="rounded-zaki-xl border border-rose-200/80 bg-rose-50/55 px-3.5 py-3 dark:border-rose-900/40 dark:bg-rose-950/10">
+                    <div className="text-2xs uppercase tracking-[0.2em] text-rose-700/90 dark:text-rose-300">
+                      {t("sidebar.dangerZone")}
+                    </div>
+                    <div className="mt-2 text-[11px] leading-5 text-rose-800/80 dark:text-rose-200/80">
+                      {t("sidebar.dangerZoneBody")}
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-3 w-full rounded-zaki-lg border border-rose-200 bg-white px-3 py-2 text-left text-sm text-zaki-brand hover:bg-[rgba(210,68,48,0.08)] transition-colors dark:border-rose-900/40 dark:bg-zaki-dark-card"
+                      onClick={() => {
+                        setSpaceSettingsOpen(false);
+                        setSpaceSettingsTarget(null);
+                        setConfirmDelete({
+                          type: "space",
+                          id: spaceSettingsTarget.id,
+                          label: spaceSettingsTarget.title || spaceSettingsTarget.id,
+                        });
+                      }}
+                    >
+                      Delete space
+                    </button>
+                  </section>
                 )}
-              </div>
+              </section>
             </div>
             <div className="flex items-center justify-between px-5 py-4 border-t border-zaki-subtle dark:border-zaki-dark">
               <button
