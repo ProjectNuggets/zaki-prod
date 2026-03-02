@@ -7,6 +7,8 @@ interface ChatViewProps {
   messages: Message[];
   isHistoryLoading: boolean;
   isStreaming: boolean;
+  streamingLabel?: string;
+  streamingPillLabel?: string;
   firstMessageTransition: boolean;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
@@ -17,6 +19,8 @@ export function ChatView({
   messages,
   isHistoryLoading,
   isStreaming,
+  streamingLabel,
+  streamingPillLabel,
   firstMessageTransition,
   onCopyMessage,
   onRegenerateMessage,
@@ -49,6 +53,8 @@ export function ChatView({
               key={msg.id}
               content={msg.content}
               isStreaming={isStreamingMessage}
+              thinkingLabel={streamingLabel}
+              thinkingPillLabel={streamingPillLabel}
             />
           );
         }

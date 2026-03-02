@@ -182,7 +182,14 @@ export default function App() {
     if (!user?.username || authLoading) return;
     const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
     const completed = window.localStorage.getItem(key) === "done";
-    setOnboardingOpen(!completed);
+    if (completed) {
+      setOnboardingOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setOnboardingOpen(true);
+    }, 900);
+    return () => window.clearTimeout(timer);
   }, [user?.username, authLoading]);
 
   useEffect(() => {
@@ -216,6 +223,21 @@ export default function App() {
       isMounted = false;
     };
   }, [token, user?.username, authLoading]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOpenOnboarding = () => {
+      setOnboardingOpen(true);
+    };
+    window.addEventListener("zaki:open-onboarding", handleOpenOnboarding);
+    return () => {
+      window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
+    };
+  }, []);
+
+  const dismissOnboarding = () => {
+    setOnboardingOpen(false);
+  };
 
   const completeOnboarding = () => {
     if (typeof window !== "undefined" && user?.username) {
@@ -304,7 +326,7 @@ export default function App() {
       {/* Mobile sidebar drawer */}
       <MobileSidebar />
       
-      <div className="zaki-app flex flex-col md:flex-row w-full h-screen overflow-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
+      <div className="zaki-app flex flex-col md:flex-row w-full h-[100dvh] overflow-x-hidden overflow-y-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
         {/* Mobile header with hamburger menu */}
         <MobileHeader />
         
@@ -391,7 +413,8 @@ export default function App() {
       <OnboardingModal
         isOpen={onboardingOpen}
         userName={user?.fullName || user?.username || t("home.guestName")}
-        onClose={completeOnboarding}
+        onDismiss={dismissOnboarding}
+        onComplete={completeOnboarding}
         onCreateSpace={openCreateSpace}
         onOpenMemory={openMemory}
         onOpenSettings={openSettings}

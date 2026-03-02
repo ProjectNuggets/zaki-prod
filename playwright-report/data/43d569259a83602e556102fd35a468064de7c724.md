@@ -1,0 +1,92 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - button "Open navigation menu" [ref=e6]:
+        - img [ref=e7]
+      - generic [ref=e8]:
+        - img [ref=e11]
+        - generic [ref=e20]: ZAKI
+    - main [ref=e21]:
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - generic [ref=e28]: Plans
+          - heading "Choose the plan that makes ZAKI feel personal" [level=1] [ref=e29]
+          - paragraph [ref=e30]: Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.
+          - generic [ref=e31]:
+            - generic [ref=e32]: "Student: $8/mo with .edu or manual verification"
+            - generic [ref=e33]: "Personal: $13/mo for everyday assistant use"
+            - generic [ref=e34]: "Gift a month: $15 one-time"
+          - paragraph [ref=e35]: You’re currently on Free · Start free, then upgrade when you want more from ZAKI.
+          - generic [ref=e36]:
+            - button "Manage plan" [ref=e37]
+            - generic [ref=e38]: "Status: Inactive"
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - generic [ref=e42]:
+                - generic [ref=e43]: Access code
+                - paragraph [ref=e44]: Redeem a campaign code to activate ZAKI access for 30 days.
+              - generic [ref=e45]: Inactive
+            - generic [ref=e46]:
+              - textbox "Enter access code" [ref=e47]
+              - button "Apply code" [disabled] [ref=e48]
+            - generic [ref=e49]: No active access code. Redeem one to keep chatting.
+            - generic [ref=e50]:
+              - generic [ref=e51]:
+                - generic [ref=e52]:
+                  - generic [ref=e53]: Gift a month
+                  - generic [ref=e54]: Gift a 30-day ZAKI pass
+                  - paragraph [ref=e55]: A thoughtful gift for a student, friend, or teammate who needs a sharp personal AI assistant for a month.
+                - generic [ref=e56]: $15 one-time
+              - list [ref=e57]:
+                - listitem [ref=e58]: Perfect for exam season, writing sprints, and deadline-heavy weeks.
+                - listitem [ref=e59]: Delivered by email as a single-use code you can forward instantly.
+                - listitem [ref=e60]: A simple one-time purchase for one month of premium access.
+              - paragraph [ref=e61]: Buy it once, keep it ready, and send it when someone needs real help.
+              - button "Buy 1-month gift code" [ref=e63]
+          - generic [ref=e65]:
+            - generic [ref=e66]: Billing cycle
+            - generic [ref=e67]:
+              - button "Monthly" [pressed] [ref=e68]
+              - button "Yearly" [ref=e69]
+            - paragraph [ref=e70]: Yearly gives you stable access all year long.
+          - generic [ref=e71]:
+            - generic [ref=e72]:
+              - generic [ref=e73]: Free
+              - generic [ref=e74]: Current
+            - generic [ref=e75]: $0
+            - paragraph [ref=e76]: Great for trying ZAKI and basic workflows.
+            - list [ref=e77]:
+              - listitem [ref=e78]: Core chat
+              - listitem [ref=e79]: Memory basics
+              - listitem [ref=e80]: Standard response quality
+            - button "Included" [disabled] [ref=e82]
+          - generic [ref=e83]:
+            - generic [ref=e85]: Student
+            - generic [ref=e86]: $8 / month
+            - paragraph [ref=e87]: For focused studying, clearer writing, and better support across your coursework.
+            - generic [ref=e88]:
+              - text: "Student plan eligibility: use your .edu email at checkout, or email any proof of enrollment for manual verification at"
+              - link "info@novanuggets.com" [ref=e89] [cursor=pointer]:
+                - /url: mailto:info@novanuggets.com?subject=Student%20verification%20for%20ZAKI
+            - list [ref=e90]:
+              - listitem [ref=e91]: Premium models for better answers
+              - listitem [ref=e92]: Priority responses during busy hours
+              - listitem [ref=e93]: Stronger help with notes, drafts, and study sessions
+            - button "Choose Student" [ref=e95]
+          - generic [ref=e96]:
+            - generic [ref=e98]: Personal
+            - generic [ref=e99]: $13 / month
+            - paragraph [ref=e100]: For everyday work and life when you want ZAKI to remember context and move faster with you.
+            - list [ref=e101]:
+              - listitem [ref=e102]: Premium models with richer reasoning
+              - listitem [ref=e103]: Priority responses and stronger context
+              - listitem [ref=e104]: More personal memory and assistant-style support
+            - button "Choose Personal" [ref=e106]
+    - region "Notifications alt+T"
+```

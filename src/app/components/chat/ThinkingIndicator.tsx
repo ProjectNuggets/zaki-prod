@@ -4,10 +4,13 @@ import { useTranslation } from "react-i18next";
 
 interface ThinkingIndicatorProps {
   className?: string;
+  label?: string;
+  pillLabel?: string;
 }
 
-export function ThinkingIndicator({ className }: ThinkingIndicatorProps) {
+export function ThinkingIndicator({ className, label, pillLabel }: ThinkingIndicatorProps) {
   const { t } = useTranslation();
+  const displayLabel = label || t("chat.thinking");
 
   return (
     <div className={cn("flex gap-4 items-start", className)}>
@@ -24,9 +27,15 @@ export function ThinkingIndicator({ className }: ThinkingIndicatorProps) {
       {/* Thinking Text with Shimmer */}
       <div className="rounded-zaki-lg px-4 py-3 text-sm bg-transparent">
         <div className="flex items-center gap-3">
-          <span className="zaki-thinking-text text-zaki-muted font-medium">
-            {t("chat.thinking")}
-          </span>
+          {pillLabel ? (
+            <span className="inline-flex items-center rounded-full border border-[#ead7c1] bg-[#fff7ee] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9a7350] shadow-[0px_6px_14px_rgba(52,36,24,0.08)] animate-pulse dark:border-[#3a2b1f] dark:bg-[#17120e] dark:text-[#d0b79b]">
+              {pillLabel}
+            </span>
+          ) : (
+            <span className="zaki-thinking-text text-zaki-muted font-medium">
+              {displayLabel}
+            </span>
+          )}
           
           {/* Animated dots — teal accent */}
           <span className="flex gap-1.5" aria-hidden="true">

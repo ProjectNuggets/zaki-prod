@@ -20,6 +20,8 @@ jest.mock("react-i18next", () => ({
       "pricingPage.billingNotices.cancel":
         "Checkout canceled. You can pick a plan anytime.",
       "pricingPage.billingNotices.manage": "Returned from billing portal.",
+      "pricingPage.interval.monthly": "Monthly",
+      "pricingPage.interval.yearly": "Yearly",
       "pricingPage.cancelSubscription": "Cancel subscription",
       "pricingPage.cancellationScheduled": "Cancellation scheduled",
       "pricingPage.cancelScheduled": "Subscription will cancel at period end.",
@@ -27,16 +29,26 @@ jest.mock("react-i18next", () => ({
         "Cancellation is already scheduled for period end.",
       "pricingPage.cancelError": "Unable to cancel subscription",
       "pricingPage.cancelUnavailable": "Subscription cancellation is temporarily unavailable.",
+      "pricingPage.yearlyUnavailableForPlan":
+        "Yearly pricing is not available for this plan yet.",
+      "pricingPage.yearlyStripeOnly":
+        "Yearly billing is currently available only through Stripe.",
+      "pricingPage.access.purchase.cta": "Buy 1-month gift code",
+      "pricingPage.access.purchase.unavailable":
+        "Code purchase is not enabled in this environment yet.",
+      "pricingPage.access.purchase.processing": "Opening checkout...",
+      "pricingPage.access.purchase.checkoutError":
+        "Unable to start code purchase checkout.",
       "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
       "pricingPage.plans.student.features": [
-        "Premium models",
-        "Priority responses",
-        "Expanded memory limits",
+        "Premium models for better answers",
+        "Priority responses during busy hours",
+        "Stronger help with notes, drafts, and study sessions",
       ],
       "pricingPage.plans.personal.features": [
-        "Premium models",
-        "Priority responses",
-        "Advanced memory insights",
+        "Premium models with richer reasoning",
+        "Priority responses and stronger context",
+        "More personal memory and assistant-style support",
       ],
     };
     return {
@@ -80,12 +92,19 @@ let billingConfigData = {
       portalEnabled: true,
       cancelEnabled: true,
       webhookEnabled: true,
+      checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+      accessCodePurchaseEnabled: true,
+      pricingAvailability: {
+        student: { monthly: true, yearly: true },
+        personal: { monthly: true, yearly: true },
+      },
       missing: [],
     },
   },
 };
 
 const checkoutMutateAsync = jest.fn();
+const accessCodePurchaseCheckoutMutateAsync = jest.fn();
 const portalMutateAsync = jest.fn();
 const syncBillingMutateAsync = jest.fn().mockResolvedValue({ success: true });
 const redeemAccessCodeMutateAsync = jest.fn();
@@ -104,6 +123,10 @@ jest.mock("@/queries", () => ({
   }),
   useCheckout: () => ({
     mutateAsync: checkoutMutateAsync,
+    isPending: false,
+  }),
+  useAccessCodePurchaseCheckout: () => ({
+    mutateAsync: accessCodePurchaseCheckoutMutateAsync,
     isPending: false,
   }),
   useBillingPortal: () => ({
@@ -149,6 +172,12 @@ describe("PricingPage", () => {
           portalEnabled: true,
           cancelEnabled: true,
           webhookEnabled: true,
+          checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          accessCodePurchaseEnabled: true,
+          pricingAvailability: {
+            student: { monthly: true, yearly: true },
+            personal: { monthly: true, yearly: true },
+          },
           missing: [],
         },
       },
@@ -245,5 +274,178 @@ describe("PricingPage", () => {
     expect(scheduledButton).toBeDisabled();
     expect(screen.getByText("pricingPage.cancelAtPeriodEndNote")).toBeInTheDocument();
     expect(cancelSubscriptionMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("sends yearly interval for yearly checkout selection", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "student", interval: "yearly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("falls back to monthly checkout when yearly is unavailable for student", async () => {
+    billingConfigData = {
+      data: {
+        configured: {
+          stripeEnabled: true,
+          checkoutEnabled: true,
+          portalEnabled: true,
+          cancelEnabled: true,
+          webhookEnabled: true,
+          checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          accessCodePurchaseEnabled: true,
+          pricingAvailability: {
+            student: { monthly: true, yearly: false },
+            personal: { monthly: true, yearly: true },
+          },
+          missing: [],
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "student", interval: "monthly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("uses interval from URL query when selecting checkout", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing?interval=yearly"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "student", interval: "yearly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("does not autostart checkout from URL query selection", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing?plan=personal&interval=yearly&autostart=1"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).not.toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[1]);
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "personal", interval: "yearly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("starts access-code purchase checkout from pricing card", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy 1-month gift code" }));
+
+    await waitFor(() => {
+      expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "pricing_page" })
+      );
+    });
+  });
+
+  it("does not autostart access-code purchase checkout from gift intent query", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/pricing?intent=gift_code&autostart=1&source=website_pricing"]}
+      >
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(accessCodePurchaseCheckoutMutateAsync).not.toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy 1-month gift code" }));
+
+    await waitFor(() => {
+      expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "website_pricing" })
+      );
+    });
+  });
+
+  it("disables access-code purchase checkout when not configured", () => {
+    billingConfigData = {
+      data: {
+        configured: {
+          stripeEnabled: true,
+          checkoutEnabled: true,
+          portalEnabled: true,
+          cancelEnabled: true,
+          webhookEnabled: true,
+          checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
+          accessCodePurchaseEnabled: false,
+          pricingAvailability: {
+            student: { monthly: true, yearly: true },
+            personal: { monthly: true, yearly: true },
+          },
+          missing: [],
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Buy 1-month gift code" })).toBeDisabled();
+    expect(
+      screen.getByText("Code purchase is not enabled in this environment yet.")
+    ).toBeInTheDocument();
   });
 });

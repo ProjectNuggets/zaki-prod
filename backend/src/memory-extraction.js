@@ -7,6 +7,16 @@
 
 import { z } from "zod";
 import { dbGet, dbQuery } from "./db.js";
+import { callNovaTypChat, parseJsonObjectFromText } from "./memory/nova-chat.js";
+
+function resolveTimeoutMs(envName, fallbackMs) {
+  const raw = Number.parseInt(String(process.env[envName] || ""), 10);
+  if (!Number.isFinite(raw)) return fallbackMs;
+  return Math.min(30_000, Math.max(500, raw));
+}
+
+const EXTRACTION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EXTRACTION_TIMEOUT_MS", 12_000);
+const TRANSLATION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_TRANSLATION_TIMEOUT_MS", 5_000);
 
 // LLM Extraction Schema
 const MemorySchema = z.object({
@@ -26,6 +36,17 @@ const ClassificationSchema = z.enum([
   "roleplay",
 ]);
 
+const ALLOWED_EXTRACTED_TYPES = new Set([
+  "fact",
+  "preference",
+  "emotion",
+  "event",
+  "goal",
+  "relationship",
+  "struggle",
+]);
+const MAX_EXTRACTED_MEMORIES_PER_MESSAGE = 12;
+
 const ExtractionResponseSchema = z.object({
   classification: ClassificationSchema.optional(),
   memories: z.array(MemorySchema).optional(),
@@ -41,6 +62,13 @@ First classify the message as one of:
 - roleplay: The user is asking you to roleplay or act as someone else.
 
 Only extract memories if classification is user_statement. Otherwise return empty memories.
+
+Extraction quality rules:
+- Each memory must be atomic: exactly one fact, preference, goal, emotion, event, relationship, or struggle per item.
+- Split compound statements into separate memories.
+- Do NOT output vague references such as "this", "that", "these", "those", "all of those", "that place", or "the above".
+- Do NOT merge preferences with plans, facts, or locations in one memory.
+- Prefer direct canonical phrasing such as "Likes travel", "Plans to travel to Dubai", "From Damascus", "Lives in Hamburg".
 
 Return JSON: {"classification": "...", "memories": [{"content": "...", "type": "...", "confidence": 0.9, "conflict_key": "...", "polarity": "positive"}]}
 
@@ -164,7 +192,12 @@ function cleanPreferenceValue(value) {
     .replace(/[.,!?;:]+$/g, "")
     .trim();
   if (!normalized) return "";
-  return normalized.replace(/^to\s+/i, "").trim();
+  return normalized
+    .replace(/^to\s+/i, "")
+    .replace(/\b(?:you know|kind of|sort of|basically|i guess|you know what i mean)\b/gi, " ")
+    .replace(/\s+(?:and|but)\s+i\s+(?:am|m|live|work|study|plan|want|love|like|need|feel)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizePreferenceMemory(content, polarity) {
@@ -179,25 +212,47 @@ function normalizePreferenceMemory(content, polarity) {
 
   const patterns = [
     {
-      regex:
-        /^(?:likes?|i\s+(?:like|love|enjoy|prefer|(?:am|i'm)\s+into)|like to)\s+(.+)$/i,
+      regex: /^(?:prefers?|i\s+prefer)\s+(.+)$/i,
       polarity: "positive",
+      verb: "Prefers",
+    },
+    {
+      regex:
+        /^(?:likes?|i\s+(?:like|love|enjoy|(?:am|i'm)\s+into)|like to)\s+(.+)$/i,
+      polarity: "positive",
+      verb: "Likes",
     },
     {
       regex:
         /^(?:dislikes?|i\s+(?:don't like|dont like|do not like|dislike|hate))\s+(.+)$/i,
       polarity: "negative",
+      verb: "Dislikes",
     },
   ];
 
   let extractedValue = "";
   let inferredPolarity = polarity || null;
+  let resolvedVerb = "";
   for (const pattern of patterns) {
     const match = raw.match(pattern.regex);
     if (!match) continue;
     extractedValue = match[1] || "";
     if (!inferredPolarity) inferredPolarity = pattern.polarity;
+    resolvedVerb = pattern.verb;
     break;
+  }
+
+  // Some malformed LLM outputs nest another preference verb inside the value,
+  // e.g. "Likes Prefers concise replies". In that case, the inner verb should win.
+  if (extractedValue) {
+    for (const pattern of patterns) {
+      const nestedMatch = extractedValue.match(pattern.regex);
+      if (!nestedMatch) continue;
+      extractedValue = nestedMatch[1] || extractedValue;
+      inferredPolarity = pattern.polarity;
+      resolvedVerb = pattern.verb;
+      break;
+    }
   }
 
   const value = cleanPreferenceValue(extractedValue || raw);
@@ -210,11 +265,235 @@ function normalizePreferenceMemory(content, polarity) {
   }
 
   const resolvedPolarity = inferredPolarity || polarity || "positive";
+  const verb =
+    resolvedVerb ||
+    (resolvedPolarity === "negative" ? "Dislikes" : "Likes");
   return {
-    content: `${resolvedPolarity === "negative" ? "Dislikes" : "Likes"} ${value}`,
+    content: `${verb} ${value}`,
     value,
     polarity: resolvedPolarity,
   };
+}
+
+function cleanStructuredValue(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/[.,!?;:]+$/g, "")
+    .replace(/\s+(?:and|but)\s+i\s+(?:am|m|live|work|study|plan|want|love|like|need|feel)\b.*$/i, "")
+    .trim();
+}
+
+function splitListValues(value) {
+  return String(value || "")
+    .split(/\s*,\s*|\s+and\s+/i)
+    .map((part) => cleanStructuredValue(part))
+    .filter(Boolean);
+}
+
+function normalizeFactMemory(content) {
+  const raw = String(content || "").replace(/\s+/g, " ").trim();
+  if (!raw) {
+    return {
+      content: raw,
+      conflictKey: null,
+    };
+  }
+
+  const patterns = [
+    {
+      regex: /^(?:i\s+am\s+from|i'?m\s+from|im\s+from|from)\s+(.+)$/i,
+      build: (value) => ({ content: `From ${value}`, conflictKey: null }),
+    },
+    {
+      regex: /^(?:i\s+live\s+in|i'?m\s+living\s+in|im\s+living\s+in|live in|lives in)\s+(.+)$/i,
+      build: (value) => ({
+        content: `Lives in ${value}`,
+        conflictKey: canonicalizeConflictKey("identity:location"),
+      }),
+    },
+    {
+      regex: /^(?:i\s+work\s+(?:at|for)|works?\s+(?:at|for)|my job is)\s+(.+)$/i,
+      build: (value) => ({
+        content: `Works at ${value}`,
+        conflictKey: canonicalizeConflictKey("identity:occupation"),
+      }),
+    },
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern.regex);
+    if (!match) continue;
+    const value = cleanStructuredValue(match[1] || "");
+    if (!value) break;
+    return pattern.build(value);
+  }
+
+  return {
+    content: raw,
+    conflictKey: null,
+  };
+}
+
+function normalizeGoalMemory(content) {
+  const raw = String(content || "").replace(/\s+/g, " ").trim();
+  if (!raw) return { content: raw };
+
+  const patterns = [
+    {
+      regex:
+        /^(?:i\s+(?:plan|plans|am planning|m planning)\s+to\s+travel\s+to|plans?\s+to\s+travel\s+to|travel to)\s+(.+)$/i,
+      build: (value) => `Plans to travel to ${value}`,
+    },
+    {
+      regex:
+        /^(?:i\s+(?:want|would like|d like)\s+to\s+(?:travel|visit|go)\s+to|wants?\s+to\s+(?:travel|visit|go)\s+to)\s+(.+)$/i,
+      build: (value) => `Wants to visit ${value}`,
+    },
+    {
+      regex:
+        /^(?:i\s+(?:want|would like|d like)\s+to\s+learn|wants?\s+to\s+learn)\s+(.+)$/i,
+      build: (value) => `Wants to learn ${value}`,
+    },
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern.regex);
+    if (!match) continue;
+    const value = cleanStructuredValue(match[1] || "");
+    if (!value) break;
+    return { content: pattern.build(value) };
+  }
+
+  return { content: raw };
+}
+
+const LOW_SIGNAL_MEMORY_VALUES = [
+  "all of those",
+  "those",
+  "these",
+  "that",
+  "this",
+  "the above",
+  "that place",
+  "those cities",
+  "these cities",
+  "هؤلاء",
+  "هذي",
+  "هذه",
+  "هذا",
+  "تلك",
+  "هاي",
+  "كلهم",
+];
+
+function containsUnresolvedReference(value) {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return false;
+  return LOW_SIGNAL_MEMORY_VALUES.some((token) => normalized === token || normalized.includes(token));
+}
+
+function countClauseSignals(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) return 0;
+  const signals = [
+    /\blikes?\b/g,
+    /\bdislikes?\b/g,
+    /\bloves?\b/g,
+    /\benjoys?\b/g,
+    /\bprefers?\b/g,
+    /\bplans?\b/g,
+    /\bwants?\b/g,
+    /\btravels?\b/g,
+    /\bvisits?\b/g,
+    /\blives?\b/g,
+    /\bfrom\b/g,
+    /\bworks?\b/g,
+    /\bstudies?\b/g,
+    /\bfeels?\b/g,
+    /\bname is\b/g,
+  ];
+  return signals.reduce((count, pattern) => count + (normalized.match(pattern)?.length || 0), 0);
+}
+
+function isCompoundMemory(memory) {
+  const content = String(memory?.content || "").replace(/\s+/g, " ").trim();
+  if (!content) return false;
+  if (!/\b(?:and|but)\b|,/.test(content)) return false;
+  return countClauseSignals(content) > 1;
+}
+
+function isLowQualityExtractedMemory(memory) {
+  const content = String(memory?.content || "").replace(/\s+/g, " ").trim();
+  if (!content) return true;
+  if (content.length > 140) return true;
+  if (containsUnresolvedReference(content)) return true;
+  if (isCompoundMemory(memory)) return true;
+
+  if (memory?.type === "preference") {
+    const normalized = normalizePreferenceMemory(content, memory?.polarity);
+    if (!normalized.value || containsUnresolvedReference(normalized.value)) return true;
+  }
+
+  return false;
+}
+
+function normalizeExtractedMemory(memory) {
+  const base = {
+    content: String(memory?.content || "").replace(/\s+/g, " ").trim(),
+    type: String(memory?.type || "").trim().toLowerCase(),
+    confidence: memory?.confidence || 0.8,
+    conflictKey: canonicalizeConflictKey(memory?.conflictKey || memory?.conflict_key) || null,
+    polarity: memory?.polarity || null,
+  };
+
+  if (!base.content) return null;
+  if (!ALLOWED_EXTRACTED_TYPES.has(base.type)) return null;
+
+  if (base.type === "preference") {
+    const normalized = normalizePreferenceMemory(base.content, base.polarity);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      conflictKey:
+        canonicalizeConflictKey(
+          base.conflictKey || (normalized.value ? `preference:${normalized.value}` : "")
+        ) || null,
+      polarity: normalized.polarity || base.polarity || "positive",
+    };
+  }
+
+  if (base.type === "fact") {
+    const normalized = normalizeFactMemory(base.content);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      conflictKey: normalized.conflictKey || base.conflictKey || null,
+      polarity: base.polarity || "neutral",
+    };
+  }
+
+  if (base.type === "goal") {
+    const normalized = normalizeGoalMemory(base.content);
+    return {
+      ...base,
+      content: normalized.content || base.content,
+      polarity: base.polarity || "neutral",
+    };
+  }
+
+  return base;
+}
+
+export function sanitizeExtractedMemories(memories, limit = MAX_EXTRACTED_MEMORIES_PER_MESSAGE) {
+  const boundedLimit = Math.max(1, Math.min(50, Number(limit) || MAX_EXTRACTED_MEMORIES_PER_MESSAGE));
+  const normalized = (Array.isArray(memories) ? memories : [])
+    .map((memory) => normalizeExtractedMemory(memory))
+    .filter(Boolean)
+    .filter((memory) => !isLowQualityExtractedMemory(memory));
+  return finalizeExtractedMemories(normalized).slice(0, boundedLimit);
 }
 
 function shouldDebug() {
@@ -354,35 +633,22 @@ async function translatePreferenceValue(value) {
     return cached.translated_text;
   }
 
-  const baseUrl = (process.env.NOVA_TYP_BASE_URL || "").trim();
-  if (!baseUrl) return null;
-  const apiBase = baseUrl.replace(/\/+$/, "");
-  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
-
   try {
-    const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Translate the user preference value to a short English noun phrase. Reply with only the translation, no punctuation.",
-          },
-          { role: "user", content: raw },
-        ],
-        temperature: 0.2,
-        max_tokens: 20,
-      }),
+    const result = await callNovaTypChat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "Translate the user preference value to a short English noun phrase. Reply with only the translation, no punctuation.",
+        },
+        { role: "user", content: raw },
+      ],
+      temperature: 0.2,
+      maxTokens: 20,
+      timeoutMs: TRANSLATION_TIMEOUT_MS,
+      label: "Preference translation",
     });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const translated = data.choices?.[0]?.message?.content?.trim();
+    const translated = String(result?.content || "").trim();
     if (!translated) return null;
     await dbQuery(
       `INSERT INTO memory_translation_cache (source_text, translated_text, language, created_at, updated_at)
@@ -412,16 +678,14 @@ export async function extractFacts(message) {
 
   const classification = llmClassification || heuristicClass;
 
-  // LLM-first: only run pattern fallback if LLM returns nothing
   let patternMemories = [];
   const shouldRunPatterns =
-    llmMemories.length === 0 &&
-    (classification === "user_statement" || heuristicClass === "user_statement");
+    classification === "user_statement" || heuristicClass === "user_statement";
   if (shouldRunPatterns) {
     const skipTranslation = llmMemories.some((m) => m.conflictKey);
     patternMemories = await extractWithPatterns(message, {
       skipTranslation,
-      simpleOnly: true,
+      simpleOnly: false,
     });
   }
 
@@ -438,10 +702,10 @@ export async function extractFacts(message) {
     );
   }
 
-  if (llmMemories.length === 0) return dedupeExtractedMemories(patternMemories);
-  if (patternMemories.length === 0) return dedupeExtractedMemories(llmMemories);
+  if (llmMemories.length === 0) return finalizeExtractedMemories(patternMemories);
+  if (patternMemories.length === 0) return finalizeExtractedMemories(llmMemories);
 
-  const merged = dedupeExtractedMemories([...llmMemories, ...patternMemories]);
+  const merged = finalizeExtractedMemories([...llmMemories, ...patternMemories]);
   if (shouldDebug()) {
     console.log(`[Memory] Extracted ${merged.length} total memories`);
   }
@@ -489,44 +753,33 @@ function dedupeExtractedMemories(memories) {
   return [...byKey.values(), ...passthrough];
 }
 
+function finalizeExtractedMemories(memories) {
+  return dedupeExtractedMemories(
+    (memories || []).filter((memory) => !isLowQualityExtractedMemory(memory))
+  );
+}
+
 async function extractWithLLM(message) {
-  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
-  
-  const baseUrl = (process.env.NOVA_TYP_BASE_URL || "").trim();
-  if (!baseUrl) {
-    throw new Error("NOVA_TYP_BASE_URL not configured");
-  }
-  
-  const apiBase = baseUrl.replace(/\/+$/, "");
-  const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: DEFAULT_PROMPT },
-        { role: "user", content: message },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.1,
-    }),
+  const { content, transport } = await callNovaTypChat({
+    messages: [
+      { role: "system", content: DEFAULT_PROMPT },
+      { role: "user", content: message },
+    ],
+    jsonMode: true,
+    temperature: 0.1,
+    timeoutMs: EXTRACTION_TIMEOUT_MS,
+    label: "Memory extraction",
   });
-  
-  if (!response.ok) {
-    throw new Error(`LLM request failed: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  
+
   if (!content) {
     return { classification: null, memories: [] };
   }
-  
-  const parsed = JSON.parse(content);
+
+  if (shouldDebug()) {
+    console.log(`[Memory] Extraction transport: ${transport}`);
+  }
+
+  const parsed = parseJsonObjectFromText(content);
   const validated = ExtractionResponseSchema.safeParse(parsed);
   
   if (!validated.success) {
@@ -534,35 +787,51 @@ async function extractWithLLM(message) {
     return { classification: null, memories: [] };
   }
   
-  const memories = (validated.data.memories || []).map((m) => {
-    const base = {
-      content: m.content,
-      type: m.type,
-      confidence: m.confidence || 0.8,
-      conflictKey: canonicalizeConflictKey(m.conflict_key) || null,
-      polarity: m.polarity || null,
-    };
-
-    if (m.type !== "preference") {
-      return base;
-    }
-
-    const normalized = normalizePreferenceMemory(base.content, base.polarity);
-    return {
-      ...base,
-      content: normalized.content || base.content,
-      conflictKey:
-        canonicalizeConflictKey(
-          base.conflictKey || (normalized.value ? `preference:${normalized.value}` : "")
-        ) || null,
-      polarity: normalized.polarity || base.polarity || "positive",
-    };
-  });
+  const memories = sanitizeExtractedMemories(validated.data.memories || []);
 
   return {
     classification: validated.data.classification || null,
     memories,
   };
+}
+
+export async function probeMemoryExtractionProvider(
+  sampleMessage = "I like coffee and I live in Dubai."
+) {
+  try {
+    const { content, transport, model } = await callNovaTypChat({
+      messages: [
+        { role: "system", content: DEFAULT_PROMPT },
+        { role: "user", content: String(sampleMessage || "").trim() || "I like coffee." },
+      ],
+      jsonMode: true,
+      temperature: 0,
+      timeoutMs: EXTRACTION_TIMEOUT_MS,
+      label: "Memory extraction probe",
+    });
+    const parsed = parseJsonObjectFromText(content);
+    const validated = ExtractionResponseSchema.safeParse(parsed);
+    if (!validated.success) {
+      return {
+        ok: false,
+        transport,
+        model,
+        error: "Extraction probe returned invalid schema.",
+      };
+    }
+    return {
+      ok: true,
+      transport,
+      model,
+      classification: validated.data.classification || null,
+      extracted: Array.isArray(validated.data.memories) ? validated.data.memories.length : 0,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
 }
 
 async function extractWithPatterns(message, { skipTranslation = false, simpleOnly = false } = {}) {
@@ -582,11 +851,26 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
       });
     }
   }
+
+  const originValues = collectPatternValues(
+    message,
+    /(?:i\s+am\s+from|i'?m\s+from|im\s+from)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+(?:i\s+|live|work|study|plan|want|love|like)\b|[.,!?]|$)/gi
+  );
+  for (const rawValue of originValues) {
+    const value = cleanStructuredValue(rawValue);
+    if (!value) continue;
+    facts.push({
+      content: `From ${value}`,
+      type: "fact",
+      confidence: 0.88,
+      polarity: "neutral",
+    });
+  }
   
   // Pattern: I love/like/enjoy ... (supports repeated clauses)
   const likeValues = collectPatternValues(
     message,
-    /(?:i love|i like|i enjoy|i prefer|i(?:'m| am) into)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:love|like|enjoy|prefer|(?:am|\'m)\s+into)\b|[.,!?]|$)/gi
+    /(?:i love|i like|i enjoy|i prefer|i(?:'m| am) into)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:love|like|enjoy|prefer|(?:am|\'m)\s+into|hate|don't like|do not like|dislike)\b|[.,!?]|$)/gi
   );
   for (const rawValue of likeValues) {
     const value = cleanPreferenceValue(rawValue);
@@ -605,7 +889,7 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
   // Pattern: I hate/don't like/dislike ... (supports repeated clauses)
   const dislikeValues = collectPatternValues(
     message,
-    /(?:i hate|i don't like|i do not like|i dislike)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:hate|don't like|do not like|dislike)\b|[.,!?]|$)/gi
+    /(?:i hate|i don't like|i do not like|i dislike)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+i\s+(?:hate|don't like|do not like|dislike|love|like|enjoy|prefer|(?:am|\'m)\s+into)\b|[.,!?]|$)/gi
   );
   for (const rawValue of dislikeValues) {
     const value = cleanPreferenceValue(rawValue);
@@ -647,9 +931,13 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     });
   }
   
-  const liveMatch = message.match(/(?:i live in|i'm from|i'm living in) (.+?)(?:\.|,|now)/i);
-  if (liveMatch) {
-    const value = liveMatch[1].trim();
+  const liveValues = collectPatternValues(
+    message,
+    /(?:i\s+live\s+in|i'?m\s+living\s+in|im\s+living\s+in|(?:^|\s)live in)\s+([^.,!?]+?)(?=\s+(?:and|but)\s+(?:i\s+|live|work|study|plan|want|love|like)\b|[.,!?]|$)/gi
+  );
+  for (const rawValue of liveValues) {
+    const value = cleanStructuredValue(rawValue);
+    if (!value) continue;
     facts.push({
       content: `Lives in ${value}`,
       type: "fact",
@@ -657,6 +945,23 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
       conflictKey: canonicalizeConflictKey("identity:location"),
       polarity: "neutral",
     });
+  }
+
+  if (!simpleOnly) {
+    const travelGoalValues = collectPatternValues(
+      message,
+      /(?:i\s+(?:plan|am planning|m planning)\s+to\s+travel\s+to|plan\s+to\s+travel\s+to|i\s+(?:want|would like|d like)\s+to\s+(?:travel|visit|go)\s+to|want\s+to\s+(?:travel|visit|go)\s+to|i\s+plan\s+to\s+visit|plan\s+to\s+visit)\s+([^.!?]+?)(?=\s+(?:and|but)\s+(?:i\s+am|i'?m|im|live|work|study|love|like)\b|[.!?]|$)/gi
+    );
+    for (const rawValue of travelGoalValues) {
+      for (const destination of splitListValues(rawValue)) {
+        facts.push({
+          content: `Plans to travel to ${destination}`,
+          type: "goal",
+          confidence: 0.86,
+          polarity: "neutral",
+        });
+      }
+    }
   }
 
   // Arabic fallback patterns

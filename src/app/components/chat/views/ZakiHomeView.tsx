@@ -298,8 +298,8 @@ function MemoryPopover({
             </div>
             <div className="mt-3">
               {cards.map((card, index) => {
-                const Icon = stageIcons[index % stageIcons.length];
-                const style = stageClasses[index % stageClasses.length];
+                const Icon = stageIcons[index % stageIcons.length] ?? Brain;
+                const style = stageClasses[index % stageClasses.length] ?? stageClasses[0];
                 return (
                   <article
                     key={card.title}

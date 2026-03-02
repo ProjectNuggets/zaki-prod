@@ -7,13 +7,91 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 import { dbQuery, dbGet, dbAll, hasPgVector } from "../db.js";
+import { callNovaTypChat, parseJsonObjectFromText } from "./nova-chat.js";
 
 // ============================================================================
 // Storage Detection
 // ============================================================================
 
 export async function checkStorage() {
-  return await hasPgVector();
+  return await getCachedStorageSupport(false);
+}
+
+function resolveStorageCacheTtlMs() {
+  const raw = Number.parseInt(String(process.env.ZAKI_MEMORY_STORAGE_CACHE_TTL_MS || ""), 10);
+  if (!Number.isFinite(raw)) return 30_000;
+  return Math.min(300_000, Math.max(1_000, raw));
+}
+
+const STORAGE_CACHE_TTL_MS = resolveStorageCacheTtlMs();
+const storageSupportCache = {
+  value: null,
+  checkedAt: 0,
+};
+let storageSupportProbe = hasPgVector;
+
+async function getCachedStorageSupport(forceRefresh = false) {
+  const now = Date.now();
+  if (
+    !forceRefresh &&
+    typeof storageSupportCache.value === "boolean" &&
+    now - storageSupportCache.checkedAt < STORAGE_CACHE_TTL_MS
+  ) {
+    return storageSupportCache.value;
+  }
+  const next = await storageSupportProbe();
+  storageSupportCache.value = next;
+  storageSupportCache.checkedAt = now;
+  return next;
+}
+
+export async function refreshStorageSupportCache() {
+  return await getCachedStorageSupport(true);
+}
+
+export function setStorageSupportProbeForTests(probe) {
+  storageSupportProbe = typeof probe === "function" ? probe : hasPgVector;
+  storageSupportCache.value = null;
+  storageSupportCache.checkedAt = 0;
+}
+
+function resolveTimeoutMs(envName, fallbackMs) {
+  const raw = Number.parseInt(String(process.env[envName] || ""), 10);
+  if (!Number.isFinite(raw)) return fallbackMs;
+  return Math.min(30_000, Math.max(500, raw));
+}
+
+const RELEVANCE_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_RELEVANCE_TIMEOUT_MS", 8_000);
+const EMBEDDING_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EMBEDDING_TIMEOUT_MS", 4_500);
+
+function shouldDebug() {
+  return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
+}
+
+function isAbortError(error) {
+  if (!error || typeof error !== "object") return false;
+  return error.name === "AbortError";
+}
+
+async function fetchWithTimeout(url, options, { timeoutMs, label }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof timeout.unref === "function") {
+    timeout.unref();
+  }
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function normalizeUserId(userId) {
@@ -26,6 +104,86 @@ function normalizeText(value) {
     .replace(/[^\p{L}\p{N}\s]+/gu, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function stripPreferenceFillers(value) {
+  return String(value || "")
+    .replace(/\b(?:you know|kind of|sort of|basically|i guess|you know what i mean)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const CANONICAL_ENTITY_REPLACEMENTS = [
+  { regex: /\bryadh\b/gi, value: "Riyadh" },
+  { regex: /\briyadh\b/gi, value: "Riyadh" },
+  { regex: /\bdamascus\b/gi, value: "Damascus" },
+  { regex: /\bhamburg\b/gi, value: "Hamburg" },
+  { regex: /\bcairo\b/gi, value: "Cairo" },
+  { regex: /\bdubai\b/gi, value: "Dubai" },
+  { regex: /\balgeria\b/gi, value: "Algeria" },
+];
+
+function canonicalizeEntityValue(value) {
+  let next = String(value || "").replace(/\s+/g, " ").trim();
+  if (!next) return "";
+  for (const replacement of CANONICAL_ENTITY_REPLACEMENTS) {
+    next = next.replace(replacement.regex, replacement.value);
+  }
+  return next.trim();
+}
+
+const FAST_CONTEXT_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "for", "with", "from", "that", "this",
+  "what", "which", "who", "how", "when", "where", "why", "are", "is", "am",
+  "was", "were", "be", "been", "being", "to", "of", "in", "on", "at", "by",
+  "my", "me", "i", "im", "i'm", "it", "its", "about", "given", "would", "could",
+  "should", "can", "you", "your", "we", "our", "they", "their",
+  "انا", "أنا", "عندي", "لدي", "عن", "في", "من", "على", "مع", "الى", "إلى", "ما",
+  "ماذا", "كيف", "هل", "هذه", "هذا", "ذلك", "تلك", "انا", "لي", "مني", "عني",
+]);
+
+function tokenizeFastContext(value) {
+  return normalizeText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .map((token) => {
+      const lower = token.toLowerCase();
+      if (["live", "lives", "living"].includes(lower)) return "live";
+      if (["travel", "travels", "traveling", "travelling", "traveled", "travelled"].includes(lower)) {
+        return "travel";
+      }
+      if (["riyadh", "ryadh"].includes(lower)) return "riyadh";
+      if (["prefer", "prefers", "preference", "preferences"].includes(lower)) return "prefer";
+      if (["work", "works", "working"].includes(lower)) return "work";
+      return singularizeEnglishWord(lower);
+    })
+    .filter((token) => {
+      if (!token) return false;
+      if (FAST_CONTEXT_STOPWORDS.has(token)) return false;
+      if (/^[a-z0-9]+$/i.test(token) && token.length < 3) return false;
+      if (/^[\u0600-\u06FF]+$/u.test(token) && token.length < 2) return false;
+      return true;
+    });
+}
+
+function scoreFastContextMemory(memory, queryTokens) {
+  const contentTokens = new Set(tokenizeFastContext(memory?.content || ""));
+  if (contentTokens.size === 0 || queryTokens.length === 0) return 0;
+
+  let overlap = 0;
+  for (const token of queryTokens) {
+    if (contentTokens.has(token)) overlap += 1;
+  }
+  if (overlap === 0) return 0;
+
+  const domain = getMemoryConflictDomain(memory);
+  let score = overlap * 10;
+  if (domain === "identity") score += 6;
+  if (domain === "preference") score += 5;
+  if (domain === "constraint") score += 7;
+  score += Math.round(getMemoryImportanceScore(memory) * 4);
+  score += Math.round(getMemoryConfidenceScore(memory) * 3);
+  return score;
 }
 
 const MAX_STORED_MEMORY_CHARS = 500;
@@ -84,6 +242,9 @@ function sanitizeStoredMetadata(value) {
   if (typeof value.editedFrom === "string" && value.editedFrom.trim()) {
     safe.editedFrom = value.editedFrom.trim().slice(0, 120);
   }
+  if (typeof value.source === "string" && value.source.trim()) {
+    safe.source = value.source.trim().toLowerCase().slice(0, 64);
+  }
   return safe;
 }
 
@@ -115,10 +276,12 @@ function singularizeEnglishWord(word) {
 }
 
 function normalizePreferenceValue(value) {
-  const normalized = normalizeText(value);
+  const normalized = normalizeText(stripPreferenceFillers(value));
   if (!normalized) return normalized;
   const withoutEnglishArticles = normalized.replace(/^(the|a|an)\s+/, "");
-  const withoutInfinitivePrefix = withoutEnglishArticles.replace(/^to\s+/, "");
+  const withoutInfinitivePrefix = withoutEnglishArticles
+    .replace(/^to\s+/, "")
+    .replace(/\bto\b$/i, "");
   const words = withoutInfinitivePrefix
     .split(" ")
     .map((word) => word.replace(/^ال/, ""))
@@ -130,6 +293,51 @@ function normalizePreferenceValue(value) {
   normalizedWords[normalizedWords.length - 1] = singularizeEnglishWord(normalizedWords[normalizedWords.length - 1]);
 
   return normalizedWords.join(" ").trim();
+}
+
+function normalizeStoredMemoryContent(content, type = "context", metadata = null) {
+  const normalizedType = normalizeStoredType(type);
+  const conflictKey = metadata && typeof metadata === "object" ? metadata.conflictKey : null;
+  const base = normalizeStoredContent(content);
+  if (!base) return "";
+
+  if (normalizedType === "preference") {
+    const fingerprint = buildConflictFingerprint({
+      content: base,
+      conflictKey,
+      polarity: metadata?.polarity,
+    });
+    const polarity = fingerprint?.polarity ?? 1;
+    const value = normalizePreferenceValue(fingerprint?.value || base);
+    if (!value) return base;
+    if (polarity < 0) return `Dislikes ${canonicalizeEntityValue(value)}`;
+    if (/\bprefer/i.test(base)) return `Prefers ${canonicalizeEntityValue(value)}`;
+    return `Likes ${canonicalizeEntityValue(value)}`;
+  }
+
+  if (normalizedType === "goal") {
+    const match = base.match(/^Plans to travel to\s+(.+)$/i);
+    if (match) {
+      return `Plans to travel to ${canonicalizeEntityValue(match[1])}`;
+    }
+  }
+
+  if (normalizedType === "fact") {
+    const liveMatch = base.match(/^Lives in\s+(.+)$/i);
+    if (liveMatch) return `Lives in ${canonicalizeEntityValue(liveMatch[1])}`;
+    const fromMatch = base.match(/^From\s+(.+)$/i);
+    if (fromMatch) return `From ${canonicalizeEntityValue(fromMatch[1])}`;
+  }
+
+  return canonicalizeEntityValue(base);
+}
+
+function chooseNormalizedPreferenceValue(keyValue, contentValue) {
+  const normalizedKey = normalizePreferenceValue(keyValue || "");
+  const normalizedContent = normalizePreferenceValue(contentValue || "");
+  if (!normalizedKey) return normalizedContent;
+  if (!normalizedContent) return normalizedKey;
+  return normalizedContent.length <= normalizedKey.length ? normalizedContent : normalizedKey;
 }
 
 function toPolarity(value) {
@@ -215,7 +423,7 @@ function buildConflictFingerprint({ content, conflictKey, polarity }) {
   const fromContent = extractConflictKey(content);
   const normalizedValue =
     domain === "preference" || domain === "constraint"
-      ? normalizePreferenceValue(valueFromKey || fromContent?.value)
+      ? chooseNormalizedPreferenceValue(valueFromKey, fromContent?.value)
       : (fromContent?.value || valueFromKey || null);
   const normalizedKeyValue =
     domain === "preference" || domain === "constraint"
@@ -256,20 +464,129 @@ function buildSemanticMemoryKey(memory) {
   return `${type}:${normalizedContent}`;
 }
 
+function scoreMemoryRowPreference(row) {
+  const normalizedContent = normalizeText(row?.content || "");
+  const hasFiller = /\b(?:you know|kind of|sort of|basically|i guess)\b/i.test(String(row?.content || ""));
+  const retrieval = toFiniteNumber(row?.retrieval_score, 0);
+  const importance = getMemoryImportanceScore(row);
+  const confidence = getMemoryConfidenceScore(row);
+  const normalizationPenalty = toFiniteNumber(row?._normalizationPenalty, 0);
+  return (
+    retrieval * 100 +
+    importance * 10 +
+    confidence * 5 -
+    normalizedContent.length * 0.01 -
+    (hasFiller ? 8 : 0) -
+    normalizationPenalty * 4
+  );
+}
+
 function dedupeMemoryRows(rows) {
-  const seen = new Set();
-  const deduped = [];
+  const dedupedByKey = new Map();
+  const passthrough = [];
   for (const row of rows || []) {
     const key = buildSemanticMemoryKey(row);
     if (!key) {
-      deduped.push(row);
+      passthrough.push(row);
       continue;
     }
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(row);
+    const existing = dedupedByKey.get(key);
+    if (!existing) {
+      dedupedByKey.set(key, row);
+      continue;
+    }
+    if (scoreMemoryRowPreference(row) > scoreMemoryRowPreference(existing)) {
+      dedupedByKey.set(key, row);
+    }
   }
-  return deduped;
+  return [...passthrough, ...dedupedByKey.values()];
+}
+
+function isMemoryIntrospectionQuery(query) {
+  const text = String(query || "").trim();
+  if (!text) return false;
+  return [
+    /\bwhat do you know about me\b/i,
+    /\bwhat do you remember about me\b/i,
+    /\bwho am i\b/i,
+    /\bwhere do i live\b/i,
+    /\bwhere am i from\b/i,
+    /(?:^|[\s:;,.!?؟،-])(شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني|وين بعيش|من وين أنا|من وين انا|وين ساكن|وين ساكنة)(?:[\s:;,.!?؟،-]|$)/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isLocationIntrospectionQuery(query) {
+  const text = String(query || "").trim();
+  if (!text) return false;
+  return [
+    /\bwhere do i live\b/i,
+    /\bwhere am i from\b/i,
+    /(?:^|[\s:;,.!?؟،-])(وين بعيش|من وين أنا|من وين انا|وين ساكن|وين ساكنة)(?:[\s:;,.!?؟،-]|$)/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isOriginIntrospectionQuery(query) {
+  const text = String(query || "").trim();
+  if (!text) return false;
+  return [
+    /\bwhere am i from\b/i,
+    /(?:^|[\s:;,.!?؟،-])(من وين أنا|من وين انا|من أين أنا|من اين انا)(?:[\s:;,.!?؟،-]|$)/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function selectDiverseIntrospectionMemories(rows, limit = 3) {
+  const ranked = rankFallbackCandidates(dedupeMemoryRows(rows));
+  if (ranked.length === 0) return [];
+
+  const picks = [];
+  const usedIds = new Set();
+  const takeFirst = (predicate) => {
+    const hit = ranked.find((row) => !usedIds.has(String(row?.id || "")) && predicate(row));
+    if (!hit) return;
+    usedIds.add(String(hit.id || ""));
+    picks.push(hit);
+  };
+
+  takeFirst((row) => getMemoryConflictDomain(row) === "identity");
+  takeFirst((row) => String(row?.type || "").toLowerCase() === "preference");
+  takeFirst((row) => String(row?.type || "").toLowerCase() === "goal");
+
+  for (const row of ranked) {
+    if (picks.length >= limit) break;
+    const id = String(row?.id || "");
+    if (!id || usedIds.has(id)) continue;
+    usedIds.add(id);
+    picks.push(row);
+  }
+
+  return picks.slice(0, Math.max(1, Math.min(5, Number(limit) || 3)));
+}
+
+function normalizeMemoryRowForUse(row) {
+  if (!row || typeof row !== "object") return row;
+  const metadata = getMemoryMetadata(row);
+  const originalContent = String(row.content || "");
+  const originalConflictKey = String(metadata.conflictKey || "");
+  const normalizedContent = normalizeStoredMemoryContent(row.content, row.type, metadata);
+  const nextMetadata = { ...metadata };
+  const fingerprint = buildConflictFingerprint({
+    content: normalizedContent,
+    conflictKey: nextMetadata.conflictKey,
+    polarity: nextMetadata.polarity,
+  });
+  if (fingerprint?.key) {
+    nextMetadata.conflictKey = fingerprint.key;
+    nextMetadata.polarity = fingerprint.polarity ?? nextMetadata.polarity ?? 0;
+  }
+  const normalizationPenalty =
+    (normalizedContent !== originalContent ? 1 : 0) +
+    (String(nextMetadata.conflictKey || "") !== originalConflictKey ? 1 : 0);
+  return {
+    ...row,
+    content: normalizedContent,
+    metadata: nextMetadata,
+    _normalizationPenalty: normalizationPenalty,
+  };
 }
 
 function escapeLikePattern(value) {
@@ -281,16 +598,139 @@ function toFiniteNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function getMemoryMetadata(memory) {
+  const metadata = memory?.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+  return metadata;
+}
+
+function getMemoryConflictDomain(memory) {
+  const metadata = getMemoryMetadata(memory);
+  const conflictKey = String(metadata?.conflictKey || "").toLowerCase().trim();
+  if (!conflictKey) return "";
+  return conflictKey.split(":")[0] || "";
+}
+
+function getMemoryConfidenceScore(memory) {
+  const explicit = toFiniteNumber(memory?.confidence_score, NaN);
+  if (Number.isFinite(explicit)) {
+    return Math.min(1, Math.max(0, explicit));
+  }
+  const metadata = getMemoryMetadata(memory);
+  if (metadata.userVerified === true) return 0.95;
+  return 0.8;
+}
+
+function getMemoryImportanceScore(memory) {
+  return Math.min(
+    1,
+    Math.max(0, toFiniteNumber(memory?.importance_score ?? memory?.importance, 0.5))
+  );
+}
+
+function getMemoryActionabilityScore(memory) {
+  const type = String(memory?.type || "").toLowerCase().trim();
+  const domain = getMemoryConflictDomain(memory);
+
+  let score = 0.1;
+  if (type === "goal") score += 0.45;
+  if (type === "preference") score += 0.35;
+  if (type === "struggle") score += 0.32;
+  if (type === "event") score += 0.18;
+  if (type === "relationship") score += 0.16;
+  if (type === "emotion") score += 0.08;
+  if (type === "fact") score += 0.06;
+
+  if (domain === "constraint") score += 0.5;
+  if (domain === "preference") score += 0.2;
+  if (domain === "identity") score += 0.06;
+
+  return Math.min(1, Math.max(0, score));
+}
+
+function rankFallbackCandidates(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const aScore =
+      getMemoryActionabilityScore(a) * 0.5 +
+      getMemoryConfidenceScore(a) * 0.3 +
+      getMemoryImportanceScore(a) * 0.2;
+    const bScore =
+      getMemoryActionabilityScore(b) * 0.5 +
+      getMemoryConfidenceScore(b) * 0.3 +
+      getMemoryImportanceScore(b) * 0.2;
+    return bScore - aScore;
+  });
+}
+
+function selectPersonalizationFallbackMemories(rows, limit = 2) {
+  const boundedLimit = Math.max(1, Math.min(5, Number(limit) || 2));
+  const ranked = rankFallbackCandidates(rows);
+  if (ranked.length === 0) return [];
+
+  const highConfidence = ranked.filter((row) => getMemoryConfidenceScore(row) >= 0.75);
+  const selectedPool = highConfidence.length > 0 ? highConfidence : ranked;
+  return selectedPool.slice(0, boundedLimit);
+}
+
 function rankContextCandidates(rows) {
   return [...(rows || [])].sort((a, b) => {
     const aScore =
-      toFiniteNumber(a?.retrieval_score, 0) * 0.75 +
-      toFiniteNumber(a?.importance_score, 0.5) * 0.25;
+      toFiniteNumber(a?.retrieval_score, 0) * 0.55 +
+      getMemoryImportanceScore(a) * 0.2 +
+      getMemoryActionabilityScore(a) * 0.2 +
+      getMemoryConfidenceScore(a) * 0.05;
     const bScore =
-      toFiniteNumber(b?.retrieval_score, 0) * 0.75 +
-      toFiniteNumber(b?.importance_score, 0.5) * 0.25;
+      toFiniteNumber(b?.retrieval_score, 0) * 0.55 +
+      getMemoryImportanceScore(b) * 0.2 +
+      getMemoryActionabilityScore(b) * 0.2 +
+      getMemoryConfidenceScore(b) * 0.05;
     return bScore - aScore;
   });
+}
+
+const sessionDeltaInjectionCache = new Map();
+const MAX_SESSION_DELTA_CACHE_SIZE = 10_000;
+
+function makeSessionDeltaCacheKey(userId, threadId) {
+  return `${normalizeUserId(userId)}::${String(threadId || "").trim().toLowerCase()}`;
+}
+
+function shouldInjectSessionDeltaForThread({ userId, currentThreadId }) {
+  const normalizedThreadId = String(currentThreadId || "").trim().toLowerCase();
+  if (!normalizedThreadId) return false;
+  const cacheKey = makeSessionDeltaCacheKey(userId, normalizedThreadId);
+  if (sessionDeltaInjectionCache.has(cacheKey)) {
+    return false;
+  }
+  sessionDeltaInjectionCache.set(cacheKey, Date.now());
+  if (sessionDeltaInjectionCache.size > MAX_SESSION_DELTA_CACHE_SIZE) {
+    const firstKey = sessionDeltaInjectionCache.keys().next().value;
+    if (firstKey) {
+      sessionDeltaInjectionCache.delete(firstKey);
+    }
+  }
+  return true;
+}
+
+function toShortSessionDeltaLine(content, maxChars = 140) {
+  const normalized = String(content || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+export function resetSessionDeltaInjectionCacheForTests() {
+  sessionDeltaInjectionCache.clear();
+}
+
+export function rankContextCandidatesForTests(rows) {
+  return rankContextCandidates(rows);
+}
+
+export function selectPersonalizationFallbackMemoriesForTests(rows, limit = 2) {
+  return selectPersonalizationFallbackMemories(rows, limit);
 }
 
 function encodeMemoryCursor(row) {
@@ -411,7 +851,8 @@ function getNovaApiBase() {
   if (!base) {
     throw new Error("NOVA_TYP_BASE_URL not configured");
   }
-  return base.replace(/\/+$/, "");
+  const normalized = base.replace(/\/+$/, "");
+  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
 }
 
 async function filterRelevantMemories({ query, memories, allowFallback = false }) {
@@ -422,9 +863,6 @@ async function filterRelevantMemories({ query, memories, allowFallback = false }
   if (!baseUrl) {
     return allowFallback ? memories : [];
   }
-
-  const apiBase = baseUrl.replace(/\/+$/, "");
-  const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
   const payload = {
     query: normalizedQuery,
     memories: memories.map((m) => ({ id: m.id, content: m.content, type: m.type })),
@@ -435,35 +873,26 @@ async function filterRelevantMemories({ query, memories, allowFallback = false }
   });
 
   try {
-    const response = await fetch(`${apiBase}/api/v1/openai/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a relevance filter. Return JSON {\"relevant_ids\": [\"id1\", ...]} for memories that are directly relevant to answering the query. If none are relevant, return an empty array. Only use ids from the provided list.",
-          },
-          { role: "user", content: JSON.stringify(payload) },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0,
-        max_tokens: 200,
-      }),
+    const { content, transport } = await callNovaTypChat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a relevance filter. Return JSON {\"relevant_ids\": [\"id1\", ...]} for memories that are directly relevant to answering the query. If none are relevant, return an empty array. Only use ids from the provided list.",
+        },
+        { role: "user", content: JSON.stringify(payload) },
+      ],
+      jsonMode: true,
+      temperature: 0,
+      maxTokens: 200,
+      timeoutMs: RELEVANCE_TIMEOUT_MS,
+      label: "Relevance check",
     });
-
-    if (!response.ok) {
-      throw new Error(`Relevance check failed: ${response.status}`);
-    }
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
     if (!content) return [];
-    const parsed = JSON.parse(content);
+    if (shouldDebug()) {
+      console.log(`[Memory] Relevance transport: ${transport}`);
+    }
+    const parsed = parseJsonObjectFromText(content);
     const validated = ResponseSchema.safeParse(parsed);
     if (!validated.success) return [];
 
@@ -484,25 +913,59 @@ export async function getEmbeddings(texts) {
   const apiBase = getNovaApiBase();
   const input = Array.isArray(texts) ? texts : [texts];
 
-  const response = await fetch(`${apiBase}/api/v1/openai/embeddings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
+  const response = await fetchWithTimeout(
+    `${apiBase}/v1/openai/embeddings`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(NOVA_TYP_API_KEY ? { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } : {}),
+      },
+      body: JSON.stringify({ model: "all-MiniLM-L6-v2", input }),
     },
-    body: JSON.stringify({ model: "all-MiniLM-L6-v2", input }),
-  });
+    {
+      timeoutMs: EMBEDDING_TIMEOUT_MS,
+      label: "Embedding request",
+    }
+  );
   
   if (!response.ok) {
     throw new Error(`Embedding failed: ${response.status}`);
   }
   
   const data = await response.json();
+  const vectors = Array.isArray(data?.embeddings)
+    ? data.embeddings
+    : Array.isArray(data?.data)
+      ? data.data
+          .map((entry) => entry?.embedding)
+          .filter((embedding) => Array.isArray(embedding))
+      : [];
+  if (vectors.length === 0) {
+    throw new Error("Embedding payload missing vectors.");
+  }
   return {
-    embeddings: data.embeddings,
+    embeddings: vectors,
     provider: "novatyp",
-    dims: 384,
+    dims: Array.isArray(vectors[0]) ? vectors[0].length : 384,
   };
+}
+
+export async function probeEmbeddingsProvider() {
+  try {
+    const result = await getEmbeddings(["memory health probe"]);
+    return {
+      ok: true,
+      provider: result.provider,
+      dims: result.dims,
+      vectors: Array.isArray(result.embeddings) ? result.embeddings.length : 0,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+    };
+  }
 }
 
 // ============================================================================
@@ -522,7 +985,7 @@ export async function storeMemory({
   metadata = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
-  const normalizedContent = normalizeStoredContent(content);
+  const normalizedContent = normalizeStoredMemoryContent(content, type, metadata);
   if (!normalizedUserId || !normalizedContent) {
     throw new Error("Invalid memory payload.");
   }
@@ -564,13 +1027,17 @@ export async function storeMemory({
 
   const importance = importanceScore || calculateImportance(normalizedContent, normalizedType);
   const id = crypto.randomUUID();
+  let storedId = id;
   
   if (isPg) {
+    let insertResult;
     if (embedding) {
-      await dbQuery(
+      insertResult = await dbQuery(
         `INSERT INTO memories 
          (id, user_id, content, content_hash, type, embedding, importance_score, source_thread_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, NOW())
+         ON CONFLICT (user_id, content_hash) DO NOTHING
+         RETURNING id`,
         [
           id,
           normalizedUserId,
@@ -584,10 +1051,12 @@ export async function storeMemory({
         ]
       );
     } else {
-      await dbQuery(
+      insertResult = await dbQuery(
         `INSERT INTO memories 
          (id, user_id, content, content_hash, type, importance_score, source_thread_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (user_id, content_hash) DO NOTHING
+         RETURNING id`,
         [
           id,
           normalizedUserId,
@@ -600,9 +1069,22 @@ export async function storeMemory({
         ]
       );
     }
+
+    const insertedId = insertResult?.rows?.[0]?.id;
+    if (!insertedId) {
+      const duplicate = await dbGet(
+        `SELECT id
+         FROM memories
+         WHERE user_id = $1 AND content_hash = $2
+         LIMIT 1`,
+        [normalizedUserId, hash]
+      );
+      return { id: duplicate?.id || id, duplicate: true };
+    }
+    storedId = insertedId;
   }
 
-  return { id, duplicate: false, importance };
+  return { id: storedId, duplicate: false, importance };
 }
 
 export async function deleteMemory(id, userId) {
@@ -668,7 +1150,7 @@ export async function stageMemory({
   polarity = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
-  const normalizedContent = normalizeStoredContent(content);
+  const normalizedContent = normalizeStoredMemoryContent(content, type, { conflictKey, polarity });
   if (!normalizedUserId || !normalizedContent) {
     return { error: "Invalid memory payload." };
   }
@@ -993,8 +1475,14 @@ export async function resolveConflict({ userId, conflictId, action }) {
 // Context Building
 // ============================================================================
 
-export async function buildContext({ userId, query, maxChars = 2000 }) {
+export async function buildContext({
+  userId,
+  query,
+  maxChars = 2000,
+  currentThreadId = null,
+}) {
   const normalizedUserId = normalizeUserId(userId);
+  const normalizedThreadId = String(currentThreadId || "").trim() || null;
   let memories = [];
   let usedFallback = false;
 
@@ -1003,7 +1491,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
     const lexicalPattern = `%${escapeLikePattern(trimmedQuery)}%`;
 
     const lexicalPromise = dbAll(
-      `SELECT id, content, type, metadata, importance_score, created_at,
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
               CASE
                 WHEN LOWER(content) = LOWER($2) THEN 1.0
                 WHEN content ILIKE $3 ESCAPE '\\' THEN 0.82
@@ -1027,7 +1515,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
         if (Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
           const vectorLiteral = `[${queryEmbedding.join(",")}]`;
           vectorRows = await dbAll(
-            `SELECT id, content, type, metadata, importance_score, created_at,
+            `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
                     (1 - (embedding <=> $2::vector)) AS retrieval_score
              FROM memories
              WHERE user_id = $1
@@ -1051,7 +1539,7 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
   // If no relevant candidates were found, fall back to highest-signal memories.
   if (memories.length === 0) {
     memories = await dbAll(
-      `SELECT id, content, type, metadata, importance_score
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
        ORDER BY importance_score DESC, created_at DESC
@@ -1074,11 +1562,39 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
       allowFallback: !usedFallback,
     });
     if (filtered.length === 0) {
-      return { context: "", sources: [] };
+      const forcedFallback = selectPersonalizationFallbackMemories(memories, 2);
+      if (forcedFallback.length === 0) {
+        return { context: "", sources: [] };
+      }
+      memories = forcedFallback;
+    } else {
+      memories = filtered;
     }
-    memories = filtered;
   } else {
     return { context: "", sources: [] };
+  }
+
+  if (normalizedThreadId && shouldInjectSessionDeltaForThread({
+    userId: normalizedUserId,
+    currentThreadId: normalizedThreadId,
+  })) {
+    const sessionDelta = await dbGet(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+         AND metadata->>'source' = 'session_end'
+         AND ($2::text IS NULL OR COALESCE(source_thread_id, '') <> $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [normalizedUserId, normalizedThreadId]
+    );
+
+    if (sessionDelta?.id) {
+      const existingIds = new Set(memories.map((memory) => String(memory?.id || "")));
+      if (!existingIds.has(String(sessionDelta.id))) {
+        memories = [sessionDelta, ...memories];
+      }
+    }
   }
   
   // Build context string with character limit
@@ -1087,7 +1603,12 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
   const usedMemories = [];
   
   for (const m of memories) {
-    const line = `- ${m.content}\n`;
+    const metadata = getMemoryMetadata(m);
+    const isSessionDelta = metadata?.source === "session_end";
+    const lineContent = isSessionDelta
+      ? `Last time: ${toShortSessionDeltaLine(m.content)}`
+      : String(m.content || "");
+    const line = `- ${lineContent}\n`;
     if (charCount + line.length > maxChars) break;
     context += line;
     charCount += line.length;
@@ -1095,6 +1616,182 @@ export async function buildContext({ userId, query, maxChars = 2000 }) {
   }
   
   return { context, sources: usedMemories };
+}
+
+export async function buildFastContext({
+  userId,
+  query,
+  maxChars = 800,
+  currentThreadId = null,
+  limit = 3,
+}) {
+  const normalizedUserId = normalizeUserId(userId);
+  const normalizedThreadId = String(currentThreadId || "").trim() || null;
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedUserId || !normalizedQuery) {
+    return { context: "", sources: [] };
+  }
+
+  const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 3));
+  const introspectionQuery = isMemoryIntrospectionQuery(normalizedQuery);
+  const locationIntrospectionQuery = isLocationIntrospectionQuery(normalizedQuery);
+  const originIntrospectionQuery = isOriginIntrospectionQuery(normalizedQuery);
+  const queryTokens = tokenizeFastContext(normalizedQuery);
+  if (queryTokens.length === 0 && !introspectionQuery) {
+    return { context: "", sources: [] };
+  }
+  let memories = await dbAll(
+    `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
+            0.0 AS retrieval_score
+     FROM memories
+     WHERE user_id = $1
+     ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+     LIMIT $2`,
+    [normalizedUserId, 50]
+  );
+
+  memories = dedupeMemoryRows(memories.map((memory) => normalizeMemoryRowForUse(memory)))
+    .map((memory) => ({
+      ...memory,
+      retrieval_score: introspectionQuery
+        ? scoreFastContextMemory(memory, queryTokens) + getMemoryConfidenceScore(memory) * 2
+        : scoreFastContextMemory(memory, queryTokens),
+    }))
+    .filter((memory) => introspectionQuery || Number(memory.retrieval_score || 0) > 0)
+    .sort((a, b) => {
+      const scoreDiff = Number(b.retrieval_score || 0) - Number(a.retrieval_score || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const importanceDiff = getMemoryImportanceScore(b) - getMemoryImportanceScore(a);
+      if (importanceDiff !== 0) return importanceDiff;
+      const confidenceDiff = getMemoryConfidenceScore(b) - getMemoryConfidenceScore(a);
+      if (confidenceDiff !== 0) return confidenceDiff;
+      return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    });
+
+  if (originIntrospectionQuery) {
+    const originOnly = memories.filter(
+      (memory) => String(memory?.content || "").toLowerCase().startsWith("from ")
+    );
+    if (originOnly.length > 0) {
+      memories = originOnly.slice(0, 1);
+    }
+  } else if (locationIntrospectionQuery) {
+    const locationOnly = memories.filter(
+      (memory) => getMemoryConflictDomain(memory) === "identity"
+    );
+    if (locationOnly.length > 0) {
+      memories = locationOnly.slice(0, 1);
+    }
+  } else if (introspectionQuery) {
+    memories = selectDiverseIntrospectionMemories(memories, boundedLimit);
+  } else {
+    memories = memories.slice(0, boundedLimit);
+  }
+
+  if (introspectionQuery && memories.length === 0) {
+    const fallbackRows = (await dbAll(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+       ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+       LIMIT 12`,
+      [normalizedUserId]
+    )).map((row) => normalizeMemoryRowForUse(row));
+    memories = originIntrospectionQuery
+      ? selectDiverseIntrospectionMemories(
+          fallbackRows.filter((row) => String(row?.content || "").toLowerCase().startsWith("from ")),
+          1
+        )
+      : locationIntrospectionQuery
+      ? selectDiverseIntrospectionMemories(
+          fallbackRows.filter((row) => getMemoryConflictDomain(row) === "identity"),
+          1
+        )
+      : selectDiverseIntrospectionMemories(fallbackRows, boundedLimit);
+  }
+  if (!introspectionQuery && memories.length === 0) {
+    memories = selectPersonalizationFallbackMemories(
+      (await dbAll(
+        `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+         FROM memories
+         WHERE user_id = $1
+         ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+         LIMIT 12`,
+        [normalizedUserId]
+      )).map((row) => normalizeMemoryRowForUse(row)),
+      boundedLimit
+    );
+  }
+  if (memories.length === 0) {
+    return { context: "", sources: [] };
+  }
+
+  if (
+    normalizedThreadId &&
+    shouldInjectSessionDeltaForThread({
+      userId: normalizedUserId,
+      currentThreadId: normalizedThreadId,
+    })
+  ) {
+    const sessionDelta = await dbGet(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+         AND metadata->>'source' = 'session_end'
+         AND ($2::text IS NULL OR COALESCE(source_thread_id, '') <> $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [normalizedUserId, normalizedThreadId]
+    );
+    if (sessionDelta?.id) {
+      const existingIds = new Set(memories.map((memory) => String(memory?.id || "")));
+      if (!existingIds.has(String(sessionDelta.id))) {
+        memories = [sessionDelta, ...memories].slice(0, boundedLimit);
+      }
+    }
+  }
+
+  let context = "About this person:\n";
+  let charCount = context.length;
+  const usedMemories = [];
+
+  for (const memory of memories) {
+    const metadata = getMemoryMetadata(memory);
+    const isSessionDelta = metadata?.source === "session_end";
+    const lineContent = isSessionDelta
+      ? `Last time: ${toShortSessionDeltaLine(memory.content)}`
+      : String(memory.content || "");
+    const line = `- ${lineContent}\n`;
+    if (charCount + line.length > maxChars) break;
+    context += line;
+    charCount += line.length;
+    usedMemories.push(memory);
+  }
+
+  if (usedMemories.length === 0) {
+    return { context: "", sources: [] };
+  }
+
+  return { context, sources: usedMemories };
+}
+
+export function normalizeMemoryRecordForMaintenance(row) {
+  const metadata = sanitizeStoredMetadata(row?.metadata || {});
+  const content = normalizeStoredMemoryContent(row?.content, row?.type, metadata);
+  const fingerprint = buildConflictFingerprint({
+    content,
+    conflictKey: metadata.conflictKey,
+    polarity: metadata.polarity,
+  });
+  if (fingerprint?.key) {
+    metadata.conflictKey = fingerprint.key;
+    metadata.polarity = fingerprint.polarity ?? metadata.polarity ?? 0;
+  }
+  return {
+    content,
+    type: normalizeStoredType(row?.type),
+    metadata,
+  };
 }
 
 export async function searchMemories({ userId, query, limit = 5 }) {

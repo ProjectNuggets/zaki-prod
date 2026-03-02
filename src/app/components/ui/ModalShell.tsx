@@ -14,6 +14,7 @@ interface ModalShellProps {
   ariaLabelledBy?: string;
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
+  lockBodyScroll?: boolean;
   role?: "dialog" | "alertdialog";
 }
 
@@ -28,6 +29,7 @@ export function ModalShell({
   ariaLabelledBy,
   closeOnBackdrop = true,
   closeOnEscape = true,
+  lockBodyScroll = true,
   role = "dialog",
 }: ModalShellProps) {
   const modalRef = useFocusTrap<HTMLDivElement>(isOpen);
@@ -46,7 +48,7 @@ export function ModalShell({
   }, [closeOnEscape, isOpen, onClose]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !lockBodyScroll) {
       return;
     }
     const previousOverflow = document.body.style.overflow;
@@ -54,7 +56,7 @@ export function ModalShell({
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen]);
+  }, [isOpen, lockBodyScroll]);
 
   if (!isOpen || typeof document === "undefined") {
     return null;

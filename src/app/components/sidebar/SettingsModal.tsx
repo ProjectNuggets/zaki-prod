@@ -1,12 +1,12 @@
 import { ModalShell } from "@/app/components/ui/ModalShell";
 import {
   useBillingConfig,
-  useBillingPortal,
   useCancelSubscription,
   useDeleteAccount,
   useEntitlements,
 } from "@/queries";
 import { exportAccountData } from "@/lib/api";
+import { trackProductEvent } from "@/lib/productTelemetry";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -42,7 +42,6 @@ export function SettingsModal({
   const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
-  const billingPortal = useBillingPortal();
   const cancelSubscription = useCancelSubscription();
   const deleteAccountMutation = useDeleteAccount();
   const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
@@ -224,8 +223,18 @@ export function SettingsModal({
                   type="button"
                   className="zaki-btn-sm zaki-btn-secondary"
                   onClick={() => {
+                    void trackProductEvent({
+                      event: "pricing_viewed",
+                      source: "settings",
+                      language: languageValue === "ar" ? "ar" : "en",
+                      plan:
+                        planTier === "student" || planTier === "personal" ? planTier : "free",
+                      interval: null,
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
                     onClose();
-                    navigate("/pricing");
+                    navigate("/pricing?source=settings");
                   }}
                 >
                   {t("settingsModal.plan.viewPricing")}
@@ -233,24 +242,18 @@ export function SettingsModal({
                 <button
                   type="button"
                   className="zaki-btn-sm zaki-btn-primary"
-                  disabled={
-                    billingPortal.isPending ||
-                    (isPremium ? !billingPortalEnabled : !billingCheckoutEnabled)
-                  }
-                  onClick={async () => {
-                    try {
-                      if (!isPremium && !billingCheckoutEnabled) {
-                        throw new Error(t("settingsModal.plan.errors.billingUnavailable"));
-                      }
-                      if (isPremium && !billingPortalEnabled) {
-                        throw new Error(t("settingsModal.plan.errors.portalUnavailable"));
-                      }
-                      await billingPortal.mutateAsync();
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error ? err.message : t("settingsModal.plan.errors.openPortal")
-                      );
-                    }
+                  onClick={() => {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: "settings",
+                      language: languageValue === "ar" ? "ar" : "en",
+                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                      interval: "monthly",
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                    onClose();
+                    navigate("/pricing?source=settings");
                   }}
                 >
                   {isPremium ? t("settingsModal.plan.managePlan") : t("settingsModal.plan.upgrade")}

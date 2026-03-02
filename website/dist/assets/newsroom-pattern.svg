@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" fill="none">
+  <defs>
+    <pattern id="tile" x="0" y="0" width="240" height="240" patternUnits="userSpaceOnUse">
+      <rect width="240" height="240" fill="#F5EFE5"/>
+      <rect x="0" y="0" width="120" height="120" fill="#ECE1D1"/>
+      <rect x="120" y="120" width="120" height="120" fill="#ECE1D1"/>
+      <circle cx="120" cy="120" r="22" fill="#F5EFE5"/>
+      <path d="M120 56L134 72L120 88L106 72L120 56Z" fill="#F5EFE5"/>
+      <path d="M56 120L72 106L88 120L72 134L56 120Z" fill="#F5EFE5"/>
+      <path d="M152 120L168 106L184 120L168 134L152 120Z" fill="#F5EFE5"/>
+      <circle cx="56" cy="56" r="14" fill="#E9DCCB"/>
+      <circle cx="184" cy="184" r="14" fill="#E9DCCB"/>
+      <path d="M0 120C0 93.49 21.49 72 48 72H72V96H48C34.75 96 24 106.75 24 120V144H0V120Z" fill="#F5EFE5"/>
+      <path d="M240 120C240 93.49 218.51 72 192 72H168V96H192C205.25 96 216 106.75 216 120V144H240V120Z" fill="#F5EFE5"/>
+      <path d="M120 0C93.49 0 72 21.49 72 48V72H96V48C96 34.75 106.75 24 120 24H144V0H120Z" fill="#F5EFE5"/>
+      <path d="M120 240C93.49 240 72 218.51 72 192V168H96V192C96 205.25 106.75 216 120 216H144V240H120Z" fill="#F5EFE5"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="800" fill="url(#tile)"/>
+</svg>

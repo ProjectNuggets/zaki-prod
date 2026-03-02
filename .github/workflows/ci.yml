@@ -20,6 +20,8 @@ jobs:
         run: npm ci
       - name: Frontend tests
         run: npm run test -- --runInBand
+      - name: Frontend typecheck
+        run: npm run typecheck
       - name: Frontend build
         run: npm run build
 
@@ -50,11 +52,10 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - name: Install backend deps
         run: npm --prefix backend ci
-      - name: Backend syntax checks
+      - name: Backend lint checks
+        run: npm --prefix backend run lint
+      - name: Root script syntax checks
         run: |
-          node --check backend/src/index.js
-          node --check backend/src/db.js
-          node --check backend/scripts/create-access-code.js
           node --check backend/src/memory/telemetry.js
           node --check scripts/smoke-v01.mjs
           node --check scripts/load-memory.mjs

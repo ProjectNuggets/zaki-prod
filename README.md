@@ -110,6 +110,11 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/zaki
 NOVA_TYP_BASE_URL=http://localhost:3000/api
 NOVA_TYP_API_KEY=your_nova_admin_key
 ZAKI_EMAIL_MODE=console
+
+# Optional: ZAKI-agent (Nullclaw) backend adapter
+ZAKI_AGENT_BACKEND_ENABLED=true
+NULLCLAW_BASE_URL=http://localhost:8788
+NULLCLAW_INTERNAL_TOKEN=replace_me
 ```
 
 **Frontend** (`.env`):

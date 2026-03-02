@@ -12,6 +12,8 @@ export interface Message {
   attachments?: { name: string; type: string; url: string }[];
   chatId?: number;
   memorySources?: { id: string; content: string; type: string }[];
+  error?: boolean;
+  errorCode?: string | null;
 }
 
 export interface MessageBubbleProps {
@@ -36,6 +38,7 @@ export function MessageBubble({
   // isStreaming can be used to show typing indicator or disable actions
   void isStreaming;
   const isUser = message.role === 'user';
+  const isAssistantError = !isUser && Boolean(message.error);
   const [showWhy, setShowWhy] = useState(false);
   const memorySources = message.memorySources || [];
   const { t } = useTranslation();
@@ -84,7 +87,9 @@ export function MessageBubble({
               "zaki-message-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed",
               isUser
                 ? "zaki-user-bubble bg-zaki-bubble-user text-zaki-bubble-user"
-                : "zaki-assistant-bubble bg-transparent text-zaki-primary"
+                : isAssistantError
+                  ? "zaki-assistant-bubble border border-rose-200 bg-rose-50/90 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
+                  : "zaki-assistant-bubble bg-transparent text-zaki-primary"
             )}
           >
             {!isUser ? (
