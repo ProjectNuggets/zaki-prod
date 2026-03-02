@@ -30,6 +30,10 @@ interface ThreadResponse {
   label?: string;
 }
 
+function normalizeWorkspaceIcon(icon?: string) {
+  return icon === "zaki" ? "folder" : icon;
+}
+
 // Fetchers
 async function fetchSpaces(): Promise<Space[]> {
   const response = await apiRequest("/workspaces");
@@ -42,7 +46,7 @@ async function fetchSpaces(): Promise<Space[]> {
   
   // Fetch threads for each workspace in parallel
   const spacesWithThreads = await Promise.all(
-    workspaces.map(async (ws, index) => {
+    workspaces.map(async (ws) => {
       let threads: Thread[] = [];
       let instructions = ws.instructions ?? ws.openAiPrompt ?? "";
       let pinnedFiles = ws.pinnedFiles ?? [];
@@ -66,11 +70,10 @@ async function fetchSpaces(): Promise<Space[]> {
         id: ws.slug,
         title: ws.name,
         description: ws.description,
-        icon: ws.icon,
+        icon: normalizeWorkspaceIcon(ws.icon),
         color: ws.color,
         instructions,
         pinnedFiles,
-        fixed: index === 0,
         threads,
       } satisfies Space;
     })
@@ -106,7 +109,7 @@ async function createSpace(space: {
     id: ws.slug,
     title: ws.name,
     description: ws.description,
-    icon: ws.icon,
+    icon: normalizeWorkspaceIcon(ws.icon),
     color: ws.color,
     instructions: ws.instructions ?? ws.openAiPrompt ?? "",
     pinnedFiles: ws.pinnedFiles ?? [],
@@ -144,7 +147,7 @@ async function updateSpace(
     id: ws.slug,
     title: ws.name,
     description: ws.description,
-    icon: ws.icon,
+    icon: normalizeWorkspaceIcon(ws.icon),
     color: ws.color,
     instructions: ws.instructions ?? ws.openAiPrompt ?? "",
     pinnedFiles: ws.pinnedFiles ?? [],

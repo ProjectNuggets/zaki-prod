@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText } from "lucide-react";
-import { CenterLogo } from "../../icons";
 import { InputArea } from "../../InputArea";
 import { useTranslation } from "react-i18next";
 import type { PinnedFileStatus, Space } from "@/types";
@@ -119,9 +118,6 @@ export function SpaceDetailView({
             aria-expanded={iconPickerOpen}
           >
             {(() => {
-              if (spaceDetail.icon === "zaki") {
-                return <CenterLogo />;
-              }
               const Icon = iconOptions.find((option) => option.id === (spaceDetail.icon ?? "folder"))?.icon ?? Folder;
               return <Icon className="size-5" style={{ color: spaceDetail.color ?? "#88735A" }} />;
             })()}

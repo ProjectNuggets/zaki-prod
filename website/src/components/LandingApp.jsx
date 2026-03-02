@@ -34,7 +34,7 @@ function useInView(options = {}) {
 const APP_URL = "https://app.chatzaki.com";
 const SITE_URL = "https://chatzaki.com";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
-const SEO_UPDATED_AT = "2026-02-25T00:00:00Z";
+const SEO_UPDATED_AT = "2026-03-02T00:00:00Z";
 const HORIZONTAL_SLIDE_IMAGES = [
   { src: "/slides/1.png" },
   { src: "/slides/2.png" },
@@ -239,6 +239,46 @@ function AnimatedParagraph({ children, className = "", delay = 0 }) {
     <GsapAnimated delay={delay} className={className}>
       {children}
     </GsapAnimated>
+  );
+}
+
+function SocialProofStack({ socialProof, locale }) {
+  if (!socialProof?.label) return null;
+
+  const avatars = Array.isArray(socialProof.avatars) ? socialProof.avatars.slice(0, 4) : [];
+
+  return (
+    <div
+      className="group mt-4"
+    >
+      <div className="relative overflow-hidden rounded-[22px] border border-[#eadfce] bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,239,228,0.96))] px-4 py-3 text-center shadow-[0_14px_32px_rgba(15,12,11,0.06)] transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_18px_38px_rgba(15,12,11,0.1)]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-10 top-0 h-10 rounded-full bg-[radial-gradient(circle,rgba(210,68,48,0.14),transparent_72%)] opacity-70 blur-xl"
+        />
+        <div className={`relative flex items-center justify-center ${locale === "ar" ? "flex-row-reverse" : ""}`}>
+          {avatars.map((avatar, index) => (
+            <span
+              key={`${avatar}-${index}`}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-[#f7e7d5] via-[#efcfab] to-[#e2b890] text-[11px] font-semibold text-[#6f5842] shadow-[0_6px_16px_rgba(111,88,66,0.14)] transition-transform duration-300 group-hover:scale-[1.03] ${
+                index === 0 ? "" : locale === "ar" ? "-mr-2.5" : "-ml-2.5"
+              }`}
+            >
+              {avatar}
+            </span>
+          ))}
+          <span className={`z-10 inline-flex h-9 min-w-9 items-center justify-center rounded-full border-2 border-white bg-[#d24430] px-2.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgba(210,68,48,0.28)] ${avatars.length > 0 ? locale === "ar" ? "-mr-2.5" : "-ml-2.5" : ""}`}>
+            +300
+          </span>
+        </div>
+        <p className="relative mt-3 text-[12px] font-semibold leading-5 text-[#5f574d]">
+          {socialProof.label}
+        </p>
+        <p className="relative mt-1 text-[11px] leading-5 text-[#8b7b69] opacity-0 transition-all duration-300 group-hover:opacity-100">
+          {socialProof.hoverLabel}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -470,8 +510,6 @@ export function LandingApp() {
     upsertMeta("property", "og:locale:alternate", seo.altLocaleTag);
     upsertMeta("property", "og:updated_time", seo.updatedAt);
     upsertMeta("name", "twitter:card", "summary_large_image");
-    upsertMeta("name", "twitter:site", "@chat_zaki");
-    upsertMeta("name", "twitter:creator", "@chat_zaki");
     upsertMeta("name", "twitter:title", seo.title);
     upsertMeta("name", "twitter:description", seo.description);
     upsertMeta("name", "twitter:image", DEFAULT_OG_IMAGE);
@@ -502,7 +540,7 @@ export function LandingApp() {
       name: "Nova Nuggets",
       url: "https://www.novanuggets.com",
       logo: `${SITE_URL}/favicon.svg`,
-      sameAs: ["https://instagram.com/chat_zaki"],
+      sameAs: ["https://instagram.com/chatzaki.ai"],
     });
 
     upsertJsonLd("zaki-app-jsonld", {
@@ -518,17 +556,21 @@ export function LandingApp() {
         {
           "@type": "Offer",
           category: "Student",
+          price: "8",
+          priceCurrency: "USD",
           url: `${APP_URL}/pricing?auth=signup`,
         },
         {
           "@type": "Offer",
           category: "Personal",
+          price: "13",
+          priceCurrency: "USD",
           url: `${APP_URL}/pricing?auth=signup`,
         },
         {
           "@type": "Offer",
           category: "Gift Code",
-          price: "10",
+          price: "15",
           priceCurrency: "USD",
           url: `${APP_URL}/pricing?auth=signup&intent=gift_code&source=website_pricing`,
         },
@@ -909,7 +951,7 @@ export function LandingApp() {
           </nav>
 
           <a
-            href={`${APP_URL}/pricing?auth=signup&plan=personal&interval=monthly&autostart=1&source=website_nav`}
+            href={`${APP_URL}/pricing?auth=signup&plan=personal&interval=monthly&source=website_nav`}
             className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-3.5 text-[14px] font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white"
             style={{ color: "#ffffff" }}
           >
@@ -998,6 +1040,7 @@ export function LandingApp() {
                 {t.earlyAccess.cta}
               </button>
               <p className="mt-2 text-center text-[12px] text-[#8a7d6f]">{t.earlyAccess.secondary}</p>
+              <SocialProofStack socialProof={t.earlyAccess.socialProof} locale={locale} />
               <div className="mt-3 rounded-xl border border-[#e7dbc9] bg-white/70 px-3 py-2">
                 <div className="text-[12px] font-semibold text-[#5f574d]">{t.earlyAccess.campaignLabel}</div>
                 <p className="mt-1 text-[12px] leading-relaxed text-[#6f6255]">{t.earlyAccess.campaignTeaser}</p>
@@ -1005,12 +1048,12 @@ export function LandingApp() {
               <p className="mt-3 whitespace-pre-line text-center text-[12px] leading-relaxed text-[#6f6255]">
                 {t.earlyAccess.instagramNote}{" "}
                 <a
-                  href="https://instagram.com/chat_zaki"
+                  href="https://instagram.com/chatzaki.ai"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-semibold text-[#D24430] underline decoration-[#D24430]/50 underline-offset-2"
                 >
-                  @chat_zaki
+                  @chatzaki.ai
                 </a>
               </p>
             </div>
@@ -1469,7 +1512,7 @@ export function LandingApp() {
                     <a
                       href={`${APP_URL}/pricing?auth=signup&plan=${encodeURIComponent(
                         plan.tier
-                      )}&interval=${encodeURIComponent(pricingInterval)}&autostart=1&source=website_pricing`}
+                      )}&interval=${encodeURIComponent(pricingInterval)}&source=website_pricing`}
                       className="inline-flex w-full items-center justify-center rounded-full border border-[#a33227] bg-[#d24430] px-4 py-2.5 text-sm font-semibold !text-white shadow-sm transition-all hover:bg-[#b03020] hover:shadow-md hover:-translate-y-0.5 hover:!text-white"
                     >
                       {plan.cta}

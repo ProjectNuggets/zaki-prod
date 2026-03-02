@@ -1132,6 +1132,16 @@ export function Sidebar() {
             >
               <EditIcon />
             </button>
+            <button
+              className="size-9 rounded-zaki-md transition-colors flex items-center justify-center hover:bg-zaki-hover focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+              onClick={() => toast.info(t("input.menu.comingSoonToast"))}
+              onMouseUp={blurButtonOnPointerClick}
+              type="button"
+              title={t("sidebar.nav.zakiBot")}
+              aria-label={t("sidebar.nav.zakiBot")}
+            >
+              <CenterLogo className="size-4 text-zaki-brand" />
+            </button>
           </div>
 
           <div className="mt-6 flex flex-col items-center gap-2">
@@ -1238,6 +1248,26 @@ export function Sidebar() {
              <EditIcon />
           </div>
           <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.spaces")}</span>
+        </button>
+
+        <button
+          className="group relative flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left hover:bg-zaki-hover"
+          onClick={() => toast.info(t("input.menu.comingSoonToast"))}
+          onMouseUp={blurButtonOnPointerClick}
+          type="button"
+        >
+          <div className="size-5 flex items-center justify-center text-zaki-brand">
+            <CenterLogo className="size-4" />
+          </div>
+          <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.zakiBot")}</span>
+          <span
+            className={cn(
+              "ml-auto inline-flex items-center rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted shadow-sm",
+              isRtl && "ml-0 mr-auto"
+            )}
+          >
+            {t("input.menu.comingSoonPill")}
+          </span>
         </button>
       </div>
 

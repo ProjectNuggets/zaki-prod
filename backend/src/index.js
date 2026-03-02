@@ -127,7 +127,6 @@ const ZAKI_AGENT_BACKEND_ENABLED =
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
-const ZAKI_DEFAULT_WORKSPACE_SLUG = (process.env.ZAKI_DEFAULT_WORKSPACE_SLUG || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
 const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
@@ -1748,27 +1747,6 @@ async function fetchNovaUserIdByUsername(username) {
     (user) => String(user.username).toLowerCase() === String(username).toLowerCase()
   );
   return match?.id ?? null;
-}
-
-async function ensureUserInDefaultWorkspace(novaUserId) {
-  if (!ZAKI_DEFAULT_WORKSPACE_SLUG || !novaUserId) {
-    return { success: true };
-  }
-  const response = await novaAdminRequest(
-    `/v1/admin/workspaces/${ZAKI_DEFAULT_WORKSPACE_SLUG}/manage-users`,
-    {
-      method: "POST",
-      body: JSON.stringify({ userIds: [Number(novaUserId)], reset: false }),
-    }
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.success === false) {
-    return {
-      success: false,
-      error: data?.error || data?.message || "Unable to assign workspace.",
-    };
-  }
-  return { success: true };
 }
 
 async function fetchSessionWorkspaceSlugs(authHeader) {
@@ -4189,16 +4167,6 @@ const loginHandler = async (req, res) => {
       }
     }
 
-    if (novaUserId) {
-      const assignResult = await ensureUserInDefaultWorkspace(novaUserId);
-      if (!assignResult.success) {
-        console.warn(
-          "[ZAKI] Failed to assign default workspace:",
-          assignResult.error
-        );
-      }
-    }
-
     const response = await fetch(`${apiBase}/request-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -6061,15 +6029,6 @@ const deleteWorkspaceHandler = async (req, res) => {
       return;
     }
     const normalizedSlug = slug.toLowerCase();
-    const defaultSlug = String(ZAKI_DEFAULT_WORKSPACE_SLUG || "zaki").trim().toLowerCase();
-    if (normalizedSlug === "zaki" || normalizedSlug === defaultSlug) {
-      res.status(400).json({
-        success: false,
-        error: "Default workspace cannot be deleted.",
-      });
-      return;
-    }
-
     // Permission scope: only allow deleting a workspace currently visible to this session user.
     const accessCheck = await workspaceVisibleForSession(authHeader, normalizedSlug);
     if (!accessCheck.success) {

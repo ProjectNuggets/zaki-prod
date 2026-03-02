@@ -33,6 +33,11 @@ export const content = {
       heading: "Start your relationship with ZAKI today",
       description:
         "ZAKI is now live. Subscribe and start building a personal, memory-aware workflow that evolves with you.",
+      socialProof: {
+        label: "300+ early users joined in week one",
+        hoverLabel: "Join the early community shaping ZAKI before full rollout.",
+        avatars: ["AN", "SK", "RM", "LM"],
+      },
       highlights: [
         "Personal assistant, not just a chatbot",
         "Culturally-aware conversations",
@@ -89,7 +94,7 @@ export const content = {
           },
           link: {
             label: "Follow the journey",
-            url: "https://instagram.com/chat_zaki",
+            url: "https://instagram.com/chatzaki.ai",
           },
         },
         {
@@ -103,7 +108,7 @@ export const content = {
           status: "done",
           link: {
             label: "Spread the word",
-            url: "https://instagram.com/chat_zaki",
+            url: "https://instagram.com/chatzaki.ai",
           },
         },
         {
@@ -189,7 +194,7 @@ export const content = {
           status: "next",
           link: {
             label: "Follow updates",
-            url: "https://instagram.com/chat_zaki",
+            url: "https://instagram.com/chatzaki.ai",
           },
         },
       ],
@@ -313,7 +318,7 @@ export const content = {
           tier: "personal",
           label: "Personal",
           priceMonthly: "$13 / month",
-          priceYearly: "$156 / year",
+          priceYearly: "$150 / year",
           blurb: "For everyday work and life when you want ZAKI to feel like your assistant.",
           features: [
             "Premium models with richer reasoning",
@@ -434,6 +439,11 @@ export const content = {
       heading: "ابدأ مع زكي من اليوم",
       description:
         "زكي أصبح متاحًا الآن. اشترك وابدأ تجربة شخصية مع ذاكرة تتطور معك.",
+      socialProof: {
+        label: "انضم أكثر من 300 مستخدم مبكر خلال الأسبوع الأول",
+        hoverLabel: "انضم إلى المجتمع المبكر الذي يشكّل زكي قبل الإطلاق الكامل.",
+        avatars: ["أن", "سك", "رم", "لم"],
+      },
       highlights: [
         "مساعد شخصي، وليس مجرد chatbot",
         "محادثات واعية بالسياق والثقافة",
@@ -490,7 +500,7 @@ export const content = {
           },
           link: {
             label: "تابع الرحلة",
-            url: "https://instagram.com/chat_zaki",
+            url: "https://instagram.com/chatzaki.ai",
           },
         },
         {
@@ -504,7 +514,7 @@ export const content = {
           status: "done",
           link: {
             label: "انشرها مع أصحابك",
-            url: "https://instagram.com/chat_zaki",
+            url: "https://instagram.com/chatzaki.ai",
           },
         },
         {
@@ -590,7 +600,7 @@ export const content = {
           status: "next",
           link: {
             label: "تابع التحديثات",
-            url: "https://instagram.com/chat_zaki",
+            url: "https://instagram.com/chatzaki.ai",
           },
         },
       ],
@@ -714,7 +724,7 @@ export const content = {
           tier: "personal",
           label: "شخصي",
           priceMonthly: "$13 / شهر",
-          priceYearly: "$156 / سنة",
+          priceYearly: "$150 / سنة",
           blurb: "للعمل والحياة اليومية عندما تريد أن يبدو زكي كمساعدك الشخصي.",
           features: [
             "نماذج متقدمة بمنطق أغنى",
