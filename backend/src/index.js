@@ -389,7 +389,7 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
             payload?.websocketUUID &&
             agentWsBase
           ) {
-            const agentUrl = `${agentWsBase}/agent-invocation/${payload.websocketUUID}`;
+            const agentUrl = `${agentWsBase}/api/agent-invocation/${payload.websocketUUID}`;
             payload.agentInvocationUrl = agentUrl;
             payload.websocketUrl = agentUrl;
           }

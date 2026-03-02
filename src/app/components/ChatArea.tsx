@@ -191,6 +191,35 @@ function buildAgentInvocationUrl(invocationId: string, baseHint?: string | null)
   return sourceUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
 }
 
+function normalizeAgentSocketUrl(rawUrl: string | null | undefined) {
+  const trimmed = String(rawUrl || "").trim();
+  if (!trimmed) return null;
+
+  let normalized = trimmed;
+  if (
+    typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
+    normalized.startsWith("ws://")
+  ) {
+    normalized = normalized.replace(/^ws:/i, "wss:");
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (
+      /^\/agent-invocation\/[^/]+$/i.test(parsed.pathname) &&
+      !parsed.pathname.startsWith("/api/")
+    ) {
+      parsed.pathname = `/api${parsed.pathname}`;
+      normalized = parsed.toString();
+    }
+  } catch {
+    // Keep best-effort normalized string.
+  }
+
+  return normalized;
+}
+
 export function ChatArea() {
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
@@ -1064,7 +1093,7 @@ export function ChatArea() {
         (payload.websocketUrl as string | undefined) ||
         (payload.wsUrl as string | undefined) ||
         (payload.url as string | undefined);
-      if (direct) return direct;
+      if (direct) return normalizeAgentSocketUrl(direct);
       const socketId =
         (payload.websocketUUID as string | undefined) ||
         (payload.websocketUuid as string | undefined);
