@@ -1730,10 +1730,14 @@ function getRequestHeaderValue(req, name) {
 
 function getPublicRequestBase(req) {
   const origin = getRequestHeaderValue(req, "origin");
+  let originProto = "";
   if (/^https?:\/\//i.test(origin)) {
-    return origin.replace(/\/+$/, "");
+    try {
+      originProto = new URL(origin).protocol.replace(":", "").toLowerCase();
+    } catch {
+      originProto = "";
+    }
   }
-
   const forwardedProto = getRequestHeaderValue(req, "x-forwarded-proto")
     .split(",")[0]
     .trim()
@@ -1743,7 +1747,8 @@ function getPublicRequestBase(req) {
     .trim();
   const host = forwardedHost || getRequestHeaderValue(req, "host");
   if (!host) return null;
-  const proto = forwardedProto || (req?.socket?.encrypted ? "https" : "http");
+  const proto =
+    forwardedProto || originProto || (req?.socket?.encrypted ? "https" : "http");
   return `${proto}://${host}`;
 }
 
