@@ -6,11 +6,9 @@ export const ReadyState = forwardRef<
   HTMLDivElement,
   {
     onStartChat?: () => void;
-    onSelectExample?: (example: string) => void;
   }
->(function ReadyState({ onStartChat, onSelectExample }, ref) {
+>(function ReadyState({ onStartChat }, ref) {
   const { t } = useTranslation();
-  const examples = t("empty.examples", { returnObjects: true }) as string[];
 
   return (
     <div className="min-h-full flex flex-col items-center justify-center px-4 py-16 pb-32">
@@ -32,18 +30,6 @@ export const ReadyState = forwardRef<
           <button className="zaki-btn bg-zaki-accent text-white" onClick={onStartChat}>
             {t("empty.cta")}
           </button>
-          <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
-            {examples.slice(0, 2).map((example) => (
-              <button
-                key={example}
-                type="button"
-                className="zaki-btn-sm border border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover"
-                onClick={() => onSelectExample?.(example)}
-              >
-                {example}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>

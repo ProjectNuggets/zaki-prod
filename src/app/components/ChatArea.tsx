@@ -2109,7 +2109,6 @@ export function ChatArea() {
         <ReadyState
           ref={readyRef}
           onStartChat={handleStartChat}
-          onSelectExample={handleExampleSelect}
         />
       );
     }
