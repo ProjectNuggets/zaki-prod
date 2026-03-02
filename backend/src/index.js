@@ -2,12 +2,14 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
+import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
 import {
@@ -113,6 +115,7 @@ function normalizeEmailValue(value) {
 }
 
 const app = express();
+app.set("trust proxy", true);
 const billingHealth = createBillingHealthTracker();
 const PORT = Number(process.env.PORT || 8787);
 const isProduction = process.env.NODE_ENV === "production";
@@ -348,8 +351,8 @@ function pipeReadableToResponse(readable, res, label = "Stream") {
   readable.pipe(res);
 }
 
-async function pipeSseWithAgentLinks(readable, res, label = "Stream") {
-  const agentWsBase = getAgentWsBase();
+async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
+  const agentWsBase = getPublicAgentWsBase(req);
   const decoder = new TextDecoder();
   let buffer = "";
 
@@ -1717,6 +1720,26 @@ function getAgentWsBase() {
   if (apiBase.startsWith("https://")) return `wss://${apiBase.slice(8)}`;
   if (apiBase.startsWith("http://")) return `ws://${apiBase.slice(7)}`;
   return null;
+}
+
+function getRequestHeaderValue(req, name) {
+  const value = req?.headers?.[name];
+  if (Array.isArray(value)) return value[0] || "";
+  return String(value || "").trim();
+}
+
+function getPublicAgentWsBase(req) {
+  const forwardedProto = getRequestHeaderValue(req, "x-forwarded-proto")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const forwardedHost = getRequestHeaderValue(req, "x-forwarded-host")
+    .split(",")[0]
+    .trim();
+  const host = forwardedHost || getRequestHeaderValue(req, "host");
+  if (!host) return null;
+  const proto = forwardedProto || (req?.socket?.encrypted ? "https" : "http");
+  return `${proto === "https" ? "wss" : "ws"}://${host}`;
 }
 
 function getNullclawBase() {
@@ -6982,7 +7005,7 @@ ${originalMessage}`;
     }
 
     if (isSse) {
-      await pipeSseWithAgentLinks(nodeStream, res, "Chat stream");
+      await pipeSseWithAgentLinks(nodeStream, res, req, "Chat stream");
     } else {
       pipeReadableToResponse(nodeStream, res, "Chat stream");
     }
@@ -7422,6 +7445,98 @@ app.all("*", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const agentProxyWss = new WebSocketServer({ noServer: true });
+
+agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
+  const agentWsBase = getAgentWsBase();
+  if (!agentWsBase) {
+    clientSocket.close(1011, "Agent websocket base is not configured.");
+    return;
+  }
+
+  const upstreamUrl = `${agentWsBase}/agent-invocation/${encodeURIComponent(invocationId)}`;
+  const upstreamSocket = new UpstreamWebSocket(upstreamUrl);
+
+  const closeClient = (code = 1011, reason = "Agent websocket proxy failed.") => {
+    if (
+      clientSocket.readyState === clientSocket.OPEN ||
+      clientSocket.readyState === clientSocket.CONNECTING
+    ) {
+      clientSocket.close(code, reason);
+    }
+  };
+
+  const closeUpstream = (code = 1000, reason = "client_closed") => {
+    if (
+      upstreamSocket.readyState === upstreamSocket.OPEN ||
+      upstreamSocket.readyState === upstreamSocket.CONNECTING
+    ) {
+      upstreamSocket.close(code, reason);
+    }
+  };
+
+  upstreamSocket.on("open", () => {
+    if (clientSocket.readyState !== clientSocket.OPEN) {
+      closeUpstream();
+    }
+  });
+
+  upstreamSocket.on("message", (data, isBinary) => {
+    if (clientSocket.readyState === clientSocket.OPEN) {
+      clientSocket.send(data, { binary: isBinary });
+    }
+  });
+
+  upstreamSocket.on("error", (error) => {
+    console.error("[AgentProxy] Upstream websocket error:", error);
+    closeClient(1011, "Agent upstream connection failed.");
+  });
+
+  upstreamSocket.on("close", (code, reason) => {
+    if (
+      clientSocket.readyState === clientSocket.OPEN ||
+      clientSocket.readyState === clientSocket.CONNECTING
+    ) {
+      clientSocket.close(code || 1000, reason?.toString() || "upstream_closed");
+    }
+  });
+
+  clientSocket.on("message", (data, isBinary) => {
+    if (upstreamSocket.readyState === upstreamSocket.OPEN) {
+      upstreamSocket.send(data, { binary: isBinary });
+    }
+  });
+
+  clientSocket.on("error", (error) => {
+    console.error("[AgentProxy] Client websocket error:", error);
+    closeUpstream(1011, "client_error");
+  });
+
+  clientSocket.on("close", () => {
+    closeUpstream();
+  });
+});
+
+server.on("upgrade", (req, socket, head) => {
+  const url = new URL(req.url || "", "http://localhost");
+  const match = url.pathname.match(/^\/api\/agent-invocation\/([^/]+)$/);
+  if (!match) {
+    socket.destroy();
+    return;
+  }
+
+  const invocationId = decodeURIComponent(match[1] || "").trim();
+  if (!invocationId) {
+    socket.destroy();
+    return;
+  }
+
+  agentProxyWss.handleUpgrade(req, socket, head, (ws) => {
+    agentProxyWss.emit("connection", ws, req, invocationId);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`ZAKI backend listening on port ${PORT}`);
 });
