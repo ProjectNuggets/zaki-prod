@@ -1702,7 +1702,12 @@ export function Sidebar() {
                     event: "upgrade_cta_clicked",
                     source: "settings",
                     language: isRtl ? "ar" : "en",
-                    plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                    plan:
+                      isPremium
+                        ? planTierRaw === "student" || planTierRaw === "personal"
+                          ? planTierRaw
+                          : "personal"
+                        : "personal",
                     interval: "monthly",
                   }).catch(() => {
                     // Best-effort telemetry only.

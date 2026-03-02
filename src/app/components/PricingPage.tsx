@@ -755,12 +755,12 @@ export function PricingPage() {
               !isPaidPlan || resolvedInterval === "monthly"
                 ? isPaidPlan
                   ? getCatalogPlanPriceLabel(
-                      paidTier,
+                      paidTier || "personal",
                       "monthly",
                       plan.priceMonthly
                     )
                   : plan.priceMonthly
-                : getCatalogPlanPriceLabel(paidTier, "yearly", plan.priceYearly);
+                : getCatalogPlanPriceLabel(paidTier || "personal", "yearly", plan.priceYearly);
             const showsYearlyFallback =
               isPaidPlan &&
               requestedInterval === "yearly" &&
