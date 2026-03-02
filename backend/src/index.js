@@ -1728,7 +1728,12 @@ function getRequestHeaderValue(req, name) {
   return String(value || "").trim();
 }
 
-function getPublicAgentWsBase(req) {
+function getPublicRequestBase(req) {
+  const origin = getRequestHeaderValue(req, "origin");
+  if (/^https?:\/\//i.test(origin)) {
+    return origin.replace(/\/+$/, "");
+  }
+
   const forwardedProto = getRequestHeaderValue(req, "x-forwarded-proto")
     .split(",")[0]
     .trim()
@@ -1739,7 +1744,13 @@ function getPublicAgentWsBase(req) {
   const host = forwardedHost || getRequestHeaderValue(req, "host");
   if (!host) return null;
   const proto = forwardedProto || (req?.socket?.encrypted ? "https" : "http");
-  return `${proto === "https" ? "wss" : "ws"}://${host}`;
+  return `${proto}://${host}`;
+}
+
+function getPublicAgentWsBase(req) {
+  const publicBase = getPublicRequestBase(req);
+  if (!publicBase) return null;
+  return publicBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
 }
 
 function getNullclawBase() {
@@ -6970,7 +6981,10 @@ ${originalMessage}`;
       "X-Zaki-Web-Search",
       upstreamPayload.webSearchEnabled === true ? "1" : "0"
     );
-    if (apiBase) {
+    const publicRequestBase = getPublicRequestBase(req);
+    if (publicRequestBase) {
+      res.setHeader("X-Zaki-Agent-Base", publicRequestBase);
+    } else if (apiBase) {
       res.setHeader("X-Zaki-Agent-Base", apiBase.replace(/\/api$/i, ""));
     }
     if (typeof upstreamPayload.mode === "string" && upstreamPayload.mode.trim()) {
