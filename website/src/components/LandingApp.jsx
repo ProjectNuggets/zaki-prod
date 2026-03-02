@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { content, resolveLocale } from "./landingContent";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import {
+  APP_URL,
+  DEFAULT_OG_IMAGE,
+  getAlternateLanguageUrls,
+  getSeoData,
+  getStructuredData,
+} from "../seo";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -31,10 +38,6 @@ function useInView(options = {}) {
   return [ref, isInView];
 }
 
-const APP_URL = "https://app.chatzaki.com";
-const SITE_URL = "https://chatzaki.com";
-const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
-const SEO_UPDATED_AT = "2026-03-02T00:00:00Z";
 const FEEDBACK_CLIENT_ID_KEY = "zaki.website.feedback.client_id";
 const WEBSITE_API_BASE_URL = String(import.meta.env.VITE_WEBSITE_API_BASE_URL || "").trim();
 const HORIZONTAL_SLIDE_IMAGES = [
@@ -211,7 +214,7 @@ function SlideVisual({ src, alt }) {
             onError={() => setBroken(true)}
             loading="lazy"
             decoding="async"
-            fetchPriority={src.endsWith("/1.png") ? "high" : "auto"}
+            fetchpriority={src.endsWith("/1.png") ? "high" : "auto"}
           />
           <div
             className="h-full w-full"
@@ -711,8 +714,11 @@ function WhySection({ locale, t, whyScale, whyWeight }) {
   );
 }
 
-export function LandingApp() {
-  const locale = useMemo(resolveLocale, []);
+export function LandingApp({ initialLocale } = {}) {
+  const locale = useMemo(
+    () => (initialLocale === "ar" || initialLocale === "en" ? initialLocale : resolveLocale()),
+    [initialLocale]
+  );
   const t = content[locale] || content.en;
   const pricing = t.pricing || {
     heading: "",
@@ -738,9 +744,7 @@ export function LandingApp() {
   const [promptIndex, setPromptIndex] = useState(0);
   const [isDeletingPrompt, setIsDeletingPrompt] = useState(false);
   const [openFaq, setOpenFaq] = useState(-1);
-  const [isDesktop, setIsDesktop] = useState(
-    typeof window !== "undefined" ? window.innerWidth >= 768 : true
-  );
+  const [isDesktop, setIsDesktop] = useState(true);
   const [pricingInterval, setPricingInterval] = useState("monthly");
   const [activeSlide, setActiveSlide] = useState(1);
   const [activeUpdateSlide, setActiveUpdateSlide] = useState(1);
@@ -791,42 +795,15 @@ export function LandingApp() {
     window.location.href = `${APP_URL}/?auth=signup${query}`;
   };
 
-  const switchLangHref = locale === "ar" ? "/" : "/?lang=ar";
+  const switchLangHref = locale === "ar" ? "/" : "/ar/";
   const dir = t.dir;
   const langFlag = locale === "ar" ? "🇸🇾" : "🇬🇧";
   const legalBasePath = locale === "ar" ? "/ar" : "";
-  const seo = useMemo(
-    () =>
-      locale === "ar"
-        ? {
-            title: "زكي AI | مساعد شخصي عربي آمن وواعٍ بالسياق",
-            description:
-              "زكي هو Personal Assistant AI بالعربية والإنجليزية، بذاكرة تحت تحكمك، وبنهج آمن وسيادي للاستخدام اليومي والعمل.",
-            keywords:
-              "زكي, ZAKI AI, مساعد شخصي, Personal Assistant AI, AI Agent, ذكاء اصطناعي عربي, ذكاء سيادي, مساعد آمن, Arabic AI Assistant",
-            canonical: `${SITE_URL}/?lang=ar`,
-            localeTag: "ar_AR",
-            altLocaleTag: "en_US",
-            imageAlt: "واجهة زكي الذكية باللغة العربية",
-            updatedAt: SEO_UPDATED_AT,
-          }
-        : {
-            title: "ZAKI AI | Personal Assistant AI for Arabic and English",
-            description:
-              "ZAKI is a personal assistant AI for Arabic and English workflows, built for cultural context, memory control, AI-agent workflows, and sovereign-by-design deployment.",
-            keywords:
-              "ZAKI AI, personal assistant AI, Arabic AI assistant, AI agent, sovereign AI, culturally aware AI, bilingual AI, Arabic chatbot alternative",
-            canonical: `${SITE_URL}/`,
-            localeTag: "en_US",
-            altLocaleTag: "ar_AR",
-            imageAlt: "ZAKI AI landing experience",
-            updatedAt: SEO_UPDATED_AT,
-          },
-    [locale]
-  );
+  const seo = useMemo(() => getSeoData(locale), [locale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
+    document.documentElement.dir = dir;
     document.title = seo.title;
     upsertMeta("name", "description", seo.description);
     upsertMeta(
@@ -864,108 +841,18 @@ export function LandingApp() {
     upsertMeta("name", "twitter:image:alt", seo.imageAlt);
 
     upsertLink("canonical", seo.canonical);
-    upsertLink("alternate", `${SITE_URL}/`, "en");
-    upsertLink("alternate", `${SITE_URL}/?lang=ar`, "ar");
-    upsertLink("alternate", `${SITE_URL}/`, "x-default");
+    const alternateUrls = getAlternateLanguageUrls();
+    upsertLink("alternate", alternateUrls.en, "en");
+    upsertLink("alternate", alternateUrls.ar, "ar");
+    upsertLink("alternate", alternateUrls["x-default"], "x-default");
 
-    upsertJsonLd("zaki-seo-jsonld", {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "ZAKI AI",
-      url: SITE_URL,
-      inLanguage: locale === "ar" ? "ar" : "en",
-      description: seo.description,
-      publisher: {
-        "@type": "Organization",
-        name: "Nova Nuggets",
-        url: "https://www.novanuggets.com",
-      },
-    });
-
-    upsertJsonLd("zaki-org-jsonld", {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      name: "Nova Nuggets",
-      url: "https://www.novanuggets.com",
-      logo: `${SITE_URL}/favicon.svg`,
-      sameAs: ["https://instagram.com/chatzaki.ai"],
-    });
-
-    upsertJsonLd("zaki-app-jsonld", {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      name: "ZAKI AI",
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      inLanguage: ["en", "ar"],
-      description: seo.description,
-      url: SITE_URL,
-      offers: [
-        {
-          "@type": "Offer",
-          category: "Student",
-          price: "8",
-          priceCurrency: "USD",
-          url: `${APP_URL}/pricing?auth=signup`,
-        },
-        {
-          "@type": "Offer",
-          category: "Personal",
-          price: "13",
-          priceCurrency: "USD",
-          url: `${APP_URL}/pricing?auth=signup`,
-        },
-        {
-          "@type": "Offer",
-          category: "Gift Code",
-          price: "15",
-          priceCurrency: "USD",
-          url: `${APP_URL}/pricing?auth=signup&intent=gift_code&source=website_pricing`,
-        },
-      ],
-      featureList: [
-        locale === "ar" ? "مساعد شخصي واعٍ ثقافيًا" : "Culturally aware personal assistant",
-        locale === "ar" ? "ذاكرة تحت تحكم المستخدم" : "User-controlled memory",
-        locale === "ar" ? "دعم العربية والإنجليزية" : "Arabic and English support",
-        locale === "ar" ? "خارطة AI Agents تنفيذية" : "AI-agent workflow roadmap",
-      ],
-      publisher: {
-        "@type": "Organization",
-        name: "Nova Nuggets",
-      },
-    });
-
-    upsertJsonLd("zaki-faq-jsonld", {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      mainEntity: (Array.isArray(t.faq?.items) ? t.faq.items : []).slice(0, 6).map((item) => ({
-        "@type": "Question",
-        name: item.question,
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: item.answer,
-        },
-      })),
-    });
-
-    upsertJsonLd("zaki-newsroom-jsonld", {
-      "@context": "https://schema.org",
-      "@type": "ItemList",
-      name: locale === "ar" ? "غرفة أخبار زكي" : "ZAKI Newsroom",
-      itemListElement: (Array.isArray(t.updatesCarousel?.slides) ? t.updatesCarousel.slides : []).map(
-        (slide, index) => ({
-          "@type": "ListItem",
-          position: index + 1,
-          item: {
-            "@type": "Thing",
-            name: slide.title,
-            description: slide.description,
-            url: slide.link?.url || `${seo.canonical}#updates-carousel`,
-          },
-        })
-      ),
-    });
-  }, [locale, seo]);
+    const jsonLd = getStructuredData(locale);
+    upsertJsonLd("zaki-website-jsonld", jsonLd.website);
+    upsertJsonLd("zaki-organization-jsonld", jsonLd.organization);
+    upsertJsonLd("zaki-app-jsonld", jsonLd.app);
+    upsertJsonLd("zaki-faq-jsonld", jsonLd.faq);
+    upsertJsonLd("zaki-newsroom-jsonld", jsonLd.newsroom);
+  }, [locale, dir, seo]);
 
   useEffect(() => {
     setPrompt("");
@@ -1097,13 +984,8 @@ export function LandingApp() {
   }, [updatesCarousel.slides.length, locale, isDesktop]);
 
   useEffect(() => {
-    let mounted = true;
-    import("gsap").then(({ gsap }) => {
-      if (!mounted) return;
-      updatesGsapRef.current = gsap;
-    });
+    updatesGsapRef.current = gsap;
     return () => {
-      mounted = false;
       if (socialProofPromptTimeoutRef.current) {
         window.clearTimeout(socialProofPromptTimeoutRef.current);
       }
@@ -1139,13 +1021,7 @@ export function LandingApp() {
     const initHorizontalScroll = async () => {
       if (!isDesktop) return;
       if (!horizontalSectionRef.current || !horizontalViewportRef.current || !horizontalTrackRef.current) return;
-      const [{ gsap }, { ScrollTrigger }] = await Promise.all([
-        import("gsap"),
-        import("gsap/ScrollTrigger"),
-      ]);
       if (!mounted) return;
-
-      gsap.registerPlugin(ScrollTrigger);
 
       const sectionEl = horizontalSectionRef.current;
       const viewportEl = horizontalViewportRef.current;

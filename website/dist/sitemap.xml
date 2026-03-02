@@ -7,14 +7,14 @@
     <loc>https://chatzaki.com/</loc>
     <lastmod>2026-03-02</lastmod>
     <xhtml:link rel="alternate" hreflang="en" href="https://chatzaki.com/" />
-    <xhtml:link rel="alternate" hreflang="ar" href="https://chatzaki.com/?lang=ar" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://chatzaki.com/ar/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://chatzaki.com/" />
   </url>
   <url>
-    <loc>https://chatzaki.com/?lang=ar</loc>
+    <loc>https://chatzaki.com/ar/</loc>
     <lastmod>2026-03-02</lastmod>
     <xhtml:link rel="alternate" hreflang="en" href="https://chatzaki.com/" />
-    <xhtml:link rel="alternate" hreflang="ar" href="https://chatzaki.com/?lang=ar" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://chatzaki.com/ar/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://chatzaki.com/" />
   </url>
   <url><loc>https://chatzaki.com/terms/</loc></url>

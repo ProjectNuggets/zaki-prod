@@ -3276,7 +3276,7 @@ const billingAdapters = {
       const checkoutSource = String(context?.source || "").trim().toLowerCase() || "pricing_page";
       if (plan === "student" && !isStudentEligible(zakiUser, email)) {
         const err = new Error(
-          "Student plan requires a .edu email or manual verification. Email proof of enrollment to info@novanuggets.com."
+          "Student plan requires a .edu email or manual verification. Email proof of enrollment to support@chatzaki.com."
         );
         err.status = 400;
         throw err;
@@ -3741,7 +3741,7 @@ function buildVerificationEmailHtml({ verifyUrl, logoUrl }) {
     footerHtml: `
       <p style="margin:0;font-size:12px;line-height:1.6;color:#7f6b59;">
         If this was not you, you can safely ignore this email. Need help? Reach us at
-        <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+        <a href="mailto:support@chatzaki.com" style="color:#c75236;text-decoration:none;">support@chatzaki.com</a>.
       </p>
     `,
   });
@@ -3773,7 +3773,7 @@ function buildPasswordResetEmailHtml({ resetUrl, logoUrl }) {
     footerHtml: `
       <p style="margin:0;font-size:12px;line-height:1.6;color:#7f6b59;">
         If you did not request this reset, you can ignore this email. Need help? Reach us at
-        <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+        <a href="mailto:support@chatzaki.com" style="color:#c75236;text-decoration:none;">support@chatzaki.com</a>.
       </p>
     `,
   });
@@ -3791,7 +3791,7 @@ async function sendVerificationEmail(email, token) {
     `This link expires in ${Math.max(1, Number(ZAKI_VERIFY_TTL_MINUTES || 60))} minutes.`,
     "",
     "If this was not you, you can ignore this email.",
-    "Support: info@novanuggets.com",
+    "Support: support@chatzaki.com",
   ].join("\n");
   const html = buildVerificationEmailHtml({ verifyUrl, logoUrl });
 
@@ -3857,7 +3857,7 @@ async function sendPasswordResetEmail(email, token) {
     `This reset link expires in ${Math.max(1, Number(ZAKI_RESET_TTL_MINUTES || 30))} minutes.`,
     "",
     "If you did not request this, you can ignore this email.",
-    "Support: info@novanuggets.com",
+    "Support: support@chatzaki.com",
   ].join("\n");
   const html = buildPasswordResetEmailHtml({ resetUrl, logoUrl });
 
@@ -3953,7 +3953,7 @@ function buildAccessCodePurchaseEmailHtml({
     footerHtml: `
       <p style="margin:0;font-size:12px;line-height:1.6;color:#7f6b59;">
         You can keep this code for yourself or share it with someone you want to help. Need help? Reach us at
-        <a href="mailto:info@novanuggets.com" style="color:#c75236;text-decoration:none;">info@novanuggets.com</a>.
+        <a href="mailto:support@chatzaki.com" style="color:#c75236;text-decoration:none;">support@chatzaki.com</a>.
       </p>
     `,
   });
@@ -3977,7 +3977,7 @@ async function sendAccessCodePurchaseEmail({
     `Duration: ${durationDays} days (single use)`,
     `Redeem here: ${pricingUrl}`,
     "",
-    "Need help? info@novanuggets.com",
+    "Need help? support@chatzaki.com",
   ].join("\n");
   const html = buildAccessCodePurchaseEmailHtml({
     logoUrl,
