@@ -7140,9 +7140,30 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     const targetUrl = `${nullclawBase}/api/v1/chat/stream`;
+    const normalizedPayload = payload && typeof payload === "object" ? payload : {};
+    const rawThreadId = String(normalizedPayload.threadId || "").trim();
+    const rawSpaceId = String(normalizedPayload.spaceId || "").trim();
+    const existingContext =
+      normalizedPayload.context && typeof normalizedPayload.context === "object"
+        ? normalizedPayload.context
+        : {};
+    const ZAKI_BOT_SPACE_ID = "zaki-bot";
+    const ZAKI_BOT_SURFACE = "zaki_bot";
+    const ZAKI_AGENT_SURFACE = "zaki_agent";
+
     const upstreamPayload = {
-      ...(payload && typeof payload === "object" ? payload : {}),
+      ...normalizedPayload,
       message: originalMessage,
+      stream: true,
+      context: {
+        ...existingContext,
+        surface:
+          rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID
+            ? ZAKI_BOT_SURFACE
+            : ZAKI_AGENT_SURFACE,
+        ...(rawSpaceId ? { space_id: rawSpaceId } : {}),
+        ...(rawThreadId ? { thread_id: rawThreadId } : {}),
+      },
     };
 
     const upstream = await fetchWithTimeout(
@@ -7193,11 +7214,205 @@ const agentChatStreamHandler = async (req, res) => {
   }
 };
 
+function resolveAgentUserId(authResult) {
+  return (
+    String(authResult?.zakiUser?.id || "").trim() ||
+    normalizeEmail(String(authResult?.email || ""))
+  );
+}
+
+async function proxyNullclawRequest(req, res, targetPath, options = {}) {
+  const nullclawBase = getNullclawBase();
+  if (!nullclawBase) {
+    return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
+  }
+  if (!NULLCLAW_INTERNAL_TOKEN) {
+    return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
+  }
+
+  let userId = String(options.userId || "").trim();
+  if (!userId) {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    userId = resolveAgentUserId(authResult);
+  }
+  if (!userId) {
+    return res.status(400).json({ error: "Invalid user." });
+  }
+
+  const targetUrl = `${nullclawBase}${targetPath}`;
+  const headers = new Headers(options.headers || {});
+  headers.set("X-Internal-Token", NULLCLAW_INTERNAL_TOKEN);
+  headers.set("X-Zaki-User-Id", userId);
+  headers.set("X-Request-Id", String(req.requestId || crypto.randomUUID()));
+
+  const method = String(options.method || req.method || "GET").toUpperCase();
+  const allowBody = !["GET", "HEAD"].includes(method);
+  const body = allowBody
+    ? options.body === undefined
+      ? req.body
+      : options.body
+    : undefined;
+  if (body !== undefined && body !== null && !(body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const upstream = await fetchWithTimeout(
+    targetUrl,
+    {
+      method,
+      headers,
+      body:
+        body === undefined || body === null
+          ? undefined
+          : body instanceof FormData
+          ? body
+          : JSON.stringify(body),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    "Nullclaw proxy request"
+  );
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  Readable.fromWeb(upstream.body).pipe(res);
+}
+
+const agentProvisionHandler = async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+
+    const userId = resolveAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user." });
+    }
+
+    const payload =
+      req.body && typeof req.body === "object" ? req.body : {};
+
+    return proxyNullclawRequest(req, res, "/api/v1/users/provision", {
+      method: "POST",
+      userId,
+      body: {
+        ...payload,
+        user_id: userId,
+      },
+    });
+  } catch (error) {
+    console.error("[Agent] Provision error:", error);
+    return res.status(500).json({ error: error?.message || "Agent provision failed." });
+  }
+};
+
+const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const userId = resolveAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user." });
+    }
+    const targetPath = pathBuilder(userId, req);
+    return proxyNullclawRequest(req, res, targetPath);
+  } catch (error) {
+    console.error("[Agent] Control proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Agent control request failed." });
+  }
+};
+
 app.post(
   "/api/agent/chat/stream",
   streamChatLimiter,
   express.json({ limit: "10mb" }),
   agentChatStreamHandler
+);
+
+app.post("/api/agent/provision", express.json({ limit: "1mb" }), agentProvisionHandler);
+app.get(
+  "/api/agent/onboarding",
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
+);
+app.put(
+  "/api/agent/onboarding",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
+);
+app.get(
+  "/api/agent/config",
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
+);
+app.patch(
+  "/api/agent/config",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
+);
+app.get(
+  "/api/agent/secrets/:key",
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
+  )
+);
+app.put(
+  "/api/agent/secrets/:key",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
+  )
+);
+app.delete(
+  "/api/agent/secrets/:key",
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
+  )
+);
+app.post(
+  "/api/agent/channels/telegram/connect",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/connect`
+  )
+);
+app.delete(
+  "/api/agent/channels/telegram/disconnect",
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/disconnect`
+  )
+);
+app.get(
+  "/api/agent/heartbeat",
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
+);
+app.put(
+  "/api/agent/heartbeat",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
+);
+app.get(
+  "/api/agent/cron",
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
+);
+app.post(
+  "/api/agent/cron",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
+);
+app.patch(
+  "/api/agent/cron/:id",
+  express.json({ limit: "1mb" }),
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
+  )
+);
+app.delete(
+  "/api/agent/cron/:id",
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
+  )
 );
 
 // =============================================================================

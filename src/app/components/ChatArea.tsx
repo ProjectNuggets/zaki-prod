@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest, buildApiUrl, getApiBase } from "@/lib/api";
+import { apiRequest, buildApiUrl, getApiBase, provisionAgent } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   readResponseFormattingConfig,
@@ -29,6 +29,13 @@ import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
+import {
+  createZakiBotThread,
+  isZakiBotSpaceId,
+  ZAKI_BOT_LABEL,
+  ZAKI_BOT_SPACE_ID,
+  ZAKI_BOT_THREAD_ID,
+} from "@/lib/zakiBot";
 import {
   getActivationProgress,
   markFirstMemorySaved,
@@ -232,6 +239,9 @@ export function ChatArea() {
     exported: isRtl ? "تم تصدير المحادثة" : "Chat exported",
     exportFailed: isRtl ? "تعذر تصدير هذه المحادثة" : "Unable to export this chat",
     dragPrompt: isRtl ? "أسقط الملفات داخل المساحة ليتم استخدامها" : "Drop files into a workspace to ground them",
+    botUploadUnavailable: isRtl
+      ? "رفع الملفات غير متاح داخل بوت زكي بعد."
+      : "File uploads are not available inside ZAKI Bot yet.",
     shareConversationAria: isRtl ? "مشاركة المحادثة" : "Share conversation",
     shareConversation: isRtl ? "مشاركة" : "Share",
     moreOptionsAria: isRtl ? "خيارات إضافية" : "More options",
@@ -291,6 +301,8 @@ export function ChatArea() {
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const zakiBotProvisionedRef = useRef(false);
+  const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
 
   // Memory state - works for both auto-save and manual modes
   const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
@@ -481,7 +493,6 @@ export function ChatArea() {
 
   // Computed values
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
-  const showReady = !activeThreadId || messages.length === 0;
   const primarySpace = spacesList[0] ?? null;
   const homeConversationSpaceId = useMemo(() => {
     const zakiSpace = spacesList.find(
@@ -491,8 +502,25 @@ export function ChatArea() {
     const fixedSpace = spacesList.find((space) => Boolean(space.fixed));
     return fixedSpace?.id ?? primarySpace?.id ?? null;
   }, [primarySpace?.id, spacesList]);
-  const activeSpace = spacesList.find((space) => space.id === activeWorkspaceSlug) ?? null;
-  const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
+  const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const activeSpace =
+    spacesList.find((space) => space.id === activeWorkspaceSlug) ??
+    (isZakiBotActiveSpace
+      ? {
+          id: ZAKI_BOT_SPACE_ID,
+          title: ZAKI_BOT_LABEL,
+          description: "",
+          icon: "sparkles",
+          threads: [createZakiBotThread()],
+        }
+      : null);
+  const activeThread =
+    activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ??
+    (isZakiBotActiveSpace && activeThreadId === ZAKI_BOT_THREAD_ID
+      ? createZakiBotThread()
+      : null);
+  const isMemoryPipelineEnabled = !isZakiBotActiveSpace;
+  const showReady = (!activeThreadId || messages.length === 0) && !isZakiBotActiveSpace;
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
@@ -618,10 +646,14 @@ export function ChatArea() {
         toast.error(isRtl ? "اختر مساحة أولًا لإضافة الملفات." : "Select a space before adding files.");
         return;
       }
+      if (resolvedSpaceId === ZAKI_BOT_SPACE_ID) {
+        toast.error(chatCopy.botUploadUnavailable);
+        return;
+      }
       setFileUploadSpaceId(resolvedSpaceId);
       fileInputRef.current?.click();
     },
-    [activeWorkspaceSlug, isRtl, primarySpace?.id]
+    [activeWorkspaceSlug, chatCopy.botUploadUnavailable, isRtl, primarySpace?.id]
   );
 
   const handleWorkspaceFilesSelected = useCallback(
@@ -771,8 +803,8 @@ export function ChatArea() {
   };
 
   const { data: historyData, isLoading: isHistoryLoading } = useMessages(
-    activeWorkspaceSlug,
-    activeThreadId
+    isZakiBotActiveSpace ? null : activeWorkspaceSlug,
+    isZakiBotActiveSpace ? null : activeThreadId
   );
 
   // Helper to update assistant message content
@@ -1017,7 +1049,7 @@ export function ChatArea() {
     const shouldDisableResponseEnvelope =
       responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
     const isZakiAgentSpace =
-      String(workspaceSlug || "").trim().toLowerCase() === "zaki-agent";
+      String(workspaceSlug || "").trim().toLowerCase() === ZAKI_BOT_SPACE_ID;
     const requestPath = isZakiAgentSpace
       ? "/api/agent/chat/stream"
       : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
@@ -1120,7 +1152,7 @@ export function ChatArea() {
         );
       }
 
-      if (eventType === "memory_used" && Array.isArray(payload.sources)) {
+      if (isMemoryPipelineEnabled && eventType === "memory_used" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
           assistantId,
@@ -1128,7 +1160,7 @@ export function ChatArea() {
         );
         return {};
       }
-      if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
+      if (isMemoryPipelineEnabled && payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
           assistantId,
@@ -1330,6 +1362,7 @@ export function ChatArea() {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
   }, [
+    isMemoryPipelineEnabled,
     spacesList,
     responseFormattingConfig.disableResponseEnvelope,
     queryModeEnabled,
@@ -1360,7 +1393,7 @@ export function ChatArea() {
 
   const syncMemoryStatus = useCallback(
     async (notifyOnNewConflicts = false) => {
-      if (!authUserId) return;
+      if (!authUserId || !isMemoryPipelineEnabled) return;
       try {
         const statusResponse = await apiRequest("/api/memory/status");
         if (!statusResponse.ok) return;
@@ -1458,12 +1491,12 @@ export function ChatArea() {
         // Sync is best-effort and should never block chat.
       }
     },
-    [authUserId]
+    [authUserId, isMemoryPipelineEnabled]
   );
 
   const requestMemoryStatusSync = useCallback(
     (notifyOnNewConflicts = false, force = false) => {
-      if (!authUserId) return;
+      if (!authUserId || !isMemoryPipelineEnabled) return;
       const now = Date.now();
       const elapsed = now - lastMemoryStatusSyncAtRef.current;
       if (!force && elapsed < MEMORY_STATUS_SYNC_THROTTLE_MS) {
@@ -1472,11 +1505,11 @@ export function ChatArea() {
       lastMemoryStatusSyncAtRef.current = now;
       void syncMemoryStatus(notifyOnNewConflicts);
     },
-    [authUserId, syncMemoryStatus]
+    [authUserId, isMemoryPipelineEnabled, syncMemoryStatus]
   );
 
   const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
-    if (!authUserId) return;
+    if (!authUserId || !isMemoryPipelineEnabled) return;
     if (memoryInFlightRef.current) {
       queuedMemoryCheckRef.current = { message, threadId, mode: modeOverride };
       return;
@@ -1602,12 +1635,27 @@ export function ChatArea() {
     activationProgress.firstMemorySaved,
     activeThreadId,
     flushMemoryQueue,
+    isMemoryPipelineEnabled,
     isRtl,
     memoryMode,
     requestMemoryStatusSync,
   ]);
 
   useEffect(() => {
+    if (!isMemoryPipelineEnabled) {
+      conflictCountRef.current = 0;
+      memoryStatusHydratedRef.current = false;
+      lastMemoryStatusSyncAtRef.current = 0;
+      memoryQueueRef.current = [];
+      queuedMemoryCheckRef.current = null;
+      memoryInFlightRef.current = false;
+      setPendingMemories([]);
+      setShowMemoryToast(false);
+      setShowConflictToast(false);
+      setMemoryConflictCount(0);
+      setMemoryError(null);
+      return;
+    }
     if (!authUserId) {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
@@ -1617,10 +1665,10 @@ export function ChatArea() {
       return;
     }
     requestMemoryStatusSync(false, true);
-  }, [authUserId, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
 
   useEffect(() => {
-    if (!authUserId) return;
+    if (!authUserId || !isMemoryPipelineEnabled) return;
     let cancelled = false;
     let reconnectTimer: number | null = null;
     let controller: AbortController | null = null;
@@ -1734,10 +1782,10 @@ export function ChatArea() {
       }
       controller?.abort();
     };
-  }, [authUserId, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
 
   useEffect(() => {
-    if (!authUserId) return;
+    if (!authUserId || !isMemoryPipelineEnabled) return;
 
     const handleFocus = () => {
       requestMemoryStatusSync(true, true);
@@ -1754,7 +1802,59 @@ export function ChatArea() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [authUserId, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
+
+  const ensureZakiBotProvisioned = useCallback(
+    async (silent = false) => {
+      if (!isZakiBotActiveSpace) return true;
+      if (zakiBotProvisionedRef.current) return true;
+      if (zakiBotProvisionPromiseRef.current) {
+        return zakiBotProvisionPromiseRef.current;
+      }
+
+      const pending = (async () => {
+        const { response, data } = await provisionAgent({
+          spaceId: ZAKI_BOT_SPACE_ID,
+          threadId: ZAKI_BOT_THREAD_ID,
+        });
+        if (!response.ok) {
+          const message = String(
+            (data as { error?: string; message?: string } | null)?.error ||
+              (data as { error?: string; message?: string } | null)?.message ||
+              "Unable to initialize ZAKI BOT."
+          );
+          if (!silent) toast.error(message);
+          return false;
+        }
+        zakiBotProvisionedRef.current = true;
+        return true;
+      })()
+        .catch((error) => {
+          if (!silent) {
+            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI BOT.");
+          }
+          return false;
+        })
+        .finally(() => {
+          zakiBotProvisionPromiseRef.current = null;
+        });
+
+      zakiBotProvisionPromiseRef.current = pending;
+      return pending;
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    void ensureZakiBotProvisioned(true);
+  }, [ensureZakiBotProvisioned, isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    if (activeThreadId === ZAKI_BOT_THREAD_ID) return;
+    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`, { replace: true });
+  }, [activeThreadId, isZakiBotActiveSpace, navigate]);
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
@@ -1770,7 +1870,12 @@ export function ChatArea() {
       return;
     }
 
-    let threadId = activeThreadId;
+    const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
+    if (isZakiBotTarget) {
+      const provisioned = await ensureZakiBotProvisioned(false);
+      if (!provisioned) return;
+    }
+    let threadId = isZakiBotTarget ? ZAKI_BOT_THREAD_ID : activeThreadId;
     if (!threadId) {
       try {
         const response = await apiRequest(`/workspace/${resolvedWorkspaceSlug}/thread/new`, {
@@ -1919,6 +2024,7 @@ export function ChatArea() {
     activationProgress.firstMessageSent,
     authUserId,
     checkForSavedMemories,
+    ensureZakiBotProvisioned,
     isRtl,
     isStreaming,
     navigate,
@@ -1994,7 +2100,7 @@ export function ChatArea() {
     const prevThread = prevThreadRef.current;
     
     // If we had a previous thread and we're switching away from it
-    if (prevThread && prevThread.id !== activeThreadId) {
+    if (prevThread && prevThread.id !== activeThreadId && !isZakiBotSpaceId(prevThread.workspaceSlug)) {
       const prevMessages = messagesByThread[prevThread.id];
       
       // Only summarize if there were meaningful messages (at least 2 exchanges)
@@ -2327,6 +2433,10 @@ export function ChatArea() {
           const targetSpaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
           if (!targetSpaceId) {
             toast.error(isRtl ? "اختر مساحة أولًا لإضافة الملفات." : "Select a space before adding files.");
+            return;
+          }
+          if (targetSpaceId === ZAKI_BOT_SPACE_ID) {
+            toast.error(chatCopy.botUploadUnavailable);
             return;
           }
           handleWorkspaceFilesSelected(targetSpaceId, files);

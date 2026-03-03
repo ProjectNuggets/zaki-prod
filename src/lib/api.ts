@@ -798,3 +798,139 @@ export async function deleteAccount(confirmEmail: string) {
   }
   return { response, data };
 }
+
+async function parseApiJson<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+export async function provisionAgent(payload: Record<string, unknown> = {}) {
+  const response = await backendAuthRequest("/api/agent/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentOnboarding() {
+  const response = await backendAuthRequest("/api/agent/onboarding", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function saveAgentOnboarding(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/onboarding", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentConfig() {
+  const response = await backendAuthRequest("/api/agent/config", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentConfig(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/config", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function getAgentSecret(key: string) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function putAgentSecret(key: string, value: unknown) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentSecret(key: string) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function connectAgentTelegram(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function disconnectAgentTelegram() {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/disconnect", {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentHeartbeat() {
+  const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentHeartbeat(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/heartbeat", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function listAgentCron() {
+  const response = await backendAuthRequest("/api/agent/cron", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function createAgentCron(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/cron", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentCron(id: string, payload: Record<string, unknown>) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentCron(id: string) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
