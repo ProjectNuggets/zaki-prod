@@ -57,6 +57,7 @@ import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
   extractAgentTokenChunk,
+  normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
 
@@ -138,6 +139,9 @@ const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
 const NULLCLAW_INTERNAL_TOKEN = (process.env.NULLCLAW_INTERNAL_TOKEN || "").trim();
+const ZAKI_AGENT_WEBHOOK_BASE_URL = (
+  process.env.ZAKI_AGENT_WEBHOOK_BASE_URL || ""
+).trim().replace(/\/+$/, "");
 const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
     .toLowerCase()
@@ -7669,6 +7673,44 @@ const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
   }
 };
 
+const agentTelegramConnectHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const payload = normalizeTelegramConnectPayload(req.body);
+    const hasWebhookUrl =
+      typeof payload.webhook_url === "string" && payload.webhook_url.length > 0;
+    const hasWebhookBaseUrl =
+      typeof payload.webhook_base_url === "string" &&
+      payload.webhook_base_url.length > 0;
+
+    const extraHeaders = {};
+    if (!hasWebhookUrl && !hasWebhookBaseUrl && ZAKI_AGENT_WEBHOOK_BASE_URL) {
+      extraHeaders["X-Webhook-Base-Url"] = ZAKI_AGENT_WEBHOOK_BASE_URL;
+    }
+
+    return proxyNullclawRequest(
+      req,
+      res,
+      `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/connect`,
+      {
+        method: "POST",
+        userId,
+        body: payload,
+        headers: extraHeaders,
+      }
+    );
+  } catch (error) {
+    console.error("[Agent] Telegram connect proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Telegram connect failed." });
+  }
+};
+
 app.post(
   "/api/agent/chat/stream",
   requireAgentContext,
@@ -7740,9 +7782,7 @@ app.post(
   requireAgentContext,
   agentRouteLimiter,
   express.json({ limit: "1mb" }),
-  makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/connect`
-  )
+  agentTelegramConnectHandler
 );
 app.delete(
   "/api/agent/channels/telegram/disconnect",

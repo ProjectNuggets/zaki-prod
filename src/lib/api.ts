@@ -871,7 +871,18 @@ export async function deleteAgentSecret(key: string) {
   return { response, data };
 }
 
-export async function connectAgentTelegram(payload: Record<string, unknown>) {
+export type ConnectAgentTelegramPayload = {
+  bot_token?: string;
+  webhook_url?: string;
+  webhook_base_url?: string;
+  webhook_secret_token?: string;
+  account_id?: string;
+  chat_id?: string;
+  allow_from?: string[];
+  drop_pending_updates?: boolean;
+};
+
+export async function connectAgentTelegram(payload: ConnectAgentTelegramPayload) {
   const response = await backendAuthRequest("/api/agent/channels/telegram/connect", {
     method: "POST",
     body: JSON.stringify(payload),

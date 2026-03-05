@@ -62,7 +62,6 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
   const [secretValue, setSecretValue] = useState("");
 
   const [telegramBotToken, setTelegramBotToken] = useState("");
-  const [telegramChatId, setTelegramChatId] = useState("");
   const [telegramWebhookUrl, setTelegramWebhookUrl] = useState("");
 
   const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
@@ -300,6 +299,8 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                 type="button"
                 className="rounded-full border border-rose-200 px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50"
                 onClick={async () => {
+                  setError("");
+                  setStatus("");
                   const { response, data } = await disconnectAgentTelegram();
                   if (!response.ok) {
                     setError(getErrorMessage(data, "Unable to disconnect Telegram."));
@@ -318,30 +319,24 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
               onChange={(event) => setTelegramBotToken(event.target.value)}
             />
             <input
-              className="mb-2 w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Chat ID"
-              value={telegramChatId}
-              onChange={(event) => setTelegramChatId(event.target.value)}
-            />
-            <input
               className="w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Webhook URL (optional)"
+              placeholder="Webhook URL (optional override)"
               value={telegramWebhookUrl}
               onChange={(event) => setTelegramWebhookUrl(event.target.value)}
             />
+            <p className="mt-2 text-xs text-zaki-muted">
+              Leave webhook URL empty to use the backend default (`ZAKI_AGENT_WEBHOOK_BASE_URL`).
+            </p>
             <button
               type="button"
               className="mt-3 rounded-full bg-zaki-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-zaki-brand-hover"
               onClick={async () => {
+                setError("");
+                setStatus("");
                 const botToken = telegramBotToken.trim();
-                const chatId = telegramChatId.trim();
                 const webhookUrl = telegramWebhookUrl.trim();
                 if (!botToken) {
                   setError("Telegram bot token is required.");
-                  return;
-                }
-                if (!chatId || !/^-?\d+$/.test(chatId)) {
-                  setError("Telegram chat ID must be numeric.");
                   return;
                 }
                 if (webhookUrl) {
@@ -352,14 +347,16 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                     return;
                   }
                 }
-                const payload: Record<string, unknown> = { botToken, chatId };
-                if (webhookUrl) payload.webhookUrl = webhookUrl;
+                const payload: Parameters<typeof connectAgentTelegram>[0] = {
+                  bot_token: botToken,
+                };
+                if (webhookUrl) payload.webhook_url = webhookUrl;
                 const { response, data } = await connectAgentTelegram(payload);
                 if (!response.ok) {
                   setError(getErrorMessage(data, "Unable to connect Telegram."));
                   return;
                 }
-                setStatus("Telegram connect request sent.");
+                setStatus("Telegram connected. Send a message to your bot now to confirm inbound routing.");
               }}
             >
               Connect Telegram
@@ -528,4 +525,3 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
     </div>
   );
 }
-

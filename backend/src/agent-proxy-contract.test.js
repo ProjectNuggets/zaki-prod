@@ -3,6 +3,7 @@ import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
   extractAgentTokenChunk,
+  normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
 
@@ -70,3 +71,47 @@ describe("buildAgentRetrySsePayload", () => {
   });
 });
 
+describe("normalizeTelegramConnectPayload", () => {
+  test("normalizes legacy camelCase telegram connect payload keys", () => {
+    expect(
+      normalizeTelegramConnectPayload({
+        botToken: " 123456:ABC ",
+        webhookUrl: " https://agent-dev.zaki.com/webhook/telegram?user_id=7 ",
+        webhookSecretToken: "  secret-token  ",
+        accountId: " main ",
+        chatId: " 1110331014 ",
+        allowFrom: [" 1110331014 ", ""],
+        dropPendingUpdates: true,
+      })
+    ).toEqual({
+      bot_token: "123456:ABC",
+      webhook_url: "https://agent-dev.zaki.com/webhook/telegram?user_id=7",
+      webhook_secret_token: "secret-token",
+      account_id: "main",
+      chat_id: "1110331014",
+      allow_from: ["1110331014"],
+      drop_pending_updates: true,
+    });
+  });
+
+  test("keeps canonical snake_case keys and ignores invalid values", () => {
+    expect(
+      normalizeTelegramConnectPayload({
+        bot_token: "123456:ABC",
+        webhook_base_url: "https://agent-dev.zaki.com",
+        drop_pending_updates: "false",
+        allow_from: ["100", "200"],
+      })
+    ).toEqual({
+      bot_token: "123456:ABC",
+      webhook_base_url: "https://agent-dev.zaki.com",
+      allow_from: ["100", "200"],
+      drop_pending_updates: false,
+    });
+  });
+
+  test("returns empty object for non-object payloads", () => {
+    expect(normalizeTelegramConnectPayload(null)).toEqual({});
+    expect(normalizeTelegramConnectPayload("invalid")).toEqual({});
+  });
+});

@@ -17,6 +17,7 @@ cp .env.example .env
 - `ZAKI_AGENT_BACKEND_ENABLED` (`true` to enable Nullclaw adapter route)
 - `NULLCLAW_BASE_URL` (ex: `https://agent-staging.zaki.com`)
 - `NULLCLAW_INTERNAL_TOKEN` (must match Nullclaw `X-Internal-Token` allowlist)
+- `ZAKI_AGENT_WEBHOOK_BASE_URL` (optional but recommended; used for Telegram connect when UI does not pass a webhook URL, ex: `https://agent-dev.zaki.com`)
 - `ZAKI_AGENT_RATE_LIMIT_PER_MINUTE` (optional per-user limiter for `/api/agent/*`, default `60`)
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
 - `ZAKI_BILLING_PROVIDER` (`stripe`, `creem`, `paddle`, `external`, or `none`; default `stripe`)
