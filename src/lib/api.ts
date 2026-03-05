@@ -934,3 +934,50 @@ export async function deleteAgentCron(id: string) {
   const data = await parseApiJson<Record<string, unknown>>(response);
   return { response, data };
 }
+
+export async function fetchAgentHistory(
+  spaceId = "zaki-bot",
+  threadId = "main",
+  mode: "merged" | "app" = "merged"
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/history?spaceId=${encodeURIComponent(spaceId)}&threadId=${encodeURIComponent(threadId)}&mode=${encodeURIComponent(mode)}`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{
+    history?: Array<{
+      id?: string;
+      role?: "user" | "assistant";
+      content?: string;
+      createdAt?: string;
+    }>;
+    historyMode?: "merged" | "app";
+    source?: string;
+    warning?: string;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentDiagnostics() {
+  const response = await backendAuthRequest("/api/agent/diagnostics", { method: "GET" });
+  const data = await parseApiJson<{
+    userId?: string;
+    agentBackendEnabled?: boolean;
+    nullclawBaseConfigured?: boolean;
+    historyModeDefault?: string;
+    upstreamHealth?: {
+      ok?: boolean;
+      status?: number;
+      latencyMs?: number | null;
+      reason?: string;
+    };
+    lastAgentStreamError?: {
+      at?: string;
+      class?: string;
+      message?: string;
+    } | null;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}

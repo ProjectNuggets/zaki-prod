@@ -129,8 +129,8 @@ test("pricing page displays expected student, personal, and gift-code prices", a
   await expect(
     page.getByRole("heading", { name: "Choose the plan that makes ZAKI feel personal" })
   ).toBeVisible();
-  await expect(page.getByText("$8 / month")).toBeVisible();
-  await expect(page.getByText("$13 / month")).toBeVisible();
-  await expect(page.getByText("$15 one-time")).toBeVisible();
+  await expect(page.getByText("$8 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("$13 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("$15 one-time", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy 1-month gift code" })).toBeVisible();
 });

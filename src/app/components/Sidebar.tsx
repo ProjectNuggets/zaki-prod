@@ -125,7 +125,6 @@ export function Sidebar() {
   const isDark = resolvedTheme() === "dark";
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
   const [spaceSearchQuery, setSpaceSearchQuery] = useState("");
-  const [workspaceTypeHint, setWorkspaceTypeHint] = useState("");
   const [removingDocumentKey, setRemovingDocumentKey] = useState<string | null>(null);
   const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
 
@@ -185,31 +184,6 @@ export function Sidebar() {
     };
   }, [profileMenuOpen, user?.username]);
 
-  useEffect(() => {
-    let active = true;
-    apiRequest("/api/documents/accepted-file-types")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (!active || !data?.types || typeof data.types !== "object") return;
-        const extensions = Array.from(
-          new Set(
-            Object.values(data.types)
-              .flat()
-              .map((value) => String(value || "").trim().toLowerCase())
-              .filter(Boolean)
-          )
-        );
-        setWorkspaceTypeHint(extensions.slice(0, 8).join(", "));
-      })
-      .catch(() => {
-        if (!active) return;
-        setWorkspaceTypeHint("");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  
   // Focus trap refs for modals
   const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);

@@ -330,6 +330,179 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_bot_messages (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_bot_messages_user_thread
+    ON zaki_bot_messages (user_id, space_id, thread_id, id ASC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_bot_messages_legacy (
+      id BIGSERIAL PRIMARY KEY,
+      legacy_message_id BIGINT,
+      legacy_user_id_text TEXT,
+      space_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ,
+      quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      quarantine_reason TEXT NOT NULL
+    );
+  `);
+
+  const zakiBotUserIdType = await pool.query(`
+    SELECT data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'zaki_bot_messages'
+      AND column_name = 'user_id'
+    LIMIT 1;
+  `);
+  const currentZakiBotUserIdType = String(zakiBotUserIdType.rows?.[0]?.data_type || "").toLowerCase();
+  if (currentZakiBotUserIdType && currentZakiBotUserIdType !== "bigint") {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS zaki_bot_messages_new (
+          id BIGSERIAL PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+          space_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+          content TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+
+      await pool.query(`
+        INSERT INTO zaki_bot_messages_legacy (
+          legacy_message_id,
+          legacy_user_id_text,
+          space_id,
+          thread_id,
+          role,
+          content,
+          created_at,
+          quarantine_reason
+        )
+        SELECT
+          src.id,
+          src.user_id,
+          src.space_id,
+          src.thread_id,
+          src.role,
+          src.content,
+          src.created_at,
+          CASE
+            WHEN src.user_id IS NULL OR btrim(src.user_id) = '' THEN 'empty_user_id'
+            WHEN src.user_id !~ '^[0-9]{1,18}$' THEN 'non_numeric_user_id'
+            WHEN usr.id IS NULL THEN 'user_not_found'
+            ELSE 'unknown'
+          END AS quarantine_reason
+        FROM zaki_bot_messages src
+        LEFT JOIN zaki_users usr
+          ON (src.user_id ~ '^[0-9]{1,18}$' AND usr.id = src.user_id::BIGINT)
+        WHERE NOT (
+          src.user_id ~ '^[0-9]{1,18}$'
+          AND usr.id IS NOT NULL
+        );
+      `);
+
+      await pool.query(`
+        INSERT INTO zaki_bot_messages_new (
+          id,
+          user_id,
+          space_id,
+          thread_id,
+          role,
+          content,
+          created_at
+        )
+        SELECT
+          src.id,
+          src.user_id::BIGINT,
+          src.space_id,
+          src.thread_id,
+          src.role,
+          src.content,
+          src.created_at
+        FROM zaki_bot_messages src
+        INNER JOIN zaki_users usr
+          ON usr.id = src.user_id::BIGINT
+        WHERE src.user_id ~ '^[0-9]{1,18}$';
+      `);
+
+      await pool.query("DROP TABLE zaki_bot_messages;");
+      await pool.query("ALTER TABLE zaki_bot_messages_new RENAME TO zaki_bot_messages;");
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_zaki_bot_messages_user_thread
+        ON zaki_bot_messages (user_id, space_id, thread_id, id ASC);
+      `);
+      await pool.query(`
+        SELECT setval(
+          pg_get_serial_sequence('zaki_bot_messages', 'id'),
+          GREATEST(COALESCE((SELECT MAX(id) FROM zaki_bot_messages), 0), 1),
+          true
+        );
+      `);
+      await pool.query("COMMIT");
+      console.log("[DB] Migrated zaki_bot_messages.user_id to BIGINT with quarantine handling.");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
+  const zakiBotIdSeqResult = await pool.query(`
+    SELECT pg_get_serial_sequence('zaki_bot_messages', 'id') AS seq;
+  `);
+  let zakiBotIdSeq = String(zakiBotIdSeqResult.rows?.[0]?.seq || "").trim();
+  if (!zakiBotIdSeq) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(`
+        CREATE SEQUENCE IF NOT EXISTS zaki_bot_messages_id_seq;
+      `);
+      await pool.query(`
+        ALTER TABLE zaki_bot_messages
+        ALTER COLUMN id SET DEFAULT nextval('zaki_bot_messages_id_seq');
+      `);
+      await pool.query(`
+        ALTER SEQUENCE zaki_bot_messages_id_seq
+        OWNED BY zaki_bot_messages.id;
+      `);
+      await pool.query("COMMIT");
+      zakiBotIdSeq = "public.zaki_bot_messages_id_seq";
+      console.log("[DB] Repaired zaki_bot_messages.id auto-increment sequence.");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
+  await pool.query(
+    `
+      SELECT setval(
+        $1::regclass,
+        GREATEST(COALESCE((SELECT MAX(id) FROM zaki_bot_messages), 0), 1),
+        true
+      );
+    `,
+    [zakiBotIdSeq]
+  );
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_hidden_workspaces (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

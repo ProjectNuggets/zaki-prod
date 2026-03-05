@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest, buildApiUrl, getApiBase, provisionAgent } from "@/lib/api";
+import { apiRequest, buildApiUrl, fetchAgentHistory, getApiBase, provisionAgent } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   readResponseFormattingConfig,
@@ -21,6 +21,8 @@ import {
   EditInstructionsModal,
   MemoryConfirmationPanel,
 } from "./chat";
+import type { BotToolCall } from "./chat/BotToolCallBlock";
+import type { BotStatusEvent } from "./chat/BotStatusRail";
 
 import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
@@ -227,6 +229,72 @@ function normalizeAgentSocketUrl(rawUrl: string | null | undefined) {
   return normalized;
 }
 
+function extractVisibleAgentChunk(payload: Record<string, unknown>) {
+  const content = payload.content;
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return trimmed || null;
+  }
+  if (content && typeof content === "object") {
+    const typedContent = content as Record<string, unknown>;
+    const nested =
+      typedContent.message ||
+      typedContent.content ||
+      typedContent.status ||
+      typedContent.toolName ||
+      typedContent.tool ||
+      typedContent.name;
+    return typeof nested === "string" && nested.trim() ? nested.trim() : null;
+  }
+  const direct =
+    payload.message ||
+    payload.content ||
+    payload.status ||
+    payload.toolName ||
+    payload.tool;
+  return typeof direct === "string" && direct.trim() ? direct.trim() : null;
+}
+
+function extractToolCallPayload(payload: Record<string, unknown>) {
+  const source =
+    (payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : payload) || payload;
+  const requestId =
+    (typeof source.requestId === "string" && source.requestId) ||
+    (typeof source.request_id === "string" && source.request_id) ||
+    (typeof payload.requestId === "string" && payload.requestId) ||
+    (typeof payload.request_id === "string" && payload.request_id) ||
+    undefined;
+  const name =
+    (typeof source.name === "string" && source.name) ||
+    (typeof source.toolName === "string" && source.toolName) ||
+    (typeof source.tool === "string" && source.tool) ||
+    "unknown_tool";
+  const args =
+    source.arguments && typeof source.arguments === "object"
+      ? (source.arguments as Record<string, unknown>)
+      : {};
+  return { requestId, name, arguments: args };
+}
+
+function extractToolResultPayload(payload: Record<string, unknown>) {
+  const source =
+    (payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : payload) || payload;
+  const requestId =
+    (typeof source.requestId === "string" && source.requestId) ||
+    (typeof source.request_id === "string" && source.request_id) ||
+    (typeof payload.requestId === "string" && payload.requestId) ||
+    (typeof payload.request_id === "string" && payload.request_id) ||
+    undefined;
+  const ok = source.ok === true;
+  const error = typeof source.error === "string" ? source.error : undefined;
+  const result = source.result;
+  return { requestId, ok, error, result };
+}
+
 export function ChatArea() {
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
@@ -294,6 +362,10 @@ export function ChatArea() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching">("thinking");
+  const [zakiBotToolCalls, setZakiBotToolCalls] = useState<BotToolCall[]>([]);
+  const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
+  const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
+  const [zakiBotHistorySource, setZakiBotHistorySource] = useState<string>("");
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
@@ -806,6 +878,7 @@ export function ChatArea() {
     isZakiBotActiveSpace ? null : activeWorkspaceSlug,
     isZakiBotActiveSpace ? null : activeThreadId
   );
+  const [isBotHistoryLoading, setIsBotHistoryLoading] = useState(false);
 
   // Helper to update assistant message content
   const updateAssistantContent = useCallback((threadSlug: string, assistantId: string, newContent: string) => {
@@ -866,6 +939,94 @@ export function ChatArea() {
       });
     },
     []
+  );
+
+  const upsertZakiBotToolCall = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const { requestId, name, arguments: args } = extractToolCallPayload(payload);
+      setZakiBotToolCalls((prev) => {
+        if (requestId) {
+          const existingIndex = prev.findIndex((call) => call.requestId === requestId);
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            const existingCall = next[existingIndex];
+            if (!existingCall) return prev;
+            next[existingIndex] = {
+              ...existingCall,
+              name,
+              arguments: args,
+            };
+            return next;
+          }
+        }
+        return [
+          ...prev,
+          {
+            id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            requestId,
+            name,
+            arguments: args,
+            timestamp: Date.now(),
+          },
+        ];
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const applyZakiBotToolResult = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const { requestId, ok, error, result } = extractToolResultPayload(payload);
+      setZakiBotToolCalls((prev) => {
+        if (!prev.length) return prev;
+        const next = [...prev];
+        let targetIndex = -1;
+        if (requestId) {
+          targetIndex = next.findIndex((call) => call.requestId === requestId);
+        }
+        if (targetIndex < 0) {
+          targetIndex = [...next]
+            .reverse()
+            .findIndex((call) => !call.result);
+          if (targetIndex >= 0) {
+            targetIndex = next.length - 1 - targetIndex;
+          }
+        }
+        if (targetIndex < 0) return prev;
+        const existingCall = next[targetIndex];
+        if (!existingCall) return prev;
+        next[targetIndex] = {
+          ...existingCall,
+          result: { ok, error, result },
+        };
+        return next;
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const pushZakiBotStatusEvent = useCallback(
+    (rawStatus: unknown) => {
+      if (!isZakiBotActiveSpace) return;
+      const text = typeof rawStatus === "string" ? rawStatus.trim() : "";
+      if (!text) return;
+      setZakiBotStatusEvents((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.text === text) return prev;
+        const next = [
+          ...prev,
+          {
+            id: `status-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+            timestamp: Date.now(),
+          },
+        ];
+        return next.slice(-10);
+      });
+    },
+    [isZakiBotActiveSpace]
   );
 
   // Stream via WebSocket for agent invocation URLs
@@ -952,6 +1113,24 @@ export function ChatArea() {
             supportsAgentStreaming = true;
             const report = payload.content as { type?: string; content?: string };
             if (report?.type === "removeStatusResponse") return;
+            if (isZakiBotActiveSpace && report?.type === "statusResponse") {
+              const visibleChunk = extractVisibleAgentChunk({ content: report.content });
+              if (visibleChunk) {
+                pushZakiBotStatusEvent(visibleChunk);
+              }
+              return;
+            }
+            if (isZakiBotActiveSpace && report?.type === "toolCallInvocation") {
+              upsertZakiBotToolCall({ content: report.content, type: "toolCallInvocation" });
+              return;
+            }
+            if (
+              isZakiBotActiveSpace &&
+              (report?.type === "toolCallResult" || report?.type === "tool_result")
+            ) {
+              applyZakiBotToolResult({ content: report.content, type: report?.type });
+              return;
+            }
             if (report?.type === "fullTextResponse") {
               accumulated = String(report.content || "");
               updateAssistantContent(threadSlug, assistantId, accumulated);
@@ -964,19 +1143,30 @@ export function ChatArea() {
               if (accumulated) hasAnswer = true;
               return;
             }
-            if (report?.type === "toolCallInvocation") {
-              return;
-            }
-            if (report?.type === "statusResponse") {
-              return;
-            }
+            if (report?.type === "toolCallInvocation") return;
+            if (report?.type === "statusResponse") return;
           }
 
           if (payload?.type === "statusResponse") {
+            if (isZakiBotActiveSpace) {
+              const visibleChunk = extractVisibleAgentChunk(payload);
+              if (visibleChunk) {
+                pushZakiBotStatusEvent(visibleChunk);
+              }
+            }
             return;
           }
 
           if (payload?.type === "toolCallInvocation") {
+            if (isZakiBotActiveSpace) {
+              upsertZakiBotToolCall(payload);
+            }
+            return;
+          }
+          if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
+            if (isZakiBotActiveSpace) {
+              applyZakiBotToolResult(payload);
+            }
             return;
           }
 
@@ -1026,7 +1216,7 @@ export function ChatArea() {
       };
       ws.onclose = () => resolveOnce();
     });
-  }, [updateAssistantContent]);
+  }, [applyZakiBotToolResult, isZakiBotActiveSpace, pushZakiBotStatusEvent, updateAssistantContent, upsertZakiBotToolCall]);
 
   // Stream chat message via fetch (POST)
   const streamChatMessage = useCallback(async ({
@@ -1137,6 +1327,16 @@ export function ChatArea() {
       payload: Record<string, unknown>,
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
+      if (isZakiAgentSpace && eventType === "token") {
+        const tokenChunk =
+          (typeof payload.delta === "string" && payload.delta) ||
+          (typeof payload.token === "string" && payload.token) ||
+          (typeof payload.text === "string" && payload.text) ||
+          (typeof payload.chunk === "string" && payload.chunk) ||
+          (typeof payload.content === "string" && payload.content) ||
+          "";
+        return tokenChunk ? { chunk: tokenChunk } : {};
+      }
       if (eventType === "done") {
         return { done: true };
       }
@@ -1180,6 +1380,23 @@ export function ChatArea() {
         payload?.type === "statusResponse" ||
         payload?.type === "toolCallInvocation"
       ) {
+        if (isZakiBotActiveSpace) {
+          if (payload?.type === "toolCallInvocation") {
+            upsertZakiBotToolCall(payload);
+            return {};
+          }
+          const visibleChunk = extractVisibleAgentChunk(payload);
+          if (visibleChunk) {
+            pushZakiBotStatusEvent(visibleChunk);
+          }
+          return {};
+        }
+        return {};
+      }
+      if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
+        if (isZakiBotActiveSpace) {
+          applyZakiBotToolResult(payload);
+        }
         return {};
       }
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
@@ -1362,11 +1579,15 @@ export function ChatArea() {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
   }, [
+    isZakiBotActiveSpace,
     isMemoryPipelineEnabled,
     spacesList,
     responseFormattingConfig.disableResponseEnvelope,
     queryModeEnabled,
     streamAgentInvocation,
+    upsertZakiBotToolCall,
+    pushZakiBotStatusEvent,
+    applyZakiBotToolResult,
     updateAssistantContent,
     updateAssistantSources,
   ]);
@@ -1851,6 +2072,17 @@ export function ChatArea() {
   }, [ensureZakiBotProvisioned, isZakiBotActiveSpace]);
 
   useEffect(() => {
+    zakiBotProvisionedRef.current = false;
+    zakiBotProvisionPromiseRef.current = null;
+  }, [authUserId]);
+
+  useEffect(() => {
+    if (isZakiBotActiveSpace) return;
+    setZakiBotToolCalls([]);
+    setZakiBotStatusEvents([]);
+  }, [isZakiBotActiveSpace]);
+
+  useEffect(() => {
     if (!isZakiBotActiveSpace) return;
     if (activeThreadId === ZAKI_BOT_THREAD_ID) return;
     navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`, { replace: true });
@@ -1958,6 +2190,10 @@ export function ChatArea() {
     setAttachments([]);
     const manualAgentPrefix = /^@agent\b/i.test(trimmed);
     const agentRequested = webSearchArmed || manualAgentPrefix;
+    if (isZakiBotTarget) {
+      setZakiBotToolCalls([]);
+      setZakiBotStatusEvents([]);
+    }
     setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
     setIsStreaming(true);
     const streamController = new AbortController();
@@ -2085,13 +2321,6 @@ export function ChatArea() {
     handleSend(HOME_STARTER_MESSAGE, [], workspaceSlug);
   }, [goToSpaces, handleSend, homeConversationSpaceId]);
 
-  const handleExampleSelect = useCallback(
-    (example: string) => {
-      handleSend(example, []);
-    },
-    [handleSend]
-  );
-
   // Track previous thread for summarization on switch
   const prevThreadRef = useRef<{ id: string; workspaceSlug: string; title: string } | null>(null);
 
@@ -2158,6 +2387,50 @@ export function ChatArea() {
     }));
     historyLoadedRef.current[activeThreadId] = true;
   }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !activeThreadId) return;
+    if (historyLoadedRef.current[activeThreadId]) return;
+    if (messagesByThread[activeThreadId]?.length) {
+      historyLoadedRef.current[activeThreadId] = true;
+      return;
+    }
+
+    let cancelled = false;
+    setIsBotHistoryLoading(true);
+    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, zakiBotHistoryMode)
+      .then(({ response, data }) => {
+        if (cancelled || !response.ok) return;
+        const history = Array.isArray(data.history)
+          ? data.history.map((entry, index) => {
+              const role: "assistant" | "user" =
+                entry.role === "assistant" ? "assistant" : "user";
+              return {
+                id: String(entry.id || `bot-history-${index}`),
+                role,
+                content: String(entry.content || ""),
+              };
+            })
+          : [];
+        setZakiBotHistorySource(
+          String(data.historyMode || zakiBotHistoryMode) +
+            ":" +
+            String(data.source || "unknown")
+        );
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [activeThreadId]: history,
+        }));
+        historyLoadedRef.current[activeThreadId] = true;
+      })
+      .finally(() => {
+        if (!cancelled) setIsBotHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
 
   // First message transition effect
   useEffect(() => {
@@ -2385,10 +2658,14 @@ export function ChatArea() {
     return (
       <ChatView
         messages={messages}
-        isHistoryLoading={isHistoryLoading}
+        isHistoryLoading={isHistoryLoading || (isZakiBotActiveSpace && isBotHistoryLoading)}
         isStreaming={isStreaming}
         streamingLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : t("chat.thinking")}
         streamingPillLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : undefined}
+        botToolCalls={isZakiBotActiveSpace ? zakiBotToolCalls : []}
+        botStatusEvents={isZakiBotActiveSpace ? zakiBotStatusEvents : []}
+        showBotTimeline={isZakiBotActiveSpace}
+        botMode={isZakiBotActiveSpace}
         firstMessageTransition={firstMessageTransition}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
@@ -2465,6 +2742,11 @@ export function ChatArea() {
                 <span className="text-zaki-muted">/</span>
                 {headerThreadName}
               </span>
+              {isZakiBotActiveSpace ? (
+                <span className="rounded-full border border-zaki-subtle bg-white/70 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-zaki-muted">
+                  History {zakiBotHistorySource || `${zakiBotHistoryMode}:loading`}
+                </span>
+              ) : null}
               <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
                 <button
                   type="button"

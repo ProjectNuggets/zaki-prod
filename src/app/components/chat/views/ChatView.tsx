@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { SkeletonMessage } from "../../ui/skeleton";
+import { BotToolCallBlock, type BotToolCall } from "../BotToolCallBlock";
+import { BotStatusRail, type BotStatusEvent } from "../BotStatusRail";
 
 interface ChatViewProps {
   messages: Message[];
@@ -9,6 +11,10 @@ interface ChatViewProps {
   isStreaming: boolean;
   streamingLabel?: string;
   streamingPillLabel?: string;
+  botToolCalls?: BotToolCall[];
+  botStatusEvents?: BotStatusEvent[];
+  showBotTimeline?: boolean;
+  botMode?: boolean;
   firstMessageTransition: boolean;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
@@ -21,6 +27,10 @@ export function ChatView({
   isStreaming,
   streamingLabel,
   streamingPillLabel,
+  botToolCalls = [],
+  botStatusEvents = [],
+  showBotTimeline = false,
+  botMode = false,
   firstMessageTransition,
   onCopyMessage,
   onRegenerateMessage,
@@ -55,6 +65,7 @@ export function ChatView({
               isStreaming={isStreamingMessage}
               thinkingLabel={streamingLabel}
               thinkingPillLabel={streamingPillLabel}
+              botMode={botMode}
             />
           );
         }
@@ -69,6 +80,14 @@ export function ChatView({
           />
         );
       })}
+      {showBotTimeline
+        ? botToolCalls.map((toolCall) => (
+            <BotToolCallBlock key={toolCall.id} toolCall={toolCall} />
+          ))
+        : null}
+      {showBotTimeline && isStreaming && botToolCalls.length === 0 ? (
+        <BotStatusRail events={botStatusEvents} isStreaming={isStreaming} />
+      ) : null}
     </div>
   );
 }
