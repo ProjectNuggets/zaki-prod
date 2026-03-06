@@ -255,6 +255,25 @@ function extractVisibleAgentChunk(payload: Record<string, unknown>) {
   return typeof direct === "string" && direct.trim() ? direct.trim() : null;
 }
 
+function inferStreamingModeFromStatus(statusText: string): "thinking" | "researching" {
+  const normalized = String(statusText || "").trim().toLowerCase();
+  if (!normalized) return "thinking";
+  if (
+    normalized.includes("search") ||
+    normalized.includes("web") ||
+    normalized.includes("tool") ||
+    normalized.includes("fetch") ||
+    normalized.includes("crawl") ||
+    normalized.includes("exa") ||
+    normalized.includes("brave") ||
+    normalized.includes("looking up") ||
+    normalized.includes("query")
+  ) {
+    return "researching";
+  }
+  return "thinking";
+}
+
 function extractToolCallPayload(payload: Record<string, unknown>) {
   const source =
     (payload.content && typeof payload.content === "object"
@@ -945,6 +964,7 @@ export function ChatArea() {
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
       const { requestId, name, arguments: args } = extractToolCallPayload(payload);
+      setStreamingIndicatorMode("researching");
       setZakiBotToolCalls((prev) => {
         if (requestId) {
           const existingIndex = prev.findIndex((call) => call.requestId === requestId);
@@ -960,6 +980,7 @@ export function ChatArea() {
             return next;
           }
         }
+        const now = Date.now();
         return [
           ...prev,
           {
@@ -967,7 +988,8 @@ export function ChatArea() {
             requestId,
             name,
             arguments: args,
-            timestamp: Date.now(),
+            timestamp: now,
+            startedAt: now,
           },
         ];
       });
@@ -997,8 +1019,13 @@ export function ChatArea() {
         if (targetIndex < 0) return prev;
         const existingCall = next[targetIndex];
         if (!existingCall) return prev;
+        const finishedAt =
+          typeof existingCall.finishedAt === "number" ? existingCall.finishedAt : Date.now();
+        const durationMs = Math.max(0, finishedAt - existingCall.startedAt);
         next[targetIndex] = {
           ...existingCall,
+          finishedAt,
+          durationMs,
           result: { ok, error, result },
         };
         return next;
@@ -1012,6 +1039,7 @@ export function ChatArea() {
       if (!isZakiBotActiveSpace) return;
       const text = typeof rawStatus === "string" ? rawStatus.trim() : "";
       if (!text) return;
+      setStreamingIndicatorMode(inferStreamingModeFromStatus(text));
       setZakiBotStatusEvents((prev) => {
         const last = prev[prev.length - 1];
         if (last?.text === text) return prev;
@@ -1327,6 +1355,7 @@ export function ChatArea() {
       payload: Record<string, unknown>,
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
+      const payloadType = typeof payload.type === "string" ? payload.type : "";
       if (isZakiAgentSpace && eventType === "token") {
         const tokenChunk =
           (typeof payload.delta === "string" && payload.delta) ||
@@ -1337,7 +1366,12 @@ export function ChatArea() {
           "";
         return tokenChunk ? { chunk: tokenChunk } : {};
       }
-      if (eventType === "done") {
+      if (
+        eventType === "done" ||
+        payloadType === "done" ||
+        payload.close === true ||
+        payloadType === "finalizeResponseStream"
+      ) {
         return { done: true };
       }
       if (eventType === "error") {
@@ -1415,20 +1449,12 @@ export function ChatArea() {
         );
       }
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return { done: true };
-      }
-
       const chunk =
         (typeof payload.delta === "string" && payload.delta) ||
         (typeof payload.textResponse === "string" && payload.textResponse) ||
         (typeof payload.content === "string" && payload.content) ||
         (typeof payload.message === "string" && payload.message) ||
         "";
-
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return chunk ? { chunk, done: true } : { done: true };
-      }
 
       return chunk ? { chunk } : {};
     };
@@ -1466,11 +1492,27 @@ export function ChatArea() {
     let accumulated = "";
     let buffer = "";
     let streamClosed = false;
+    let renderedLength = 0;
+    let renderTimer: number | null = null;
+
+    const flushRenderedContent = () => {
+      if (renderTimer) {
+        window.clearTimeout(renderTimer);
+        renderTimer = null;
+      }
+      if (renderedLength === accumulated.length) return;
+      renderedLength = accumulated.length;
+      updateAssistantContent(threadSlug, assistantId, accumulated);
+    };
 
     const appendChunk = (chunk: string) => {
       if (!chunk) return;
       accumulated += chunk;
-      updateAssistantContent(threadSlug, assistantId, accumulated);
+      if (renderTimer != null) return;
+      renderTimer = window.setTimeout(() => {
+        renderTimer = null;
+        flushRenderedContent();
+      }, 32);
     };
 
     const processRawData = async (raw: string) => {
@@ -1497,6 +1539,7 @@ export function ChatArea() {
         appendChunk(result.chunk);
       }
       if (result.done) {
+        flushRenderedContent();
         streamClosed = true;
         return;
       }
@@ -1529,10 +1572,12 @@ export function ChatArea() {
           const payload = JSON.parse(payloadText) as Record<string, unknown>;
           const result = readPayloadChunk(payload, eventType);
           if (result.done) {
+            flushRenderedContent();
             streamClosed = true;
             return;
           }
           if (result.agentUrl) {
+            flushRenderedContent();
             await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
             try {
               await reader.cancel();
@@ -1574,6 +1619,7 @@ export function ChatArea() {
       await processSseBlock(trailing);
     }
 
+    flushRenderedContent();
     const finalized = normalizeAssistantFormatting(message, accumulated);
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);

@@ -11,6 +11,9 @@ export type BotToolCall = {
   arguments: Record<string, unknown>;
   result?: ToolResult;
   timestamp: number;
+  startedAt: number;
+  finishedAt?: number;
+  durationMs?: number;
 };
 
 interface BotToolCallBlockProps {
@@ -24,11 +27,43 @@ export function BotToolCallBlock({ toolCall }: BotToolCallBlockProps) {
       : "fail"
     : "pending";
 
+  const durationMs =
+    typeof toolCall.durationMs === "number"
+      ? toolCall.durationMs
+      : typeof toolCall.finishedAt === "number"
+        ? Math.max(0, toolCall.finishedAt - toolCall.startedAt)
+        : null;
+
+  const durationLabel =
+    durationMs == null
+      ? ""
+      : durationMs >= 1000
+        ? `${(durationMs / 1000).toFixed(1)}s`
+        : `${durationMs}ms`;
+
+  const requestLabel =
+    typeof toolCall.requestId === "string" && toolCall.requestId.trim()
+      ? toolCall.requestId.slice(0, 16)
+      : null;
+
   return (
-    <details className="max-w-[80%] rounded-zaki-lg border border-zaki-subtle bg-zaki-elevated/40 px-3 py-2 text-xs" open>
+    <details
+      className="max-w-[80%] rounded-zaki-lg border border-zaki-subtle bg-zaki-elevated/40 px-3 py-2 text-xs"
+      open={status === "pending"}
+    >
       <summary className="flex cursor-pointer list-none items-center gap-2 text-zaki-secondary">
         <span className="font-mono text-[10px] text-zaki-muted">tool</span>
         <span className="font-semibold text-zaki-primary">{toolCall.name}</span>
+        {requestLabel ? (
+          <span className="rounded-full border border-zaki-subtle px-1.5 py-0.5 font-mono text-[10px] text-zaki-muted">
+            {requestLabel}
+          </span>
+        ) : null}
+        {durationLabel ? (
+          <span className="rounded-full border border-zaki-subtle px-1.5 py-0.5 font-mono text-[10px] text-zaki-muted">
+            {durationLabel}
+          </span>
+        ) : null}
         <span
           className={
             status === "ok"
@@ -66,4 +101,3 @@ export function BotToolCallBlock({ toolCall }: BotToolCallBlockProps) {
     </details>
   );
 }
-

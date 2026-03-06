@@ -9,9 +9,14 @@ export type BotStatusEvent = {
 interface BotStatusRailProps {
   events: BotStatusEvent[];
   isStreaming?: boolean;
+  fallbackText?: string;
 }
 
-export function BotStatusRail({ events, isStreaming = false }: BotStatusRailProps) {
+export function BotStatusRail({
+  events,
+  isStreaming = false,
+  fallbackText = "Analyzing request",
+}: BotStatusRailProps) {
   const [dotCount, setDotCount] = useState(1);
 
   useEffect(() => {
@@ -29,7 +34,7 @@ export function BotStatusRail({ events, isStreaming = false }: BotStatusRailProp
         ? [
             {
               id: "streaming-fallback",
-              text: `Analyzing request${".".repeat(dotCount)}`,
+              text: `${fallbackText}${".".repeat(dotCount)}`,
               timestamp: Date.now(),
             },
           ]

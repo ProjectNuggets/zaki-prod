@@ -86,7 +86,11 @@ export function ChatView({
           ))
         : null}
       {showBotTimeline && isStreaming && botToolCalls.length === 0 ? (
-        <BotStatusRail events={botStatusEvents} isStreaming={isStreaming} />
+        <BotStatusRail
+          events={botStatusEvents}
+          isStreaming={isStreaming}
+          fallbackText={streamingLabel || "Analyzing request"}
+        />
       ) : null}
     </div>
   );
