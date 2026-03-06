@@ -40,6 +40,11 @@ function getErrorMessage(data: unknown, fallback: string) {
   return fallback;
 }
 
+function asObjectRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
 function isValidCronSchedule(input: string) {
   const trimmed = String(input || "").trim();
   if (!trimmed) return false;
@@ -57,6 +62,8 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [onboardingJson, setOnboardingJson] = useState("{}");
   const [configJson, setConfigJson] = useState("{}");
+  const [webSearchGeekMode, setWebSearchGeekMode] = useState(false);
+  const [webSearchModeSaving, setWebSearchModeSaving] = useState(false);
 
   const [secretKey, setSecretKey] = useState("");
   const [secretValue, setSecretValue] = useState("");
@@ -84,6 +91,10 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
         if (!active) return;
         setOnboardingJson(stringifyJson(onboardingResult.data));
         setConfigJson(stringifyJson(configResult.data));
+        const configObj = asObjectRecord(configResult.data);
+        const toolsObj = asObjectRecord(configObj.tools);
+        const providerRaw = String(toolsObj.web_search_provider || "").trim().toLowerCase();
+        setWebSearchGeekMode(providerRaw === "exa");
 
         const heartbeatData =
           heartbeatResult.data && typeof heartbeatResult.data === "object" ? heartbeatResult.data : {};
@@ -213,6 +224,53 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
               value={configJson}
               onChange={(event) => setConfigJson(event.target.value)}
             />
+          </section>
+
+          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-zaki-primary">ZAKI geek mood</h3>
+                <p className="mt-1 text-xs text-zaki-muted">On = Exa search. Off = Brave search.</p>
+              </div>
+              <button
+                type="button"
+                disabled={webSearchModeSaving}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  webSearchGeekMode
+                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    : "border-zaki-subtle bg-zaki-sunken/50 text-zaki-muted"
+                } ${webSearchModeSaving ? "opacity-60" : ""}`}
+                onClick={async () => {
+                  setError("");
+                  setStatus("");
+                  const nextMode = !webSearchGeekMode;
+                  let parsedConfig: Record<string, unknown> = {};
+                  try {
+                    parsedConfig = asObjectRecord(JSON.parse(configJson));
+                  } catch {
+                    setError("Config JSON is invalid. Fix it before changing search mode.");
+                    return;
+                  }
+                  const nextConfig: Record<string, unknown> = { ...parsedConfig };
+                  const tools = { ...asObjectRecord(nextConfig.tools) };
+                  tools.web_search_provider = nextMode ? "exa" : "brave";
+                  nextConfig.tools = tools;
+
+                  setWebSearchModeSaving(true);
+                  const { response, data } = await updateAgentConfig(nextConfig);
+                  setWebSearchModeSaving(false);
+                  if (!response.ok) {
+                    setError(getErrorMessage(data, "Unable to update search provider mode."));
+                    return;
+                  }
+                  setWebSearchGeekMode(nextMode);
+                  setConfigJson(stringifyJson(nextConfig));
+                  setStatus(`ZAKI geek mood ${nextMode ? "enabled (Exa)" : "disabled (Brave)"}.`);
+                }}
+              >
+                {webSearchModeSaving ? "Saving..." : webSearchGeekMode ? "Active" : "Inactive"}
+              </button>
+            </div>
           </section>
 
           <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
