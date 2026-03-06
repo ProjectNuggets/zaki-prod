@@ -2712,6 +2712,7 @@ export function ChatArea() {
         botStatusEvents={isZakiBotActiveSpace ? zakiBotStatusEvents : []}
         showBotTimeline={isZakiBotActiveSpace}
         botMode={isZakiBotActiveSpace}
+        streamingMode={streamingIndicatorMode}
         firstMessageTransition={firstMessageTransition}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}

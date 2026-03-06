@@ -2,8 +2,9 @@ import { cn } from "@/lib/utils";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { SkeletonMessage } from "../../ui/skeleton";
-import { BotToolCallBlock, type BotToolCall } from "../BotToolCallBlock";
-import { BotStatusRail, type BotStatusEvent } from "../BotStatusRail";
+import type { BotToolCall } from "../BotToolCallBlock";
+import type { BotStatusEvent } from "../BotStatusRail";
+import { BotProcessRail } from "../BotProcessRail";
 
 interface ChatViewProps {
   messages: Message[];
@@ -15,6 +16,7 @@ interface ChatViewProps {
   botStatusEvents?: BotStatusEvent[];
   showBotTimeline?: boolean;
   botMode?: boolean;
+  streamingMode?: "thinking" | "researching";
   firstMessageTransition: boolean;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
@@ -31,6 +33,7 @@ export function ChatView({
   botStatusEvents = [],
   showBotTimeline = false,
   botMode = false,
+  streamingMode = "thinking",
   firstMessageTransition,
   onCopyMessage,
   onRegenerateMessage,
@@ -53,6 +56,14 @@ export function ChatView({
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
+      {showBotTimeline ? (
+        <BotProcessRail
+          isStreaming={isStreaming}
+          stage={isStreaming ? streamingMode : "writing"}
+          toolCalls={botToolCalls}
+          statusEvents={botStatusEvents}
+        />
+      ) : null}
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
@@ -80,18 +91,6 @@ export function ChatView({
           />
         );
       })}
-      {showBotTimeline
-        ? botToolCalls.map((toolCall) => (
-            <BotToolCallBlock key={toolCall.id} toolCall={toolCall} />
-          ))
-        : null}
-      {showBotTimeline && isStreaming && botToolCalls.length === 0 ? (
-        <BotStatusRail
-          events={botStatusEvents}
-          isStreaming={isStreaming}
-          fallbackText={streamingLabel || "Analyzing request"}
-        />
-      ) : null}
     </div>
   );
 }

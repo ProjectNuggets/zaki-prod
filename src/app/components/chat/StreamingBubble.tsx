@@ -14,6 +14,7 @@ interface StreamingBubbleProps {
 
 export function StreamingBubble({
   content,
+  isStreaming = false,
   showActions = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -46,7 +47,20 @@ export function StreamingBubble({
       </div>
 
       <div className="zaki-message-stack max-w-[80%] flex flex-col gap-2 items-start">
-        <div className="zaki-message-bubble zaki-assistant-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed bg-transparent text-zaki-primary">
+        <div
+          className={[
+            "zaki-message-bubble zaki-assistant-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed text-zaki-primary",
+            isStreaming
+              ? "border border-[#ead7c1] bg-[linear-gradient(140deg,#fffaf4_0%,#fff3e4_100%)] shadow-[0px_10px_24px_rgba(52,36,24,0.10)]"
+              : "bg-transparent",
+          ].join(" ")}
+        >
+          {isStreaming ? (
+            <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-[#8f6c4b]">
+              <span className="inline-block size-1.5 rounded-full bg-zaki-brand animate-pulse" aria-hidden />
+              Live response
+            </div>
+          ) : null}
           <ChatMarkdown content={displayedContent} />
         </div>
         {showActions && (
