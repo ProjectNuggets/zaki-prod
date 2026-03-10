@@ -633,6 +633,22 @@ export function ChatArea() {
   const showReady = (!activeThreadId || messages.length === 0) && !isZakiBotActiveSpace;
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
+  const zakiBotQuotaInfo =
+    isZakiBotActiveSpace &&
+    freeDailyQuota &&
+    !freeDailyQuota.unlimited &&
+    typeof freeDailyQuota.limit === "number"
+      ? {
+          limit: freeDailyQuota.limit,
+          remaining: Math.max(
+            0,
+            Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
+          ),
+        }
+      : null;
+  const isZakiBotSendLocked = Boolean(
+    zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
+  );
 
   const handleCopyMessage = useCallback(async (message: Message) => {
     if (!message.content) return;
@@ -3066,29 +3082,23 @@ export function ChatArea() {
                 onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
                 memoryMode={memoryMode}
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
+                showUpgradeStrip={!isZakiBotActiveSpace}
+                sendLocked={isZakiBotSendLocked}
               />
-              {freeDailyQuota && !freeDailyQuota.unlimited && typeof freeDailyQuota.limit === "number" ? (
-                <p className="px-6 pt-1 text-center text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                  {freeDailyQuota.surface === "zaki_bot"
-                    ? isRtl
-                      ? `حد ZAKI BOT اليوم: ${Math.max(
-                          0,
-                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
-                        )}/${freeDailyQuota.limit}`
-                      : `ZAKI BOT today: ${Math.max(
-                          0,
-                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
-                        )}/${freeDailyQuota.limit} prompts left`
-                    : isRtl
-                      ? `المتبقي اليوم: ${Math.max(
-                          0,
-                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
-                        )}/${freeDailyQuota.limit}`
-                      : `Free today: ${Math.max(
-                          0,
-                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
-                        )}/${freeDailyQuota.limit} prompts left`}
-                </p>
+              {zakiBotQuotaInfo ? (
+                <div className="px-6 pt-1 text-center">
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                      zakiBotQuotaInfo.remaining <= 0
+                        ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300"
+                        : zakiBotQuotaInfo.remaining <= 2
+                          ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
+                          : "border-zaki-subtle bg-white text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-muted"
+                    }`}
+                  >
+                    {zakiBotQuotaInfo.remaining}/{zakiBotQuotaInfo.limit}
+                  </span>
+                </div>
               ) : null}
             </div>
           )}
