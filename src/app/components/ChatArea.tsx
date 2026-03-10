@@ -3084,22 +3084,22 @@ export function ChatArea() {
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
                 showUpgradeStrip={!isZakiBotActiveSpace}
                 sendLocked={isZakiBotSendLocked}
+                zakiBotMode={isZakiBotActiveSpace}
+                quotaBadge={
+                  zakiBotQuotaInfo
+                    ? {
+                        remaining: zakiBotQuotaInfo.remaining,
+                        limit: zakiBotQuotaInfo.limit,
+                        tone:
+                          zakiBotQuotaInfo.remaining <= 0
+                            ? "danger"
+                            : zakiBotQuotaInfo.remaining <= 2
+                              ? "warning"
+                              : "neutral",
+                      }
+                    : null
+                }
               />
-              {zakiBotQuotaInfo ? (
-                <div className="px-6 pt-1 text-center">
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                      zakiBotQuotaInfo.remaining <= 0
-                        ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300"
-                        : zakiBotQuotaInfo.remaining <= 2
-                          ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
-                          : "border-zaki-subtle bg-white text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-muted"
-                    }`}
-                  >
-                    {zakiBotQuotaInfo.remaining}/{zakiBotQuotaInfo.limit}
-                  </span>
-                </div>
-              ) : null}
             </div>
           )}
 
