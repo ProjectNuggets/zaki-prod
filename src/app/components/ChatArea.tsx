@@ -5,7 +5,15 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest, buildApiUrl, fetchAgentHistory, getApiBase, provisionAgent } from "@/lib/api";
+import {
+  apiRequest,
+  buildApiUrl,
+  fetchAgentHistory,
+  fetchUsageQuota,
+  getApiBase,
+  provisionAgent,
+  type UsageQuotaSurface,
+} from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   readResponseFormattingConfig,
@@ -385,6 +393,15 @@ export function ChatArea() {
   const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
   const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
   const [zakiBotHistorySource, setZakiBotHistorySource] = useState<string>("");
+  const [freeDailyQuota, setFreeDailyQuota] = useState<{
+    unlimited: boolean;
+    limit: number | null;
+    used: number;
+    remaining: number | null;
+    resetAt: string | null;
+    surface: UsageQuotaSurface;
+    bucket: string | null;
+  } | null>(null);
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
@@ -594,6 +611,7 @@ export function ChatArea() {
     return fixedSpace?.id ?? primarySpace?.id ?? null;
   }, [primarySpace?.id, spacesList]);
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
     (isZakiBotActiveSpace
@@ -1057,6 +1075,59 @@ export function ChatArea() {
     [isZakiBotActiveSpace]
   );
 
+  const applyQuotaHeaders = useCallback((headers: Headers, fallbackSurface: UsageQuotaSurface) => {
+    const limitRaw = String(headers.get("x-zaki-quota-limit") || "").trim().toLowerCase();
+    if (!limitRaw) return;
+    const remainingRaw = String(headers.get("x-zaki-quota-remaining") || "").trim().toLowerCase();
+    const resetAtRaw = String(headers.get("x-zaki-quota-reset-at") || "").trim();
+    const headerSurface = String(headers.get("x-zaki-quota-surface") || "").trim().toLowerCase();
+    const headerBucket = String(headers.get("x-zaki-quota-bucket") || "").trim();
+    const normalizedSurface: UsageQuotaSurface =
+      headerSurface === "zaki_bot" ? "zaki_bot" : fallbackSurface;
+    const unlimited = limitRaw === "unlimited";
+    const parsedLimit = Number(limitRaw);
+    const parsedRemaining = Number(remainingRaw);
+    setFreeDailyQuota({
+      unlimited,
+      limit: unlimited || !Number.isFinite(parsedLimit) ? null : parsedLimit,
+      used:
+        unlimited || !Number.isFinite(parsedLimit) || !Number.isFinite(parsedRemaining)
+          ? 0
+          : Math.max(0, parsedLimit - parsedRemaining),
+      remaining:
+        unlimited || !Number.isFinite(parsedRemaining)
+          ? null
+          : Math.max(0, Math.floor(parsedRemaining)),
+      resetAt: resetAtRaw || null,
+      surface: normalizedSurface,
+      bucket: headerBucket || null,
+    });
+  }, []);
+
+  const refreshUsageQuota = useCallback(async () => {
+    try {
+      const { response, data } = await fetchUsageQuota(quotaSurface);
+      if (!response.ok) return;
+      const normalizedSurface: UsageQuotaSurface =
+        data.surface === "zaki_bot" ? "zaki_bot" : quotaSurface;
+      setFreeDailyQuota({
+        unlimited: data.unlimited === true,
+        limit: typeof data.limit === "number" ? data.limit : null,
+        used: Math.max(0, Number(data.used || 0)),
+        remaining: typeof data.remaining === "number" ? Math.max(0, Number(data.remaining)) : null,
+        resetAt: typeof data.resetAt === "string" ? data.resetAt : null,
+        surface: normalizedSurface,
+        bucket: typeof data.bucket === "string" && data.bucket.trim() ? data.bucket.trim() : null,
+      });
+    } catch {
+      // Best-effort status sync.
+    }
+  }, [quotaSurface]);
+
+  useEffect(() => {
+    void refreshUsageQuota();
+  }, [refreshUsageQuota]);
+
   // Stream via WebSocket for agent invocation URLs
   const streamAgentInvocation = useCallback(async (
     agentUrl: string,
@@ -1298,6 +1369,9 @@ export function ChatArea() {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
       let errorCode: string | null = null;
+      let quotaLimit: number | null = null;
+      let quotaResetAt: string | null = null;
+      let quotaSurfaceCode: UsageQuotaSurface | null = null;
       const requestId = response.headers.get("x-request-id");
       const errorContentType = response.headers.get("content-type") || "";
       try {
@@ -1306,9 +1380,23 @@ export function ChatArea() {
             error?: string;
             message?: string;
             code?: string;
+            limit?: number;
+            resetAt?: string;
+            surface?: string;
           };
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
+          }
+          if (typeof data.limit === "number" && Number.isFinite(data.limit)) {
+            quotaLimit = data.limit;
+          }
+          if (typeof data.resetAt === "string" && data.resetAt.trim()) {
+            quotaResetAt = data.resetAt.trim();
+          }
+          if (typeof data.surface === "string" && data.surface.trim().toLowerCase() === "zaki_bot") {
+            quotaSurfaceCode = "zaki_bot";
+          } else if (typeof data.surface === "string" && data.surface.trim().toLowerCase() === "app_chat") {
+            quotaSurfaceCode = "app_chat";
           }
           if (typeof data.message === "string" && data.message.trim()) {
             message = data.message;
@@ -1316,6 +1404,21 @@ export function ChatArea() {
             message = data.error;
           } else if (errorCode === "access_expired") {
             message = "Access code required. Redeem a fresh code to keep chatting.";
+          } else if (errorCode === "daily_limit_reached") {
+            const safeLimit = quotaLimit ?? 5;
+            const resetLabel = quotaResetAt
+              ? new Date(quotaResetAt).toLocaleString()
+              : "tomorrow";
+            const isBotQuota = quotaSurfaceCode === "zaki_bot" || isZakiAgentSpace;
+            if (isBotQuota) {
+              message = isRtl
+                ? `وصلت إلى حد ZAKI BOT اليومي (${safeLimit}). سيُعاد التعيين عند ${resetLabel}. نسخة BOT premium قريبًا.`
+                : `You reached today's ZAKI BOT limit (${safeLimit}). Resets at ${resetLabel}. BOT premium is coming soon.`;
+            } else {
+              message = isRtl
+                ? `وصلت إلى الحد اليومي المجاني (${safeLimit}). سيُعاد التعيين عند ${resetLabel}.`
+                : `You reached today's free limit (${safeLimit}). Resets at ${resetLabel}.`;
+            }
           }
         } else {
           const text = (await response.text()).trim();
@@ -1335,6 +1438,8 @@ export function ChatArea() {
     if (!response.body) {
       throw new Error("Chat stream returned no data.");
     }
+
+    applyQuotaHeaders(response.headers, isZakiAgentSpace ? "zaki_bot" : "app_chat");
 
     const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
       const direct =
@@ -1625,6 +1730,8 @@ export function ChatArea() {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
   }, [
+    applyQuotaHeaders,
+    isRtl,
     isZakiBotActiveSpace,
     isMemoryPipelineEnabled,
     spacesList,
@@ -2924,6 +3031,29 @@ export function ChatArea() {
                 memoryMode={memoryMode}
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
               />
+              {freeDailyQuota && !freeDailyQuota.unlimited && typeof freeDailyQuota.limit === "number" ? (
+                <p className="px-6 pt-1 text-center text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+                  {freeDailyQuota.surface === "zaki_bot"
+                    ? isRtl
+                      ? `حد ZAKI BOT اليوم: ${Math.max(
+                          0,
+                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
+                        )}/${freeDailyQuota.limit}`
+                      : `ZAKI BOT today: ${Math.max(
+                          0,
+                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
+                        )}/${freeDailyQuota.limit} prompts left`
+                    : isRtl
+                      ? `المتبقي اليوم: ${Math.max(
+                          0,
+                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
+                        )}/${freeDailyQuota.limit}`
+                      : `Free today: ${Math.max(
+                          0,
+                          Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
+                        )}/${freeDailyQuota.limit} prompts left`}
+                </p>
+              ) : null}
             </div>
           )}
 

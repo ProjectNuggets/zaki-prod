@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 
-const baseUrl = String(process.env.ZAKI_BASE_URL || "http://127.0.0.1:8787").replace(/\/+$/, "");
-const tokens = String(process.env.ZAKI_MULTIUSER_TOKENS || "")
-  .split(",")
-  .map((item) => item.trim())
-  .filter(Boolean);
+import {
+  requireAtLeastTwoTokens,
+  requireNonPlaceholderTokens,
+  resolveBaseUrl,
+  resolveMultiuserTokens,
+} from "./multiuser-agent-env.mjs";
+
+const baseUrl = resolveBaseUrl();
+const tokens = resolveMultiuserTokens();
 const rounds = Math.max(1, Number(process.env.ZAKI_MULTIUSER_ROUNDS || 3));
 const p95TargetMs = Math.max(500, Number(process.env.ZAKI_MULTIUSER_P95_TARGET_MS || 3000));
 const errorRateTarget = Math.max(0, Number(process.env.ZAKI_MULTIUSER_ERROR_RATE_TARGET || 0.005));
-
-if (tokens.length < 2) {
-  console.error("Set ZAKI_MULTIUSER_TOKENS with at least 2 bearer tokens.");
-  process.exit(1);
-}
+requireAtLeastTwoTokens(tokens);
+requireNonPlaceholderTokens(tokens);
 
 async function authRequest(token, path, init = {}) {
   return fetch(`${baseUrl}${path}`, {
@@ -26,15 +27,61 @@ async function authRequest(token, path, init = {}) {
 
 async function runStream(token, message) {
   const startedAt = Date.now();
-  const response = await authRequest(token, "/api/agent/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, spaceId: "zaki-bot", threadId: "main" }),
-  });
-  const latencyMs = Date.now() - startedAt;
-  if (!response.ok) return { ok: false, status: response.status, latencyMs };
-  await response.text();
-  return { ok: true, status: response.status, latencyMs };
+  try {
+    const response = await authRequest(token, "/api/agent/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, spaceId: "zaki-bot", threadId: "main" }),
+    });
+    if (!response.ok) {
+      return { ok: false, status: response.status, latencyMs: Date.now() - startedAt };
+    }
+    if (!response.body) {
+      return { ok: true, status: response.status, latencyMs: Date.now() - startedAt };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      if (!chunk) continue;
+      buffer += chunk;
+
+      let sep = buffer.indexOf("\n\n");
+      while (sep !== -1) {
+        const block = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        const lines = block.split("\n");
+        const eventType = lines
+          .find((line) => line.startsWith("event:"))
+          ?.slice(6)
+          .trim()
+          .toLowerCase();
+        if (eventType === "done") {
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore cancel errors
+          }
+          return { ok: true, status: response.status, latencyMs: Date.now() - startedAt };
+        }
+        sep = buffer.indexOf("\n\n");
+      }
+    }
+
+    return { ok: true, status: response.status, latencyMs: Date.now() - startedAt };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      latencyMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 for (const token of tokens) {
@@ -49,7 +96,10 @@ const attempts = [];
 for (let round = 0; round < rounds; round += 1) {
   const wave = await Promise.all(
     tokens.map((token, index) =>
-      runStream(token, `Stress round ${round + 1} for user ${index + 1} at ${Date.now()}`)
+      runStream(
+        token,
+        `Reply with exactly "OK". Stress round ${round + 1} for user ${index + 1} at ${Date.now()}.`
+      )
     )
   );
   attempts.push(...wave);
@@ -74,4 +124,3 @@ const summary = {
 
 console.log(JSON.stringify(summary, null, 2));
 if (!summary.ok) process.exit(2);
-

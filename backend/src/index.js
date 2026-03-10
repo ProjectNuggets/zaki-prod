@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
@@ -60,6 +60,20 @@ import {
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
+import {
+  APP_CHAT_SURFACE,
+  ZAKI_BOT_SURFACE,
+  consumeDailyPromptQuota,
+  getQuotaResetAtUtcIso,
+  getSurfaceQuotaConfig,
+  isUnlimitedUser,
+  readDailyPromptUsage,
+  resolveQuotaSurface,
+} from "./daily-quota.js";
+import {
+  buildUsageQuotaResponse,
+  enforcePromptQuotaForIngress,
+} from "./quota-route-handlers.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -224,11 +238,18 @@ const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 45_000)
 );
+const APP_CHAT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, APP_CHAT_SURFACE);
+const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
 const AGENT_HISTORY_MODE_DEFAULT = "merged";
-const AGENT_ROUTE_LIMIT_PER_MINUTE = Math.max(
+const ZAKI_BOT_SPACE_ID = "zaki-bot";
+const ZAKI_BOT_THREAD_ID = "main";
+const ZAKI_AGENT_SURFACE = "zaki_agent";
+const DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE = Math.max(
   1,
   Number(process.env.ZAKI_AGENT_RATE_LIMIT_PER_MINUTE || 60)
 );
+const RATE_LIMITS_RUNTIME_SETTINGS_KEY = "rate_limits";
+const RATE_LIMITS_RUNTIME_SETTINGS_VERSION = 1;
 const AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS || 3_000)
@@ -275,6 +296,12 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
   timeoutMs: ZAKI_BILLING_ALERT_TIMEOUT_MS,
   cooldownMs: ZAKI_BILLING_ALERT_COOLDOWN_MS,
 });
+
+let runtimeRateLimitSettings = {
+  appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
+  zakiBotDailyPromptLimit: ZAKI_BOT_QUOTA_CONFIG.limit,
+  agentPerMinuteLimit: DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE,
+};
 
 const configReport = validateRuntimeConfig(process.env);
 if (configReport.warnings.length > 0) {
@@ -1500,17 +1527,18 @@ const streamChatLimiter = rateLimit({
 
 const agentRouteLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: AGENT_ROUTE_LIMIT_PER_MINUTE,
+  max: () => runtimeRateLimitSettings.agentPerMinuteLimit,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
     const scopedUserId = String(req.agentUserId || "").trim();
     if (scopedUserId) return `agent_user:${scopedUserId}`;
-    const ipKey =
+    const rawIp =
       String(req.ip || "").trim() ||
       String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
       String(req.socket?.remoteAddress || "").trim() ||
       "unknown";
+    const ipKey = ipKeyGenerator(rawIp);
     return `agent_anon:${ipKey}`;
   },
   message: { error: "Too many agent requests. Please retry in a minute.", code: "agent_rate_limited" },
@@ -2429,6 +2457,16 @@ const AdminMemberUpsertSchema = z.object({
   email: z.string().trim().email("Invalid admin email address"),
 });
 
+const AdminRateLimitsUpdateSchema = z
+  .object({
+    appChatDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    zakiBotDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    agentPerMinuteLimit: z.coerce.number().int().min(1).max(10000).optional(),
+  })
+  .refine((value) => Object.keys(value || {}).length > 0, {
+    message: "At least one field is required.",
+  });
+
 const ClientErrorEventSchema = z.object({
   message: z.string().trim().min(1).max(2000),
   stack: z.string().max(12000).optional(),
@@ -2756,6 +2794,7 @@ app.get("/api/admin/telemetry/billing", async (req, res) => {
 
 await initDb();
 await ensureSuperAdminMembersSeed();
+await loadRuntimeRateLimitSettings();
 
 const smtpHost = (process.env.SMTP_HOST || "").trim();
 const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -2949,6 +2988,165 @@ function getAccessStatus(zakiUser) {
     active,
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     campaign: zakiUser?.access_code_campaign || null,
+  };
+}
+
+function normalizeRateLimitValue(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(10_000, Math.floor(parsed));
+}
+
+function sanitizeRuntimeRateLimitSettings(raw = null) {
+  const source =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return {
+    appChatDailyPromptLimit: normalizeRateLimitValue(
+      source.appChatDailyPromptLimit,
+      APP_CHAT_QUOTA_CONFIG.limit
+    ),
+    zakiBotDailyPromptLimit: normalizeRateLimitValue(
+      source.zakiBotDailyPromptLimit,
+      ZAKI_BOT_QUOTA_CONFIG.limit
+    ),
+    agentPerMinuteLimit: normalizeRateLimitValue(
+      source.agentPerMinuteLimit,
+      DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE
+    ),
+  };
+}
+
+function buildRateLimitSettingsResponse(settings = runtimeRateLimitSettings) {
+  return {
+    appChatDailyPromptLimit: settings.appChatDailyPromptLimit,
+    appChatDailyPromptBucket: APP_CHAT_QUOTA_CONFIG.bucket,
+    zakiBotDailyPromptLimit: settings.zakiBotDailyPromptLimit,
+    zakiBotDailyPromptBucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
+    agentPerMinuteLimit: settings.agentPerMinuteLimit,
+  };
+}
+
+async function loadRuntimeRateLimitSettings() {
+  const row = await dbGet(
+    `SELECT value_json
+     FROM zaki_runtime_settings
+     WHERE setting_key = $1
+     LIMIT 1`,
+    [RATE_LIMITS_RUNTIME_SETTINGS_KEY]
+  );
+  const valueJson = row?.value_json && typeof row.value_json === "object" ? row.value_json : null;
+  runtimeRateLimitSettings = sanitizeRuntimeRateLimitSettings(valueJson);
+  return runtimeRateLimitSettings;
+}
+
+async function saveRuntimeRateLimitSettings(patch = {}, updatedBy = null) {
+  const nextSettings = sanitizeRuntimeRateLimitSettings({
+    ...runtimeRateLimitSettings,
+    ...(patch || {}),
+  });
+  const valueJson = JSON.stringify({
+    version: RATE_LIMITS_RUNTIME_SETTINGS_VERSION,
+    ...nextSettings,
+  });
+  await dbQuery(
+    `INSERT INTO zaki_runtime_settings (setting_key, value_json, updated_by, created_at, updated_at)
+     VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+     ON CONFLICT (setting_key)
+     DO UPDATE SET
+       value_json = EXCLUDED.value_json,
+       updated_by = EXCLUDED.updated_by,
+       updated_at = NOW()`,
+    [RATE_LIMITS_RUNTIME_SETTINGS_KEY, valueJson, normalizeEmail(updatedBy) || null]
+  );
+  runtimeRateLimitSettings = nextSettings;
+  return runtimeRateLimitSettings;
+}
+
+function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
+  const normalizedSurface = resolveQuotaSurface(surface);
+  if (normalizedSurface === ZAKI_BOT_SURFACE) {
+    return {
+      surface: ZAKI_BOT_SURFACE,
+      bucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
+      limit: runtimeRateLimitSettings.zakiBotDailyPromptLimit,
+    };
+  }
+  return {
+    surface: APP_CHAT_SURFACE,
+    bucket: APP_CHAT_QUOTA_CONFIG.bucket,
+    limit: runtimeRateLimitSettings.appChatDailyPromptLimit,
+  };
+}
+
+function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
+  const normalizedSurface = resolveQuotaSurface(surface);
+  const tier = resolveTier(zakiUser?.plan_tier || "free");
+  const status = zakiUser?.plan_status || "inactive";
+  const access = getAccessStatus(zakiUser);
+  const unlimited =
+    normalizedSurface === ZAKI_BOT_SURFACE
+      ? false
+      : isUnlimitedUser({
+          tier,
+          status,
+          accessActive: access.active,
+        });
+  return { tier, status, access, surface: normalizedSurface, unlimited };
+}
+
+function setPromptQuotaHeaders(res, quota) {
+  if (!quota) return;
+  const limitValue = quota.limit === null ? "unlimited" : String(quota.limit);
+  const remainingValue = quota.remaining === null ? "unlimited" : String(quota.remaining);
+  res.setHeader("X-Zaki-Quota-Limit", limitValue);
+  res.setHeader("X-Zaki-Quota-Remaining", remainingValue);
+  if (quota.resetAt) {
+    res.setHeader("X-Zaki-Quota-Reset-At", String(quota.resetAt));
+  }
+  if (quota.surface) {
+    res.setHeader("X-Zaki-Quota-Surface", String(quota.surface));
+  }
+  if (quota.bucket) {
+    res.setHeader("X-Zaki-Quota-Bucket", String(quota.bucket));
+  }
+}
+
+async function consumePromptQuotaForUser(
+  zakiUser,
+  { surface = APP_CHAT_SURFACE, nowDate = new Date() } = {}
+) {
+  const normalizedSurface = resolveQuotaSurface(surface);
+  const quotaConfig = resolveSurfaceQuotaConfig(normalizedSurface);
+  const quotaContext = buildUserQuotaContext(zakiUser, { surface: normalizedSurface });
+  const resetAt = getQuotaResetAtUtcIso(nowDate);
+
+  if (quotaContext.unlimited) {
+    return {
+      allowed: true,
+      unlimited: true,
+      limit: null,
+      used: 0,
+      remaining: null,
+      resetAt,
+      bucket: quotaConfig.bucket,
+      surface: normalizedSurface,
+    };
+  }
+
+  const consumed = await consumeDailyPromptQuota({
+    dbQuery,
+    dbGet,
+    userId: zakiUser.id,
+    bucket: quotaConfig.bucket,
+    limit: quotaConfig.limit,
+    nowDate,
+  });
+
+  return {
+    ...consumed,
+    unlimited: false,
+    bucket: quotaConfig.bucket,
+    surface: normalizedSurface,
   };
 }
 
@@ -4663,6 +4861,29 @@ const updateProfileHandler = async (req, res) => {
 app.get("/api/profile", getProfileHandler);
 app.patch("/api/profile", express.json({ limit: "1mb" }), updateProfileHandler);
 
+app.get("/api/usage/quota", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { zakiUser } = authResult;
+    const requestedSurface =
+      typeof req.query.surface === "string" ? req.query.surface : APP_CHAT_SURFACE;
+    const surface = resolveQuotaSurface(requestedSurface);
+    const payload = await buildUsageQuotaResponse({
+      zakiUser,
+      surface,
+      buildUserQuotaContext,
+      readDailyPromptUsage,
+      resolveSurfaceQuotaConfig,
+      dbGet,
+    });
+    res.status(200).json(payload);
+  } catch (error) {
+    console.error("[Usage] Quota endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load usage quota." });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // Account: export + irreversible account deletion
 // -----------------------------------------------------------------------------
@@ -5067,6 +5288,65 @@ app.get("/api/entitlements", async (req, res) => {
   } catch (error) {
     console.error("[Billing] Entitlements error:", error);
     res.status(500).json({ error: error?.message || "Entitlements failed." });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Admin Runtime Controls (super admin only)
+// -----------------------------------------------------------------------------
+app.get("/api/admin/rate-limits", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    res.status(200).json({
+      success: true,
+      actor: {
+        email: authResult.email,
+        role: authResult.admin.role,
+        isSuperAdmin: authResult.admin.isSuperAdmin,
+      },
+      settings: buildRateLimitSettingsResponse(),
+    });
+  } catch (error) {
+    console.error("[Admin] Rate limits load error:", error);
+    res.status(500).json({ error: error?.message || "Failed to load rate limits." });
+  }
+});
+
+app.patch("/api/admin/rate-limits", express.json({ limit: "50kb" }), async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(AdminRateLimitsUpdateSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const patch = {};
+    if (validation.data.appChatDailyPromptLimit !== undefined) {
+      patch.appChatDailyPromptLimit = validation.data.appChatDailyPromptLimit;
+    }
+    if (validation.data.zakiBotDailyPromptLimit !== undefined) {
+      patch.zakiBotDailyPromptLimit = validation.data.zakiBotDailyPromptLimit;
+    }
+    if (validation.data.agentPerMinuteLimit !== undefined) {
+      patch.agentPerMinuteLimit = validation.data.agentPerMinuteLimit;
+    }
+
+    const saved = await saveRuntimeRateLimitSettings(patch, authResult.email);
+    res.status(200).json({
+      success: true,
+      settings: buildRateLimitSettingsResponse(saved),
+    });
+  } catch (error) {
+    console.error("[Admin] Rate limits update error:", error);
+    res.status(500).json({ error: error?.message || "Failed to update rate limits." });
   }
 });
 
@@ -6874,21 +7154,6 @@ const streamChatHandler = async (req, res) => {
     const zakiUser = authResult.zakiUser;
     console.log(`[Chat] User: ${userEmail}`);
 
-    if (zakiUser) {
-      const tier = resolveTier(zakiUser.plan_tier || "free");
-      const status = zakiUser.plan_status || "inactive";
-      const premiumActive = isPaidActive(tier, status);
-      const access = getAccessStatus(zakiUser);
-      if (!premiumActive && !access.active) {
-        return res.status(403).json({
-          error: "Access code required.",
-          code: "access_expired",
-          message:
-            "Your access code took a coffee break. Add a fresh code to keep chatting.",
-        });
-      }
-    }
-
     const requestPayload = req.body;
     const originalMessage = extractStreamMessage(requestPayload);
     const requestedFormat = getRequestedResponseFormat(originalMessage);
@@ -6902,6 +7167,17 @@ const streamChatHandler = async (req, res) => {
       return res.status(400).json({
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
+    }
+
+    const streamQuotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser,
+      res,
+      surface: APP_CHAT_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!streamQuotaDecision.allowed) {
+      return res.status(streamQuotaDecision.status).json(streamQuotaDecision.payload);
     }
 
     if (isIdentityProbePrompt(originalMessage)) {
@@ -7179,6 +7455,7 @@ const agentChatStreamHandler = async (req, res) => {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
     }
     req.agentUserId = userId;
+    let promptQuota = null;
 
     const payload = req.body;
     const originalMessage = extractStreamMessage(payload);
@@ -7190,6 +7467,17 @@ const agentChatStreamHandler = async (req, res) => {
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
     }
+    const agentQuotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser: authResult.zakiUser,
+      res,
+      surface: ZAKI_BOT_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!agentQuotaDecision.allowed) {
+      return res.status(agentQuotaDecision.status).json(agentQuotaDecision.payload);
+    }
+    promptQuota = agentQuotaDecision.quota;
 
     const targetUrl = `${nullclawBase}/api/v1/chat/stream`;
     const normalizedPayload = payload && typeof payload === "object" ? payload : {};
@@ -7199,10 +7487,6 @@ const agentChatStreamHandler = async (req, res) => {
       normalizedPayload.context && typeof normalizedPayload.context === "object"
         ? normalizedPayload.context
         : {};
-    const ZAKI_BOT_SPACE_ID = "zaki-bot";
-    const ZAKI_BOT_SURFACE = "zaki_bot";
-    const ZAKI_AGENT_SURFACE = "zaki_agent";
-
     const upstreamPayload = {
       ...normalizedPayload,
       message: originalMessage,
@@ -7220,7 +7504,7 @@ const agentChatStreamHandler = async (req, res) => {
 
     const isZakiBotSpace = rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID;
     const resolvedSpaceId = rawSpaceId || ZAKI_BOT_SPACE_ID;
-    const resolvedThreadId = rawThreadId || "main";
+    const resolvedThreadId = rawThreadId || ZAKI_BOT_THREAD_ID;
 
     if (isZakiBotSpace) {
       await dbQuery(
@@ -7247,6 +7531,7 @@ const agentChatStreamHandler = async (req, res) => {
 
     res.status(upstream.status);
     copyResponseHeaders(upstream, res);
+    setPromptQuotaHeaders(res, promptQuota);
 
     if (!upstream.body) {
       const retryPayload = buildAgentRetrySsePayload(upstream.status);
@@ -7366,8 +7651,8 @@ app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req
     return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
   }
 
-  const spaceId = String(req.query.spaceId || "zaki-bot").trim() || "zaki-bot";
-  const threadId = String(req.query.threadId || "main").trim() || "main";
+  const spaceId = String(req.query.spaceId || ZAKI_BOT_SPACE_ID).trim() || ZAKI_BOT_SPACE_ID;
+  const threadId = String(req.query.threadId || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
   const requestedMode = String(req.query.mode || AGENT_HISTORY_MODE_DEFAULT)
     .trim()
     .toLowerCase();
@@ -7643,7 +7928,7 @@ const agentProvisionHandler = async (req, res) => {
     const payload =
       req.body && typeof req.body === "object" ? req.body : {};
 
-    return proxyNullclawRequest(req, res, "/api/v1/users/provision", {
+    await proxyNullclawRequest(req, res, "/api/v1/users/provision", {
       method: "POST",
       userId,
       body: {
@@ -7651,6 +7936,7 @@ const agentProvisionHandler = async (req, res) => {
         user_id: userId,
       },
     });
+    return;
   } catch (error) {
     console.error("[Agent] Provision error:", error);
     return res.status(500).json({ error: error?.message || "Agent provision failed." });
@@ -7666,7 +7952,8 @@ const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
     }
     const targetPath = pathBuilder(userId, req);
-    return proxyNullclawRequest(req, res, targetPath);
+    await proxyNullclawRequest(req, res, targetPath);
+    return;
   } catch (error) {
     console.error("[Agent] Control proxy error:", error);
     return res.status(500).json({ error: error?.message || "Agent control request failed." });
@@ -7694,7 +7981,7 @@ const agentTelegramConnectHandler = async (req, res) => {
       extraHeaders["X-Webhook-Base-Url"] = ZAKI_AGENT_WEBHOOK_BASE_URL;
     }
 
-    return proxyNullclawRequest(
+    await proxyNullclawRequest(
       req,
       res,
       `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/connect`,
@@ -7705,6 +7992,7 @@ const agentTelegramConnectHandler = async (req, res) => {
         headers: extraHeaders,
       }
     );
+    return;
   } catch (error) {
     console.error("[Agent] Telegram connect proxy error:", error);
     return res.status(500).json({ error: error?.message || "Telegram connect failed." });

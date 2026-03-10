@@ -570,6 +570,14 @@ export type AdminStudentVerificationUser = {
   studentVerifiedAt: string | null;
 };
 
+export type AdminRateLimitSettings = {
+  appChatDailyPromptLimit: number;
+  appChatDailyPromptBucket: string;
+  zakiBotDailyPromptLimit: number;
+  zakiBotDailyPromptBucket: string;
+  agentPerMinuteLimit: number;
+};
+
 export async function listAdminMembers() {
   const response = await backendAuthRequest("/api/admin/admins", {
     method: "GET",
@@ -668,6 +676,35 @@ export async function updateAdminStudentVerification(email: string, verified: bo
   } catch {
     // Ignore JSON parsing failures.
   }
+  return { response, data };
+}
+
+export async function getAdminRateLimits() {
+  const response = await backendAuthRequest("/api/admin/rate-limits", {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function updateAdminRateLimits(payload: {
+  appChatDailyPromptLimit?: number;
+  zakiBotDailyPromptLimit?: number;
+  agentPerMinuteLimit?: number;
+}) {
+  const response = await backendAuthRequest("/api/admin/rate-limits", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
   return { response, data };
 }
 
@@ -805,6 +842,27 @@ async function parseApiJson<T>(response: Response): Promise<T> {
   } catch {
     return {} as T;
   }
+}
+
+export type UsageQuotaSurface = "app_chat" | "zaki_bot";
+
+export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
+  const params = new URLSearchParams({ surface });
+  const response = await backendAuthRequest(`/api/usage/quota?${params.toString()}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    unlimited?: boolean;
+    limit?: number | null;
+    used?: number;
+    remaining?: number | null;
+    resetAt?: string;
+    bucket?: string;
+    surface?: UsageQuotaSurface;
+    error?: string | null;
+  }>(response);
+  return { response, data };
 }
 
 export async function provisionAgent(payload: Record<string, unknown> = {}) {

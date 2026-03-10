@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 
-const baseUrl = String(process.env.ZAKI_BASE_URL || "http://127.0.0.1:8787").replace(/\/+$/, "");
-const tokens = String(process.env.ZAKI_MULTIUSER_TOKENS || "")
-  .split(",")
-  .map((item) => item.trim())
-  .filter(Boolean);
+import {
+  requireAtLeastTwoTokens,
+  requireNonPlaceholderTokens,
+  resolveBaseUrl,
+  resolveMultiuserTokens,
+} from "./multiuser-agent-env.mjs";
 
-if (tokens.length < 2) {
-  console.error("Set ZAKI_MULTIUSER_TOKENS with at least 2 bearer tokens.");
-  process.exit(1);
-}
+const baseUrl = resolveBaseUrl();
+const tokens = resolveMultiuserTokens();
+requireAtLeastTwoTokens(tokens);
+requireNonPlaceholderTokens(tokens);
 
 async function authRequest(token, path, init = {}) {
   return fetch(`${baseUrl}${path}`, {
@@ -83,4 +84,3 @@ for (let index = 0; index < tokens.length; index += 1) {
 }
 
 console.log(JSON.stringify({ ok: true, users: results.length, results }, null, 2));
-

@@ -347,6 +347,32 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_daily_prompt_usage (
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      usage_date DATE NOT NULL,
+      bucket TEXT NOT NULL DEFAULT 'shared',
+      used_count INT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, usage_date, bucket)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_daily_prompt_usage_date_bucket
+    ON zaki_daily_prompt_usage (usage_date, bucket);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_runtime_settings (
+      setting_key TEXT PRIMARY KEY,
+      value_json JSONB NOT NULL,
+      updated_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_bot_messages_legacy (
       id BIGSERIAL PRIMARY KEY,
       legacy_message_id BIGINT,
