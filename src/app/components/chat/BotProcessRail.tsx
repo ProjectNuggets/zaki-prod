@@ -47,7 +47,7 @@ function stageChip(current: ProcessStage, target: ProcessStage, isStreaming: boo
     (current === "researching" && target === "thinking") ||
     (current === "writing" && (target === "thinking" || target === "researching"));
   if (active) {
-    return "border-zaki-brand bg-zaki-brand/15 text-zaki-primary shadow-[0px_4px_12px_rgba(52,36,24,0.12)]";
+    return "border-zaki-brand bg-zaki-brand/15 text-zaki-primary shadow-[0px_4px_12px_rgba(52,36,24,0.12)] animate-pulse";
   }
   if (complete) {
     return "border-emerald-300 bg-emerald-50 text-emerald-700";
@@ -65,6 +65,8 @@ export function BotProcessRail({
 
   const latestEvents = statusEvents.slice(-6);
   const orderedTools = toolCalls.slice(-8);
+  const showStatusEvents = orderedTools.length === 0 && latestEvents.length > 0;
+  const showFallbackPulse = orderedTools.length === 0 && latestEvents.length === 0 && isStreaming;
 
   return (
     <section className="max-w-[92%] rounded-2xl border border-[#e8d4bc] bg-[linear-gradient(140deg,#fff9f0_0%,#fff3e2_100%)] px-4 py-3 shadow-[0px_10px_24px_rgba(52,36,24,0.10)]">
@@ -87,7 +89,7 @@ export function BotProcessRail({
         </div>
       </div>
 
-      {latestEvents.length > 0 ? (
+      {showStatusEvents ? (
         <div className="mb-3 space-y-1.5">
           {latestEvents.map((event) => (
             <div key={event.id} className="flex items-center gap-2 rounded-lg border border-[#ecdac5] bg-white/70 px-2.5 py-1.5 text-xs text-zaki-secondary">
@@ -98,6 +100,13 @@ export function BotProcessRail({
               </span>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {showFallbackPulse ? (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-[#ecdac5] bg-white/70 px-2.5 py-2 text-xs text-zaki-secondary">
+          <span className="inline-block size-1.5 rounded-full bg-zaki-brand animate-ping" aria-hidden />
+          <span className="font-medium">Listening for live status from agent…</span>
         </div>
       ) : null}
 
@@ -144,4 +153,3 @@ export function BotProcessRail({
     </section>
   );
 }
-

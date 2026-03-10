@@ -409,6 +409,7 @@ export function ChatArea() {
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
 
@@ -2233,7 +2234,38 @@ export function ChatArea() {
     if (isZakiBotActiveSpace) return;
     setZakiBotToolCalls([]);
     setZakiBotStatusEvents([]);
+    if (zakiBotProcessClearTimerRef.current) {
+      window.clearTimeout(zakiBotProcessClearTimerRef.current);
+      zakiBotProcessClearTimerRef.current = null;
+    }
   }, [isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    if (isStreaming) {
+      if (zakiBotProcessClearTimerRef.current) {
+        window.clearTimeout(zakiBotProcessClearTimerRef.current);
+        zakiBotProcessClearTimerRef.current = null;
+      }
+      return;
+    }
+    if (zakiBotToolCalls.length === 0 && zakiBotStatusEvents.length === 0) return;
+    if (zakiBotProcessClearTimerRef.current) {
+      window.clearTimeout(zakiBotProcessClearTimerRef.current);
+    }
+    zakiBotProcessClearTimerRef.current = window.setTimeout(() => {
+      setZakiBotToolCalls([]);
+      setZakiBotStatusEvents([]);
+      zakiBotProcessClearTimerRef.current = null;
+    }, 1200);
+
+    return () => {
+      if (zakiBotProcessClearTimerRef.current) {
+        window.clearTimeout(zakiBotProcessClearTimerRef.current);
+        zakiBotProcessClearTimerRef.current = null;
+      }
+    };
+  }, [isStreaming, isZakiBotActiveSpace, zakiBotStatusEvents.length, zakiBotToolCalls.length]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
@@ -2766,6 +2798,10 @@ export function ChatArea() {
       }
       if (autoDismissTimerRef.current) {
         window.clearTimeout(autoDismissTimerRef.current);
+      }
+      if (zakiBotProcessClearTimerRef.current) {
+        window.clearTimeout(zakiBotProcessClearTimerRef.current);
+        zakiBotProcessClearTimerRef.current = null;
       }
       streamAbortRef.current?.abort();
     };
