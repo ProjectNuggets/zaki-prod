@@ -32,6 +32,22 @@ interface ConversationData {
 
 type ViewState = 'loading' | 'password' | 'viewing' | 'error' | 'expired';
 
+const RESPONSE_FORMAT_ENVELOPE_OPEN = "[[ZAKI_RESPONSE_FORMAT_V1]]";
+const RESPONSE_FORMAT_ENVELOPE_CLOSE = "[[/ZAKI_RESPONSE_FORMAT_V1]]";
+
+function stripResponseFormatEnvelope(content: string): string {
+  const text = String(content || "");
+  if (!text) return "";
+  const openIndex = text.indexOf(RESPONSE_FORMAT_ENVELOPE_OPEN);
+  const closeIndex = text.indexOf(RESPONSE_FORMAT_ENVELOPE_CLOSE);
+  if (openIndex === -1 || closeIndex === -1 || closeIndex <= openIndex) {
+    return text;
+  }
+  const head = text.slice(0, openIndex);
+  const tail = text.slice(closeIndex + RESPONSE_FORMAT_ENVELOPE_CLOSE.length);
+  return `${head}${tail}`.trim();
+}
+
 export function SharedConversation() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.toLowerCase().startsWith("ar");
@@ -351,7 +367,13 @@ export function SharedConversation() {
                     : "bg-zaki-raised dark:bg-zaki-dark-card text-zaki-primary dark:text-zaki-dark-primary"
                 )}
               >
-                <ChatMarkdown content={typeof msg.content === "string" ? msg.content : ""} />
+                <ChatMarkdown
+                  content={
+                    typeof msg.content === "string"
+                      ? stripResponseFormatEnvelope(msg.content)
+                      : ""
+                  }
+                />
               </div>
               
               {msg.role === 'user' && (

@@ -130,7 +130,15 @@ function splitFilesByAcceptedTypes(
 function getRequestedResponseFormat(prompt: string) {
   const text = String(prompt || "").trim();
   if (!text) return null;
-  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) return "table";
+  const tableFormatIntentPatterns = [
+    /\b(?:as|into|in)\s+(?:a\s+)?(?:markdown\s+)?table\b/i,
+    /\b(?:return|respond|reply|output|format|present|show|organize|summari[sz]e|compare)\b[\s\S]{0,80}\b(?:a\s+)?(?:markdown\s+)?table\b/i,
+    /\b(?:table|tabular)\s+format\b/i,
+    /(?:^|\s)(?:please|kindly)\s+use\s+(?:a\s+)?(?:markdown\s+)?table(?:\s|$)/i,
+    /(?:^|\s)(?:حولها|حوّلها|رتبها|قدّمها|اعرضها|لخّصها|لخصها|قارنها)\s+(?:في|ب)?\s*جدول(?:\s|$)/i,
+    /(?:^|\s)(?:على شكل جدول|بصيغة جدول|بتنسيق جدول|جدول مقارنة)(?:\s|$)/i,
+  ];
+  if (tableFormatIntentPatterns.some((pattern) => pattern.test(text))) return "table";
   if (
     /\b(?:bullet|bullets|bullet points)\b/i.test(text) ||
     /(?:^|\s)(نقاط|بنقاط|تعداد|bullet)(?:\s|$)/i.test(text)
@@ -156,9 +164,25 @@ function getRequestedBulletCount(prompt: string) {
   return null;
 }
 
+const RESPONSE_FORMAT_ENVELOPE_OPEN = "[[ZAKI_RESPONSE_FORMAT_V1]]";
+const RESPONSE_FORMAT_ENVELOPE_CLOSE = "[[/ZAKI_RESPONSE_FORMAT_V1]]";
+
+function stripResponseFormatEnvelope(content: string) {
+  const text = String(content || "");
+  if (!text) return "";
+  const openIndex = text.indexOf(RESPONSE_FORMAT_ENVELOPE_OPEN);
+  const closeIndex = text.indexOf(RESPONSE_FORMAT_ENVELOPE_CLOSE);
+  if (openIndex === -1 || closeIndex === -1 || closeIndex <= openIndex) {
+    return text.trim();
+  }
+  const head = text.slice(0, openIndex);
+  const tail = text.slice(closeIndex + RESPONSE_FORMAT_ENVELOPE_CLOSE.length);
+  return `${head}${tail}`.trim();
+}
+
 function normalizeAssistantFormatting(prompt: string, content: string) {
   const format = getRequestedResponseFormat(prompt);
-  const text = String(content || "").trim();
+  const text = stripResponseFormatEnvelope(content);
   if (!format || !text) return text;
 
   if (format === "bullets") {
