@@ -56,14 +56,6 @@ export function ChatView({
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
-      {showBotTimeline ? (
-        <BotProcessRail
-          isStreaming={isStreaming}
-          stage={isStreaming ? streamingMode : "writing"}
-          toolCalls={botToolCalls}
-          statusEvents={botStatusEvents}
-        />
-      ) : null}
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
@@ -91,6 +83,14 @@ export function ChatView({
           />
         );
       })}
+      {showBotTimeline ? (
+        <BotProcessRail
+          isStreaming={isStreaming}
+          stage={isStreaming ? streamingMode : "writing"}
+          toolCalls={botToolCalls}
+          statusEvents={botStatusEvents}
+        />
+      ) : null}
     </div>
   );
 }
