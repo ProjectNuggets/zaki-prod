@@ -2,6 +2,9 @@ import { cn } from "@/lib/utils";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { SkeletonMessage } from "../../ui/skeleton";
+import type { BotToolCall } from "../BotToolCallBlock";
+import type { BotStatusEvent } from "../BotStatusRail";
+import { BotProcessRail } from "../BotProcessRail";
 
 interface ChatViewProps {
   messages: Message[];
@@ -9,6 +12,11 @@ interface ChatViewProps {
   isStreaming: boolean;
   streamingLabel?: string;
   streamingPillLabel?: string;
+  botToolCalls?: BotToolCall[];
+  botStatusEvents?: BotStatusEvent[];
+  showBotTimeline?: boolean;
+  botMode?: boolean;
+  streamingMode?: "thinking" | "researching" | "writing";
   firstMessageTransition: boolean;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
@@ -21,6 +29,11 @@ export function ChatView({
   isStreaming,
   streamingLabel,
   streamingPillLabel,
+  botToolCalls = [],
+  botStatusEvents = [],
+  showBotTimeline = false,
+  botMode = false,
+  streamingMode = "thinking",
   firstMessageTransition,
   onCopyMessage,
   onRegenerateMessage,
@@ -55,6 +68,7 @@ export function ChatView({
               isStreaming={isStreamingMessage}
               thinkingLabel={streamingLabel}
               thinkingPillLabel={streamingPillLabel}
+              botMode={botMode}
             />
           );
         }
@@ -69,6 +83,14 @@ export function ChatView({
           />
         );
       })}
+      {showBotTimeline ? (
+        <BotProcessRail
+          isStreaming={isStreaming}
+          stage={isStreaming ? streamingMode : "writing"}
+          toolCalls={botToolCalls}
+          statusEvents={botStatusEvents}
+        />
+      ) : null}
     </div>
   );
 }

@@ -48,6 +48,10 @@ const HORIZONTAL_SLIDE_IMAGES = [
   { src: "/slides/5.png" },
   { src: "/slides/6.png" },
 ];
+const FULL_BLEED_SECTION_STYLE = {
+  width: "100vw",
+  marginInline: "calc(50% - 50vw)",
+};
 
 function getWebsiteApiBase() {
   if (WEBSITE_API_BASE_URL) {
@@ -1310,7 +1314,7 @@ export function LandingApp({ initialLocale } = {}) {
         <section
           id="updates-carousel"
           className="relative z-20 mt-[clamp(10rem,22vh,18rem)] w-screen max-w-none overflow-hidden bg-[#f7f2ea] md:mt-[clamp(12rem,26vh,22rem)]"
-          style={{ left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}
+          style={FULL_BLEED_SECTION_STYLE}
           ref={updatesSectionRef}
         >
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
@@ -1550,7 +1554,7 @@ export function LandingApp({ initialLocale } = {}) {
 
         <section
           className="relative mt-36 w-screen max-w-none md:mt-44"
-          style={{ left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}
+          style={FULL_BLEED_SECTION_STYLE}
           id="horizontal-showcase"
           dir="ltr"
           ref={horizontalSectionRef}

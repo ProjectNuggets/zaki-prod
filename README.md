@@ -115,6 +115,7 @@ ZAKI_EMAIL_MODE=console
 ZAKI_AGENT_BACKEND_ENABLED=true
 NULLCLAW_BASE_URL=http://localhost:8788
 NULLCLAW_INTERNAL_TOKEN=replace_me
+ZAKI_AGENT_WEBHOOK_BASE_URL=https://agent-dev.zaki.com
 ```
 
 **Frontend** (`.env`):

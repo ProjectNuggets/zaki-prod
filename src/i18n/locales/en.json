@@ -97,7 +97,8 @@
     "nav": {
       "newSpace": "New space",
       "spaces": "Spaces",
-      "zakiBot": "ZAKI Bot",
+      "zakiBot": "ZAKI BOT",
+      "botChat": "Chat",
       "search": "Search",
       "newChat": "New chat"
     },

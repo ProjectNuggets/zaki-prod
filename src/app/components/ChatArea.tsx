@@ -5,7 +5,15 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiRequest, buildApiUrl, getApiBase } from "@/lib/api";
+import {
+  apiRequest,
+  buildApiUrl,
+  fetchAgentHistory,
+  fetchUsageQuota,
+  getApiBase,
+  provisionAgent,
+  type UsageQuotaSurface,
+} from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   readResponseFormattingConfig,
@@ -21,6 +29,8 @@ import {
   EditInstructionsModal,
   MemoryConfirmationPanel,
 } from "./chat";
+import type { BotToolCall } from "./chat/BotToolCallBlock";
+import type { BotStatusEvent } from "./chat/BotStatusRail";
 
 import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
@@ -29,6 +39,13 @@ import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryRail } from "./memory/MemoryRail";
+import {
+  createZakiBotThread,
+  isZakiBotSpaceId,
+  ZAKI_BOT_LABEL,
+  ZAKI_BOT_SPACE_ID,
+  ZAKI_BOT_THREAD_ID,
+} from "@/lib/zakiBot";
 import {
   getActivationProgress,
   markFirstMemorySaved,
@@ -220,6 +237,167 @@ function normalizeAgentSocketUrl(rawUrl: string | null | undefined) {
   return normalized;
 }
 
+function extractVisibleAgentChunk(payload: Record<string, unknown>) {
+  const content = payload.content;
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return trimmed || null;
+  }
+  if (content && typeof content === "object") {
+    const typedContent = content as Record<string, unknown>;
+    const nested =
+      typedContent.message ||
+      typedContent.content ||
+      typedContent.status ||
+      typedContent.toolName ||
+      typedContent.tool ||
+      typedContent.name;
+    return typeof nested === "string" && nested.trim() ? nested.trim() : null;
+  }
+  const direct =
+    payload.message ||
+    payload.content ||
+    payload.status ||
+    payload.toolName ||
+    payload.tool;
+  return typeof direct === "string" && direct.trim() ? direct.trim() : null;
+}
+
+function inferStreamingModeFromContext(rawValue: string): "thinking" | "researching" | "writing" {
+  const normalized = String(rawValue || "").trim().toLowerCase();
+  if (!normalized) return "thinking";
+  if (
+    normalized.includes("search") ||
+    normalized.includes("web") ||
+    normalized.includes("retrieval") ||
+    normalized.includes("browse") ||
+    normalized.includes("lookup") ||
+    normalized.includes("tool") ||
+    normalized.includes("fetch") ||
+    normalized.includes("crawl") ||
+    normalized.includes("exa") ||
+    normalized.includes("brave") ||
+    normalized.includes("looking up") ||
+    normalized.includes("query")
+  ) {
+    return "researching";
+  }
+  if (
+    normalized.includes("compose") ||
+    normalized.includes("final") ||
+    normalized.includes("respond") ||
+    normalized.includes("draft") ||
+    normalized.includes("summarize") ||
+    normalized.includes("summary") ||
+    normalized.includes("write")
+  ) {
+    return "writing";
+  }
+  return "thinking";
+}
+
+function extractProgressPayload(payload: Record<string, unknown>) {
+  const source =
+    (payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : payload) || payload;
+  const phaseRaw =
+    (typeof source.phase === "string" && source.phase) ||
+    (typeof payload.phase === "string" && payload.phase) ||
+    "";
+  const stateRaw =
+    (typeof source.state === "string" && source.state) ||
+    (typeof payload.state === "string" && payload.state) ||
+    "";
+  const labelRaw =
+    (typeof source.label === "string" && source.label) ||
+    (typeof source.status === "string" && source.status) ||
+    (typeof payload.label === "string" && payload.label) ||
+    "";
+  const toolRaw =
+    (typeof source.tool === "string" && source.tool) ||
+    (typeof source.toolName === "string" && source.toolName) ||
+    (typeof payload.tool === "string" && payload.tool) ||
+    undefined;
+  const iterationRaw =
+    typeof source.iteration === "number"
+      ? source.iteration
+      : typeof payload.iteration === "number"
+        ? payload.iteration
+        : undefined;
+  const durationMsRaw =
+    typeof source.duration_ms === "number"
+      ? source.duration_ms
+      : typeof source.durationMs === "number"
+        ? source.durationMs
+        : typeof payload.duration_ms === "number"
+          ? payload.duration_ms
+          : typeof payload.durationMs === "number"
+            ? payload.durationMs
+            : undefined;
+
+  const phase = String(phaseRaw || "").trim() || null;
+  const state = String(stateRaw || "").trim() || null;
+  const label = String(labelRaw || "").trim() || null;
+  const tool = String(toolRaw || "").trim() || null;
+  const iteration =
+    typeof iterationRaw === "number" && Number.isFinite(iterationRaw)
+      ? Math.max(0, Math.trunc(iterationRaw))
+      : null;
+  const durationMs =
+    typeof durationMsRaw === "number" && Number.isFinite(durationMsRaw)
+      ? Math.max(0, Math.trunc(durationMsRaw))
+      : null;
+
+  const fallbackText = extractVisibleAgentChunk(source);
+  const text = label || fallbackText;
+  if (!text && !phase && !state && !tool) return null;
+  return { phase, state, label, tool, iteration, durationMs, text: text || null };
+}
+
+function extractToolCallPayload(payload: Record<string, unknown>) {
+  const source =
+    (payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : payload) || payload;
+  const requestId =
+    (typeof source.requestId === "string" && source.requestId) ||
+    (typeof source.request_id === "string" && source.request_id) ||
+    (typeof payload.requestId === "string" && payload.requestId) ||
+    (typeof payload.request_id === "string" && payload.request_id) ||
+    undefined;
+  const name =
+    (typeof source.name === "string" && source.name) ||
+    (typeof source.toolName === "string" && source.toolName) ||
+    (typeof source.tool === "string" && source.tool) ||
+    "unknown_tool";
+  const args =
+    source.arguments && typeof source.arguments === "object"
+      ? (source.arguments as Record<string, unknown>)
+      : {};
+  return { requestId, name, arguments: args };
+}
+
+function extractToolResultPayload(payload: Record<string, unknown>) {
+  const source =
+    (payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : payload) || payload;
+  const requestId =
+    (typeof source.requestId === "string" && source.requestId) ||
+    (typeof source.request_id === "string" && source.request_id) ||
+    (typeof payload.requestId === "string" && payload.requestId) ||
+    (typeof payload.request_id === "string" && payload.request_id) ||
+    undefined;
+  const okRaw = source.ok;
+  const ok =
+    okRaw === true ||
+    (okRaw !== false && typeof source.error !== "string");
+  const error = typeof source.error === "string" ? source.error : undefined;
+  const result = source.result;
+  return { requestId, ok, error, result };
+}
+
 export function ChatArea() {
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
@@ -232,6 +410,9 @@ export function ChatArea() {
     exported: isRtl ? "تم تصدير المحادثة" : "Chat exported",
     exportFailed: isRtl ? "تعذر تصدير هذه المحادثة" : "Unable to export this chat",
     dragPrompt: isRtl ? "أسقط الملفات داخل المساحة ليتم استخدامها" : "Drop files into a workspace to ground them",
+    botUploadUnavailable: isRtl
+      ? "رفع الملفات غير متاح داخل بوت زكي بعد."
+      : "File uploads are not available inside ZAKI Bot yet.",
     shareConversationAria: isRtl ? "مشاركة المحادثة" : "Share conversation",
     shareConversation: isRtl ? "مشاركة" : "Share",
     moreOptionsAria: isRtl ? "خيارات إضافية" : "More options",
@@ -283,7 +464,23 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching">("thinking");
+  const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching" | "writing">("thinking");
+  const [zakiBotToolCalls, setZakiBotToolCalls] = useState<BotToolCall[]>([]);
+  const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
+  const [zakiBotProgressTerminalReason, setZakiBotProgressTerminalReason] = useState<
+    "done" | "error" | "abort" | "stream_end" | null
+  >(null);
+  const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
+  const [zakiBotHistorySource, setZakiBotHistorySource] = useState<string>("");
+  const [freeDailyQuota, setFreeDailyQuota] = useState<{
+    unlimited: boolean;
+    limit: number | null;
+    used: number;
+    remaining: number | null;
+    resetAt: string | null;
+    surface: UsageQuotaSurface;
+    bucket: string | null;
+  } | null>(null);
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
@@ -291,6 +488,9 @@ export function ChatArea() {
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const zakiBotProcessClearTimerRef = useRef<number | null>(null);
+  const zakiBotProvisionedRef = useRef(false);
+  const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
 
   // Memory state - works for both auto-save and manual modes
   const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
@@ -481,7 +681,6 @@ export function ChatArea() {
 
   // Computed values
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
-  const showReady = !activeThreadId || messages.length === 0;
   const primarySpace = spacesList[0] ?? null;
   const homeConversationSpaceId = useMemo(() => {
     const zakiSpace = spacesList.find(
@@ -491,10 +690,44 @@ export function ChatArea() {
     const fixedSpace = spacesList.find((space) => Boolean(space.fixed));
     return fixedSpace?.id ?? primarySpace?.id ?? null;
   }, [primarySpace?.id, spacesList]);
-  const activeSpace = spacesList.find((space) => space.id === activeWorkspaceSlug) ?? null;
-  const activeThread = activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ?? null;
+  const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
+  const activeSpace =
+    spacesList.find((space) => space.id === activeWorkspaceSlug) ??
+    (isZakiBotActiveSpace
+      ? {
+          id: ZAKI_BOT_SPACE_ID,
+          title: ZAKI_BOT_LABEL,
+          description: "",
+          icon: "sparkles",
+          threads: [createZakiBotThread()],
+        }
+      : null);
+  const activeThread =
+    activeSpace?.threads?.find((thread) => thread.id === activeThreadId) ??
+    (isZakiBotActiveSpace && activeThreadId === ZAKI_BOT_THREAD_ID
+      ? createZakiBotThread()
+      : null);
+  const isMemoryPipelineEnabled = !isZakiBotActiveSpace;
+  const showReady = (!activeThreadId || messages.length === 0) && !isZakiBotActiveSpace;
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
+  const zakiBotQuotaInfo =
+    isZakiBotActiveSpace &&
+    freeDailyQuota &&
+    !freeDailyQuota.unlimited &&
+    typeof freeDailyQuota.limit === "number"
+      ? {
+          limit: freeDailyQuota.limit,
+          remaining: Math.max(
+            0,
+            Number(freeDailyQuota.remaining ?? freeDailyQuota.limit)
+          ),
+        }
+      : null;
+  const isZakiBotSendLocked = Boolean(
+    zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
+  );
 
   const handleCopyMessage = useCallback(async (message: Message) => {
     if (!message.content) return;
@@ -618,10 +851,14 @@ export function ChatArea() {
         toast.error(isRtl ? "اختر مساحة أولًا لإضافة الملفات." : "Select a space before adding files.");
         return;
       }
+      if (resolvedSpaceId === ZAKI_BOT_SPACE_ID) {
+        toast.error(chatCopy.botUploadUnavailable);
+        return;
+      }
       setFileUploadSpaceId(resolvedSpaceId);
       fileInputRef.current?.click();
     },
-    [activeWorkspaceSlug, isRtl, primarySpace?.id]
+    [activeWorkspaceSlug, chatCopy.botUploadUnavailable, isRtl, primarySpace?.id]
   );
 
   const handleWorkspaceFilesSelected = useCallback(
@@ -771,9 +1008,10 @@ export function ChatArea() {
   };
 
   const { data: historyData, isLoading: isHistoryLoading } = useMessages(
-    activeWorkspaceSlug,
-    activeThreadId
+    isZakiBotActiveSpace ? null : activeWorkspaceSlug,
+    isZakiBotActiveSpace ? null : activeThreadId
   );
+  const [isBotHistoryLoading, setIsBotHistoryLoading] = useState(false);
 
   // Helper to update assistant message content
   const updateAssistantContent = useCallback((threadSlug: string, assistantId: string, newContent: string) => {
@@ -836,6 +1074,315 @@ export function ChatArea() {
     []
   );
 
+  const clearZakiBotProgressVisuals = useCallback(() => {
+    if (zakiBotProcessClearTimerRef.current) {
+      window.clearTimeout(zakiBotProcessClearTimerRef.current);
+      zakiBotProcessClearTimerRef.current = null;
+    }
+    setZakiBotToolCalls([]);
+    setZakiBotStatusEvents([]);
+    setZakiBotProgressTerminalReason(null);
+  }, []);
+
+  const finalizeZakiBotProgress = useCallback(
+    (reason: "done" | "error" | "abort" | "stream_end") => {
+      if (!isZakiBotActiveSpace) return;
+      if (reason === "abort") {
+        clearZakiBotProgressVisuals();
+        return;
+      }
+      setZakiBotProgressTerminalReason(reason);
+      if (reason === "done") {
+        setStreamingIndicatorMode("writing");
+      }
+    },
+    [clearZakiBotProgressVisuals, isZakiBotActiveSpace]
+  );
+
+  const upsertZakiBotToolCall = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const { requestId, name, arguments: args } = extractToolCallPayload(payload);
+      setZakiBotProgressTerminalReason(null);
+      setStreamingIndicatorMode("researching");
+      setZakiBotToolCalls((prev) => {
+        if (requestId) {
+          const existingIndex = prev.findIndex((call) => call.requestId === requestId);
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            const existingCall = next[existingIndex];
+            if (!existingCall) return prev;
+            next[existingIndex] = {
+              ...existingCall,
+              name,
+              arguments: args,
+            };
+            return next;
+          }
+        }
+        const now = Date.now();
+        return [
+          ...prev,
+          {
+            id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            requestId,
+            name,
+            arguments: args,
+            timestamp: now,
+            startedAt: now,
+          },
+        ];
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const applyZakiBotToolResult = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const { requestId, ok, error, result } = extractToolResultPayload(payload);
+      setZakiBotProgressTerminalReason(null);
+      setZakiBotToolCalls((prev) => {
+        if (!prev.length) return prev;
+        const next = [...prev];
+        let targetIndex = -1;
+        if (requestId) {
+          targetIndex = next.findIndex((call) => call.requestId === requestId);
+        }
+        if (targetIndex < 0) {
+          targetIndex = [...next]
+            .reverse()
+            .findIndex((call) => !call.result);
+          if (targetIndex >= 0) {
+            targetIndex = next.length - 1 - targetIndex;
+          }
+        }
+        if (targetIndex < 0) return prev;
+        const existingCall = next[targetIndex];
+        if (!existingCall) return prev;
+        const finishedAt =
+          typeof existingCall.finishedAt === "number" ? existingCall.finishedAt : Date.now();
+        const durationMs = Math.max(0, finishedAt - existingCall.startedAt);
+        next[targetIndex] = {
+          ...existingCall,
+          finishedAt,
+          durationMs,
+          result: { ok, error, result },
+        };
+        return next;
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const upsertZakiBotProgressTool = useCallback(
+    (toolName: string, state: string | null, label: string | null, durationMs: number | null) => {
+      if (!isZakiBotActiveSpace) return;
+      const normalizedTool = toolName.trim().toLowerCase();
+      if (!normalizedTool) return;
+      const normalizedState = String(state || "").trim().toLowerCase();
+      const isTerminal =
+        normalizedState.includes("done") ||
+        normalizedState.includes("complete") ||
+        normalizedState.includes("success") ||
+        normalizedState.includes("ok") ||
+        normalizedState.includes("fail") ||
+        normalizedState.includes("error") ||
+        normalizedState.includes("abort") ||
+        normalizedState.includes("cancel");
+      const isFailure =
+        normalizedState.includes("fail") ||
+        normalizedState.includes("error") ||
+        normalizedState.includes("abort") ||
+        normalizedState.includes("cancel");
+      const now = Date.now();
+
+      setZakiBotToolCalls((prev) => {
+        const next = [...prev];
+        const targetIndex = [...next]
+          .reverse()
+          .findIndex((call) => {
+            const callName = String(call.name || "").trim().toLowerCase();
+            if (!callName) return false;
+            return callName === normalizedTool || callName.includes(normalizedTool) || normalizedTool.includes(callName);
+          });
+        const resolvedIndex =
+          targetIndex >= 0 ? next.length - 1 - targetIndex : next.findIndex((call) => !call.result);
+
+        if (resolvedIndex >= 0) {
+          const existing = next[resolvedIndex];
+          if (!existing) return prev;
+          const startedAt =
+            typeof existing.startedAt === "number"
+              ? existing.startedAt
+              : durationMs != null
+                ? Math.max(0, now - durationMs)
+                : now;
+          const finishedAt =
+            isTerminal && durationMs != null
+              ? startedAt + durationMs
+              : isTerminal
+                ? now
+                : existing.finishedAt;
+          const computedDurationMs =
+            durationMs != null
+              ? durationMs
+              : typeof finishedAt === "number"
+                ? Math.max(0, finishedAt - startedAt)
+                : existing.durationMs;
+          next[resolvedIndex] = {
+            ...existing,
+            name: existing.name || toolName,
+            startedAt,
+            ...(typeof finishedAt === "number" ? { finishedAt } : {}),
+            ...(typeof computedDurationMs === "number" ? { durationMs: computedDurationMs } : {}),
+            ...(isTerminal
+              ? {
+                  result: {
+                    ok: !isFailure,
+                    error: isFailure ? label || "Tool failed." : undefined,
+                    result: existing.result?.result,
+                  },
+                }
+              : {}),
+          };
+          return next;
+        }
+
+        const startedAt = durationMs != null ? Math.max(0, now - durationMs) : now;
+        const finishedAt = isTerminal ? startedAt + (durationMs ?? 0) : undefined;
+        return [
+          ...next,
+          {
+            id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: toolName,
+            arguments: {},
+            timestamp: now,
+            startedAt,
+            ...(typeof finishedAt === "number" ? { finishedAt } : {}),
+            ...(durationMs != null ? { durationMs } : {}),
+            ...(isTerminal
+              ? {
+                  result: {
+                    ok: !isFailure,
+                    error: isFailure ? label || "Tool failed." : undefined,
+                    result: undefined,
+                  },
+                }
+              : {}),
+          },
+        ];
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const pushZakiBotProgressEvent = useCallback(
+    (
+      payload: Record<string, unknown>,
+      source: "progress" | "status" = "progress"
+    ) => {
+      if (!isZakiBotActiveSpace) return;
+      const progress = extractProgressPayload(payload);
+      if (!progress) return;
+      const mode = inferStreamingModeFromContext(
+        [progress.phase, progress.state, progress.text, progress.tool]
+          .filter(Boolean)
+          .join(" ")
+      );
+      setZakiBotProgressTerminalReason(null);
+      setStreamingIndicatorMode(mode);
+      if (progress.tool) {
+        upsertZakiBotProgressTool(progress.tool, progress.state, progress.text, progress.durationMs);
+      }
+      const text =
+        progress.text ||
+        [progress.phase, progress.state].filter(Boolean).join(" • ") ||
+        "Processing update";
+      setZakiBotStatusEvents((prev) => {
+        const last = prev[prev.length - 1];
+        if (
+          last?.text === text &&
+          last.phase === progress.phase &&
+          last.state === progress.state &&
+          last.tool === progress.tool
+        ) {
+          return prev;
+        }
+        const next = [
+          ...prev,
+          {
+            id: `progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+            timestamp: Date.now(),
+            source,
+            phase: progress.phase,
+            state: progress.state,
+            label: progress.label,
+            tool: progress.tool,
+            iteration: progress.iteration,
+            durationMs: progress.durationMs,
+          } satisfies BotStatusEvent,
+        ];
+        return next.slice(-10);
+      });
+    },
+    [isZakiBotActiveSpace, upsertZakiBotProgressTool]
+  );
+
+  const applyQuotaHeaders = useCallback((headers: Headers, fallbackSurface: UsageQuotaSurface) => {
+    const limitRaw = String(headers.get("x-zaki-quota-limit") || "").trim().toLowerCase();
+    if (!limitRaw) return;
+    const remainingRaw = String(headers.get("x-zaki-quota-remaining") || "").trim().toLowerCase();
+    const resetAtRaw = String(headers.get("x-zaki-quota-reset-at") || "").trim();
+    const headerSurface = String(headers.get("x-zaki-quota-surface") || "").trim().toLowerCase();
+    const headerBucket = String(headers.get("x-zaki-quota-bucket") || "").trim();
+    const normalizedSurface: UsageQuotaSurface =
+      headerSurface === "zaki_bot" ? "zaki_bot" : fallbackSurface;
+    const unlimited = limitRaw === "unlimited";
+    const parsedLimit = Number(limitRaw);
+    const parsedRemaining = Number(remainingRaw);
+    setFreeDailyQuota({
+      unlimited,
+      limit: unlimited || !Number.isFinite(parsedLimit) ? null : parsedLimit,
+      used:
+        unlimited || !Number.isFinite(parsedLimit) || !Number.isFinite(parsedRemaining)
+          ? 0
+          : Math.max(0, parsedLimit - parsedRemaining),
+      remaining:
+        unlimited || !Number.isFinite(parsedRemaining)
+          ? null
+          : Math.max(0, Math.floor(parsedRemaining)),
+      resetAt: resetAtRaw || null,
+      surface: normalizedSurface,
+      bucket: headerBucket || null,
+    });
+  }, []);
+
+  const refreshUsageQuota = useCallback(async () => {
+    try {
+      const { response, data } = await fetchUsageQuota(quotaSurface);
+      if (!response.ok) return;
+      const normalizedSurface: UsageQuotaSurface =
+        data.surface === "zaki_bot" ? "zaki_bot" : quotaSurface;
+      setFreeDailyQuota({
+        unlimited: data.unlimited === true,
+        limit: typeof data.limit === "number" ? data.limit : null,
+        used: Math.max(0, Number(data.used || 0)),
+        remaining: typeof data.remaining === "number" ? Math.max(0, Number(data.remaining)) : null,
+        resetAt: typeof data.resetAt === "string" ? data.resetAt : null,
+        surface: normalizedSurface,
+        bucket: typeof data.bucket === "string" && data.bucket.trim() ? data.bucket.trim() : null,
+      });
+    } catch {
+      // Best-effort status sync.
+    }
+  }, [quotaSurface]);
+
+  useEffect(() => {
+    void refreshUsageQuota();
+  }, [refreshUsageQuota]);
+
   // Stream via WebSocket for agent invocation URLs
   const streamAgentInvocation = useCallback(async (
     agentUrl: string,
@@ -854,6 +1401,7 @@ export function ChatArea() {
       let hasAnswer = false;
       let autoReplySent = false;
       let settled = false;
+      let sawTerminalEvent = false;
 
       const cleanup = () => {
         signal?.removeEventListener("abort", handleAbort);
@@ -874,6 +1422,7 @@ export function ChatArea() {
       };
 
       const handleAbort = () => {
+        finalizeZakiBotProgress("abort");
         try {
           ws.close(1000, "aborted");
         } catch {
@@ -918,8 +1467,31 @@ export function ChatArea() {
 
           if (payload?.type === "reportStreamEvent" && payload?.content) {
             supportsAgentStreaming = true;
-            const report = payload.content as { type?: string; content?: string };
+            const report = payload.content as { type?: string; content?: unknown };
+            const reportPayload =
+              report?.content && typeof report.content === "object"
+                ? ({ ...(report.content as Record<string, unknown>), type: report.type } as Record<string, unknown>)
+                : ({ type: report?.type, content: report?.content } as Record<string, unknown>);
             if (report?.type === "removeStatusResponse") return;
+            if (isZakiBotActiveSpace && report?.type === "progress") {
+              pushZakiBotProgressEvent(reportPayload, "progress");
+              return;
+            }
+            if (isZakiBotActiveSpace && report?.type === "statusResponse") {
+              pushZakiBotProgressEvent(reportPayload, "status");
+              return;
+            }
+            if (isZakiBotActiveSpace && report?.type === "toolCallInvocation") {
+              upsertZakiBotToolCall({ content: report.content, type: "toolCallInvocation" });
+              return;
+            }
+            if (
+              isZakiBotActiveSpace &&
+              (report?.type === "toolCallResult" || report?.type === "tool_result")
+            ) {
+              applyZakiBotToolResult({ content: report.content, type: report?.type });
+              return;
+            }
             if (report?.type === "fullTextResponse") {
               accumulated = String(report.content || "");
               updateAssistantContent(threadSlug, assistantId, accumulated);
@@ -932,27 +1504,63 @@ export function ChatArea() {
               if (accumulated) hasAnswer = true;
               return;
             }
-            if (report?.type === "toolCallInvocation") {
-              return;
+            if (report?.type === "toolCallInvocation") return;
+            if (report?.type === "statusResponse") return;
+          }
+
+          if (payload?.type === "progress") {
+            if (isZakiBotActiveSpace) {
+              pushZakiBotProgressEvent(payload, "progress");
             }
-            if (report?.type === "statusResponse") {
-              return;
-            }
+            return;
           }
 
           if (payload?.type === "statusResponse") {
+            if (isZakiBotActiveSpace) {
+              pushZakiBotProgressEvent(payload, "status");
+            }
             return;
           }
 
           if (payload?.type === "toolCallInvocation") {
+            if (isZakiBotActiveSpace) {
+              upsertZakiBotToolCall(payload);
+            }
+            return;
+          }
+          if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
+            if (isZakiBotActiveSpace) {
+              applyZakiBotToolResult(payload);
+            }
             return;
           }
 
           if (payload?.type === "wssFailure") {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("error");
             const errorText =
               (typeof payload.content === "string" && payload.content) ||
               "Agent connection failed.";
             updateAssistantError(threadSlug, assistantId, errorText, "agent_error");
+            ws.close();
+            return;
+          }
+
+          if (payload?.type === "error" || payload?.error === true) {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("error");
+            const errorText =
+              (typeof payload.message === "string" && payload.message) ||
+              (typeof payload.error === "string" && payload.error) ||
+              "Agent connection failed.";
+            updateAssistantError(threadSlug, assistantId, errorText, "agent_error");
+            ws.close();
+            return;
+          }
+
+          if (payload?.type === "done") {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("done");
             ws.close();
             return;
           }
@@ -977,6 +1585,8 @@ export function ChatArea() {
           }
 
           if (payload.close || payload.type === "finalizeResponseStream") {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("done");
             ws.close();
             return;
           }
@@ -990,11 +1600,25 @@ export function ChatArea() {
           resolveOnce();
           return;
         }
+        finalizeZakiBotProgress("error");
         rejectOnce(new Error("Connection failed."));
       };
-      ws.onclose = () => resolveOnce();
+      ws.onclose = () => {
+        if (!signal?.aborted && !sawTerminalEvent) {
+          finalizeZakiBotProgress("stream_end");
+        }
+        resolveOnce();
+      };
     });
-  }, [updateAssistantContent]);
+  }, [
+    applyZakiBotToolResult,
+    finalizeZakiBotProgress,
+    isZakiBotActiveSpace,
+    pushZakiBotProgressEvent,
+    updateAssistantContent,
+    updateAssistantError,
+    upsertZakiBotToolCall,
+  ]);
 
   // Stream chat message via fetch (POST)
   const streamChatMessage = useCallback(async ({
@@ -1017,7 +1641,7 @@ export function ChatArea() {
     const shouldDisableResponseEnvelope =
       responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
     const isZakiAgentSpace =
-      String(workspaceSlug || "").trim().toLowerCase() === "zaki-agent";
+      String(workspaceSlug || "").trim().toLowerCase() === ZAKI_BOT_SPACE_ID;
     const requestPath = isZakiAgentSpace
       ? "/api/agent/chat/stream"
       : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
@@ -1048,6 +1672,9 @@ export function ChatArea() {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
       let errorCode: string | null = null;
+      let quotaLimit: number | null = null;
+      let quotaResetAt: string | null = null;
+      let quotaSurfaceCode: UsageQuotaSurface | null = null;
       const requestId = response.headers.get("x-request-id");
       const errorContentType = response.headers.get("content-type") || "";
       try {
@@ -1056,9 +1683,23 @@ export function ChatArea() {
             error?: string;
             message?: string;
             code?: string;
+            limit?: number;
+            resetAt?: string;
+            surface?: string;
           };
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
+          }
+          if (typeof data.limit === "number" && Number.isFinite(data.limit)) {
+            quotaLimit = data.limit;
+          }
+          if (typeof data.resetAt === "string" && data.resetAt.trim()) {
+            quotaResetAt = data.resetAt.trim();
+          }
+          if (typeof data.surface === "string" && data.surface.trim().toLowerCase() === "zaki_bot") {
+            quotaSurfaceCode = "zaki_bot";
+          } else if (typeof data.surface === "string" && data.surface.trim().toLowerCase() === "app_chat") {
+            quotaSurfaceCode = "app_chat";
           }
           if (typeof data.message === "string" && data.message.trim()) {
             message = data.message;
@@ -1066,6 +1707,21 @@ export function ChatArea() {
             message = data.error;
           } else if (errorCode === "access_expired") {
             message = "Access code required. Redeem a fresh code to keep chatting.";
+          } else if (errorCode === "daily_limit_reached") {
+            const safeLimit = quotaLimit ?? 5;
+            const resetLabel = quotaResetAt
+              ? new Date(quotaResetAt).toLocaleString()
+              : "tomorrow";
+            const isBotQuota = quotaSurfaceCode === "zaki_bot" || isZakiAgentSpace;
+            if (isBotQuota) {
+              message = isRtl
+                ? `وصلت إلى حد ZAKI BOT اليومي (${safeLimit}). سيُعاد التعيين عند ${resetLabel}. نسخة BOT premium قريبًا.`
+                : `You reached today's ZAKI BOT limit (${safeLimit}). Resets at ${resetLabel}. BOT premium is coming soon.`;
+            } else {
+              message = isRtl
+                ? `وصلت إلى الحد اليومي المجاني (${safeLimit}). سيُعاد التعيين عند ${resetLabel}.`
+                : `You reached today's free limit (${safeLimit}). Resets at ${resetLabel}.`;
+            }
           }
         } else {
           const text = (await response.text()).trim();
@@ -1086,6 +1742,8 @@ export function ChatArea() {
       throw new Error("Chat stream returned no data.");
     }
 
+    applyQuotaHeaders(response.headers, isZakiAgentSpace ? "zaki_bot" : "app_chat");
+
     const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
       const direct =
         (payload.agentInvocationUrl as string | undefined) ||
@@ -1105,10 +1763,32 @@ export function ChatArea() {
       payload: Record<string, unknown>,
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
-      if (eventType === "done") {
+      const payloadType = typeof payload.type === "string" ? payload.type : "";
+      if (isZakiAgentSpace && eventType === "token") {
+        const tokenChunk =
+          (typeof payload.delta === "string" && payload.delta) ||
+          (typeof payload.token === "string" && payload.token) ||
+          (typeof payload.text === "string" && payload.text) ||
+          (typeof payload.chunk === "string" && payload.chunk) ||
+          (typeof payload.content === "string" && payload.content) ||
+          "";
+        return tokenChunk ? { chunk: tokenChunk } : {};
+      }
+      if (
+        eventType === "done" ||
+        payloadType === "done" ||
+        payload.close === true ||
+        payloadType === "finalizeResponseStream"
+      ) {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("done");
+        }
         return { done: true };
       }
       if (eventType === "error") {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("error");
+        }
         const msg =
           (typeof payload.message === "string" && payload.message) ||
           (typeof payload.error === "string" && payload.error) ||
@@ -1120,7 +1800,7 @@ export function ChatArea() {
         );
       }
 
-      if (eventType === "memory_used" && Array.isArray(payload.sources)) {
+      if (isMemoryPipelineEnabled && eventType === "memory_used" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
           assistantId,
@@ -1128,7 +1808,7 @@ export function ChatArea() {
         );
         return {};
       }
-      if (payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
+      if (isMemoryPipelineEnabled && payload?.type === "memoryUsed" && Array.isArray(payload.sources)) {
         updateAssistantSources(
           threadSlug,
           assistantId,
@@ -1143,18 +1823,44 @@ export function ChatArea() {
           return { agentUrl };
         }
       }
+      if (eventType === "progress" || payload?.type === "progress") {
+        if (isZakiBotActiveSpace) {
+          pushZakiBotProgressEvent(payload, "progress");
+        }
+        return {};
+      }
       if (
         eventType === "status" ||
         payload?.type === "statusResponse" ||
         payload?.type === "toolCallInvocation"
       ) {
+        if (isZakiBotActiveSpace) {
+          if (payload?.type === "toolCallInvocation") {
+            upsertZakiBotToolCall(payload);
+            return {};
+          }
+          pushZakiBotProgressEvent(payload, "status");
+          return {};
+        }
+        return {};
+      }
+      if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
+        if (isZakiBotActiveSpace) {
+          applyZakiBotToolResult(payload);
+        }
         return {};
       }
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("error");
+        }
         throw new Error(payload.error.trim());
       }
 
       if (payload?.type === "error" || payload?.error === true) {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("error");
+        }
         const errorMessage =
           (typeof payload.message === "string" && payload.message.trim()) ||
           (typeof payload.error === "string" && payload.error.trim()) ||
@@ -1166,10 +1872,6 @@ export function ChatArea() {
         );
       }
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return { done: true };
-      }
-
       const chunk =
         (typeof payload.delta === "string" && payload.delta) ||
         (typeof payload.textResponse === "string" && payload.textResponse) ||
@@ -1177,14 +1879,11 @@ export function ChatArea() {
         (typeof payload.message === "string" && payload.message) ||
         "";
 
-      if (payload?.close === true || payload?.type === "finalizeResponseStream") {
-        return chunk ? { chunk, done: true } : { done: true };
-      }
-
       return chunk ? { chunk } : {};
     };
 
     const contentType = response.headers.get("content-type") || "";
+    let sawTerminalEvent = false;
     
     // If JSON response, check for agent invocation URL
     if (contentType.includes("application/json")) {
@@ -1208,6 +1907,12 @@ export function ChatArea() {
           normalizeAssistantFormatting(message, result.chunk)
         );
       }
+      if (result.done) {
+        sawTerminalEvent = true;
+      }
+      if (isZakiAgentSpace && !sawTerminalEvent && !signal?.aborted) {
+        finalizeZakiBotProgress("stream_end");
+      }
       return;
     }
 
@@ -1217,17 +1922,39 @@ export function ChatArea() {
     let accumulated = "";
     let buffer = "";
     let streamClosed = false;
+    let renderedLength = 0;
+    let renderTimer: number | null = null;
+
+    const flushRenderedContent = () => {
+      if (renderTimer) {
+        window.clearTimeout(renderTimer);
+        renderTimer = null;
+      }
+      if (renderedLength === accumulated.length) return;
+      renderedLength = accumulated.length;
+      updateAssistantContent(threadSlug, assistantId, accumulated);
+    };
 
     const appendChunk = (chunk: string) => {
       if (!chunk) return;
       accumulated += chunk;
-      updateAssistantContent(threadSlug, assistantId, accumulated);
+      if (renderTimer != null) return;
+      renderTimer = window.setTimeout(() => {
+        renderTimer = null;
+        flushRenderedContent();
+      }, 32);
     };
 
     const processRawData = async (raw: string) => {
       const value = raw.trim();
       if (!value || value === "[DONE]") {
-        if (value === "[DONE]") streamClosed = true;
+        if (value === "[DONE]") {
+          streamClosed = true;
+          sawTerminalEvent = true;
+          if (isZakiAgentSpace) {
+            finalizeZakiBotProgress("done");
+          }
+        }
         return;
       }
       let payload: Record<string, unknown>;
@@ -1248,6 +1975,8 @@ export function ChatArea() {
         appendChunk(result.chunk);
       }
       if (result.done) {
+        sawTerminalEvent = true;
+        flushRenderedContent();
         streamClosed = true;
         return;
       }
@@ -1280,10 +2009,13 @@ export function ChatArea() {
           const payload = JSON.parse(payloadText) as Record<string, unknown>;
           const result = readPayloadChunk(payload, eventType);
           if (result.done) {
+            sawTerminalEvent = true;
+            flushRenderedContent();
             streamClosed = true;
             return;
           }
           if (result.agentUrl) {
+            flushRenderedContent();
             await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
             try {
               await reader.cancel();
@@ -1325,17 +2057,30 @@ export function ChatArea() {
       await processSseBlock(trailing);
     }
 
+    if (isZakiAgentSpace && !sawTerminalEvent && !signal?.aborted) {
+      finalizeZakiBotProgress("stream_end");
+    }
+
+    flushRenderedContent();
     const finalized = normalizeAssistantFormatting(message, accumulated);
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
   }, [
-    spacesList,
-    responseFormattingConfig.disableResponseEnvelope,
+    applyQuotaHeaders,
+    applyZakiBotToolResult,
+    finalizeZakiBotProgress,
+    isRtl,
+    isZakiBotActiveSpace,
+    isMemoryPipelineEnabled,
+    pushZakiBotProgressEvent,
     queryModeEnabled,
+    responseFormattingConfig.disableResponseEnvelope,
+    spacesList,
     streamAgentInvocation,
     updateAssistantContent,
     updateAssistantSources,
+    upsertZakiBotToolCall,
   ]);
 
   // Check for memories - Auto-Save or Manual mode
@@ -1360,7 +2105,7 @@ export function ChatArea() {
 
   const syncMemoryStatus = useCallback(
     async (notifyOnNewConflicts = false) => {
-      if (!authUserId) return;
+      if (!authUserId || !isMemoryPipelineEnabled) return;
       try {
         const statusResponse = await apiRequest("/api/memory/status");
         if (!statusResponse.ok) return;
@@ -1458,12 +2203,12 @@ export function ChatArea() {
         // Sync is best-effort and should never block chat.
       }
     },
-    [authUserId]
+    [authUserId, isMemoryPipelineEnabled]
   );
 
   const requestMemoryStatusSync = useCallback(
     (notifyOnNewConflicts = false, force = false) => {
-      if (!authUserId) return;
+      if (!authUserId || !isMemoryPipelineEnabled) return;
       const now = Date.now();
       const elapsed = now - lastMemoryStatusSyncAtRef.current;
       if (!force && elapsed < MEMORY_STATUS_SYNC_THROTTLE_MS) {
@@ -1472,11 +2217,11 @@ export function ChatArea() {
       lastMemoryStatusSyncAtRef.current = now;
       void syncMemoryStatus(notifyOnNewConflicts);
     },
-    [authUserId, syncMemoryStatus]
+    [authUserId, isMemoryPipelineEnabled, syncMemoryStatus]
   );
 
   const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
-    if (!authUserId) return;
+    if (!authUserId || !isMemoryPipelineEnabled) return;
     if (memoryInFlightRef.current) {
       queuedMemoryCheckRef.current = { message, threadId, mode: modeOverride };
       return;
@@ -1602,12 +2347,27 @@ export function ChatArea() {
     activationProgress.firstMemorySaved,
     activeThreadId,
     flushMemoryQueue,
+    isMemoryPipelineEnabled,
     isRtl,
     memoryMode,
     requestMemoryStatusSync,
   ]);
 
   useEffect(() => {
+    if (!isMemoryPipelineEnabled) {
+      conflictCountRef.current = 0;
+      memoryStatusHydratedRef.current = false;
+      lastMemoryStatusSyncAtRef.current = 0;
+      memoryQueueRef.current = [];
+      queuedMemoryCheckRef.current = null;
+      memoryInFlightRef.current = false;
+      setPendingMemories([]);
+      setShowMemoryToast(false);
+      setShowConflictToast(false);
+      setMemoryConflictCount(0);
+      setMemoryError(null);
+      return;
+    }
     if (!authUserId) {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
@@ -1617,10 +2377,10 @@ export function ChatArea() {
       return;
     }
     requestMemoryStatusSync(false, true);
-  }, [authUserId, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
 
   useEffect(() => {
-    if (!authUserId) return;
+    if (!authUserId || !isMemoryPipelineEnabled) return;
     let cancelled = false;
     let reconnectTimer: number | null = null;
     let controller: AbortController | null = null;
@@ -1734,10 +2494,10 @@ export function ChatArea() {
       }
       controller?.abort();
     };
-  }, [authUserId, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
 
   useEffect(() => {
-    if (!authUserId) return;
+    if (!authUserId || !isMemoryPipelineEnabled) return;
 
     const handleFocus = () => {
       requestMemoryStatusSync(true, true);
@@ -1754,7 +2514,115 @@ export function ChatArea() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [authUserId, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
+
+  const ensureZakiBotProvisioned = useCallback(
+    async (silent = false) => {
+      if (!isZakiBotActiveSpace) return true;
+      if (zakiBotProvisionedRef.current) return true;
+      if (zakiBotProvisionPromiseRef.current) {
+        return zakiBotProvisionPromiseRef.current;
+      }
+
+      const pending = (async () => {
+        const { response, data } = await provisionAgent({
+          spaceId: ZAKI_BOT_SPACE_ID,
+          threadId: ZAKI_BOT_THREAD_ID,
+        });
+        if (!response.ok) {
+          const message = String(
+            (data as { error?: string; message?: string } | null)?.error ||
+              (data as { error?: string; message?: string } | null)?.message ||
+              "Unable to initialize ZAKI BOT."
+          );
+          if (!silent) toast.error(message);
+          return false;
+        }
+        zakiBotProvisionedRef.current = true;
+        return true;
+      })()
+        .catch((error) => {
+          if (!silent) {
+            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI BOT.");
+          }
+          return false;
+        })
+        .finally(() => {
+          zakiBotProvisionPromiseRef.current = null;
+        });
+
+      zakiBotProvisionPromiseRef.current = pending;
+      return pending;
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    void ensureZakiBotProvisioned(true);
+  }, [ensureZakiBotProvisioned, isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    zakiBotProvisionedRef.current = false;
+    zakiBotProvisionPromiseRef.current = null;
+  }, [authUserId]);
+
+  useEffect(() => {
+    if (isZakiBotActiveSpace) return;
+    clearZakiBotProgressVisuals();
+  }, [clearZakiBotProgressVisuals, isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    if (isStreaming) {
+      if (zakiBotProcessClearTimerRef.current) {
+        window.clearTimeout(zakiBotProcessClearTimerRef.current);
+        zakiBotProcessClearTimerRef.current = null;
+      }
+      setZakiBotProgressTerminalReason(null);
+      return;
+    }
+    if (zakiBotToolCalls.length === 0 && zakiBotStatusEvents.length === 0) return;
+    if (zakiBotProcessClearTimerRef.current) {
+      window.clearTimeout(zakiBotProcessClearTimerRef.current);
+    }
+
+    const clearDelayMs =
+      zakiBotProgressTerminalReason === "error"
+        ? 1500
+        : zakiBotProgressTerminalReason === "abort"
+          ? 0
+          : 600;
+
+    if (clearDelayMs <= 0) {
+      clearZakiBotProgressVisuals();
+      return;
+    }
+
+    zakiBotProcessClearTimerRef.current = window.setTimeout(() => {
+      clearZakiBotProgressVisuals();
+    }, clearDelayMs);
+
+    return () => {
+      if (zakiBotProcessClearTimerRef.current) {
+        window.clearTimeout(zakiBotProcessClearTimerRef.current);
+        zakiBotProcessClearTimerRef.current = null;
+      }
+    };
+  }, [
+    clearZakiBotProgressVisuals,
+    isStreaming,
+    isZakiBotActiveSpace,
+    zakiBotProgressTerminalReason,
+    zakiBotStatusEvents.length,
+    zakiBotToolCalls.length,
+  ]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    if (activeThreadId === ZAKI_BOT_THREAD_ID) return;
+    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`, { replace: true });
+  }, [activeThreadId, isZakiBotActiveSpace, navigate]);
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
@@ -1770,7 +2638,12 @@ export function ChatArea() {
       return;
     }
 
-    let threadId = activeThreadId;
+    const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
+    if (isZakiBotTarget) {
+      const provisioned = await ensureZakiBotProvisioned(false);
+      if (!provisioned) return;
+    }
+    let threadId = isZakiBotTarget ? ZAKI_BOT_THREAD_ID : activeThreadId;
     if (!threadId) {
       try {
         const response = await apiRequest(`/workspace/${resolvedWorkspaceSlug}/thread/new`, {
@@ -1853,6 +2726,9 @@ export function ChatArea() {
     setAttachments([]);
     const manualAgentPrefix = /^@agent\b/i.test(trimmed);
     const agentRequested = webSearchArmed || manualAgentPrefix;
+    if (isZakiBotTarget) {
+      clearZakiBotProgressVisuals();
+    }
     setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
     setIsStreaming(true);
     const streamController = new AbortController();
@@ -1889,13 +2765,22 @@ export function ChatArea() {
       void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
       if (isAbortError(error)) {
+        if (isZakiBotTarget) {
+          finalizeZakiBotProgress("abort");
+        }
         updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
         return;
       }
       if (error instanceof ChatRequestError && error.code === "access_expired") {
+        if (isZakiBotTarget) {
+          finalizeZakiBotProgress("error");
+        }
         toast.error(error.message);
         navigate("/pricing");
         return;
+      }
+      if (isZakiBotTarget) {
+        finalizeZakiBotProgress("error");
       }
       const errorMessage =
         error instanceof Error ? error.message : "ZAKI couldn't finish that reply. Please try again.";
@@ -1910,7 +2795,9 @@ export function ChatArea() {
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
-      setStreamingIndicatorMode("thinking");
+      if (!isZakiBotTarget) {
+        setStreamingIndicatorMode("thinking");
+      }
       setIsStreaming(false);
     }
   }, [
@@ -1919,6 +2806,9 @@ export function ChatArea() {
     activationProgress.firstMessageSent,
     authUserId,
     checkForSavedMemories,
+    clearZakiBotProgressVisuals,
+    ensureZakiBotProvisioned,
+    finalizeZakiBotProgress,
     isRtl,
     isStreaming,
     navigate,
@@ -1979,13 +2869,6 @@ export function ChatArea() {
     handleSend(HOME_STARTER_MESSAGE, [], workspaceSlug);
   }, [goToSpaces, handleSend, homeConversationSpaceId]);
 
-  const handleExampleSelect = useCallback(
-    (example: string) => {
-      handleSend(example, []);
-    },
-    [handleSend]
-  );
-
   // Track previous thread for summarization on switch
   const prevThreadRef = useRef<{ id: string; workspaceSlug: string; title: string } | null>(null);
 
@@ -1994,7 +2877,7 @@ export function ChatArea() {
     const prevThread = prevThreadRef.current;
     
     // If we had a previous thread and we're switching away from it
-    if (prevThread && prevThread.id !== activeThreadId) {
+    if (prevThread && prevThread.id !== activeThreadId && !isZakiBotSpaceId(prevThread.workspaceSlug)) {
       const prevMessages = messagesByThread[prevThread.id];
       
       // Only summarize if there were meaningful messages (at least 2 exchanges)
@@ -2052,6 +2935,50 @@ export function ChatArea() {
     }));
     historyLoadedRef.current[activeThreadId] = true;
   }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !activeThreadId) return;
+    if (historyLoadedRef.current[activeThreadId]) return;
+    if (messagesByThread[activeThreadId]?.length) {
+      historyLoadedRef.current[activeThreadId] = true;
+      return;
+    }
+
+    let cancelled = false;
+    setIsBotHistoryLoading(true);
+    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, zakiBotHistoryMode)
+      .then(({ response, data }) => {
+        if (cancelled || !response.ok) return;
+        const history = Array.isArray(data.history)
+          ? data.history.map((entry, index) => {
+              const role: "assistant" | "user" =
+                entry.role === "assistant" ? "assistant" : "user";
+              return {
+                id: String(entry.id || `bot-history-${index}`),
+                role,
+                content: String(entry.content || ""),
+              };
+            })
+          : [];
+        setZakiBotHistorySource(
+          String(data.historyMode || zakiBotHistoryMode) +
+            ":" +
+            String(data.source || "unknown")
+        );
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [activeThreadId]: history,
+        }));
+        historyLoadedRef.current[activeThreadId] = true;
+      })
+      .finally(() => {
+        if (!cancelled) setIsBotHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
 
   // First message transition effect
   useEffect(() => {
@@ -2235,6 +3162,10 @@ export function ChatArea() {
       if (autoDismissTimerRef.current) {
         window.clearTimeout(autoDismissTimerRef.current);
       }
+      if (zakiBotProcessClearTimerRef.current) {
+        window.clearTimeout(zakiBotProcessClearTimerRef.current);
+        zakiBotProcessClearTimerRef.current = null;
+      }
       streamAbortRef.current?.abort();
     };
   }, []);
@@ -2279,10 +3210,21 @@ export function ChatArea() {
     return (
       <ChatView
         messages={messages}
-        isHistoryLoading={isHistoryLoading}
+        isHistoryLoading={isHistoryLoading || (isZakiBotActiveSpace && isBotHistoryLoading)}
         isStreaming={isStreaming}
-        streamingLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : t("chat.thinking")}
+        streamingLabel={
+          streamingIndicatorMode === "researching"
+            ? t("chat.researching")
+            : streamingIndicatorMode === "writing"
+              ? (isRtl ? "يكتب" : "Writing")
+              : t("chat.thinking")
+        }
         streamingPillLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : undefined}
+        botToolCalls={isZakiBotActiveSpace ? zakiBotToolCalls : []}
+        botStatusEvents={isZakiBotActiveSpace ? zakiBotStatusEvents : []}
+        showBotTimeline={isZakiBotActiveSpace}
+        botMode={isZakiBotActiveSpace}
+        streamingMode={streamingIndicatorMode}
         firstMessageTransition={firstMessageTransition}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
@@ -2329,6 +3271,10 @@ export function ChatArea() {
             toast.error(isRtl ? "اختر مساحة أولًا لإضافة الملفات." : "Select a space before adding files.");
             return;
           }
+          if (targetSpaceId === ZAKI_BOT_SPACE_ID) {
+            toast.error(chatCopy.botUploadUnavailable);
+            return;
+          }
           handleWorkspaceFilesSelected(targetSpaceId, files);
         }
       }}
@@ -2355,6 +3301,11 @@ export function ChatArea() {
                 <span className="text-zaki-muted">/</span>
                 {headerThreadName}
               </span>
+              {isZakiBotActiveSpace ? (
+                <span className="rounded-full border border-zaki-subtle bg-white/70 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-zaki-muted">
+                  History {zakiBotHistorySource || `${zakiBotHistoryMode}:loading`}
+                </span>
+              ) : null}
               <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
                 <button
                   type="button"
@@ -2484,6 +3435,23 @@ export function ChatArea() {
                 onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
                 memoryMode={memoryMode}
                 onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
+                showUpgradeStrip={!isZakiBotActiveSpace}
+                sendLocked={isZakiBotSendLocked}
+                zakiBotMode={isZakiBotActiveSpace}
+                quotaBadge={
+                  zakiBotQuotaInfo
+                    ? {
+                        remaining: zakiBotQuotaInfo.remaining,
+                        limit: zakiBotQuotaInfo.limit,
+                        tone:
+                          zakiBotQuotaInfo.remaining <= 0
+                            ? "danger"
+                            : zakiBotQuotaInfo.remaining <= 2
+                              ? "warning"
+                              : "neutral",
+                      }
+                    : null
+                }
               />
             </div>
           )}

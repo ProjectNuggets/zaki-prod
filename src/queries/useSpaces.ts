@@ -1,6 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import type { PinnedFile, Space, Thread } from "@/types";
+import {
+  createZakiBotSpace,
+  createZakiBotThread,
+  isZakiBotSpaceId,
+  ZAKI_BOT_DESCRIPTION,
+  ZAKI_BOT_LABEL,
+} from "@/lib/zakiBot";
 
 // Keys
 export const spaceKeys = {
@@ -79,7 +86,25 @@ async function fetchSpaces(): Promise<Space[]> {
     })
   );
   
-  return spacesWithThreads;
+  const injectedBotSpace = createZakiBotSpace();
+  const withoutBot = spacesWithThreads.filter((space) => !isZakiBotSpaceId(space.id));
+  const existingBot = spacesWithThreads.find((space) => isZakiBotSpaceId(space.id));
+
+  return [
+    existingBot
+      ? {
+          ...existingBot,
+          ...injectedBotSpace,
+          id: injectedBotSpace.id,
+          title: ZAKI_BOT_LABEL,
+          description: ZAKI_BOT_DESCRIPTION,
+          icon: existingBot.icon || injectedBotSpace.icon,
+          fixed: true,
+          threads: [createZakiBotThread()],
+        }
+      : injectedBotSpace,
+    ...withoutBot,
+  ];
 }
 
 async function createSpace(space: {

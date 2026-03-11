@@ -17,6 +17,12 @@ cp .env.example .env
 - `ZAKI_AGENT_BACKEND_ENABLED` (`true` to enable Nullclaw adapter route)
 - `NULLCLAW_BASE_URL` (ex: `https://agent-staging.zaki.com`)
 - `NULLCLAW_INTERNAL_TOKEN` (must match Nullclaw `X-Internal-Token` allowlist)
+- `ZAKI_AGENT_WEBHOOK_BASE_URL` (optional but recommended; used for Telegram connect when UI does not pass a webhook URL, ex: `https://agent-dev.zaki.com`)
+- `ZAKI_AGENT_RATE_LIMIT_PER_MINUTE` (optional per-user limiter for `/api/agent/*`, default `60`)
+- `ZAKI_APP_CHAT_DAILY_PROMPT_LIMIT` (optional free-user daily cap for normal app chat, default `5`)
+- `ZAKI_APP_CHAT_DAILY_PROMPT_BUCKET` (optional bucket name for normal app chat quota, default `app_chat`)
+- `ZAKI_BOT_DAILY_PROMPT_LIMIT` (optional daily cap for ZAKI BOT chat for all users, default `5`)
+- `ZAKI_BOT_DAILY_PROMPT_BUCKET` (optional bucket name for ZAKI BOT quota, default `zaki_bot`)
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
 - `ZAKI_BILLING_PROVIDER` (`stripe`, `creem`, `paddle`, `external`, or `none`; default `stripe`)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
@@ -88,12 +94,17 @@ npm run migrate:sqlite
 - `GET /api/admin/admins` — list admin members and actor role (admin auth required)
 - `POST /api/admin/admins` — add/activate admin member (super admin auth required)
 - `DELETE /api/admin/admins/:email` — remove admin member (super admin auth required)
+- `GET /api/admin/rate-limits` — read live runtime rate-limit settings (super admin auth required)
+- `PATCH /api/admin/rate-limits` — update live runtime rate-limit settings (super admin auth required)
 - `POST /api/admin/access-codes` — create access codes (admin auth required)
 - `GET /api/admin/access-codes` — list/search access codes (admin auth required)
 - `PATCH /api/admin/access-codes/:id` — update/disable access code (admin auth required)
 - `POST /api/telemetry/client-error` — ingest frontend runtime errors for production observability
 - `GET /api/admin/telemetry/memory` — inspect memory pipeline telemetry and recent alerts (admin auth required)
 - `POST /api/agent/chat/stream` — authenticated SSE proxy to Nullclaw `/api/v1/chat/stream` (requires `ZAKI_AGENT_BACKEND_ENABLED=true`)
+- `GET /api/usage/quota?surface=app_chat|zaki_bot` — authenticated daily quota status (defaults to `app_chat`)
+- `GET /api/agent/history?spaceId=zaki-bot&threadId=main&mode=merged|app` — ZAKI BOT history (mode default: `merged`)
+- `GET /api/agent/diagnostics` — authenticated per-user agent diagnostics (no secrets returned)
 
 Billing endpoints may return `503` with code `billing_unavailable` when Stripe is not configured in the runtime environment.
 

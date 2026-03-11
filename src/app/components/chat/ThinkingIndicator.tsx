@@ -8,7 +8,11 @@ interface ThinkingIndicatorProps {
   pillLabel?: string;
 }
 
-export function ThinkingIndicator({ className, label, pillLabel }: ThinkingIndicatorProps) {
+export function ThinkingIndicator({
+  className,
+  label,
+  pillLabel,
+}: ThinkingIndicatorProps) {
   const { t } = useTranslation();
   const displayLabel = label || t("chat.thinking");
 

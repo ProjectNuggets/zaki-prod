@@ -4,13 +4,16 @@ import { toast } from "sonner";
 import {
   addAdminMember,
   AdminAccessCode,
+  AdminRateLimitSettings,
   AdminMember,
   AdminStudentVerificationUser,
   createAdminAccessCodes,
+  getAdminRateLimits,
   getAdminStudentVerification,
   listAdminMembers,
   listAdminAccessCodes,
   removeAdminMember,
+  updateAdminRateLimits,
   updateAdminStudentVerification,
   updateAdminAccessCode,
 } from "@/lib/api";
@@ -57,6 +60,13 @@ export function AdminAccessCodesPage() {
   const [studentLookupError, setStudentLookupError] = useState<string | null>(null);
   const [isStudentLookupLoading, setIsStudentLookupLoading] = useState(false);
   const [isStudentUpdateLoading, setIsStudentUpdateLoading] = useState(false);
+  const [rateLimits, setRateLimits] = useState<AdminRateLimitSettings | null>(null);
+  const [rateLimitsError, setRateLimitsError] = useState<string | null>(null);
+  const [isRateLimitsLoading, setIsRateLimitsLoading] = useState(false);
+  const [isRateLimitsSaving, setIsRateLimitsSaving] = useState(false);
+  const [appChatDailyLimitInput, setAppChatDailyLimitInput] = useState("");
+  const [zakiBotDailyLimitInput, setZakiBotDailyLimitInput] = useState("");
+  const [agentPerMinuteLimitInput, setAgentPerMinuteLimitInput] = useState("");
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,6 +156,41 @@ export function AdminAccessCodesPage() {
     }
   }, []);
 
+  const hydrateRateLimitInputs = useCallback((settings: AdminRateLimitSettings) => {
+    setAppChatDailyLimitInput(String(settings.appChatDailyPromptLimit));
+    setZakiBotDailyLimitInput(String(settings.zakiBotDailyPromptLimit));
+    setAgentPerMinuteLimitInput(String(settings.agentPerMinuteLimit));
+  }, []);
+
+  const loadRateLimits = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setRateLimits(null);
+      setRateLimitsError(null);
+      setIsRateLimitsLoading(false);
+      return;
+    }
+    setIsRateLimitsLoading(true);
+    setRateLimitsError(null);
+    try {
+      const { response, data } = await getAdminRateLimits();
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok || !data.success || !data.settings) {
+        throw new Error(data.error ?? "Unable to load rate limits.");
+      }
+      setRateLimits(data.settings);
+      hydrateRateLimitInputs(data.settings);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load rate limits.";
+      setRateLimitsError(message);
+      toast.error(message);
+    } finally {
+      setIsRateLimitsLoading(false);
+    }
+  }, [hydrateRateLimitInputs, isSuperAdmin]);
+
   useEffect(() => {
     void loadCodes(false);
   }, [loadCodes]);
@@ -153,6 +198,17 @@ export function AdminAccessCodesPage() {
   useEffect(() => {
     void loadAdminMembers();
   }, [loadAdminMembers]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    void loadRateLimits();
+  }, [isSuperAdmin, loadRateLimits]);
+
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    setRateLimits(null);
+    setRateLimitsError(null);
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     setDisableResponseEnvelope(
@@ -330,6 +386,54 @@ export function AdminAccessCodesPage() {
     );
   };
 
+  const onSaveRateLimits = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!isSuperAdmin || isRateLimitsSaving) return;
+
+    const appChatDailyPromptLimit = Number.parseInt(appChatDailyLimitInput, 10);
+    const zakiBotDailyPromptLimit = Number.parseInt(zakiBotDailyLimitInput, 10);
+    const agentPerMinuteLimit = Number.parseInt(agentPerMinuteLimitInput, 10);
+
+    if (!Number.isInteger(appChatDailyPromptLimit) || appChatDailyPromptLimit < 1) {
+      toast.error("App chat daily limit must be at least 1.");
+      return;
+    }
+    if (!Number.isInteger(zakiBotDailyPromptLimit) || zakiBotDailyPromptLimit < 1) {
+      toast.error("ZAKI BOT daily limit must be at least 1.");
+      return;
+    }
+    if (!Number.isInteger(agentPerMinuteLimit) || agentPerMinuteLimit < 1) {
+      toast.error("Agent per-minute limit must be at least 1.");
+      return;
+    }
+
+    setIsRateLimitsSaving(true);
+    setRateLimitsError(null);
+    try {
+      const { response, data } = await updateAdminRateLimits({
+        appChatDailyPromptLimit,
+        zakiBotDailyPromptLimit,
+        agentPerMinuteLimit,
+      });
+      if (response.status === 403) {
+        toast.error("Only super admin can update rate limits.");
+        return;
+      }
+      if (!response.ok || !data.success || !data.settings) {
+        throw new Error(data.error ?? "Unable to update rate limits.");
+      }
+      setRateLimits(data.settings);
+      hydrateRateLimitInputs(data.settings);
+      toast.success("Rate limits updated.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update rate limits.";
+      setRateLimitsError(message);
+      toast.error(message);
+    } finally {
+      setIsRateLimitsSaving(false);
+    }
+  };
+
   const lookupStudentVerification = async () => {
     const email = studentEmailInput.trim().toLowerCase();
     if (!email) {
@@ -419,6 +523,93 @@ export function AdminAccessCodesPage() {
             </span>
             . This does not change server defaults for other users.
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">Runtime</div>
+              <h2 className="mt-2 text-xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                Rate Limits
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                Live quota controls for app chat and ZAKI BOT. Changes apply immediately to newly
+                admitted requests.
+              </p>
+            </div>
+            {rateLimits ? (
+              <span className="rounded-full border border-zaki-subtle px-3 py-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                Buckets: {rateLimits.appChatDailyPromptBucket} / {rateLimits.zakiBotDailyPromptBucket}
+              </span>
+            ) : null}
+          </div>
+
+          {!isSuperAdmin ? (
+            <div className="mt-4 rounded-xl border border-zaki-subtle bg-zaki-hover px-4 py-3 text-sm text-zaki-secondary dark:bg-zaki-dark-bg/40 dark:text-zaki-dark-subtle">
+              Only super admin can edit runtime rate limits.
+            </div>
+          ) : (
+            <form className="mt-4 grid gap-3 md:grid-cols-3" onSubmit={onSaveRateLimits}>
+              <label className="flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                App chat daily limit
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={appChatDailyLimitInput}
+                  onChange={(event) => setAppChatDailyLimitInput(event.target.value)}
+                  className="rounded-xl border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                ZAKI BOT daily limit
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={zakiBotDailyLimitInput}
+                  onChange={(event) => setZakiBotDailyLimitInput(event.target.value)}
+                  className="rounded-xl border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                Agent per-minute limit
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={agentPerMinuteLimitInput}
+                  onChange={(event) => setAgentPerMinuteLimitInput(event.target.value)}
+                  className="rounded-xl border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"
+                />
+              </label>
+              <div className="md:col-span-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={isRateLimitsSaving || isRateLimitsLoading}
+                  className="zaki-btn zaki-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isRateLimitsSaving ? "Saving..." : "Save rate limits"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isRateLimitsLoading}
+                  className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => {
+                    void loadRateLimits();
+                  }}
+                >
+                  {isRateLimitsLoading ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {rateLimitsError ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+              {rateLimitsError}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">

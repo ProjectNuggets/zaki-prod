@@ -19,6 +19,12 @@ import { useSpaces } from "@/queries/useSpaces";
 import { useEntitlements } from "@/queries";
 import { useTranslation } from "react-i18next";
 import { SettingsModal } from "./sidebar/SettingsModal";
+import { ZakiBotControlPanel } from "./agent/ZakiBotControlPanel";
+import {
+  isZakiBotSpaceId,
+  ZAKI_BOT_LABEL,
+  ZAKI_BOT_SPACE_ID,
+} from "@/lib/zakiBot";
 
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
@@ -60,7 +66,7 @@ export function Sidebar() {
   const { user, logout, setUser } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
-  const { goHome, goToSpaces, goToThread } = useNavigation();
+  const { goHome, goToSpaces, goToThread, goToZakiBot } = useNavigation();
   const navigate = useNavigate();
   const setCollapsed = setSidebarCollapsed;
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
@@ -68,6 +74,7 @@ export function Sidebar() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [zakiBotControlsOpen, setZakiBotControlsOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
@@ -118,7 +125,6 @@ export function Sidebar() {
   const isDark = resolvedTheme() === "dark";
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
   const [spaceSearchQuery, setSpaceSearchQuery] = useState("");
-  const [workspaceTypeHint, setWorkspaceTypeHint] = useState("");
   const [removingDocumentKey, setRemovingDocumentKey] = useState<string | null>(null);
   const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
 
@@ -178,31 +184,6 @@ export function Sidebar() {
     };
   }, [profileMenuOpen, user?.username]);
 
-  useEffect(() => {
-    let active = true;
-    apiRequest("/api/documents/accepted-file-types")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (!active || !data?.types || typeof data.types !== "object") return;
-        const extensions = Array.from(
-          new Set(
-            Object.values(data.types)
-              .flat()
-              .map((value) => String(value || "").trim().toLowerCase())
-              .filter(Boolean)
-          )
-        );
-        setWorkspaceTypeHint(extensions.slice(0, 8).join(", "));
-      })
-      .catch(() => {
-        if (!active) return;
-        setWorkspaceTypeHint("");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  
   // Focus trap refs for modals
   const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
@@ -250,7 +231,7 @@ export function Sidebar() {
     });
   }, [normalizedSpaceSearch, spaces]);
   const filteredFixedSpaces = useMemo(
-    () => filteredSpaces.filter((space) => space.fixed),
+    () => filteredSpaces.filter((space) => space.fixed && !isZakiBotSpaceId(space.id)),
     [filteredSpaces]
   );
   const filteredUserSpaces = useMemo(
@@ -288,6 +269,14 @@ export function Sidebar() {
     window.dispatchEvent(new Event("zaki:clear-thread"));
     window.dispatchEvent(new Event("zaki:view-zaki-home"));
   }, [goHome]);
+
+  const openZakiBotView = useCallback(() => {
+    setSpaceSearchQuery("");
+    setExpandedSpace(ZAKI_BOT_SPACE_ID);
+    setActiveItem(ZAKI_BOT_SPACE_ID);
+    goToZakiBot();
+    window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
+  }, [goToZakiBot]);
 
   const resolveThreadTargetSpace = useCallback(() => {
     if (
@@ -789,6 +778,10 @@ export function Sidebar() {
   };
 
   const createThreadInSpace = async (spaceId: string | null) => {
+    if (isZakiBotSpaceId(spaceId)) {
+      openZakiBotView();
+      return;
+    }
     const resolvedSpaceId =
       spaceId && spaces.some((space) => space.id === spaceId)
         ? spaceId
@@ -1133,12 +1126,15 @@ export function Sidebar() {
               <EditIcon />
             </button>
             <button
-              className="size-9 rounded-zaki-md transition-colors flex items-center justify-center hover:bg-zaki-hover focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-              onClick={() => toast.info(t("input.menu.comingSoonToast"))}
+              className={cn(
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                isActive(ZAKI_BOT_SPACE_ID) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+              )}
+              onClick={openZakiBotView}
               onMouseUp={blurButtonOnPointerClick}
               type="button"
-              title={t("sidebar.nav.zakiBot")}
-              aria-label={t("sidebar.nav.zakiBot")}
+              title={ZAKI_BOT_LABEL}
+              aria-label={ZAKI_BOT_LABEL}
             >
               <CenterLogo className="size-4 text-zaki-brand" />
             </button>
@@ -1250,25 +1246,36 @@ export function Sidebar() {
           <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.spaces")}</span>
         </button>
 
-        <button
-          className="group relative flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left hover:bg-zaki-hover"
-          onClick={() => toast.info(t("input.menu.comingSoonToast"))}
-          onMouseUp={blurButtonOnPointerClick}
-          type="button"
-        >
-          <div className="size-5 flex items-center justify-center text-zaki-brand">
-            <CenterLogo className="size-4" />
-          </div>
-          <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.zakiBot")}</span>
-          <span
+        <div className="relative group">
+          <button
             className={cn(
-              "ml-auto inline-flex items-center rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted shadow-sm",
-              isRtl && "ml-0 mr-auto"
+              "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left",
+              isSpaceActive(ZAKI_BOT_SPACE_ID) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
             )}
+            onClick={openZakiBotView}
+            onMouseUp={blurButtonOnPointerClick}
+            type="button"
           >
-            {t("input.menu.comingSoonPill")}
-          </span>
-        </button>
+            <div className="size-5 flex items-center justify-center">
+              <div className="scale-[0.6]">
+                <CenterLogo />
+              </div>
+            </div>
+            <span className="text-zaki-secondary text-sm font-medium flex-1">{ZAKI_BOT_LABEL}</span>
+          </button>
+          <button
+            type="button"
+            className="absolute right-1 top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+            onClick={(event) => {
+              event.stopPropagation();
+              setZakiBotControlsOpen(true);
+            }}
+            aria-label={`${ZAKI_BOT_LABEL} settings`}
+          >
+            <Settings className="size-4 text-zaki-muted" />
+          </button>
+        </div>
+
       </div>
 
       {/* Divider */}
@@ -1323,7 +1330,9 @@ export function Sidebar() {
                   )}
                 >
                   <button
-                    onClick={() => handleSpaceToggle(space.id)}
+                    onClick={() =>
+                      isZakiBotSpaceId(space.id) ? openZakiBotView() : handleSpaceToggle(space.id)
+                    }
                     className={cn(
                       "min-w-0 flex-1 flex items-center gap-2 p-1.5 text-left",
                       isRtl && "text-right"
@@ -1339,7 +1348,20 @@ export function Sidebar() {
                       {space.title}
                     </span>
                   </button>
-                  {space.threads.length > 0 && (
+                  {isZakiBotSpaceId(space.id) && (
+                    <button
+                      type="button"
+                      className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setZakiBotControlsOpen(true);
+                      }}
+                      aria-label={`${space.title} settings`}
+                    >
+                      <Settings className="size-4 text-zaki-muted" />
+                    </button>
+                  )}
+                  {!isZakiBotSpaceId(space.id) && space.threads.length > 0 && (
                     <button
                       type="button"
                       className={cn(
@@ -1354,7 +1376,7 @@ export function Sidebar() {
                   )}
                 </div>
               </div>
-              {isSpaceExpanded(space.id) && (
+              {isSpaceExpanded(space.id) && !isZakiBotSpaceId(space.id) && (
                 <div className="pl-6 flex flex-col gap-1 mt-1">
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">
@@ -2226,6 +2248,10 @@ export function Sidebar() {
           </div>
         </div>
       )}
+      <ZakiBotControlPanel
+        isOpen={zakiBotControlsOpen}
+        onClose={() => setZakiBotControlsOpen(false)}
+      />
     </nav>
   );
 }

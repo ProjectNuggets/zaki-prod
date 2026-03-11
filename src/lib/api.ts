@@ -570,6 +570,14 @@ export type AdminStudentVerificationUser = {
   studentVerifiedAt: string | null;
 };
 
+export type AdminRateLimitSettings = {
+  appChatDailyPromptLimit: number;
+  appChatDailyPromptBucket: string;
+  zakiBotDailyPromptLimit: number;
+  zakiBotDailyPromptBucket: string;
+  agentPerMinuteLimit: number;
+};
+
 export async function listAdminMembers() {
   const response = await backendAuthRequest("/api/admin/admins", {
     method: "GET",
@@ -668,6 +676,35 @@ export async function updateAdminStudentVerification(email: string, verified: bo
   } catch {
     // Ignore JSON parsing failures.
   }
+  return { response, data };
+}
+
+export async function getAdminRateLimits() {
+  const response = await backendAuthRequest("/api/admin/rate-limits", {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function updateAdminRateLimits(payload: {
+  appChatDailyPromptLimit?: number;
+  zakiBotDailyPromptLimit?: number;
+  agentPerMinuteLimit?: number;
+}) {
+  const response = await backendAuthRequest("/api/admin/rate-limits", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
   return { response, data };
 }
 
@@ -796,5 +833,220 @@ export async function deleteAccount(confirmEmail: string) {
   } catch {
     // Ignore JSON parsing failures.
   }
+  return { response, data };
+}
+
+async function parseApiJson<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+export type UsageQuotaSurface = "app_chat" | "zaki_bot";
+
+export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
+  const params = new URLSearchParams({ surface });
+  const response = await backendAuthRequest(`/api/usage/quota?${params.toString()}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    unlimited?: boolean;
+    limit?: number | null;
+    used?: number;
+    remaining?: number | null;
+    resetAt?: string;
+    bucket?: string;
+    surface?: UsageQuotaSurface;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function provisionAgent(payload: Record<string, unknown> = {}) {
+  const response = await backendAuthRequest("/api/agent/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentOnboarding() {
+  const response = await backendAuthRequest("/api/agent/onboarding", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function saveAgentOnboarding(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/onboarding", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentConfig() {
+  const response = await backendAuthRequest("/api/agent/config", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentConfig(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/config", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function getAgentSecret(key: string) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function putAgentSecret(key: string, value: unknown) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentSecret(key: string) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export type ConnectAgentTelegramPayload = {
+  bot_token?: string;
+  webhook_url?: string;
+  webhook_base_url?: string;
+  webhook_secret_token?: string;
+  account_id?: string;
+  chat_id?: string;
+  allow_from?: string[];
+  drop_pending_updates?: boolean;
+};
+
+export async function connectAgentTelegram(payload: ConnectAgentTelegramPayload) {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function disconnectAgentTelegram() {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/disconnect", {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentHeartbeat() {
+  const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentHeartbeat(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/heartbeat", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function listAgentCron() {
+  const response = await backendAuthRequest("/api/agent/cron", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function createAgentCron(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/cron", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentCron(id: string, payload: Record<string, unknown>) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentCron(id: string) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentHistory(
+  spaceId = "zaki-bot",
+  threadId = "main",
+  mode: "merged" | "app" = "merged"
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/history?spaceId=${encodeURIComponent(spaceId)}&threadId=${encodeURIComponent(threadId)}&mode=${encodeURIComponent(mode)}`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{
+    history?: Array<{
+      id?: string;
+      role?: "user" | "assistant";
+      content?: string;
+      createdAt?: string;
+    }>;
+    historyMode?: "merged" | "app";
+    source?: string;
+    warning?: string;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentDiagnostics() {
+  const response = await backendAuthRequest("/api/agent/diagnostics", { method: "GET" });
+  const data = await parseApiJson<{
+    userId?: string;
+    agentBackendEnabled?: boolean;
+    nullclawBaseConfigured?: boolean;
+    historyModeDefault?: string;
+    upstreamHealth?: {
+      ok?: boolean;
+      status?: number;
+      latencyMs?: number | null;
+      reason?: string;
+    };
+    lastAgentStreamError?: {
+      at?: string;
+      class?: string;
+      message?: string;
+    } | null;
+    error?: string | null;
+  }>(response);
   return { response, data };
 }

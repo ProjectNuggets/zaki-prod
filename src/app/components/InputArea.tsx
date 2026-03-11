@@ -19,6 +19,10 @@ export function InputArea({
   onToggleWebSearch,
   memoryMode = "autosave",
   onToggleMemoryMode,
+  showUpgradeStrip = true,
+  sendLocked = false,
+  zakiBotMode = false,
+  quotaBadge = null,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
@@ -31,6 +35,14 @@ export function InputArea({
   onToggleWebSearch?: () => void;
   memoryMode?: "autosave" | "manual";
   onToggleMemoryMode?: () => void;
+  showUpgradeStrip?: boolean;
+  sendLocked?: boolean;
+  zakiBotMode?: boolean;
+  quotaBadge?: {
+    remaining: number;
+    limit: number;
+    tone: "neutral" | "warning" | "danger";
+  } | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
@@ -77,7 +89,7 @@ export function InputArea({
   }, [inputValue.length]);
 
   const submitMessage = () => {
-    if (isSending) {
+    if (isSending || sendLocked) {
       return;
     }
     if (inputValue.trim() || attachments.length > 0) {
@@ -86,7 +98,8 @@ export function InputArea({
     }
   };
 
-  const canSend = inputValue.trim().length > 0 || attachments.length > 0;
+  const canSend =
+    !sendLocked && (inputValue.trim().length > 0 || attachments.length > 0);
   const isStopMode = isSending;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -193,69 +206,76 @@ export function InputArea({
       {/* Input Box */}
       <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir="ltr">
         <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
+          {showUpgradeStrip ? (
+            <div
+              className={cn(
+                "w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
+                isRtl ? "justify-end text-right" : "justify-start text-left"
+              )}
+            >
+              {isRtl ? (
+                <>
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
+                    onClick={() => {
+                      void trackProductEvent({
+                        event: "upgrade_cta_clicked",
+                        source: "chat_input",
+                        language: isRtl ? "ar" : "en",
+                        plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                        interval: "monthly",
+                      }).catch(() => {
+                        // Best-effort telemetry only.
+                      });
+                      navigate("/pricing?source=chat_input");
+                    }}
+                  >
+                    {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
+                  </button>
+                  <span className="text-zaki-secondary">
+                    {t("input.upgradeLabel")}
+                  </span>
+                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+                    <Zap className="size-3" />
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+                    <Zap className="size-3" />
+                  </span>
+                  <span className="text-zaki-secondary">
+                    {t("input.upgradeLabel")}
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
+                    onClick={() => {
+                      void trackProductEvent({
+                        event: "upgrade_cta_clicked",
+                        source: "chat_input",
+                        language: isRtl ? "ar" : "en",
+                        plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
+                        interval: "monthly",
+                      }).catch(() => {
+                        // Best-effort telemetry only.
+                      });
+                      navigate("/pricing?source=chat_input");
+                    }}
+                  >
+                    {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
           <div
             className={cn(
-              "w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
-              isRtl ? "justify-end text-right" : "justify-start text-left"
+              "w-full rounded-[16px] border border-[#ead7c1] dark:border-zaki-dark bg-[#fffaf4] dark:bg-[#15110d] px-3 py-2.5 flex flex-col gap-2 relative",
+              showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
-            {isRtl ? (
-              <>
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
-                  onClick={() => {
-                    void trackProductEvent({
-                      event: "upgrade_cta_clicked",
-                      source: "chat_input",
-                      language: isRtl ? "ar" : "en",
-                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                      interval: "monthly",
-                    }).catch(() => {
-                      // Best-effort telemetry only.
-                    });
-                    navigate("/pricing?source=chat_input");
-                  }}
-                >
-                  {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
-                </button>
-                <span className="text-zaki-secondary">
-                  {t("input.upgradeLabel")}
-                </span>
-                <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
-                  <Zap className="size-3" />
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
-                  <Zap className="size-3" />
-                </span>
-                <span className="text-zaki-secondary">
-                  {t("input.upgradeLabel")}
-                </span>
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
-                  onClick={() => {
-                    void trackProductEvent({
-                      event: "upgrade_cta_clicked",
-                      source: "chat_input",
-                      language: isRtl ? "ar" : "en",
-                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                      interval: "monthly",
-                    }).catch(() => {
-                      // Best-effort telemetry only.
-                    });
-                    navigate("/pricing?source=chat_input");
-                  }}
-                >
-                  {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
-                </button>
-              </>
-            )}
-          </div>
-          <div className="w-full mt-2 rounded-[16px] border border-[#ead7c1] dark:border-zaki-dark bg-[#fffaf4] dark:bg-[#15110d] px-3 py-2.5 flex flex-col gap-2 relative">
         {attachments.length > 0 && (
           <div className="flex flex-col gap-2 px-2">
             <div className="flex flex-wrap gap-2">
@@ -341,7 +361,8 @@ export function InputArea({
           />
         </div>
         <div className="zaki-input-row flex items-center gap-2 px-1 pt-0.5">
-          <div className="relative" ref={menuRef}>
+          {!zakiBotMode ? (
+            <div className="relative" ref={menuRef}>
             <button
               type="button"
               className="size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
@@ -449,8 +470,10 @@ export function InputArea({
                 </button>
               </div>
             )}
-          </div>
-          <button
+            </div>
+          ) : null}
+          {!zakiBotMode ? (
+            <button
             type="button"
             onClick={() => {
               window.dispatchEvent(new CustomEvent("zaki:onboarding-web-search-clicked"));
@@ -482,8 +505,9 @@ export function InputArea({
                 ? t("input.webSearch.onPill")
                 : t("input.webSearch.offPill")}
             </span>
-          </button>
-          {webSearchArmed ? (
+            </button>
+          ) : null}
+          {!zakiBotMode && webSearchArmed ? (
             <button
               type="button"
               onClick={onToggleWebSearch}
@@ -492,12 +516,13 @@ export function InputArea({
               {t("input.webSearch.activePill")}
             </button>
           ) : null}
-          {queryModeEnabled ? (
+          {!zakiBotMode && queryModeEnabled ? (
             <span className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent">
               {t("input.queryMode.activePill")}
             </span>
           ) : null}
-          <button
+          {!zakiBotMode ? (
+            <button
             type="button"
             onClick={onToggleMemoryMode}
             className={cn(
@@ -519,7 +544,8 @@ export function InputArea({
                 : t("input.memoryMode.manual")}
             </span>
             <ChevronDown className="size-3 text-zaki-muted" />
-          </button>
+            </button>
+          ) : null}
           <span className="flex-1" />
           <button
             type={isStopMode ? "button" : "submit"}
@@ -551,7 +577,23 @@ export function InputArea({
         </div>
         </div>
       </form>
-      <div className="text-center mt-2">
+      {quotaBadge ? (
+        <div className="mt-1 flex justify-center">
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+              quotaBadge.tone === "danger"
+                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300"
+                : quotaBadge.tone === "warning"
+                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
+                  : "border-zaki-subtle bg-white text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-muted"
+            )}
+          >
+            {quotaBadge.remaining}/{quotaBadge.limit}
+          </span>
+        </div>
+      ) : null}
+      <div className={cn("text-center", quotaBadge ? "mt-1" : "mt-2")}>
          <p className="text-zaki-disabled text-xs" dir={isRtl ? "rtl" : "ltr"}>
            {t("input.disclaimer")}
          </p>

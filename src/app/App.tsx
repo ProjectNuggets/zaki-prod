@@ -19,6 +19,7 @@ import {
   submitLegalReconsent,
 } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
+import { isZakiBotSpaceId } from "@/lib/zakiBot";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
 
@@ -39,6 +40,7 @@ export default function App() {
   const scrollTimerRef = useRef<number | null>(null);
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
+  const isZakiBotRoute = isZakiBotSpaceId(params.spaceId);
   
   // Auth state from Zustand
   const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
@@ -178,8 +180,18 @@ export default function App() {
   }, [token, setUser, setLoading, logout]);
 
   useEffect(() => {
+    if (isZakiBotRoute) {
+      setOnboardingOpen(false);
+    }
+  }, [isZakiBotRoute]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (!user?.username || authLoading) return;
+    if (isZakiBotRoute) {
+      setOnboardingOpen(false);
+      return;
+    }
     const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
     const completed = window.localStorage.getItem(key) === "done";
     if (completed) {
@@ -190,7 +202,7 @@ export default function App() {
       setOnboardingOpen(true);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [user?.username, authLoading]);
+  }, [user?.username, authLoading, isZakiBotRoute]);
 
   useEffect(() => {
     if (!token || !user?.username || authLoading) {
@@ -227,13 +239,14 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleOpenOnboarding = () => {
+      if (isZakiBotRoute) return;
       setOnboardingOpen(true);
     };
     window.addEventListener("zaki:open-onboarding", handleOpenOnboarding);
     return () => {
       window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
     };
-  }, []);
+  }, [isZakiBotRoute]);
 
   const dismissOnboarding = () => {
     setOnboardingOpen(false);
