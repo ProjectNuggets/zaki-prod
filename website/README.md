@@ -41,8 +41,8 @@ Deploy `website/dist` as static hosting.
 ## Routes
 
 - `/` -> React landing (EN by default)
-- `/?lang=ar` -> React landing (Arabic mode)
-- `/ar/` -> redirect to `/?lang=ar`
+- `/ar/` -> React landing (Arabic mode, canonical Arabic URL)
+- `/?lang=ar` -> compatibility path (should 301 to `/ar/` at edge)
 - `/terms/` -> Terms of Use
 - `/privacy/` -> Privacy
 - `/compliance/` -> Compliance
