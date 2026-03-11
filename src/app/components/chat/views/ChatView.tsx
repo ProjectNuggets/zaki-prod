@@ -16,7 +16,7 @@ interface ChatViewProps {
   botStatusEvents?: BotStatusEvent[];
   showBotTimeline?: boolean;
   botMode?: boolean;
-  streamingMode?: "thinking" | "researching";
+  streamingMode?: "thinking" | "researching" | "writing";
   firstMessageTransition: boolean;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;

@@ -4,6 +4,14 @@ export type BotStatusEvent = {
   id: string;
   text: string;
   timestamp: number;
+  source?: "progress" | "status" | "fallback";
+  phase?: string | null;
+  state?: string | null;
+  label?: string | null;
+  tool?: string | null;
+  iteration?: number | null;
+  durationMs?: number | null;
+  terminal?: "done" | "error" | null;
 };
 
 interface BotStatusRailProps {

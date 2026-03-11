@@ -18,7 +18,7 @@ describe("BotProcessRail", () => {
     expect(screen.getByText("Listening for live status from agent…")).toBeInTheDocument();
   });
 
-  it("hides status rows when tool calls are present", () => {
+  it("shows one-line latest progress while hiding the full status list when tool calls are present", () => {
     render(
       <BotProcessRail
         isStreaming
@@ -43,8 +43,8 @@ describe("BotProcessRail", () => {
       />
     );
 
-    expect(screen.queryByText("Searching web")).not.toBeInTheDocument();
+    expect(screen.getByText("Latest:")).toBeInTheDocument();
+    expect(screen.getByText(/Searching web/)).toBeInTheDocument();
     expect(screen.getByText("web.search")).toBeInTheDocument();
   });
 });
-

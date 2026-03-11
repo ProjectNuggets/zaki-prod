@@ -63,10 +63,25 @@ export function BotProcessRail({
 }: BotProcessRailProps) {
   if (!isStreaming && toolCalls.length === 0 && statusEvents.length === 0) return null;
 
-  const latestEvents = statusEvents.slice(-6);
+  const latestEvents = statusEvents.slice(-10);
+  const dedupedEvents = latestEvents.filter((event, index, all) => {
+    if (index === 0) return true;
+    const prev = all[index - 1];
+    if (!prev) return true;
+    return (
+      prev.text !== event.text ||
+      prev.phase !== event.phase ||
+      prev.state !== event.state ||
+      prev.tool !== event.tool ||
+      prev.terminal !== event.terminal
+    );
+  });
   const orderedTools = toolCalls.slice(-8);
-  const showStatusEvents = orderedTools.length === 0 && latestEvents.length > 0;
-  const showFallbackPulse = orderedTools.length === 0 && latestEvents.length === 0 && isStreaming;
+  const showStatusEvents = orderedTools.length === 0 && dedupedEvents.length > 0;
+  const showFallbackPulse = orderedTools.length === 0 && dedupedEvents.length === 0 && isStreaming;
+  const latestProgressEvent = [...dedupedEvents]
+    .reverse()
+    .find((event) => Boolean(event.text));
 
   return (
     <section className="max-w-[92%] rounded-2xl border border-[#e8d4bc] bg-[linear-gradient(140deg,#fff9f0_0%,#fff3e2_100%)] px-4 py-3 shadow-[0px_10px_24px_rgba(52,36,24,0.10)]">
@@ -91,10 +106,25 @@ export function BotProcessRail({
 
       {showStatusEvents ? (
         <div className="mb-3 space-y-1.5">
-          {latestEvents.map((event) => (
+          {dedupedEvents.map((event) => (
             <div key={event.id} className="flex items-center gap-2 rounded-lg border border-[#ecdac5] bg-white/70 px-2.5 py-1.5 text-xs text-zaki-secondary">
-              <span className="inline-block size-1.5 rounded-full bg-zaki-brand/70" aria-hidden />
+              <span
+                className={[
+                  "inline-block size-1.5 rounded-full",
+                  event.terminal === "error"
+                    ? "bg-rose-500"
+                    : event.terminal === "done"
+                      ? "bg-emerald-500"
+                      : "bg-zaki-brand/70",
+                ].join(" ")}
+                aria-hidden
+              />
               <span className="flex-1 leading-5">{event.text}</span>
+              {event.phase ? (
+                <span className="rounded-full border border-zaki-subtle bg-white/70 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zaki-muted">
+                  {event.phase}
+                </span>
+              ) : null}
               <span className="font-mono text-[10px] text-zaki-muted">
                 {new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
@@ -112,6 +142,11 @@ export function BotProcessRail({
 
       {orderedTools.length > 0 ? (
         <div className="space-y-2">
+          {latestProgressEvent ? (
+            <div className="rounded-lg border border-[#ecdac5] bg-white/70 px-2.5 py-1.5 text-xs text-zaki-secondary">
+              <span className="font-semibold text-zaki-muted">Latest:</span> {latestProgressEvent.text}
+            </div>
+          ) : null}
           {orderedTools.map((toolCall) => {
             const badge = statusBadge(toolCall);
             const duration =

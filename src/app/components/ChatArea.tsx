@@ -263,12 +263,15 @@ function extractVisibleAgentChunk(payload: Record<string, unknown>) {
   return typeof direct === "string" && direct.trim() ? direct.trim() : null;
 }
 
-function inferStreamingModeFromStatus(statusText: string): "thinking" | "researching" {
-  const normalized = String(statusText || "").trim().toLowerCase();
+function inferStreamingModeFromContext(rawValue: string): "thinking" | "researching" | "writing" {
+  const normalized = String(rawValue || "").trim().toLowerCase();
   if (!normalized) return "thinking";
   if (
     normalized.includes("search") ||
     normalized.includes("web") ||
+    normalized.includes("retrieval") ||
+    normalized.includes("browse") ||
+    normalized.includes("lookup") ||
     normalized.includes("tool") ||
     normalized.includes("fetch") ||
     normalized.includes("crawl") ||
@@ -279,7 +282,77 @@ function inferStreamingModeFromStatus(statusText: string): "thinking" | "researc
   ) {
     return "researching";
   }
+  if (
+    normalized.includes("compose") ||
+    normalized.includes("final") ||
+    normalized.includes("respond") ||
+    normalized.includes("draft") ||
+    normalized.includes("summarize") ||
+    normalized.includes("summary") ||
+    normalized.includes("write")
+  ) {
+    return "writing";
+  }
   return "thinking";
+}
+
+function extractProgressPayload(payload: Record<string, unknown>) {
+  const source =
+    (payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : payload) || payload;
+  const phaseRaw =
+    (typeof source.phase === "string" && source.phase) ||
+    (typeof payload.phase === "string" && payload.phase) ||
+    "";
+  const stateRaw =
+    (typeof source.state === "string" && source.state) ||
+    (typeof payload.state === "string" && payload.state) ||
+    "";
+  const labelRaw =
+    (typeof source.label === "string" && source.label) ||
+    (typeof source.status === "string" && source.status) ||
+    (typeof payload.label === "string" && payload.label) ||
+    "";
+  const toolRaw =
+    (typeof source.tool === "string" && source.tool) ||
+    (typeof source.toolName === "string" && source.toolName) ||
+    (typeof payload.tool === "string" && payload.tool) ||
+    undefined;
+  const iterationRaw =
+    typeof source.iteration === "number"
+      ? source.iteration
+      : typeof payload.iteration === "number"
+        ? payload.iteration
+        : undefined;
+  const durationMsRaw =
+    typeof source.duration_ms === "number"
+      ? source.duration_ms
+      : typeof source.durationMs === "number"
+        ? source.durationMs
+        : typeof payload.duration_ms === "number"
+          ? payload.duration_ms
+          : typeof payload.durationMs === "number"
+            ? payload.durationMs
+            : undefined;
+
+  const phase = String(phaseRaw || "").trim() || null;
+  const state = String(stateRaw || "").trim() || null;
+  const label = String(labelRaw || "").trim() || null;
+  const tool = String(toolRaw || "").trim() || null;
+  const iteration =
+    typeof iterationRaw === "number" && Number.isFinite(iterationRaw)
+      ? Math.max(0, Math.trunc(iterationRaw))
+      : null;
+  const durationMs =
+    typeof durationMsRaw === "number" && Number.isFinite(durationMsRaw)
+      ? Math.max(0, Math.trunc(durationMsRaw))
+      : null;
+
+  const fallbackText = extractVisibleAgentChunk(source);
+  const text = label || fallbackText;
+  if (!text && !phase && !state && !tool) return null;
+  return { phase, state, label, tool, iteration, durationMs, text: text || null };
 }
 
 function extractToolCallPayload(payload: Record<string, unknown>) {
@@ -316,7 +389,10 @@ function extractToolResultPayload(payload: Record<string, unknown>) {
     (typeof payload.requestId === "string" && payload.requestId) ||
     (typeof payload.request_id === "string" && payload.request_id) ||
     undefined;
-  const ok = source.ok === true;
+  const okRaw = source.ok;
+  const ok =
+    okRaw === true ||
+    (okRaw !== false && typeof source.error !== "string");
   const error = typeof source.error === "string" ? source.error : undefined;
   const result = source.result;
   return { requestId, ok, error, result };
@@ -388,9 +464,12 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching">("thinking");
+  const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching" | "writing">("thinking");
   const [zakiBotToolCalls, setZakiBotToolCalls] = useState<BotToolCall[]>([]);
   const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
+  const [zakiBotProgressTerminalReason, setZakiBotProgressTerminalReason] = useState<
+    "done" | "error" | "abort" | "stream_end" | null
+  >(null);
   const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
   const [zakiBotHistorySource, setZakiBotHistorySource] = useState<string>("");
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
@@ -995,10 +1074,36 @@ export function ChatArea() {
     []
   );
 
+  const clearZakiBotProgressVisuals = useCallback(() => {
+    if (zakiBotProcessClearTimerRef.current) {
+      window.clearTimeout(zakiBotProcessClearTimerRef.current);
+      zakiBotProcessClearTimerRef.current = null;
+    }
+    setZakiBotToolCalls([]);
+    setZakiBotStatusEvents([]);
+    setZakiBotProgressTerminalReason(null);
+  }, []);
+
+  const finalizeZakiBotProgress = useCallback(
+    (reason: "done" | "error" | "abort" | "stream_end") => {
+      if (!isZakiBotActiveSpace) return;
+      if (reason === "abort") {
+        clearZakiBotProgressVisuals();
+        return;
+      }
+      setZakiBotProgressTerminalReason(reason);
+      if (reason === "done") {
+        setStreamingIndicatorMode("writing");
+      }
+    },
+    [clearZakiBotProgressVisuals, isZakiBotActiveSpace]
+  );
+
   const upsertZakiBotToolCall = useCallback(
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
       const { requestId, name, arguments: args } = extractToolCallPayload(payload);
+      setZakiBotProgressTerminalReason(null);
       setStreamingIndicatorMode("researching");
       setZakiBotToolCalls((prev) => {
         if (requestId) {
@@ -1036,6 +1141,7 @@ export function ChatArea() {
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
       const { requestId, ok, error, result } = extractToolResultPayload(payload);
+      setZakiBotProgressTerminalReason(null);
       setZakiBotToolCalls((prev) => {
         if (!prev.length) return prev;
         const next = [...prev];
@@ -1069,27 +1175,159 @@ export function ChatArea() {
     [isZakiBotActiveSpace]
   );
 
-  const pushZakiBotStatusEvent = useCallback(
-    (rawStatus: unknown) => {
+  const upsertZakiBotProgressTool = useCallback(
+    (toolName: string, state: string | null, label: string | null, durationMs: number | null) => {
       if (!isZakiBotActiveSpace) return;
-      const text = typeof rawStatus === "string" ? rawStatus.trim() : "";
-      if (!text) return;
-      setStreamingIndicatorMode(inferStreamingModeFromStatus(text));
+      const normalizedTool = toolName.trim().toLowerCase();
+      if (!normalizedTool) return;
+      const normalizedState = String(state || "").trim().toLowerCase();
+      const isTerminal =
+        normalizedState.includes("done") ||
+        normalizedState.includes("complete") ||
+        normalizedState.includes("success") ||
+        normalizedState.includes("ok") ||
+        normalizedState.includes("fail") ||
+        normalizedState.includes("error") ||
+        normalizedState.includes("abort") ||
+        normalizedState.includes("cancel");
+      const isFailure =
+        normalizedState.includes("fail") ||
+        normalizedState.includes("error") ||
+        normalizedState.includes("abort") ||
+        normalizedState.includes("cancel");
+      const now = Date.now();
+
+      setZakiBotToolCalls((prev) => {
+        const next = [...prev];
+        const targetIndex = [...next]
+          .reverse()
+          .findIndex((call) => {
+            const callName = String(call.name || "").trim().toLowerCase();
+            if (!callName) return false;
+            return callName === normalizedTool || callName.includes(normalizedTool) || normalizedTool.includes(callName);
+          });
+        const resolvedIndex =
+          targetIndex >= 0 ? next.length - 1 - targetIndex : next.findIndex((call) => !call.result);
+
+        if (resolvedIndex >= 0) {
+          const existing = next[resolvedIndex];
+          if (!existing) return prev;
+          const startedAt =
+            typeof existing.startedAt === "number"
+              ? existing.startedAt
+              : durationMs != null
+                ? Math.max(0, now - durationMs)
+                : now;
+          const finishedAt =
+            isTerminal && durationMs != null
+              ? startedAt + durationMs
+              : isTerminal
+                ? now
+                : existing.finishedAt;
+          const computedDurationMs =
+            durationMs != null
+              ? durationMs
+              : typeof finishedAt === "number"
+                ? Math.max(0, finishedAt - startedAt)
+                : existing.durationMs;
+          next[resolvedIndex] = {
+            ...existing,
+            name: existing.name || toolName,
+            startedAt,
+            ...(typeof finishedAt === "number" ? { finishedAt } : {}),
+            ...(typeof computedDurationMs === "number" ? { durationMs: computedDurationMs } : {}),
+            ...(isTerminal
+              ? {
+                  result: {
+                    ok: !isFailure,
+                    error: isFailure ? label || "Tool failed." : undefined,
+                    result: existing.result?.result,
+                  },
+                }
+              : {}),
+          };
+          return next;
+        }
+
+        const startedAt = durationMs != null ? Math.max(0, now - durationMs) : now;
+        const finishedAt = isTerminal ? startedAt + (durationMs ?? 0) : undefined;
+        return [
+          ...next,
+          {
+            id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: toolName,
+            arguments: {},
+            timestamp: now,
+            startedAt,
+            ...(typeof finishedAt === "number" ? { finishedAt } : {}),
+            ...(durationMs != null ? { durationMs } : {}),
+            ...(isTerminal
+              ? {
+                  result: {
+                    ok: !isFailure,
+                    error: isFailure ? label || "Tool failed." : undefined,
+                    result: undefined,
+                  },
+                }
+              : {}),
+          },
+        ];
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const pushZakiBotProgressEvent = useCallback(
+    (
+      payload: Record<string, unknown>,
+      source: "progress" | "status" = "progress"
+    ) => {
+      if (!isZakiBotActiveSpace) return;
+      const progress = extractProgressPayload(payload);
+      if (!progress) return;
+      const mode = inferStreamingModeFromContext(
+        [progress.phase, progress.state, progress.text, progress.tool]
+          .filter(Boolean)
+          .join(" ")
+      );
+      setZakiBotProgressTerminalReason(null);
+      setStreamingIndicatorMode(mode);
+      if (progress.tool) {
+        upsertZakiBotProgressTool(progress.tool, progress.state, progress.text, progress.durationMs);
+      }
+      const text =
+        progress.text ||
+        [progress.phase, progress.state].filter(Boolean).join(" • ") ||
+        "Processing update";
       setZakiBotStatusEvents((prev) => {
         const last = prev[prev.length - 1];
-        if (last?.text === text) return prev;
+        if (
+          last?.text === text &&
+          last.phase === progress.phase &&
+          last.state === progress.state &&
+          last.tool === progress.tool
+        ) {
+          return prev;
+        }
         const next = [
           ...prev,
           {
-            id: `status-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id: `progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             text,
             timestamp: Date.now(),
-          },
+            source,
+            phase: progress.phase,
+            state: progress.state,
+            label: progress.label,
+            tool: progress.tool,
+            iteration: progress.iteration,
+            durationMs: progress.durationMs,
+          } satisfies BotStatusEvent,
         ];
         return next.slice(-10);
       });
     },
-    [isZakiBotActiveSpace]
+    [isZakiBotActiveSpace, upsertZakiBotProgressTool]
   );
 
   const applyQuotaHeaders = useCallback((headers: Headers, fallbackSurface: UsageQuotaSurface) => {
@@ -1163,6 +1401,7 @@ export function ChatArea() {
       let hasAnswer = false;
       let autoReplySent = false;
       let settled = false;
+      let sawTerminalEvent = false;
 
       const cleanup = () => {
         signal?.removeEventListener("abort", handleAbort);
@@ -1183,6 +1422,7 @@ export function ChatArea() {
       };
 
       const handleAbort = () => {
+        finalizeZakiBotProgress("abort");
         try {
           ws.close(1000, "aborted");
         } catch {
@@ -1227,13 +1467,18 @@ export function ChatArea() {
 
           if (payload?.type === "reportStreamEvent" && payload?.content) {
             supportsAgentStreaming = true;
-            const report = payload.content as { type?: string; content?: string };
+            const report = payload.content as { type?: string; content?: unknown };
+            const reportPayload =
+              report?.content && typeof report.content === "object"
+                ? ({ ...(report.content as Record<string, unknown>), type: report.type } as Record<string, unknown>)
+                : ({ type: report?.type, content: report?.content } as Record<string, unknown>);
             if (report?.type === "removeStatusResponse") return;
+            if (isZakiBotActiveSpace && report?.type === "progress") {
+              pushZakiBotProgressEvent(reportPayload, "progress");
+              return;
+            }
             if (isZakiBotActiveSpace && report?.type === "statusResponse") {
-              const visibleChunk = extractVisibleAgentChunk({ content: report.content });
-              if (visibleChunk) {
-                pushZakiBotStatusEvent(visibleChunk);
-              }
+              pushZakiBotProgressEvent(reportPayload, "status");
               return;
             }
             if (isZakiBotActiveSpace && report?.type === "toolCallInvocation") {
@@ -1263,12 +1508,16 @@ export function ChatArea() {
             if (report?.type === "statusResponse") return;
           }
 
+          if (payload?.type === "progress") {
+            if (isZakiBotActiveSpace) {
+              pushZakiBotProgressEvent(payload, "progress");
+            }
+            return;
+          }
+
           if (payload?.type === "statusResponse") {
             if (isZakiBotActiveSpace) {
-              const visibleChunk = extractVisibleAgentChunk(payload);
-              if (visibleChunk) {
-                pushZakiBotStatusEvent(visibleChunk);
-              }
+              pushZakiBotProgressEvent(payload, "status");
             }
             return;
           }
@@ -1287,10 +1536,31 @@ export function ChatArea() {
           }
 
           if (payload?.type === "wssFailure") {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("error");
             const errorText =
               (typeof payload.content === "string" && payload.content) ||
               "Agent connection failed.";
             updateAssistantError(threadSlug, assistantId, errorText, "agent_error");
+            ws.close();
+            return;
+          }
+
+          if (payload?.type === "error" || payload?.error === true) {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("error");
+            const errorText =
+              (typeof payload.message === "string" && payload.message) ||
+              (typeof payload.error === "string" && payload.error) ||
+              "Agent connection failed.";
+            updateAssistantError(threadSlug, assistantId, errorText, "agent_error");
+            ws.close();
+            return;
+          }
+
+          if (payload?.type === "done") {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("done");
             ws.close();
             return;
           }
@@ -1315,6 +1585,8 @@ export function ChatArea() {
           }
 
           if (payload.close || payload.type === "finalizeResponseStream") {
+            sawTerminalEvent = true;
+            finalizeZakiBotProgress("done");
             ws.close();
             return;
           }
@@ -1328,11 +1600,25 @@ export function ChatArea() {
           resolveOnce();
           return;
         }
+        finalizeZakiBotProgress("error");
         rejectOnce(new Error("Connection failed."));
       };
-      ws.onclose = () => resolveOnce();
+      ws.onclose = () => {
+        if (!signal?.aborted && !sawTerminalEvent) {
+          finalizeZakiBotProgress("stream_end");
+        }
+        resolveOnce();
+      };
     });
-  }, [applyZakiBotToolResult, isZakiBotActiveSpace, pushZakiBotStatusEvent, updateAssistantContent, upsertZakiBotToolCall]);
+  }, [
+    applyZakiBotToolResult,
+    finalizeZakiBotProgress,
+    isZakiBotActiveSpace,
+    pushZakiBotProgressEvent,
+    updateAssistantContent,
+    updateAssistantError,
+    upsertZakiBotToolCall,
+  ]);
 
   // Stream chat message via fetch (POST)
   const streamChatMessage = useCallback(async ({
@@ -1494,9 +1780,15 @@ export function ChatArea() {
         payload.close === true ||
         payloadType === "finalizeResponseStream"
       ) {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("done");
+        }
         return { done: true };
       }
       if (eventType === "error") {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("error");
+        }
         const msg =
           (typeof payload.message === "string" && payload.message) ||
           (typeof payload.error === "string" && payload.error) ||
@@ -1531,6 +1823,12 @@ export function ChatArea() {
           return { agentUrl };
         }
       }
+      if (eventType === "progress" || payload?.type === "progress") {
+        if (isZakiBotActiveSpace) {
+          pushZakiBotProgressEvent(payload, "progress");
+        }
+        return {};
+      }
       if (
         eventType === "status" ||
         payload?.type === "statusResponse" ||
@@ -1541,10 +1839,7 @@ export function ChatArea() {
             upsertZakiBotToolCall(payload);
             return {};
           }
-          const visibleChunk = extractVisibleAgentChunk(payload);
-          if (visibleChunk) {
-            pushZakiBotStatusEvent(visibleChunk);
-          }
+          pushZakiBotProgressEvent(payload, "status");
           return {};
         }
         return {};
@@ -1556,10 +1851,16 @@ export function ChatArea() {
         return {};
       }
       if (payload?.type === "abort" && typeof payload.error === "string" && payload.error.trim()) {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("error");
+        }
         throw new Error(payload.error.trim());
       }
 
       if (payload?.type === "error" || payload?.error === true) {
+        if (isZakiAgentSpace) {
+          finalizeZakiBotProgress("error");
+        }
         const errorMessage =
           (typeof payload.message === "string" && payload.message.trim()) ||
           (typeof payload.error === "string" && payload.error.trim()) ||
@@ -1582,6 +1883,7 @@ export function ChatArea() {
     };
 
     const contentType = response.headers.get("content-type") || "";
+    let sawTerminalEvent = false;
     
     // If JSON response, check for agent invocation URL
     if (contentType.includes("application/json")) {
@@ -1604,6 +1906,12 @@ export function ChatArea() {
           assistantId,
           normalizeAssistantFormatting(message, result.chunk)
         );
+      }
+      if (result.done) {
+        sawTerminalEvent = true;
+      }
+      if (isZakiAgentSpace && !sawTerminalEvent && !signal?.aborted) {
+        finalizeZakiBotProgress("stream_end");
       }
       return;
     }
@@ -1640,7 +1948,13 @@ export function ChatArea() {
     const processRawData = async (raw: string) => {
       const value = raw.trim();
       if (!value || value === "[DONE]") {
-        if (value === "[DONE]") streamClosed = true;
+        if (value === "[DONE]") {
+          streamClosed = true;
+          sawTerminalEvent = true;
+          if (isZakiAgentSpace) {
+            finalizeZakiBotProgress("done");
+          }
+        }
         return;
       }
       let payload: Record<string, unknown>;
@@ -1661,6 +1975,7 @@ export function ChatArea() {
         appendChunk(result.chunk);
       }
       if (result.done) {
+        sawTerminalEvent = true;
         flushRenderedContent();
         streamClosed = true;
         return;
@@ -1694,6 +2009,7 @@ export function ChatArea() {
           const payload = JSON.parse(payloadText) as Record<string, unknown>;
           const result = readPayloadChunk(payload, eventType);
           if (result.done) {
+            sawTerminalEvent = true;
             flushRenderedContent();
             streamClosed = true;
             return;
@@ -1741,6 +2057,10 @@ export function ChatArea() {
       await processSseBlock(trailing);
     }
 
+    if (isZakiAgentSpace && !sawTerminalEvent && !signal?.aborted) {
+      finalizeZakiBotProgress("stream_end");
+    }
+
     flushRenderedContent();
     const finalized = normalizeAssistantFormatting(message, accumulated);
     if (finalized && finalized !== accumulated) {
@@ -1748,18 +2068,19 @@ export function ChatArea() {
     }
   }, [
     applyQuotaHeaders,
+    applyZakiBotToolResult,
+    finalizeZakiBotProgress,
     isRtl,
     isZakiBotActiveSpace,
     isMemoryPipelineEnabled,
-    spacesList,
-    responseFormattingConfig.disableResponseEnvelope,
+    pushZakiBotProgressEvent,
     queryModeEnabled,
+    responseFormattingConfig.disableResponseEnvelope,
+    spacesList,
     streamAgentInvocation,
-    upsertZakiBotToolCall,
-    pushZakiBotStatusEvent,
-    applyZakiBotToolResult,
     updateAssistantContent,
     updateAssistantSources,
+    upsertZakiBotToolCall,
   ]);
 
   // Check for memories - Auto-Save or Manual mode
@@ -2248,13 +2569,8 @@ export function ChatArea() {
 
   useEffect(() => {
     if (isZakiBotActiveSpace) return;
-    setZakiBotToolCalls([]);
-    setZakiBotStatusEvents([]);
-    if (zakiBotProcessClearTimerRef.current) {
-      window.clearTimeout(zakiBotProcessClearTimerRef.current);
-      zakiBotProcessClearTimerRef.current = null;
-    }
-  }, [isZakiBotActiveSpace]);
+    clearZakiBotProgressVisuals();
+  }, [clearZakiBotProgressVisuals, isZakiBotActiveSpace]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
@@ -2263,17 +2579,29 @@ export function ChatArea() {
         window.clearTimeout(zakiBotProcessClearTimerRef.current);
         zakiBotProcessClearTimerRef.current = null;
       }
+      setZakiBotProgressTerminalReason(null);
       return;
     }
     if (zakiBotToolCalls.length === 0 && zakiBotStatusEvents.length === 0) return;
     if (zakiBotProcessClearTimerRef.current) {
       window.clearTimeout(zakiBotProcessClearTimerRef.current);
     }
+
+    const clearDelayMs =
+      zakiBotProgressTerminalReason === "error"
+        ? 1500
+        : zakiBotProgressTerminalReason === "abort"
+          ? 0
+          : 600;
+
+    if (clearDelayMs <= 0) {
+      clearZakiBotProgressVisuals();
+      return;
+    }
+
     zakiBotProcessClearTimerRef.current = window.setTimeout(() => {
-      setZakiBotToolCalls([]);
-      setZakiBotStatusEvents([]);
-      zakiBotProcessClearTimerRef.current = null;
-    }, 1200);
+      clearZakiBotProgressVisuals();
+    }, clearDelayMs);
 
     return () => {
       if (zakiBotProcessClearTimerRef.current) {
@@ -2281,7 +2609,14 @@ export function ChatArea() {
         zakiBotProcessClearTimerRef.current = null;
       }
     };
-  }, [isStreaming, isZakiBotActiveSpace, zakiBotStatusEvents.length, zakiBotToolCalls.length]);
+  }, [
+    clearZakiBotProgressVisuals,
+    isStreaming,
+    isZakiBotActiveSpace,
+    zakiBotProgressTerminalReason,
+    zakiBotStatusEvents.length,
+    zakiBotToolCalls.length,
+  ]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
@@ -2392,8 +2727,7 @@ export function ChatArea() {
     const manualAgentPrefix = /^@agent\b/i.test(trimmed);
     const agentRequested = webSearchArmed || manualAgentPrefix;
     if (isZakiBotTarget) {
-      setZakiBotToolCalls([]);
-      setZakiBotStatusEvents([]);
+      clearZakiBotProgressVisuals();
     }
     setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
     setIsStreaming(true);
@@ -2431,13 +2765,22 @@ export function ChatArea() {
       void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
       if (isAbortError(error)) {
+        if (isZakiBotTarget) {
+          finalizeZakiBotProgress("abort");
+        }
         updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
         return;
       }
       if (error instanceof ChatRequestError && error.code === "access_expired") {
+        if (isZakiBotTarget) {
+          finalizeZakiBotProgress("error");
+        }
         toast.error(error.message);
         navigate("/pricing");
         return;
+      }
+      if (isZakiBotTarget) {
+        finalizeZakiBotProgress("error");
       }
       const errorMessage =
         error instanceof Error ? error.message : "ZAKI couldn't finish that reply. Please try again.";
@@ -2452,7 +2795,9 @@ export function ChatArea() {
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
-      setStreamingIndicatorMode("thinking");
+      if (!isZakiBotTarget) {
+        setStreamingIndicatorMode("thinking");
+      }
       setIsStreaming(false);
     }
   }, [
@@ -2461,7 +2806,9 @@ export function ChatArea() {
     activationProgress.firstMessageSent,
     authUserId,
     checkForSavedMemories,
+    clearZakiBotProgressVisuals,
     ensureZakiBotProvisioned,
+    finalizeZakiBotProgress,
     isRtl,
     isStreaming,
     navigate,
@@ -2865,7 +3212,13 @@ export function ChatArea() {
         messages={messages}
         isHistoryLoading={isHistoryLoading || (isZakiBotActiveSpace && isBotHistoryLoading)}
         isStreaming={isStreaming}
-        streamingLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : t("chat.thinking")}
+        streamingLabel={
+          streamingIndicatorMode === "researching"
+            ? t("chat.researching")
+            : streamingIndicatorMode === "writing"
+              ? (isRtl ? "يكتب" : "Writing")
+              : t("chat.thinking")
+        }
         streamingPillLabel={streamingIndicatorMode === "researching" ? t("chat.researching") : undefined}
         botToolCalls={isZakiBotActiveSpace ? zakiBotToolCalls : []}
         botStatusEvents={isZakiBotActiveSpace ? zakiBotStatusEvents : []}
