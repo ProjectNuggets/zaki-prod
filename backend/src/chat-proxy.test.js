@@ -90,6 +90,16 @@ describe("chat proxy payload helpers", () => {
     expect(getRequestedResponseFormat("Give me the answer in bullets")).toBe("bullets");
     expect(getRequestedResponseFormat("Keep it brief and concise")).toBe("concise");
     expect(getRequestedResponseFormat("قارنها في جدول")).toBe("table");
+    expect(
+      getRequestedResponseFormat(
+        "Please see below the current budget in the table for the event side."
+      )
+    ).toBeNull();
+    expect(
+      getRequestedResponseFormat(
+        "Check language and phrasing for this paragraph. The budget items are listed in the table below."
+      )
+    ).toBeNull();
     expect(getRequestedResponseFormat("Give me 3 numbered steps to plan a trip.")).toBeNull();
     expect(
       getRequestedResponseFormat("Reply in one short sentence: what are workspace instructions?")
