@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LogoArabicOrange } from "./icons";
@@ -47,6 +47,9 @@ const AUTH_COPY = {
       link: "Terms, Privacy & Compliance",
     },
     actions: {
+      tabSignIn: "Sign in",
+      tabCreate: "Create",
+      tabReset: "Reset",
       forgotPassword: "Forgot password?",
       createAccount: "Create account",
       creatingAccount: "Creating account...",
@@ -59,6 +62,14 @@ const AUTH_COPY = {
       haveAccount: "Have an account? Sign in",
       newHere: "New here? Create an account",
       backToSignIn: "Back to sign in",
+      showActivationCode: "Have an activation code?",
+      hideActivationCode: "Hide activation code",
+    },
+    subtitles: {
+      login: "Sign in to continue your chats and spaces.",
+      signup: "Create your account to start with ZAKI.",
+      resetRequest: "We will email you a secure reset link.",
+      resetConfirm: "Set a new password to regain access.",
     },
     aria: {
       hidePassword: "Hide password",
@@ -124,6 +135,9 @@ const AUTH_COPY = {
       link: "الشروط والخصوصية والامتثال",
     },
     actions: {
+      tabSignIn: "دخول",
+      tabCreate: "إنشاء",
+      tabReset: "استعادة",
       forgotPassword: "هل نسيت كلمة المرور؟",
       createAccount: "إنشاء الحساب",
       creatingAccount: "جارٍ إنشاء الحساب...",
@@ -136,6 +150,14 @@ const AUTH_COPY = {
       haveAccount: "لديك حساب؟ سجّل الدخول",
       newHere: "جديد هنا؟ أنشئ حسابًا",
       backToSignIn: "العودة إلى تسجيل الدخول",
+      showActivationCode: "لديك رمز تفعيل؟",
+      hideActivationCode: "إخفاء رمز التفعيل",
+    },
+    subtitles: {
+      login: "سجّل الدخول لمتابعة محادثاتك ومساحاتك.",
+      signup: "أنشئ حسابك للبدء مع ZAKI.",
+      resetRequest: "سنرسل لك رابطًا آمنًا لإعادة تعيين كلمة المرور.",
+      resetConfirm: "عيّن كلمة مرور جديدة لاستعادة الوصول.",
     },
     aria: {
       hidePassword: "إخفاء كلمة المرور",
@@ -202,10 +224,12 @@ export function LoginScreen() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
   const [loginAccessCode, setLoginAccessCode] = useState("");
+  const [showLoginAccessCode, setShowLoginAccessCode] = useState(false);
   const [signupLegalConsent, setSignupLegalConsent] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -214,23 +238,47 @@ export function LoginScreen() {
     getInitialLegalPolicyVersion
   );
 
+  const setModeClean = useCallback(
+    (nextMode: "login" | "signup" | "reset-request" | "reset-confirm") => {
+      setMode(nextMode);
+      setError("");
+      setNotice("");
+      setFieldErrors({});
+      if (nextMode !== "login") {
+        setLoginAccessCode("");
+        setShowLoginAccessCode(false);
+      }
+      if (nextMode !== "signup") {
+        setFullName("");
+        setDateOfBirth("");
+        setConfirmPassword("");
+        setSignupLegalConsent(false);
+      }
+      if (nextMode !== "reset-confirm") {
+        setResetPassword("");
+        setResetConfirm("");
+        if (nextMode !== "reset-request") {
+          setResetToken("");
+          clearResetUrl();
+        }
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const verified = String(url.searchParams.get("verified") || "").trim();
     const authMode = String(url.searchParams.get("auth") || "").trim();
     if (authMode === "signup") {
-      setMode("signup");
-      setNotice("");
-      setError("");
+      setModeClean("signup");
     } else if (authMode === "login") {
-      setMode("login");
-      setNotice("");
-      setError("");
+      setModeClean("login");
     }
 
     if (verified) {
-      setMode("login");
+      setModeClean("login");
       if (verified === "success") {
         setNotice(copy.notices.verifiedSuccess);
         setError("");
@@ -254,7 +302,7 @@ export function LoginScreen() {
       url.searchParams.delete("verified");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
-  }, [copy]);
+  }, [copy, setModeClean]);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,15 +329,32 @@ export function LoginScreen() {
     window.history.replaceState({}, "", url.pathname + url.search);
   };
 
+  const clearFieldError = useCallback((field: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (loginAccessCode.trim()) {
+      setShowLoginAccessCode(true);
+    }
+  }, [loginAccessCode]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
     setNotice("");
+    setFieldErrors({});
     setIsLoading(true);
 
     try {
       if (mode === "reset-request") {
         if (!email.trim()) {
+          setFieldErrors({ email: copy.errors.emailRequired });
           setError(copy.errors.emailRequired);
           return;
         }
@@ -307,10 +372,12 @@ export function LoginScreen() {
           return;
         }
         if (!resetPassword) {
+          setFieldErrors({ resetPassword: copy.errors.passwordRequired });
           setError(copy.errors.passwordRequired);
           return;
         }
         if (resetPassword !== resetConfirm) {
+          setFieldErrors({ resetConfirm: copy.errors.passwordsMismatch });
           setError(copy.errors.passwordsMismatch);
           return;
         }
@@ -328,28 +395,33 @@ export function LoginScreen() {
         setResetConfirm("");
         setResetToken("");
         clearResetUrl();
-        setMode("login");
+        setModeClean("login");
         return;
       }
 
       if (mode === "signup") {
         if (!fullName.trim()) {
+          setFieldErrors({ fullName: copy.errors.fullNameRequired });
           setError(copy.errors.fullNameRequired);
           return;
         }
         if (!dateOfBirth.trim()) {
+          setFieldErrors({ dateOfBirth: copy.errors.dateOfBirthRequired });
           setError(copy.errors.dateOfBirthRequired);
           return;
         }
         if (!email.trim()) {
+          setFieldErrors({ email: copy.errors.emailRequired });
           setError(copy.errors.emailRequired);
           return;
         }
         if (!password) {
+          setFieldErrors({ password: copy.errors.passwordRequired });
           setError(copy.errors.passwordRequired);
           return;
         }
         if (password !== confirmPassword) {
+          setFieldErrors({ confirmPassword: copy.errors.passwordsMismatch });
           setError(copy.errors.passwordsMismatch);
           return;
         }
@@ -376,7 +448,18 @@ export function LoginScreen() {
             ? `${copy.notices.verificationLink} ${data.verificationLink}`
             : data?.message || copy.notices.verifyEmail
         );
-        setMode("login");
+        setModeClean("login");
+        return;
+      }
+
+      if (!email.trim()) {
+        setFieldErrors({ email: copy.errors.emailRequired });
+        setError(copy.errors.emailRequired);
+        return;
+      }
+      if (!password) {
+        setFieldErrors({ password: copy.errors.passwordRequired });
+        setError(copy.errors.passwordRequired);
         return;
       }
 
@@ -404,6 +487,7 @@ export function LoginScreen() {
 
       setToken(data.token);
       setLoginAccessCode("");
+      setShowLoginAccessCode(false);
     } catch (err) {
       setError(
         mode === "signup"
@@ -436,7 +520,63 @@ export function LoginScreen() {
                 ? copy.title.resetConfirm
                 : copy.title.login}
         </h1>
-        {mode === "login" && null}
+        <p className="mt-1 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+          {mode === "signup"
+            ? copy.subtitles.signup
+            : mode === "reset-request"
+              ? copy.subtitles.resetRequest
+              : mode === "reset-confirm"
+                ? copy.subtitles.resetConfirm
+                : copy.subtitles.login}
+        </p>
+
+        {mode !== "reset-confirm" ? (
+          <div
+            role="tablist"
+            aria-label={isRtl ? "تبديل نمط الدخول" : "Authentication mode"}
+            className="mt-4 grid grid-cols-3 gap-2 rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base/70 dark:bg-[#14100d] p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "login"}
+              onClick={() => setModeClean("login")}
+              className={`rounded-zaki-sm px-3 py-1.5 text-xs font-semibold transition ${
+                mode === "login"
+                  ? "bg-white dark:bg-[#0f0b08] text-zaki-primary dark:text-[#efe6d9] shadow-sm"
+                  : "text-zaki-muted dark:text-[#a79079] hover:text-zaki-primary dark:hover:text-[#efe6d9]"
+              }`}
+            >
+              {copy.actions.tabSignIn}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "signup"}
+              onClick={() => setModeClean("signup")}
+              className={`rounded-zaki-sm px-3 py-1.5 text-xs font-semibold transition ${
+                mode === "signup"
+                  ? "bg-white dark:bg-[#0f0b08] text-zaki-primary dark:text-[#efe6d9] shadow-sm"
+                  : "text-zaki-muted dark:text-[#a79079] hover:text-zaki-primary dark:hover:text-[#efe6d9]"
+              }`}
+            >
+              {copy.actions.tabCreate}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "reset-request"}
+              onClick={() => setModeClean("reset-request")}
+              className={`rounded-zaki-sm px-3 py-1.5 text-xs font-semibold transition ${
+                mode === "reset-request"
+                  ? "bg-white dark:bg-[#0f0b08] text-zaki-primary dark:text-[#efe6d9] shadow-sm"
+                  : "text-zaki-muted dark:text-[#a79079] hover:text-zaki-primary dark:hover:text-[#efe6d9]"
+              }`}
+            >
+              {copy.actions.tabReset}
+            </button>
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {mode === "reset-confirm" && (
@@ -450,12 +590,18 @@ export function LoginScreen() {
               <input
                 type="text"
                 value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
+                onChange={(event) => {
+                  setFullName(event.target.value);
+                  clearFieldError("fullName");
+                }}
                 placeholder={copy.placeholders.fullName}
                 className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="name"
                 required
               />
+              {fieldErrors.fullName ? (
+                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.fullName}</span>
+              ) : null}
             </label>
           )}
           {mode === "signup" && (
@@ -464,11 +610,17 @@ export function LoginScreen() {
               <input
                 type="date"
                 value={dateOfBirth}
-                onChange={(event) => setDateOfBirth(event.target.value)}
+                onChange={(event) => {
+                  setDateOfBirth(event.target.value);
+                  clearFieldError("dateOfBirth");
+                }}
                 className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="bday"
                 required
               />
+              {fieldErrors.dateOfBirth ? (
+                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.dateOfBirth}</span>
+              ) : null}
             </label>
           )}
           {(mode === "login" ||
@@ -479,12 +631,18 @@ export function LoginScreen() {
               <input
                 type="text"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  clearFieldError("email");
+                }}
                 placeholder={copy.placeholders.email}
                 className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="email"
                 required
               />
+              {fieldErrors.email ? (
+                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.email}</span>
+              ) : null}
             </label>
           )}
 
@@ -495,7 +653,10 @@ export function LoginScreen() {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    clearFieldError("password");
+                  }}
                   placeholder={copy.placeholders.password}
                   className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 pr-12 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
@@ -514,6 +675,9 @@ export function LoginScreen() {
                   )}
                 </button>
               </div>
+              {fieldErrors.password ? (
+                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.password}</span>
+              ) : null}
             </label>
           )}
 
@@ -541,28 +705,37 @@ export function LoginScreen() {
             </label>
           )}
 
-          {mode === "login" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
-              {copy.fields.accessCode}
-              <input
-                type="text"
-                value={loginAccessCode}
-                onChange={(event) => setLoginAccessCode(event.target.value)}
-                placeholder={copy.placeholders.accessCode}
-                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
-                autoComplete="off"
-              />
-            </label>
-          )}
+          {mode === "login" ? (
+            <>
+              <button
+                type="button"
+                className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+                onClick={() => setShowLoginAccessCode((prev) => !prev)}
+              >
+                {showLoginAccessCode ? copy.actions.hideActivationCode : copy.actions.showActivationCode}
+              </button>
+              {showLoginAccessCode ? (
+                <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+                  {copy.fields.accessCode}
+                  <input
+                    type="text"
+                    value={loginAccessCode}
+                    onChange={(event) => setLoginAccessCode(event.target.value)}
+                    placeholder={copy.placeholders.accessCode}
+                    className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                    autoComplete="off"
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
 
           {mode === "login" && (
             <button
               type="button"
               className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
               onClick={() => {
-                setError("");
-                setNotice("");
-                setMode("reset-request");
+                setModeClean("reset-request");
               }}
             >
               {copy.actions.forgotPassword}
@@ -575,12 +748,18 @@ export function LoginScreen() {
               <input
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  clearFieldError("confirmPassword");
+                }}
                 placeholder={copy.placeholders.confirmPassword}
                 className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                 autoComplete="new-password"
                 required
               />
+              {fieldErrors.confirmPassword ? (
+                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.confirmPassword}</span>
+              ) : null}
             </label>
           )}
 
@@ -591,24 +770,36 @@ export function LoginScreen() {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetPassword}
-                  onChange={(event) => setResetPassword(event.target.value)}
+                  onChange={(event) => {
+                    setResetPassword(event.target.value);
+                    clearFieldError("resetPassword");
+                  }}
                   placeholder={copy.placeholders.newPassword}
                   className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete="new-password"
                   required
                 />
+                {fieldErrors.resetPassword ? (
+                  <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetPassword}</span>
+                ) : null}
               </label>
               <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
                 {copy.fields.confirmNewPassword}
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetConfirm}
-                  onChange={(event) => setResetConfirm(event.target.value)}
+                  onChange={(event) => {
+                    setResetConfirm(event.target.value);
+                    clearFieldError("resetConfirm");
+                  }}
                   placeholder={copy.placeholders.confirmNewPassword}
                   className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
                   autoComplete="new-password"
                   required
                 />
+                {fieldErrors.resetConfirm ? (
+                  <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetConfirm}</span>
+                ) : null}
               </label>
             </>
           )}
@@ -658,27 +849,12 @@ export function LoginScreen() {
           type="button"
           className="mt-4 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
           onClick={() => {
-            setError("");
-            setNotice("");
             if (mode === "signup") {
-              setMode("login");
+              setModeClean("login");
             } else if (mode === "login") {
-              setMode("signup");
+              setModeClean("signup");
             } else {
-              setMode("login");
-              setResetPassword("");
-              setResetConfirm("");
-              setResetToken("");
-              clearResetUrl();
-            }
-            if (mode === "signup") {
-              setFullName("");
-              setDateOfBirth("");
-              setConfirmPassword("");
-              setSignupLegalConsent(false);
-            }
-            if (mode === "login") {
-              setLoginAccessCode("");
+              setModeClean("login");
             }
           }}
         >
@@ -688,6 +864,10 @@ export function LoginScreen() {
               ? copy.actions.newHere
               : copy.actions.backToSignIn}
         </button>
+
+        <div className="mt-5 border-t border-zaki-strong/60 dark:border-[#2a2018] pt-3 text-[11px] text-zaki-muted dark:text-[#9f8f7c]">
+          {isRtl ? "تسجيل دخول آمن • بنية تحتية موثوقة • امتثال قانوني" : "Secure sign-in • Trusted infrastructure • Legal compliance"}
+        </div>
       </div>
     </div>
   );
