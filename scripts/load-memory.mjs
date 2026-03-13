@@ -256,21 +256,36 @@ function pickWorkload(baseUrl, workspace, thread, { includeStream }) {
       }),
     },
     {
-      name: "memory.preview",
-      weight: 14,
+      name: "memory.capture.preference",
+      weight: 18,
       build: () => ({
         method: "POST",
-        url: `${baseUrl}/api/memory/preview`,
-        body: { message: "I like hiking and coffee.", threadId: thread },
+        url: `${baseUrl}/api/memory/capture`,
+        body: {
+          message: "I prefer concise answers and weekly plans.",
+          threadId: thread,
+        },
       }),
     },
     {
-      name: "memory.autosave",
-      weight: 14,
+      name: "memory.capture.sensitive",
+      weight: 12,
       build: () => ({
         method: "POST",
-        url: `${baseUrl}/api/memory/autosave`,
-        body: { message: "I enjoy swimming and jazz.", threadId: thread },
+        url: `${baseUrl}/api/memory/capture`,
+        body: {
+          message: "My phone number is +49 157 12345678.",
+          threadId: thread,
+        },
+      }),
+    },
+    {
+      name: "memory.capture.conflict",
+      weight: 8,
+      build: () => ({
+        method: "POST",
+        url: `${baseUrl}/api/memory/capture`,
+        body: { message: "I live in Berlin.", threadId: thread },
       }),
     },
   ];

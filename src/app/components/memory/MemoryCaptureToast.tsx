@@ -81,9 +81,10 @@ export function MemoryCaptureToast({
           </div>
           <button
             type="button"
-            className="text-zaki-muted hover:text-zaki-primary"
+            className="text-zaki-muted hover:text-zaki-primary disabled:pointer-events-none disabled:opacity-40"
             onClick={onDismiss}
             aria-label={t("memory.dismissAria")}
+            disabled={processing}
           >
             ×
           </button>
@@ -103,8 +104,9 @@ export function MemoryCaptureToast({
           {(reviewCount > 0 || conflictCount > 0) && onReview ? (
             <button
               type="button"
-              className="font-medium text-zaki-brand hover:underline"
+              className="font-medium text-zaki-brand hover:underline disabled:pointer-events-none disabled:opacity-50"
               onClick={onReview}
+              disabled={processing}
             >
               {t("memory.review")}
             </button>

@@ -65,4 +65,81 @@ describe("MemoryCaptureToast", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     expect(onReview).toHaveBeenCalledTimes(1);
   });
+
+  it("disables dismiss, undo, and review actions while processing", () => {
+    const onDismiss = jest.fn();
+    const onUndo = jest.fn();
+    const onReview = jest.fn();
+
+    render(
+      <MemoryCaptureToast
+        position={position}
+        tone="review"
+        savedCount={1}
+        reviewCount={1}
+        conflictCount={0}
+        processing
+        onUndo={onUndo}
+        onReview={onReview}
+        onDismiss={onDismiss}
+      />
+    );
+
+    const dismissButton = screen.getByRole("button", { name: "Dismiss memory rail" });
+    const undoButton = screen.getByRole("button", { name: "Undo" });
+    const reviewButton = screen.getByRole("button", { name: "Review" });
+
+    expect(dismissButton).toBeDisabled();
+    expect(undoButton).toBeDisabled();
+    expect(reviewButton).toBeDisabled();
+
+    fireEvent.click(dismissButton);
+    fireEvent.click(undoButton);
+    fireEvent.click(reviewButton);
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onUndo).not.toHaveBeenCalled();
+    expect(onReview).not.toHaveBeenCalled();
+  });
+
+  it("restores interactivity after processing completes", () => {
+    const onDismiss = jest.fn();
+    const onUndo = jest.fn();
+    const onReview = jest.fn();
+    const { rerender } = render(
+      <MemoryCaptureToast
+        position={position}
+        tone="review"
+        savedCount={1}
+        reviewCount={1}
+        conflictCount={0}
+        processing
+        onUndo={onUndo}
+        onReview={onReview}
+        onDismiss={onDismiss}
+      />
+    );
+
+    rerender(
+      <MemoryCaptureToast
+        position={position}
+        tone="review"
+        savedCount={1}
+        reviewCount={1}
+        conflictCount={0}
+        processing={false}
+        onUndo={onUndo}
+        onReview={onReview}
+        onDismiss={onDismiss}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss memory rail" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onReview).toHaveBeenCalledTimes(1);
+  });
 });

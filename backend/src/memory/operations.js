@@ -1618,6 +1618,8 @@ export async function buildContext({
   return { context, sources: usedMemories };
 }
 
+// Legacy lower-level selector retained for compatibility; normal chat should use
+// buildChatMemoryContext so all runtime callers share one retrieval contract.
 export async function buildFastContext({
   userId,
   query,
@@ -1871,13 +1873,29 @@ export async function buildChatMemoryContext({
   maxChars = 800,
   currentThreadId = null,
   limit = 6,
+  mode = "default",
 }) {
+  const normalizedMode =
+    mode === "introspection_summary" || mode === "introspection_fact" ? mode : "default";
+  const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 6));
+  const effectiveLimit =
+    normalizedMode === "introspection_summary"
+      ? Math.max(boundedLimit, 4)
+      : normalizedMode === "introspection_fact"
+      ? Math.min(boundedLimit, 1)
+      : boundedLimit;
+  const fallbackFloor =
+    normalizedMode === "introspection_summary"
+      ? 4
+      : normalizedMode === "introspection_fact"
+      ? 1
+      : 3;
   const base = await buildFastContext({
     userId,
     query,
     maxChars,
     currentThreadId,
-    limit,
+    limit: effectiveLimit,
   });
 
   const sources = dedupeMemoryRows(
@@ -1886,7 +1904,7 @@ export async function buildChatMemoryContext({
       .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end")
   );
 
-  if (sources.length < 3) {
+  if (sources.length < fallbackFloor) {
     const fallbackRows = (
       await dbAll(
         `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
@@ -1906,8 +1924,12 @@ export async function buildChatMemoryContext({
       if (!memoryId || seenIds.has(memoryId)) continue;
       sources.push(memory);
       seenIds.add(memoryId);
-      if (sources.length >= 6) break;
+      if (sources.length >= effectiveLimit) break;
     }
+  }
+
+  if (sources.length > effectiveLimit) {
+    sources.length = effectiveLimit;
   }
 
   if (sources.length === 0) {

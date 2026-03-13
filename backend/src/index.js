@@ -24,7 +24,6 @@ import { validateRuntimeConfig } from "./config-validation.js";
 import {
   createMemoryRoutes,
   buildChatMemoryContext,
-  buildFastContext,
   findDuplicateMemory,
 } from "./memory/index.js";
 import {
@@ -7199,15 +7198,19 @@ const streamChatHandler = async (req, res) => {
     if (userEmail && introspectionMode) {
       try {
         const memoryResult = await withTimeout(
-          buildFastContext({
+          buildChatMemoryContext({
             userId: userEmail,
             query: originalMessage,
             maxChars: 600,
             currentThreadId: req.params.threadSlug,
             limit: introspectionMode === "summary" ? 4 : 1,
+            mode:
+              introspectionMode === "summary"
+                ? "introspection_summary"
+                : "introspection_fact",
           }),
           ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS,
-          "Fast memory introspection build"
+          "Chat memory introspection build"
         );
         const memorySources = (memoryResult.sources || []).map((source) => ({
           id: source.id,
