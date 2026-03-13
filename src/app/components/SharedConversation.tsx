@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Lock, Calendar, Eye, ArrowLeft, AlertCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ChatMarkdown } from './ChatMarkdown';
 import { CenterLogo } from './icons';
 import { buildApiUrl } from '@/lib/api';
 import { useTranslation } from "react-i18next";
+import { MessageContent } from './chat/rendering/MessageContent';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -361,19 +361,30 @@ export function SharedConversation() {
               
               <div
                 className={cn(
-                  "max-w-[92%] sm:max-w-[80%] rounded-zaki-xl px-4 py-3 border border-zaki-subtle dark:border-zaki-dark",
+                  "max-w-[92%] sm:max-w-[80%]",
                   msg.role === 'user'
-                    ? "bg-zaki-elevated/80 dark:bg-zaki-dark-elevated text-zaki-primary dark:text-zaki-dark-primary"
-                    : "bg-zaki-raised dark:bg-zaki-dark-card text-zaki-primary dark:text-zaki-dark-primary"
+                    ? "rounded-zaki-xl border border-zaki-subtle bg-zaki-elevated/80 px-4 py-3 text-zaki-primary dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-primary"
+                    : "bg-transparent text-zaki-primary dark:text-zaki-dark-primary"
                 )}
               >
-                <ChatMarkdown
-                  content={
-                    typeof msg.content === "string"
-                      ? stripResponseFormatEnvelope(msg.content)
-                      : ""
-                  }
-                />
+                {msg.role === "assistant" ? (
+                  <MessageContent
+                    content={
+                      typeof msg.content === "string"
+                        ? stripResponseFormatEnvelope(msg.content)
+                        : ""
+                    }
+                    role="assistant"
+                    surface="shared"
+                  />
+                ) : (
+                  <MessageContent
+                    content={typeof msg.content === "string" ? msg.content : ""}
+                    role="user"
+                    surface="shared"
+                    preserveUserFormatting
+                  />
+                )}
               </div>
               
               {msg.role === 'user' && (

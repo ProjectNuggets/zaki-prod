@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { ChatMarkdown } from "../ChatMarkdown";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
+import { MessageContent } from "./rendering/MessageContent";
 
 export interface Message {
   id: string;
@@ -61,8 +61,8 @@ export function MessageBubble({
 
       <div
         className={cn(
-          "zaki-message-stack max-w-[80%] flex flex-col gap-2",
-          isUser ? "items-end" : "items-start"
+          "zaki-message-stack flex flex-col gap-2",
+          isUser ? "max-w-[80%] items-end" : "w-full max-w-[780px] items-start"
         )}
       >
         {message.attachments && message.attachments.length > 0 && (
@@ -84,16 +84,16 @@ export function MessageBubble({
         {message.content && (
           <div
             className={cn(
-              "zaki-message-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed",
+              "zaki-message-bubble text-sm leading-relaxed",
               isUser
-                ? "zaki-user-bubble bg-zaki-bubble-user text-zaki-bubble-user"
+                ? "zaki-user-bubble rounded-zaki-lg bg-zaki-bubble-user px-4 py-3 text-zaki-bubble-user"
                 : isAssistantError
-                  ? "zaki-assistant-bubble border border-rose-200 bg-rose-50/90 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
-                  : "zaki-assistant-bubble bg-transparent text-zaki-primary"
+                  ? "zaki-assistant-bubble w-full rounded-[18px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
+                  : "zaki-assistant-bubble w-full bg-transparent px-0 py-0 text-zaki-primary"
             )}
           >
             {!isUser ? (
-              <ChatMarkdown content={message.content} />
+              <MessageContent content={message.content} role="assistant" surface="chat" />
             ) : (
               message.content
             )}
