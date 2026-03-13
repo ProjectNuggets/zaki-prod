@@ -65,6 +65,12 @@ import {
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
 import {
+  buildBotProvisionPayload,
+  normalizeTelegramDisconnectErrorPayload,
+  registerBotBffAliases,
+  registerTelegramDisconnectAliases,
+} from "./agent-bff-contract.js";
+import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
   consumeDailyPromptQuota,
@@ -7939,10 +7945,7 @@ const agentProvisionHandler = async (req, res) => {
     await proxyNullclawRequest(req, res, "/api/v1/users/provision", {
       method: "POST",
       userId,
-      body: {
-        ...payload,
-        user_id: userId,
-      },
+      body: buildBotProvisionPayload(userId, payload),
     });
     return;
   } catch (error) {
@@ -8007,11 +8010,104 @@ const agentTelegramConnectHandler = async (req, res) => {
   }
 };
 
+const agentTelegramDisconnectHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const nullclawBase = getNullclawBase();
+    if (!nullclawBase) {
+      return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
+    }
+    if (!NULLCLAW_INTERNAL_TOKEN) {
+      return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
+    }
+
+    const upstream = await fetchWithTimeout(
+      `${nullclawBase}/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/disconnect`,
+      {
+        method: "DELETE",
+        headers: buildAgentForwardHeaders({
+          internalToken: NULLCLAW_INTERNAL_TOKEN,
+          userId,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
+      },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Telegram disconnect request"
+    );
+
+    const contentType = String(upstream.headers.get("content-type") || "");
+    if (upstream.ok) {
+      res.status(upstream.status);
+      copyResponseHeaders(upstream, res);
+      if (!upstream.body) {
+        res.end();
+        return;
+      }
+      Readable.fromWeb(upstream.body).pipe(res);
+      return;
+    }
+
+    let payload = null;
+    try {
+      payload = contentType.toLowerCase().includes("application/json")
+        ? await upstream.json()
+        : null;
+    } catch {
+      payload = null;
+    }
+
+    const normalizedPayload = normalizeTelegramDisconnectErrorPayload(
+      payload && typeof payload === "object"
+        ? payload
+        : {
+            error: "Telegram disconnect failed.",
+            message: "Telegram disconnect failed.",
+          },
+      upstream.status
+    );
+
+    res.status(upstream.status).json(normalizedPayload);
+    return;
+  } catch (error) {
+    console.error("[Agent] Telegram disconnect proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Telegram disconnect failed." });
+  }
+};
+
+const botUsageHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const { zakiUser } = authResult;
+    const payload = await buildUsageQuotaResponse({
+      zakiUser,
+      surface: ZAKI_BOT_SURFACE,
+      buildUserQuotaContext,
+      readDailyPromptUsage,
+      resolveSurfaceQuotaConfig,
+      dbGet,
+    });
+    res.status(200).json(payload);
+  } catch (error) {
+    console.error("[Usage] BOT quota endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load usage quota." });
+  }
+};
+
+const agentJson10mb = express.json({ limit: "10mb" });
+const agentJson1mb = express.json({ limit: "1mb" });
+
 app.post(
   "/api/agent/chat/stream",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "10mb" }),
+  agentJson10mb,
   agentChatStreamHandler
 );
 
@@ -8019,7 +8115,7 @@ app.post(
   "/api/agent/provision",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   agentProvisionHandler
 );
 app.get(
@@ -8032,7 +8128,7 @@ app.put(
   "/api/agent/onboarding",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
 );
 app.get(
@@ -8045,7 +8141,7 @@ app.patch(
   "/api/agent/config",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
 app.get(
@@ -8060,7 +8156,7 @@ app.put(
   "/api/agent/secrets/:key",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   makeAgentUserProxyHandler(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
   )
@@ -8077,17 +8173,14 @@ app.post(
   "/api/agent/channels/telegram/connect",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   agentTelegramConnectHandler
 );
-app.delete(
-  "/api/agent/channels/telegram/disconnect",
+registerTelegramDisconnectAliases(app, {
   requireAgentContext,
   agentRouteLimiter,
-  makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/disconnect`
-  )
-);
+  agentTelegramDisconnectHandler,
+});
 app.get(
   "/api/agent/heartbeat",
   requireAgentContext,
@@ -8098,7 +8191,7 @@ app.put(
   "/api/agent/heartbeat",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
 );
 app.get(
@@ -8111,18 +8204,42 @@ app.post(
   "/api/agent/cron",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
 );
 app.patch(
   "/api/agent/cron/:id",
   requireAgentContext,
   agentRouteLimiter,
-  express.json({ limit: "1mb" }),
+  agentJson1mb,
   makeAgentUserProxyHandler(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
   )
 );
+
+registerBotBffAliases(app, {
+  requireAgentContext,
+  agentRouteLimiter,
+  json1mb: agentJson1mb,
+  json10mb: agentJson10mb,
+  agentProvisionHandler,
+  onboardingGetHandler: makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`
+  ),
+  onboardingPutHandler: makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`
+  ),
+  agentChatStreamHandler,
+  configGetHandler: makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`
+  ),
+  configPatchHandler: makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`
+  ),
+  agentTelegramConnectHandler,
+  agentTelegramDisconnectHandler,
+  botUsageHandler,
+});
 app.delete(
   "/api/agent/cron/:id",
   requireAgentContext,
