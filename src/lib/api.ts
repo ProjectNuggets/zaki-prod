@@ -1,6 +1,40 @@
 import type { ProductTelemetrySource } from "./productTelemetry";
 const TOKEN_KEY = "zaki.auth.token";
 
+export type MemoryCaptureResponse = {
+  saved: Array<{
+    id: string;
+    content: string;
+    type: string;
+    state: "saved_reversible";
+    undoUntil: string;
+  }>;
+  review: Array<{
+    id: string;
+    content: string;
+    type: string;
+    state: "needs_review";
+    reason: string;
+  }>;
+  duplicates: Array<{
+    content: string;
+    type: string;
+  }>;
+  conflicts: Array<{
+    id: string;
+    content: string;
+    type: string;
+    conflictingContent?: string;
+  }>;
+  skipped: Array<{
+    content: string;
+    type: string;
+    reason: string;
+    stage?: "extraction" | "quality_filter" | "policy" | "duplicate_guard";
+    detail?: string;
+  }>;
+};
+
 type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
 };
@@ -117,6 +151,31 @@ export async function backendAuthRequest(
     requestHeaders.set("Authorization", `Bearer ${token}`);
   }
   return backendRequest(path, { ...rest, headers: requestHeaders });
+}
+
+export async function captureMemory({
+  message,
+  threadId,
+}: {
+  message: string;
+  threadId?: string | null;
+}) {
+  const response = await apiRequest("/api/memory/capture", {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      threadId: threadId ?? null,
+    }),
+  });
+
+  let data: MemoryCaptureResponse | null = null;
+  try {
+    data = (await response.json()) as MemoryCaptureResponse;
+  } catch {
+    data = null;
+  }
+
+  return { response, data };
 }
 
 export async function requestLogin({

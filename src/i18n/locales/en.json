@@ -212,9 +212,9 @@
     "welcome": "Welcome back",
     "guestName": "there",
     "memoryOn": "Memory is on",
-    "memoryOnHelper": "We only store what you approve.",
+    "memoryOnHelper": "ZAKI saves useful memory automatically. You can undo or delete it anytime.",
     "conflictsBadge": "Conflicts {{count}}",
-    "learnMemory": "See memory pipeline",
+    "learnMemory": "See how memory works",
     "quickStartLabel": "Quick start",
     "latestLabel": "Your controls",
     "viewAll": "View all",
@@ -225,8 +225,8 @@
     "aboutZaki": "About ZAKI",
     "aboutNovaNuggets": "About Nova Nuggets",
     "missionLabel": "Why we exist",
-    "memoryClarityLabel": "Memory pipeline",
-    "memoryClarityBody": "ZAKI extracts potential memory from chat, routes it through pending review and conflict checks, then uses only approved memory in future replies.",
+    "memoryClarityLabel": "How memory works",
+    "memoryClarityBody": "ZAKI saves clear, useful details automatically, gives you a short undo window, and sends only sensitive or conflicting items to review.",
     "examplesLabel": "Examples",
     "examplesSets": {
       "default": "Examples",
@@ -391,7 +391,7 @@
       "label": "Memory",
       "auto": "Auto",
       "manual": "Manual",
-      "autosaveHint": "Auto-save memories with 8s undo",
+      "autosaveHint": "Auto-save memories with 5s undo",
       "manualHint": "Manually confirm each memory"
     },
     "sendAria": "Send message",
@@ -826,7 +826,14 @@
   },
   "memory": {
     "saved": "memory saved",
+    "savedSingle": "Saved to memory",
+    "savedMultiple": "Saved {{count}} memories",
     "toReview": "memory to review",
+    "reviewNotice": "{{count}} item needs review",
+    "conflictNotice": "{{count}} conflict needs review",
+    "manageAnytime": "You can review or delete memories anytime.",
+    "reviewPendingHelper": "{{count}} item is waiting in review.",
+    "reviewConflictsHelper": "{{count}} conflict needs your decision.",
     "review": "Review",
     "hide": "Hide",
     "remember": "Remember",
@@ -835,6 +842,9 @@
     "open": "Open",
     "rememberAll": "Remember all",
     "undo": "Undo",
+    "undoRetry": "Retry undo",
+    "undoFailed": "Undo failed. The memory is still saved.",
+    "undoPartialError": "{{count}} memory could not be undone.",
     "pending": "Pending",
     "more": "more",
     "dismissAria": "Dismiss memory rail",
@@ -869,7 +879,7 @@
     "mode": {
       "title": "Memory Mode",
       "autosave": "Auto-Save",
-      "autosaveHint": "Save instantly, 8s undo",
+      "autosaveHint": "Save instantly, 5s undo",
       "manual": "Manual",
       "manualHint": "Confirm each memory"
     }
@@ -906,8 +916,8 @@
       "retry": "Try again"
     },
     "pipeline": {
-      "title": "Memory Pipeline",
-      "body": "ZAKI extracts from chat, queues manual reviews, flags contradictions, then stores approved memory for context injection.",
+      "title": "Memory at a glance",
+      "body": "Useful details are saved automatically, with quick undo. Sensitive or conflicting memories wait here for review.",
       "pending": "Pending Review",
       "stored": "Stored",
       "conflicts": "Conflicts",

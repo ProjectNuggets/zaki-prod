@@ -440,4 +440,71 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("Likes travel");
     expect(result.context).toContain("Plans to travel to Riyadh");
   });
+
+  it("buildChatMemoryContext groups selected memories into stable buckets and omits session-end entries", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-from",
+        content: "From Damascus",
+        type: "fact",
+        metadata: { conflictKey: "identity:origin" },
+        retrieval_score: 0.9,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+      },
+      {
+        id: "m-pref",
+        content: "Prefers concise answers",
+        type: "preference",
+        metadata: { conflictKey: "preference:concise-answers" },
+        retrieval_score: 0.88,
+        importance_score: 0.8,
+        confidence_score: 0.9,
+      },
+      {
+        id: "m-active",
+        content: "Preparing Lausanne Summit note",
+        type: "goal",
+        metadata: {},
+        retrieval_score: 0.86,
+        importance_score: 0.85,
+        confidence_score: 0.9,
+      },
+      {
+        id: "m-delta",
+        content: "Last time: drafted a short recap.",
+        type: "goal",
+        metadata: { source: "session_end" },
+        retrieval_score: 0.95,
+        importance_score: 0.9,
+        confidence_score: 0.8,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "Help me write my summit update",
+      maxChars: 500,
+      currentThreadId: "thread-new",
+      limit: 6,
+    });
+
+    expect(result.context).toContain("Profile:");
+    expect(result.context).toContain("Preferences:");
+    expect(result.context).toContain("Active:");
+    expect(result.context).toContain("From Damascus");
+    expect(result.context).toContain("Prefers concise");
+    expect(result.context).toContain("Preparing Lausanne Summit note");
+    expect(result.context).not.toContain("Last time:");
+    expect(result.sources.map((source) => source.id)).toEqual([
+      "m-from",
+      "m-pref",
+      "m-active",
+    ]);
+  });
 });

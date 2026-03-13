@@ -1,4 +1,4 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, GraduationCap, File as FileIcon, FileText, X, Zap, ChevronDown, Check } from "lucide-react";
+import { Plus, ArrowUp, Sparkles, Paperclip, Search, GraduationCap, File as FileIcon, FileText, X, Zap, Check } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -17,8 +17,6 @@ export function InputArea({
   onToggleQueryMode,
   webSearchArmed = false,
   onToggleWebSearch,
-  memoryMode = "autosave",
-  onToggleMemoryMode,
   showUpgradeStrip = true,
   sendLocked = false,
   zakiBotMode = false,
@@ -33,8 +31,6 @@ export function InputArea({
   onToggleQueryMode?: () => void;
   webSearchArmed?: boolean;
   onToggleWebSearch?: () => void;
-  memoryMode?: "autosave" | "manual";
-  onToggleMemoryMode?: () => void;
   showUpgradeStrip?: boolean;
   sendLocked?: boolean;
   zakiBotMode?: boolean;
@@ -520,31 +516,6 @@ export function InputArea({
             <span className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent">
               {t("input.queryMode.activePill")}
             </span>
-          ) : null}
-          {!zakiBotMode ? (
-            <button
-            type="button"
-            onClick={onToggleMemoryMode}
-            className={cn(
-              "flex items-center gap-2 rounded-xl border px-3 py-1 text-2xs transition-colors",
-              "bg-[#f6eee4] border-[#ead7c1] text-zaki-secondary hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-subtle dark:hover:bg-zaki-dark-hover"
-            )}
-            data-onboarding-id="chat-memory-mode-toggle"
-            title={
-              memoryMode === "autosave"
-                ? t("input.memoryMode.autosaveHint")
-                : t("input.memoryMode.manualHint")
-            }
-          >
-            <span className="text-zaki-muted">{t("input.memoryMode.label")}</span>
-            <span className="h-4 w-px bg-[#e4d6c4] dark:bg-zaki-dark-hover" />
-            <span className="capitalize">
-              {memoryMode === "autosave"
-                ? t("input.memoryMode.auto")
-                : t("input.memoryMode.manual")}
-            </span>
-            <ChevronDown className="size-3 text-zaki-muted" />
-            </button>
           ) : null}
           <span className="flex-1" />
           <button

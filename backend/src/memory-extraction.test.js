@@ -32,6 +32,16 @@ describe("memory extraction", () => {
     );
   });
 
+  it("extracts compound preference statements as actionable memories", async () => {
+    const result = await extractFacts("I prefer concise answers and weekly plans.");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ content: "Likes concise answers" }),
+        expect.objectContaining({ content: "Likes weekly plans" }),
+      ])
+    );
+  });
+
   it("normalizes malformed preference phrasing from LLM output", async () => {
     process.env.NOVA_TYP_BASE_URL = "https://example.com";
     global.fetch = async () => ({
@@ -388,6 +398,30 @@ describe("memory extraction", () => {
     );
   });
 
+  it("extracts phone details for downstream review classification", async () => {
+    const result = await extractFacts("My phone number is +49 170 123 4567.");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: "Reach me at +49 170 123 4567",
+          type: "fact",
+        }),
+      ])
+    );
+  });
+
+  it("extracts Arabic health details for downstream review classification", async () => {
+    const result = await extractFacts("أعاني من القلق المزمن.");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: "Health detail: القلق المزمن",
+          type: "struggle",
+        }),
+      ])
+    );
+  });
+
   it("sanitizes mocked extracted memories defensively", () => {
     const result = sanitizeExtractedMemories([
       {
@@ -411,6 +445,63 @@ describe("memory extraction", () => {
       expect.objectContaining({
         content: "Plans to travel to Dubai",
         type: "goal",
+      }),
+    ]);
+  });
+
+  it("splits compound preference statements into atomic memories", () => {
+    const result = sanitizeExtractedMemories([
+      {
+        content: "Prefers concise answers and weekly plans",
+        type: "preference",
+        confidence: 0.9,
+        polarity: "positive",
+      },
+    ]);
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: "Prefers concise answers",
+          type: "preference",
+        }),
+        expect.objectContaining({
+          content: "Prefers weekly plans",
+          type: "preference",
+        }),
+      ])
+    );
+  });
+
+  it("keeps missing confidence as null instead of silently defaulting to autosave threshold", () => {
+    const result = sanitizeExtractedMemories([
+      {
+        content: "Prefers concise answers",
+        type: "preference",
+      },
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        content: "Prefers concise answers",
+        confidence: null,
+      }),
+    ]);
+  });
+
+  it("preserves Arabic preference memories through sanitization", () => {
+    const result = sanitizeExtractedMemories([
+      {
+        content: "أفضل الإجابات المختصرة",
+        type: "preference",
+        confidence: 0.9,
+      },
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        content: "Prefers الإجابات المختصرة",
+        type: "preference",
       }),
     ]);
   });

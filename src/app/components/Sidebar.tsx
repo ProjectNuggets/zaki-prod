@@ -76,6 +76,9 @@ export function Sidebar() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [zakiBotControlsOpen, setZakiBotControlsOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
+  const [memoryInitialTab, setMemoryInitialTab] = useState<
+    "memories" | "pending" | "conflicts"
+  >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
   const planTierRaw = entitlementsResult?.data?.plan?.tier ?? "free";
@@ -131,9 +134,17 @@ export function Sidebar() {
   useEffect(() => {
     const handleOpenMemory = (event: Event) => {
       if (!user?.username) return;
-      const detail = (event as CustomEvent<{ query?: string }>).detail;
+      const detail = (event as CustomEvent<{
+        query?: string;
+        tab?: "memories" | "pending" | "conflicts";
+      }>).detail;
       const nextQuery = String(detail?.query || "").trim();
+      const nextTab =
+        detail?.tab === "pending" || detail?.tab === "conflicts" || detail?.tab === "memories"
+          ? detail.tab
+          : "memories";
       setMemorySearchQuery(nextQuery);
+      setMemoryInitialTab(nextTab);
       setMemoryOpen(true);
       window.dispatchEvent(new Event("zaki:onboarding-memory-opened"));
     };
@@ -146,6 +157,7 @@ export function Sidebar() {
     const handleCloseMemory = () => {
       setMemoryOpen(false);
       setMemorySearchQuery("");
+      setMemoryInitialTab("memories");
     };
     const handleConflictCount = (event: Event) => {
       const detail = (event as CustomEvent<{ count?: number }>).detail;
@@ -1915,6 +1927,7 @@ export function Sidebar() {
             onClick={() => {
               setMemoryOpen(false);
               setMemorySearchQuery("");
+              setMemoryInitialTab("memories");
             }}
             aria-hidden="true"
           />
@@ -1941,6 +1954,7 @@ export function Sidebar() {
                 onClick={() => {
                   setMemoryOpen(false);
                   setMemorySearchQuery("");
+                  setMemoryInitialTab("memories");
                 }}
                 aria-label={sidebarCopy.closeMemoryAria}
               >
@@ -1948,7 +1962,11 @@ export function Sidebar() {
               </button>
             </div>
             <div className="max-h-[75vh] overflow-y-auto px-6 py-6 bg-zaki-base/60 dark:bg-[#130f0c]">
-              <MemoryViewer userId={user.username} initialSearchQuery={memorySearchQuery} />
+              <MemoryViewer
+                userId={user.username}
+                initialSearchQuery={memorySearchQuery}
+                initialTab={memoryInitialTab}
+              />
             </div>
           </div>
         </div>

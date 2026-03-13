@@ -8,10 +8,12 @@ import { useNavigate } from "react-router-dom";
 import {
   apiRequest,
   buildApiUrl,
+  captureMemory,
   fetchAgentHistory,
   fetchUsageQuota,
   getApiBase,
   provisionAgent,
+  type MemoryCaptureResponse,
   type UsageQuotaSurface,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -27,18 +29,16 @@ import {
   ReadyState,
   CreateSpaceModal,
   EditInstructionsModal,
-  MemoryConfirmationPanel,
 } from "./chat";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type { BotStatusEvent } from "./chat/BotStatusRail";
 
-import { useMemoryMode } from "./memory/MemoryModeToggle";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
-import { MemoryRail } from "./memory/MemoryRail";
+import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import {
   createZakiBotThread,
   isZakiBotSpaceId,
@@ -516,21 +516,29 @@ export function ChatArea() {
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
 
-  // Memory state - works for both auto-save and manual modes
-  const [pendingMemories, setPendingMemories] = useState<Array<{id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual"}>>([]);
+  type MemoryViewerTab = "memories" | "pending" | "conflicts";
+
+  // Memory state for the simplified normal-chat capture flow
+  const [recentSavedMemories, setRecentSavedMemories] = useState<
+    MemoryCaptureResponse["saved"]
+  >([]);
+  const [recentReviewCount, setRecentReviewCount] = useState(0);
+  const [recentConflictCount, setRecentConflictCount] = useState(0);
+  const [memoryPendingCount, setMemoryPendingCount] = useState(0);
   const [showMemoryToast, setShowMemoryToast] = useState(false);
-  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [memoryToastMode, setMemoryToastMode] = useState<"saved" | "review" | "conflict">(
+    "saved"
+  );
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const [showConflictToast, setShowConflictToast] = useState(false);
-  // Memory chip removed
-  const lastMemoryRequestRef = useRef<{ message: string; threadId?: string; mode: "autosave" | "manual" } | null>(null);
-  const memoryQueueRef = useRef<Array<{ id: string; content: string; type: string; confirmationId?: string; _mode: "autosave" | "manual" }>>([]);
-  const memoryFlushTimerRef = useRef<number | null>(null);
+  const [memoryToastUndoError, setMemoryToastUndoError] = useState<string | null>(null);
+  const [memoryToastPartialUndoCount, setMemoryToastPartialUndoCount] = useState(0);
+  const lastMemoryRequestRef = useRef<{ message: string; threadId?: string } | null>(null);
   const autoDismissTimerRef = useRef<number | null>(null);
+  const [isUndoingMemoryToast, setIsUndoingMemoryToast] = useState(false);
   const memoryInFlightRef = useRef(false);
-  const queuedMemoryCheckRef = useRef<{ message: string; threadId?: string; mode?: "autosave" | "manual" } | null>(null);
-  const memorySeenRef = useRef<Set<string>>(new Set());
+  const queuedMemoryCheckRef = useRef<{ message: string; threadId?: string } | null>(null);
   const memoryConflictSeenRef = useRef<Set<string>>(new Set());
   const conflictCountRef = useRef(0);
   const memoryStatusHydratedRef = useRef(false);
@@ -549,35 +557,6 @@ export function ChatArea() {
     completed: false,
   });
   
-  // Memory mode: autosave (default) or manual
-  const [memoryMode, setMemoryMode] = useMemoryMode();
-
-  // Clear pending memories when switching modes to prevent stale state
-  const prevModeRef = useRef(memoryMode);
-  useEffect(() => {
-    if (prevModeRef.current !== memoryMode) {
-      window.dispatchEvent(
-        new CustomEvent("zaki:onboarding-memory-mode-changed", {
-          detail: { mode: memoryMode },
-        })
-      );
-      // Mode changed - keep manual pending memories visible until resolved
-      const hasManualPending = pendingMemories.some((m) => m._mode === "manual");
-      if (prevModeRef.current === "manual" && hasManualPending) {
-        setShowMemoryToast(true);
-      } else if (memoryMode === "autosave") {
-        setShowMemoryToast(false);
-      }
-      prevModeRef.current = memoryMode;
-    }
-  }, [memoryMode, pendingMemories]);
-
-  useEffect(() => {
-    if (pendingMemories.some((m) => m._mode === "manual" || m._mode === "autosave")) {
-      setShowMemoryToast(true);
-    }
-  }, [pendingMemories]);
-
   useEffect(() => {
     if (!authUserId) {
       setActivationProgress({
@@ -2107,25 +2086,43 @@ export function ChatArea() {
     upsertZakiBotToolCall,
   ]);
 
-  // Check for memories - Auto-Save or Manual mode
-  const flushMemoryQueue = useCallback(() => {
-    if (memoryQueueRef.current.length === 0) return;
-    setPendingMemories((prev) => {
-      const merged = [...prev, ...memoryQueueRef.current];
-      memoryQueueRef.current = [];
-      return merged;
-    });
-    setShowMemoryToast(true);
-    if (memoryMode === "autosave") {
-      if (autoDismissTimerRef.current) {
-        window.clearTimeout(autoDismissTimerRef.current);
-      }
-      autoDismissTimerRef.current = window.setTimeout(() => {
-        setShowMemoryToast(false);
-        setPendingMemories((prev) => prev.filter((m) => m._mode !== "autosave"));
-      }, 8000);
+  const dismissMemoryToast = useCallback(() => {
+    setShowMemoryToast(false);
+    setRecentSavedMemories([]);
+    setRecentReviewCount(0);
+    setRecentConflictCount(0);
+    setMemoryToastUndoError(null);
+    setMemoryToastPartialUndoCount(0);
+    if (autoDismissTimerRef.current) {
+      window.clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
     }
-  }, [memoryMode]);
+  }, []);
+
+  const scheduleMemoryToastDismiss = useCallback(() => {
+    if (autoDismissTimerRef.current) {
+      window.clearTimeout(autoDismissTimerRef.current);
+    }
+    autoDismissTimerRef.current = window.setTimeout(() => {
+      dismissMemoryToast();
+    }, 5000);
+  }, [dismissMemoryToast]);
+
+  const openMemoryViewer = useCallback((query?: string, tab?: MemoryViewerTab) => {
+    if (typeof window === "undefined") return;
+    if (query || tab) {
+      window.dispatchEvent(
+        new CustomEvent("zaki:open-memory", {
+          detail: {
+            ...(query ? { query } : {}),
+            ...(tab ? { tab } : {}),
+          },
+        })
+      );
+      return;
+    }
+    window.dispatchEvent(new Event("zaki:open-memory"));
+  }, []);
 
   const syncMemoryStatus = useCallback(
     async (notifyOnNewConflicts = false) => {
@@ -2142,6 +2139,7 @@ export function ChatArea() {
         const conflictCount = Math.max(0, Number(statusData.conflicts || 0));
         const previousConflictCount = conflictCountRef.current;
 
+        setMemoryPendingCount(pendingCount);
         if (!memoryStatusHydratedRef.current) {
           memoryStatusHydratedRef.current = true;
           if (conflictCount > 0) {
@@ -2161,68 +2159,6 @@ export function ChatArea() {
           );
         }
 
-        if (pendingCount <= 0) {
-          let hasAutosaveMemories = false;
-          setPendingMemories((prev) => {
-            const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
-            hasAutosaveMemories = autosaveOnly.length > 0;
-            return autosaveOnly;
-          });
-          if (!hasAutosaveMemories) {
-            setShowMemoryToast(false);
-          }
-          return;
-        }
-
-        const pendingResponse = await apiRequest("/api/memory/confirmations?limit=50");
-        if (!pendingResponse.ok) return;
-
-        const pendingData = (await pendingResponse.json()) as {
-          confirmations?: Array<{
-            id: string;
-            content: string;
-            type: string;
-          }>;
-          pending?: Array<{
-            id: string;
-            content: string;
-            type: string;
-          }>;
-        };
-        const incoming = (
-          Array.isArray(pendingData.confirmations)
-            ? pendingData.confirmations
-            : Array.isArray(pendingData.pending)
-              ? pendingData.pending
-              : []
-        ).map((memory) => ({
-          id: memory.id,
-          content: memory.content,
-          type: memory.type,
-          confirmationId: memory.id,
-          _mode: "manual" as const,
-        }));
-
-        if (incoming.length === 0) {
-          setPendingMemories((prev) => {
-            const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
-            if (autosaveOnly.length === 0) {
-              setShowMemoryToast(false);
-            }
-            return autosaveOnly;
-          });
-          return;
-        }
-
-        setPendingMemories((prev) => {
-          const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
-          const incomingById = new Map(
-            incoming.map((memory) => [memory.confirmationId || memory.id, memory])
-          );
-          const mergedManual = Array.from(incomingById.values());
-          return [...autosaveOnly, ...mergedManual];
-        });
-        setShowMemoryToast(true);
       } catch {
         // Sync is best-effort and should never block chat.
       }
@@ -2244,38 +2180,35 @@ export function ChatArea() {
     [authUserId, isMemoryPipelineEnabled, syncMemoryStatus]
   );
 
-  const checkForSavedMemories = useCallback(async (message: string, threadId?: string, modeOverride?: "autosave" | "manual") => {
+  const checkForSavedMemories = useCallback(async (message: string, threadId?: string) => {
     if (!authUserId || !isMemoryPipelineEnabled) return;
     if (memoryInFlightRef.current) {
-      queuedMemoryCheckRef.current = { message, threadId, mode: modeOverride };
+      queuedMemoryCheckRef.current = { message, threadId };
       return;
     }
-    
-    const activeMode = modeOverride ?? memoryMode;
-    const endpoint = activeMode === "autosave" 
-      ? "/api/memory/autosave" 
-      : "/api/memory/preview";
-    lastMemoryRequestRef.current = { message, threadId, mode: activeMode };
+
+    lastMemoryRequestRef.current = { message, threadId };
     memoryInFlightRef.current = true;
-    
+
     try {
-      const response = await apiRequest(endpoint, {
-        method: "POST",
-        body: JSON.stringify({
-          message,
-          threadId: threadId ?? activeThreadId,
-        }),
+      const { response, data } = await captureMemory({
+        message,
+        threadId: threadId ?? activeThreadId,
       });
-      
-      if (!response.ok) {
+
+      if (!response.ok || !data) {
         setMemoryError("Memory save failed. Retry?");
         return;
       }
-      
-      const data = await response.json();
+
       setMemoryError(null);
-      const conflicts = data.conflicts || [];
+      setMemoryToastUndoError(null);
+      setMemoryToastPartialUndoCount(0);
+      const saved = Array.isArray(data.saved) ? data.saved : [];
+      const review = Array.isArray(data.review) ? data.review : [];
+      const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
       const duplicates = Array.isArray(data.duplicates) ? data.duplicates : [];
+
       if (conflicts.length > 0) {
         const newConflicts = conflicts.filter((conflict: { id?: string }) => {
           if (!conflict?.id) return true;
@@ -2287,39 +2220,18 @@ export function ChatArea() {
           setShowConflictToast(true);
         }
       }
-      
-      // Different response shapes for different modes
-      const memories = (activeMode === "autosave" ? (data.saved || []) : (data.pending || [])).map(
-        (m: { id: string; content: string; type: string; confirmationId?: string }) => ({
-          ...m,
-          _mode: activeMode,
-        })
-      );
 
-      if (memories.length === 0 && duplicates.length > 0 && conflicts.length === 0) {
+      if (saved.length === 0 && review.length === 0 && duplicates.length > 0 && conflicts.length === 0) {
         const firstDuplicate = String(duplicates[0]?.content || "").trim();
         toast.info(
           duplicates.length === 1 && firstDuplicate
             ? `Already remembered: "${firstDuplicate}".`
             : `Already remembered ${duplicates.length} memories.`
         );
-        if (firstDuplicate && typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("zaki:open-memory", {
-              detail: { query: firstDuplicate },
-            })
-          );
-        }
+        return;
       }
-      
-      if (memories.length > 0) {
-        const uniqueMemories = memories.filter((m: { id: string; confirmationId?: string }) => {
-          const key = m.confirmationId || m.id;
-          if (memorySeenRef.current.has(key)) return false;
-          memorySeenRef.current.add(key);
-          return true;
-        });
-        if (uniqueMemories.length === 0) return;
+
+      if (saved.length > 0) {
         if (authUserId && !activationProgress.firstMemorySaved) {
           const nextProgress = markFirstMemorySaved(authUserId);
           setActivationProgress(nextProgress);
@@ -2344,14 +2256,16 @@ export function ChatArea() {
             });
           }
         }
-        memoryQueueRef.current = [...memoryQueueRef.current, ...uniqueMemories];
-        if (memoryFlushTimerRef.current) {
-          window.clearTimeout(memoryFlushTimerRef.current);
-        }
-        memoryFlushTimerRef.current = window.setTimeout(() => {
-          flushMemoryQueue();
-          memoryFlushTimerRef.current = null;
-        }, 150);
+      }
+      setRecentSavedMemories(saved);
+      setRecentReviewCount(review.length);
+      setRecentConflictCount(conflicts.length);
+      setShowMemoryToast(saved.length > 0 || review.length > 0 || conflicts.length > 0);
+      setMemoryToastMode(
+        conflicts.length > 0 ? "conflict" : review.length > 0 ? "review" : "saved"
+      );
+      if (saved.length > 0 || review.length > 0 || conflicts.length > 0) {
+        scheduleMemoryToastDismiss();
       }
     } catch (err) {
       // Silent fail - not critical for chat
@@ -2363,18 +2277,17 @@ export function ChatArea() {
       if (queuedMemoryCheckRef.current) {
         const next = queuedMemoryCheckRef.current;
         queuedMemoryCheckRef.current = null;
-        checkForSavedMemories(next.message, next.threadId, next.mode);
+        checkForSavedMemories(next.message, next.threadId);
       }
     }
   }, [
     authUserId,
     activationProgress.firstMemorySaved,
     activeThreadId,
-    flushMemoryQueue,
     isMemoryPipelineEnabled,
     isRtl,
-    memoryMode,
     requestMemoryStatusSync,
+    scheduleMemoryToastDismiss,
   ]);
 
   useEffect(() => {
@@ -2382,11 +2295,10 @@ export function ChatArea() {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
       lastMemoryStatusSyncAtRef.current = 0;
-      memoryQueueRef.current = [];
       queuedMemoryCheckRef.current = null;
       memoryInFlightRef.current = false;
-      setPendingMemories([]);
-      setShowMemoryToast(false);
+      dismissMemoryToast();
+      setMemoryPendingCount(0);
       setShowConflictToast(false);
       setMemoryConflictCount(0);
       setMemoryError(null);
@@ -2396,12 +2308,13 @@ export function ChatArea() {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
       lastMemoryStatusSyncAtRef.current = 0;
+      setMemoryPendingCount(0);
       setMemoryConflictCount(0);
       setShowConflictToast(false);
       return;
     }
     requestMemoryStatusSync(false, true);
-  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
+  }, [authUserId, dismissMemoryToast, isMemoryPipelineEnabled, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId || !isMemoryPipelineEnabled) return;
@@ -2462,6 +2375,7 @@ export function ChatArea() {
                     Number(payload.conflicts || 0)
                   );
                   const previousConflictCount = conflictCountRef.current;
+                  setMemoryPendingCount(nextPendingCount);
                   if (nextConflictCount > conflictCountRef.current) {
                     setShowConflictToast(true);
                   }
@@ -2474,17 +2388,7 @@ export function ChatArea() {
                       })
                     );
                   }
-                  if (nextPendingCount <= 0) {
-                    let hasAutosaveMemories = false;
-                    setPendingMemories((prev) => {
-                      const autosaveOnly = prev.filter((memory) => memory._mode === "autosave");
-                      hasAutosaveMemories = autosaveOnly.length > 0;
-                      return autosaveOnly;
-                    });
-                    if (!hasAutosaveMemories) {
-                      setShowMemoryToast(false);
-                    }
-                  } else {
+                  if (nextPendingCount > 0) {
                     requestMemoryStatusSync(true);
                   }
                 } catch {
@@ -3180,9 +3084,6 @@ export function ChatArea() {
 
   useEffect(() => {
     return () => {
-      if (memoryFlushTimerRef.current) {
-        window.clearTimeout(memoryFlushTimerRef.current);
-      }
       if (autoDismissTimerRef.current) {
         window.clearTimeout(autoDismissTimerRef.current);
       }
@@ -3361,15 +3262,15 @@ export function ChatArea() {
                       role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
-                        setShowMemoryPanel(true);
+                        openMemoryViewer();
                       }}
                       aria-label={chatCopy.reviewMemoriesAria}
                     >
                       <Brain className="size-4 text-zaki-muted" />
                       {chatCopy.reviewMemories}
-                      {pendingMemories.length > 0 && (
+                      {memoryPendingCount + memoryConflictCount > 0 && (
                         <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
-                          {pendingMemories.length}
+                          {memoryPendingCount + memoryConflictCount}
                         </span>
                       )}
                     </button>
@@ -3457,8 +3358,6 @@ export function ChatArea() {
                 onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
                 webSearchArmed={webSearchArmed}
                 onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
-                memoryMode={memoryMode}
-                onToggleMemoryMode={() => setMemoryMode(memoryMode === "autosave" ? "manual" : "autosave")}
                 showUpgradeStrip={!isZakiBotActiveSpace}
                 sendLocked={isZakiBotSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
@@ -3537,31 +3436,111 @@ export function ChatArea() {
         }}
       />
 
-      {/* Memory Toast - Mode-dependent rendering */}
-      {showMemoryToast && pendingMemories.length > 0 && authUserId && (
-        <MemoryRail
-          memoryMode={pendingMemories.some((m) => m._mode === "manual") ? "manual" : memoryMode}
-          memories={
-            pendingMemories.some((m) => m._mode === "manual")
-              ? pendingMemories.filter((m) => m._mode === "manual")
-              : pendingMemories.filter((m) => m._mode === "autosave")
-          }
-          userId={authUserId}
+      {showMemoryToast && authUserId && (
+        <MemoryCaptureToast
           position={toastPosition}
-          onResolve={(resolvedId) => {
-            setPendingMemories((prev) => {
-              const next = prev.filter((m) => (m.confirmationId || m.id) !== resolvedId);
-              if (next.filter((m) => m._mode === "manual").length === 0) {
-                setShowMemoryToast(false);
-              }
-              return next;
-            });
-            requestMemoryStatusSync(false, true);
+          tone={memoryToastMode}
+          savedCount={recentSavedMemories.length}
+          reviewCount={recentReviewCount}
+          conflictCount={recentConflictCount}
+          processing={isUndoingMemoryToast}
+          onUndo={
+            recentSavedMemories.length > 0
+              ? async () => {
+                  if (isUndoingMemoryToast) return;
+                  setIsUndoingMemoryToast(true);
+                  setMemoryToastUndoError(null);
+                  setMemoryToastPartialUndoCount(0);
+                  try {
+                    const results = await Promise.allSettled(
+                      recentSavedMemories.map((memory) =>
+                        apiRequest(`/api/memory/undo/${memory.id}`, {
+                          method: "POST",
+                        }).then(async (response) => {
+                          let data: { success?: boolean; error?: string | null } | null = null;
+                          try {
+                            data = (await response.json()) as {
+                              success?: boolean;
+                              error?: string | null;
+                            };
+                          } catch {
+                            data = null;
+                          }
+                          return {
+                            id: memory.id,
+                            ok: response.ok && data?.success !== false,
+                            error:
+                              typeof data?.error === "string" && data.error.trim()
+                                ? data.error.trim()
+                                : null,
+                          };
+                        })
+                      )
+                    );
+
+                    const failedIds = new Set<string>();
+                    let firstError: string | null = null;
+                    for (const result of results) {
+                      if (result.status === "fulfilled" && result.value.ok) continue;
+                      if (result.status === "fulfilled") {
+                        failedIds.add(result.value.id);
+                        if (!firstError && result.value.error) {
+                          firstError = result.value.error;
+                        }
+                        continue;
+                      }
+                      if (!firstError && result.reason instanceof Error) {
+                        firstError = result.reason.message;
+                      }
+                    }
+
+                    if (failedIds.size === 0) {
+                      if (recentReviewCount > 0 || recentConflictCount > 0) {
+                        setRecentSavedMemories([]);
+                        setMemoryToastMode(
+                          recentConflictCount > 0 ? "conflict" : recentReviewCount > 0 ? "review" : "saved"
+                        );
+                        setShowMemoryToast(true);
+                        scheduleMemoryToastDismiss();
+                      } else {
+                        dismissMemoryToast();
+                      }
+                      requestMemoryStatusSync(false, true);
+                      return;
+                    }
+
+                    const failedMemories = recentSavedMemories.filter((memory) => failedIds.has(memory.id));
+                    const partialUndoCount = recentSavedMemories.length - failedMemories.length;
+                    setRecentSavedMemories(failedMemories);
+                    setMemoryToastPartialUndoCount(partialUndoCount);
+                    setMemoryToastUndoError(
+                      firstError ||
+                        t(
+                          partialUndoCount > 0
+                            ? "memory.undoPartialError"
+                            : "memory.undoFailed"
+                        )
+                    );
+                    setShowMemoryToast(
+                      failedMemories.length > 0 || recentReviewCount > 0 || recentConflictCount > 0
+                    );
+                    requestMemoryStatusSync(false, true);
+                  } finally {
+                    setIsUndoingMemoryToast(false);
+                  }
+                }
+              : undefined
+          }
+          onReview={() => {
+            dismissMemoryToast();
+            openMemoryViewer(
+              undefined,
+              memoryToastMode === "conflict" || recentConflictCount > 0 ? "conflicts" : "pending"
+            );
           }}
-          onDismiss={() => {
-            setShowMemoryToast(false);
-            setPendingMemories((prev) => prev.filter((m) => m._mode !== "autosave"));
-          }}
+          onDismiss={dismissMemoryToast}
+          undoError={memoryToastUndoError}
+          partialUndoCount={memoryToastPartialUndoCount}
         />
       )}
 
@@ -3589,7 +3568,7 @@ export function ChatArea() {
                 type="button"
                 className="text-zaki-brand font-semibold hover:underline"
                 onClick={() => {
-                  window.dispatchEvent(new Event("zaki:open-memory"));
+                  openMemoryViewer(undefined, "conflicts");
                   setShowConflictToast(false);
                 }}
               >
@@ -3630,13 +3609,13 @@ export function ChatArea() {
               <button
                 type="button"
                 className="text-zaki-brand font-semibold hover:underline"
-                onClick={() => {
-                  const last = lastMemoryRequestRef.current;
-                  if (last) {
-                    checkForSavedMemories(last.message, last.threadId, last.mode);
-                  }
-                  setMemoryError(null);
-                }}
+                  onClick={() => {
+                    const last = lastMemoryRequestRef.current;
+                    if (last) {
+                      checkForSavedMemories(last.message, last.threadId);
+                    }
+                    setMemoryError(null);
+                  }}
               >
                 Retry
               </button>
@@ -3650,15 +3629,6 @@ export function ChatArea() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* P0 Fix: Memory Confirmation Panel - Full review UI */}
-      {authUserId && (
-        <MemoryConfirmationPanel
-          userId={authUserId}
-          isOpen={showMemoryPanel}
-          onClose={() => setShowMemoryPanel(false)}
-        />
       )}
     </div>
   );

@@ -69,7 +69,7 @@ try {
     runStep({
       label: "Memory smoke gate",
       cmd: "npm",
-      args: ["run", "smoke:memory-session"],
+      args: ["run", "smoke:memory-capture"],
     });
   } else {
     process.stdout.write(

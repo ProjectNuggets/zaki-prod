@@ -21,7 +21,12 @@ import {
   buildConsentStatus,
 } from "./legal-consent.js";
 import { validateRuntimeConfig } from "./config-validation.js";
-import { createMemoryRoutes, buildFastContext, findDuplicateMemory } from "./memory/index.js";
+import {
+  createMemoryRoutes,
+  buildChatMemoryContext,
+  buildFastContext,
+  findDuplicateMemory,
+} from "./memory/index.js";
 import {
   configureMemoryTelemetryAlerts,
   getMemoryTelemetrySnapshot,
@@ -7260,15 +7265,15 @@ const streamChatHandler = async (req, res) => {
         const contextStartedAt = Date.now();
         // Build context from memory
         const memoryResult = await withTimeout(
-          buildFastContext({
+          buildChatMemoryContext({
             userId: userEmail,
             query: originalMessage,
             maxChars: 800,
             currentThreadId: threadSlug,
-            limit: 3,
+            limit: 6,
           }),
           ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS,
-          "Fast memory context build"
+          "Chat memory context build"
         );
         console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 

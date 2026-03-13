@@ -8,7 +8,28 @@ import { storeMemory, deleteMemory, findConflict, createConflict } from "./opera
 import { dbGet, dbQuery } from "../db.js";
 import { sanitizeExtractedMemories } from "../memory-extraction.js";
 
-const UNDO_WINDOW_MS = 8000;
+const DEFAULT_UNDO_WINDOW_MS = Math.max(
+  1000,
+  Number(process.env.ZAKI_MEMORY_UNDO_WINDOW_MS || 5000)
+);
+
+export function getMemoryUndoWindowMs() {
+  return DEFAULT_UNDO_WINDOW_MS;
+}
+
+export async function upsertUndoWindow({ memoryId, userId, expiresAt }) {
+  await dbQuery(
+    `INSERT INTO memory_undo_windows (memory_id, user_id, expires_at, used_at, created_at)
+     VALUES ($1, $2, $3, NULL, NOW())
+     ON CONFLICT (memory_id)
+     DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       expires_at = EXCLUDED.expires_at,
+       used_at = NULL,
+       created_at = NOW()`,
+    [memoryId, userId, expiresAt]
+  );
+}
 
 export async function autoSaveWithUndo({ userId, message, threadId = null }) {
   // Extract facts
@@ -63,26 +84,18 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
       if (result.duplicate) {
         duplicates.push({ content: fact.content, type: fact.type });
       } else {
-        const expiresAt = new Date(Date.now() + UNDO_WINDOW_MS).toISOString();
+        const expiresAt = new Date(Date.now() + DEFAULT_UNDO_WINDOW_MS).toISOString();
         saved.push({
           id: result.id,
           content: fact.content,
           type: fact.type,
-          undoUntil: Date.parse(expiresAt),
+          undoUntil: expiresAt,
         });
-
-        // Persist undo window for multi-instance reliability.
-        await dbQuery(
-          `INSERT INTO memory_undo_windows (memory_id, user_id, expires_at, used_at, created_at)
-           VALUES ($1, $2, $3, NULL, NOW())
-           ON CONFLICT (memory_id)
-           DO UPDATE SET
-             user_id = EXCLUDED.user_id,
-             expires_at = EXCLUDED.expires_at,
-             used_at = NULL,
-             created_at = NOW()`,
-          [result.id, userId, expiresAt]
-        );
+        await upsertUndoWindow({
+          memoryId: result.id,
+          userId,
+          expiresAt,
+        });
       }
     } catch (err) {
       console.warn("[AutoSave] Failed:", err.message);
