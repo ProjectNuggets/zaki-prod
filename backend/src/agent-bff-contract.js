@@ -1,21 +1,13 @@
 export const BOT_BFF_ALIAS_ROUTES = Object.freeze([
-  { method: "post", path: "/v1/me/bot/provision", target: "/api/agent/provision" },
-  { method: "get", path: "/v1/me/bot/onboarding", target: "/api/agent/onboarding" },
-  { method: "put", path: "/v1/me/bot/onboarding", target: "/api/agent/onboarding" },
-  { method: "post", path: "/v1/me/bot/chat/stream", target: "/api/agent/chat/stream" },
-  { method: "get", path: "/v1/me/bot/settings", target: "/api/agent/config" },
-  { method: "patch", path: "/v1/me/bot/settings", target: "/api/agent/config" },
-  {
-    method: "post",
-    path: "/v1/me/bot/telegram/connect",
-    target: "/api/agent/channels/telegram/connect",
-  },
-  {
-    method: "post",
-    path: "/v1/me/bot/telegram/disconnect",
-    target: "/api/agent/channels/telegram/disconnect",
-  },
-  { method: "get", path: "/v1/me/bot/usage", target: "/api/usage/quota?surface=zaki_bot" },
+  { method: "post", path: "/v1/me/bot/provision" },
+  { method: "get", path: "/v1/me/bot/onboarding" },
+  { method: "put", path: "/v1/me/bot/onboarding" },
+  { method: "post", path: "/v1/me/bot/chat/stream" },
+  { method: "get", path: "/v1/me/bot/settings" },
+  { method: "patch", path: "/v1/me/bot/settings" },
+  { method: "post", path: "/v1/me/bot/telegram/connect" },
+  { method: "post", path: "/v1/me/bot/telegram/disconnect" },
+  { method: "get", path: "/v1/me/bot/usage" },
 ]);
 
 export function buildBotProvisionPayload(userId, payload = {}) {
@@ -98,15 +90,15 @@ export function registerBotBffAliases(app, handlers) {
     agentRouteLimiter,
     json1mb,
     json10mb,
-    agentProvisionHandler,
+    provisionHandler,
     onboardingGetHandler,
     onboardingPutHandler,
-    agentChatStreamHandler,
-    configGetHandler,
-    configPatchHandler,
-    agentTelegramConnectHandler,
-    agentTelegramDisconnectHandler,
-    botUsageHandler,
+    chatStreamHandler,
+    settingsGetHandler,
+    settingsPatchHandler,
+    telegramConnectHandler,
+    telegramDisconnectHandler,
+    usageHandler,
   } = handlers;
 
   app.post(
@@ -114,7 +106,7 @@ export function registerBotBffAliases(app, handlers) {
     requireAgentContext,
     agentRouteLimiter,
     json1mb,
-    agentProvisionHandler
+    provisionHandler
   );
   app.get("/v1/me/bot/onboarding", requireAgentContext, agentRouteLimiter, onboardingGetHandler);
   app.put(
@@ -129,30 +121,30 @@ export function registerBotBffAliases(app, handlers) {
     requireAgentContext,
     agentRouteLimiter,
     json10mb,
-    agentChatStreamHandler
+    chatStreamHandler
   );
-  app.get("/v1/me/bot/settings", requireAgentContext, agentRouteLimiter, configGetHandler);
+  app.get("/v1/me/bot/settings", requireAgentContext, agentRouteLimiter, settingsGetHandler);
   app.patch(
     "/v1/me/bot/settings",
     requireAgentContext,
     agentRouteLimiter,
     json1mb,
-    configPatchHandler
+    settingsPatchHandler
   );
   app.post(
     "/v1/me/bot/telegram/connect",
     requireAgentContext,
     agentRouteLimiter,
     json1mb,
-    agentTelegramConnectHandler
+    telegramConnectHandler
   );
   app.post(
     "/v1/me/bot/telegram/disconnect",
     requireAgentContext,
     agentRouteLimiter,
-    agentTelegramDisconnectHandler
+    telegramDisconnectHandler
   );
-  app.get("/v1/me/bot/usage", requireAgentContext, botUsageHandler);
+  app.get("/v1/me/bot/usage", requireAgentContext, usageHandler);
 }
 
 export function registerTelegramDisconnectAliases(app, handlers) {

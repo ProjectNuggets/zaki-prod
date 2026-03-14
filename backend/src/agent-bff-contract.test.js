@@ -10,23 +10,15 @@ import {
 describe("agent BOT BFF contract", () => {
   it("defines the expected /v1/me/bot alias surface", () => {
     expect(BOT_BFF_ALIAS_ROUTES).toEqual([
-      { method: "post", path: "/v1/me/bot/provision", target: "/api/agent/provision" },
-      { method: "get", path: "/v1/me/bot/onboarding", target: "/api/agent/onboarding" },
-      { method: "put", path: "/v1/me/bot/onboarding", target: "/api/agent/onboarding" },
-      { method: "post", path: "/v1/me/bot/chat/stream", target: "/api/agent/chat/stream" },
-      { method: "get", path: "/v1/me/bot/settings", target: "/api/agent/config" },
-      { method: "patch", path: "/v1/me/bot/settings", target: "/api/agent/config" },
-      {
-        method: "post",
-        path: "/v1/me/bot/telegram/connect",
-        target: "/api/agent/channels/telegram/connect",
-      },
-      {
-        method: "post",
-        path: "/v1/me/bot/telegram/disconnect",
-        target: "/api/agent/channels/telegram/disconnect",
-      },
-      { method: "get", path: "/v1/me/bot/usage", target: "/api/usage/quota?surface=zaki_bot" },
+      { method: "post", path: "/v1/me/bot/provision" },
+      { method: "get", path: "/v1/me/bot/onboarding" },
+      { method: "put", path: "/v1/me/bot/onboarding" },
+      { method: "post", path: "/v1/me/bot/chat/stream" },
+      { method: "get", path: "/v1/me/bot/settings" },
+      { method: "patch", path: "/v1/me/bot/settings" },
+      { method: "post", path: "/v1/me/bot/telegram/connect" },
+      { method: "post", path: "/v1/me/bot/telegram/disconnect" },
+      { method: "get", path: "/v1/me/bot/usage" },
     ]);
   });
 
@@ -107,15 +99,15 @@ describe("agent BOT BFF contract", () => {
       agentRouteLimiter: jest.fn(),
       json1mb: jest.fn(),
       json10mb: jest.fn(),
-      agentProvisionHandler: jest.fn(),
+      provisionHandler: jest.fn(),
       onboardingGetHandler: jest.fn(),
       onboardingPutHandler: jest.fn(),
-      agentChatStreamHandler: jest.fn(),
-      configGetHandler: jest.fn(),
-      configPatchHandler: jest.fn(),
-      agentTelegramConnectHandler: jest.fn(),
-      agentTelegramDisconnectHandler: jest.fn(),
-      botUsageHandler: jest.fn(),
+      chatStreamHandler: jest.fn(),
+      settingsGetHandler: jest.fn(),
+      settingsPatchHandler: jest.fn(),
+      telegramConnectHandler: jest.fn(),
+      telegramDisconnectHandler: jest.fn(),
+      usageHandler: jest.fn(),
     };
 
     registerBotBffAliases(app, handlers);
@@ -125,25 +117,25 @@ describe("agent BOT BFF contract", () => {
       handlers.requireAgentContext,
       handlers.agentRouteLimiter,
       handlers.json1mb,
-      handlers.agentProvisionHandler
+      handlers.provisionHandler
     );
     expect(app.post).toHaveBeenCalledWith(
       "/v1/me/bot/chat/stream",
       handlers.requireAgentContext,
       handlers.agentRouteLimiter,
       handlers.json10mb,
-      handlers.agentChatStreamHandler
+      handlers.chatStreamHandler
     );
     expect(app.post).toHaveBeenCalledWith(
       "/v1/me/bot/telegram/disconnect",
       handlers.requireAgentContext,
       handlers.agentRouteLimiter,
-      handlers.agentTelegramDisconnectHandler
+      handlers.telegramDisconnectHandler
     );
     expect(app.get).toHaveBeenCalledWith(
       "/v1/me/bot/usage",
       handlers.requireAgentContext,
-      handlers.botUsageHandler
+      handlers.usageHandler
     );
   });
 

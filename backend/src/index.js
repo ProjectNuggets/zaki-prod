@@ -71,6 +71,11 @@ import {
   registerTelegramDisconnectAliases,
 } from "./agent-bff-contract.js";
 import {
+  createBotBffHandlers,
+  mapBotBffAuthFailure,
+  normalizeBotUsageSummaryFromQuota,
+} from "./bot-bff.js";
+import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
   consumeDailyPromptQuota,
@@ -7841,6 +7846,81 @@ function resolveAgentUserId(authResult) {
   return resolveCanonicalAgentUserId(authResult);
 }
 
+function getOrCreateRequestId(req) {
+  return String(req?.requestId || crypto.randomUUID());
+}
+
+function getOrCreateIdempotencyKey(req, requestId) {
+  const headerValue = String(
+    req?.headers?.["idempotency-key"] || req?.headers?.["Idempotency-Key"] || ""
+  ).trim();
+  return headerValue || requestId;
+}
+
+async function requireBotBffContext(req, res, next) {
+  const existingUserId = String(req.botBffContext?.userId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const requestId = getOrCreateRequestId(req);
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  let sessionResponse;
+  try {
+    sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, {
+      method: "GET",
+    });
+  } catch (error) {
+    console.error("[Auth][BFF] Session refresh failed:", error);
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const sessionData = await sessionResponse.json().catch(() => ({}));
+  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const email = normalizeEmail(String(sessionData.user.username || ""));
+  if (!email) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [email]);
+  if (!zakiUser) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const userId = resolveCanonicalAgentUserId({ zakiUser });
+  if (!userId) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  req.botBffContext = {
+    email,
+    sessionUser: sessionData.user,
+    zakiUser,
+    userId,
+  };
+  next();
+}
+
 async function requireAgentContext(req, res, next) {
   const existingUserId = String(req.agentUserId || "").trim();
   if (existingUserId) {
@@ -8100,6 +8180,68 @@ const botUsageHandler = async (req, res) => {
   }
 };
 
+async function sendBotBffUpstreamRequest({
+  method,
+  path,
+  userId,
+  requestId,
+  idempotencyKey,
+  body,
+  headers = {},
+}) {
+  const nullclawBase = getNullclawBase();
+  if (!nullclawBase) {
+    throw new Error("NULLCLAW_BASE_URL is not configured.");
+  }
+  if (!NULLCLAW_INTERNAL_TOKEN) {
+    throw new Error("NULLCLAW_INTERNAL_TOKEN is not configured.");
+  }
+
+  const requestHeaders = buildAgentForwardHeaders({
+    internalToken: NULLCLAW_INTERNAL_TOKEN,
+    userId,
+    requestId,
+    extraHeaders: {
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      ...headers,
+    },
+  });
+
+  return fetchWithTimeout(
+    `${nullclawBase}${path}`,
+    {
+      method,
+      headers: requestHeaders,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    "BOT BFF upstream request"
+  );
+}
+
+async function buildBotBffUsageSummary({ zakiUser }) {
+  const quotaPayload = await buildUsageQuotaResponse({
+    zakiUser,
+    surface: ZAKI_BOT_SURFACE,
+    buildUserQuotaContext,
+    readDailyPromptUsage,
+    resolveSurfaceQuotaConfig,
+    dbGet,
+  });
+  return normalizeBotUsageSummaryFromQuota(quotaPayload);
+}
+
+const botBffHandlers = createBotBffHandlers({
+  getAuthContext: async (req) => {
+    if (req.botBffContext?.userId) return req.botBffContext;
+    return null;
+  },
+  sendUpstreamRequest: sendBotBffUpstreamRequest,
+  buildUsageSummary: buildBotBffUsageSummary,
+  createRequestId: getOrCreateRequestId,
+  createIdempotencyKey: getOrCreateIdempotencyKey,
+});
+
 const agentJson10mb = express.json({ limit: "10mb" });
 const agentJson1mb = express.json({ limit: "1mb" });
 
@@ -8218,27 +8360,19 @@ app.patch(
 );
 
 registerBotBffAliases(app, {
-  requireAgentContext,
+  requireAgentContext: requireBotBffContext,
   agentRouteLimiter,
   json1mb: agentJson1mb,
   json10mb: agentJson10mb,
-  agentProvisionHandler,
-  onboardingGetHandler: makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`
-  ),
-  onboardingPutHandler: makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`
-  ),
-  agentChatStreamHandler,
-  configGetHandler: makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`
-  ),
-  configPatchHandler: makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`
-  ),
-  agentTelegramConnectHandler,
-  agentTelegramDisconnectHandler,
-  botUsageHandler,
+  provisionHandler: botBffHandlers.provision,
+  onboardingGetHandler: botBffHandlers.getOnboarding,
+  onboardingPutHandler: botBffHandlers.putOnboarding,
+  chatStreamHandler: botBffHandlers.chatStream,
+  settingsGetHandler: botBffHandlers.getSettings,
+  settingsPatchHandler: botBffHandlers.patchSettings,
+  telegramConnectHandler: botBffHandlers.telegramConnect,
+  telegramDisconnectHandler: botBffHandlers.telegramDisconnect,
+  usageHandler: botBffHandlers.usage,
 });
 app.delete(
   "/api/agent/cron/:id",
