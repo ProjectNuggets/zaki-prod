@@ -3,6 +3,7 @@ import {
   PRODUCT_ERROR_CODES,
   createBotBffHandlers,
   normalizeBotUsageSummaryFromQuota,
+  sanitizeBotOnboardingState,
   validateBotSettingsPatch,
 } from "./bot-bff.js";
 
@@ -156,6 +157,52 @@ describe("bot BFF T6 contract", () => {
     expect(sleepFn).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(200);
     expect(res.jsonBody).toEqual({ status: "provisioned" });
+  });
+
+  it("preserves enriched onboarding setup metadata", async () => {
+    const setup = {
+      channels: {
+        telegram: {
+          status: "connected",
+          bot_username: "@zaki_bot",
+        },
+        slack: {
+          instructions: ["Open Slack", "Add the app", "Authorize the workspace"],
+        },
+      },
+      guidance: {
+        summary: "Finish channels to complete your bot setup.",
+      },
+    };
+
+    expect(
+      sanitizeBotOnboardingState({
+        completed: true,
+        completed_at_s: 1760000000,
+        setup,
+      })
+    ).toEqual({
+      completed: true,
+      completed_at_s: 1760000000,
+      setup,
+    });
+  });
+
+  it("rejects UI-specific fields inside onboarding setup metadata", () => {
+    expect(() =>
+      sanitizeBotOnboardingState({
+        completed: false,
+        completed_at_s: null,
+        setup: {
+          channels: {
+            telegram: {
+              status: "connected",
+              panel_tab: "telegram",
+            },
+          },
+        },
+      })
+    ).toThrow(/ui-specific fields are not allowed/i);
   });
 
   it("returns 503 temporary_contention when lock retries exhaust", async () => {

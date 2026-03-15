@@ -1,20 +1,28 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
-  connectAgentTelegram,
-  createAgentCron,
-  deleteAgentCron,
-  deleteAgentSecret,
-  disconnectAgentTelegram,
-  fetchAgentConfig,
-  fetchAgentHeartbeat,
-  fetchAgentOnboarding,
-  getAgentSecret,
-  listAgentCron,
-  provisionAgent,
-  putAgentSecret,
-  updateAgentConfig,
-  updateAgentCron,
-  updateAgentHeartbeat,
+  Activity,
+  Bot,
+  CheckCircle2,
+  Link2,
+  Settings2,
+  X,
+} from "lucide-react";
+import { ModalShell } from "@/app/components/ui/ModalShell";
+import {
+  connectBotTelegram,
+  disconnectBotTelegram,
+  fetchBotOnboarding,
+  fetchBotSettings,
+  fetchBotUsage,
+  provisionBot,
+  updateBotOnboarding,
+  updateBotSettings,
+  type BotErrorCode,
+  type BotOnboardingSetup,
+  type BotOnboardingState,
+  type BotSettingsPatch,
+  type BotSettingsProfile,
+  type BotUsageSummary,
 } from "@/lib/api";
 
 type Props = {
@@ -22,117 +30,336 @@ type Props = {
   onClose: () => void;
 };
 
-function stringifyJson(value: unknown) {
-  try {
-    return JSON.stringify(value ?? {}, null, 2);
-  } catch {
-    return "{}";
-  }
+type BannerState =
+  | { tone: "success"; text: string }
+  | { tone: "error"; text: string }
+  | null;
+
+type SettingsDraft = {
+  assistant_mode: "fast" | "balanced" | "deep";
+  group_activation: "mention" | "always";
+  proactive_updates: boolean;
+  voice_replies: boolean;
+  session_timeout_minutes: string;
+};
+
+const DEFAULT_SETTINGS: SettingsDraft = {
+  assistant_mode: "balanced",
+  group_activation: "mention",
+  proactive_updates: true,
+  voice_replies: false,
+  session_timeout_minutes: "30",
+};
+
+const FALLBACK_CHANNEL_STEPS = {
+  slack: [
+    "Open your Slack workspace admin apps page.",
+    "Add the ZAKI Slack app when it is available to your workspace.",
+    "Complete authorization to let ZAKI BOT receive mentions and send replies.",
+  ],
+  discord: [
+    "Open your Discord server settings and app integrations.",
+    "Invite the ZAKI BOT app to the target server.",
+    "Grant message and channel permissions so ZAKI BOT can respond when enabled.",
+  ],
+};
+
+const ERROR_COPY: Record<BotErrorCode, string> = {
+  temporary_contention: "ZAKI BOT is busy on another node. Retry shortly.",
+  unauthorized: "Sign in again to manage your ZAKI BOT space.",
+  forbidden: "This ZAKI BOT action is not available for your account.",
+  invalid_telegram_token: "The Telegram token is invalid. Check it and try again.",
+  provision_failed: "We could not provision your ZAKI BOT space right now.",
+  settings_update_failed: "We could not save your ZAKI BOT settings.",
+  usage_unavailable: "Usage is temporarily unavailable.",
+};
+
+function cn(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
 }
 
-function getErrorMessage(data: unknown, fallback: string) {
-  if (data && typeof data === "object") {
-    const error = String((data as { error?: string }).error || "").trim();
-    if (error) return error;
-    const message = String((data as { message?: string }).message || "").trim();
-    if (message) return message;
-  }
-  return fallback;
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
-function asObjectRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
+function asString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function isValidCronSchedule(input: string) {
-  const trimmed = String(input || "").trim();
-  if (!trimmed) return false;
-  if (trimmed.startsWith("@")) {
-    return ["@hourly", "@daily", "@weekly", "@monthly", "@yearly", "@annually"].includes(
-      trimmed.toLowerCase()
-    );
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((entry) => asString(entry)).filter(Boolean)
+    : [];
+}
+
+function getBotErrorCode(payload: unknown): BotErrorCode | null {
+  const raw = asString(asRecord(payload).error).toLowerCase();
+  if (
+    raw === "temporary_contention" ||
+    raw === "unauthorized" ||
+    raw === "forbidden" ||
+    raw === "invalid_telegram_token" ||
+    raw === "provision_failed" ||
+    raw === "settings_update_failed" ||
+    raw === "usage_unavailable"
+  ) {
+    return raw;
   }
-  return trimmed.split(/\s+/).length === 5;
+  return null;
+}
+
+function getBotErrorText(payload: unknown, fallback: string) {
+  const code = getBotErrorCode(payload);
+  return code ? ERROR_COPY[code] : fallback;
+}
+
+function formatCompletedAt(value?: number | null) {
+  if (!value) return "Not completed yet";
+  const date = new Date(value * 1000);
+  return Number.isNaN(date.getTime()) ? "Not completed yet" : date.toLocaleString();
+}
+
+function getSetupSummary(setup: BotOnboardingSetup | null | undefined) {
+  const source = asRecord(setup);
+  return (
+    asString(source.summary) ||
+    asString(asRecord(source.guidance).summary) ||
+    asString(source.description) ||
+    asString(asRecord(source.onboarding).summary)
+  );
+}
+
+function getChannelSetup(
+  setup: BotOnboardingSetup | null | undefined,
+  channel: "telegram" | "slack" | "discord"
+) {
+  const source = asRecord(setup);
+  const channels = asRecord(source.channels);
+  return asRecord(channels[channel] ?? source[channel]);
+}
+
+function getChannelStatus(setup: Record<string, unknown>) {
+  return (
+    asString(setup.status) ||
+    asString(setup.connection_status) ||
+    asString(setup.state)
+  );
+}
+
+function getChannelMeta(setup: Record<string, unknown>) {
+  return (
+    asString(setup.bot_username) ||
+    asString(setup.username) ||
+    asString(setup.workspace_name) ||
+    asString(setup.workspace) ||
+    asString(setup.server_name) ||
+    asString(setup.server)
+  );
+}
+
+function getInstructionSteps(
+  setup: Record<string, unknown>,
+  fallback: string[]
+) {
+  const candidates = [
+    asStringArray(setup.instructions),
+    asStringArray(setup.steps),
+    asStringArray(setup.connect_steps),
+    asStringArray(setup.how_to_connect),
+  ];
+  const steps = candidates.find((candidate) => candidate.length > 0) ?? [];
+  return steps.length > 0 ? steps : fallback;
+}
+
+function SectionCard({
+  title,
+  description,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  description: string;
+  icon: typeof Bot;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[24px] border border-zaki-subtle bg-white px-5 py-5 shadow-[0px_14px_32px_rgba(15,15,15,0.06)] dark:border-[#2e241b] dark:bg-[#16110d]">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 rounded-2xl border border-zaki-subtle bg-zaki-base p-2.5 dark:border-[#2e241b] dark:bg-[#1d1611]">
+          <Icon className="size-4 text-zaki-brand" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+            {title}
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+            {description}
+          </p>
+        </div>
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ProductField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function ChannelInstructionCard({
+  title,
+  status,
+  meta,
+  steps,
+}: {
+  title: string;
+  status?: string;
+  meta?: string;
+  steps: string[];
+}) {
+  return (
+    <div className="rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 dark:border-[#2e241b] dark:bg-[#1a140f]">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+          {title}
+        </h4>
+        {status ? (
+          <span className="rounded-full border border-zaki-subtle bg-white px-2.5 py-0.5 text-[11px] font-medium text-zaki-secondary dark:border-[#2e241b] dark:bg-[#120e0b] dark:text-zaki-dark-subtle">
+            {status}
+          </span>
+        ) : null}
+      </div>
+      {meta ? (
+        <p className="mt-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">{meta}</p>
+      ) : null}
+      <ol className="mt-3 space-y-2 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+        {steps.map((step) => (
+          <li key={step} className="flex gap-2">
+            <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-zaki-brand" />
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [onboardingJson, setOnboardingJson] = useState("{}");
-  const [configJson, setConfigJson] = useState("{}");
-  const [webSearchGeekMode, setWebSearchGeekMode] = useState(false);
-  const [webSearchModeSaving, setWebSearchModeSaving] = useState(false);
-
-  const [secretKey, setSecretKey] = useState("");
-  const [secretValue, setSecretValue] = useState("");
-
-  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [banner, setBanner] = useState<BannerState>(null);
+  const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
+  const [settings, setSettings] = useState<BotSettingsProfile | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(DEFAULT_SETTINGS);
+  const [usage, setUsage] = useState<BotUsageSummary | null>(null);
+  const [usageUnavailable, setUsageUnavailable] = useState(false);
+  const [telegramToken, setTelegramToken] = useState("");
   const [telegramWebhookUrl, setTelegramWebhookUrl] = useState("");
+  const [savingOnboarding, setSavingOnboarding] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [telegramBusy, setTelegramBusy] = useState(false);
 
-  const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
-  const [heartbeatIntervalSec, setHeartbeatIntervalSec] = useState("300");
-
-  const [cronEditId, setCronEditId] = useState("");
-  const [cronName, setCronName] = useState("");
-  const [cronSchedule, setCronSchedule] = useState("");
-  const [cronPrompt, setCronPrompt] = useState("");
-  const [cronEnabled, setCronEnabled] = useState(true);
+  const setup = useMemo(
+    () => (onboarding?.setup && typeof onboarding.setup === "object" ? onboarding.setup : null),
+    [onboarding]
+  );
+  const telegramSetup = useMemo(() => getChannelSetup(setup, "telegram"), [setup]);
+  const slackSetup = useMemo(() => getChannelSetup(setup, "slack"), [setup]);
+  const discordSetup = useMemo(() => getChannelSetup(setup, "discord"), [setup]);
+  const telegramStatus = getChannelStatus(telegramSetup);
 
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
-    setLoading(true);
-    setError("");
-    setStatus("");
-    Promise.all([fetchAgentOnboarding(), fetchAgentConfig(), fetchAgentHeartbeat(), listAgentCron()])
-      .then(([onboardingResult, configResult, heartbeatResult, cronResult]) => {
-        if (!active) return;
-        setOnboardingJson(stringifyJson(onboardingResult.data));
-        setConfigJson(stringifyJson(configResult.data));
-        const configObj = asObjectRecord(configResult.data);
-        const toolsObj = asObjectRecord(configObj.tools);
-        const providerRaw = String(toolsObj.web_search_provider || "").trim().toLowerCase();
-        setWebSearchGeekMode(providerRaw === "exa");
 
-        const heartbeatData =
-          heartbeatResult.data && typeof heartbeatResult.data === "object" ? heartbeatResult.data : {};
-        const heartbeatEnabledValue = Boolean(
-          (heartbeatData as { enabled?: boolean }).enabled ?? true
-        );
-        const heartbeatIntervalValue = Number(
-          (heartbeatData as { intervalSec?: number; interval_seconds?: number }).intervalSec ??
-            (heartbeatData as { intervalSec?: number; interval_seconds?: number }).interval_seconds ??
-            300
-        );
-        setHeartbeatEnabled(heartbeatEnabledValue);
-        setHeartbeatIntervalSec(String(Number.isFinite(heartbeatIntervalValue) ? heartbeatIntervalValue : 300));
+    async function loadBotSpace() {
+      setLoading(true);
+      setBanner(null);
+      setUsageUnavailable(false);
 
-        const cronData = cronResult.data;
-        const cronItems = Array.isArray((cronData as { items?: unknown[] })?.items)
-          ? ((cronData as { items?: unknown[] }).items as Array<Record<string, unknown>>)
-          : Array.isArray(cronData)
-          ? (cronData as Array<Record<string, unknown>>)
-          : [];
-        const firstCron = cronItems[0] || null;
-        if (firstCron) {
-          setCronEditId(String(firstCron.id || ""));
-          setCronName(String(firstCron.name || ""));
-          setCronSchedule(String(firstCron.schedule || firstCron.cron || ""));
-          setCronPrompt(String(firstCron.prompt || firstCron.message || firstCron.task || ""));
-          setCronEnabled(
-            typeof firstCron.enabled === "boolean" ? firstCron.enabled : true
-          );
+      const [onboardingResult, settingsResult, usageResult] = await Promise.allSettled([
+        fetchBotOnboarding(),
+        fetchBotSettings(),
+        fetchBotUsage(),
+      ]);
+
+      if (!active) return;
+
+      if (onboardingResult.status === "fulfilled") {
+        const { response, data } = onboardingResult.value;
+        if (response.ok) {
+          setOnboarding(data);
+        } else {
+          setBanner({
+            tone: "error",
+            text: getBotErrorText(data, "Unable to load ZAKI BOT onboarding."),
+          });
+          setOnboarding(null);
         }
-      })
-      .catch((nextError) => {
-        if (!active) return;
-        setError(nextError instanceof Error ? nextError.message : "Unable to load bot controls.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      } else {
+        setBanner({ tone: "error", text: "Unable to load ZAKI BOT onboarding." });
+        setOnboarding(null);
+      }
+
+      if (settingsResult.status === "fulfilled") {
+        const { response, data } = settingsResult.value;
+        if (response.ok) {
+          setSettings(data);
+          setSettingsDraft({
+            assistant_mode: data.assistant_mode ?? DEFAULT_SETTINGS.assistant_mode,
+            group_activation: data.group_activation ?? DEFAULT_SETTINGS.group_activation,
+            proactive_updates: Boolean(data.proactive_updates ?? DEFAULT_SETTINGS.proactive_updates),
+            voice_replies: Boolean(data.voice_replies ?? DEFAULT_SETTINGS.voice_replies),
+            session_timeout_minutes:
+              typeof data.session_timeout_minutes === "number"
+                ? String(data.session_timeout_minutes)
+                : DEFAULT_SETTINGS.session_timeout_minutes,
+          });
+        } else {
+          setBanner({
+            tone: "error",
+            text: getBotErrorText(data, "Unable to load ZAKI BOT settings."),
+          });
+          setSettings(null);
+        }
+      } else {
+        setBanner({ tone: "error", text: "Unable to load ZAKI BOT settings." });
+        setSettings(null);
+      }
+
+      if (usageResult.status === "fulfilled") {
+        const { response, data } = usageResult.value;
+        if (response.ok) {
+          setUsage(data);
+          setUsageUnavailable(false);
+        } else {
+          setUsage(null);
+          setUsageUnavailable(getBotErrorCode(data) === "usage_unavailable");
+        }
+      } else {
+        setUsage(null);
+        setUsageUnavailable(true);
+      }
+
+      setLoading(false);
+    }
+
+    void loadBotSpace();
+
     return () => {
       active = false;
     };
@@ -140,446 +367,505 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
+  const settingsDirty =
+    settingsDraft.assistant_mode !== (settings?.assistant_mode ?? DEFAULT_SETTINGS.assistant_mode) ||
+    settingsDraft.group_activation !== (settings?.group_activation ?? DEFAULT_SETTINGS.group_activation) ||
+    settingsDraft.proactive_updates !== Boolean(settings?.proactive_updates ?? DEFAULT_SETTINGS.proactive_updates) ||
+    settingsDraft.voice_replies !== Boolean(settings?.voice_replies ?? DEFAULT_SETTINGS.voice_replies) ||
+    settingsDraft.session_timeout_minutes !==
+      String(settings?.session_timeout_minutes ?? DEFAULT_SETTINGS.session_timeout_minutes);
+
+  const onboardingSummary = getSetupSummary(setup);
+  const telegramMeta = getChannelMeta(telegramSetup);
+  const slackMeta = getChannelMeta(slackSetup);
+  const discordMeta = getChannelMeta(discordSetup);
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-[1px]">
-      <div className="h-full w-full max-w-md overflow-y-auto border-l border-zaki-subtle bg-[#FDF6EE] px-5 py-5 shadow-[0px_18px_36px_rgba(15,15,15,0.16)]">
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-zaki-primary">ZAKI BOT</h2>
-            <p className="mt-1 text-sm text-zaki-secondary">
-              Validated controls for provisioning, telegram, heartbeat, and cron.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rounded-full border border-zaki-subtle px-3 py-1 text-sm text-zaki-secondary hover:bg-zaki-hover"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-
-        {status ? (
-          <div className="mb-3 rounded-zaki-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{status}</div>
-        ) : null}
-        {error ? <div className="mb-3 rounded-zaki-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
-        {loading ? <div className="mb-3 text-sm text-zaki-secondary">Loading…</div> : null}
-
-        <div className="space-y-5">
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zaki-primary">Provision</h3>
-              <button
-                type="button"
-                className="rounded-full bg-zaki-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-zaki-brand-hover"
-                onClick={async () => {
-                  setError("");
-                  const { response, data } = await provisionAgent();
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Provision failed."));
-                    return;
-                  }
-                  setStatus("Provisioned ZAKI BOT successfully.");
-                }}
-              >
-                Provision agent
-              </button>
-            </div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zaki-muted">
-              Onboarding payload (read-only)
-            </label>
-            <textarea
-              className="min-h-24 w-full rounded-zaki-lg border border-zaki-subtle bg-zaki-sunken/40 px-3 py-2 text-xs text-zaki-secondary outline-none"
-              value={onboardingJson}
-              readOnly
-            />
-          </section>
-
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zaki-primary">Config</h3>
-              <button
-                type="button"
-                className="rounded-full border border-zaki-subtle px-3 py-1.5 text-sm text-zaki-secondary hover:bg-zaki-hover"
-                onClick={async () => {
-                  setError("");
-                  try {
-                    const payload = JSON.parse(configJson);
-                    const { response, data } = await updateAgentConfig(payload);
-                    if (!response.ok) {
-                      setError(getErrorMessage(data, "Config update failed."));
-                      return;
-                    }
-                    setStatus("Agent config updated.");
-                  } catch {
-                    setError("Invalid config JSON.");
-                  }
-                }}
-              >
-                Save config
-              </button>
-            </div>
-            <textarea
-              className="min-h-32 w-full rounded-zaki-lg border border-zaki-subtle bg-zaki-sunken/40 px-3 py-2 text-xs text-zaki-secondary outline-none"
-              value={configJson}
-              onChange={(event) => setConfigJson(event.target.value)}
-            />
-          </section>
-
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-zaki-primary">ZAKI geek mood</h3>
-                <p className="mt-1 text-xs text-zaki-muted">On = Exa search. Off = Brave search.</p>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel="ZAKI BOT space"
+      className="w-full max-w-[980px] overflow-hidden rounded-[28px] border border-zaki-subtle bg-[#f8f1e8] dark:border-[#2e241b] dark:bg-[#120e0b]"
+    >
+      <div className="max-h-[calc(100vh-3rem)] overflow-y-auto">
+        <div className="sticky top-0 z-10 border-b border-zaki-subtle bg-[linear-gradient(135deg,#fff7ee_0%,#f6ecdf_65%,#efe5d8_100%)] px-6 py-5 dark:border-[#2e241b] dark:bg-[linear-gradient(140deg,#21170f_0%,#18120d_58%,#120e0b_100%)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2e241b] dark:bg-[#1a140f] dark:text-zaki-dark-muted">
+                <Bot className="size-3.5 text-zaki-brand" />
+                ZAKI BOT space
               </div>
-              <button
-                type="button"
-                disabled={webSearchModeSaving}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  webSearchGeekMode
-                    ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-zaki-subtle bg-zaki-sunken/50 text-zaki-muted"
-                } ${webSearchModeSaving ? "opacity-60" : ""}`}
-                onClick={async () => {
-                  setError("");
-                  setStatus("");
-                  const nextMode = !webSearchGeekMode;
-                  let parsedConfig: Record<string, unknown> = {};
-                  try {
-                    parsedConfig = asObjectRecord(JSON.parse(configJson));
-                  } catch {
-                    setError("Config JSON is invalid. Fix it before changing search mode.");
-                    return;
-                  }
-                  const nextConfig: Record<string, unknown> = { ...parsedConfig };
-                  const tools = { ...asObjectRecord(nextConfig.tools) };
-                  tools.web_search_provider = nextMode ? "exa" : "brave";
-                  nextConfig.tools = tools;
-
-                  setWebSearchModeSaving(true);
-                  const { response, data } = await updateAgentConfig(nextConfig);
-                  setWebSearchModeSaving(false);
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Unable to update search provider mode."));
-                    return;
-                  }
-                  setWebSearchGeekMode(nextMode);
-                  setConfigJson(stringifyJson(nextConfig));
-                  setStatus(`ZAKI geek mood ${nextMode ? "enabled (Exa)" : "disabled (Brave)"}.`);
-                }}
-              >
-                {webSearchModeSaving ? "Saving..." : webSearchGeekMode ? "Active" : "Inactive"}
-              </button>
+              <h2 className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                Personal intelligence settings
+              </h2>
+              <p className="mt-2 max-w-[62ch] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+                Provision your bot space, tune its product settings, connect channels, and review daily usage without touching raw JSON.
+              </p>
             </div>
-          </section>
-
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-zaki-primary">Secrets</h3>
-            <input
-              className="mb-2 w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Secret key"
-              value={secretKey}
-              onChange={(event) => setSecretKey(event.target.value)}
-            />
-            <textarea
-              className="min-h-20 w-full rounded-zaki-lg border border-zaki-subtle bg-zaki-sunken/40 px-3 py-2 text-sm text-zaki-secondary outline-none"
-              placeholder="Secret value"
-              value={secretValue}
-              onChange={(event) => setSecretValue(event.target.value)}
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-zaki-subtle px-3 py-1.5 text-sm text-zaki-secondary hover:bg-zaki-hover"
-                onClick={async () => {
-                  const key = secretKey.trim();
-                  if (!key) {
-                    setError("Secret key is required.");
-                    return;
-                  }
-                  const { response, data } = await getAgentSecret(key);
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Unable to read secret."));
-                    return;
-                  }
-                  setSecretValue(stringifyJson(data));
-                  setStatus(`Loaded secret ${key}.`);
-                }}
-              >
-                Load
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-zaki-subtle px-3 py-1.5 text-sm text-zaki-secondary hover:bg-zaki-hover"
-                onClick={async () => {
-                  const key = secretKey.trim();
-                  if (!key) {
-                    setError("Secret key is required.");
-                    return;
-                  }
-                  const { response, data } = await putAgentSecret(key, secretValue);
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Unable to save secret."));
-                    return;
-                  }
-                  setStatus(`Saved secret ${key}.`);
-                }}
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-rose-200 px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50"
-                onClick={async () => {
-                  const key = secretKey.trim();
-                  if (!key) {
-                    setError("Secret key is required.");
-                    return;
-                  }
-                  const { response, data } = await deleteAgentSecret(key);
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Unable to delete secret."));
-                    return;
-                  }
-                  setSecretValue("");
-                  setStatus(`Deleted secret ${key}.`);
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zaki-primary">Telegram</h3>
-              <button
-                type="button"
-                className="rounded-full border border-rose-200 px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50"
-                onClick={async () => {
-                  setError("");
-                  setStatus("");
-                  const { response, data } = await disconnectAgentTelegram();
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Unable to disconnect Telegram."));
-                    return;
-                  }
-                  setStatus("Telegram disconnected.");
-                }}
-              >
-                Disconnect
-              </button>
-            </div>
-            <input
-              className="mb-2 w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Bot token"
-              value={telegramBotToken}
-              onChange={(event) => setTelegramBotToken(event.target.value)}
-            />
-            <input
-              className="w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Webhook URL (optional override)"
-              value={telegramWebhookUrl}
-              onChange={(event) => setTelegramWebhookUrl(event.target.value)}
-            />
-            <p className="mt-2 text-xs text-zaki-muted">
-              Leave webhook URL empty to use the backend default (`ZAKI_AGENT_WEBHOOK_BASE_URL`).
-            </p>
             <button
               type="button"
-              className="mt-3 rounded-full bg-zaki-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-zaki-brand-hover"
-              onClick={async () => {
-                setError("");
-                setStatus("");
-                const botToken = telegramBotToken.trim();
-                const webhookUrl = telegramWebhookUrl.trim();
-                if (!botToken) {
-                  setError("Telegram bot token is required.");
-                  return;
-                }
-                if (webhookUrl) {
-                  try {
-                    new URL(webhookUrl);
-                  } catch {
-                    setError("Webhook URL must be a valid URL.");
-                    return;
-                  }
-                }
-                const payload: Parameters<typeof connectAgentTelegram>[0] = {
-                  bot_token: botToken,
-                };
-                if (webhookUrl) payload.webhook_url = webhookUrl;
-                const { response, data } = await connectAgentTelegram(payload);
-                if (!response.ok) {
-                  setError(getErrorMessage(data, "Unable to connect Telegram."));
-                  return;
-                }
-                setStatus("Telegram connected. Send a message to your bot now to confirm inbound routing.");
-              }}
+              className="zaki-icon-btn size-9"
+              onClick={onClose}
+              aria-label="Close ZAKI BOT panel"
             >
-              Connect Telegram
+              <X className="size-4" />
             </button>
-          </section>
-
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zaki-primary">Heartbeat</h3>
-              <button
-                type="button"
-                className="rounded-full border border-zaki-subtle px-3 py-1.5 text-sm text-zaki-secondary hover:bg-zaki-hover"
-                onClick={async () => {
-                  const intervalSec = Number(heartbeatIntervalSec);
-                  if (!Number.isInteger(intervalSec) || intervalSec < 10 || intervalSec > 86400) {
-                    setError("Heartbeat interval must be an integer between 10 and 86400 seconds.");
-                    return;
-                  }
-                  const payload = { enabled: heartbeatEnabled, intervalSec };
-                  const { response, data } = await updateAgentHeartbeat(payload);
-                  if (!response.ok) {
-                    setError(getErrorMessage(data, "Heartbeat update failed."));
-                    return;
-                  }
-                  setStatus("Heartbeat updated.");
-                }}
-              >
-                Save heartbeat
-              </button>
+          </div>
+          {banner ? (
+            <div
+              className={cn(
+                "mt-4 rounded-zaki-lg border px-4 py-3 text-sm",
+                banner.tone === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              )}
+            >
+              {banner.text}
             </div>
-            <label className="mb-2 flex items-center gap-2 text-sm text-zaki-secondary">
-              <input
-                type="checkbox"
-                checked={heartbeatEnabled}
-                onChange={(event) => setHeartbeatEnabled(event.target.checked)}
-              />
-              Enabled
-            </label>
-            <input
-              className="w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Interval seconds"
-              value={heartbeatIntervalSec}
-              onChange={(event) => setHeartbeatIntervalSec(event.target.value)}
-            />
-          </section>
+          ) : null}
+        </div>
 
-          <section className="rounded-zaki-xl border border-zaki-subtle bg-white/80 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zaki-primary">Cron</h3>
-              <div className="flex gap-2">
+        <div className="grid gap-5 px-6 py-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-5">
+            <SectionCard
+              icon={Bot}
+              title="Onboarding"
+              description="Provision the space, verify your current setup state, and complete the first-run flow."
+            >
+              {loading && !onboarding ? (
+                <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">Loading onboarding…</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold",
+                        onboarding?.completed
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      )}
+                    >
+                      {onboarding?.completed ? "Completed" : "Needs setup"}
+                    </span>
+                    <span className="text-sm text-zaki-muted dark:text-zaki-dark-muted">
+                      {formatCompletedAt(onboarding?.completed_at_s ?? null)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={savingOnboarding}
+                      className="zaki-btn zaki-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={async () => {
+                        setSavingOnboarding(true);
+                        setBanner(null);
+                        const { response, data } = await provisionBot();
+                        setSavingOnboarding(false);
+                        if (!response.ok) {
+                          setBanner({
+                            tone: "error",
+                            text: getBotErrorText(data, "Unable to provision ZAKI BOT."),
+                          });
+                          return;
+                        }
+                        const onboardingResult = await fetchBotOnboarding();
+                        if (onboardingResult.response.ok) {
+                          setOnboarding(onboardingResult.data);
+                        }
+                        setBanner({ tone: "success", text: "ZAKI BOT space provisioned." });
+                      }}
+                    >
+                      {savingOnboarding ? "Provisioning…" : "Provision ZAKI BOT"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingOnboarding}
+                      className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={async () => {
+                        setSavingOnboarding(true);
+                        setBanner(null);
+                        const nextCompleted = !Boolean(onboarding?.completed);
+                        const { response, data } = await updateBotOnboarding({
+                          completed: nextCompleted,
+                        });
+                        setSavingOnboarding(false);
+                        if (!response.ok) {
+                          setBanner({
+                            tone: "error",
+                            text: getBotErrorText(data, "Unable to update onboarding state."),
+                          });
+                          return;
+                        }
+                        setOnboarding(data);
+                        setBanner({
+                          tone: "success",
+                          text: nextCompleted
+                            ? "Onboarding marked complete."
+                            : "Onboarding reopened for further setup.",
+                        });
+                      }}
+                    >
+                      {onboarding?.completed ? "Mark as incomplete" : "Mark as complete"}
+                    </button>
+                  </div>
+
+                  <div className="mt-5 rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 dark:border-[#2e241b] dark:bg-[#1a140f]">
+                    <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      Setup summary
+                    </h4>
+                    <p className="mt-2 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+                      {onboardingSummary ||
+                        "Provisioning unlocks your bot space. As channel setup metadata becomes available, it will appear here without exposing internal runtime details."}
+                    </p>
+                    {setup ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {[
+                          ["Telegram", getChannelStatus(telegramSetup)],
+                          ["Slack", getChannelStatus(slackSetup)],
+                          ["Discord", getChannelStatus(discordSetup)],
+                        ]
+                          .filter(([, status]) => Boolean(status))
+                          .map(([label, status]) => (
+                            <span
+                              key={label}
+                              className="rounded-full border border-zaki-subtle bg-white px-3 py-1 text-xs text-zaki-secondary dark:border-[#2e241b] dark:bg-[#120e0b] dark:text-zaki-dark-subtle"
+                            >
+                              {label}: {status}
+                            </span>
+                          ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              icon={Settings2}
+              title="Settings"
+              description="These product settings shape how ZAKI BOT behaves across sessions and channels."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ProductField label="Assistant mode">
+                  <select
+                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                    value={settingsDraft.assistant_mode}
+                    onChange={(event) =>
+                      setSettingsDraft((current) => ({
+                        ...current,
+                        assistant_mode: event.target.value as SettingsDraft["assistant_mode"],
+                      }))
+                    }
+                  >
+                    <option value="fast">Fast</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="deep">Deep</option>
+                  </select>
+                </ProductField>
+                <ProductField label="Group activation">
+                  <select
+                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                    value={settingsDraft.group_activation}
+                    onChange={(event) =>
+                      setSettingsDraft((current) => ({
+                        ...current,
+                        group_activation: event.target.value as SettingsDraft["group_activation"],
+                      }))
+                    }
+                  >
+                    <option value="mention">Mention only</option>
+                    <option value="always">Always active</option>
+                  </select>
+                </ProductField>
+                <ProductField label="Session timeout (minutes)">
+                  <input
+                    type="number"
+                    min={5}
+                    max={180}
+                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                    value={settingsDraft.session_timeout_minutes}
+                    onChange={(event) =>
+                      setSettingsDraft((current) => ({
+                        ...current,
+                        session_timeout_minutes: event.target.value,
+                      }))
+                    }
+                  />
+                </ProductField>
+                <div className="grid gap-3">
+                  <label className="flex items-center gap-3 rounded-zaki-md border border-zaki-subtle bg-zaki-base/70 px-4 py-3 text-sm text-zaki-primary dark:border-[#2e241b] dark:bg-[#1a140f] dark:text-zaki-dark-primary">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.proactive_updates}
+                      onChange={(event) =>
+                        setSettingsDraft((current) => ({
+                          ...current,
+                          proactive_updates: event.target.checked,
+                        }))
+                      }
+                    />
+                    Proactive updates
+                  </label>
+                  <label className="flex items-center gap-3 rounded-zaki-md border border-zaki-subtle bg-zaki-base/70 px-4 py-3 text-sm text-zaki-primary dark:border-[#2e241b] dark:bg-[#1a140f] dark:text-zaki-dark-primary">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.voice_replies}
+                      onChange={(event) =>
+                        setSettingsDraft((current) => ({
+                          ...current,
+                          voice_replies: event.target.checked,
+                        }))
+                      }
+                    />
+                    Voice replies
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <p className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                  Product-level settings only. No raw runtime config is exposed here.
+                </p>
                 <button
                   type="button"
-                  className="rounded-full border border-zaki-subtle px-3 py-1.5 text-sm text-zaki-secondary hover:bg-zaki-hover"
+                  disabled={!settingsDirty || savingSettings}
+                  className="zaki-btn zaki-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={async () => {
-                    const name = cronName.trim();
-                    const schedule = cronSchedule.trim();
-                    const prompt = cronPrompt.trim();
-                    if (!name) {
-                      setError("Cron name is required.");
+                    setSavingSettings(true);
+                    setBanner(null);
+                    const parsedTimeout = Number.parseInt(
+                      settingsDraft.session_timeout_minutes,
+                      10
+                    );
+                    if (!Number.isInteger(parsedTimeout) || parsedTimeout < 5 || parsedTimeout > 180) {
+                      setSavingSettings(false);
+                      setBanner({
+                        tone: "error",
+                        text: "Session timeout must be between 5 and 180 minutes.",
+                      });
                       return;
                     }
-                    if (!isValidCronSchedule(schedule)) {
-                      setError("Cron schedule must be 5-part cron or @hourly/@daily/@weekly/@monthly/@yearly.");
-                      return;
-                    }
-                    if (!prompt) {
-                      setError("Cron prompt/task is required.");
-                      return;
-                    }
-                    const payload = { name, schedule, prompt, enabled: cronEnabled };
-                    const { response, data } = await createAgentCron(payload);
-                    if (!response.ok) {
-                      setError(getErrorMessage(data, "Cron create failed."));
-                      return;
-                    }
-                    setStatus("Cron entry created.");
-                  }}
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full border border-zaki-subtle px-3 py-1.5 text-sm text-zaki-secondary hover:bg-zaki-hover"
-                  onClick={async () => {
-                    const id = cronEditId.trim();
-                    if (!id) {
-                      setError("Enter a cron id to update.");
-                      return;
-                    }
-                    if (!isValidCronSchedule(cronSchedule)) {
-                      setError("Cron schedule must be valid.");
-                      return;
-                    }
-                    const payload = {
-                      name: cronName.trim(),
-                      schedule: cronSchedule.trim(),
-                      prompt: cronPrompt.trim(),
-                      enabled: cronEnabled,
+                    const payload: BotSettingsPatch = {
+                      assistant_mode: settingsDraft.assistant_mode,
+                      group_activation: settingsDraft.group_activation,
+                      proactive_updates: settingsDraft.proactive_updates,
+                      voice_replies: settingsDraft.voice_replies,
+                      session_timeout_minutes: parsedTimeout,
                     };
-                    const { response, data } = await updateAgentCron(id, payload);
+                    const { response, data } = await updateBotSettings(payload);
+                    setSavingSettings(false);
                     if (!response.ok) {
-                      setError(getErrorMessage(data, "Cron update failed."));
+                      setBanner({
+                        tone: "error",
+                        text: getBotErrorText(data, "Unable to save ZAKI BOT settings."),
+                      });
                       return;
                     }
-                    setStatus(`Cron ${id} updated.`);
+                    setSettings(data);
+                    setSettingsDraft({
+                      assistant_mode: data.assistant_mode ?? DEFAULT_SETTINGS.assistant_mode,
+                      group_activation: data.group_activation ?? DEFAULT_SETTINGS.group_activation,
+                      proactive_updates: Boolean(data.proactive_updates ?? DEFAULT_SETTINGS.proactive_updates),
+                      voice_replies: Boolean(data.voice_replies ?? DEFAULT_SETTINGS.voice_replies),
+                      session_timeout_minutes:
+                        typeof data.session_timeout_minutes === "number"
+                          ? String(data.session_timeout_minutes)
+                          : DEFAULT_SETTINGS.session_timeout_minutes,
+                    });
+                    setBanner({ tone: "success", text: "ZAKI BOT settings saved." });
                   }}
                 >
-                  Update
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full border border-rose-200 px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50"
-                  onClick={async () => {
-                    const id = cronEditId.trim();
-                    if (!id) {
-                      setError("Enter a cron id to delete.");
-                      return;
-                    }
-                    const { response, data } = await deleteAgentCron(id);
-                    if (!response.ok) {
-                      setError(getErrorMessage(data, "Cron delete failed."));
-                      return;
-                    }
-                    setStatus(`Cron ${id} deleted.`);
-                  }}
-                >
-                  Delete
+                  {savingSettings ? "Saving…" : "Save settings"}
                 </button>
               </div>
+            </SectionCard>
+          </div>
+
+          <div className="space-y-5">
+            <SectionCard
+              icon={Link2}
+              title="Channels"
+              description="Connect Telegram now. Slack and Discord are guided through setup instructions until those channels are ready."
+            >
+              <div className="space-y-4">
+                <div className="rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 dark:border-[#2e241b] dark:bg-[#1a140f]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        Telegram
+                      </h4>
+                      <p className="mt-1 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                        {telegramStatus
+                          ? `Current status: ${telegramStatus}${telegramMeta ? ` — ${telegramMeta}` : ""}`
+                          : "Connect Telegram so ZAKI BOT can receive and respond through your bot."}
+                      </p>
+                    </div>
+                    {telegramStatus === "connected" ? (
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Connected
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <input
+                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                      placeholder="Telegram bot token"
+                      value={telegramToken}
+                      onChange={(event) => setTelegramToken(event.target.value)}
+                    />
+                    <input
+                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                      placeholder="Webhook URL override (optional)"
+                      value={telegramWebhookUrl}
+                      onChange={(event) => setTelegramWebhookUrl(event.target.value)}
+                    />
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={telegramBusy}
+                      className="zaki-btn zaki-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={async () => {
+                        setBanner(null);
+                        const botToken = telegramToken.trim();
+                        if (!botToken) {
+                          setBanner({
+                            tone: "error",
+                            text: "Enter a Telegram bot token before connecting.",
+                          });
+                          return;
+                        }
+                        const payload: Parameters<typeof connectBotTelegram>[0] = {
+                          bot_token: botToken,
+                        };
+                        const webhookUrl = telegramWebhookUrl.trim();
+                        if (webhookUrl) payload.webhook_url = webhookUrl;
+                        setTelegramBusy(true);
+                        const { response, data } = await connectBotTelegram(payload);
+                        setTelegramBusy(false);
+                        if (!response.ok) {
+                          setBanner({
+                            tone: "error",
+                            text: getBotErrorText(data, "Unable to connect Telegram."),
+                          });
+                          return;
+                        }
+                        setBanner({
+                          tone: "success",
+                          text: "Telegram connected. Send a message to your bot to confirm routing.",
+                        });
+                        const onboardingResult = await fetchBotOnboarding();
+                        if (onboardingResult.response.ok) {
+                          setOnboarding(onboardingResult.data);
+                        }
+                      }}
+                    >
+                      {telegramBusy ? "Connecting…" : "Connect Telegram"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={telegramBusy}
+                      className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={async () => {
+                        setTelegramBusy(true);
+                        const { response, data } = await disconnectBotTelegram();
+                        setTelegramBusy(false);
+                        if (!response.ok) {
+                          setBanner({
+                            tone: "error",
+                            text: getBotErrorText(data, "Unable to disconnect Telegram."),
+                          });
+                          return;
+                        }
+                        setBanner({ tone: "success", text: "Telegram disconnected." });
+                        const onboardingResult = await fetchBotOnboarding();
+                        if (onboardingResult.response.ok) {
+                          setOnboarding(onboardingResult.data);
+                        }
+                      }}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+
+                <ChannelInstructionCard
+                  title="Slack"
+                  status={getChannelStatus(slackSetup) || undefined}
+                  meta={slackMeta || undefined}
+                  steps={getInstructionSteps(slackSetup, FALLBACK_CHANNEL_STEPS.slack)}
+                />
+                <ChannelInstructionCard
+                  title="Discord"
+                  status={getChannelStatus(discordSetup) || undefined}
+                  meta={discordMeta || undefined}
+                  steps={getInstructionSteps(discordSetup, FALLBACK_CHANNEL_STEPS.discord)}
+                />
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              icon={Activity}
+              title="Usage"
+              description="Daily product usage reflects the public ZAKI BOT limits exposed by the BFF."
+            >
+              {usageUnavailable ? (
+                <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                  Usage is temporarily unavailable. Your bot space still works, but we could not load the daily usage summary.
+                </div>
+              ) : usage ? (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 dark:border-[#2e241b] dark:bg-[#1a140f]">
+                    <p className="text-xs uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                      State
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      {usage.state ?? "unknown"}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 dark:border-[#2e241b] dark:bg-[#1a140f]">
+                    <p className="text-xs uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                      Requests / day
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      {usage.requests_day ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 dark:border-[#2e241b] dark:bg-[#1a140f]">
+                    <p className="text-xs uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                      Token telemetry
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      {(usage.tokens_day ?? 0) + (usage.tokens_month ?? 0) === 0 ? "Pending" : "Live"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[18px] border border-zaki-subtle bg-zaki-base/70 px-4 py-4 text-sm text-zaki-secondary dark:border-[#2e241b] dark:bg-[#1a140f] dark:text-zaki-dark-subtle">
+                  No usage snapshot is available yet.
+                </div>
+              )}
+            </SectionCard>
+
+            <div className="rounded-[24px] border border-zaki-subtle bg-white px-5 py-5 dark:border-[#2e241b] dark:bg-[#16110d]">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 size-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    What stays unchanged
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+                    Nullalis stays private. This UI only talks to the ZAKI BFF, and it only exposes product-level state that future clients can reuse unchanged.
+                  </p>
+                </div>
+              </div>
             </div>
-            <input
-              className="mb-2 w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Cron id for update/delete"
-              value={cronEditId}
-              onChange={(event) => setCronEditId(event.target.value)}
-            />
-            <input
-              className="mb-2 w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Cron name"
-              value={cronName}
-              onChange={(event) => setCronName(event.target.value)}
-            />
-            <input
-              className="mb-2 w-full rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none"
-              placeholder="Schedule (e.g. 0 9 * * * or @daily)"
-              value={cronSchedule}
-              onChange={(event) => setCronSchedule(event.target.value)}
-            />
-            <textarea
-              className="min-h-20 w-full rounded-zaki-lg border border-zaki-subtle bg-zaki-sunken/40 px-3 py-2 text-sm text-zaki-secondary outline-none"
-              placeholder="Prompt/task"
-              value={cronPrompt}
-              onChange={(event) => setCronPrompt(event.target.value)}
-            />
-            <label className="mt-2 flex items-center gap-2 text-sm text-zaki-secondary">
-              <input
-                type="checkbox"
-                checked={cronEnabled}
-                onChange={(event) => setCronEnabled(event.target.checked)}
-              />
-              Enabled
-            </label>
-          </section>
+          </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
