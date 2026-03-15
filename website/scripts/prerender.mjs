@@ -12,7 +12,7 @@ if (!ssrEntryFile) {
   throw new Error("Could not find SSR entry output in website/dist-ssr.");
 }
 
-const { renderLanding } = await import(pathToFileURL(resolve(distSsrDir, ssrEntryFile)).href);
+const { renderRoute, getPrerenderRoutes, routeRegistry } = await import(pathToFileURL(resolve(distSsrDir, ssrEntryFile)).href);
 
 const templatePath = resolve(distDir, "index.html");
 const templateHtml = readFileSync(templatePath, "utf8");
@@ -29,10 +29,10 @@ function escapeHtml(value = "") {
 }
 
 function buildSeoBlock({ seo, structuredData }) {
-  const jsonLdScripts = Object.entries(structuredData)
+  const jsonLdScripts = structuredData
     .map(
-      ([key, value]) =>
-        `<script type="application/ld+json" id="zaki-${key}-jsonld">${JSON.stringify(value)}</script>`
+      (value, index) =>
+        `<script type="application/ld+json" id="zaki-jsonld-${index}">${JSON.stringify(value)}</script>`
     )
     .join("\n    ");
 
@@ -55,9 +55,9 @@ function buildSeoBlock({ seo, structuredData }) {
     />
     <meta name="theme-color" content="#fcfcfd" />
     <link rel="canonical" href="${escapeHtml(seo.canonical)}" />
-    <link rel="alternate" hreflang="en" href="https://chatzaki.com/" />
-    <link rel="alternate" hreflang="ar" href="https://chatzaki.com/ar/" />
-    <link rel="alternate" hreflang="x-default" href="https://chatzaki.com/" />
+    ${Object.entries(seo.alternates)
+      .map(([hreflang, href]) => `<link rel="alternate" hreflang="${hreflang}" href="${href}" />`)
+      .join("\n    ")}
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ZAKI AI" />
@@ -74,7 +74,7 @@ function buildSeoBlock({ seo, structuredData }) {
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${escapeHtml(seo.imageAlt)}" />
     <meta property="og:locale" content="${escapeHtml(seo.localeTag)}" />
-    <meta property="og:locale:alternate" content="${escapeHtml(seo.altLocaleTag)}" />
+    ${seo.altLocaleTag && seo.altLocaleTag !== seo.localeTag ? `<meta property="og:locale:alternate" content="${escapeHtml(seo.altLocaleTag)}" />` : ""}
     <meta property="og:updated_time" content="${escapeHtml(seo.updatedAt)}" />
 
     <meta name="twitter:card" content="summary_large_image" />
@@ -89,8 +89,8 @@ function buildSeoBlock({ seo, structuredData }) {
     ${seoEnd}`;
 }
 
-function injectPage(template, locale) {
-  const rendered = renderLanding(locale);
+function injectPage(template, pathname) {
+  const rendered = renderRoute(pathname);
   const seoBlock = buildSeoBlock(rendered);
 
   let html = template.replace(
@@ -106,8 +106,38 @@ function injectPage(template, locale) {
   return html;
 }
 
-writeFileSync(resolve(distDir, "index.html"), injectPage(templateHtml, "en"));
-mkdirSync(resolve(distDir, "ar"), { recursive: true });
-writeFileSync(resolve(distDir, "ar", "index.html"), injectPage(templateHtml, "ar"));
+function buildSitemapXml(routes) {
+  const today = "2026-03-14";
+  const byPath = new Map(routeRegistry.map((route) => [route.pathname, route]));
+  const absoluteUrl = (pathname) =>
+    pathname === "/" ? "https://chatzaki.com/" : `https://chatzaki.com${pathname}`;
 
-rmSync(distSsrDir, { recursive: true, force: true });
+  const body = routes
+    .map((routePath) => {
+      const route = byPath.get(routePath);
+      const alternates = Object.entries(renderRoute(routePath).seo.alternates)
+        .map(
+          ([hreflang, href]) =>
+            `    <xhtml:link rel="alternate" hreflang="${hreflang}" href="${href}" />`
+        )
+        .join("\n");
+
+      return `  <url>\n    <loc>${absoluteUrl(routePath)}</loc>\n    <lastmod>${today}</lastmod>${
+        alternates ? `\n${alternates}` : ""
+      }\n  </url>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset\n  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n  xmlns:xhtml="http://www.w3.org/1999/xhtml"\n>\n${body}\n</urlset>\n`;
+}
+
+const routes = getPrerenderRoutes();
+
+for (const route of routes) {
+  const html = injectPage(templateHtml, route);
+  const routeDir = route === "/" ? distDir : resolve(distDir, route.slice(1));
+  mkdirSync(routeDir, { recursive: true });
+  writeFileSync(resolve(routeDir, "index.html"), html);
+}
+
+writeFileSync(resolve(distDir, "sitemap.xml"), buildSitemapXml(routes));
