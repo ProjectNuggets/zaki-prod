@@ -28,6 +28,7 @@ const botOnboardingStateSchema = z
   .object({
     completed: z.boolean(),
     completed_at_s: z.number().int().nonnegative().nullable(),
+    setup: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict();
 
@@ -82,6 +83,33 @@ function normalizedIntegerOrNull(value) {
     return Number.parseInt(value.trim(), 10);
   }
   return null;
+}
+
+function sanitizeProductSetupValue(value) {
+  if (value === null) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeProductSetupValue(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const uiFields = findUiSpecificFields(value);
+  if (uiFields.length > 0) {
+    throw new Error(`ui-specific fields are not allowed: ${uiFields.join(", ")}`);
+  }
+
+  const sanitized = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const nextValue = sanitizeProductSetupValue(nestedValue);
+    if (typeof nextValue !== "undefined") {
+      sanitized[key] = nextValue;
+    }
+  }
+  return sanitized;
 }
 
 function extractPayloadMessage(payload) {
@@ -244,9 +272,14 @@ export function sanitizeBotOnboardingState(payload, fallbackCompleted = false) {
   const completed =
     typeof source.completed === "boolean" ? source.completed : Boolean(fallbackCompleted);
   const completedAt = normalizedIntegerOrNull(source.completed_at_s ?? source.completedAtS);
+  const setup =
+    source.setup && typeof source.setup === "object" && !Array.isArray(source.setup)
+      ? sanitizeProductSetupValue(source.setup)
+      : null;
   return botOnboardingStateSchema.parse({
     completed,
     completed_at_s: completed ? completedAt : null,
+    setup: setup && typeof setup === "object" ? setup : null,
   });
 }
 

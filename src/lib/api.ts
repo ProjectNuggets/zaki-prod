@@ -904,6 +904,72 @@ async function parseApiJson<T>(response: Response): Promise<T> {
 }
 
 export type UsageQuotaSurface = "app_chat" | "zaki_bot";
+export type BotErrorCode =
+  | "temporary_contention"
+  | "unauthorized"
+  | "forbidden"
+  | "invalid_telegram_token"
+  | "provision_failed"
+  | "settings_update_failed"
+  | "usage_unavailable";
+
+export type BotApiError = {
+  error?: BotErrorCode | string | null;
+  message?: string | null;
+  retryable?: boolean;
+  request_id?: string;
+};
+
+export type BotProvisionStatus = {
+  status: string;
+};
+
+export type BotOnboardingSetup = Record<string, unknown>;
+
+export type BotOnboardingState = BotApiError & {
+  completed?: boolean;
+  completed_at_s?: number | null;
+  setup?: BotOnboardingSetup | null;
+};
+
+export type BotSettingsProfile = BotApiError & {
+  assistant_mode?: "fast" | "balanced" | "deep";
+  group_activation?: "mention" | "always";
+  proactive_updates?: boolean;
+  voice_replies?: boolean;
+  session_timeout_minutes?: number;
+};
+
+export type BotSettingsPatch = {
+  assistant_mode?: "fast" | "balanced" | "deep";
+  group_activation?: "mention" | "always";
+  proactive_updates?: boolean;
+  voice_replies?: boolean;
+  session_timeout_minutes?: number;
+};
+
+export type BotTelegramConnectPayload = {
+  bot_token?: string;
+  webhook_url?: string;
+  webhook_base_url?: string;
+  webhook_secret_token?: string;
+  account_id?: string;
+  chat_id?: string;
+  allow_from?: string[];
+  drop_pending_updates?: boolean;
+};
+
+export type BotTelegramConnectionState = BotApiError & {
+  status?: "connected" | "disconnected";
+  channel?: "telegram";
+};
+
+export type BotUsageSummary = BotApiError & {
+  state?: string;
+  requests_day?: number;
+  tokens_day?: number;
+  tokens_month?: number;
+};
 
 export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
   const params = new URLSearchParams({ surface });
@@ -921,6 +987,69 @@ export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
     surface?: UsageQuotaSurface;
     error?: string | null;
   }>(response);
+  return { response, data };
+}
+
+export async function provisionBot(payload: Record<string, unknown> = {}) {
+  const response = await backendAuthRequest("/v1/me/bot/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotProvisionStatus & BotApiError>(response);
+  return { response, data };
+}
+
+export async function fetchBotOnboarding() {
+  const response = await backendAuthRequest("/v1/me/bot/onboarding", { method: "GET" });
+  const data = await parseApiJson<BotOnboardingState>(response);
+  return { response, data };
+}
+
+export async function updateBotOnboarding(payload: { completed: boolean }) {
+  const response = await backendAuthRequest("/v1/me/bot/onboarding", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotOnboardingState>(response);
+  return { response, data };
+}
+
+export async function fetchBotSettings() {
+  const response = await backendAuthRequest("/v1/me/bot/settings", { method: "GET" });
+  const data = await parseApiJson<BotSettingsProfile>(response);
+  return { response, data };
+}
+
+export async function updateBotSettings(payload: BotSettingsPatch) {
+  const response = await backendAuthRequest("/v1/me/bot/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotSettingsProfile>(response);
+  return { response, data };
+}
+
+export async function connectBotTelegram(payload: BotTelegramConnectPayload) {
+  const response = await backendAuthRequest("/v1/me/bot/telegram/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotTelegramConnectionState>(response);
+  return { response, data };
+}
+
+export async function disconnectBotTelegram() {
+  const response = await backendAuthRequest("/v1/me/bot/telegram/disconnect", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const data = await parseApiJson<BotTelegramConnectionState>(response);
+  return { response, data };
+}
+
+export async function fetchBotUsage() {
+  const response = await backendAuthRequest("/v1/me/bot/usage", { method: "GET" });
+  const data = await parseApiJson<BotUsageSummary>(response);
   return { response, data };
 }
 
