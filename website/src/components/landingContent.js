@@ -49,7 +49,7 @@ export const content = {
             "Dedicated spaces keep work, research, and planning separated cleanly",
             "User-controlled memory and stronger data discipline",
           ],
-          ctaLabel: "Use ZAKI Chat",
+          ctaLabel: "Try Spaces",
           ctaHref: "https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_chat_live",
         },
         {
@@ -667,7 +667,7 @@ export const content = {
             "المساحات تفصل العمل والبحث والتخطيط بوضوح",
             "تحكم أوضح في الذاكرة والبيانات",
           ],
-          ctaLabel: "استخدم ZAKI Chat",
+          ctaLabel: "جرّب Spaces",
           ctaHref: "https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_chat_live",
         },
         {
