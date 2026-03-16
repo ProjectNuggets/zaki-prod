@@ -1,0 +1,84 @@
+name: Deploy Nullalis
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: "DigitalOcean Kubernetes cluster name"
+        required: false
+        default: "zaki-prod"
+      namespace:
+        description: "Kubernetes namespace"
+        required: false
+        default: "zaki"
+      deployment:
+        description: "Nullalis deployment name"
+        required: false
+        default: "nullclaw"
+      container:
+        description: "Container name inside the deployment"
+        required: false
+        default: "nullclaw"
+      image_ref:
+        description: "Optional image ref to set before rollout, e.g. ghcr.io/org/nullalis:sha"
+        required: false
+        default: ""
+  repository_dispatch:
+    types: [nullalis_deploy]
+
+concurrency:
+  group: deploy-nullalis
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve deploy inputs
+        id: inputs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_CLUSTER: ${{ github.event.inputs.cluster }}
+          INPUT_NAMESPACE: ${{ github.event.inputs.namespace }}
+          INPUT_DEPLOYMENT: ${{ github.event.inputs.deployment }}
+          INPUT_CONTAINER: ${{ github.event.inputs.container }}
+          INPUT_IMAGE_REF: ${{ github.event.inputs.image_ref }}
+          PAYLOAD_CLUSTER: ${{ github.event.client_payload.cluster }}
+          PAYLOAD_NAMESPACE: ${{ github.event.client_payload.namespace }}
+          PAYLOAD_DEPLOYMENT: ${{ github.event.client_payload.deployment }}
+          PAYLOAD_CONTAINER: ${{ github.event.client_payload.container }}
+          PAYLOAD_IMAGE_REF: ${{ github.event.client_payload.image_ref }}
+        run: |
+          if [ "${EVENT_NAME}" = "repository_dispatch" ]; then
+            echo "cluster=${PAYLOAD_CLUSTER:-zaki-prod}" >> "$GITHUB_OUTPUT"
+            echo "namespace=${PAYLOAD_NAMESPACE:-zaki}" >> "$GITHUB_OUTPUT"
+            echo "deployment=${PAYLOAD_DEPLOYMENT:-nullclaw}" >> "$GITHUB_OUTPUT"
+            echo "container=${PAYLOAD_CONTAINER:-nullclaw}" >> "$GITHUB_OUTPUT"
+            echo "image_ref=${PAYLOAD_IMAGE_REF:-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "cluster=${INPUT_CLUSTER:-zaki-prod}" >> "$GITHUB_OUTPUT"
+            echo "namespace=${INPUT_NAMESPACE:-zaki}" >> "$GITHUB_OUTPUT"
+            echo "deployment=${INPUT_DEPLOYMENT:-nullclaw}" >> "$GITHUB_OUTPUT"
+            echo "container=${INPUT_CONTAINER:-nullclaw}" >> "$GITHUB_OUTPUT"
+            echo "image_ref=${INPUT_IMAGE_REF:-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DO_API_TOKEN }}
+
+      - name: Configure kubectl
+        run: doctl kubernetes cluster kubeconfig save "${{ steps.inputs.outputs.cluster }}"
+
+      - name: Set Nullalis image
+        if: ${{ steps.inputs.outputs.image_ref != '' }}
+        run: |
+          kubectl set image deployment/"${{ steps.inputs.outputs.deployment }}" \
+            "${{ steps.inputs.outputs.container }}"="${{ steps.inputs.outputs.image_ref }}" \
+            -n "${{ steps.inputs.outputs.namespace }}"
+
+      - name: Restart Nullalis deployment
+        run: |
+          kubectl rollout restart deployment/"${{ steps.inputs.outputs.deployment }}" -n "${{ steps.inputs.outputs.namespace }}"
+          kubectl rollout status deployment/"${{ steps.inputs.outputs.deployment }}" -n "${{ steps.inputs.outputs.namespace }}" --timeout=300s
