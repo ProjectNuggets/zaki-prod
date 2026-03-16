@@ -1,46 +1,21 @@
-name: CI
+name: CI Backend
 
 on:
   pull_request:
+    paths:
+      - "backend/**"
+      - "scripts/**"
+      - ".github/workflows/ci-backend.yml"
   push:
     branches:
       - main
+    paths:
+      - "backend/**"
+      - "scripts/**"
+      - ".github/workflows/ci-backend.yml"
   workflow_dispatch:
 
 jobs:
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install frontend deps
-        run: npm ci
-      - name: Frontend tests
-        run: npm run test -- --runInBand
-      - name: Frontend typecheck
-        run: npm run typecheck
-      - name: Frontend build
-        run: npm run build
-
-  frontend-e2e:
-    runs-on: ubuntu-latest
-    needs: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install frontend deps
-        run: npm ci
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-      - name: Frontend e2e (memory rail)
-        run: npm run test:e2e
-
   backend-static:
     runs-on: ubuntu-latest
     steps:

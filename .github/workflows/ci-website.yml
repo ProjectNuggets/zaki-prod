@@ -1,0 +1,31 @@
+name: CI Website
+
+on:
+  pull_request:
+    paths:
+      - "website/**"
+      - ".github/workflows/ci-website.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "website/**"
+      - ".github/workflows/ci-website.yml"
+  workflow_dispatch:
+
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install website deps
+        run: npm --prefix website ci
+      - name: Website typecheck
+        run: npx tsc --noEmit -p website/tsconfig.json
+      - name: Website build
+        run: npm --prefix website run build
