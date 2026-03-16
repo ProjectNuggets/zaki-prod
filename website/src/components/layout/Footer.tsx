@@ -14,8 +14,8 @@ export function Footer({ locale }: { locale: Locale }) {
           </Link>
           <p className="mt-4 max-w-[38ch] text-sm leading-7 text-chat-muted">
             {isArabic
-              ? "دردشة عملية اليوم. ومشغّل ذكاء شخصي يتشكل علنًا."
-              : "Practical chat now. A personal AI operator taking shape in public."}
+              ? "Spaces للعمل المنظّم اليوم. وزكي لاختبار الذكاء الشخصي المستمر علنًا."
+              : "Spaces for structured work now. ZAKI for testing persistent personal intelligence in public."}
           </p>
         </div>
         <div>
@@ -23,12 +23,16 @@ export function Footer({ locale }: { locale: Locale }) {
             {isArabic ? "المنتج" : "Product"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm">
-            <a href="https://app.chatzaki.com/pricing?auth=signup&source=website_footer" className="transition-colors hover:text-chat-accent">ZAKI Chat</a>
+            <a href="https://app.chatzaki.com/pricing?auth=signup&source=website_footer" className="transition-colors hover:text-chat-accent">{isArabic ? "Spaces (حاليًا ZAKI Chat)" : "Spaces (currently ZAKI Chat)"}</a>
             <Link to={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="transition-colors hover:text-chat-accent">{isArabic ? "زكي" : "ZAKI"}</Link>
-            <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-chat-accent">{isArabic ? "حكايتنا" : "Our Story"}</Link>
+            <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-chat-accent">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Link>
             <Link to={isArabic ? "/ar/faq/" : "/faq/"} className="transition-colors hover:text-chat-accent">{isArabic ? "الأسئلة" : "FAQ"}</Link>
-            <Link to={isArabic ? "/ar/vs-chatgpt/" : "/vs-chatgpt/"} className="transition-colors hover:text-chat-accent">{isArabic ? "ZAKI مقابل ChatGPT" : "ZAKI vs ChatGPT"}</Link>
-            <Link to={isArabic ? "/ar/best-arabic-ai-assistant/" : "/best-arabic-ai-assistant/"} className="transition-colors hover:text-chat-accent">{isArabic ? "أفضل مساعد عربي" : "Best Arabic AI"}</Link>
+            <Link to="/zaki-vs-spaces/" className="transition-colors hover:text-chat-accent">{isArabic ? "زكي مقابل Spaces" : "ZAKI vs Spaces"}</Link>
+            <Link to="/how-to/how-zaki-and-spaces-work/" className="transition-colors hover:text-chat-accent">{isArabic ? "كيف يعمل زكي وSpaces" : "How ZAKI and Spaces work together"}</Link>
+            <Link to="/how-to/what-to-use-spaces-for/" className="transition-colors hover:text-chat-accent">{isArabic ? "متى تستخدم Spaces" : "What to use Spaces for"}</Link>
+            <Link to="/how-to/what-to-use-zaki-for/" className="transition-colors hover:text-chat-accent">{isArabic ? "متى تستخدم زكي" : "What to use ZAKI for"}</Link>
+            <Link to="/vs-chatgpt/" className="transition-colors hover:text-chat-accent">{isArabic ? "Spaces مقابل ChatGPT" : "Spaces vs ChatGPT"}</Link>
+            <Link to="/best-arabic-ai-assistant/" className="transition-colors hover:text-chat-accent">{isArabic ? "أفضل مساعد عربي" : "Best Arabic AI Assistant"}</Link>
           </div>
         </div>
         <div>

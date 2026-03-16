@@ -102,6 +102,14 @@ export const routeRegistry: RouteDefinition[] = [
     requiresSchema: true,
   },
   {
+    pathname: "/zaki-vs-spaces/",
+    locale: "en",
+    pageKind: "comparison",
+    seoKey: "zaki-vs-spaces",
+    requiresAlternates: false,
+    requiresSchema: true,
+  },
+  {
     pathname: "/best-arabic-ai-assistant/",
     locale: "en",
     pageKind: "comparison",
@@ -130,6 +138,30 @@ export const routeRegistry: RouteDefinition[] = [
     locale: "en",
     pageKind: "howto",
     seoKey: "howto-create-social-media-content-arabic",
+    requiresAlternates: false,
+    requiresSchema: true,
+  },
+  {
+    pathname: "/how-to/how-zaki-and-spaces-work/",
+    locale: "en",
+    pageKind: "howto",
+    seoKey: "howto-how-zaki-and-spaces-work",
+    requiresAlternates: false,
+    requiresSchema: true,
+  },
+  {
+    pathname: "/how-to/what-to-use-spaces-for/",
+    locale: "en",
+    pageKind: "howto",
+    seoKey: "howto-what-to-use-spaces-for",
+    requiresAlternates: false,
+    requiresSchema: true,
+  },
+  {
+    pathname: "/how-to/what-to-use-zaki-for/",
+    locale: "en",
+    pageKind: "howto",
+    seoKey: "howto-what-to-use-zaki-for",
     requiresAlternates: false,
     requiresSchema: true,
   },
@@ -263,4 +295,3 @@ export function getLocaleSwitchPath(pathname: string, targetLocale: Locale) {
     )?.pathname ?? (targetLocale === "ar" ? "/ar/" : "/")
   );
 }
-

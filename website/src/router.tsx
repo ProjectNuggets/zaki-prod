@@ -20,10 +20,14 @@ export function AppRoutes() {
       <Route path="/faq" element={<FaqPage locale="en" />} />
       <Route path="/ar/faq" element={<FaqPage locale="ar" />} />
       <Route path="/vs-chatgpt" element={<ComparisonPage slug="vs-chatgpt" />} />
+      <Route path="/zaki-vs-spaces" element={<ComparisonPage slug="zaki-vs-spaces" />} />
       <Route path="/best-arabic-ai-assistant" element={<ComparisonPage slug="best-arabic-ai-assistant" />} />
       <Route path="/how-to/write-arabic-emails-ai" element={<HowToPage slug="write-arabic-emails-ai" />} />
       <Route path="/how-to/translate-dialects-arabic-english" element={<HowToPage slug="translate-dialects-arabic-english" />} />
       <Route path="/how-to/create-social-media-content-arabic" element={<HowToPage slug="create-social-media-content-arabic" />} />
+      <Route path="/how-to/how-zaki-and-spaces-work" element={<HowToPage slug="how-zaki-and-spaces-work" />} />
+      <Route path="/how-to/what-to-use-spaces-for" element={<HowToPage slug="what-to-use-spaces-for" />} />
+      <Route path="/how-to/what-to-use-zaki-for" element={<HowToPage slug="what-to-use-zaki-for" />} />
       <Route path="/contact" element={<ContactPage locale="en" />} />
       <Route path="/ar/contact" element={<ContactPage locale="ar" />} />
       <Route path="/privacy" element={<LegalPage locale="en" slug="privacy" />} />

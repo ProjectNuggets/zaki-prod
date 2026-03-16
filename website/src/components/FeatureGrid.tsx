@@ -1,56 +1,7 @@
-import { Quote, Shield, Zap } from "lucide-react";
+import { ArrowUpRight, Quote, Shield, Zap } from "lucide-react";
 import type { Locale, WebsiteContent } from "../lib/content";
 import { Card } from "./ui/card";
 import { Reveal } from "./Reveal";
-
-/* Stylised growth chart — editorial, not dashboard */
-function GrowthChart({ isArabic }: { isArabic: boolean }) {
-  const bars = [
-    { year: "2024", value: 5.4, h: 14 },
-    { year: "2025", value: 11, h: 28 },
-    { year: "2026", value: 18, h: 42 },
-    { year: "2027", value: 26, h: 56 },
-    { year: "2028", value: 35, h: 72 },
-    { year: "2029", value: 43, h: 86 },
-    { year: "2030", value: 50, h: 100 },
-  ];
-
-  return (
-    <div className="mt-6 rounded-[18px] border border-line-strong/60 bg-chat-bg/60 p-5">
-      <div className="flex items-baseline justify-between">
-        <p className="font-mono-ui text-[10px] uppercase tracking-[0.24em] text-chat-muted/60">
-          {isArabic ? "حجم سوق وكلاء AI (مليار $)" : "AI agents market size (USD B)"}
-        </p>
-        <p className="font-mono-ui text-[10px] tracking-[0.16em] text-chat-accent">
-          {isArabic ? "نمو سنوي 45.8%" : "45.8% CAGR"}
-        </p>
-      </div>
-      <div className="mt-5 flex items-end gap-2.5" dir="ltr">
-        {bars.map((bar, i) => (
-          <div key={bar.year} className="flex flex-1 flex-col items-center gap-2">
-            <span
-              className="w-full rounded-t-[6px] transition-all duration-500"
-              style={{
-                height: `${bar.h}px`,
-                background:
-                  i === bars.length - 1
-                    ? "linear-gradient(180deg, hsl(10 68% 52%), hsl(10 68% 42%))"
-                    : `rgba(210, 68, 48, ${0.12 + i * 0.08})`,
-              }}
-            />
-            <span className="font-mono-ui text-[9px] text-chat-muted/70">
-              {bar.year.slice(2)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 flex items-baseline justify-between border-t border-line-strong/40 pt-3">
-        <span className="text-[12px] text-chat-muted">$5.4B</span>
-        <span className="font-display text-[18px] font-extrabold tracking-[-0.03em] text-chat-text">$50B</span>
-      </div>
-    </div>
-  );
-}
 
 /* Edge metrics — inline stat pills */
 function EdgeMetrics({ isArabic }: { isArabic: boolean }) {
@@ -122,7 +73,7 @@ export function FeatureGrid({ locale, t }: { locale: Locale; t: WebsiteContent }
             <h3 className="font-display mt-4 text-[26px] font-extrabold leading-[1.1] tracking-[-0.04em] text-chat-text md:text-[30px]">
               {t.geo.definitionHeading}
             </h3>
-            <p className="mt-3 text-[14px] leading-[1.8] text-chat-muted">{t.geo.definitionText}</p>
+            <p className="mt-3 max-w-[44ch] text-[14px] leading-[1.75] text-chat-muted">{t.geo.definitionText}</p>
             <div className="mt-auto pt-5">
               <div className="rounded-[18px] border border-line-strong/60 bg-chat-bg/60 p-5">
                 <p className="font-mono-ui text-[10px] uppercase tracking-[0.28em] text-chat-muted/60">
@@ -131,13 +82,13 @@ export function FeatureGrid({ locale, t }: { locale: Locale; t: WebsiteContent }
                 <ul className="mt-3 space-y-2">
                   {(isArabic
                     ? [
-                        { label: "ZAKI Chat", desc: "مساحة عمل مباشرة ومدفوعة للتركيز والإنتاجية", color: "bg-chat-accent" },
-                        { label: "ZAKI BOT", desc: "بيتا تجريبية لذكاء شخصي مستمر", color: "bg-[#f0a050]" },
+                        { label: "Spaces", desc: "مساحات عمل مباشرة ومدفوعة للتركيز والتنفيذ المنظّم", color: "bg-chat-accent" },
+                        { label: "ZAKI", desc: "بيتا تجريبية لوكيل ذكاء شخصي مستمر", color: "bg-[#f0a050]" },
                         { label: "Nullalis", desc: "طبقة تشغيل داخلية وراء الاستمرارية والذاكرة", color: "bg-chat-muted" },
                       ]
                     : [
-                        { label: "ZAKI Chat", desc: "live, paid workspace for focused productivity", color: "bg-chat-accent" },
-                        { label: "ZAKI BOT", desc: "experimental beta for persistent personal intelligence", color: "bg-[#f0a050]" },
+                        { label: "Spaces", desc: "live, paid workspaces for focused execution", color: "bg-chat-accent" },
+                        { label: "ZAKI", desc: "experimental beta for a persistent personal agent", color: "bg-[#f0a050]" },
                         { label: "Nullalis", desc: "private runtime layer behind continuity and memory", color: "bg-chat-muted" },
                       ]
                   ).map((item) => (
@@ -157,19 +108,58 @@ export function FeatureGrid({ locale, t }: { locale: Locale; t: WebsiteContent }
         <Reveal delay={120}>
           <Card className="flex h-full flex-col">
             <p className="font-mono-ui text-[10px] uppercase tracking-[0.28em] text-chat-accent">
-              {isArabic ? "لماذا هذا الاتجاه؟" : "Why this direction matters"}
+              {isArabic ? "لماذا تهم الاستمرارية؟" : "Why persistence matters"}
             </p>
             <h3 className="font-display mt-4 text-[26px] font-extrabold leading-[1.1] tracking-[-0.04em] text-chat-text md:text-[30px]">
               {isArabic
-                ? "التحول القادم ليس في الإجابة فقط"
-                : "AI is moving from answers to continuity"}
+                ? "السياق هو ما يفصل الأداة عن النظير"
+                : "Context is what separates a tool from a counterpart"}
             </h3>
-            <p className="mt-3 text-[14px] leading-[1.8] text-chat-muted">
+            <p className="mt-3 text-[14px] leading-[1.75] text-chat-muted">
               {isArabic
-                ? "المرحلة التالية ليست مجرد مخرجات أفضل، بل أنظمة تتذكر وتحافظ على السياق وتبقى مفيدة مع الوقت. زكي يُبنى لهذا التحول: دردشة عملية الآن، وذكاء مستمر بعد ذلك."
-                : "The next shift is not just better outputs. It is systems that remember, keep context, and stay useful across time. ZAKI is being built for that shift: practical chat now, persistent intelligence next."}
+                ? "الفرق الحقيقي ليس في إجابة واحدة جيدة، بل في بقاء الذكاء الاصطناعي مفيدًا عبر الوقت. لهذا يبدأ زكي بالدردشة المنظّمة ثم يبني فوقها طبقة استمرارية وذاكرة."
+                : "The real difference is not one good answer. It is whether AI stays useful over time. ZAKI starts with structured chat, then builds a continuity and memory layer on top."}
             </p>
-            <GrowthChart isArabic={isArabic} />
+            <ul className="mt-5 space-y-3">
+              {(isArabic
+                ? [
+                    "العمل الطويل يحتاج سياقًا لا يضيع بين الجلسات.",
+                    "الذاكرة تغيّر ما إذا كان الذكاء الاصطناعي يساعدك مرة واحدة أو يتطور معك.",
+                  ]
+                : [
+                    "Long-running work needs context that does not disappear between sessions.",
+                    "Memory changes whether AI helps once or improves with repeated use.",
+                  ]
+              ).map((item) => (
+                <li
+                  key={item}
+                  className="rounded-[16px] border border-line-strong/60 bg-chat-bg/60 px-4 py-3 text-[13px] leading-6 text-chat-text"
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-auto pt-5">
+              <div className="rounded-[14px] border border-line-strong/60 bg-chat-bg/60 p-4">
+                <p className="font-mono-ui text-[10px] uppercase tracking-[0.22em] text-chat-muted/70">
+                  {isArabic ? "مصدر" : "Source"}
+                </p>
+                <p className="mt-2 text-[13px] leading-[1.7] text-chat-muted">
+                  {isArabic
+                    ? "Anthropic أشارت إلى أن إدارة السياق والذاكرة تحسّن أداء الـ agents في المهام المعقدة ومتعددة الخطوات."
+                    : "Anthropic reports that context management and memory improve agent performance on complex, multi-step tasks."}
+                </p>
+                <a
+                  href="https://www.anthropic.com/news/context-management"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-chat-accent transition-colors hover:text-chat-accent-hover"
+                >
+                  {isArabic ? "Anthropic: Managing context" : "Anthropic: Managing context"}
+                  <ArrowUpRight className="size-4" />
+                </a>
+              </div>
+            </div>
           </Card>
         </Reveal>
 
@@ -184,18 +174,35 @@ export function FeatureGrid({ locale, t }: { locale: Locale; t: WebsiteContent }
                 ? "ذكاء مستمر، لا مخرجات عامة"
                 : "Persistent intelligence, not generic output"}
             </h3>
-            <p className="mt-3 text-[14px] leading-[1.8] text-chat-muted">
+            <p className="mt-3 text-[14px] leading-[1.75] text-chat-muted">
               {isArabic
-                ? "ZAKI Chat مُحسَّن للإنتاجية المنظمة، لا للنصوص العامة المتكررة. وZAKI BOT يمد هذا الانضباط إلى ذكاء شخصي مستمر: ذاكرة متواصلة، وسياق لكل مستخدم، ومراحل عمل مرئية."
-                : "ZAKI Chat is optimized for structured productivity, not endless generic output. ZAKI BOT extends that discipline into persistent personal intelligence: memory continuity, per-user context, and visible work phases."}
+                ? "Spaces مُحسَّنة للعمل المنظّم، لا للنصوص العامة المتكررة. وزكي يضيف إلى ذلك ما لا تعطيه الدردشة العادية: ذاكرة متواصلة، وسياق لكل مستخدم، ومراحل عمل مرئية."
+                : "Spaces are optimized for structured work, not endless generic output. ZAKI adds what ordinary chat does not: memory continuity, per-user context, and visible work phases."}
             </p>
+            <ul className="mt-5 space-y-3">
+              {(isArabic
+                ? [
+                    "زكي مبني على الاستمرارية أولًا، لا كإضافة لاحقة.",
+                  ]
+                : [
+                    "ZAKI is built around continuity first, not as a bolt-on later.",
+                  ]
+              ).map((item) => (
+                <li
+                  key={item}
+                  className="rounded-[16px] border border-line-strong/60 bg-chat-bg/60 px-4 py-3 text-[13px] leading-6 text-chat-text"
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
             <EdgeMetrics isArabic={isArabic} />
             <div className="mt-auto pt-5">
               <div className="rounded-[14px] border border-line-strong/60 bg-chat-bg/60 p-4">
                 <p className="text-[13px] leading-[1.7] text-chat-muted">
                   {isArabic
-                    ? "Nullalis يبقى في الخلفية. المهم للمستخدم هو النتيجة: استمرارية، وذاكرة، وسياق أكثر أمانًا لكل مستخدم."
-                    : "Nullalis stays under the hood. What matters publicly is the result: continuity, memory, and safer per-user context."}
+                    ? "ما يراه المستخدم ليس المحرك الداخلي، بل النتيجة: استمرارية، وذاكرة، وعلاقة عمل أوضح مع الذكاء الاصطناعي."
+                    : "What users feel is not the runtime label. It is the result: continuity, memory, and a clearer working relationship with AI."}
                 </p>
               </div>
             </div>

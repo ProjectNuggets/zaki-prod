@@ -107,7 +107,7 @@ function injectPage(template, pathname) {
 }
 
 function buildSitemapXml(routes) {
-  const today = "2026-03-14";
+  const today = "2026-03-15";
   const byPath = new Map(routeRegistry.map((route) => [route.pathname, route]));
   const absoluteUrl = (pathname) =>
     pathname === "/" ? "https://chatzaki.com/" : `https://chatzaki.com${pathname}`;

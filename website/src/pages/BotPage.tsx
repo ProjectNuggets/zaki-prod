@@ -27,14 +27,14 @@ export function BotPage({ locale }: { locale: Locale }) {
 
         <div className="mx-auto grid max-w-[1240px] gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-start">
           <Reveal>
-            <Badge tone="warning" pulse>{isArabic ? "النسخة التجريبية الرائدة" : "Experimental flagship"}</Badge>
+            <Badge tone="warning" pulse>{isArabic ? "بيتا عامة تجريبية" : "Experimental public beta"}</Badge>
             <h1 className="font-display mt-6 max-w-[10ch] text-[40px] font-extrabold leading-[0.92] tracking-[-0.06em] text-bot-text md:text-[72px]">
               {isArabic ? "مشغّل ذكاء شخصي." : "Personal AI Operator."}
             </h1>
             <p className="mt-6 max-w-[58ch] text-sm leading-7 text-bot-muted md:text-base md:leading-8">
               {isArabic
-                ? "زكي مشغّل ذكاء تجريبي بذاكرة مستمرة، ومراحل عمل مرئية، وسياق لكل مستخدم لا يُعاد ضبطه بين الجلسات."
-                : "ZAKI is an experimental AI operator with persistent memory, visible work phases, and per-user context that doesn't reset between sessions."}
+                ? "زكي هو البيتا العامة لذكاء شخصي مستمر: طبقة وكيل قابلة للتدريب، بسياق لا يُعاد ضبطه بين الجلسات، وذاكرة لكل مستخدم، ومراحل عمل مرئية. وعندما تحتاج إلى التنفيذ المنظّم، تنتقل إلى Spaces."
+                : "ZAKI is the public beta for persistent personal intelligence: a trainable agent layer with context that does not reset between sessions, per-user memory, and visible work phases. When the work needs structure and execution, you move into Spaces."}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Button asChild>
@@ -42,7 +42,7 @@ export function BotPage({ locale }: { locale: Locale }) {
               </Button>
               <Button asChild variant="bot">
                 <a href="https://app.chatzaki.com/?auth=signup&source=website_bot_page">
-                  {isArabic ? "استخدم ZAKI Chat الآن" : "Use ZAKI Chat now"}
+                  {isArabic ? "جرّب Spaces الآن" : "Try Spaces now"}
                 </a>
               </Button>
               <a href={isArabic ? "/ar/faq/" : "/faq/"} className="inline-flex items-center gap-2 text-sm font-medium text-bot-text transition-colors hover:text-bot-accent">
@@ -64,7 +64,7 @@ export function BotPage({ locale }: { locale: Locale }) {
                 ))}
               </div>
               <p className="font-mono-ui mt-5 text-[10px] uppercase tracking-[0.3em] text-bot-accent">
-                {isArabic ? "مشغّل شخصي / واجهة تجريبية" : "personal operator / experimental interface"}
+                {isArabic ? "مشغّل شخصي / بيتا قابلة للتدريب" : "personal operator / trainable beta"}
               </p>
             </Card>
           </Reveal>
@@ -76,7 +76,13 @@ export function BotPage({ locale }: { locale: Locale }) {
         <div className="mx-auto grid max-w-[1240px] gap-6 md:grid-cols-3">
           {[
             { icon: Bot, title: isArabic ? "ما هو" : "What it is", body: t.botProduct.intro },
-            { icon: Orbit, title: isArabic ? "لماذا هو مختلف" : "Why it is different", body: t.botProduct.bridgeLine },
+            {
+              icon: Orbit,
+              title: isArabic ? "كيف يعمل مع Spaces" : "How it works with Spaces",
+              body: isArabic
+                ? "زكي يعتني بطبقة الاستمرارية والعلاقة طويلة المدى. وعندما يصبح العمل بحاجة إلى كتابة أو بحث أو تنفيذ منظم، تنتقل إلى Spaces كي يبقى كل مشروع في سياقه الصحيح."
+                : "ZAKI handles the continuity layer and the long-running relationship. When the job turns into writing, research, or organized execution, you move into Spaces so each project keeps its own clean context.",
+            },
             { icon: Cpu, title: isArabic ? "لماذا هو تجريبي" : "Why it is experimental", body: t.beta.warning },
           ].map((item, index) => (
             <Reveal key={item.title} delay={index * 70}>
@@ -146,7 +152,7 @@ export function BotPage({ locale }: { locale: Locale }) {
               <p className="mt-3 max-w-[44ch] text-sm leading-7 text-bot-muted">
                 {isArabic
                   ? "البيتا تشمل 5 رسائل كل 24 ساعة — مجانًا بينما نتعلّم ما ينجح. الاشتراكات المدفوعة تبدأ بعد هذه المرحلة."
-                  : "The beta includes 5 messages every 24 hours — free while we learn what works. Paid subscriptions start after this phase."}
+                  : "The beta includes 5 messages every 24 hours — free while we learn what works, limited enough to stay honest about what is still experimental. Paid subscriptions start after this phase."}
               </p>
 
               <div className="mt-5 flex-1">
