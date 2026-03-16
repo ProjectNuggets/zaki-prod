@@ -348,6 +348,43 @@ export async function initDb() {
     );
   `);
 
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS name TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS role TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS use_case TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS locale TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS source TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS submission_count INT NOT NULL DEFAULT 1;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS first_submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS last_submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS ip_address TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS user_agent TEXT;"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
+  );
+  await pool.query(
+    "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
+  );
+
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_website_beta_waitlist_last_submitted
     ON website_beta_waitlist (last_submitted_at DESC, created_at DESC);

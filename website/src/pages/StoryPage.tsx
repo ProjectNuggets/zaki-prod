@@ -46,6 +46,9 @@ export function StoryPage({ locale }: { locale: Locale }) {
     let cancelled = false;
     let rafId: number | null = null;
     let cleanup: (() => void) | undefined;
+    let removeImageListeners: (() => void) | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+    let refreshScroll = () => {};
 
     async function initStoryScroll() {
       const [{ gsap }, { ScrollTrigger }] = await Promise.all([
@@ -62,13 +65,29 @@ export function StoryPage({ locale }: { locale: Locale }) {
         const section = scrollSectionRef.current;
         if (!track || !section) return;
 
-        rafId = window.requestAnimationFrame(() => {
-          const totalScroll = track.scrollWidth - section.offsetWidth;
-          if (totalScroll <= 0) return;
+        refreshScroll = () => ScrollTrigger.refresh();
 
+        const setupScroll = () => {
+          ScrollTrigger.getAll().forEach((trigger) => {
+            if (trigger.trigger === section) {
+              trigger.kill();
+            }
+          });
+
+          const totalScroll = Math.max(0, track.scrollWidth - section.offsetWidth);
+          if (totalScroll <= 0) {
+            gsap.set(track, { x: 0 });
+            return;
+          }
+
+          const startX = isArabic ? -totalScroll : 0;
+          const endX = isArabic ? 0 : -totalScroll;
+
+          gsap.set(track, { x: startX });
           gsap.to(track, {
-            x: isArabic ? totalScroll : -totalScroll,
+            x: endX,
             ease: "none",
+            overwrite: "auto",
             scrollTrigger: {
               trigger: section,
               start: "top top",
@@ -79,10 +98,41 @@ export function StoryPage({ locale }: { locale: Locale }) {
               invalidateOnRefresh: true,
             },
           });
+
+          refreshScroll();
+        };
+
+        rafId = window.requestAnimationFrame(setupScroll);
+
+        const images = Array.from(track.querySelectorAll("img")) as HTMLImageElement[];
+        const handleImageReady = () => {
+          setupScroll();
+        };
+        images.forEach((image) => {
+          image.addEventListener("load", handleImageReady);
         });
+        removeImageListeners = () => {
+          images.forEach((image) => {
+            image.removeEventListener("load", handleImageReady);
+          });
+        };
+
+        if ("ResizeObserver" in window) {
+          resizeObserver = new ResizeObserver(() => {
+            setupScroll();
+          });
+          resizeObserver.observe(section);
+          resizeObserver.observe(track);
+        }
+        window.addEventListener("resize", refreshScroll);
       }, scrollSectionRef);
 
-      cleanup = () => ctx.revert();
+      cleanup = () => {
+        resizeObserver?.disconnect();
+        window.removeEventListener("resize", refreshScroll);
+        removeImageListeners?.();
+        ctx.revert();
+      };
     }
 
     void initStoryScroll();
