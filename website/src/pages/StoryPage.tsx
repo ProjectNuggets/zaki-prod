@@ -5,6 +5,7 @@ import { SiteShell } from "../components/layout/SiteShell";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { Reveal } from "../components/Reveal";
+import { ClosingCta } from "../components/ClosingCta";
 import { content } from "../components/landingContent";
 import type { Locale } from "../lib/content";
 
@@ -107,7 +108,7 @@ export function StoryPage({ locale }: { locale: Locale }) {
           <Reveal>
             <div className="flex items-center gap-3">
               <img src="/assets/zaki-logo-secondary.png" alt="" className="size-10 rounded-[10px]" />
-              <Badge tone="chat">{isArabic ? "حكايتنا" : "Our Story"}</Badge>
+              <Badge tone="chat">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Badge>
             </div>
           </Reveal>
           <Reveal delay={40}>
@@ -291,44 +292,7 @@ export function StoryPage({ locale }: { locale: Locale }) {
         </div>
       </section>
 
-      {/* ══════ CTA ══════ */}
-      <section className="relative z-10 px-4 py-16 md:px-8 md:py-24">
-        <div className="mx-auto max-w-[1240px] text-center">
-          <Reveal>
-            <h2 className="font-display mx-auto max-w-[18ch] text-[32px] font-extrabold leading-[0.96] tracking-[-0.05em] text-chat-text md:text-[56px]">
-              {cta.heading}
-            </h2>
-          </Reveal>
-          <Reveal delay={60}>
-            <p className="mx-auto mt-6 max-w-[48ch] whitespace-pre-line text-base leading-8 text-chat-muted">
-              {cta.subheading}
-            </p>
-          </Reveal>
-          <Reveal delay={120}>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <a
-                href="https://app.chatzaki.com/?auth=signup&source=website_story"
-                className="inline-flex min-h-12 items-center gap-2 rounded-full bg-chat-accent px-6 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(201,57,42,0.3)] transition hover:-translate-y-0.5 hover:bg-chat-accent-hover"
-              >
-                {cta.secondary}
-                <ArrowUpRight className="size-4" />
-              </a>
-              <Link
-                to={isArabic ? "/ar/contact/" : "/contact/"}
-                className="inline-flex min-h-12 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-6 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
-              >
-                {cta.primary}
-                <ArrowUpRight className="size-4" />
-              </Link>
-            </div>
-          </Reveal>
-          <Reveal delay={160}>
-            <p className="font-mono-ui mt-8 text-xs uppercase tracking-[0.24em] text-chat-accent">
-              {cta.hoverLine}
-            </p>
-          </Reveal>
-        </div>
-      </section>
+      <ClosingCta locale={locale} t={t} source="website_story" />
 
       {/* ══════ Comparison links (SEO bridges) ══════ */}
       <section className="relative z-10 border-t border-line-strong px-4 py-10 md:px-8 md:py-14">
@@ -339,10 +303,17 @@ export function StoryPage({ locale }: { locale: Locale }) {
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
+                to="/zaki-vs-spaces/"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+              >
+                {isArabic ? "زكي مقابل Spaces" : "ZAKI vs Spaces"}
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
                 to="/vs-chatgpt/"
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
               >
-                {isArabic ? "ZAKI Chat مقابل ChatGPT" : "ZAKI Chat vs ChatGPT"}
+                {isArabic ? "Spaces مقابل ChatGPT" : "Spaces vs ChatGPT"}
                 <ArrowUpRight className="size-4" />
               </Link>
               <Link

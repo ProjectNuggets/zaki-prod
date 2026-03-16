@@ -11,30 +11,30 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
         <Reveal>
           <div className="mb-10 max-w-[48ch]">
             <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-chat-accent">
-              {isArabic ? "كيف يعمل زكي" : "How ZAKI works"}
+              {isArabic ? "سلّم المنتج" : "Product ladder"}
             </p>
             <h2 className="font-display mt-4 text-[28px] font-extrabold leading-[1.08] tracking-[-0.04em] text-chat-text md:text-[44px]">
               {isArabic
-                ? "مساران. اتجاه واحد."
-                : "Two paths. One direction."}
+                ? "منتج عملي الآن. وبيتا للذكاء المستمر تتشكل علنًا."
+                : "A practical product now. A public beta for persistent intelligence taking shape in the open."}
             </h2>
           </div>
         </Reveal>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {/* ZAKI Chat */}
+          {/* Spaces */}
           <Reveal>
             <div className="flex h-full flex-col rounded-card border border-line-strong bg-chat-surface p-7 shadow-[0_2px_4px_rgba(0,0,0,0.02),0_16px_48px_rgba(17,10,6,0.06)] md:p-9">
               <p className="font-mono-ui text-[10px] uppercase tracking-[0.28em] text-chat-muted">
                 {isArabic ? "يعمل الآن" : "Live now"}
               </p>
               <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-chat-text md:text-[36px]">
-                ZAKI Chat
+                Spaces
               </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-chat-muted">
                 {isArabic
-                  ? "مساحة عمل ذكاء اصطناعي منظّمة يمكنك استخدامها الآن. تسأل، يُجيب — لكن كل محادثة تعيش في مساحتها الخاصة. المشاريع منفصلة. السياق نظيف. مبني لطريقة عملك الفعلية."
-                  : "A structured AI workspace you can use right now. You ask, it answers. yet every conversation lives in its own space. Projects stay separated. Context stays clean. Built for the way daily work actually happens."}
+                  ? "مساحات عمل ذكاء اصطناعي منظّمة يمكنك استخدامها الآن. المشاريع تبقى منفصلة، والسياق يبقى نظيفًا، والعمل اليومي لا يضيع داخل فوضى خيوط عامة. هذا هو ما قد يشير إليه التطبيق حاليًا باسم ZAKI Chat."
+                  : "Structured AI workspaces you can use right now. Projects stay separated, context stays clean, and daily work does not dissolve into generic chat threads. This is the layer the current app may still call ZAKI Chat."}
               </p>
               <div className="mt-auto flex items-baseline justify-between pt-8">
                 <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-chat-text">
@@ -63,8 +63,8 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                 </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-chat-muted">
                 {isArabic
-                   ? "معظم الذكاء الاصطناعي يُعيد الضبط لحظة تُغلق التبويب. زكي يختبر ماذا يحدث عندما لا يفعل ذلك — ذاكرة مستمرة، مراحل عمل مرئية، وسياق يمتد عبر الجلسات. مبكر، محدود، وهو الاتجاه الذي نبنيه."
-                   : "Most AI resets the moment you close the tab. ZAKI explores what happens when it doesn't: persistent memory, visible work phases, and context that carries across sessions. Early, limited, and the direction we're building toward."}
+                   ? "معظم الذكاء الاصطناعي يعيد الضبط مع كل جلسة. زكي يختبر ماذا يحدث عندما لا يفعل ذلك: استمرارية، وذاكرة، وعلاقة طويلة الخيط. وعندما يصبح العمل بحاجة إلى كتابة أو بحث أو تنفيذ منظّم، تنتقل إلى Spaces."
+                   : "Most AI resets with every session. ZAKI explores what happens when it does not: continuity, memory, and a long-running relationship. When the work needs writing, research, or organized execution, you move into Spaces."}
               </p>
                 <div className="mt-auto flex items-baseline justify-between pt-8">
                   <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-chat-accent">

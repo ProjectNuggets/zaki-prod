@@ -1,10 +1,13 @@
 import type { Locale } from "./content";
 
-export type ComparisonSlug = "vs-chatgpt" | "best-arabic-ai-assistant";
+export type ComparisonSlug = "vs-chatgpt" | "zaki-vs-spaces" | "best-arabic-ai-assistant";
 export type HowToSlug =
   | "write-arabic-emails-ai"
   | "translate-dialects-arabic-english"
-  | "create-social-media-content-arabic";
+  | "create-social-media-content-arabic"
+  | "how-zaki-and-spaces-work"
+  | "what-to-use-spaces-for"
+  | "what-to-use-zaki-for";
 export type LegalSlug = "privacy" | "terms" | "compliance";
 
 type SeoPayload = {
@@ -77,18 +80,18 @@ type LegalContent = {
 const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
   "vs-chatgpt": {
     badge: "Comparison",
-    title: "ZAKI Chat vs ChatGPT for Arabic Speakers",
+    title: "Spaces vs ChatGPT for Arabic Speakers",
     intro:
-      "This page compares the live ZAKI Chat experience, not the future-facing operator product. ChatGPT remains broader and more frontier-led. ZAKI Chat is stronger when the job is organized, cheaper, and more controlled Arabic-English daily work.",
-    note: "ZAKI is the flagship future product; this page compares only the current ZAKI Chat experience.",
+      "Short answer: choose ChatGPT if you want the broadest frontier AI in the mainstream market. Choose Spaces if you want a more disciplined Arabic-English workspace for real daily work. This page exists to make that tradeoff explicit before product labels or model hype get in the way.",
+    note: "This page compares Spaces today. ZAKI itself is the public beta for persistent personal intelligence.",
     definition:
-      "ZAKI Chat is the live paid spaces-based AI workspace in the ZAKI product ladder. ChatGPT is the mainstream general-purpose benchmark for AI chat. This comparison is about product fit, not a claim that ZAKI beats frontier models on raw capability.",
+      "Spaces are the live paid workspace layer in the ZAKI product ladder, and the current app may still call them ZAKI Chat during the transition. ChatGPT is the mainstream general-purpose benchmark for AI chat. The real decision here is not who wins the raw-model race. It is whether you need a broad general assistant or a more structured bilingual workspace that keeps daily work cleaner.",
     table: {
-      headers: ["Feature", "ZAKI Chat", "ChatGPT"],
+      headers: ["Feature", "Spaces", "ChatGPT"],
       rows: [
         {
           feature: "Primary role",
-          values: ["Spaces-based daily AI workspace", "General-purpose mainstream AI assistant"],
+          values: ["Productivity workspace with spaces and cleaner context separation", "General-purpose mainstream AI assistant"],
         },
         {
           feature: "Arabic-English workflow fit",
@@ -111,64 +114,185 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
         },
         {
           feature: "Next-step vision",
-          values: ["Connects directly to ZAKI", "General chat product direction"],
+          values: ["Connects directly to ZAKI and the persistent-intelligence beta", "General chat product direction"],
         },
       ],
     },
     quote:
-      "ZAKI Chat is not trying to beat ChatGPT at the frontier-model game. It is trying to be more organized, more controllable, and more useful for everyday Arabic-English work.",
+      "ChatGPT wins when you want the broadest frontier AI. Spaces win when you want daily work to stay structured, bilingual, and easier to control.",
     sections: [
       {
-        title: "Why people choose ZAKI Chat",
+        title: "Choose Spaces if",
         items: [
-          "You want a cheaper daily-use AI layer with clearer structure.",
-          "You work across Arabic and English every day and care about product fit, not just model scale.",
-          "You want memory and personalization with more user control.",
-          "You want a clearer path from daily chat to something more persistent through ZAKI.",
+          "You want AI to feel like a workspace, not an endless pile of chat threads.",
+          "You work across Arabic and English every day and want product fit, not just model scale.",
+          "You care about clearer context separation, memory control, and lower-noise daily use.",
+          "You want a practical chat layer now with a direct path into ZAKI's persistent-intelligence beta.",
         ],
       },
       {
-        title: "Why people still choose ChatGPT",
+        title: "Choose ChatGPT if",
         items: [
-          "You want the broadest mainstream AI ecosystem.",
-          "You care most about raw frontier-model performance and breadth.",
-          "You want the product that has already become the global default.",
+          "You want the broadest mainstream AI ecosystem and model breadth.",
+          "You optimize primarily for frontier capability and general-purpose coverage.",
+          "You want the product that has already become the default answer for many users.",
         ],
       },
       {
-        title: "If you want more than chat",
+        title: "What comes after Spaces",
         body:
-          "ZAKI is the flagship future product: a Personal AI Operator powered by Nullalis. The public beta opens with 5 free messages every 24 hours for experimentation.",
+          "ZAKI is the public beta for persistent personal intelligence: a trainable personal operator built to hold context across time, show its work phases, and close the last mile between AI answers and AI counterparts.",
       },
     ],
     disclaimer:
-      "This page is intentionally honest: ChatGPT remains stronger in the frontier-model conversation. The case for ZAKI Chat is not raw supremacy. It is product discipline, workflow structure, pricing, and control.",
+      "This comparison is intentionally product-first. Spaces do not claim frontier-model supremacy. The case for them is structure, bilingual workflow fit, control, and a clearer bridge from workspaces to persistent intelligence.",
     links: [
       { label: "Read the ZAKI page", href: "/zaki-bot/" },
       { label: "See the Arabic AI ranking", href: "/best-arabic-ai-assistant/" },
-      { label: "Use ZAKI Chat", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
     ],
     seo: {
-      title: "ZAKI Chat vs ChatGPT for Arabic Speakers",
+      title: "Spaces vs ChatGPT for Arabic Speakers",
       description:
-        "An honest comparison of ZAKI Chat and ChatGPT for Arabic-English daily work. ZAKI is the flagship future product; this page compares only the current ZAKI Chat experience.",
-      imageAlt: "ZAKI Chat versus ChatGPT comparison page",
+        "Choose ChatGPT for the broadest frontier AI. Choose Spaces for a more structured Arabic-English workspace for daily work. This page compares the live Spaces product, which the app may still call ZAKI Chat.",
+      imageAlt: "Spaces versus ChatGPT comparison page",
       keywords:
-        "ZAKI Chat vs ChatGPT, Arabic AI comparison, bilingual AI workspace, ZAKI Chat, ChatGPT",
+        "Spaces vs ChatGPT, ZAKI Chat vs ChatGPT, Arabic AI comparison, bilingual AI workspace, ChatGPT",
+    },
+  },
+  "zaki-vs-spaces": {
+    badge: "Product model",
+    title: "ZAKI vs Spaces",
+    intro:
+      "Short answer: use ZAKI when you want continuity, planning, memory, and a long-running AI relationship. Use Spaces when you want focused execution in a clean, dedicated work context. Together, they form the real product model behind ZAKI.",
+    note: "Spaces are what the current website and app may still refer to as ZAKI Chat.",
+    definition:
+      "ZAKI is the persistent agent layer: the part that remembers, plans, and keeps a long-running thread with you. Spaces are the structured work surfaces where writing, research, translation, planning, and execution stay organized. ZAKI helps you decide what to do. Spaces help you do it cleanly.",
+    table: {
+      headers: ["Use case", "ZAKI", "Spaces"],
+      rows: [
+        {
+          feature: "Brainstorming",
+          values: [
+            "Best when you want a continuous thinking partner that carries your thread forward",
+            "Better when the idea is ready to be worked into a concrete deliverable",
+          ],
+        },
+        {
+          feature: "Planning next steps",
+          values: [
+            "Helps decide direction, sequence, and tradeoffs across time",
+            "Turns the chosen direction into cleaner task-focused execution",
+          ],
+        },
+        {
+          feature: "Long-running personal thread",
+          values: [
+            "Designed for continuity, memory, and returning to the same relationship over time",
+            "Not the main relationship layer; better as a dedicated execution surface",
+          ],
+        },
+        {
+          feature: "Document drafting",
+          values: [
+            "Useful for framing and deciding what the draft should become",
+            "Best place to write, edit, refine, and keep the draft inside a clear project context",
+          ],
+        },
+        {
+          feature: "Research by project",
+          values: [
+            "Helps hold the bigger thread and recurring context behind the work",
+            "Keeps research separated by project, client, or topic so it stays usable",
+          ],
+        },
+        {
+          feature: "Bilingual production work",
+          values: [
+            "Good for deciding tone, goals, and recurring context across languages",
+            "Best for doing the Arabic-English work itself inside a dedicated space",
+          ],
+        },
+        {
+          feature: "Task execution",
+          values: [
+            "Better for deciding what matters and what should happen next",
+            "Better for doing the focused work without mixing unrelated threads together",
+          ],
+        },
+        {
+          feature: "Project separation",
+          values: [
+            "Keeps relationship-level continuity with you",
+            "Keeps work separated by context instead of one long noisy thread",
+          ],
+        },
+      ],
+    },
+    quote:
+      "ZAKI helps you think, plan, and stay continuous. Spaces help you do focused work.",
+    sections: [
+      {
+        title: "Use ZAKI when",
+        items: [
+          "You are thinking through a decision and want continuity across time.",
+          "You are returning to an ongoing thread instead of starting from scratch.",
+          "You want a persistent AI counterpart, not just a temporary prompt result.",
+          "You need direction, framing, and memory before the execution layer begins.",
+        ],
+      },
+      {
+        title: "Use Spaces when",
+        items: [
+          "You want a dedicated place for one task, project, or line of work.",
+          "You are drafting, translating, researching, or organizing deliverables.",
+          "You want clean context separation instead of a single mixed thread.",
+          "You want work to stay easier to revisit, refine, and continue later.",
+        ],
+      },
+      {
+        title: "How they work together",
+        body:
+          "Start with ZAKI when the job is still fuzzy: planning, deciding, framing, and keeping the long-running thread alive. Then move into a Space when the work needs structure: writing, research, task execution, translation, and project-by-project focus. Return to ZAKI when the relationship-level context matters again. That is the model: continuity with ZAKI, execution in Spaces.",
+      },
+      {
+        title: "Real examples",
+        items: [
+          "Launch planning: think through strategy with ZAKI, then move execution plans and drafts into a dedicated Space.",
+          "Bilingual email: decide tone and intent with ZAKI, then write and refine the actual email in a Space.",
+          "Travel or move planning: use ZAKI for the recurring thread, then keep documents, lists, and research separated in Spaces.",
+          "Weekly operating system: use ZAKI for priorities and direction, then keep execution split across workspaces by project.",
+        ],
+      },
+    ],
+    disclaimer:
+      "This is a product-clarity page, not a rename of the app overnight. Spaces is the clearer public name for what the current product may still call ZAKI Chat while the website and app stay operationally aligned.",
+    links: [
+      { label: "See ZAKI", href: "/zaki-bot/" },
+      { label: "Compare Spaces vs ChatGPT", href: "/vs-chatgpt/" },
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+    ],
+    seo: {
+      title: "ZAKI vs Spaces: When to Think with ZAKI and When to Work in Spaces",
+      description:
+        "ZAKI is the persistent AI counterpart for planning, memory, and continuity. Spaces are the structured workspaces for focused execution. Learn when to use each and how they work together.",
+      imageAlt: "ZAKI versus Spaces product explainer page",
+      keywords:
+        "ZAKI vs Spaces, ZAKI agent vs chat spaces, AI spaces vs personal AI agent, persistent AI agent, AI workspace with memory",
     },
   },
   "best-arabic-ai-assistant": {
     badge: "2026 Roundup",
-    title: "Best Arabic AI Assistant in 2026: Chat Tools and Operators",
+      title: "Best Arabic AI Assistant in 2026: Chat Tools and Operators",
     intro:
-      "There is no single best Arabic AI product in the abstract. Some tools are broad chat products, some are vertical assistants, and some are starting to move toward something more persistent. This page separates those categories instead of flattening them.",
+      "Short answer: the best Arabic AI tool depends on the job. Spaces are a strong choice for structured Arabic-English productivity today. ChatGPT remains broader and more mainstream. ZAKI is the public beta for users who want the next step: persistent personal intelligence instead of ordinary chat.",
     definition:
-      "Short answer: ZAKI Chat is a strong choice for bilingual daily productivity and structured work. ChatGPT remains broader and more mainstream. ZAKI is the public beta step toward something more ambitious: a Personal AI Operator.",
+      "Not every Arabic AI product belongs in one bucket. Some tools are broad chat products. Some are vertical assistants. Some are moving toward something more persistent. ZAKI's position is unusual because it combines live structured workspaces today with a public beta for a more trainable, persistent agent layer.",
     table: {
       headers: ["Tool", "Best for", "Category", "Memory / control model", "Notes"],
       rows: [
         {
-          feature: "ZAKI Chat",
+          feature: "Spaces",
           values: [
             "Bilingual daily productivity and spaces-based work",
             "Live paid chat product",
@@ -215,37 +339,37 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       ],
     },
     quote:
-      "The right Arabic AI tool depends on what you need today. ZAKI Chat is strong for bilingual daily work now, while ZAKI points toward a more persistent personal AI category.",
+      "The right Arabic AI tool depends on what you need now. Spaces are for disciplined bilingual work today. ZAKI is for people who want to see what a persistent digital counterpart could become next.",
     sections: [
       {
-        title: "Read this comparison the right way",
+        title: "How to read this ranking",
         items: [
-          "ZAKI Chat is strongest when the user wants a practical Arabic-English productivity assistant now.",
+          "Spaces are strongest when the need is practical Arabic-English productivity with cleaner structure.",
           "ChatGPT still wins on frontier breadth and mainstream ecosystem strength.",
-          "Daleela, Labiba, and Yasmina AI make more sense when the need is vertical or embedded rather than a personal general assistant.",
-          "ZAKI is not the same category as chat tools. It is the public beta step toward a Personal AI Operator.",
+          "Daleela, Labiba, and Yasmina AI make more sense when the need is vertical, embedded, or domain-specific.",
+          "ZAKI is not just another chat assistant. It is the public beta step toward persistent personal intelligence.",
         ],
       },
       {
-        title: "For users looking beyond chat",
+        title: "Why ZAKI stands out",
         body:
-          "ZAKI is our public beta step toward a Personal AI Operator. It opens with 5 free messages every 24 hours for experimentation. That is the flagship direction, not just another comparison-row feature.",
+          "ZAKI is distinctive because it combines two layers in one product story: live workspaces now, and a public beta for a more secure, trainable, persistent agent layer next. That combination is aimed at closing the last mile between AI tools and real digital counterparts.",
       },
     ],
     disclaimer:
-      "This page is intentionally use-case based. Not every Arabic AI product is trying to solve the same problem, and not every assistant belongs in the same ranking logic.",
+      "This ranking is intentionally use-case based. Not every Arabic AI product is solving the same problem, and not every assistant belongs in the same category.",
     links: [
       { label: "Read the ZAKI page", href: "/zaki-bot/" },
-      { label: "Compare ZAKI Chat vs ChatGPT", href: "/vs-chatgpt/" },
-      { label: "Use ZAKI Chat", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Compare Spaces vs ChatGPT", href: "/vs-chatgpt/" },
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
     ],
     seo: {
       title: "Best Arabic AI Assistant in 2026: Chat Tools and Operators",
       description:
-        "An honest comparison of Arabic AI tools by product fit. ZAKI Chat is strong for bilingual daily productivity, and ZAKI is the public beta step toward a Personal AI Operator.",
+        "A use-case based ranking of Arabic AI tools. Spaces are strong for structured bilingual productivity, and ZAKI is the public beta for persistent personal intelligence.",
       imageAlt: "Arabic AI assistant comparison page",
       keywords:
-        "best Arabic AI assistant, Arabic AI tools, ZAKI Chat, Personal AI Operator, Arabic AI comparison",
+        "best Arabic AI assistant, Arabic AI tools, Spaces, ZAKI, Personal AI Operator, Arabic AI comparison",
     },
   },
 };
@@ -255,7 +379,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     badge: "How To",
     title: "How to Write Professional Arabic Emails Using AI",
     intro:
-      "Use AI to save time on Arabic email drafting, then tighten tone and context so the final message still sounds like you.",
+      "Use Spaces for Arabic email drafting when the job needs one clean place for context, revisions, and final copy. Use ZAKI first if the message still needs framing, tone decisions, or continuity from a longer thread before execution starts.",
     steps: [
       {
         title: "Set the context.",
@@ -283,23 +407,24 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "A clear Arabic subject line, respectful greeting, one-paragraph context, specific ask, and polite closing. The best draft sounds natural and avoids over-translation from English.",
     links: [
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "Translate dialects to English", href: "/how-to/translate-dialects-arabic-english/" },
-      { label: "Try ZAKI", href: "https://app.chatzaki.com/?auth=signup" },
     ],
     seo: {
       title: "How to Write Professional Arabic Emails Using AI",
       description:
-        "A step-by-step guide to writing professional Arabic emails with AI, including prompts, tone control, and practical examples.",
+        "A step-by-step guide to writing professional Arabic emails with AI using Spaces for cleaner execution and ZAKI for planning and continuity.",
       imageAlt: "Guide for writing Arabic emails with AI",
       keywords:
-        "Arabic email AI guide, write Arabic emails with AI, ZAKI Arabic productivity guide",
+        "Arabic email AI guide, write Arabic emails with AI, Spaces email workflow, ZAKI Arabic productivity guide",
     },
   },
   "translate-dialects-arabic-english": {
     badge: "How To",
     title: "How to Translate Arabic Dialects to English Accurately",
     intro:
-      "Good translation is not word-for-word conversion. It keeps intent, tone, and implied context when dialect meets English.",
+      "Use Spaces when Arabic-English translation needs one dedicated place for source text, revisions, and final wording. Use ZAKI when the translation still needs planning, audience framing, or continuity from a longer relationship-level thread.",
     steps: [
       {
         title: "Name the dialect.",
@@ -324,23 +449,24 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "The English result reads naturally, while a short note explains any phrase that does not translate literally. You keep meaning, not just vocabulary.",
     links: [
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "Create Arabic social content", href: "/how-to/create-social-media-content-arabic/" },
-      { label: "Try ZAKI", href: "https://app.chatzaki.com/?auth=signup" },
     ],
     seo: {
       title: "How to Translate Arabic Dialects to English Accurately",
       description:
-        "Learn how to translate Levantine, Khaleeji, and Egyptian Arabic to natural English with AI while preserving meaning and context.",
+        "Learn how to translate Levantine, Khaleeji, and Egyptian Arabic to natural English with AI using Spaces for execution and ZAKI for planning and context.",
       imageAlt: "Guide for translating Arabic dialects to English with AI",
       keywords:
-        "translate Arabic dialects to English, Arabic dialect AI translation, ZAKI translation guide",
+        "translate Arabic dialects to English, Arabic dialect AI translation, Spaces translation workflow, ZAKI translation guide",
     },
   },
   "create-social-media-content-arabic": {
     badge: "How To",
     title: "How to Create Arabic Social Media Content with AI",
     intro:
-      "AI helps most when you give it a platform, audience, and tone. The goal is not generic output. The goal is Arabic content that sounds native to the channel.",
+      "Use Spaces for Arabic social content when you want one dedicated workspace for hooks, drafts, revisions, and channel-specific output. Use ZAKI when the work still needs framing, campaign thinking, or continuity before the content gets produced.",
     steps: [
       {
         title: "Specify the channel.",
@@ -365,16 +491,167 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "Short hooks, a clear value proposition, and phrasing that matches the platform. The best AI-assisted caption feels written for the region, not translated into it.",
     links: [
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "Write Arabic emails", href: "/how-to/write-arabic-emails-ai/" },
-      { label: "Try ZAKI", href: "https://app.chatzaki.com/?auth=signup" },
     ],
     seo: {
       title: "How to Create Arabic Social Media Content with AI",
       description:
-        "Use AI to draft Arabic captions, posts, and short-form content with stronger local phrasing, clearer hooks, and more natural tone.",
+        "Use AI to draft Arabic captions, posts, and short-form content with Spaces for cleaner execution and ZAKI for planning and continuity.",
       imageAlt: "Guide for Arabic social media content with AI",
       keywords:
-        "Arabic social media AI guide, Arabic content with AI, ZAKI content writing guide",
+        "Arabic social media AI guide, Arabic content with AI, Spaces content workflow, ZAKI content writing guide",
+    },
+  },
+  "how-zaki-and-spaces-work": {
+    badge: "How To",
+    title: "How ZAKI and Spaces Work Together",
+    intro:
+      "Short answer: think with ZAKI, execute in Spaces. This page exists to show the workflow clearly so users understand why ZAKI keeps the long-running thread while Spaces handle the focused work.",
+    steps: [
+      {
+        title: "Start with ZAKI to frame the task.",
+        text:
+          "Use ZAKI when the work is still fuzzy: goals, tradeoffs, planning, recurring context, or a decision that should connect to what came before.",
+      },
+      {
+        title: "Use ZAKI to decide direction and priorities.",
+        text:
+          "Ask ZAKI to narrow scope, sequence next steps, and turn an idea into a clear path. This is where continuity matters more than production speed.",
+      },
+      {
+        title: "Move the actual work into a Space.",
+        text:
+          "Open a Space once the job needs focused execution: writing, research, translation, planning artifacts, or project-specific work that should stay separate from everything else.",
+      },
+      {
+        title: "Keep each project inside its own Space.",
+        text:
+          "Separate contexts by project, client, or task so drafts, research, and revisions do not collapse into one long thread.",
+      },
+      {
+        title: "Return to ZAKI when the relationship-level thread matters again.",
+        text:
+          "Come back to ZAKI when you want to review progress, reconnect current work to bigger priorities, or continue an ongoing thread across time.",
+      },
+    ],
+    examplePrompt:
+      "ZAKI, help me turn this messy launch idea into a plan, then tell me what should move into a dedicated Space for execution.",
+    goodOutput:
+      "A clear split between relationship-level thinking and execution: ZAKI helps define goals, priorities, and next steps, then points to a Space where the real drafting, research, and task work can stay organized.",
+    links: [
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "See ZAKI", href: "/zaki-bot/" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
+    ],
+    seo: {
+      title: "How ZAKI and Spaces Work Together",
+      description:
+        "Learn how ZAKI and Spaces work together: use ZAKI for planning, continuity, and memory, then move execution into Spaces for cleaner focused work.",
+      imageAlt: "Guide explaining how ZAKI and Spaces work together",
+      keywords:
+        "how ZAKI and Spaces work together, AI workflow planning and execution, persistent AI counterpart, Spaces productivity workflow",
+    },
+  },
+  "what-to-use-spaces-for": {
+    badge: "How To",
+    title: "What to Use Spaces For",
+    intro:
+      "Short answer: use Spaces when the work needs one dedicated context, not one endless mixed thread. This page exists to make the live product practical by showing where Spaces are strongest.",
+    steps: [
+      {
+        title: "Use Spaces for writing and drafting.",
+        text:
+          "Emails, outlines, proposals, notes, and content drafts are easier to manage when each piece of work has its own workspace instead of living in a general conversation thread.",
+      },
+      {
+        title: "Use Spaces for research by project.",
+        text:
+          "Keep each research stream separate so sources, notes, summaries, and follow-up drafts stay attached to the project they belong to.",
+      },
+      {
+        title: "Use Spaces for translation and bilingual work.",
+        text:
+          "Arabic-English work benefits from cleaner separation because source text, tone choices, revisions, and final output are easier to track when they are not mixed with unrelated work.",
+      },
+      {
+        title: "Use Spaces for content production and planning artifacts.",
+        text:
+          "Social posts, campaign drafts, content calendars, and project plans work better when they live inside a task-specific context that can be reopened and refined later.",
+      },
+      {
+        title: "Use Spaces for client or project separation.",
+        text:
+          "The real advantage is less context spill. One client, one project, or one task can keep its own history, which makes work cleaner to continue and easier to trust.",
+      },
+    ],
+    examplePrompt:
+      "Create a Space for my Arabic-English product launch work and help me keep research, messaging, and draft content separated by task.",
+    goodOutput:
+      "Clear project separation, less thread chaos, and work that is easier to reopen later. The best use of Spaces feels like a calmer AI workspace, not a bigger pile of chat.",
+    links: [
+      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
+      { label: "What to use ZAKI for", href: "/how-to/what-to-use-zaki-for/" },
+    ],
+    seo: {
+      title: "What to Use Spaces For",
+      description:
+        "Learn what to use Spaces for: writing, research, translation, content production, and project separation in a cleaner structured AI workspace.",
+      imageAlt: "Guide explaining what to use Spaces for",
+      keywords:
+        "what to use Spaces for, AI workspaces for productivity, structured AI workspace use cases, Spaces vs one long chat thread",
+    },
+  },
+  "what-to-use-zaki-for": {
+    badge: "How To",
+    title: "What to Use ZAKI For",
+    intro:
+      "Short answer: use ZAKI when the job is not just a task, but an ongoing thread. This page exists to make the agent layer practical without pretending it is a finished autonomous system.",
+    steps: [
+      {
+        title: "Use ZAKI for weekly review and planning.",
+        text:
+          "ZAKI is useful when priorities change over time and you want a persistent thread that remembers what matters, what has shifted, and what should happen next.",
+      },
+      {
+        title: "Use ZAKI for decision support.",
+        text:
+          "Bring decisions to ZAKI when the work needs tradeoffs, framing, and continuity across more than one session instead of a one-off answer.",
+      },
+      {
+        title: "Use ZAKI for long-running projects.",
+        text:
+          "Projects that unfold across days or weeks benefit from a relationship-level thread that keeps context alive before the work moves into separate Spaces for execution.",
+      },
+      {
+        title: "Use ZAKI for idea development.",
+        text:
+          "ZAKI is useful when you want to return to the same idea, refine it gradually, and keep the continuity of why it matters instead of re-prompting from zero.",
+      },
+      {
+        title: "Use ZAKI for your personal operating system.",
+        text:
+          "The strongest early use case is not autonomy theater. It is having a more persistent AI counterpart for priorities, planning, memory, and continuity across time.",
+      },
+    ],
+    examplePrompt:
+      "ZAKI, help me review this week, decide what matters next, and tell me which parts should move into separate Spaces for execution.",
+    goodOutput:
+      "A practical planning layer: ZAKI helps connect the thread across time, clarify what matters, and point specific work into Spaces instead of pretending to replace every workflow by itself.",
+    links: [
+      { label: "See ZAKI", href: "/zaki-bot/" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
+      { label: "How ZAKI and Spaces work together", href: "/how-to/how-zaki-and-spaces-work/" },
+    ],
+    seo: {
+      title: "What to Use ZAKI For",
+      description:
+        "Learn what to use ZAKI for: planning, continuity, decision support, long-running projects, and a more persistent AI counterpart across time.",
+      imageAlt: "Guide explaining what to use ZAKI for",
+      keywords:
+        "what to use ZAKI for, persistent AI companion use cases, AI continuity workflows, personal AI counterpart",
     },
   },
 };
@@ -384,15 +661,15 @@ const contactContent: Record<Locale, ContactContent> = {
     badge: "Support",
     title: "Contact",
     intro:
-      "For support, account, legal, privacy, or compliance requests, contact the team directly.",
+      "For support, account, legal, privacy, or compliance requests, contact the team directly. Keep the summary concise and include enough context for a real response.",
     cards: [
       {
         title: "Support requests",
-        body: "Include account email, timestamp, and a concise issue summary so the team can respond faster.",
+        body: "Include account email, timestamp, affected route or feature, and a concise issue summary so the team can respond faster.",
       },
       {
         title: "Legal and privacy",
-        body: "Add request type: access, correction, export, deletion, or compliance inquiry.",
+        body: "Add the request type clearly: access, correction, export, deletion, or compliance inquiry.",
       },
     ],
     emailLabel: "support@chatzaki.com",
@@ -408,15 +685,15 @@ const contactContent: Record<Locale, ContactContent> = {
   ar: {
     badge: "الدعم",
     title: "تواصل معنا",
-    intro: "للدعم أو الحساب أو طلبات الخصوصية والامتثال، تواصل معنا مباشرة.",
+    intro: "للدعم أو الحساب أو طلبات الخصوصية والامتثال، تواصل معنا مباشرة، مع ملخص واضح وسياق كافٍ حتى نتمكن من الرد بشكل فعلي.",
     cards: [
       {
         title: "طلبات الدعم",
-        body: "يرجى تضمين بريد الحساب ووقت المشكلة ووصفًا واضحًا للحالة حتى نتمكن من المتابعة بسرعة.",
+        body: "يرجى تضمين بريد الحساب ووقت المشكلة والمسار أو الميزة المتأثرة ووصفًا واضحًا للحالة حتى نتمكن من المتابعة بسرعة.",
       },
       {
         title: "الطلبات القانونية والخصوصية",
-        body: "حدّد نوع الطلب: وصول، تصحيح، تصدير، حذف، أو استفسار امتثال.",
+        body: "حدّد نوع الطلب بوضوح: وصول، تصحيح، تصدير، حذف، أو استفسار امتثال.",
       },
     ],
     emailLabel: "support@chatzaki.com",
@@ -828,4 +1105,3 @@ export function getContactContent(locale: Locale) {
 export function getLegalContent(slug: LegalSlug, locale: Locale) {
   return legalContent[slug][locale];
 }
-

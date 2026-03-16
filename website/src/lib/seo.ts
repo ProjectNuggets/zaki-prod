@@ -14,7 +14,7 @@ import {
 export const SITE_URL = "https://chatzaki.com";
 export const APP_URL = "https://app.chatzaki.com";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
-export const SEO_UPDATED_AT = "2026-03-14T00:00:00Z";
+export const SEO_UPDATED_AT = "2026-03-16T00:00:00Z";
 
 export type RouteSeo = {
   title: string;
@@ -118,7 +118,10 @@ function buildHowToSchema(slug: Parameters<typeof getHowToContent>[0], canonical
   };
 }
 
-function buildComparisonSchema(seoKey: "vs-chatgpt" | "best-arabic-ai-assistant", canonical: string) {
+function buildComparisonSchema(
+  seoKey: "vs-chatgpt" | "zaki-vs-spaces" | "best-arabic-ai-assistant",
+  canonical: string
+) {
   if (seoKey === "best-arabic-ai-assistant") {
     return {
       "@context": "https://schema.org",
@@ -126,7 +129,7 @@ function buildComparisonSchema(seoKey: "vs-chatgpt" | "best-arabic-ai-assistant"
       name: "Best Arabic AI Assistant in 2026",
       url: canonical,
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "ZAKI Chat" },
+        { "@type": "ListItem", position: 1, name: "Spaces" },
         { "@type": "ListItem", position: 2, name: "ChatGPT" },
         { "@type": "ListItem", position: 3, name: "Daleela" },
         { "@type": "ListItem", position: 4, name: "Labiba" },
@@ -135,10 +138,21 @@ function buildComparisonSchema(seoKey: "vs-chatgpt" | "best-arabic-ai-assistant"
     };
   }
 
+  if (seoKey === "zaki-vs-spaces") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: "ZAKI vs Spaces",
+      url: canonical,
+      description:
+        "ZAKI is the persistent AI counterpart for planning, memory, and continuity. Spaces are the structured workspaces for focused execution.",
+    };
+  }
+
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    name: "ZAKI Chat vs ChatGPT Comparison",
+    name: "Spaces vs ChatGPT Comparison",
     url: canonical,
   };
 }
@@ -161,8 +175,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/zaki-bot/" || route === "/ar/zaki-bot/") {
     const description =
       locale === "ar"
-        ? "زكي هو البيتا العامة لمشغّل ذكاء شخصي تجريبي: مستمر، تقني، ومدعوم بـ Nullalis مع 5 رسائل مجانية كل 24 ساعة."
-        : "ZAKI is the experimental public beta of a Personal AI Operator: persistent, technical, and powered by Nullalis with 5 free messages every 24 hours.";
+        ? "زكي هو البيتا العامة لمشغّل ذكاء شخصي قابل للتدريب: ذكاء مستمر بذاكرة لكل مستخدم ومراحل عمل مرئية، ومحدود بخمس رسائل مجانية كل 24 ساعة."
+        : "ZAKI is the public beta of a trainable Personal AI Operator: persistent intelligence with per-user memory, visible work phases, and 5 free messages every 24 hours.";
     return {
       title:
         locale === "ar"
@@ -177,8 +191,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
       altLocaleTag,
       keywords:
         locale === "ar"
-          ? "زكي, ZAKI, مشغّل ذكاء شخصي, BOT beta, Nullalis, مساعد ذكاء شخصي"
-          : "ZAKI, Personal AI Operator, BOT beta, Nullalis, Arabic AI product",
+          ? "زكي, ZAKI, مشغّل ذكاء شخصي, بيتا زكي, مساعد ذكاء شخصي"
+          : "ZAKI, Personal AI Operator, ZAKI beta, Arabic AI product",
       schema: [
         ...buildCommonSchema(locale, description),
         {
@@ -199,13 +213,13 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/faq/" || route === "/ar/faq/") {
     const description =
       locale === "ar"
-        ? "اعرف الفرق بين ZAKI Chat وزكي، ما الذي تتضمنه البيتا العامة، ولماذا هي تجريبية، ومتى تبدأ الاشتراكات."
-        : "Learn the difference between ZAKI Chat and ZAKI, what the public beta includes, why it is experimental, and when subscriptions arrive.";
+        ? "اعرف الفرق بين زكي وSpaces، ما الذي تتضمنه البيتا العامة، ولماذا هي تجريبية، ومتى تبدأ الاشتراكات."
+        : "Learn the difference between ZAKI and Spaces, what the public beta includes, why it is experimental, and when subscriptions arrive.";
     return {
       title:
         locale === "ar"
-          ? "الأسئلة الشائعة | ZAKI Chat وزكي"
-          : "ZAKI FAQ | Chat, Beta, and Personal AI",
+          ? "الأسئلة الشائعة | زكي وSpaces"
+          : "ZAKI FAQ | Spaces, Beta, and Personal AI",
       description,
       canonical: locale === "ar" ? `${SITE_URL}/ar/faq/` : `${SITE_URL}/faq/`,
       lang: locale,
@@ -215,8 +229,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
       altLocaleTag,
       keywords:
         locale === "ar"
-          ? "الأسئلة الشائعة, زكي, ZAKI Chat, بيتا زكي, Nullalis"
-          : "ZAKI FAQ, ZAKI Chat, ZAKI beta, Nullalis, Personal AI FAQ",
+          ? "الأسئلة الشائعة, زكي, Spaces, بيتا زكي"
+          : "ZAKI FAQ, Spaces, ZAKI beta, Personal AI FAQ",
       schema: [...buildCommonSchema(locale, description), faqSchema],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -226,14 +240,14 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/story/" || route === "/ar/story/") {
     const description =
       locale === "ar"
-        ? "حكاية زكي: لماذا بُني ذكاء اصطناعي عربي أولًا، وكيف يتشكّل علنًا مع مجتمعه."
-        : "The ZAKI story: why we built Arabic-first AI, how it's shaped in public, and where it's going.";
+        ? "لماذا يوجد زكي: كيف يجمع بين Spaces كمساحات عمل منظّمة وبين زكي كوكيل ذكاء شخصي مستمر يتشكل علنًا."
+        : "Why ZAKI exists: combining Spaces as structured workspaces with ZAKI as a public beta for persistent personal intelligence.";
     const canonical = toAbsoluteUrl(route);
     return {
       title:
         locale === "ar"
-          ? "حكايتنا | ZAKI — ذكاء عربي أولًا"
-          : "Our Story | ZAKI — Arabic-First AI",
+          ? "لماذا زكي | ZAKI — ذكاء عربي أولًا"
+          : "Why ZAKI | Arabic-First AI with Product Discipline",
       description,
       canonical,
       lang: locale,
@@ -247,15 +261,24 @@ export function getRouteSeo(pathname: string): RouteSeo {
           : "ZAKI story, Arabic AI story, why ZAKI, building in public",
       schema: [
         ...buildCommonSchema(locale, description),
-        buildWebPageSchema("Our Story", canonical, locale, description),
+        buildWebPageSchema("Why ZAKI", canonical, locale, description),
       ],
       alternates,
       updatedAt: SEO_UPDATED_AT,
     };
   }
 
-  if (route === "/vs-chatgpt/" || route === "/best-arabic-ai-assistant/") {
-    const comparisonKey = route === "/vs-chatgpt/" ? "vs-chatgpt" : "best-arabic-ai-assistant";
+  if (
+    route === "/vs-chatgpt/" ||
+    route === "/zaki-vs-spaces/" ||
+    route === "/best-arabic-ai-assistant/"
+  ) {
+    const comparisonKey =
+      route === "/vs-chatgpt/"
+        ? "vs-chatgpt"
+        : route === "/zaki-vs-spaces/"
+          ? "zaki-vs-spaces"
+          : "best-arabic-ai-assistant";
     const content = getComparisonContent(comparisonKey);
     const canonical = toAbsoluteUrl(route);
     return {
@@ -361,8 +384,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
 
   const description =
     locale === "ar"
-      ? "زكي يجمع بين ZAKI Chat المتاح اليوم وبين زكي، مشغّل الذكاء الشخصي التجريبي القادم. دردشة عملية الآن، ومشغّل شخصي للمستقبل."
-      : "ZAKI combines ZAKI Chat, the practical live workspace, with ZAKI, the experimental Personal AI Operator. Daily AI now, operator future next.";
+      ? "زكي يجمع بين Spaces كمساحات عمل منظّمة للإنتاجية اليومية وبين زكي كبيتا عامة لذكاء شخصي مستمر وقابل للتدريب."
+      : "ZAKI combines Spaces as structured workspaces for daily productivity with ZAKI as a public beta for trainable persistent intelligence.";
 
   return {
     title:
@@ -376,10 +399,10 @@ export function getRouteSeo(pathname: string): RouteSeo {
     imageAlt: locale === "ar" ? "واجهة زكي الرئيسية" : "ZAKI homepage experience",
     localeTag,
     altLocaleTag,
-    keywords:
-      locale === "ar"
-        ? "زكي, ZAKI, ZAKI Chat, مساعد ذكاء شخصي, AI عربي, Nullalis"
-        : "ZAKI, ZAKI Chat, Personal AI Operator, Arabic AI, Nullalis, bilingual AI",
+      keywords:
+        locale === "ar"
+          ? "زكي, ZAKI, Spaces, مساعد ذكاء شخصي, AI عربي"
+          : "ZAKI, Spaces, Personal AI Operator, Arabic AI, bilingual AI",
     schema: [
       ...buildCommonSchema(locale, description),
       {
@@ -408,7 +431,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
           },
         ],
         featureList: [
-          locale === "ar" ? "ZAKI Chat متاح الآن" : "ZAKI Chat is live now",
+          locale === "ar" ? "Spaces متاحة الآن" : "Spaces are live now",
           locale === "ar" ? "زكي بيتا عامة تجريبية" : "ZAKI experimental public beta",
           locale === "ar" ? "5 رسائل مجانية كل 24 ساعة" : "5 free messages every 24 hours",
           locale === "ar" ? "ذاكرة وتحكم أوضح" : "Clearer memory and control",

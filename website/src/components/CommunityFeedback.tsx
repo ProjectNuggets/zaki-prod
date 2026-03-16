@@ -138,16 +138,16 @@ export function CommunityFeedback({ locale }: { locale: Locale }) {
           <div className="flex items-center gap-3 mb-2">
             <MessageSquare className="size-5 text-chat-accent" />
             <p className="font-mono-ui text-xs uppercase tracking-[0.24em] text-chat-accent">
-              {isArabic ? "صوت المجتمع" : "Community voice"}
+              {isArabic ? "من المستخدمين الأوائل" : "From early users"}
             </p>
           </div>
           <h2 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-chat-text md:text-[36px]">
-            {isArabic ? "ساعدنا في تشكيل زكي" : "Help shape ZAKI"}
+            {isArabic ? "ما الذي طلب منا المستخدمون تحسينه؟" : "What early users told us to improve"}
           </h2>
           <p className="mt-3 max-w-[52ch] text-sm leading-7 text-chat-muted">
             {isArabic
-              ? "بسيطة، علنية، ومجهولة افتراضيًا. انضم إلى المجتمع الذي يشكل ما سيأتي بعد ذلك."
-              : "Simple, public, and anonymous by default. Join the community shaping what comes next."}
+              ? "هذه أمثلة من الملاحظات والطلبات المتكررة التي سمعناها من المستخدمين الأوائل والمختبرين أثناء تشكيل المنتج."
+              : "These are representative requests and feedback themes we kept hearing from early users and testers while shaping the product."}
           </p>
         </Reveal>
 
@@ -158,7 +158,7 @@ export function CommunityFeedback({ locale }: { locale: Locale }) {
             ))}
           </div>
           <p className="mt-6 text-center font-mono-ui text-[11px] uppercase tracking-[0.2em] text-chat-muted">
-            {isArabic ? "لقطة من الطلبات التي يشكّل بها المجتمع الاتجاه" : "A snapshot of the requests shaping the direction"}
+            {isArabic ? "طلبات مبكرة ساعدتنا في توجيه ما يأتي بعد ذلك" : "Early requests that helped shape what comes next"}
           </p>
         </Reveal>
       </div>

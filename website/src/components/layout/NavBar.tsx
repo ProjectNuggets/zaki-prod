@@ -8,7 +8,6 @@ export function NavBar({ locale }: { locale: Locale }) {
   const location = useLocation();
   const isArabic = locale === "ar";
   const botHref = isArabic ? "/ar/zaki-bot/" : "/zaki-bot/";
-  const faqHref = isArabic ? "/ar/faq/" : "/faq/";
   const storyHref = isArabic ? "/ar/story/" : "/story/";
   const contactHref = isArabic ? "/ar/contact/" : "/contact/";
 
@@ -28,8 +27,7 @@ export function NavBar({ locale }: { locale: Locale }) {
 
   const navLinks = [
     { to: botHref, label: isArabic ? "زكي" : "ZAKI" },
-    { to: faqHref, label: isArabic ? "الأسئلة" : "FAQ" },
-    { to: storyHref, label: isArabic ? "حكايتنا" : "Story" },
+    { to: storyHref, label: isArabic ? "لماذا زكي" : "Why ZAKI" },
     { to: contactHref, label: isArabic ? "تواصل" : "Contact" },
   ];
 
@@ -50,9 +48,6 @@ export function NavBar({ locale }: { locale: Locale }) {
           className="inline-flex shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80"
         >
           <img src="/assets/zaki-logo.png" alt="ZAKI" className="size-7 rounded-[6px]" />
-          <span className="font-display text-[15px] font-extrabold tracking-[0.06em] text-chat-text dark:text-bot-text">
-            ZAKI
-          </span>
         </Link>
 
         {/* Desktop nav links — right-aligned */}
@@ -85,9 +80,9 @@ export function NavBar({ locale }: { locale: Locale }) {
 
           <a
             href="https://app.chatzaki.com/pricing?auth=signup&source=website_nav"
-            className="ms-1 inline-flex items-center rounded-full bg-chat-accent px-4 py-1.5 text-[12px] font-semibold tracking-wide text-white transition-colors hover:bg-chat-accent-hover dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
+            className="ms-1 inline-flex items-center rounded-full bg-chat-accent px-4 py-1.5 text-[12px] font-semibold tracking-wide text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.28)] dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
           >
-            {isArabic ? "استخدم ZAKI Chat" : "Use ZAKI Chat"}
+            {isArabic ? "انضم الآن" : "Join now"}
           </a>
         </nav>
 
@@ -131,9 +126,9 @@ export function NavBar({ locale }: { locale: Locale }) {
           ))}
           <a
             href="https://app.chatzaki.com/pricing?auth=signup&source=website_nav_mobile"
-            className="mt-2 flex items-center justify-center rounded-lg bg-chat-accent px-4 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-chat-accent-hover dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
+            className="mt-2 flex items-center justify-center rounded-lg bg-chat-accent px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.28)] dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
           >
-            {isArabic ? "استخدم ZAKI Chat" : "Use ZAKI Chat"}
+            {isArabic ? "انضم الآن" : "Join now"}
           </a>
         </nav>
       </div>

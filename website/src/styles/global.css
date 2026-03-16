@@ -118,6 +118,21 @@ body[data-route="bot"] .site-mesh {
   will-change: transform, opacity;
 }
 
+.hero-rotating-phrase {
+  display: inline-block;
+  min-width: 5.2ch;
+  white-space: nowrap;
+  will-change: transform, opacity, filter;
+}
+
+.hero-rotating-phrase.is-visible {
+  animation: hero-phrase-in 220ms ease-out forwards;
+}
+
+.hero-rotating-phrase.is-hidden {
+  animation: hero-phrase-out 180ms ease-in forwards;
+}
+
 /* ── Focus ring ── */
 :focus-visible {
   outline: 2px solid var(--chat-accent);

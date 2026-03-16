@@ -15,12 +15,12 @@ export function FaqPage({ locale }: { locale: Locale }) {
           <Reveal>
             <Badge tone="chat">{isArabic ? "الأسئلة الشائعة" : "FAQ"}</Badge>
             <h1 className="font-display mt-6 text-[40px] font-extrabold leading-[0.96] tracking-[-0.06em] md:text-[72px]">
-              {isArabic ? "أسئلة المنتج كما هو فعلًا." : "Product questions, as they actually are."}
+              {isArabic ? "أسئلة المنتج، بإجابات مباشرة." : "Product questions, answered directly."}
             </h1>
             <p className="mt-6 max-w-[60ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
               {isArabic
-                ? "تشرح هذه الصفحة الفرق بين ZAKI Chat وزكي، وما الذي تتضمنه البيتا العامة، ولماذا هي تجريبية، ومتى تبدأ الاشتراكات."
-                : "This page explains the difference between ZAKI Chat and ZAKI, what the public beta includes, why it is experimental, and when subscriptions begin."}
+                ? "تشرح هذه الصفحة الفرق بين زكي وSpaces، وما الذي تتضمنه البيتا العامة، وما الذي لا تعد به بعد، ومتى تبدأ الاشتراكات."
+                : "This page explains the difference between ZAKI and Spaces, what the public beta includes, what it does not promise yet, and when subscriptions begin."}
             </p>
           </Reveal>
           <Reveal delay={80} className="mt-8">
