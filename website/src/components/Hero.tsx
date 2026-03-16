@@ -6,6 +6,26 @@ import { Reveal } from "./Reveal";
 import { HeroParallaxImage } from "./HeroParallaxImage";
 import { RotatingPhrase } from "./RotatingPhrase";
 
+const ASK_AI_PROMPT = [
+  "Give me a concise, factual overview of ZAKI and Spaces using their public website.",
+  "",
+  "Explain:",
+  "1. What ZAKI is",
+  "2. What Spaces are",
+  "3. How ZAKI and Spaces differ",
+  "4. How they work together",
+  "5. How ZAKI compares to OpenClaw where publicly documented",
+  "",
+  "Use these pages as the primary references:",
+  "https://www.chatzaki.com/",
+  "https://www.chatzaki.com/zaki-vs-spaces/",
+  "https://www.chatzaki.com/how-to/how-zaki-and-spaces-work/",
+  "https://www.chatzaki.com/zaki-bot/",
+  "https://www.chatzaki.com/zaki-vs-openclaw/",
+  "",
+  "Keep the answer structured, concise, and note any uncertainty.",
+].join("\n");
+
 export function Hero({
   locale,
   t,
@@ -15,6 +35,7 @@ export function Hero({
 }) {
   const isArabic = locale === "ar";
   const botHref = isArabic ? "/ar/zaki-bot/#waitlist" : "/zaki-bot/#waitlist";
+  const askAiHref = `https://chatgpt.com/?q=${encodeURIComponent(ASK_AI_PROMPT)}`;
   const rotatingPhrases = isArabic
     ? ["يتذكرك", "يتابعك", "يبقى معك"]
     : ["remembers.", "follows through.", "stays useful."];
@@ -75,6 +96,18 @@ export function Hero({
             </Button>
             <a href={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent">
               {isArabic ? "ما هو زكي؟" : "What is ZAKI?"}
+              <ArrowUpRight className="size-4" />
+            </a>
+            <a
+              href={askAiHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent"
+            >
+              {isArabic ? "اسأل AI" : "Ask AI"}
+              <span className="inline-flex h-5 min-w-8 items-center justify-center rounded-full border border-line-strong bg-white px-2 text-[10px] font-semibold text-chat-muted">
+                GPT
+              </span>
               <ArrowUpRight className="size-4" />
             </a>
           </div>

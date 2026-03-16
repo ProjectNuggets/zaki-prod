@@ -64,10 +64,38 @@ export function HomePage({ locale }: { locale: Locale }) {
                 <ArrowUpRight className="size-4" />
               </Link>
               <Link
+                to="/how-to/how-zaki-and-spaces-work/"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+              >
+                {locale === "ar" ? "كيف يعمل زكي وSpaces" : "How ZAKI and Spaces work together"}
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/how-to/what-to-use-spaces-for/"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+              >
+                {locale === "ar" ? "متى تستخدم Spaces" : "What to use Spaces for"}
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/how-to/what-to-use-zaki-for/"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+              >
+                {locale === "ar" ? "متى تستخدم زكي" : "What to use ZAKI for"}
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
                 to="/vs-chatgpt/"
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
               >
                 {locale === "ar" ? "Spaces مقابل ChatGPT" : "Spaces vs ChatGPT"}
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/zaki-vs-openclaw/"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+              >
+                {locale === "ar" ? "زكي مقابل OpenClaw" : "ZAKI vs OpenClaw"}
                 <ArrowUpRight className="size-4" />
               </Link>
               <Link

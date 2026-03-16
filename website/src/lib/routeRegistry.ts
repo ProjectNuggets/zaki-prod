@@ -118,6 +118,14 @@ export const routeRegistry: RouteDefinition[] = [
     requiresSchema: true,
   },
   {
+    pathname: "/zaki-vs-openclaw/",
+    locale: "en",
+    pageKind: "comparison",
+    seoKey: "zaki-vs-openclaw",
+    requiresAlternates: false,
+    requiresSchema: true,
+  },
+  {
     pathname: "/how-to/write-arabic-emails-ai/",
     locale: "en",
     pageKind: "howto",

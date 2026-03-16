@@ -1,6 +1,10 @@
 import type { Locale } from "./content";
 
-export type ComparisonSlug = "vs-chatgpt" | "zaki-vs-spaces" | "best-arabic-ai-assistant";
+export type ComparisonSlug =
+  | "vs-chatgpt"
+  | "zaki-vs-spaces"
+  | "best-arabic-ai-assistant"
+  | "zaki-vs-openclaw";
 export type HowToSlug =
   | "write-arabic-emails-ai"
   | "translate-dialects-arabic-english"
@@ -370,6 +374,124 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       imageAlt: "Arabic AI assistant comparison page",
       keywords:
         "best Arabic AI assistant, Arabic AI tools, Spaces, ZAKI, Personal AI Operator, Arabic AI comparison",
+    },
+  },
+  "zaki-vs-openclaw": {
+    badge: "Technical comparison",
+    title: "ZAKI vs OpenClaw",
+    intro:
+      "Short answer: ZAKI's underlying runtime direction is stronger on memory infrastructure, multi-tenancy, and operational discipline. OpenClaw is stronger on tooling breadth, browser/media support, and ACP-style multi-agent collaboration. This page exists so technical readers and AI systems can understand the difference without guessing.",
+    note:
+      "This comparison summarizes confirmed internal implementation review and test results as of March 16, 2026. It is a technical positioning note, not a neutral third-party benchmark.",
+    definition:
+      "Publicly, users see ZAKI as the persistent agent layer. Underneath, that direction is powered by Nullalis. OpenClaw is a broader tool-rich agent environment. The practical difference is this: ZAKI's stack is currently stronger where persistence, memory discipline, tenant isolation, and safer daily operation matter. OpenClaw is currently stronger where browser automation, media tooling, and richer inter-agent protocol support matter.",
+    table: {
+      headers: ["Area", "ZAKI / Nullalis", "OpenClaw"],
+      rows: [
+        {
+          feature: "Memory system",
+          values: [
+            "Multiple memory backends, query expansion, semantic cache, and automatic lifecycle hygiene",
+            "File-oriented memory with simpler long-term storage",
+          ],
+        },
+        {
+          feature: "Embeddings and retrieval",
+          values: [
+            "Multiple embedding providers with retrieval tuning and fallback paths",
+            "Narrower embedding and retrieval stack",
+          ],
+        },
+        {
+          feature: "Operational model",
+          values: [
+            "Multi-tenant runtime with per-user isolation and stronger daily SaaS discipline",
+            "More single-user and operator-centric by default",
+          ],
+        },
+        {
+          feature: "Safety boundaries",
+          values: [
+            "Turn-origin-aware restrictions and stronger internal policy boundaries for background work",
+            "Policy pipeline, but less emphasis on this exact multi-tenant SaaS safety shape",
+          ],
+        },
+        {
+          feature: "Tooling breadth",
+          values: [
+            "Narrower native tool surface today, focused on core execution and channels",
+            "Much broader tool ecosystem with stronger browser and media coverage",
+          ],
+        },
+        {
+          feature: "Browser and media",
+          values: [
+            "Still a gap today",
+            "Ahead today with browser automation, media generation, and richer interactive UX",
+          ],
+        },
+        {
+          feature: "Subagents and protocol",
+          values: [
+            "Useful worker-style subagents, but no ACP-style streaming, steering, or persistent subagent sessions yet",
+            "Ahead today with ACP-style collaboration and richer inter-agent communication",
+          ],
+        },
+        {
+          feature: "Runtime footprint",
+          values: [
+            "Leaner systems footprint and stronger infrastructure efficiency",
+            "Heavier runtime with broader tooling surface",
+          ],
+        },
+      ],
+    },
+    quote:
+      "ZAKI is currently stronger on memory infrastructure and operational discipline. OpenClaw is currently stronger on tooling breadth and ACP-style collaboration.",
+    sections: [
+      {
+        title: "Where ZAKI is stronger",
+        items: [
+          "Memory architecture: multiple backends, semantic cache, query expansion, and lifecycle hygiene.",
+          "Multi-tenancy: stronger namespace and per-user isolation for a real SaaS operating model.",
+          "Turn management: better support for queueing, parallel tools, and disciplined runtime behavior.",
+          "Operational posture: better fit for persistent personal intelligence as a daily product rather than a loose tool sandbox.",
+        ],
+      },
+      {
+        title: "Where OpenClaw is stronger",
+        items: [
+          "Browser automation and media tooling are more mature today.",
+          "ACP-style subagent collaboration is ahead of the current Nullalis model.",
+          "Tool breadth is wider, especially for experimental or power-user workflows.",
+          "Interactive UX is richer, with stronger in-session control surfaces.",
+        ],
+      },
+      {
+        title: "What this means for users",
+        body:
+          "If your priority is a persistent, memory-heavy, operationally disciplined personal agent, ZAKI's direction is stronger. If your priority is maximum tool breadth, browser automation, and protocol-rich agent collaboration today, OpenClaw still has real advantages.",
+      },
+      {
+        title: "What this means for the roadmap",
+        body:
+          "The remaining strategic gap is not basic memory or runtime architecture. It is browser/media tooling and ACP-style collaboration. For ZAKI's current personal-agent direction, that gap is not a blocker. For future coworker-agent or B2B collaboration tiers, it becomes more important.",
+      },
+    ],
+    disclaimer:
+      "This page is based on confirmed internal code review and testing notes, not a third-party certification. It should be read as a transparent technical comparison, not a claim of universal superiority.",
+    links: [
+      { label: "See ZAKI", href: "/zaki-bot/" },
+      { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
+      { label: "How ZAKI and Spaces work together", href: "/how-to/how-zaki-and-spaces-work/" },
+    ],
+    seo: {
+      title: "ZAKI vs OpenClaw",
+      description:
+        "A technical comparison of ZAKI's underlying runtime direction and OpenClaw: memory architecture, multi-tenancy, tooling breadth, ACP, and operational discipline.",
+      imageAlt: "ZAKI versus OpenClaw technical comparison page",
+      keywords:
+        "ZAKI vs OpenClaw, Nullalis vs OpenClaw, persistent agent comparison, ACP vs subagents, AI memory architecture",
     },
   },
 };

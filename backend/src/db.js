@@ -330,6 +330,35 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS website_beta_waitlist (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      role TEXT,
+      use_case TEXT,
+      locale TEXT,
+      source TEXT,
+      submission_count INT NOT NULL DEFAULT 1,
+      first_submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_website_beta_waitlist_last_submitted
+    ON website_beta_waitlist (last_submitted_at DESC, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_website_beta_waitlist_source
+    ON website_beta_waitlist (source, last_submitted_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_bot_messages (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

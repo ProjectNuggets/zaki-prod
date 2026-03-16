@@ -22,6 +22,7 @@ export function AppRoutes() {
       <Route path="/vs-chatgpt" element={<ComparisonPage slug="vs-chatgpt" />} />
       <Route path="/zaki-vs-spaces" element={<ComparisonPage slug="zaki-vs-spaces" />} />
       <Route path="/best-arabic-ai-assistant" element={<ComparisonPage slug="best-arabic-ai-assistant" />} />
+      <Route path="/zaki-vs-openclaw" element={<ComparisonPage slug="zaki-vs-openclaw" />} />
       <Route path="/how-to/write-arabic-emails-ai" element={<HowToPage slug="write-arabic-emails-ai" />} />
       <Route path="/how-to/translate-dialects-arabic-english" element={<HowToPage slug="translate-dialects-arabic-english" />} />
       <Route path="/how-to/create-social-media-content-arabic" element={<HowToPage slug="create-social-media-content-arabic" />} />

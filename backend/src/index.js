@@ -1583,6 +1583,14 @@ const websiteFeedbackVoteLimiter = rateLimit({
   message: { error: "Too many votes. Please slow down for a minute." },
 });
 
+const websiteBetaWaitlistLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many waitlist submissions. Please retry a bit later." },
+});
+
 const memoryReadPathMatchers = [
   /^\/api\/memory\/health\/?$/u,
   /^\/api\/memory\/events\/?$/u,
@@ -2539,6 +2547,21 @@ const WebsiteFeedbackVoteSchema = z.object({
   clientId: WebsiteFeedbackClientIdSchema,
 });
 
+const WebsiteBetaWaitlistSchema = z.object({
+  email: z.string().trim().email("Invalid email address").max(320),
+  name: z.string().trim().max(120).optional().or(z.literal("")),
+  role: z.string().trim().max(120).optional().or(z.literal("")),
+  useCase: z.string().trim().max(2000).optional().or(z.literal("")),
+  locale: z.enum(["en", "ar"]).optional(),
+  source: z.string().trim().max(120).optional().or(z.literal("")),
+});
+
+const WebsiteBetaWaitlistAdminListSchema = z.object({
+  search: z.string().trim().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 // Validation helper
 function validateInput(schema, data) {
   const result = schema.safeParse(data);
@@ -2568,6 +2591,27 @@ function normalizeWebsiteFeedbackPost(row) {
         ? 0
         : Number(row.viewer_vote || 0),
     createdAt: row.created_at,
+  };
+}
+
+function normalizeWebsiteBetaWaitlistRow(row) {
+  return {
+    id: String(row?.id || ""),
+    email: String(row?.email || ""),
+    name: row?.name ? String(row.name) : null,
+    role: row?.role ? String(row.role) : null,
+    useCase: row?.use_case ? String(row.use_case) : null,
+    locale: row?.locale ? String(row.locale) : null,
+    source: row?.source ? String(row.source) : null,
+    submissionCount: Number(row?.submission_count || 0),
+    firstSubmittedAt: row?.first_submitted_at
+      ? new Date(row.first_submitted_at).toISOString()
+      : null,
+    lastSubmittedAt: row?.last_submitted_at
+      ? new Date(row.last_submitted_at).toISOString()
+      : null,
+    createdAt: row?.created_at ? new Date(row.created_at).toISOString() : null,
+    updatedAt: row?.updated_at ? new Date(row.updated_at).toISOString() : null,
   };
 }
 
@@ -2708,6 +2752,154 @@ app.post(
     }
   }
 );
+
+app.post(
+  "/api/website-beta-waitlist",
+  websiteBetaWaitlistLimiter,
+  express.json({ limit: "50kb" }),
+  async (req, res) => {
+    const validation = validateInput(WebsiteBetaWaitlistSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((issue) => issue.message).join(", "),
+        code: "invalid_payload",
+      });
+      return;
+    }
+
+    const email = normalizeEmail(validation.data.email);
+    const name = String(validation.data.name || "").replace(/\s+/g, " ").trim() || null;
+    const role = String(validation.data.role || "").replace(/\s+/g, " ").trim() || null;
+    const useCase = String(validation.data.useCase || "").replace(/\s+/g, " ").trim() || null;
+    const locale = validation.data.locale || null;
+    const source = String(validation.data.source || "").replace(/\s+/g, " ").trim() || null;
+    const ipAddress = getClientIp(req);
+    const userAgent = req.get("user-agent") || null;
+
+    try {
+      const existing = await dbGet(
+        `SELECT id
+         FROM website_beta_waitlist
+         WHERE email = $1
+         LIMIT 1`,
+        [email]
+      );
+
+      if (existing?.id) {
+        const updated = await dbGet(
+          `UPDATE website_beta_waitlist
+           SET name = COALESCE($2, name),
+               role = COALESCE($3, role),
+               use_case = COALESCE($4, use_case),
+               locale = COALESCE($5, locale),
+               source = COALESCE($6, source),
+               submission_count = submission_count + 1,
+               last_submitted_at = NOW(),
+               ip_address = COALESCE($7, ip_address),
+               user_agent = COALESCE($8, user_agent),
+               updated_at = NOW()
+           WHERE email = $1
+           RETURNING id`,
+          [email, name, role, useCase, locale, source, ipAddress, userAgent]
+        );
+        res.status(200).json({ success: true, id: String(updated.id), duplicate: true });
+        return;
+      }
+
+      const inserted = await dbGet(
+        `INSERT INTO website_beta_waitlist
+          (email, name, role, use_case, locale, source, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id`,
+        [email, name, role, useCase, locale, source, ipAddress, userAgent]
+      );
+
+      res.status(201).json({ success: true, id: String(inserted.id) });
+    } catch (error) {
+      console.error("[Website Waitlist] create failed:", error);
+      res.status(500).json({
+        success: false,
+        error: "Unable to capture that waitlist request right now.",
+        code: "waitlist_persist_failed",
+      });
+    }
+  }
+);
+
+app.get("/api/admin/website-beta-waitlist", async (req, res) => {
+  const authResult = await requireAdminUser(req, res);
+  if (!authResult) return;
+
+  const validation = validateInput(WebsiteBetaWaitlistAdminListSchema, req.query || {});
+  if (!validation.valid) {
+    res.status(400).json({
+      success: false,
+      error: validation.errors.map((issue) => issue.message).join(", "),
+    });
+    return;
+  }
+
+  const search = String(validation.data.search || "").trim();
+  const searchLike = search ? `%${search}%` : null;
+
+  try {
+    const [rows, totalRow] = await Promise.all([
+      dbAll(
+        `SELECT
+           id,
+           email,
+           name,
+           role,
+           use_case,
+           locale,
+           source,
+           submission_count,
+           first_submitted_at,
+           last_submitted_at,
+           created_at,
+           updated_at
+         FROM website_beta_waitlist
+         WHERE (
+           $1::text IS NULL
+           OR email ILIKE $1
+           OR COALESCE(name, '') ILIKE $1
+           OR COALESCE(role, '') ILIKE $1
+           OR COALESCE(source, '') ILIKE $1
+           OR COALESCE(use_case, '') ILIKE $1
+         )
+         ORDER BY last_submitted_at DESC, created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [searchLike, validation.data.limit, validation.data.offset]
+      ),
+      dbGet(
+        `SELECT COUNT(*)::int AS total
+         FROM website_beta_waitlist
+         WHERE (
+           $1::text IS NULL
+           OR email ILIKE $1
+           OR COALESCE(name, '') ILIKE $1
+           OR COALESCE(role, '') ILIKE $1
+           OR COALESCE(source, '') ILIKE $1
+           OR COALESCE(use_case, '') ILIKE $1
+         )`,
+        [searchLike]
+      ),
+    ]);
+
+    res.json({
+      success: true,
+      total: Number(totalRow?.total || 0),
+      items: rows.map(normalizeWebsiteBetaWaitlistRow),
+    });
+  } catch (error) {
+    console.error("[Website Waitlist] admin list failed:", error);
+    res.status(500).json({
+      success: false,
+      error: "Unable to load website waitlist entries right now.",
+    });
+  }
+});
 
 app.post("/api/telemetry/client-error", express.json({ limit: "200kb" }), async (req, res) => {
   const validation = validateInput(ClientErrorEventSchema, req.body || {});

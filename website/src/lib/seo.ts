@@ -119,7 +119,7 @@ function buildHowToSchema(slug: Parameters<typeof getHowToContent>[0], canonical
 }
 
 function buildComparisonSchema(
-  seoKey: "vs-chatgpt" | "zaki-vs-spaces" | "best-arabic-ai-assistant",
+  seoKey: "vs-chatgpt" | "zaki-vs-spaces" | "best-arabic-ai-assistant" | "zaki-vs-openclaw",
   canonical: string
 ) {
   if (seoKey === "best-arabic-ai-assistant") {
@@ -146,6 +146,17 @@ function buildComparisonSchema(
       url: canonical,
       description:
         "ZAKI is the persistent AI counterpart for planning, memory, and continuity. Spaces are the structured workspaces for focused execution.",
+    };
+  }
+
+  if (seoKey === "zaki-vs-openclaw") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: "ZAKI vs OpenClaw",
+      url: canonical,
+      description:
+        "A technical comparison of ZAKI's underlying runtime direction and OpenClaw across memory, tooling, ACP, and operational discipline.",
     };
   }
 
@@ -271,14 +282,17 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (
     route === "/vs-chatgpt/" ||
     route === "/zaki-vs-spaces/" ||
-    route === "/best-arabic-ai-assistant/"
+    route === "/best-arabic-ai-assistant/" ||
+    route === "/zaki-vs-openclaw/"
   ) {
     const comparisonKey =
       route === "/vs-chatgpt/"
         ? "vs-chatgpt"
         : route === "/zaki-vs-spaces/"
           ? "zaki-vs-spaces"
-          : "best-arabic-ai-assistant";
+          : route === "/best-arabic-ai-assistant/"
+            ? "best-arabic-ai-assistant"
+            : "zaki-vs-openclaw";
     const content = getComparisonContent(comparisonKey);
     const canonical = toAbsoluteUrl(route);
     return {
