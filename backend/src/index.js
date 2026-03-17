@@ -72,8 +72,10 @@ import {
 } from "./agent-bff-contract.js";
 import {
   createBotBffHandlers,
+  isChatSessionKeyValidationFailure,
   mapBotBffAuthFailure,
   normalizeBotUsageSummaryFromQuota,
+  resolveCanonicalChatSessionKey,
 } from "./bot-bff.js";
 import {
   APP_CHAT_SURFACE,
@@ -7712,6 +7714,15 @@ const agentChatStreamHandler = async (req, res) => {
         ...(rawThreadId ? { thread_id: rawThreadId } : {}),
       },
     };
+    const sessionKey = resolveCanonicalChatSessionKey({
+      userId,
+      payload: normalizedPayload,
+    });
+    if (!sessionKey.success) {
+      return res.status(400).json({ error: sessionKey.message, code: "invalid_chat_payload" });
+    }
+    upstreamPayload.session_key = sessionKey.sessionKey;
+    delete upstreamPayload.user_id;
 
     const isZakiBotSpace = rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID;
     const resolvedSpaceId = rawSpaceId || ZAKI_BOT_SPACE_ID;
@@ -7740,6 +7751,17 @@ const agentChatStreamHandler = async (req, res) => {
       "Agent upstream request"
     );
 
+    const contentType = String(upstream.headers.get("content-type") || "");
+    if (!upstream.ok && contentType.toLowerCase().includes("application/json")) {
+      const payloadError = await upstream.json().catch(() => null);
+      if (isChatSessionKeyValidationFailure(payloadError)) {
+        setPromptQuotaHeaders(res, promptQuota);
+        return res
+          .status(400)
+          .json({ error: "invalid chat payload or session_key", code: "invalid_chat_payload" });
+      }
+    }
+
     res.status(upstream.status);
     copyResponseHeaders(upstream, res);
     setPromptQuotaHeaders(res, promptQuota);
@@ -7759,8 +7781,6 @@ const agentChatStreamHandler = async (req, res) => {
       res.end();
       return;
     }
-
-    const contentType = String(upstream.headers.get("content-type") || "");
     const isSse = contentType.toLowerCase().includes("text/event-stream");
 
     if (!isSse) {

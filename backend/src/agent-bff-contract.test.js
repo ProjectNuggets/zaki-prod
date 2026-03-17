@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   BOT_BFF_ALIAS_ROUTES,
+  BOT_CHAT_STREAM_SESSION_KEY_CONTRACT,
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
   registerBotBffAliases,
@@ -31,6 +32,16 @@ describe("agent BOT BFF contract", () => {
     expect(payload).toEqual({
       user_id: "42",
       nickname: "nova",
+    });
+  });
+
+  it("documents auth-bound canonical session key forwarding for both chat stream surfaces", () => {
+    expect(BOT_CHAT_STREAM_SESSION_KEY_CONTRACT).toEqual({
+      surfaces: ["/api/agent/chat/stream", "/v1/me/bot/chat/stream"],
+      upstreamPath: "/api/v1/chat/stream",
+      ownership: "server_auth_bound",
+      defaultLane: "thread:<threadId|main>",
+      supportedOverrideLanes: ["main", "thread:<id>", "task:<id>", "cron:<id>"],
     });
   });
 

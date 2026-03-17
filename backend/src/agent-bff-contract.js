@@ -10,6 +10,14 @@ export const BOT_BFF_ALIAS_ROUTES = Object.freeze([
   { method: "get", path: "/v1/me/bot/usage" },
 ]);
 
+export const BOT_CHAT_STREAM_SESSION_KEY_CONTRACT = Object.freeze({
+  surfaces: Object.freeze(["/api/agent/chat/stream", "/v1/me/bot/chat/stream"]),
+  upstreamPath: "/api/v1/chat/stream",
+  ownership: "server_auth_bound",
+  defaultLane: "thread:<threadId|main>",
+  supportedOverrideLanes: Object.freeze(["main", "thread:<id>", "task:<id>", "cron:<id>"]),
+});
+
 export function buildBotProvisionPayload(userId, payload = {}) {
   return {
     ...(payload && typeof payload === "object" ? payload : {}),

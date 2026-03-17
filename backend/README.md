@@ -101,7 +101,7 @@ npm run migrate:sqlite
 - `PATCH /api/admin/access-codes/:id` — update/disable access code (admin auth required)
 - `POST /api/telemetry/client-error` — ingest frontend runtime errors for production observability
 - `GET /api/admin/telemetry/memory` — inspect memory pipeline telemetry and recent alerts (admin auth required)
-- `POST /api/agent/chat/stream` — authenticated SSE proxy to Nullclaw `/api/v1/chat/stream` (requires `ZAKI_AGENT_BACKEND_ENABLED=true`)
+- `POST /api/agent/chat/stream` — authenticated SSE proxy to Nullclaw `/api/v1/chat/stream`; the backend now generates and validates the auth-bound canonical `session_key` before proxying (requires `ZAKI_AGENT_BACKEND_ENABLED=true`)
 - `GET /api/usage/quota?surface=app_chat|zaki_bot` — authenticated daily quota status (defaults to `app_chat`)
 - `GET /api/agent/history?spaceId=zaki-bot&threadId=main&mode=merged|app` — ZAKI BOT history (mode default: `merged`)
 - `GET /api/agent/diagnostics` — authenticated per-user agent diagnostics (no secrets returned)
@@ -109,6 +109,11 @@ npm run migrate:sqlite
 Billing endpoints may return `503` with code `billing_unavailable` when Stripe is not configured in the runtime environment.
 
 If `ZAKI_MEMORY_ALERT_WEBHOOK_URL` is configured, memory telemetry alerts are forwarded as JSON POST requests to that endpoint.
+
+ZAKI BOT chat stream session policy:
+- `/api/agent/chat/stream` and `/v1/me/bot/chat/stream` both forward an explicit canonical `session_key` to Nullclaw.
+- If the client omits `session_key`, the backend derives `agent:zaki-bot:user:<user_id>:thread:<threadId|main>` from the authenticated user and current thread id.
+- If the client supplies `session_key`, the backend accepts only auth-bound `main`, `thread:<id>`, `task:<id>`, or `cron:<id>` lanes for that same user.
 
 ## Notes
 
