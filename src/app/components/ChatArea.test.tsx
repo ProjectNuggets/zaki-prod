@@ -11,6 +11,7 @@ import { ChatArea } from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
 import { apiRequest } from "@/lib/api";
+import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(async () => ({
@@ -83,6 +84,7 @@ describe("ChatArea Component", () => {
 
   beforeEach(() => {
     (apiRequest as jest.Mock).mockClear();
+    window.sessionStorage.clear();
     navState = {
       view: "chat",
       spaceId: null,
@@ -163,5 +165,16 @@ describe("ChatArea Component", () => {
       expect(screen.getByText("What should I do today?")).toBeInTheDocument();
     });
     expect(screen.queryByText("[[ZAKI_MEMORY_CONTEXT_V2]]")).not.toBeInTheDocument();
+  });
+
+  it("shows the experimental notice in the ZAKI space until dismissed for the session", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
+    window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
   });
 });

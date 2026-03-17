@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
+import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import {
   createZakiBotThread,
   isZakiBotSpaceId,
@@ -467,6 +468,17 @@ export function ChatArea() {
       isRtl ? `تمت إضافة ${count} ملفات إلى ملفات المساحة.` : `Added ${count} files to workspace files.`,
     uploadFailed: isRtl ? "فشل الرفع." : "Upload failed.",
     unableToUpload: isRtl ? "تعذر رفع الملفات." : "Unable to upload files.",
+    experimentalLimitReached: (resetLabel: string) =>
+      isRtl
+        ? `وصلت إلى حد الاستخدام التجريبي المجاني اليوم. الاستخدام المجاني يُعاد يوميًا وقد يتغير حسب الضغط وتعقيد الطلب. جرّب مرة أخرى بعد ${resetLabel}.`
+        : `You reached today's free experimental limit. Free usage resets daily and can vary with traffic and prompt complexity. Try again after ${resetLabel}.`,
+    appFreeLimitReached: (resetLabel: string) =>
+      isRtl
+        ? `وصلت إلى حد الاستخدام المجاني اليوم. يتم إعادة التعيين يوميًا. جرّب مرة أخرى بعد ${resetLabel}.`
+        : `You reached today's free limit. Free usage resets daily. Try again after ${resetLabel}.`,
+    quotaBadgeNeutral: isRtl ? "وصول تجريبي يومي" : "Daily experimental access",
+    quotaBadgeWarning: isRtl ? "الاستخدام المجاني محدود" : "Limited free usage",
+    quotaBadgeDanger: isRtl ? "تم بلوغ الحد التجريبي اليوم" : "Today's experimental limit reached",
   };
   useAuthStore(); // For auth context, values used elsewhere
   const {
@@ -1675,7 +1687,6 @@ export function ChatArea() {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
       let errorCode: string | null = null;
-      let quotaLimit: number | null = null;
       let quotaResetAt: string | null = null;
       let quotaSurfaceCode: UsageQuotaSurface | null = null;
       const requestId = response.headers.get("x-request-id");
@@ -1693,9 +1704,6 @@ export function ChatArea() {
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
           }
-          if (typeof data.limit === "number" && Number.isFinite(data.limit)) {
-            quotaLimit = data.limit;
-          }
           if (typeof data.resetAt === "string" && data.resetAt.trim()) {
             quotaResetAt = data.resetAt.trim();
           }
@@ -1711,19 +1719,14 @@ export function ChatArea() {
           } else if (errorCode === "access_expired") {
             message = "Access code required. Redeem a fresh code to keep chatting.";
           } else if (errorCode === "daily_limit_reached") {
-            const safeLimit = quotaLimit ?? 5;
             const resetLabel = quotaResetAt
               ? new Date(quotaResetAt).toLocaleString()
               : "tomorrow";
             const isBotQuota = quotaSurfaceCode === "zaki_bot" || isZakiAgentSpace;
             if (isBotQuota) {
-              message = isRtl
-                ? `وصلت إلى حد ZAKI BOT اليومي (${safeLimit}). سيُعاد التعيين عند ${resetLabel}. نسخة BOT premium قريبًا.`
-                : `You reached today's ZAKI BOT limit (${safeLimit}). Resets at ${resetLabel}. BOT premium is coming soon.`;
+              message = chatCopy.experimentalLimitReached(resetLabel);
             } else {
-              message = isRtl
-                ? `وصلت إلى الحد اليومي المجاني (${safeLimit}). سيُعاد التعيين عند ${resetLabel}.`
-                : `You reached today's free limit (${safeLimit}). Resets at ${resetLabel}.`;
+              message = chatCopy.appFreeLimitReached(resetLabel);
             }
           }
         } else {
@@ -3348,6 +3351,7 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
+              <ZakiExperimentalNotice active={isZakiBotActiveSpace} />
               <InputArea
                 onSend={handleSend}
                 attachments={attachments}
@@ -3364,8 +3368,12 @@ export function ChatArea() {
                 quotaBadge={
                   zakiBotQuotaInfo
                     ? {
-                        remaining: zakiBotQuotaInfo.remaining,
-                        limit: zakiBotQuotaInfo.limit,
+                        label:
+                          zakiBotQuotaInfo.remaining <= 0
+                            ? chatCopy.quotaBadgeDanger
+                            : zakiBotQuotaInfo.remaining <= 2
+                              ? chatCopy.quotaBadgeWarning
+                              : chatCopy.quotaBadgeNeutral,
                         tone:
                           zakiBotQuotaInfo.remaining <= 0
                             ? "danger"

@@ -413,6 +413,165 @@
       "Turn this into a checklist"
     ]
   },
+  "zakiExperimentalNotice": {
+    "badge": "Open beta",
+    "title": "ZAKI is our beta for persistent personal intelligence",
+    "intro": "This space is where we test a longer-term relationship with your AI: memory continuity, visible work phases, and context that carries across sessions.",
+    "whyExperimentalTitle": "Why it is experimental",
+    "whyExperimentalBody": "We are learning from real usage in public, so behavior, limits, and availability may shift while we refine the product.",
+    "expectationsTitle": "What to expect right now",
+    "expectationsBody": "Free access is limited, resets daily, and may vary with traffic or prompt complexity while the beta is still early.",
+    "dismissAria": "Dismiss ZAKI experimental notice",
+    "actions": {
+      "continue": "Continue",
+      "learnMore": "Learn more"
+    }
+  },
+  "zakiSettingsSheet": {
+    "badge": "ZAKI settings",
+    "title": "Tune how ZAKI shows up",
+    "header": {
+      "readySummary": "{{mode}} replies, {{join}} access, ready to use.",
+      "setupSummary": "Core behavior first. Setup, channels, and limits stay tucked behind quick sections."
+    },
+    "closeAria": "Close ZAKI settings",
+    "loading": {
+      "onboarding": "Loading your current ZAKI setup..."
+    },
+    "summary": {
+      "ready": "Ready to use",
+      "setupInProgress": "Setup in progress"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "sections": {
+      "core": {
+        "title": "Core behavior",
+        "summary": "{{style}} replies, {{join}} access"
+      },
+      "workspace": {
+        "title": "Workspace context",
+        "summary": "{{connected}} of {{total}} channels connected"
+      },
+      "limits": {
+        "title": "Limits and plan",
+        "summary": "Usage, access, and premium controls"
+      },
+      "advanced": {
+        "title": "Advanced and privacy",
+        "summary": "Account shortcuts and product help"
+      }
+    },
+    "fields": {
+      "responseStyle": {
+        "title": "Response style",
+        "helper": "Choose whether ZAKI leans toward speed, balance, or deeper reasoning."
+      },
+      "sessionWindow": {
+        "title": "Session window",
+        "summary": "{{minutes}} minute session",
+        "helper": "Choose how long ZAKI should treat nearby activity as one working session."
+      },
+      "joinBehavior": {
+        "title": "When ZAKI joins",
+        "helper": "Control whether ZAKI waits for a mention or stays available in shared channel conversations."
+      },
+      "proactiveUpdates": {
+        "title": "Proactive updates",
+        "helper": "Let ZAKI surface updates first instead of waiting for every prompt."
+      },
+      "voiceReplies": {
+        "title": "Voice replies",
+        "helper": "Enable spoken responses when the channel supports them."
+      }
+    },
+    "options": {
+      "fast": "Fast",
+      "balanced": "Balanced",
+      "deep": "Deep",
+      "mentionOnly": "Mention only",
+      "alwaysActive": "Always active"
+    },
+    "workspace": {
+      "memoryTitle": "Memory and help",
+      "memorySummary": "Review what ZAKI remembers and open help when you need product context.",
+      "memoryHelper": "Memory stays editable. Help stays one step away.",
+      "reviewMemory": "Review memory",
+      "openHelp": "Open help",
+      "setupTitle": "Setup status",
+      "setupNotCompleted": "Not completed yet",
+      "setupHelper": "{{status}}. Last update: {{updated}}.",
+      "channelsTitle": "Connected channels",
+      "channelsSummary": "{{connected}} of {{total}} channels connected",
+      "channelsSummaryLine": "{{connected}} of {{total}} channels are ready right now.",
+      "channelsHelper": "Provider details stay hidden until you open one.",
+      "channelStatus": {
+        "connected": "Connected",
+        "notConnected": "Not connected",
+        "needsSetup": "Needs setup"
+      },
+      "channelDescriptions": {
+        "telegram": "Connect Telegram so ZAKI can receive and reply through your bot.",
+        "slack": "Keep Slack ready for workspace rollout.",
+        "discord": "Keep Discord instructions nearby without opening a separate admin page."
+      },
+      "telegramToken": "Telegram bot token",
+      "telegramWebhook": "Webhook URL override (optional)"
+    },
+    "limits": {
+      "currentPlanTitle": "Current plan",
+      "currentPlanHelper": "Keep premium access and billing actions in one compact row.",
+      "planSummary": "{{plan}} plan, {{status}} status",
+      "planSummaryWithExpiry": "{{plan}} plan, {{status}} until {{expiry}}",
+      "usageTitle": "Usage today",
+      "usageSummary": "{{requests}} requests today, {{state}} status",
+      "usageUnavailable": "Usage is temporarily unavailable, but ZAKI still works.",
+      "usageHelper": "The usage view stays compact here. Full billing and pricing stay in the main settings surface."
+    },
+    "advanced": {
+      "generalSettingsTitle": "General account settings",
+      "generalSettingsSummary": "Profile, language, theme, export, and account actions live in the main settings surface.",
+      "generalSettingsHelper": "This panel stays focused on ZAKI. Use the main settings surface for broader account changes.",
+      "helpTitle": "Product help",
+      "helpSummary": "Open help when you want the longer explanation behind how ZAKI works.",
+      "helpHelper": "This keeps the main panel quiet while still making documentation easy to reach."
+    },
+    "actions": {
+      "provisioning": "Provisioning...",
+      "provision": "Provision ZAKI",
+      "markIncomplete": "Mark as incomplete",
+      "markComplete": "Mark as complete",
+      "connecting": "Connecting...",
+      "connectTelegram": "Connect Telegram",
+      "disconnect": "Disconnect",
+      "manage": "Manage",
+      "hide": "Hide",
+      "openSettings": "Open settings",
+      "openHelp": "Open help"
+    },
+    "success": {
+      "provisioned": "ZAKI BOT space provisioned.",
+      "onboardingComplete": "Onboarding marked complete.",
+      "onboardingReopened": "Onboarding reopened for further setup.",
+      "settingsSaved": "ZAKI BOT settings saved.",
+      "telegramConnected": "Telegram connected. Send a message to your bot to confirm routing.",
+      "telegramDisconnected": "Telegram disconnected."
+    },
+    "errors": {
+      "onboardingLoad": "Unable to load ZAKI setup right now.",
+      "settingsLoad": "Unable to load ZAKI settings right now.",
+      "botStateUnavailable": "ZAKI settings are temporarily unavailable for this account.",
+      "botStateUnavailableUnknownUser": "ZAKI settings are not available for this account yet.",
+      "sessionTimeoutRange": "Session window must be between 5 and 180 minutes.",
+      "telegramTokenRequired": "Enter a Telegram bot token before connecting."
+    },
+    "footer": {
+      "unsaved": "Unsaved changes",
+      "saving": "Saving..."
+    }
+  },
   "onboarding": {
     "eyebrow": "Welcome",
     "title": "Set up your workspace, {{userName}}",
