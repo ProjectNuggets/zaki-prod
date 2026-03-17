@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/queries";
+import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { toast } from "sonner";
 
@@ -55,11 +56,10 @@ export function InputArea({
   const wasSendingRef = useRef(isSending);
   const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
-  const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const isPremium =
-    ["student", "personal"].includes(planTier) &&
-    ["active", "trialing", "past_due"].includes(planStatus);
+  const entitlements = entitlementsResult?.data ?? null;
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
 
@@ -214,22 +214,28 @@ export function InputArea({
                     type="button"
                     className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
                     onClick={() => {
-                      void trackProductEvent({
-                        event: "upgrade_cta_clicked",
-                        source: "chat_input",
-                        language: isRtl ? "ar" : "en",
-                        plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                        interval: "monthly",
-                      }).catch(() => {
-                        // Best-effort telemetry only.
-                      });
+                      if (!isPremium) {
+                        void trackProductEvent({
+                          event: "upgrade_cta_clicked",
+                          source: "chat_input",
+                          language: isRtl ? "ar" : "en",
+                          plan: "personal",
+                          interval: "monthly",
+                        }).catch(() => {
+                          // Best-effort telemetry only.
+                        });
+                      }
                       navigate("/pricing?source=chat_input");
                     }}
                   >
-                    {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
+                    {activeViaAccessCode
+                      ? t("input.manageAccessCta")
+                      : isPremium
+                      ? t("sidebar.profile.managePlan")
+                      : t("input.upgradeCta")}
                   </button>
                   <span className="text-zaki-secondary">
-                    {t("input.upgradeLabel")}
+                    {activeViaAccessCode ? t("input.accessLabel") : t("input.upgradeLabel")}
                   </span>
                   <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
                     <Zap className="size-3" />
@@ -241,25 +247,31 @@ export function InputArea({
                     <Zap className="size-3" />
                   </span>
                   <span className="text-zaki-secondary">
-                    {t("input.upgradeLabel")}
+                    {activeViaAccessCode ? t("input.accessLabel") : t("input.upgradeLabel")}
                   </span>
                   <button
                     type="button"
                     className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
                     onClick={() => {
-                      void trackProductEvent({
-                        event: "upgrade_cta_clicked",
-                        source: "chat_input",
-                        language: isRtl ? "ar" : "en",
-                        plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                        interval: "monthly",
-                      }).catch(() => {
-                        // Best-effort telemetry only.
-                      });
+                      if (!isPremium) {
+                        void trackProductEvent({
+                          event: "upgrade_cta_clicked",
+                          source: "chat_input",
+                          language: isRtl ? "ar" : "en",
+                          plan: "personal",
+                          interval: "monthly",
+                        }).catch(() => {
+                          // Best-effort telemetry only.
+                        });
+                      }
                       navigate("/pricing?source=chat_input");
                     }}
                   >
-                    {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
+                    {activeViaAccessCode
+                      ? t("input.manageAccessCta")
+                      : isPremium
+                      ? t("sidebar.profile.managePlan")
+                      : t("input.upgradeCta")}
                   </button>
                 </>
               )}

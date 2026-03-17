@@ -6,6 +6,7 @@ import {
   useEntitlements,
 } from "@/queries";
 import { exportAccountData } from "@/lib/api";
+import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -44,17 +45,16 @@ export function SettingsModal({
   const { data: billingConfigResult } = useBillingConfig();
   const cancelSubscription = useCancelSubscription();
   const deleteAccountMutation = useDeleteAccount();
-  const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const accessActive = Boolean(entitlementsResult?.data?.access?.active);
-  const accessCampaign = entitlementsResult?.data?.access?.campaign ?? null;
-  const accessExpiresAt = entitlementsResult?.data?.access?.expiresAt ?? null;
-  const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
-  const isPremium =
-    ["student", "personal", "pro"].includes(planTier) &&
-    ["active", "trialing", "past_due"].includes(planStatus);
-  const effectiveStatus = accessActive ? "active" : planStatus;
-  const activeViaAccessCode = accessActive && !isPremium;
+  const entitlements = entitlementsResult?.data ?? null;
+  const planTier = entitlements?.plan?.tier ?? "free";
+  const accessCampaign = entitlements?.access?.campaign ?? null;
+  const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
+  const cancelAtPeriodEnd = Boolean(entitlements?.plan?.cancelAtPeriodEnd);
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const hasSubscription = hasActiveSubscription(entitlements);
+  const effectiveStatus = effectiveEntitlement.status;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const billingConfig = billingConfigResult?.data?.configured;
   const billingConfigLoaded = Boolean(billingConfigResult);
   const billingPortalEnabled = billingConfigLoaded ? Boolean(billingConfig?.portalEnabled) : true;
@@ -62,7 +62,7 @@ export function SettingsModal({
   const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
   const billingUnavailableMessage =
     billingConfigLoaded &&
-    (!billingPortalEnabled || !billingCheckoutEnabled || !billingCancelEnabled)
+    (!billingCheckoutEnabled || (hasSubscription && (!billingPortalEnabled || !billingCancelEnabled)))
       ? t("settingsModal.plan.billingUnavailable")
       : null;
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -205,7 +205,7 @@ export function SettingsModal({
                 <span>{t("settingsModal.plan.status")}</span>
                 <span
                   className={`text-xs uppercase tracking-wider ${
-                    accessActive ? "text-zaki-success dark:text-[#8fe6cf]" : "text-zaki-muted dark:text-[#c9b8a4]"
+                    isPremium ? "text-zaki-success dark:text-[#8fe6cf]" : "text-zaki-muted dark:text-[#c9b8a4]"
                   }`}
                 >
                   {effectiveStatusLabel}
@@ -243,22 +243,28 @@ export function SettingsModal({
                   type="button"
                   className="zaki-btn-sm zaki-btn-primary"
                   onClick={() => {
-                    void trackProductEvent({
-                      event: "upgrade_cta_clicked",
-                      source: "settings",
-                      language: languageValue === "ar" ? "ar" : "en",
-                      plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                      interval: "monthly",
-                    }).catch(() => {
-                      // Best-effort telemetry only.
-                    });
+                    if (!isPremium) {
+                      void trackProductEvent({
+                        event: "upgrade_cta_clicked",
+                        source: "settings",
+                        language: languageValue === "ar" ? "ar" : "en",
+                        plan: "personal",
+                        interval: "monthly",
+                      }).catch(() => {
+                        // Best-effort telemetry only.
+                      });
+                    }
                     onClose();
                     navigate("/pricing?source=settings");
                   }}
                 >
-                  {isPremium ? t("settingsModal.plan.managePlan") : t("settingsModal.plan.upgrade")}
+                  {activeViaAccessCode
+                    ? t("settingsModal.plan.manageAccess")
+                    : hasSubscription
+                    ? t("settingsModal.plan.managePlan")
+                    : t("settingsModal.plan.upgrade")}
                 </button>
-                {isPremium && (
+                {hasSubscription && (
                   <button
                     type="button"
                     className="zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(210,68,48,0.15)] transition-colors disabled:opacity-50"

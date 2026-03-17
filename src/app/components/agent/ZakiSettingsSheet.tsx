@@ -24,6 +24,7 @@ import {
   type BotSettingsProfile,
   type BotUsageSummary,
 } from "@/lib/api";
+import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
@@ -285,16 +286,15 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
   const discordMeta = getChannelMeta(discordSetup);
   const onboardingSummary = getSetupSummary(setup);
 
-  const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const accessActive = Boolean(entitlementsResult?.data?.access?.active);
-  const accessExpiresAt = entitlementsResult?.data?.access?.expiresAt ?? null;
-  const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
-  const isPremium =
-    ["student", "personal", "pro"].includes(planTier) &&
-    ["active", "trialing", "past_due"].includes(planStatus);
-  const effectiveStatus = accessActive ? "active" : planStatus;
-  const activeViaAccessCode = accessActive && !isPremium;
+  const entitlements = entitlementsResult?.data ?? null;
+  const planTier = entitlements?.plan?.tier ?? "free";
+  const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
+  const cancelAtPeriodEnd = Boolean(entitlements?.plan?.cancelAtPeriodEnd);
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const hasSubscription = hasActiveSubscription(entitlements);
+  const effectiveStatus = effectiveEntitlement.status;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const billingConfig = billingConfigResult?.data?.configured;
   const billingConfigLoaded = Boolean(billingConfigResult);
   const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
@@ -1080,7 +1080,10 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                                 source: "settings",
                                 language: languageValue === "ar" ? "ar" : "en",
                                 plan:
-                                  planTier === "student" || planTier === "personal" ? planTier : "free",
+                                  effectiveEntitlement.tier === "student" ||
+                                  effectiveEntitlement.tier === "personal"
+                                    ? effectiveEntitlement.tier
+                                    : "free",
                                 interval: null,
                               }).catch(() => {
                                 // Best-effort telemetry only.
@@ -1095,29 +1098,28 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                             type="button"
                             className="zaki-btn-sm zaki-btn-primary"
                             onClick={() => {
-                              void trackProductEvent({
-                                event: "upgrade_cta_clicked",
-                                source: "settings",
-                                language: languageValue === "ar" ? "ar" : "en",
-                                plan:
-                                  isPremium
-                                    ? planTier === "student" || planTier === "personal"
-                                      ? planTier
-                                      : "personal"
-                                    : "personal",
-                                interval: "monthly",
-                              }).catch(() => {
-                                // Best-effort telemetry only.
-                              });
+                              if (!isPremium) {
+                                void trackProductEvent({
+                                  event: "upgrade_cta_clicked",
+                                  source: "settings",
+                                  language: languageValue === "ar" ? "ar" : "en",
+                                  plan: "personal",
+                                  interval: "monthly",
+                                }).catch(() => {
+                                  // Best-effort telemetry only.
+                                });
+                              }
                               onClose();
                               navigate("/pricing?source=settings");
                             }}
                           >
-                            {isPremium
+                            {activeViaAccessCode
+                              ? t("settingsModal.plan.manageAccess")
+                              : hasSubscription
                               ? t("settingsModal.plan.managePlan")
                               : t("settingsModal.plan.upgrade")}
                           </button>
-                          {isPremium ? (
+                          {hasSubscription ? (
                             <button
                               type="button"
                               className="zaki-btn-sm border border-zaki-strong text-zaki-brand transition-colors hover:bg-zaki-error disabled:opacity-50 dark:border-[#643126] dark:text-[#ff9c86] dark:hover:bg-[rgba(210,68,48,0.15)]"

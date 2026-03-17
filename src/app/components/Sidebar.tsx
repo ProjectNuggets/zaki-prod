@@ -17,6 +17,7 @@ import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { useSpaces } from "@/queries/useSpaces";
 import { useEntitlements } from "@/queries";
+import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
 import { SettingsModal } from "./sidebar/SettingsModal";
@@ -82,13 +83,12 @@ export function Sidebar() {
   >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
-  const planTierRaw = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatusRaw = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const accessActive = Boolean(entitlementsResult?.data?.access?.active);
-  const isPremium =
-    ["student", "personal", "pro"].includes(planTierRaw) &&
-    ["active", "trialing", "past_due"].includes(planStatusRaw);
-  const activeViaAccessCode = accessActive && !isPremium;
+  const entitlements = entitlementsResult?.data ?? null;
+  const planTierRaw = entitlements?.plan?.tier ?? "free";
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const hasSubscription = hasActiveSubscription(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const planLabel =
     activeViaAccessCode
       ? t("sidebar.profile.planBadge.codeActive")
@@ -1732,25 +1732,26 @@ export function Sidebar() {
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              to="/pricing?source=settings"
 		              onClick={() => {
-		                void trackProductEvent({
-                    event: "upgrade_cta_clicked",
-                    source: "settings",
-                    language: isRtl ? "ar" : "en",
-                    plan:
-                      isPremium
-                        ? planTierRaw === "student" || planTierRaw === "personal"
-                          ? planTierRaw
-                          : "personal"
-                        : "personal",
-                    interval: "monthly",
-                  }).catch(() => {
-                    // Best-effort telemetry only.
-                  });
+		                if (!isPremium) {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: "settings",
+                      language: isRtl ? "ar" : "en",
+                      plan: "personal",
+                      interval: "monthly",
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                  }
                   setProfileMenuOpen(false);
-	              }}
+		              }}
 	            >
 	              <Sparkles className="size-4 text-zaki-muted" />
-	              {isPremium ? t("sidebar.profile.managePlan") : t("sidebar.profile.upgradePlan")}
+	              {activeViaAccessCode
+                  ? t("settingsModal.plan.manageAccess")
+                  : hasSubscription
+                  ? t("sidebar.profile.managePlan")
+                  : t("sidebar.profile.upgradePlan")}
 		            </Link>
 		            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}

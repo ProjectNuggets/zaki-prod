@@ -47,6 +47,7 @@
       "activeViaAccessCode": "Active via access code",
       "until": "until",
       "viewPricing": "View pricing",
+      "manageAccess": "Manage access",
       "managePlan": "Manage plan",
       "upgrade": "Upgrade",
       "cancelSubscription": "Cancel subscription",
@@ -370,7 +371,9 @@
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
     "uploadUnavailableToast": "Add files to the space when you want them available across chats.",
     "upgradeLabel": "ZAKI the chat",
+    "accessLabel": "Premium access active",
     "upgradeCta": "Upgrade!",
+    "manageAccessCta": "Manage access",
     "queryMode": {
       "label": "Query mode",
       "onBadge": "ON",
@@ -799,6 +802,7 @@
     "eyebrow": "Plans",
     "title": "Choose the plan that makes ZAKI feel personal",
     "subtitle": "Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.",
+    "subtitleAccessActive": "Your access code already unlocks premium access. You can review plans here, but checkout stays paused until the current access window ends.",
     "highlightsTemplates": {
       "student": "Student: {{price}} with .edu or manual verification",
       "personal": "Personal: {{price}} for everyday assistant use",
@@ -815,6 +819,8 @@
       "manage": "Returned from billing portal."
     },
     "managePlan": "Manage plan",
+    "viewPlans": "View plans",
+    "accessActiveCta": "Access active",
     "intervalLabel": "Billing cycle",
     "interval": {
       "monthly": "Monthly",
@@ -867,7 +873,8 @@
       "summaryActiveUntil": "Access active until {{date}}.",
       "summaryActiveCampaign": "Access active ({{campaign}}).",
       "summaryActiveUntilCampaign": "Access active until {{date}} ({{campaign}}).",
-      "summaryInactive": "No active access code. Redeem one to keep chatting."
+      "summaryInactive": "No active access code. Redeem one to keep chatting.",
+      "extendHint": "Redeem another code to extend your premium access."
     },
     "plans": {
       "free": {

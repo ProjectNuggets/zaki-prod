@@ -22,6 +22,8 @@ jest.mock("react-i18next", () => ({
       "pricingPage.billingNotices.manage": "Returned from billing portal.",
       "pricingPage.interval.monthly": "Monthly",
       "pricingPage.interval.yearly": "Yearly",
+      "pricingPage.subtitleAccessActive":
+        "Your access code already unlocks premium access. You can review plans here, but checkout stays paused until the current access window ends.",
       "pricingPage.cancelSubscription": "Cancel subscription",
       "pricingPage.cancellationScheduled": "Cancellation scheduled",
       "pricingPage.cancelScheduled": "Subscription will cancel at period end.",
@@ -39,6 +41,9 @@ jest.mock("react-i18next", () => ({
       "pricingPage.access.purchase.processing": "Opening checkout...",
       "pricingPage.access.purchase.checkoutError":
         "Unable to start code purchase checkout.",
+      "pricingPage.access.extendHint": "Redeem another code to extend your premium access.",
+      "pricingPage.viewPlans": "View plans",
+      "pricingPage.accessActiveCta": "Access active",
       "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
       "pricingPage.plans.student.features": [
         "Premium models for better answers",
@@ -80,6 +85,12 @@ let entitlementsData = {
       active: false,
       expiresAt: null,
       campaign: null,
+    },
+    effective: {
+      tier: "free",
+      status: "inactive",
+      source: "free",
+      premium: false,
     },
   },
 };
@@ -161,6 +172,12 @@ describe("PricingPage", () => {
           active: false,
           expiresAt: null,
           campaign: null,
+        },
+        effective: {
+          tier: "free",
+          status: "inactive",
+          source: "free",
+          premium: false,
         },
       },
     };
@@ -389,6 +406,42 @@ describe("PricingPage", () => {
         expect.objectContaining({ source: "pricing_page" })
       );
     });
+  });
+
+  it("shows active access state and blocks checkout for access-code users", () => {
+    entitlementsData = {
+      data: {
+        plan: {
+          tier: "free",
+          status: "inactive",
+          cancelAtPeriodEnd: false,
+        },
+        access: {
+          active: true,
+          expiresAt: "2026-04-20T00:00:00.000Z",
+          campaign: "Founders Circle",
+        },
+        effective: {
+          tier: "personal",
+          status: "active",
+          source: "access_code",
+          premium: true,
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Your access code already unlocks premium access. You can review plans here, but checkout stays paused until the current access window ends.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Access active" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Cancel subscription" })).not.toBeInTheDocument();
+    expect(screen.getByText("Redeem another code to extend your premium access.")).toBeInTheDocument();
   });
 
   it("does not autostart access-code purchase checkout from gift intent query", async () => {

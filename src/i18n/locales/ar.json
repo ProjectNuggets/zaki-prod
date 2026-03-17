@@ -47,6 +47,7 @@
       "activeViaAccessCode": "نشطة عبر رمز تفعيل",
       "until": "حتى",
       "viewPricing": "عرض التسعير",
+      "manageAccess": "إدارة الوصول",
       "managePlan": "إدارة الخطة",
       "upgrade": "ترقية",
       "cancelSubscription": "إلغاء الاشتراك",
@@ -370,7 +371,9 @@
     "disclaimer": "قد يخطئ Zaki. يُفضّل التحقق من المعلومات المهمة.",
     "uploadUnavailableToast": "أضف الملفات إلى المساحة عندما تريد أن تكون متاحة عبر كل المحادثات.",
     "upgradeLabel": "الحوار زكي",
+    "accessLabel": "الوصول المميز نشط",
     "upgradeCta": "ترقية!",
+    "manageAccessCta": "إدارة الوصول",
     "queryMode": {
       "label": "وضع الاستعلام",
       "onBadge": "مفعّل",
@@ -808,6 +811,7 @@
     "eyebrow": "الخطط",
     "title": "اختر الخطة التي تجعل ZAKI أكثر شخصية لك",
     "subtitle": "ابدأ مجانًا، ثم قم بالترقية عندما تريد ردودًا أسرع وذاكرة أفضل ومساعدًا شخصيًا أكثر قدرة.",
+    "subtitleAccessActive": "رمز الوصول لديك يفتح الوصول المميز بالفعل. يمكنك مراجعة الخطط هنا، لكن الدفع يبقى متوقفًا حتى تنتهي مدة الوصول الحالية.",
     "highlightsTemplates": {
       "student": "الطالب: {{price}} مع بريد .edu أو تحقق يدوي",
       "personal": "الشخصي: {{price}} للاستخدام اليومي كمساعد شخصي",
@@ -824,6 +828,8 @@
       "manage": "تمت العودة من بوابة الفوترة."
     },
     "managePlan": "إدارة الخطة",
+    "viewPlans": "عرض الخطط",
+    "accessActiveCta": "الوصول نشط",
     "intervalLabel": "دورة الفوترة",
     "interval": {
       "monthly": "شهري",
@@ -876,7 +882,8 @@
       "summaryActiveUntil": "الوصول فعّال حتى {{date}}.",
       "summaryActiveCampaign": "الوصول فعّال ({{campaign}}).",
       "summaryActiveUntilCampaign": "الوصول فعّال حتى {{date}} ({{campaign}}).",
-      "summaryInactive": "لا يوجد رمز تفعيل نشط. فعّل رمزًا للمتابعة في المحادثة."
+      "summaryInactive": "لا يوجد رمز تفعيل نشط. فعّل رمزًا للمتابعة في المحادثة.",
+      "extendHint": "فعّل رمزًا آخر لتمديد وصولك المميز."
     },
     "plans": {
       "free": {

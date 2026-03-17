@@ -1,19 +1,24 @@
 import "@testing-library/jest-dom";
-import { describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { InputArea } from "./InputArea";
 
+const navigateMock = jest.fn();
+let entitlementsData = {
+  data: {
+    plan: { tier: "free", status: "inactive" },
+    access: { active: false },
+    effective: { tier: "free", status: "inactive", source: "free", premium: false },
+  },
+};
+
 jest.mock("react-router-dom", () => ({
-  useNavigate: () => jest.fn(),
+  useNavigate: () => navigateMock,
 }));
 
 jest.mock("@/queries", () => ({
   useEntitlements: () => ({
-    data: {
-      data: {
-        plan: { tier: "free", status: "inactive" },
-      },
-    },
+    data: entitlementsData,
   }),
   useCheckout: () => ({
     mutateAsync: jest.fn(),
@@ -40,6 +45,17 @@ jest.mock("sonner", () => ({
 }));
 
 describe("InputArea primary action button", () => {
+  beforeEach(() => {
+    navigateMock.mockReset();
+    entitlementsData = {
+      data: {
+        plan: { tier: "free", status: "inactive" },
+        access: { active: false },
+        effective: { tier: "free", status: "inactive", source: "free", premium: false },
+      },
+    };
+  });
+
   it("sends when not streaming and does not call stop", () => {
     const onSend = jest.fn();
     const onStop = jest.fn();
@@ -101,5 +117,27 @@ describe("InputArea primary action button", () => {
 
     expect(screen.getByText("Limited free usage")).toBeInTheDocument();
     expect(screen.queryByText("0/10")).not.toBeInTheDocument();
+  });
+
+  it("shows manage access for active access-code users instead of upgrade", () => {
+    entitlementsData = {
+      data: {
+        plan: { tier: "free", status: "inactive" },
+        access: { active: true },
+        effective: { tier: "personal", status: "active", source: "access_code", premium: true },
+      },
+    };
+
+    render(
+      <InputArea
+        onSend={jest.fn()}
+        attachments={[]}
+        setAttachments={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText("input.accessLabel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "input.manageAccessCta" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "input.upgradeCta" })).not.toBeInTheDocument();
   });
 });

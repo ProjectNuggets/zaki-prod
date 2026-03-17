@@ -12,6 +12,7 @@ import {
   useSyncBilling,
 } from "@/queries";
 import { trackProductEvent } from "@/lib/productTelemetry";
+import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ export function PricingPage() {
   const supportEmail = "info@novanuggets.com";
   const [searchParams, setSearchParams] = useSearchParams();
   const handledBillingStatusRef = useRef<string | null>(null);
+  const plansSectionRef = useRef<HTMLDivElement | null>(null);
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
   const [selectedInterval, setSelectedInterval] = useState<BillingInterval>("monthly");
   const [accessCode, setAccessCode] = useState("");
@@ -91,16 +93,17 @@ export function PricingPage() {
     }
     return "pricing_page";
   })();
-  const currentTier = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const cancelAtPeriodEnd = Boolean(entitlementsResult?.data?.plan?.cancelAtPeriodEnd);
-  const accessActive = Boolean(entitlementsResult?.data?.access?.active);
-  const accessExpiresAt = entitlementsResult?.data?.access?.expiresAt ?? null;
-  const accessCampaign = entitlementsResult?.data?.access?.campaign ?? null;
-  const isPremium =
-    ["student", "personal"].includes(currentTier) &&
-    ["active", "trialing", "past_due"].includes(planStatus);
-  const activeViaAccessCode = accessActive && !isPremium;
+  const entitlements = entitlementsResult?.data ?? null;
+  const currentTier = entitlements?.plan?.tier ?? "free";
+  const cancelAtPeriodEnd = Boolean(entitlements?.plan?.cancelAtPeriodEnd);
+  const accessActive = Boolean(entitlements?.access?.active);
+  const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
+  const accessCampaign = entitlements?.access?.campaign ?? null;
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
+  const hasSubscription = hasActiveSubscription(entitlements);
+  const currentDisplayTier = activeViaAccessCode ? effectiveEntitlement.tier : currentTier;
   const billingConfig = billingConfigResult?.data?.configured;
   const billingConfigLoaded = Boolean(billingConfigResult);
   const billingPortalEnabled = billingConfigLoaded ? Boolean(billingConfig?.portalEnabled) : true;
@@ -111,7 +114,7 @@ export function PricingPage() {
     : false;
   const billingUnavailableMessage =
     billingConfigLoaded &&
-    (!billingPortalEnabled || !billingCheckoutEnabled || (isPremium && !billingCancelEnabled))
+    (!billingCheckoutEnabled || (hasSubscription && (!billingPortalEnabled || !billingCancelEnabled)))
       ? t("pricingPage.billingUnavailable")
       : null;
   const pricingAvailability = {
@@ -266,18 +269,18 @@ export function PricingPage() {
     if (activeViaAccessCode) {
       return t("pricingPage.codeActivePlanLabel");
     }
-    const plan = plans.find((p) => p.tier === currentTier);
+    const plan = plans.find((p) => p.tier === currentDisplayTier);
     return plan?.label ?? t("pricingPage.plans.free.label");
-  }, [activeViaAccessCode, currentTier, plans, t]);
+  }, [activeViaAccessCode, currentDisplayTier, plans, t]);
 
   const localizedPlanStatus = useMemo(() => {
     if (activeViaAccessCode) {
       return t("pricingPage.statusValues.code_active");
     }
-    return t(`pricingPage.statusValues.${planStatus}`, {
-      defaultValue: planStatus,
+    return t(`pricingPage.statusValues.${effectiveEntitlement.status}`, {
+      defaultValue: effectiveEntitlement.status,
     });
-  }, [activeViaAccessCode, planStatus, t]);
+  }, [activeViaAccessCode, effectiveEntitlement.status, t]);
 
   const accessExpiresLabel = useMemo(() => {
     if (!accessExpiresAt) return null;
@@ -308,6 +311,10 @@ export function PricingPage() {
     }
     return t("pricingPage.access.summaryActive");
   }, [accessActive, accessCampaign, accessExpiresLabel, t]);
+  const accessSecondaryHint = useMemo(() => {
+    if (!accessActive) return null;
+    return t("pricingPage.access.extendHint");
+  }, [accessActive, t]);
   const accessCodePurchaseHighlights = useMemo(() => {
     const translated = t("pricingPage.access.purchase.highlights", {
       returnObjects: true,
@@ -419,12 +426,15 @@ export function PricingPage() {
       event: "pricing_viewed",
       source: sourceFromQuery,
       language: isRtl ? "ar" : "en",
-      plan: currentTier === "student" || currentTier === "personal" ? currentTier : "free",
+      plan:
+        effectiveEntitlement.tier === "student" || effectiveEntitlement.tier === "personal"
+          ? effectiveEntitlement.tier
+          : "free",
       interval: selectedInterval,
     }).catch(() => {
       // Best-effort telemetry only.
     });
-  }, [currentTier, isRtl, selectedInterval, sourceFromQuery]);
+  }, [effectiveEntitlement.tier, isRtl, selectedInterval, sourceFromQuery]);
 
   useEffect(() => {
     if (!requestedIntervalFromQuery) return;
@@ -467,7 +477,7 @@ export function PricingPage() {
             {t("pricingPage.title")}
           </h1>
           <p className="max-w-3xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-            {t("pricingPage.subtitle")}
+            {activeViaAccessCode ? t("pricingPage.subtitleAccessActive") : t("pricingPage.subtitle")}
           </p>
           <div className="flex flex-wrap gap-2">
             {pricingHighlights.map((item) => (
@@ -501,25 +511,48 @@ export function PricingPage() {
             </div>
           )}
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="zaki-btn zaki-btn-primary"
-              disabled={portal.isPending || !billingPortalEnabled}
-              onClick={async () => {
-                try {
-                  if (!billingPortalEnabled) {
-                    throw new Error(t("pricingPage.portalError"));
+            {hasSubscription ? (
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-primary"
+                disabled={portal.isPending || !billingPortalEnabled}
+                onClick={async () => {
+                  try {
+                    if (!billingPortalEnabled) {
+                      throw new Error(t("pricingPage.portalError"));
+                    }
+                    await portal.mutateAsync();
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : t("pricingPage.portalError")
+                    );
                   }
-                  await portal.mutateAsync();
-                } catch (err) {
-                  toast.error(
-                    err instanceof Error ? err.message : t("pricingPage.portalError")
-                  );
-                }
-              }}
-            >
-              {t("pricingPage.managePlan")}
-            </button>
+                }}
+              >
+                {t("pricingPage.managePlan")}
+              </button>
+            ) : activeViaAccessCode ? (
+              <>
+                <button type="button" className="zaki-btn zaki-btn-primary opacity-80" disabled>
+                  {t("pricingPage.accessActiveCta")}
+                </button>
+                <button
+                  type="button"
+                  className="zaki-btn zaki-btn-secondary"
+                  onClick={() => plansSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                >
+                  {t("pricingPage.viewPlans")}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-primary"
+                onClick={() => plansSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                {t("pricingPage.viewPlans")}
+              </button>
+            )}
             <span className="text-xs text-zaki-muted self-center">
               {t("pricingPage.statusLabel")}: {localizedPlanStatus}
             </span>
@@ -532,7 +565,7 @@ export function PricingPage() {
           )}
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div ref={plansSectionRef} className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-5 py-5 shadow-[0px_16px_30px_rgba(15,15,15,0.06)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -613,6 +646,11 @@ export function PricingPage() {
               </button>
             </div>
             <div className="mt-3 text-xs text-zaki-muted">{accessSummary}</div>
+            {accessSecondaryHint ? (
+              <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                {accessSecondaryHint}
+              </div>
+            ) : null}
             <div
               id="access-code-purchase"
               ref={accessCodePurchaseCardRef}
@@ -738,9 +776,9 @@ export function PricingPage() {
             </div>
           </div>
           {plans.map((plan) => {
-            const isCurrent = currentTier === plan.tier;
+            const isCurrent = currentDisplayTier === plan.tier;
             const isCurrentActivePaidPlan =
-              isPremium && plan.tier !== "free" && currentTier === plan.tier;
+              hasSubscription && plan.tier !== "free" && currentTier === plan.tier;
             const requestedInterval = selectedInterval;
             const paidTier =
               plan.tier === "student" || plan.tier === "personal" ? plan.tier : null;
@@ -875,7 +913,9 @@ export function PricingPage() {
                         }
                       }}
                     >
-                      {isPremium
+                      {activeViaAccessCode
+                        ? t("pricingPage.accessActiveCta")
+                        : isPremium
                         ? t("pricingPage.alreadySubscribed")
                         : t("pricingPage.choose", { plan: plan.label })}
                     </button>

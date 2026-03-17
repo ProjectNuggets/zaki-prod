@@ -91,6 +91,11 @@ import {
   buildUsageQuotaResponse,
   enforcePromptQuotaForIngress,
 } from "./quota-route-handlers.js";
+import {
+  getAccessStatus,
+  getEffectiveEntitlementState,
+  isPaidActive,
+} from "./effective-entitlements.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -3181,25 +3186,6 @@ function resolveTier(tier) {
   return tier || "free";
 }
 
-function isPaidActive(tier, status) {
-  return (
-    ["student", "personal"].includes(resolveTier(tier)) &&
-    ["active", "trialing", "past_due"].includes(status || "")
-  );
-}
-
-function getAccessStatus(zakiUser) {
-  const expiresAt = zakiUser?.access_expires_at
-    ? new Date(zakiUser.access_expires_at)
-    : null;
-  const active = expiresAt ? expiresAt.getTime() > Date.now() : false;
-  return {
-    active,
-    expiresAt: expiresAt ? expiresAt.toISOString() : null,
-    campaign: zakiUser?.access_code_campaign || null,
-  };
-}
-
 function normalizeRateLimitValue(value, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -5331,12 +5317,11 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
     const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
     if (!email || !zakiUser) return;
 
-    const currentTier = resolveTier(zakiUser.plan_tier || "free");
-    const currentStatus = zakiUser.plan_status || "inactive";
-    if (isPaidActive(currentTier, currentStatus)) {
+    const effective = getEffectiveEntitlementState(zakiUser);
+    if (effective.premium) {
       res.status(409).json({
         success: false,
-        error: "You are already subscribed to an active paid plan.",
+        error: "You already have active premium access.",
       });
       return;
     }
@@ -5464,11 +5449,10 @@ app.get("/api/entitlements", async (req, res) => {
       stripePricingCatalog,
       zakiUser.stripe_price_id || null
     );
-    const premiumActive = isPaidActive(tier, status);
     const access = getAccessStatus(zakiUser);
-    const accessActive = premiumActive || access.active;
-    const readOnly = !premiumActive && !access.active;
-    const hasPersonal = premiumActive && tier === "personal";
+    const effective = getEffectiveEntitlementState(zakiUser);
+    const readOnly = !effective.premium;
+    const hasPersonal = effective.tier === "personal" && effective.premium;
 
     res.status(200).json({
       success: true,
@@ -5481,15 +5465,21 @@ app.get("/api/entitlements", async (req, res) => {
         cancelAtPeriodEnd: Boolean(zakiUser.cancel_at_period_end),
       },
       access: {
-        active: accessActive,
+        active: access.active,
         readOnly,
         expiresAt: access.expiresAt,
         campaign: access.campaign,
       },
+      effective: {
+        tier: effective.tier,
+        status: effective.status,
+        source: effective.source,
+        premium: effective.premium,
+      },
       features: {
-        premium: premiumActive,
+        premium: effective.premium,
         imageGeneration: hasPersonal,
-        advancedModels: premiumActive,
+        advancedModels: effective.premium,
         deepResearch: hasPersonal,
         agentMode: hasPersonal,
       },
