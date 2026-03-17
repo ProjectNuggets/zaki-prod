@@ -1,9 +1,9 @@
 export const APP_CHAT_SURFACE = "app_chat";
 export const ZAKI_BOT_SURFACE = "zaki_bot";
 
-export const DEFAULT_APP_CHAT_DAILY_PROMPT_LIMIT = 5;
+export const DEFAULT_APP_CHAT_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_APP_CHAT_DAILY_PROMPT_BUCKET = APP_CHAT_SURFACE;
-export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_LIMIT = 5;
+export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_BUCKET = ZAKI_BOT_SURFACE;
 
 function parsePositiveInteger(raw, fallback) {
@@ -74,8 +74,10 @@ export function buildDailyLimitExceededPayload({
   const normalizedSurface = resolveQuotaSurface(surface);
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
     return {
-      error: `You reached today's ZAKI BOT limit (${limit}). Resets at ${resetAt}. BOT premium is coming soon.`,
-      message: `You reached today's ZAKI BOT limit (${limit}). Resets at ${resetAt}. BOT premium is coming soon.`,
+      error:
+        "You reached today's free experimental limit. Free usage resets daily and may vary with traffic and prompt complexity.",
+      message:
+        "You reached today's free experimental limit. Free usage resets daily and may vary with traffic and prompt complexity.",
       code: "daily_limit_reached",
       surface: ZAKI_BOT_SURFACE,
       limit,
@@ -84,8 +86,8 @@ export function buildDailyLimitExceededPayload({
     };
   }
   return {
-    error: `You reached today's free limit (${limit}).`,
-    message: `You reached today's free limit (${limit}).`,
+    error: "You reached today's free limit. Free usage resets daily.",
+    message: "You reached today's free limit. Free usage resets daily.",
     code: "daily_limit_reached",
     surface: APP_CHAT_SURFACE,
     limit,

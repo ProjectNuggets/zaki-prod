@@ -87,4 +87,19 @@ describe("InputArea primary action button", () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox")).toBeDisabled();
   });
+
+  it("renders a qualitative quota badge without numeric counters", () => {
+    render(
+      <InputArea
+        onSend={jest.fn()}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        quotaBadge={{ label: "Limited free usage", tone: "warning" }}
+        zakiBotMode
+      />
+    );
+
+    expect(screen.getByText("Limited free usage")).toBeInTheDocument();
+    expect(screen.queryByText("0/10")).not.toBeInTheDocument();
+  });
 });

@@ -35,8 +35,7 @@ export function InputArea({
   sendLocked?: boolean;
   zakiBotMode?: boolean;
   quotaBadge?: {
-    remaining: number;
-    limit: number;
+    label: string;
     tone: "neutral" | "warning" | "danger";
   } | null;
 }) {
@@ -560,7 +559,7 @@ export function InputArea({
                   : "border-zaki-subtle bg-white text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-muted"
             )}
           >
-            {quotaBadge.remaining}/{quotaBadge.limit}
+            {quotaBadge.label}
           </span>
         </div>
       ) : null}
