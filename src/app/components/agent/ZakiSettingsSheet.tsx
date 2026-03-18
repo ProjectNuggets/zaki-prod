@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, Brain, ShieldCheck, Sparkles, Volume2, X } from "lucide-react";
+import { Bot, Brain, Sparkles, Volume2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import {
-  useBillingConfig,
-  useCancelSubscription,
-  useEntitlements,
-} from "@/queries";
 import {
   connectBotTelegram,
   disconnectBotTelegram,
@@ -22,10 +16,7 @@ import {
   type BotOnboardingState,
   type BotSettingsPatch,
   type BotSettingsProfile,
-  type BotUsageSummary,
 } from "@/lib/api";
-import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
-import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
@@ -33,7 +24,6 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/compone
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  onOpenGeneralSettings: () => void;
 };
 
 type BannerState =
@@ -41,7 +31,8 @@ type BannerState =
   | { tone: "error"; text: string }
   | null;
 
-type SectionValue = "core" | "workspace" | "limits" | "advanced";
+type SectionValue = "core" | "workspace";
+type OpenSectionValue = SectionValue | "";
 type ChannelValue = "telegram" | "slack" | "discord" | null;
 
 type SettingsDraft = {
@@ -64,22 +55,22 @@ const FALLBACK_CHANNEL_STEPS = {
   slack: [
     "Open your Slack workspace admin apps page.",
     "Add the ZAKI Slack app when it is available to your workspace.",
-    "Complete authorization to let ZAKI BOT receive mentions and send replies.",
+    "Complete authorization to let ZAKI receive mentions and send replies.",
   ],
   discord: [
     "Open your Discord server settings and app integrations.",
-    "Invite the ZAKI BOT app to the target server.",
-    "Grant message and channel permissions so ZAKI BOT can respond when enabled.",
+    "Invite the ZAKI app to the target server.",
+    "Grant message and channel permissions so ZAKI can respond when enabled.",
   ],
 } as const;
 
 const ERROR_COPY: Record<BotErrorCode, string> = {
-  temporary_contention: "ZAKI BOT is busy on another node. Retry shortly.",
-  unauthorized: "Sign in again to manage your ZAKI BOT space.",
-  forbidden: "This ZAKI BOT action is not available for your account.",
+  temporary_contention: "ZAKI is busy on another node. Retry shortly.",
+  unauthorized: "Sign in again to manage your ZAKI space.",
+  forbidden: "This ZAKI action is not available for your account.",
   invalid_telegram_token: "The Telegram token is invalid. Check it and try again.",
-  provision_failed: "We could not provision your ZAKI BOT space right now.",
-  settings_update_failed: "We could not save your ZAKI BOT settings.",
+  provision_failed: "We could not provision your ZAKI space right now.",
+  settings_update_failed: "We could not save your ZAKI settings.",
   usage_unavailable: "Usage is temporarily unavailable.",
 };
 
@@ -202,7 +193,7 @@ function CompactRow({
   children?: ReactNode;
 }) {
   return (
-    <div className="group rounded-[20px] border border-zaki-subtle/80 bg-[#fff9f3] px-3.5 py-3 dark:border-[#2d2219] dark:bg-[#120e0b]">
+    <div className="group rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 transition-colors dark:border-[#2b2119] dark:bg-[#17120f]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
@@ -219,7 +210,7 @@ function CompactRow({
         </div>
         {control ? <div className="w-full shrink-0 sm:w-[220px]">{control}</div> : null}
       </div>
-      {children ? <div className="mt-3 border-t border-zaki-subtle/80 pt-3 dark:border-[#2d2219]">{children}</div> : null}
+      {children ? <div className="mt-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">{children}</div> : null}
     </div>
   );
 }
@@ -235,7 +226,7 @@ function SectionBadge({
 }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
-      <div className="mt-0.5 inline-flex size-9 items-center justify-center rounded-2xl border border-zaki-brand/20 bg-zaki-brand/10 text-zaki-brand dark:border-zaki-brand/20 dark:bg-zaki-brand/15">
+      <div className="mt-0.5 inline-flex size-9 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
         <Icon className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -250,25 +241,20 @@ function SectionBadge({
   );
 }
 
-export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Props) {
-  const { t, i18n } = useTranslation();
+export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data: entitlementsResult } = useEntitlements();
-  const { data: billingConfigResult } = useBillingConfig();
-  const cancelSubscription = useCancelSubscription();
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
   const [settings, setSettings] = useState<BotSettingsProfile | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(DEFAULT_SETTINGS);
-  const [usage, setUsage] = useState<BotUsageSummary | null>(null);
-  const [usageUnavailable, setUsageUnavailable] = useState(false);
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramWebhookUrl, setTelegramWebhookUrl] = useState("");
   const [savingOnboarding, setSavingOnboarding] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
-  const [openSection, setOpenSection] = useState<SectionValue>("core");
+  const [openSection, setOpenSection] = useState<OpenSectionValue>("");
   const [expandedChannel, setExpandedChannel] = useState<ChannelValue>(null);
 
   const setup = useMemo(
@@ -286,35 +272,6 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
   const discordMeta = getChannelMeta(discordSetup);
   const onboardingSummary = getSetupSummary(setup);
 
-  const entitlements = entitlementsResult?.data ?? null;
-  const planTier = entitlements?.plan?.tier ?? "free";
-  const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
-  const cancelAtPeriodEnd = Boolean(entitlements?.plan?.cancelAtPeriodEnd);
-  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
-  const isPremium = effectiveEntitlement.premium;
-  const hasSubscription = hasActiveSubscription(entitlements);
-  const effectiveStatus = effectiveEntitlement.status;
-  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
-  const billingConfig = billingConfigResult?.data?.configured;
-  const billingConfigLoaded = Boolean(billingConfigResult);
-  const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
-  const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
-  const accessExpiryLabel = useMemo(() => {
-    if (!accessExpiresAt) return null;
-    const parsed = new Date(accessExpiresAt);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  }, [accessExpiresAt]);
-  const effectiveStatusLabel = t(`settingsModal.plan.statusValues.${effectiveStatus}`, {
-    defaultValue: effectiveStatus,
-  });
-  const currentPlanLabel = activeViaAccessCode
-    ? t("sidebar.profile.planBadge.codeActive")
-    : t(`sidebar.profile.planBadge.${planTier}`, { defaultValue: planTier });
   const settingsDirty =
     settingsDraft.assistant_mode !== (settings?.assistant_mode ?? DEFAULT_SETTINGS.assistant_mode) ||
     settingsDraft.group_activation !== (settings?.group_activation ?? DEFAULT_SETTINGS.group_activation) ||
@@ -347,22 +304,6 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
     onboarding?.completed_at_s ?? null,
     t("zakiSettingsSheet.workspace.setupNotCompleted")
   );
-  const usageSummary = usageUnavailable
-    ? t("zakiSettingsSheet.limits.usageUnavailable")
-    : t("zakiSettingsSheet.limits.usageSummary", {
-        requests: usage?.requests_day ?? 0,
-        state: usage?.state ?? effectiveStatusLabel,
-      });
-  const planSummary = activeViaAccessCode && accessExpiryLabel
-    ? t("zakiSettingsSheet.limits.planSummaryWithExpiry", {
-        plan: currentPlanLabel,
-        status: effectiveStatusLabel,
-        expiry: accessExpiryLabel,
-      })
-    : t("zakiSettingsSheet.limits.planSummary", {
-        plan: currentPlanLabel,
-        status: effectiveStatusLabel,
-      });
   const getBotLoadErrorText = (payload: unknown, fallbackKey: string) => {
     if (getBotErrorMessage(payload) === "unknown_user_id") {
       return t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser");
@@ -389,7 +330,6 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
     async function loadBotSpace() {
       setLoading(true);
       setBanner(null);
-      setUsageUnavailable(false);
 
       const [onboardingResult, settingsResult, usageResult] = await Promise.allSettled([
         fetchBotOnboarding(),
@@ -442,17 +382,9 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
       }
 
       if (usageResult.status === "fulfilled") {
-        const { response, data } = usageResult.value;
-        if (response.ok) {
-          setUsage(data);
-          setUsageUnavailable(false);
-        } else {
-          setUsage(null);
-          setUsageUnavailable(getBotErrorCode(data) === "usage_unavailable");
-        }
+        void usageResult.value;
       } else {
-        setUsage(null);
-        setUsageUnavailable(true);
+        void usageResult.reason;
       }
 
       setLoading(false);
@@ -469,7 +401,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
     if (isOpen) return;
     setTelegramToken("");
     setTelegramWebhookUrl("");
-    setOpenSection("core");
+    setOpenSection("");
     setExpandedChannel(null);
   }, [isOpen]);
 
@@ -498,7 +430,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
     if (!response.ok) {
       setBanner({
         tone: "error",
-        text: getBotErrorText(data, "Unable to save ZAKI BOT settings."),
+        text: getBotErrorText(data, "Unable to save ZAKI settings."),
       });
       return false;
     }
@@ -524,28 +456,26 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
       <SheetContent
         side="right"
         hideCloseButton
-        className="w-full max-w-[100vw] gap-0 border-l border-zaki-subtle bg-[#f7efe6] p-0 text-zaki-primary sm:max-w-[720px] dark:border-[#2d2219] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+        className="w-full max-w-[100vw] gap-0 border-l border-[#eadcca] bg-[#f6f1ea] p-0 text-zaki-primary sm:max-w-[720px] dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-52 bg-[radial-gradient(circle_at_top_right,rgba(229,106,84,0.15),transparent_55%),radial-gradient(circle_at_top_left,rgba(33,145,113,0.12),transparent_50%)]" />
-
         <div className="relative flex h-full flex-col">
-          <div className="sticky top-0 z-20 border-b border-zaki-subtle/80 bg-[#f7efe6]/95 px-5 py-4 backdrop-blur dark:border-[#2d2219] dark:bg-[#120e0b]/95">
+          <div className="sticky top-0 z-20 border-b border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2d2219] dark:bg-[#1a140f] dark:text-zaki-dark-muted">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c8] bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2d231b] dark:bg-[#1a140f] dark:text-zaki-dark-muted">
                   <Sparkles className="size-3.5 text-zaki-brand" />
                   {t("zakiSettingsSheet.badge")}
                 </div>
-                <SheetTitle className="mt-3 text-[1.75rem] font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
+                <SheetTitle className="mt-3 text-2xl font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
                   {t("zakiSettingsSheet.title")}
                 </SheetTitle>
-                <SheetDescription className="mt-2 max-w-[52ch] text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                <SheetDescription className="mt-2 max-w-[42ch] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
                   {headerSummary}
                 </SheetDescription>
               </div>
               <button
                 type="button"
-                className="inline-flex size-10 items-center justify-center rounded-2xl border border-zaki-subtle bg-white/85 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary dark:border-[#2d2219] dark:bg-[#18120d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
+                className="inline-flex size-10 items-center justify-center rounded-2xl border border-[#e6d8c8] bg-white/88 text-zaki-muted transition-colors hover:bg-[#f0e8de] hover:text-zaki-primary dark:border-[#2d231b] dark:bg-[#18120d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
                 onClick={onClose}
                 aria-label={t("zakiSettingsSheet.closeAria")}
               >
@@ -554,13 +484,10 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-zaki-primary dark:bg-[#1a140f] dark:text-zaki-dark-primary">
-                {currentPlanLabel}
-              </span>
-              <span className="rounded-full border border-zaki-subtle bg-white/70 px-3 py-1 text-xs text-zaki-secondary dark:border-[#2d2219] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
+              <span className="rounded-full border border-[#e6d8c8] bg-white/70 px-3 py-1 text-xs text-zaki-secondary dark:border-[#2d231b] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
                 {setupStatusLabel}
               </span>
-              <span className="rounded-full border border-zaki-subtle bg-white/70 px-3 py-1 text-xs text-zaki-secondary dark:border-[#2d2219] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
+              <span className="rounded-full border border-[#e6d8c8] bg-white/70 px-3 py-1 text-xs text-zaki-secondary dark:border-[#2d231b] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
                 {responseStyleLabel}
               </span>
             </div>
@@ -568,7 +495,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
             {banner ? (
               <div
                 className={cn(
-                  "mt-4 rounded-[18px] border px-4 py-3 text-sm",
+                  "mt-4 rounded-2xl border px-4 py-3 text-sm",
                   banner.tone === "success"
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200"
                     : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200"
@@ -584,14 +511,14 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
               type="single"
               collapsible
               value={openSection}
-              onValueChange={(value) => setOpenSection((value as SectionValue) || "core")}
-              className="space-y-3"
+              onValueChange={(value) => setOpenSection((value as OpenSectionValue) || "")}
+              className="space-y-0"
             >
               <AccordionItem
                 value="core"
-                className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 px-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-[#2d2219] dark:bg-[#18120d]"
+                className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]"
               >
-                <AccordionTrigger className="py-4 no-underline hover:no-underline">
+                <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Volume2}
                     title={t("zakiSettingsSheet.sections.core.title")}
@@ -601,7 +528,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                     })}
                   />
                 </AccordionTrigger>
-                <AccordionContent className="pb-4">
+                <AccordionContent className="pb-6">
                   <div className="space-y-3">
                     <CompactRow
                       title={t("zakiSettingsSheet.fields.responseStyle.title")}
@@ -741,9 +668,9 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
 
               <AccordionItem
                 value="workspace"
-                className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 px-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-[#2d2219] dark:bg-[#18120d]"
+                className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]"
               >
-                <AccordionTrigger className="py-4 no-underline hover:no-underline">
+                <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Brain}
                     title={t("zakiSettingsSheet.sections.workspace.title")}
@@ -753,7 +680,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                     })}
                   />
                 </AccordionTrigger>
-                <AccordionContent className="pb-4">
+                <AccordionContent className="pb-6">
                   <div className="space-y-3">
                     <CompactRow
                       title={t("zakiSettingsSheet.workspace.memoryTitle")}
@@ -810,7 +737,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                               if (!response.ok) {
                                 setBanner({
                                   tone: "error",
-                                  text: getBotErrorText(data, "Unable to provision ZAKI BOT."),
+                                  text: getBotErrorText(data, "Unable to provision ZAKI."),
                                 });
                                 return;
                               }
@@ -907,7 +834,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                           return (
                             <div
                               key={channel.key}
-                              className="rounded-[18px] border border-zaki-subtle/80 bg-white px-3.5 py-3 dark:border-[#2d2219] dark:bg-[#14100d]"
+                              className="rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]"
                             >
                               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0">
@@ -946,15 +873,15 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
 
                               {expanded ? (
                                 channel.key === "telegram" ? (
-                                  <div className="mt-3 grid gap-3 border-t border-zaki-subtle/80 pt-3 dark:border-[#2d2219]">
+                                  <div className="mt-3 grid gap-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">
                                     <input
-                                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+                                      className="w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
                                       placeholder={t("zakiSettingsSheet.workspace.telegramToken")}
                                       value={telegramToken}
                                       onChange={(event) => setTelegramToken(event.target.value)}
                                     />
                                     <input
-                                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+                                      className="w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
                                       placeholder={t("zakiSettingsSheet.workspace.telegramWebhook")}
                                       value={telegramWebhookUrl}
                                       onChange={(event) => setTelegramWebhookUrl(event.target.value)}
@@ -1033,7 +960,7 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                                     </div>
                                   </div>
                                 ) : (
-                                  <ol className="mt-3 space-y-2 border-t border-zaki-subtle/80 pt-3 text-xs leading-5 text-zaki-secondary dark:border-[#2d2219] dark:text-zaki-dark-subtle">
+                                  <ol className="mt-3 space-y-2 border-t border-[#e6d8c8] pt-3 text-xs leading-5 text-zaki-secondary dark:border-[#2b2119] dark:text-zaki-dark-subtle">
                                     {channel.steps.map((step) => (
                                       <li key={step} className="flex gap-2">
                                         <span className="mt-[6px] size-1.5 shrink-0 rounded-full bg-zaki-brand" />
@@ -1052,187 +979,16 @@ export function ZakiSettingsSheet({ isOpen, onClose, onOpenGeneralSettings }: Pr
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem
-                value="limits"
-                className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 px-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-[#2d2219] dark:bg-[#18120d]"
-              >
-                <AccordionTrigger className="py-4 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={Sparkles}
-                    title={t("zakiSettingsSheet.sections.limits.title")}
-                    summary={planSummary}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-4">
-                  <div className="space-y-3">
-                    <CompactRow
-                      title={t("zakiSettingsSheet.limits.currentPlanTitle")}
-                      summary={planSummary}
-                      helper={t("zakiSettingsSheet.limits.currentPlanHelper")}
-                      control={
-                        <div className="flex flex-col gap-2 sm:items-end">
-                          <button
-                            type="button"
-                            className="zaki-btn-sm zaki-btn-secondary"
-                            onClick={() => {
-                              void trackProductEvent({
-                                event: "pricing_viewed",
-                                source: "settings",
-                                language: languageValue === "ar" ? "ar" : "en",
-                                plan:
-                                  effectiveEntitlement.tier === "student" ||
-                                  effectiveEntitlement.tier === "personal"
-                                    ? effectiveEntitlement.tier
-                                    : "free",
-                                interval: null,
-                              }).catch(() => {
-                                // Best-effort telemetry only.
-                              });
-                              onClose();
-                              navigate("/pricing?source=settings");
-                            }}
-                          >
-                            {t("settingsModal.plan.viewPricing")}
-                          </button>
-                          <button
-                            type="button"
-                            className="zaki-btn-sm zaki-btn-primary"
-                            onClick={() => {
-                              if (!isPremium) {
-                                void trackProductEvent({
-                                  event: "upgrade_cta_clicked",
-                                  source: "settings",
-                                  language: languageValue === "ar" ? "ar" : "en",
-                                  plan: "personal",
-                                  interval: "monthly",
-                                }).catch(() => {
-                                  // Best-effort telemetry only.
-                                });
-                              }
-                              onClose();
-                              navigate("/pricing?source=settings");
-                            }}
-                          >
-                            {activeViaAccessCode
-                              ? t("settingsModal.plan.manageAccess")
-                              : hasSubscription
-                              ? t("settingsModal.plan.managePlan")
-                              : t("settingsModal.plan.upgrade")}
-                          </button>
-                          {hasSubscription ? (
-                            <button
-                              type="button"
-                              className="zaki-btn-sm border border-zaki-strong text-zaki-brand transition-colors hover:bg-zaki-error disabled:opacity-50 dark:border-[#643126] dark:text-[#ff9c86] dark:hover:bg-[rgba(210,68,48,0.15)]"
-                              onClick={async () => {
-                                try {
-                                  if (!billingCancelEnabled) {
-                                    throw new Error(t("settingsModal.plan.errors.cancelUnavailable"));
-                                  }
-                                  const result = await cancelSubscription.mutateAsync();
-                                  toast.success(
-                                    result?.alreadyScheduled
-                                      ? t("settingsModal.plan.success.cancelAlreadyScheduled")
-                                      : t("settingsModal.plan.success.cancelScheduled")
-                                  );
-                                } catch (error) {
-                                  toast.error(
-                                    error instanceof Error
-                                      ? error.message
-                                      : t("settingsModal.plan.errors.cancelSubscription")
-                                  );
-                                }
-                              }}
-                              disabled={
-                                cancelAtPeriodEnd || cancelSubscription.isPending || !billingCancelEnabled
-                              }
-                            >
-                              {cancelAtPeriodEnd
-                                ? t("settingsModal.plan.cancellationScheduled")
-                                : t("settingsModal.plan.cancelSubscription")}
-                            </button>
-                          ) : null}
-                        </div>
-                      }
-                    />
-
-                    <CompactRow
-                      title={t("zakiSettingsSheet.limits.usageTitle")}
-                      summary={usageSummary}
-                      helper={t("zakiSettingsSheet.limits.usageHelper")}
-                      control={
-                        <div className="rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 text-sm font-semibold text-zaki-primary dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary">
-                          {usage?.requests_day ?? 0}
-                        </div>
-                      }
-                    />
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem
-                value="advanced"
-                className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 px-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-[#2d2219] dark:bg-[#18120d]"
-              >
-                <AccordionTrigger className="py-4 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={ShieldCheck}
-                    title={t("zakiSettingsSheet.sections.advanced.title")}
-                    summary={t("zakiSettingsSheet.sections.advanced.summary")}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-4">
-                  <div className="space-y-3">
-                    <CompactRow
-                      title={t("zakiSettingsSheet.advanced.generalSettingsTitle")}
-                      summary={t("zakiSettingsSheet.advanced.generalSettingsSummary")}
-                      helper={t("zakiSettingsSheet.advanced.generalSettingsHelper")}
-                      control={
-                        <button
-                          type="button"
-                          className="zaki-btn-sm zaki-btn-secondary"
-                          onClick={() => {
-                            onClose();
-                            onOpenGeneralSettings();
-                          }}
-                        >
-                          {t("zakiSettingsSheet.actions.openSettings")}
-                        </button>
-                      }
-                    />
-
-                    <CompactRow
-                      title={t("zakiSettingsSheet.advanced.helpTitle")}
-                      summary={t("zakiSettingsSheet.advanced.helpSummary")}
-                      helper={t("zakiSettingsSheet.advanced.helpHelper")}
-                      control={
-                        <button
-                          type="button"
-                          className="zaki-btn-sm zaki-btn-secondary"
-                          onClick={() => {
-                            onClose();
-                            navigate("/help");
-                          }}
-                        >
-                          {t("zakiSettingsSheet.actions.openHelp")}
-                        </button>
-                      }
-                    />
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
             </Accordion>
           </div>
 
-          <div className="sticky bottom-0 z-20 border-t border-zaki-subtle/80 bg-[#f7efe6]/95 px-5 py-4 backdrop-blur dark:border-[#2d2219] dark:bg-[#120e0b]/95">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                <span>{t("settingsModal.footer.changesApplyImmediately")}</span>
-                {settingsDirty ? (
-                  <span className="rounded-full border border-zaki-brand/20 bg-zaki-brand/10 px-2 py-0.5 text-[11px] font-semibold text-zaki-brand">
-                    {t("zakiSettingsSheet.footer.unsaved")}
-                  </span>
-                ) : null}
-              </div>
+          <div className="sticky bottom-0 z-20 border-t border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {settingsDirty ? (
+                <span className="me-auto rounded-full border border-zaki-brand/20 bg-zaki-brand/10 px-2.5 py-1 text-[11px] font-semibold text-zaki-brand">
+                  {t("zakiSettingsSheet.footer.unsaved")}
+                </span>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <button type="button" className="zaki-btn zaki-btn-secondary" onClick={onClose}>
                   {t("settingsModal.footer.cancel")}

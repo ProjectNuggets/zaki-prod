@@ -1,6 +1,6 @@
 import { 
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
-  EditIcon, ChevronDownIcon, CenterLogo
+  ChevronDownIcon, CenterLogo
 } from "./icons";
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,7 +112,7 @@ export function Sidebar() {
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
   const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);
   const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<SidebarSpace | null>(null);
-  const [spaceDescriptionDraft, setSpaceDescriptionDraft] = useState("");
+  const [spaceNameDraft, setSpaceNameDraft] = useState("");
   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ type: "space" | "thread"; id: string; label: string } | null>(null);
@@ -256,13 +256,6 @@ export function Sidebar() {
       event.currentTarget.blur();
     }
   };
-
-  const openSpacesView = useCallback(() => {
-    setActiveItem("spaces");
-    setSpaceSearchQuery("");
-    goToSpaces();
-    window.dispatchEvent(new Event("zaki:view-spaces"));
-  }, [goToSpaces]);
 
   const openCreateSpaceFlow = useCallback(() => {
     setSpaceSearchQuery("");
@@ -936,6 +929,7 @@ export function Sidebar() {
     const handleUpdateSpace = (event: Event) => {
       const detail = (event as CustomEvent<{
         id: string;
+        name?: string;
         instructions?: string;
         pinnedFiles?: PinnedFile[];
         icon?: string;
@@ -950,6 +944,9 @@ export function Sidebar() {
           space.id === detail.id
             ? {
                 ...space,
+                title: typeof detail.name === "string" && detail.name.trim().length > 0
+                  ? detail.name.trim()
+                  : space.title,
                 instructions: detail.instructions ?? space.instructions,
                 pinnedFiles: detail.pinnedFiles ? detail.pinnedFiles : space.pinnedFiles,
                 icon: space.fixed ? space.icon : detail.icon ?? space.icon,
@@ -960,6 +957,12 @@ export function Sidebar() {
         )
       );
       const updatePayload: Record<string, unknown> = {};
+      if (typeof detail.name === "string") {
+        const normalizedName = detail.name.trim();
+        if (normalizedName) {
+          updatePayload.name = normalizedName;
+        }
+      }
       if (typeof detail.description === "string") {
         updatePayload.description = detail.description.trim();
       }
@@ -1047,7 +1050,7 @@ export function Sidebar() {
       const target = spaces.find((space) => space.id === detail?.id);
       if (!target) return;
       setSpaceSettingsTarget(target);
-      setSpaceDescriptionDraft(target.description ?? "");
+      setSpaceNameDraft(target.title ?? "");
       setSpaceSettingsOpen(true);
     };
     const handleDeleteSpace = (event: Event) => {
@@ -1123,19 +1126,6 @@ export function Sidebar() {
               data-onboarding-id="sidebar-create-space"
             >
               <AddIcon />
-            </button>
-            <button
-              className={cn(
-                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                isActive("spaces") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
-              )}
-              onClick={openSpacesView}
-              onMouseUp={blurButtonOnPointerClick}
-              type="button"
-              title={t("sidebar.nav.spaces")}
-              aria-label={t("sidebar.actions.viewSpaces")}
-            >
-              <EditIcon />
             </button>
             <button
               className={cn(
@@ -1241,21 +1231,6 @@ export function Sidebar() {
             <AddIcon />
           </div>
           <span className="text-zaki-brand text-sm font-medium">{t("sidebar.nav.newSpace")}</span>
-        </button>
-
-        <button
-          className={cn(
-            "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-            isActive("spaces") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
-          )}
-          onClick={openSpacesView}
-          onMouseUp={blurButtonOnPointerClick}
-          type="button"
-        >
-          <div className="size-5 flex items-center justify-center">
-             <EditIcon />
-          </div>
-          <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.spaces")}</span>
         </button>
 
         <div className="relative group">
@@ -1527,7 +1502,7 @@ export function Sidebar() {
                         className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                         onClick={() => {
                           setSpaceSettingsTarget(space);
-                          setSpaceDescriptionDraft(space.description ?? "");
+                          setSpaceNameDraft(space.title ?? "");
                           setSpaceSettingsOpen(true);
                         }}
                         aria-label={`${space.title} settings`}
@@ -1974,22 +1949,23 @@ export function Sidebar() {
       <ZakiSettingsSheet
         isOpen={zakiSettingsOpen}
         onClose={() => setZakiSettingsOpen(false)}
-        onOpenGeneralSettings={() => setSettingsModalOpen(true)}
       />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}
         space={spaceSettingsTarget}
-        descriptionDraft={spaceDescriptionDraft}
-        onDescriptionChange={setSpaceDescriptionDraft}
+        nameDraft={spaceNameDraft}
+        onNameChange={setSpaceNameDraft}
         onClose={() => {
           setSpaceSettingsOpen(false);
           setSpaceSettingsTarget(null);
         }}
         onSave={() => {
           if (!spaceSettingsTarget) return;
+          const trimmedName = spaceNameDraft.trim();
+          if (!trimmedName) return;
           window.dispatchEvent(
             new CustomEvent("zaki:update-space", {
-              detail: { id: spaceSettingsTarget.id, description: spaceDescriptionDraft.trim() },
+              detail: { id: spaceSettingsTarget.id, name: trimmedName },
             })
           );
           setSpaceSettingsOpen(false);

@@ -19,8 +19,8 @@ type SpaceTarget = {
 type Props = {
   isOpen: boolean;
   space: SpaceTarget | null;
-  descriptionDraft: string;
-  onDescriptionChange: (value: string) => void;
+  nameDraft: string;
+  onNameChange: (value: string) => void;
   onClose: () => void;
   onSave: () => void;
   onEditInstructions: () => void;
@@ -31,11 +31,19 @@ type Props = {
   fileStatusTone: Record<"embedded" | "processing" | "failed", FileStatusTone>;
 };
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
+      {children}
+    </div>
+  );
+}
+
 export function SpaceSettingsSheet({
   isOpen,
   space,
-  descriptionDraft,
-  onDescriptionChange,
+  nameDraft,
+  onNameChange,
   onClose,
   onSave,
   onEditInstructions,
@@ -55,15 +63,13 @@ export function SpaceSettingsSheet({
       <SheetContent
         side="right"
         hideCloseButton
-        className="w-full max-w-[100vw] gap-0 border-l border-zaki-subtle bg-[#f7efe6] p-0 text-zaki-primary sm:max-w-[720px] dark:border-zaki-dark dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+        className="w-full max-w-[100vw] gap-0 border-l border-[#eadcca] bg-[#f6f1ea] p-0 text-zaki-primary sm:max-w-[720px] dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_top_right,rgba(229,106,84,0.18),transparent_58%),radial-gradient(circle_at_top_left,rgba(33,145,113,0.12),transparent_52%)]" />
-
         <div className="relative flex h-full flex-col">
-          <div className="sticky top-0 z-20 border-b border-zaki-subtle/80 bg-[#f7efe6]/95 px-5 py-4 backdrop-blur dark:border-zaki-dark dark:bg-[#120e0b]/95">
+          <div className="sticky top-0 z-20 border-b border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-zaki-dark dark:bg-[#1a140f] dark:text-zaki-dark-muted">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c8] bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2d231b] dark:bg-[#1a140f] dark:text-zaki-dark-muted">
                   {t("sidebar.spaceSettings")}
                 </div>
                 <SheetTitle className="mt-3 text-2xl font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
@@ -75,7 +81,7 @@ export function SpaceSettingsSheet({
               </div>
               <button
                 type="button"
-                className="inline-flex size-10 items-center justify-center rounded-2xl border border-zaki-subtle bg-white/80 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary dark:border-zaki-dark dark:bg-[#18120d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
+                className="inline-flex size-10 items-center justify-center rounded-2xl border border-[#e6d8c8] bg-white/88 text-zaki-muted transition-colors hover:bg-[#f0e8de] hover:text-zaki-primary dark:border-[#2d231b] dark:bg-[#18120d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
                 onClick={onClose}
                 aria-label={t("sidebar.spaceSettings")}
               >
@@ -85,44 +91,32 @@ export function SpaceSettingsSheet({
           </div>
 
           <div className="relative flex-1 overflow-y-auto px-5 py-5">
-            <div className="space-y-5">
-              <section className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 p-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-zaki-dark dark:bg-[#18120d]">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
-                  {t("sidebar.basics")}
-                </div>
-                <label className="mt-3 block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
-                    {isRtl ? "الوصف" : "Description"}
-                  </span>
-                  <textarea
-                    className="mt-2 w-full rounded-[18px] border border-zaki-subtle bg-[#fff9f3] px-3 py-3 text-sm text-zaki-secondary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-zaki-dark dark:bg-[#120e0b] dark:text-zaki-dark-subtle"
-                    rows={4}
-                    maxLength={200}
-                    value={descriptionDraft}
-                    onChange={(event) => onDescriptionChange(event.target.value)}
-                    placeholder={
-                      isRtl
-                        ? "صف ما الذي خُصصت له هذه المساحة..."
-                        : "Describe what this space is for..."
-                    }
-                  />
-                  <div className="mt-2 text-right text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                    {descriptionDraft.length}/200
-                  </div>
+            <div className="space-y-8">
+              <section className="border-b border-[#e6d8c8] pb-6 dark:border-[#2b2119]">
+                <label className="block">
+                  <SectionLabel>{isRtl ? "اسم المساحة" : "Space name"}</SectionLabel>
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-[#ddd0c1] bg-white px-4 py-3 text-sm text-zaki-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#17120f] dark:text-zaki-dark-primary"
+                    type="text"
+                    maxLength={80}
+                    value={nameDraft}
+                    onChange={(event) => onNameChange(event.target.value)}
+                  placeholder={
+                    isRtl ? "اكتب اسمًا واضحًا للمساحة" : "Give this space a clear name"
+                  }
+                />
                 </label>
               </section>
 
-              <section className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 p-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-zaki-dark dark:bg-[#18120d]">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
-                  {t("sidebar.sharedContext")}
-                </div>
+              <section className="border-b border-[#e6d8c8] pb-6 dark:border-[#2b2119]">
+                <SectionLabel>{t("sidebar.sharedContext")}</SectionLabel>
                 <p className="mt-2 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
                   {t("sidebar.sharedContextSubtitle")}
                 </p>
-                <div className="mt-4 grid gap-3">
+                <div className="mt-4 space-y-3">
                   <button
                     type="button"
-                    className="w-full rounded-[18px] border border-zaki-subtle bg-[#fff9f3] px-3.5 py-3 text-left transition-colors hover:border-zaki-brand/30 hover:bg-white dark:border-zaki-dark dark:bg-[#120e0b] dark:hover:bg-[#17110d]"
+                    className="w-full rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 text-left transition-colors hover:border-zaki-brand/30 hover:bg-[#fcfaf7] dark:border-[#2b2119] dark:bg-[#17120f] dark:hover:bg-[#1b1511]"
                     onClick={onEditInstructions}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -134,7 +128,7 @@ export function SpaceSettingsSheet({
                           {t("sidebar.instructionsBody")}
                         </div>
                       </div>
-                      <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
+                      <span className="shrink-0 rounded-full bg-[#f2e9de] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-[#221a15] dark:text-zaki-dark-subtle">
                         {t("sidebar.editAction")}
                       </span>
                     </div>
@@ -142,7 +136,7 @@ export function SpaceSettingsSheet({
 
                   <button
                     type="button"
-                    className="w-full rounded-[18px] border border-zaki-subtle bg-[#fff9f3] px-3.5 py-3 text-left transition-colors hover:border-zaki-brand/30 hover:bg-white dark:border-zaki-dark dark:bg-[#120e0b] dark:hover:bg-[#17110d]"
+                    className="w-full rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 text-left transition-colors hover:border-zaki-brand/30 hover:bg-[#fcfaf7] dark:border-[#2b2119] dark:bg-[#17120f] dark:hover:bg-[#1b1511]"
                     onClick={onUploadFiles}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -154,7 +148,7 @@ export function SpaceSettingsSheet({
                           {t("sidebar.knowledgeFilesBody")}
                         </div>
                       </div>
-                      <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
+                      <span className="shrink-0 rounded-full bg-[#f2e9de] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-[#221a15] dark:text-zaki-dark-subtle">
                         {t("sidebar.filesBadge", { count: space.pinnedFiles?.length ?? 0 })}
                       </span>
                     </div>
@@ -162,13 +156,11 @@ export function SpaceSettingsSheet({
                 </div>
               </section>
 
-              <section className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 p-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-zaki-dark dark:bg-[#18120d]">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
-                  {t("sidebar.contextSummaryTitle")}
-                </div>
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-start gap-3 rounded-[18px] border border-zaki-subtle bg-[#fff9f3] px-3.5 py-3 dark:border-zaki-dark dark:bg-[#120e0b]">
-                    <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
+              <section className="border-b border-[#e6d8c8] pb-6 dark:border-[#2b2119]">
+                <SectionLabel>{t("sidebar.contextSummaryTitle")}</SectionLabel>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="flex items-start gap-3 rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]">
+                    <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
                       <Brain className="size-4" />
                     </span>
                     <div>
@@ -180,8 +172,8 @@ export function SpaceSettingsSheet({
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3 rounded-[18px] border border-zaki-subtle bg-[#fff9f3] px-3.5 py-3 dark:border-zaki-dark dark:bg-[#120e0b]">
-                    <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
+                  <div className="flex items-start gap-3 rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]">
+                    <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
                       <FileText className="size-4" />
                     </span>
                     <div>
@@ -196,10 +188,8 @@ export function SpaceSettingsSheet({
                 </div>
               </section>
 
-              <section className="rounded-[24px] border border-zaki-subtle/80 bg-white/92 p-4 shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-zaki-dark dark:bg-[#18120d]">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-zaki-dark-muted">
-                  {t("sidebar.workspaceFilesTitle")}
-                </div>
+              <section className="border-b border-[#e6d8c8] pb-6 dark:border-[#2b2119]">
+                <SectionLabel>{t("sidebar.workspaceFilesTitle")}</SectionLabel>
                 <div className="mt-4 space-y-2">
                   {(space.pinnedFiles ?? []).length > 0 ? (
                     (space.pinnedFiles ?? []).map((file) => {
@@ -209,7 +199,7 @@ export function SpaceSettingsSheet({
                       return (
                         <div
                           key={`${file.name}:${file.size}:${file.type}:${file.location ?? ""}`}
-                          className="flex items-start justify-between gap-3 rounded-[18px] border border-zaki-subtle bg-[#fff9f3] px-3.5 py-3 dark:border-zaki-dark dark:bg-[#120e0b]"
+                          className="flex items-start justify-between gap-3 rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]"
                         >
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
@@ -227,7 +217,7 @@ export function SpaceSettingsSheet({
                           </div>
                           <button
                             type="button"
-                            className="shrink-0 rounded-full border border-zaki-subtle px-2.5 py-1 text-[11px] text-zaki-secondary hover:bg-zaki-hover disabled:opacity-50 dark:border-zaki-dark dark:text-zaki-dark-subtle dark:hover:bg-zaki-dark-hover"
+                            className="shrink-0 rounded-full border border-[#ddd0c1] px-2.5 py-1 text-[11px] text-zaki-secondary hover:bg-[#f3ebe1] disabled:opacity-50 dark:border-[#2b2119] dark:text-zaki-dark-subtle dark:hover:bg-[#211914]"
                             onClick={() => onRemoveFile(file)}
                             disabled={!file.location || removingDocumentKey === removeKey}
                           >
@@ -239,7 +229,7 @@ export function SpaceSettingsSheet({
                       );
                     })
                   ) : (
-                    <div className="rounded-[18px] border border-dashed border-zaki-subtle px-3 py-3 text-sm text-zaki-muted dark:border-zaki-dark dark:text-zaki-dark-muted">
+                    <div className="rounded-2xl border border-dashed border-[#dfd1c2] bg-[#fbf8f4] px-4 py-4 text-sm text-zaki-muted dark:border-[#2b2119] dark:bg-[#140f0c] dark:text-zaki-dark-muted">
                       {t("sidebar.workspaceFilesEmpty")}
                     </div>
                   )}
@@ -247,7 +237,7 @@ export function SpaceSettingsSheet({
               </section>
 
               {!space.fixed ? (
-                <section className="rounded-[24px] border border-rose-200/80 bg-rose-50/60 p-4 dark:border-rose-900/40 dark:bg-rose-950/10">
+                <section className="rounded-2xl border border-rose-200/80 bg-[rgba(210,68,48,0.05)] p-4 dark:border-rose-900/40 dark:bg-rose-950/10">
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-700/90 dark:text-rose-300">
                     {t("sidebar.dangerZone")}
                   </div>
@@ -256,7 +246,7 @@ export function SpaceSettingsSheet({
                   </div>
                   <button
                     type="button"
-                    className="mt-4 w-full rounded-[18px] border border-rose-200 bg-white px-3 py-2 text-left text-sm text-zaki-brand transition-colors hover:bg-[rgba(210,68,48,0.08)] dark:border-rose-900/40 dark:bg-zaki-dark-card"
+                    className="mt-4 w-full rounded-2xl border border-rose-200 bg-[#fff9f7] px-4 py-3 text-left text-sm text-zaki-brand transition-colors hover:bg-[rgba(210,68,48,0.08)] dark:border-rose-900/40 dark:bg-zaki-dark-card"
                     onClick={onDelete}
                   >
                     Delete space
@@ -266,23 +256,18 @@ export function SpaceSettingsSheet({
             </div>
           </div>
 
-          <div className="sticky bottom-0 z-20 border-t border-zaki-subtle/80 bg-[#f7efe6]/95 px-5 py-4 backdrop-blur dark:border-zaki-dark dark:bg-[#120e0b]/95">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                {t("sidebar.spaceSettingsSubtitle")}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="zaki-btn zaki-btn-secondary" onClick={onClose}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="zaki-btn bg-zaki-accent text-white transition-colors hover:bg-zaki-accent-hover"
-                  onClick={onSave}
-                >
-                  Save changes
-                </button>
-              </div>
+          <div className="sticky bottom-0 z-20 border-t border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button type="button" className="zaki-btn zaki-btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="zaki-btn bg-zaki-accent text-white transition-colors hover:bg-zaki-accent-hover"
+                onClick={onSave}
+              >
+                Save changes
+              </button>
             </div>
           </div>
         </div>

@@ -4,9 +4,6 @@ import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MoreVertical,
-  ArrowLeft,
-  ArrowRight,
-  ShieldCheck,
   Sparkles,
   Brain,
   CalendarClock,
@@ -23,7 +20,6 @@ import { cn } from "@/lib/utils";
 interface ZakiHomeViewProps {
   primarySpace: Space | null;
   onSendExample: (example: string) => void;
-  onStartConversation: () => void;
   onGoToThread: (spaceId: string, threadId: string) => void;
   onDeleteThread: (threadId: string, spaceId?: string) => void;
 }
@@ -69,7 +65,6 @@ function MissionCard({
   activeSlide,
   onSelect,
   icon,
-  carouselHint,
   getSlideAriaLabel,
 }: {
   label: string;
@@ -77,7 +72,6 @@ function MissionCard({
   activeSlide: number;
   onSelect: (index: number) => void;
   icon?: React.ReactNode;
-  carouselHint: string;
   getSlideAriaLabel: (index: number) => string;
 }) {
   return (
@@ -112,69 +106,6 @@ function MissionCard({
             />
           ))}
         </div>
-        <div className="mt-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted">
-          {carouselHint}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ExamplesCard({
-  label,
-  ramadanLabel,
-  activeSet,
-  examples,
-  isRtl,
-  onNext,
-  onSendExample,
-  nextAriaLabel,
-}: {
-  label: string;
-  ramadanLabel: string;
-  activeSet: number;
-  examples: string[];
-  isRtl: boolean;
-  onNext: () => void;
-  onSendExample: (example: string) => void;
-  nextAriaLabel: string;
-}) {
-  const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
-  return (
-    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-4 shadow-zaki-lg dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
-      <div className="flex items-center justify-between gap-2 min-h-[28px]">
-        <div className="flex items-center gap-2 justify-end text-right leading-none">
-          <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
-            {label}
-          </div>
-          {activeSet === 1 && (
-            <div className="text-2xs font-semibold uppercase tracking-wider text-zaki-brand leading-none">
-              {ramadanLabel}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center">
-          <button
-            type="button"
-            className="zaki-btn-sm size-10 p-0 border border-zaki bg-white flex items-center justify-center text-zaki-brand hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:bg-[#15100e] dark:text-zaki-brand dark:hover:bg-[#1d1512]"
-            onClick={onNext}
-            aria-label={nextAriaLabel}
-          >
-            <ArrowIcon className="size-5" />
-          </button>
-        </div>
-      </div>
-      <div className="mt-2 flex flex-col gap-1.5 rtl:text-right">
-        {examples.slice(0, 3).map((example) => (
-          <button
-            key={example}
-            type="button"
-            className="text-left text-sm leading-5 text-zaki-secondary hover:text-zaki-primary hover:bg-zaki-hover rounded-zaki-md px-2 py-1 transition-colors rtl:text-right dark:text-zaki-dark-subtle dark:hover:text-zaki-dark-primary dark:hover:bg-[#17110f]"
-            onClick={() => onSendExample(example)}
-          >
-            {example}
-          </button>
-        ))}
       </div>
     </div>
   );
@@ -192,15 +123,15 @@ function CapabilitiesCard({
   limitationsLabel: string;
 }) {
   return (
-    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-4 shadow-zaki-lg dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
-      <div className="grid gap-4 md:grid-cols-2">
+    <div className="mt-2 border-t border-zaki-subtle/80 pt-5 dark:border-[#2a2018]">
+      <div className="grid gap-6 md:grid-cols-2">
         <div className="rtl:text-right">
-          <div className="min-h-[28px] flex items-center text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
+          <div className="min-h-[20px] flex items-center text-[11px] text-zaki-muted font-semibold uppercase tracking-[0.18em] dark:text-zaki-dark-muted">
             {capabilitiesLabel}
           </div>
-          <ul className="mt-2 space-y-1 text-sm leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+          <ul className="mt-2 space-y-1.5 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
             {capabilities.map((item) => (
-              <li key={item} className="flex items-start gap-2 px-2 py-1 rtl:flex-row-reverse">
+              <li key={item} className="flex items-start gap-2 rtl:flex-row-reverse">
                 <span
                   className="mt-[6px] size-1.5 rounded-full bg-zaki-muted dark:bg-zaki-dark-muted"
                   aria-hidden="true"
@@ -211,12 +142,12 @@ function CapabilitiesCard({
           </ul>
         </div>
         <div className="rtl:text-right">
-          <div className="min-h-[28px] flex items-center text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
+          <div className="min-h-[20px] flex items-center text-[11px] text-zaki-muted font-semibold uppercase tracking-[0.18em] dark:text-zaki-dark-muted">
             {limitationsLabel}
           </div>
-          <ul className="mt-2 space-y-1 text-sm leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+          <ul className="mt-2 space-y-1.5 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
             {limitations.map((item) => (
-              <li key={item} className="flex items-start gap-2 px-2 py-1 rtl:flex-row-reverse">
+              <li key={item} className="flex items-start gap-2 rtl:flex-row-reverse">
                 <span
                   className="mt-[6px] size-1.5 rounded-full bg-zaki-muted dark:bg-zaki-dark-muted"
                   aria-hidden="true"
@@ -367,7 +298,6 @@ function MemoryPopover({
 export function ZakiHomeView({
   primarySpace,
   onSendExample,
-  onStartConversation,
   onGoToThread,
   onDeleteThread,
 }: ZakiHomeViewProps) {
@@ -381,7 +311,6 @@ export function ZakiHomeView({
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const [zakiMenuOpen, setZakiMenuOpen] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
-  const [activeExampleSet, setActiveExampleSet] = useState(0);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [conflictCount, setConflictCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -393,19 +322,12 @@ export function ZakiHomeView({
     width: 680,
     maxHeight: 560,
   });
-  const zakiExamples = t("empty.examples", { returnObjects: true }) as string[];
   const zakiMissionSlides = t("home.missionSlides", { returnObjects: true }) as MissionSlide[];
   const zakiNews = t("home.news", { returnObjects: true }) as NewsItem[];
   const quickStart = t("home.quickStart", { returnObjects: true }) as QuickStartItem[];
   const memoryCards = t("home.memoryCards", { returnObjects: true }) as MemoryCard[];
   const capabilities = t("home.capabilities", { returnObjects: true }) as string[];
   const limitations = t("home.limitations", { returnObjects: true }) as string[];
-  const ramadanExamples = t("home.ramadanExamples", { returnObjects: true }) as string[];
-  const exampleSets = [
-    { label: t("home.examplesSets.default"), items: zakiExamples },
-    { label: t("home.examplesSets.ramadan"), items: ramadanExamples },
-  ];
-  const activeExamples = exampleSets[activeExampleSet]?.items ?? zakiExamples;
 
   useEffect(() => {
     if (!memoryPanelOpen) return;
@@ -549,17 +471,11 @@ export function ZakiHomeView({
             {t("empty.subtext")}
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-2 relative">
-            <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-xs text-zaki-secondary">
-              <ShieldCheck className="size-4 text-zaki-success" />
-              {t("home.memoryOn")}
-              <span className="text-zaki-muted">·</span>
-              {t("home.memoryOnHelper")}
-              {conflictCount > 0 && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-zaki-brand text-white px-2 py-0.5 text-[10px] font-semibold">
-                  {t("home.conflictsBadge", { count: conflictCount })}
-                </span>
-              )}
-            </div>
+            {conflictCount > 0 ? (
+              <div className="inline-flex items-center rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-xs text-zaki-secondary">
+                {t("home.conflictsBadge", { count: conflictCount })}
+              </div>
+            ) : null}
             <div className="relative">
               <button
                 type="button"
@@ -585,18 +501,6 @@ export function ZakiHomeView({
                 />
               )}
             </div>
-          </div>
-          <div className="mt-6 flex flex-col items-start gap-2 w-full">
-            <div className="text-[11px] uppercase tracking-[0.24em] text-zaki-muted">
-              {t("empty.ctaHelper")}
-            </div>
-            <button
-              type="button"
-              className="zaki-btn bg-zaki-accent text-white w-full sm:w-auto"
-              onClick={onStartConversation}
-            >
-              {t("empty.cta")}
-            </button>
           </div>
         </div>
         <div className="relative self-start sm:self-auto" ref={menuRef}>
@@ -654,21 +558,10 @@ export function ZakiHomeView({
         activeSlide={activeSlide}
         onSelect={(index) => setActiveSlide(index)}
         icon={<CenterLogo className="size-4" />}
-        carouselHint={t("home.missionCarouselHint", { current: activeSlide + 1, total: zakiMissionSlides.length })}
         getSlideAriaLabel={(index) => t("home.missionSlideAria", { index })}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ExamplesCard
-          label={t("home.examplesLabel")}
-          ramadanLabel={t("home.examplesSets.ramadan")}
-          activeSet={activeExampleSet}
-          examples={activeExamples}
-          isRtl={isRtl}
-          onNext={() => setActiveExampleSet((prev) => (prev + 1) % exampleSets.length)}
-          onSendExample={onSendExample}
-          nextAriaLabel={t("home.nextExamplesAria")}
-        />
+      <div>
         <CapabilitiesCard
           capabilities={capabilities}
           limitations={limitations}

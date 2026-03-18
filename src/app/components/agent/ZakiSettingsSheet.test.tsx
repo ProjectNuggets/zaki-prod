@@ -29,56 +29,9 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
-jest.mock("sonner", () => ({
-  toast: {
-    success: jest.fn(),
-    error: jest.fn(),
-  },
-}));
-
-jest.mock("@/lib/productTelemetry", () => ({
-  trackProductEvent: jest.fn(async () => undefined),
-}));
-
-let entitlementsData = {
-  data: {
-    plan: {
-      tier: "personal",
-      status: "active",
-      cancelAtPeriodEnd: false,
-    },
-    access: {
-      active: false,
-      campaign: null,
-      expiresAt: null,
-    },
-    effective: {
-      tier: "personal",
-      status: "active",
-      source: "subscription",
-      premium: true,
-    },
-  },
-};
-
 jest.mock("@/queries", () => ({
   useEntitlements: () => ({
-    data: entitlementsData,
-  }),
-  useBillingConfig: () => ({
-    data: {
-      data: {
-        configured: {
-          portalEnabled: true,
-          checkoutEnabled: true,
-          cancelEnabled: true,
-        },
-      },
-    },
-  }),
-  useCancelSubscription: () => ({
-    isPending: false,
-    mutateAsync: jest.fn(async () => ({ alreadyScheduled: false })),
+    data: null,
   }),
   useDeleteAccount: () => ({
     isPending: false,
@@ -103,7 +56,6 @@ function TestHarness() {
     <ZakiSettingsSheet
       isOpen
       onClose={jest.fn()}
-      onOpenGeneralSettings={jest.fn()}
     />
   );
 }
@@ -111,27 +63,6 @@ function TestHarness() {
 describe("ZakiSettingsSheet", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    entitlementsData = {
-      data: {
-        plan: {
-          tier: "personal",
-          status: "active",
-          cancelAtPeriodEnd: false,
-        },
-        access: {
-          active: false,
-          campaign: null,
-          expiresAt: null,
-        },
-        effective: {
-          tier: "personal",
-          status: "active",
-          source: "subscription",
-          premium: true,
-        },
-      },
-    };
-
     (fetchBotOnboarding as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
       data: {
@@ -211,53 +142,19 @@ describe("ZakiSettingsSheet", () => {
     });
   });
 
-  it("renders the minimized settings surface with only core behavior open", async () => {
+  it("renders the minimized settings surface with all sections collapsed by default", async () => {
     render(<TestHarness />);
 
     expect(await screen.findByText("zakiSettingsSheet.title")).toBeInTheDocument();
     expect(screen.getByText("zakiSettingsSheet.sections.core.title")).toBeInTheDocument();
     expect(screen.getByText("zakiSettingsSheet.sections.workspace.title")).toBeInTheDocument();
-    expect(screen.getByText("zakiSettingsSheet.sections.advanced.title")).toBeInTheDocument();
-    expect(screen.getByLabelText("zakiSettingsSheet.fields.responseStyle.title")).toBeInTheDocument();
+    expect(screen.queryByText("zakiSettingsSheet.sections.limits.title")).not.toBeInTheDocument();
+    expect(screen.queryByText("zakiSettingsSheet.sections.advanced.title")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("zakiSettingsSheet.fields.responseStyle.title")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("zakiSettingsSheet.workspace.telegramToken")
     ).not.toBeInTheDocument();
     expect(screen.queryByText("settingsModal.profile.displayName")).not.toBeInTheDocument();
-  });
-
-  it("shows manage access instead of subscription controls for access-code users", async () => {
-    const user = userEvent.setup();
-    entitlementsData = {
-      data: {
-        plan: {
-          tier: "free",
-          status: "inactive",
-          cancelAtPeriodEnd: false,
-        },
-        access: {
-          active: true,
-          campaign: "Founders Circle",
-          expiresAt: "2026-04-20T00:00:00.000Z",
-        },
-        effective: {
-          tier: "personal",
-          status: "active",
-          source: "access_code",
-          premium: true,
-        },
-      },
-    };
-
-    render(<TestHarness />);
-
-    expect(await screen.findByText("zakiSettingsSheet.title")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", {
-        name: "zakiSettingsSheet.sections.limits.title zakiSettingsSheet.limits.planSummaryWithExpiry",
-      })
-    );
-    expect(screen.getByRole("button", { name: "settingsModal.plan.manageAccess" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "settingsModal.plan.cancelSubscription" })).not.toBeInTheDocument();
   });
 
   it("saves the product settings payload from the unified footer action", async () => {
@@ -265,6 +162,7 @@ describe("ZakiSettingsSheet", () => {
     render(<TestHarness />);
 
     await screen.findByText("zakiSettingsSheet.title");
+    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.core.title/i }));
 
     await user.selectOptions(
       screen.getByLabelText("zakiSettingsSheet.fields.responseStyle.title"),
