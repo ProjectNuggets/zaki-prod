@@ -199,7 +199,7 @@ export function InputArea({
       style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
     >
       {/* Input Box */}
-      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir="ltr">
+      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir={isRtl ? "rtl" : "ltr"}>
         <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
@@ -299,7 +299,10 @@ export function InputArea({
                     />
                     <button
                       type="button"
-                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                      className={cn(
+                        "absolute -top-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent",
+                        isRtl ? "-left-1" : "-right-1"
+                      )}
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -391,7 +394,10 @@ export function InputArea({
             </button>
             {menuOpen && (
               <div
-                className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
+                className={cn(
+                  "absolute bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30",
+                  isRtl ? "right-0" : "left-0"
+                )}
                 role="menu"
               >
                 <button

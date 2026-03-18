@@ -104,7 +104,7 @@ export function Hero({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent"
             >
-              {isArabic ? "اسأل AI" : "Ask AI"}
+              {isArabic ? "اسأل AI" : "Ask GPT"}
               <span className="inline-flex h-5 min-w-8 items-center justify-center rounded-full border border-line-strong bg-white px-2 text-[10px] font-semibold text-chat-muted">
                 GPT
               </span>

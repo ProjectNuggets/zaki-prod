@@ -826,18 +826,30 @@
   },
   "pricingPage": {
     "eyebrow": "Plans",
-    "title": "Choose the plan that makes ZAKI feel personal",
-    "subtitle": "Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.",
-    "subtitleAccessActive": "Your access code already unlocks premium access. You can review plans here, but checkout stays paused until the current access window ends.",
+    "title": "Choose how you want to work with ZAKI",
+    "subtitle": "Spaces is where ongoing work gets done. ZAKI is where a new interaction model is still being tested.",
+    "subtitleAccessActive": "Your code already unlocks Personal in Spaces. The ladder stays visible here, but checkout remains paused while that access is active.",
     "highlightsTemplates": {
-      "student": "Student: {{price}} with .edu or manual verification",
+      "free": "Free: 10 Spaces chats a day",
       "personal": "Personal: {{price}} for everyday assistant use",
-      "gift": "Gift a month: {{price}}"
+      "zaki": "ZAKI: experimental, 10 messages a day"
+    },
+    "productNotes": {
+      "spaces": {
+        "label": "Spaces",
+        "title": "Where work gets structured",
+        "body": "Spaces is for repeat use, projects, and continuity. Personal removes the cap. Student is the same access at a lower rate."
+      },
+      "zaki": {
+        "label": "ZAKI",
+        "title": "Where interaction is being tested",
+        "body": "ZAKI is the experimental surface. Same daily cap for everyone while we keep shaping the behavior."
+      }
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Start free, then upgrade when you want more from ZAKI.",
+    "currentPlanFree": "Start free, then move up the ladder when you need more room in Spaces.",
     "codeActivePlanLabel": "Code active",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
@@ -869,25 +881,24 @@
       "code_active": "Code active"
     },
     "access": {
-      "title": "Access code",
-      "description": "Redeem a campaign code to activate ZAKI access for 30 days.",
+      "title": "Activation code",
+      "description": "Use a 30-day code to unlock Personal in Spaces. ZAKI keeps the same experimental cap for everyone.",
       "stateActive": "Active",
       "stateInactive": "Inactive",
       "placeholder": "Enter access code",
       "apply": "Apply code",
       "applying": "Applying...",
       "purchase": {
-        "badge": "Gift a month",
-        "title": "Gift a 30-day ZAKI pass",
-        "description": "A thoughtful gift for a student, friend, or teammate who needs a sharp personal AI assistant for a month.",
+        "eyebrow": "30-day code",
+        "title": "Buy a 30-day code",
+        "description": "For yourself, or to activate someone else with one clean month of access.",
         "highlights": [
-          "Perfect for exam season, writing sprints, and deadline-heavy weeks.",
           "Delivered by email as a single-use code you can forward instantly.",
-          "A simple one-time purchase for one month of premium access."
+          "Unlocks Personal in Spaces for 30 days.",
+          "Useful for testing, teaching, or helping someone get started."
         ],
-        "note": "Buy it once, keep it ready, and send it when someone needs real help.",
         "price": "$15 one-time",
-        "cta": "Buy 1-month gift code",
+        "cta": "Buy 30-day code",
         "processing": "Opening checkout...",
         "unavailable": "Code purchase is not enabled in this environment yet.",
         "checkoutError": "Unable to start code purchase checkout."
@@ -899,18 +910,18 @@
       "summaryActiveUntil": "Access active until {{date}}.",
       "summaryActiveCampaign": "Access active ({{campaign}}).",
       "summaryActiveUntilCampaign": "Access active until {{date}} ({{campaign}}).",
-      "summaryInactive": "No active access code. Redeem one to keep chatting.",
-      "extendHint": "Redeem another code to extend your premium access."
+      "summaryInactive": "No active activation code. Redeem one if you want 30 days of Personal access in Spaces.",
+      "extendHint": "Redeem another code to extend your Personal access window."
     },
     "plans": {
       "free": {
         "label": "Free",
         "price": "$0",
-        "blurb": "Great for trying ZAKI and basic workflows.",
+        "blurb": "For trying the system without committing to it yet.",
         "features": [
-          "Core chat",
-          "Memory basics",
-          "Standard response quality"
+          "10 Spaces chats per day",
+          "10 ZAKI experimental messages per day",
+          "Memory basics"
         ]
       },
       "student": {
@@ -918,11 +929,11 @@
         "price": "$8 / month",
         "priceMonthly": "$8 / month",
         "priceYearly": "$96 / year",
-        "blurb": "For focused studying, clearer writing, and better support across your coursework.",
+        "blurb": "Unlimited Spaces at the student rate.",
         "features": [
-          "Premium models for better answers",
-          "Priority responses during busy hours",
-          "Stronger help with notes, drafts, and study sessions"
+          "Unlimited chat across Spaces",
+          "Premium models",
+          "Stronger study support"
         ]
       },
       "personal": {
@@ -930,14 +941,27 @@
         "price": "$13 / month",
         "priceMonthly": "$13 / month",
         "priceYearly": "$156 / year",
-        "blurb": "For everyday work and life when you want ZAKI to remember context and move faster with you.",
+        "blurb": "For repeat work, real continuity, and unlimited Spaces.",
         "features": [
-          "Premium models with richer reasoning",
-          "Priority responses and stronger context",
-          "More personal memory and assistant-style support"
+          "Unlimited chat across Spaces",
+          "Premium models",
+          "Deeper context and support"
         ]
+      },
+      "zaki": {
+        "label": "ZAKI",
+        "badge": "Experimental",
+        "price": "$0",
+        "blurb": "A state-of-the-art agent surface still being shaped in public.",
+        "features": [
+          "Same daily cap for everyone",
+          "Long-term memory is part of the test",
+          "Behavior is still being benchmarked"
+        ],
+        "cta": "Included in free"
       }
     },
+    "studentToggle": "I’m a student",
     "studentEligibilityTitle": "Student plan eligibility:",
     "studentEligibilityBody": "use your .edu email at checkout, or email any proof of enrollment for manual verification at",
     "currentBadge": "Current",

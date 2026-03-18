@@ -185,17 +185,19 @@ function CompactRow({
   helper,
   control,
   children,
+  isRtl = false,
 }: {
   title: string;
   summary: string;
   helper?: string;
   control?: ReactNode;
   children?: ReactNode;
+  isRtl?: boolean;
 }) {
   return (
     <div className="group rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 transition-colors dark:border-[#2b2119] dark:bg-[#17120f]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
+      <div className={cn("flex flex-col gap-3 sm:items-start sm:justify-between", isRtl ? "sm:flex-row-reverse" : "sm:flex-row")}>
+        <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
           <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             {title}
           </div>
@@ -219,17 +221,19 @@ function SectionBadge({
   icon: Icon,
   title,
   summary,
+  isRtl = false,
 }: {
   icon: typeof Bot;
   title: string;
   summary: string;
+  isRtl?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-3">
+    <div className={cn("flex min-w-0 items-start gap-3", isRtl && "flex-row-reverse text-right")}>
       <div className="mt-0.5 inline-flex size-9 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
         <Icon className="size-4" />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
         <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
           {title}
         </div>
@@ -242,8 +246,9 @@ function SectionBadge({
 }
 
 export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
@@ -454,14 +459,15 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
-        side="right"
+        side={isRtl ? "left" : "right"}
         hideCloseButton
+        dir={isRtl ? "rtl" : "ltr"}
         className="w-full max-w-[100vw] gap-0 border-l border-[#eadcca] bg-[#f6f1ea] p-0 text-zaki-primary sm:max-w-[720px] dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
       >
         <div className="relative flex h-full flex-col">
           <div className="sticky top-0 z-20 border-b border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
+            <div className={cn("flex items-start justify-between gap-4", isRtl && "flex-row-reverse")}>
+              <div className={cn("min-w-0", isRtl && "text-right")}>
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c8] bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2d231b] dark:bg-[#1a140f] dark:text-zaki-dark-muted">
                   <Sparkles className="size-3.5 text-zaki-brand" />
                   {t("zakiSettingsSheet.badge")}
@@ -526,6 +532,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       style: responseStyleLabel,
                       join: joinBehaviorLabel,
                     })}
+                    isRtl={isRtl}
                   />
                 </AccordionTrigger>
                 <AccordionContent className="pb-6">
@@ -534,6 +541,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       title={t("zakiSettingsSheet.fields.responseStyle.title")}
                       summary={responseStyleLabel}
                       helper={t("zakiSettingsSheet.fields.responseStyle.helper")}
+                      isRtl={isRtl}
                       control={
                         <select
                           aria-label={t("zakiSettingsSheet.fields.responseStyle.title")}
@@ -557,6 +565,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       title={t("zakiSettingsSheet.fields.joinBehavior.title")}
                       summary={joinBehaviorLabel}
                       helper={t("zakiSettingsSheet.fields.joinBehavior.helper")}
+                      isRtl={isRtl}
                       control={
                         <select
                           aria-label={t("zakiSettingsSheet.fields.joinBehavior.title")}
@@ -583,6 +592,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                           : "zakiSettingsSheet.status.disabled"
                       )}
                       helper={t("zakiSettingsSheet.fields.proactiveUpdates.helper")}
+                      isRtl={isRtl}
                       control={
                         <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
                           <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
@@ -615,6 +625,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                           : "zakiSettingsSheet.status.disabled"
                       )}
                       helper={t("zakiSettingsSheet.fields.voiceReplies.helper")}
+                      isRtl={isRtl}
                       control={
                         <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
                           <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
@@ -645,6 +656,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         minutes: settingsDraft.session_timeout_minutes || DEFAULT_SETTINGS.session_timeout_minutes,
                       })}
                       helper={t("zakiSettingsSheet.fields.sessionWindow.helper")}
+                      isRtl={isRtl}
                       control={
                         <input
                           aria-label={t("zakiSettingsSheet.fields.sessionWindow.title")}
@@ -678,6 +690,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       connected: connectedChannelsCount,
                       total: 3,
                     })}
+                    isRtl={isRtl}
                   />
                 </AccordionTrigger>
                 <AccordionContent className="pb-6">
@@ -686,8 +699,9 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       title={t("zakiSettingsSheet.workspace.memoryTitle")}
                       summary={t("zakiSettingsSheet.workspace.memorySummary")}
                       helper={t("zakiSettingsSheet.workspace.memoryHelper")}
+                      isRtl={isRtl}
                       control={
-                        <div className="flex flex-col gap-2 sm:items-end">
+                        <div className={cn("flex flex-col gap-2", isRtl ? "sm:items-start" : "sm:items-end")}>
                           <button
                             type="button"
                             className="zaki-btn-sm zaki-btn-secondary"
@@ -723,8 +737,9 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         status: setupStatusLabel,
                         updated: setupDateLabel,
                       })}
+                      isRtl={isRtl}
                       control={
-                        <div className="flex flex-col gap-2 sm:items-end">
+                        <div className={cn("flex flex-col gap-2", isRtl ? "sm:items-start" : "sm:items-end")}>
                           <button
                             type="button"
                             disabled={savingOnboarding}
@@ -798,6 +813,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         total: 3,
                       })}
                       helper={t("zakiSettingsSheet.workspace.channelsHelper")}
+                      isRtl={isRtl}
                     >
                       <div className="space-y-3">
                         {([
@@ -836,8 +852,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                               key={channel.key}
                               className="rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]"
                             >
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0">
+                              <div className={cn("flex flex-col gap-3 sm:items-center sm:justify-between", isRtl ? "sm:flex-row-reverse" : "sm:flex-row")}>
+                                <div className={cn("min-w-0", isRtl && "text-right")}>
                                   <div className="flex flex-wrap items-center gap-2">
                                     <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
                                       {channel.title}
@@ -960,9 +976,9 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                                     </div>
                                   </div>
                                 ) : (
-                                  <ol className="mt-3 space-y-2 border-t border-[#e6d8c8] pt-3 text-xs leading-5 text-zaki-secondary dark:border-[#2b2119] dark:text-zaki-dark-subtle">
+                                  <ol className={cn("mt-3 space-y-2 border-t border-[#e6d8c8] pt-3 text-xs leading-5 text-zaki-secondary dark:border-[#2b2119] dark:text-zaki-dark-subtle", isRtl && "text-right")}>
                                     {channel.steps.map((step) => (
-                                      <li key={step} className="flex gap-2">
+                                      <li key={step} className={cn("flex gap-2", isRtl && "flex-row-reverse")}>
                                         <span className="mt-[6px] size-1.5 shrink-0 rounded-full bg-zaki-brand" />
                                         <span>{step}</span>
                                       </li>
@@ -983,9 +999,9 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
           </div>
 
           <div className="sticky bottom-0 z-20 border-t border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-start" : "justify-end")}>
               {settingsDirty ? (
-                <span className="me-auto rounded-full border border-zaki-brand/20 bg-zaki-brand/10 px-2.5 py-1 text-[11px] font-semibold text-zaki-brand">
+                <span className={cn("rounded-full border border-zaki-brand/20 bg-zaki-brand/10 px-2.5 py-1 text-[11px] font-semibold text-zaki-brand", isRtl ? "ms-auto" : "me-auto")}>
                   {t("zakiSettingsSheet.footer.unsaved")}
                 </span>
               ) : null}

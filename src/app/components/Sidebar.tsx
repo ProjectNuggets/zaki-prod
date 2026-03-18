@@ -1210,7 +1210,7 @@ export function Sidebar() {
       </div>
       
       {/* Last synced badge — trust signal */}
-      <div className="flex items-center gap-1.5 text-2xs text-zaki-muted mb-4 pl-1">
+      <div className={cn("flex items-center gap-1.5 text-2xs text-zaki-muted mb-4", isRtl ? "pr-1 justify-end" : "pl-1")}>
         <span className="inline-block size-1.5 rounded-full bg-zaki-accent animate-pulse" />
         <span>{t("sidebar.synced", { time: formatRelativeTime(lastSynced) })}</span>
       </div>
@@ -1219,7 +1219,8 @@ export function Sidebar() {
       <div className="flex flex-col gap-1 mb-5">
         <button
           className={cn(
-            "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
+            "flex items-center gap-2 p-1.5 rounded-lg transition-colors group",
+            isRtl ? "text-right flex-row-reverse" : "text-left",
             isActive("new-space") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
           )}
           onClick={openCreateSpaceFlow}
@@ -1236,7 +1237,8 @@ export function Sidebar() {
         <div className="relative group">
           <button
             className={cn(
-              "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left",
+              "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors",
+              isRtl ? "text-right flex-row-reverse" : "text-left",
               isSpaceActive(ZAKI_BOT_SPACE_ID) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
             )}
             onClick={openZakiBotView}
@@ -1252,7 +1254,10 @@ export function Sidebar() {
           </button>
           <button
             type="button"
-            className="absolute right-1 top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+              isRtl ? "left-1" : "right-1"
+            )}
             onClick={(event) => {
               event.stopPropagation();
               setZakiSettingsOpen(true);
@@ -1270,14 +1275,14 @@ export function Sidebar() {
 
       {/* Space Section */}
       <div className="flex-1 overflow-y-auto bg-[#FDF6EE] dark:bg-[#0f0b08] zaki-scrollbar-fade">
-        <div className="text-zaki-muted text-xs font-medium mb-2 pl-1.5">{t("sidebar.section.space")}</div>
+        <div className={cn("text-zaki-muted text-xs font-medium mb-2", isRtl ? "pr-1.5 text-right" : "pl-1.5")}>{t("sidebar.section.space")}</div>
         {spacesLoading && (
           <div className="mb-3">
             <SkeletonSpaceList />
           </div>
         )}
         {spacesError && (
-          <div className="text-xs text-zaki-brand mb-3 pl-1.5">{spacesError}</div>
+          <div className={cn("text-xs text-zaki-brand mb-3", isRtl ? "pr-1.5 text-right" : "pl-1.5")}>{spacesError}</div>
         )}
         
         {/* Empty State - No Spaces */}
@@ -1364,7 +1369,7 @@ export function Sidebar() {
                 </div>
               </div>
               {isSpaceExpanded(space.id) && !isZakiBotSpaceId(space.id) && (
-                <div className="pl-6 flex flex-col gap-1 mt-1">
+                <div className={cn("flex flex-col gap-1 mt-1", isRtl ? "pr-6" : "pl-6")}>
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">
                       <button
@@ -1384,7 +1389,10 @@ export function Sidebar() {
                       </button>
                       <button
                         type="button"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        className={cn(
+                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          isRtl ? "left-0" : "right-0"
+                        )}
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(
@@ -1402,7 +1410,10 @@ export function Sidebar() {
                       </button>
                       {openMenu?.type === "thread" && openMenu.id === thread.id && (
                         <div
-                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          className={cn(
+                            "absolute top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20",
+                            isRtl ? "left-0" : "right-0"
+                          )}
                           role="menu"
                           data-menu
                         >
@@ -1435,7 +1446,10 @@ export function Sidebar() {
                     </div>
                   ))}
                   <button
-                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
+                    className={cn(
+                      "flex items-center gap-2 p-1.5 rounded-lg transition-colors group hover:bg-zaki-hover",
+                      isRtl ? "text-right flex-row-reverse" : "text-left"
+                    )}
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
                     data-onboarding-id="sidebar-space-new-thread"
@@ -1528,7 +1542,7 @@ export function Sidebar() {
               </div>
 
               {isSpaceExpanded(space.id) && (
-                <div className="pl-6 flex flex-col gap-1 mt-1">
+                <div className={cn("flex flex-col gap-1 mt-1", isRtl ? "pr-6" : "pl-6")}>
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">
                       <button
@@ -1566,7 +1580,10 @@ export function Sidebar() {
                       </button>
                       <button
                         type="button"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        className={cn(
+                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          isRtl ? "left-0" : "right-0"
+                        )}
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(openMenu?.id === thread.id ? null : { type: "thread", id: thread.id });
@@ -1580,7 +1597,10 @@ export function Sidebar() {
                       </button>
                       {openMenu?.type === "thread" && openMenu.id === thread.id && (
                         <div
-                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          className={cn(
+                            "absolute top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20",
+                            isRtl ? "left-0" : "right-0"
+                          )}
                           role="menu"
                           data-menu
                         >
@@ -1613,7 +1633,10 @@ export function Sidebar() {
                     </div>
                   ))}
                   <button
-                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
+                    className={cn(
+                      "flex items-center gap-2 p-1.5 rounded-lg transition-colors group hover:bg-zaki-hover",
+                      isRtl ? "text-right flex-row-reverse" : "text-left"
+                    )}
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
                     data-onboarding-id="sidebar-space-new-thread"
