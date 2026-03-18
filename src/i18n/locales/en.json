@@ -882,7 +882,7 @@
     },
     "access": {
       "title": "Activation code",
-      "description": "Use a 30-day code to unlock Personal in Spaces. ZAKI keeps the same experimental cap for everyone.",
+      "description": "Unlock Personal in Spaces for 30 days. ZAKI stays on the same experimental cap for everyone.",
       "stateActive": "Active",
       "stateInactive": "Inactive",
       "placeholder": "Enter access code",
@@ -891,12 +891,7 @@
       "purchase": {
         "eyebrow": "30-day code",
         "title": "Buy a 30-day code",
-        "description": "For yourself, or to activate someone else with one clean month of access.",
-        "highlights": [
-          "Delivered by email as a single-use code you can forward instantly.",
-          "Unlocks Personal in Spaces for 30 days.",
-          "Useful for testing, teaching, or helping someone get started."
-        ],
+        "description": "Use it yourself, or pass it on to someone who needs a month of Personal in Spaces.",
         "price": "$15 one-time",
         "cta": "Buy 30-day code",
         "processing": "Opening checkout...",
@@ -910,8 +905,8 @@
       "summaryActiveUntil": "Access active until {{date}}.",
       "summaryActiveCampaign": "Access active ({{campaign}}).",
       "summaryActiveUntilCampaign": "Access active until {{date}} ({{campaign}}).",
-      "summaryInactive": "No active activation code. Redeem one if you want 30 days of Personal access in Spaces.",
-      "extendHint": "Redeem another code to extend your Personal access window."
+      "summaryInactive": "No active code.",
+      "extendHint": "Redeem another code to extend your access."
     },
     "plans": {
       "free": {
@@ -951,7 +946,7 @@
       "zaki": {
         "label": "ZAKI",
         "badge": "Experimental",
-        "price": "$0",
+        "price": "Open beta / Free",
         "blurb": "A state-of-the-art agent surface still being shaped in public.",
         "features": [
           "Same daily cap for everyone",

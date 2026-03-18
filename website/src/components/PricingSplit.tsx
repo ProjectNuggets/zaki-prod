@@ -174,7 +174,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
 
                 <p className="mt-4 text-[14px] leading-[1.75] text-chat-muted">
                   {isArabic
-                    ? "للعمل اليومي، والكتابة الثنائية اللغة، والتنفيذ داخل مساحات منظمة لكل مشروع. هذا هو المنتج الذي قد يشير إليه التطبيق حاليًا باسم ZAKI Chat، لكنه على الموقع يُشرح بوضوح أكبر باسم Spaces."
+                    ? "للعمل اليومي، والكتابة الثنائية اللغة، والتنفيذ داخل مساحات واضحة لكل مشروع. هذا هو المنتج الذي قد يظهر في التطبيق باسم ZAKI Chat، لكنه يُشرح هنا باسمه الأوضح: Spaces."
                     : "For everyday work, bilingual writing, and execution inside organized workspaces for each project. This is the product the app may still call ZAKI Chat, but on the website we explain it more clearly as Spaces."}
                 </p>
 
@@ -190,8 +190,8 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                       className="mt-0.5 size-4 shrink-0 rounded border-line-strong accent-chat-accent"
                     />
                     <div>
-                      <span className="text-[13px] font-medium text-chat-text">
-                        {isArabic ? "أنا طالب" : "I'm a student"}
+                        <span className="text-[13px] font-medium text-chat-text">
+                          {isArabic ? "أنا طالب" : "I'm a student"}
                         <span className="ms-2 font-mono-ui text-[11px] tracking-wider text-chat-accent">
                           {isArabic ? "← $8/شهر" : "→ $8/mo"}
                         </span>
@@ -201,7 +201,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                       </p>
                       <p className="mt-2 text-[11px] leading-[1.6] text-chat-muted/70">
                         {isArabic
-                          ? "يمكنك البدء بالخطة الشخصية الآن أو التبديل إلى سعر الطالب عند التحقق."
+                          ? "ابدأ بالخطة الشخصية الآن، أو تحوّل إلى سعر الطالب بعد التحقق."
                           : "Start on Personal now, or switch to the student rate once verification is complete."}
                       </p>
                     </div>
@@ -231,7 +231,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                   <div>
                     <Badge tone="warning" pulse>
                       <Sparkles className="size-3" />
-                      {isArabic ? "تجريبي — مفتوح" : "Experimental — open"}
+                      {isArabic ? "تجريبي مفتوح" : "Experimental — open"}
                     </Badge>
                     <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-chat-text md:text-[36px]">
                       ZAKI
@@ -254,7 +254,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
 
                 <p className="mt-4 text-[14px] leading-[1.75] text-chat-muted">
                   {isArabic
-                    ? "زكي هو البيتا العامة لذكاء شخصي مستمر. يحتفظ بالسياق بين الجلسات، يُظهر مراحل عمله، ويمنحك 5 رسائل كل 24 ساعة لتختبر الاتجاه قبل أن يتحول إلى منتج اشتراك كامل."
+                    ? "زكي هو البيتا العامة لذكاء شخصي مستمر. يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويمنحك 5 رسائل كل 24 ساعة لتختبر الاتجاه قبل أن ينضج كمنتج اشتراك كامل."
                     : "ZAKI is the public beta for persistent personal intelligence. It keeps context between sessions, shows its work phases, and gives you 5 messages every 24 hours to test the direction before it becomes a full subscription product."}
                 </p>
 
@@ -267,7 +267,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                   </div>
                   <p className="mt-3 text-[11px] leading-[1.6] text-chat-muted/70">
                     {isArabic
-                      ? "بريدك يُستخدم فقط لتحديثات بيتا زكي والوصول المبكر. بدون رسائل دعائية."
+                      ? "نستخدم بريدك فقط لتحديثات بيتا زكي والوصول المبكر. بلا رسائل دعائية."
                       : "Your email is only used for ZAKI beta updates and early-access communication. No marketing spam."}
                   </p>
                 </PricingSupportPanel>

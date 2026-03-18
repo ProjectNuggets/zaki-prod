@@ -283,13 +283,6 @@ export function PricingPage() {
     if (!accessActive) return null;
     return t("pricingPage.access.extendHint");
   }, [accessActive, t]);
-  const accessCodePurchaseHighlights = useMemo(() => {
-    const translated = t("pricingPage.access.purchase.highlights", {
-      returnObjects: true,
-    });
-    if (!Array.isArray(translated)) return [];
-    return translated.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-  }, [i18n.language, t]);
 
   useEffect(() => {
     const status = searchParams.get("billing");
@@ -574,12 +567,12 @@ export function PricingPage() {
 
         <div ref={plansSectionRef} className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div className="order-3 md:col-span-2 xl:col-span-3 rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-5 py-4 shadow-[0px_12px_24px_rgba(15,15,15,0.05)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
                   {t("pricingPage.access.title")}
                 </div>
-                <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
                   {t("pricingPage.access.description")}
                 </p>
               </div>
@@ -658,16 +651,16 @@ export function PricingPage() {
                 {accessSecondaryHint}
               </div>
             ) : null}
-            <div
-              id="access-code-purchase"
-              ref={accessCodePurchaseCardRef}
-              className={cn(
-                "mt-4 rounded-2xl border border-zaki-subtle bg-[#fbf7f2] px-4 py-3 dark:border-[#3b2d23] dark:bg-[#181310]",
-                highlightGiftCodeCard &&
-                  "ring-2 ring-[#D24430] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
-              )}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-4 border-t border-zaki-subtle pt-4 dark:border-zaki-dark-border">
+              <div
+                id="access-code-purchase"
+                ref={accessCodePurchaseCardRef}
+                className={cn(
+                  "flex flex-col gap-3 rounded-xl bg-[#fbf8f4] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:bg-[#181512]",
+                  highlightGiftCodeCard &&
+                    "ring-2 ring-[#D24430] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
+                )}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
                     {t("pricingPage.access.purchase.eyebrow")}
@@ -675,12 +668,17 @@ export function PricingPage() {
                   <div className="mt-1 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
                     {t("pricingPage.access.purchase.title")}
                   </div>
-                  <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+                  <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
                     {t("pricingPage.access.purchase.description")}
                   </p>
                 </div>
-                <div className={cn("flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
-                  <span className="rounded-full border border-zaki-subtle bg-white/90 px-2.5 py-1 text-2xs font-medium text-zaki-secondary dark:border-[#4a382c] dark:bg-[#221b16] dark:text-zaki-dark-subtle">
+                <div
+                  className={cn(
+                    "flex flex-wrap items-center gap-2 sm:flex-nowrap",
+                    isRtl && "sm:flex-row-reverse sm:justify-start"
+                  )}
+                >
+                  <span className="rounded-full border border-zaki-subtle bg-white px-2.5 py-1 text-2xs font-medium text-zaki-secondary dark:border-[#4a382c] dark:bg-[#221b16] dark:text-zaki-dark-subtle">
                     {accessCodePriceLabel}
                   </span>
                   <button
@@ -716,11 +714,6 @@ export function PricingPage() {
                   </button>
                 </div>
               </div>
-              {accessCodePurchaseHighlights.length > 0 ? (
-                <p className="mt-2 text-2xs leading-6 text-zaki-muted dark:text-zaki-dark-subtle">
-                  {accessCodePurchaseHighlights[0]}
-                </p>
-              ) : null}
               {!accessCodePurchaseEnabled ? (
                 <div className="mt-2 text-2xs text-zaki-muted">
                   {t("pricingPage.access.purchase.unavailable")}

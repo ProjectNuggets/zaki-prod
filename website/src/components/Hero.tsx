@@ -1,4 +1,4 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpLeft, ArrowUpRight } from "lucide-react";
 import type { Locale, WebsiteContent } from "../lib/content";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -39,6 +39,7 @@ export function Hero({
   const rotatingPhrases = isArabic
     ? ["يتذكرك", "يتابعك", "يبقى معك"]
     : ["remembers.", "follows through.", "stays useful."];
+  const LinkArrow = isArabic ? ArrowUpLeft : ArrowUpRight;
 
   return (
     <section className="relative overflow-hidden px-4 pb-16 pt-[8vh] md:px-8 md:pb-24 md:pt-[10vh]">
@@ -84,7 +85,7 @@ export function Hero({
 
           <p className="mt-6 max-w-[52ch] whitespace-pre-line text-sm leading-7 text-chat-muted md:text-base md:leading-8">
             {isArabic
-              ? "Spaces هي مساحات العمل الذكية للإنتاجية اليومية المنظّمة — متاحة الآن.\nزكي هو البيتا العامة للاتجاه التالي: ذكاء شخصي مستمر بذاكرة متواصلة ومراحل عمل مرئية."
+              ? "Spaces هي مساحات العمل الذكية للإنتاجية اليومية المنظمة.\nوهي متاحة الآن. زكي هو البيتا العامة للخطوة التالية: ذكاء شخصي مستمر بذاكرة متصلة ومراحل عمل واضحة."
               : "Spaces are the structured AI workspaces for daily productivity, live now.\nZAKI is the public beta for what comes next: persistent personal intelligence with memory continuity and visible work phases."}
           </p>
 
@@ -96,7 +97,7 @@ export function Hero({
             </Button>
             <a href={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent">
               {isArabic ? "ما هو زكي؟" : "What is ZAKI?"}
-              <ArrowUpRight className="size-4" />
+              <LinkArrow className="size-4" />
             </a>
             <a
               href={askAiHref}
@@ -104,11 +105,11 @@ export function Hero({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent"
             >
-              {isArabic ? "اسأل AI" : "Ask GPT"}
+              {isArabic ? "اسأل" : "Ask"}
               <span className="inline-flex h-5 min-w-8 items-center justify-center rounded-full border border-line-strong bg-white px-2 text-[10px] font-semibold text-chat-muted">
                 GPT
               </span>
-              <ArrowUpRight className="size-4" />
+              <LinkArrow className="size-4" />
             </a>
           </div>
         </Reveal>
