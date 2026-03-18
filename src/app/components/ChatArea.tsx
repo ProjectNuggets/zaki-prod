@@ -39,6 +39,11 @@ import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
+import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
+import {
+  ZakiBootstrapCard,
+  hasSeenZakiBootstrapCard,
+} from "./ZakiBootstrapCard";
 import {
   createZakiBotThread,
   isZakiBotSpaceId,
@@ -65,7 +70,6 @@ class ChatRequestError extends Error {
   }
 }
 
-const HOME_STARTER_MESSAGE = "hello, how are you zaki";
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -467,6 +471,17 @@ export function ChatArea() {
       isRtl ? `تمت إضافة ${count} ملفات إلى ملفات المساحة.` : `Added ${count} files to workspace files.`,
     uploadFailed: isRtl ? "فشل الرفع." : "Upload failed.",
     unableToUpload: isRtl ? "تعذر رفع الملفات." : "Unable to upload files.",
+    experimentalLimitReached: (resetLabel: string) =>
+      isRtl
+        ? `وصلت إلى حد الاستخدام التجريبي المجاني اليوم. الاستخدام المجاني يُعاد يوميًا وقد يتغير حسب الضغط وتعقيد الطلب. جرّب مرة أخرى بعد ${resetLabel}.`
+        : `You reached today's free experimental limit. Free usage resets daily and can vary with traffic and prompt complexity. Try again after ${resetLabel}.`,
+    appFreeLimitReached: (resetLabel: string) =>
+      isRtl
+        ? `وصلت إلى حد الاستخدام المجاني اليوم. يتم إعادة التعيين يوميًا. جرّب مرة أخرى بعد ${resetLabel}.`
+        : `You reached today's free limit. Free usage resets daily. Try again after ${resetLabel}.`,
+    quotaBadgeNeutral: isRtl ? "وصول تجريبي يومي" : "Daily experimental access",
+    quotaBadgeWarning: isRtl ? "الاستخدام المجاني محدود" : "Limited free usage",
+    quotaBadgeDanger: isRtl ? "تم بلوغ الحد التجريبي اليوم" : "Today's experimental limit reached",
   };
   useAuthStore(); // For auth context, values used elsewhere
   const {
@@ -551,6 +566,9 @@ export function ChatArea() {
         : "";
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
+  const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(() =>
+    authUserId ? hasSeenZakiBootstrapCard(authUserId) : true
+  );
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -685,14 +703,6 @@ export function ChatArea() {
   // Computed values
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const primarySpace = spacesList[0] ?? null;
-  const homeConversationSpaceId = useMemo(() => {
-    const zakiSpace = spacesList.find(
-      (space) => String(space.id || "").trim().toLowerCase() === "zaki"
-    );
-    if (zakiSpace?.id) return zakiSpace.id;
-    const fixedSpace = spacesList.find((space) => Boolean(space.fixed));
-    return fixedSpace?.id ?? primarySpace?.id ?? null;
-  }, [primarySpace?.id, spacesList]);
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
@@ -715,6 +725,14 @@ export function ChatArea() {
   const showReady = (!activeThreadId || messages.length === 0) && !isZakiBotActiveSpace;
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !authUserId) {
+      setZakiBootstrapCompleted(true);
+      return;
+    }
+    setZakiBootstrapCompleted(hasSeenZakiBootstrapCard(authUserId));
+  }, [authUserId, isZakiBotActiveSpace]);
   const zakiBotQuotaInfo =
     isZakiBotActiveSpace &&
     freeDailyQuota &&
@@ -1675,7 +1693,6 @@ export function ChatArea() {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
       let errorCode: string | null = null;
-      let quotaLimit: number | null = null;
       let quotaResetAt: string | null = null;
       let quotaSurfaceCode: UsageQuotaSurface | null = null;
       const requestId = response.headers.get("x-request-id");
@@ -1693,9 +1710,6 @@ export function ChatArea() {
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
           }
-          if (typeof data.limit === "number" && Number.isFinite(data.limit)) {
-            quotaLimit = data.limit;
-          }
           if (typeof data.resetAt === "string" && data.resetAt.trim()) {
             quotaResetAt = data.resetAt.trim();
           }
@@ -1711,19 +1725,14 @@ export function ChatArea() {
           } else if (errorCode === "access_expired") {
             message = "Access code required. Redeem a fresh code to keep chatting.";
           } else if (errorCode === "daily_limit_reached") {
-            const safeLimit = quotaLimit ?? 5;
             const resetLabel = quotaResetAt
               ? new Date(quotaResetAt).toLocaleString()
               : "tomorrow";
             const isBotQuota = quotaSurfaceCode === "zaki_bot" || isZakiAgentSpace;
             if (isBotQuota) {
-              message = isRtl
-                ? `وصلت إلى حد ZAKI BOT اليومي (${safeLimit}). سيُعاد التعيين عند ${resetLabel}. نسخة BOT premium قريبًا.`
-                : `You reached today's ZAKI BOT limit (${safeLimit}). Resets at ${resetLabel}. BOT premium is coming soon.`;
+              message = chatCopy.experimentalLimitReached(resetLabel);
             } else {
-              message = isRtl
-                ? `وصلت إلى الحد اليومي المجاني (${safeLimit}). سيُعاد التعيين عند ${resetLabel}.`
-                : `You reached today's free limit (${safeLimit}). Resets at ${resetLabel}.`;
+              message = chatCopy.appFreeLimitReached(resetLabel);
             }
           }
         } else {
@@ -2461,7 +2470,7 @@ export function ChatArea() {
           const message = String(
             (data as { error?: string; message?: string } | null)?.error ||
               (data as { error?: string; message?: string } | null)?.message ||
-              "Unable to initialize ZAKI BOT."
+              "Unable to initialize ZAKI."
           );
           if (!silent) toast.error(message);
           return false;
@@ -2471,7 +2480,7 @@ export function ChatArea() {
       })()
         .catch((error) => {
           if (!silent) {
-            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI BOT.");
+            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI.");
           }
           return false;
         })
@@ -2787,15 +2796,6 @@ export function ChatArea() {
     }
     window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
   }, [activeWorkspaceSlug, goToSpaces, primarySpace?.id]);
-
-  const handleHomeStartConversation = useCallback(() => {
-    const workspaceSlug = homeConversationSpaceId;
-    if (!workspaceSlug) {
-      goToSpaces();
-      return;
-    }
-    handleSend(HOME_STARTER_MESSAGE, [], workspaceSlug);
-  }, [goToSpaces, handleSend, homeConversationSpaceId]);
 
   // Track previous thread for summarization on switch
   const prevThreadRef = useRef<{ id: string; workspaceSlug: string; title: string } | null>(null);
@@ -3113,7 +3113,6 @@ export function ChatArea() {
       return (
         <ZakiHomeView
           primarySpace={primarySpace}
-          onStartConversation={handleHomeStartConversation}
           onSendExample={(example) => handleSend(example, [])}
           onGoToThread={goToThread}
           onDeleteThread={(threadId, spaceId) => {
@@ -3321,7 +3320,7 @@ export function ChatArea() {
 
           {showScrollToBottom && !showZakiHome && !showSpacesView && !showSpaceDetail && (
             <div
-              className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20"
+              className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-30"
               style={{ bottom: Math.max(24, inputHeight + 24 + inputOffset) + 20 }}
             >
               <button
@@ -3348,6 +3347,14 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
+              <ZakiBootstrapCard
+                active={isZakiBotActiveSpace && Boolean(authUserId) && !zakiBootstrapCompleted}
+                userId={authUserId}
+                onDismiss={() => setZakiBootstrapCompleted(true)}
+              />
+              <ZakiExperimentalNotice
+                active={isZakiBotActiveSpace && zakiBootstrapCompleted}
+              />
               <InputArea
                 onSend={handleSend}
                 attachments={attachments}
@@ -3364,8 +3371,12 @@ export function ChatArea() {
                 quotaBadge={
                   zakiBotQuotaInfo
                     ? {
-                        remaining: zakiBotQuotaInfo.remaining,
-                        limit: zakiBotQuotaInfo.limit,
+                        label:
+                          zakiBotQuotaInfo.remaining <= 0
+                            ? chatCopy.quotaBadgeDanger
+                            : zakiBotQuotaInfo.remaining <= 2
+                              ? chatCopy.quotaBadgeWarning
+                              : chatCopy.quotaBadgeNeutral,
                         tone:
                           zakiBotQuotaInfo.remaining <= 0
                             ? "danger"

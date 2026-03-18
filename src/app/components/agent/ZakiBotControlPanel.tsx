@@ -239,7 +239,7 @@ function ChannelInstructionCard({
           {title}
         </h4>
         {status ? (
-          <span className="rounded-full border border-zaki-subtle bg-white px-2.5 py-0.5 text-[11px] font-medium text-zaki-secondary dark:border-[#2e241b] dark:bg-[#120e0b] dark:text-zaki-dark-subtle">
+          <span className="rounded-full border border-zaki-subtle bg-white px-2.5 py-0.5 text-[11px] font-medium text-zaki-secondary dark:border-[#3a2b1f] dark:bg-[#20160f] dark:text-[#e9d3bf]">
             {status}
           </span>
         ) : null}

@@ -1,6 +1,6 @@
 import { 
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
-  EditIcon, ChevronDownIcon, CenterLogo
+  ChevronDownIcon, CenterLogo
 } from "./icons";
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,9 +17,11 @@ import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { useSpaces } from "@/queries/useSpaces";
 import { useEntitlements } from "@/queries";
+import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
+import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
 import { SettingsModal } from "./sidebar/SettingsModal";
-import { ZakiBotControlPanel } from "./agent/ZakiBotControlPanel";
+import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
 import {
   isZakiBotSpaceId,
   ZAKI_BOT_LABEL,
@@ -72,22 +74,21 @@ export function Sidebar() {
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [zakiSettingsOpen, setZakiSettingsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
-  const [zakiBotControlsOpen, setZakiBotControlsOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryInitialTab, setMemoryInitialTab] = useState<
     "memories" | "pending" | "conflicts"
   >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
-  const planTierRaw = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatusRaw = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const accessActive = Boolean(entitlementsResult?.data?.access?.active);
-  const isPremium =
-    ["student", "personal", "pro"].includes(planTierRaw) &&
-    ["active", "trialing", "past_due"].includes(planStatusRaw);
-  const activeViaAccessCode = accessActive && !isPremium;
+  const entitlements = entitlementsResult?.data ?? null;
+  const planTierRaw = entitlements?.plan?.tier ?? "free";
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const hasSubscription = hasActiveSubscription(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const planLabel =
     activeViaAccessCode
       ? t("sidebar.profile.planBadge.codeActive")
@@ -111,7 +112,7 @@ export function Sidebar() {
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
   const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);
   const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<SidebarSpace | null>(null);
-  const [spaceDescriptionDraft, setSpaceDescriptionDraft] = useState("");
+  const [spaceNameDraft, setSpaceNameDraft] = useState("");
   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ type: "space" | "thread"; id: string; label: string } | null>(null);
@@ -151,7 +152,7 @@ export function Sidebar() {
     const handleOpenSettings = () => {
       if (!user?.username) return;
       setProfileMenuOpen(false);
-      setSettingsOpen(true);
+      setSettingsModalOpen(true);
       window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
     };
     const handleCloseMemory = () => {
@@ -197,7 +198,6 @@ export function Sidebar() {
   }, [profileMenuOpen, user?.username]);
 
   // Focus trap refs for modals
-  const spaceSettingsModalRef = useFocusTrap<HTMLDivElement>(spaceSettingsOpen);
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
 
   const isActive = (item: string) => activeItem === item;
@@ -256,13 +256,6 @@ export function Sidebar() {
       event.currentTarget.blur();
     }
   };
-
-  const openSpacesView = useCallback(() => {
-    setActiveItem("spaces");
-    setSpaceSearchQuery("");
-    goToSpaces();
-    window.dispatchEvent(new Event("zaki:view-spaces"));
-  }, [goToSpaces]);
 
   const openCreateSpaceFlow = useCallback(() => {
     setSpaceSearchQuery("");
@@ -497,7 +490,7 @@ export function Sidebar() {
 
   useEffect(() => {
     const anyModalOpen =
-      settingsOpen ||
+      zakiSettingsOpen ||
       memoryOpen ||
       spaceSettingsOpen ||
       Boolean(confirmDelete);
@@ -521,13 +514,13 @@ export function Sidebar() {
         setMemoryOpen(false);
         return;
       }
-      if (settingsOpen) {
-        setSettingsOpen(false);
+      if (zakiSettingsOpen) {
+        setZakiSettingsOpen(false);
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [confirmDelete, memoryOpen, settingsOpen, spaceSettingsOpen]);
+  }, [confirmDelete, memoryOpen, spaceSettingsOpen, zakiSettingsOpen]);
 
   useEffect(() => {
     if (!spaceSettingsTarget) return;
@@ -936,6 +929,7 @@ export function Sidebar() {
     const handleUpdateSpace = (event: Event) => {
       const detail = (event as CustomEvent<{
         id: string;
+        name?: string;
         instructions?: string;
         pinnedFiles?: PinnedFile[];
         icon?: string;
@@ -950,6 +944,9 @@ export function Sidebar() {
           space.id === detail.id
             ? {
                 ...space,
+                title: typeof detail.name === "string" && detail.name.trim().length > 0
+                  ? detail.name.trim()
+                  : space.title,
                 instructions: detail.instructions ?? space.instructions,
                 pinnedFiles: detail.pinnedFiles ? detail.pinnedFiles : space.pinnedFiles,
                 icon: space.fixed ? space.icon : detail.icon ?? space.icon,
@@ -960,6 +957,12 @@ export function Sidebar() {
         )
       );
       const updatePayload: Record<string, unknown> = {};
+      if (typeof detail.name === "string") {
+        const normalizedName = detail.name.trim();
+        if (normalizedName) {
+          updatePayload.name = normalizedName;
+        }
+      }
       if (typeof detail.description === "string") {
         updatePayload.description = detail.description.trim();
       }
@@ -1047,7 +1050,7 @@ export function Sidebar() {
       const target = spaces.find((space) => space.id === detail?.id);
       if (!target) return;
       setSpaceSettingsTarget(target);
-      setSpaceDescriptionDraft(target.description ?? "");
+      setSpaceNameDraft(target.title ?? "");
       setSpaceSettingsOpen(true);
     };
     const handleDeleteSpace = (event: Event) => {
@@ -1123,19 +1126,6 @@ export function Sidebar() {
               data-onboarding-id="sidebar-create-space"
             >
               <AddIcon />
-            </button>
-            <button
-              className={cn(
-                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                isActive("spaces") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
-              )}
-              onClick={openSpacesView}
-              onMouseUp={blurButtonOnPointerClick}
-              type="button"
-              title={t("sidebar.nav.spaces")}
-              aria-label={t("sidebar.actions.viewSpaces")}
-            >
-              <EditIcon />
             </button>
             <button
               className={cn(
@@ -1220,7 +1210,7 @@ export function Sidebar() {
       </div>
       
       {/* Last synced badge — trust signal */}
-      <div className="flex items-center gap-1.5 text-2xs text-zaki-muted mb-4 pl-1">
+      <div className={cn("flex items-center gap-1.5 text-2xs text-zaki-muted mb-4", isRtl ? "pr-1 justify-end" : "pl-1")}>
         <span className="inline-block size-1.5 rounded-full bg-zaki-accent animate-pulse" />
         <span>{t("sidebar.synced", { time: formatRelativeTime(lastSynced) })}</span>
       </div>
@@ -1229,7 +1219,8 @@ export function Sidebar() {
       <div className="flex flex-col gap-1 mb-5">
         <button
           className={cn(
-            "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
+            "flex items-center gap-2 p-1.5 rounded-lg transition-colors group",
+            isRtl ? "text-right flex-row-reverse" : "text-left",
             isActive("new-space") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
           )}
           onClick={openCreateSpaceFlow}
@@ -1243,25 +1234,11 @@ export function Sidebar() {
           <span className="text-zaki-brand text-sm font-medium">{t("sidebar.nav.newSpace")}</span>
         </button>
 
-        <button
-          className={cn(
-            "flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group",
-            isActive("spaces") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
-          )}
-          onClick={openSpacesView}
-          onMouseUp={blurButtonOnPointerClick}
-          type="button"
-        >
-          <div className="size-5 flex items-center justify-center">
-             <EditIcon />
-          </div>
-          <span className="text-zaki-secondary text-sm font-medium">{t("sidebar.nav.spaces")}</span>
-        </button>
-
         <div className="relative group">
           <button
             className={cn(
-              "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left",
+              "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors",
+              isRtl ? "text-right flex-row-reverse" : "text-left",
               isSpaceActive(ZAKI_BOT_SPACE_ID) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
             )}
             onClick={openZakiBotView}
@@ -1277,10 +1254,13 @@ export function Sidebar() {
           </button>
           <button
             type="button"
-            className="absolute right-1 top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+              isRtl ? "left-1" : "right-1"
+            )}
             onClick={(event) => {
               event.stopPropagation();
-              setZakiBotControlsOpen(true);
+              setZakiSettingsOpen(true);
             }}
             aria-label={`${ZAKI_BOT_LABEL} settings`}
           >
@@ -1295,14 +1275,14 @@ export function Sidebar() {
 
       {/* Space Section */}
       <div className="flex-1 overflow-y-auto bg-[#FDF6EE] dark:bg-[#0f0b08] zaki-scrollbar-fade">
-        <div className="text-zaki-muted text-xs font-medium mb-2 pl-1.5">{t("sidebar.section.space")}</div>
+        <div className={cn("text-zaki-muted text-xs font-medium mb-2", isRtl ? "pr-1.5 text-right" : "pl-1.5")}>{t("sidebar.section.space")}</div>
         {spacesLoading && (
           <div className="mb-3">
             <SkeletonSpaceList />
           </div>
         )}
         {spacesError && (
-          <div className="text-xs text-zaki-brand mb-3 pl-1.5">{spacesError}</div>
+          <div className={cn("text-xs text-zaki-brand mb-3", isRtl ? "pr-1.5 text-right" : "pl-1.5")}>{spacesError}</div>
         )}
         
         {/* Empty State - No Spaces */}
@@ -1366,7 +1346,7 @@ export function Sidebar() {
                       className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setZakiBotControlsOpen(true);
+                        setZakiSettingsOpen(true);
                       }}
                       aria-label={`${space.title} settings`}
                     >
@@ -1389,7 +1369,7 @@ export function Sidebar() {
                 </div>
               </div>
               {isSpaceExpanded(space.id) && !isZakiBotSpaceId(space.id) && (
-                <div className="pl-6 flex flex-col gap-1 mt-1">
+                <div className={cn("flex flex-col gap-1 mt-1", isRtl ? "pr-6" : "pl-6")}>
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">
                       <button
@@ -1409,7 +1389,10 @@ export function Sidebar() {
                       </button>
                       <button
                         type="button"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        className={cn(
+                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          isRtl ? "left-0" : "right-0"
+                        )}
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(
@@ -1427,7 +1410,10 @@ export function Sidebar() {
                       </button>
                       {openMenu?.type === "thread" && openMenu.id === thread.id && (
                         <div
-                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          className={cn(
+                            "absolute top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20",
+                            isRtl ? "left-0" : "right-0"
+                          )}
                           role="menu"
                           data-menu
                         >
@@ -1460,7 +1446,10 @@ export function Sidebar() {
                     </div>
                   ))}
                   <button
-                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
+                    className={cn(
+                      "flex items-center gap-2 p-1.5 rounded-lg transition-colors group hover:bg-zaki-hover",
+                      isRtl ? "text-right flex-row-reverse" : "text-left"
+                    )}
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
                     data-onboarding-id="sidebar-space-new-thread"
@@ -1527,7 +1516,7 @@ export function Sidebar() {
                         className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                         onClick={() => {
                           setSpaceSettingsTarget(space);
-                          setSpaceDescriptionDraft(space.description ?? "");
+                          setSpaceNameDraft(space.title ?? "");
                           setSpaceSettingsOpen(true);
                         }}
                         aria-label={`${space.title} settings`}
@@ -1553,7 +1542,7 @@ export function Sidebar() {
               </div>
 
               {isSpaceExpanded(space.id) && (
-                <div className="pl-6 flex flex-col gap-1 mt-1">
+                <div className={cn("flex flex-col gap-1 mt-1", isRtl ? "pr-6" : "pl-6")}>
                   {space.threads.map((thread) => (
                     <div key={thread.id} className="relative group">
                       <button
@@ -1591,7 +1580,10 @@ export function Sidebar() {
                       </button>
                       <button
                         type="button"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        className={cn(
+                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          isRtl ? "left-0" : "right-0"
+                        )}
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenMenu(openMenu?.id === thread.id ? null : { type: "thread", id: thread.id });
@@ -1605,7 +1597,10 @@ export function Sidebar() {
                       </button>
                       {openMenu?.type === "thread" && openMenu.id === thread.id && (
                         <div
-                          className="absolute right-0 top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20"
+                          className={cn(
+                            "absolute top-8 w-36 rounded-zaki-md border border-zaki-subtle bg-white shadow-[0px_12px_24px_rgba(15,15,15,0.12)] p-1 z-20",
+                            isRtl ? "left-0" : "right-0"
+                          )}
                           role="menu"
                           data-menu
                         >
@@ -1638,7 +1633,10 @@ export function Sidebar() {
                     </div>
                   ))}
                   <button
-                    className="flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left group hover:bg-zaki-hover"
+                    className={cn(
+                      "flex items-center gap-2 p-1.5 rounded-lg transition-colors group hover:bg-zaki-hover",
+                      isRtl ? "text-right flex-row-reverse" : "text-left"
+                    )}
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
                     data-onboarding-id="sidebar-space-new-thread"
@@ -1732,25 +1730,26 @@ export function Sidebar() {
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              to="/pricing?source=settings"
 		              onClick={() => {
-		                void trackProductEvent({
-                    event: "upgrade_cta_clicked",
-                    source: "settings",
-                    language: isRtl ? "ar" : "en",
-                    plan:
-                      isPremium
-                        ? planTierRaw === "student" || planTierRaw === "personal"
-                          ? planTierRaw
-                          : "personal"
-                        : "personal",
-                    interval: "monthly",
-                  }).catch(() => {
-                    // Best-effort telemetry only.
-                  });
+		                if (!isPremium) {
+                    void trackProductEvent({
+                      event: "upgrade_cta_clicked",
+                      source: "settings",
+                      language: isRtl ? "ar" : "en",
+                      plan: "personal",
+                      interval: "monthly",
+                    }).catch(() => {
+                      // Best-effort telemetry only.
+                    });
+                  }
                   setProfileMenuOpen(false);
-	              }}
+		              }}
 	            >
 	              <Sparkles className="size-4 text-zaki-muted" />
-	              {isPremium ? t("sidebar.profile.managePlan") : t("sidebar.profile.upgradePlan")}
+	              {activeViaAccessCode
+                  ? t("settingsModal.plan.manageAccess")
+                  : hasSubscription
+                  ? t("sidebar.profile.managePlan")
+                  : t("sidebar.profile.upgradePlan")}
 		            </Link>
 		            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
@@ -1790,7 +1789,7 @@ export function Sidebar() {
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
-                setSettingsOpen(true);
+                setSettingsModalOpen(true);
                 window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
               }}
               data-onboarding-id="profile-menu-settings"
@@ -1801,9 +1800,9 @@ export function Sidebar() {
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1b1512]")}
 	              type="button"
-		              onClick={() => {
-		                setProfileMenuOpen(false);
-		                setSettingsOpen(true);
+              onClick={() => {
+                setProfileMenuOpen(false);
+                setSettingsModalOpen(true);
 	              }}
 	            >
 	              <Globe className="size-4 text-zaki-muted" />
@@ -1860,29 +1859,6 @@ export function Sidebar() {
           </div>
         )}
       </div>
-      <SettingsModal
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        displayName={displayName}
-        onDisplayNameChange={setDisplayName}
-        email={user?.username || ""}
-        themePreference={themePreference}
-        onThemeChange={(value) =>
-          setThemePreference(value as "light" | "dark" | "system")
-        }
-        onSave={async () => {
-          const saved = await saveDisplayName();
-          if (saved) {
-            setSettingsOpen(false);
-          }
-        }}
-        onAccountDeleted={() => {
-          setSettingsOpen(false);
-          setProfileMenuOpen(false);
-          logout();
-        }}
-        saving={profileSaving}
-      />
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
           <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} aria-hidden="true" />
@@ -1971,264 +1947,90 @@ export function Sidebar() {
           </div>
         </div>
       )}
-      {spaceSettingsOpen && spaceSettingsTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[1px]">
-          <div
-            className="absolute inset-0"
-            onClick={() => {
-              setSpaceSettingsOpen(false);
-              setSpaceSettingsTarget(null);
-            }}
-            aria-hidden="true"
-          />
-          <div
-            ref={spaceSettingsModalRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Space settings"
-            className="relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)]"
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zaki-subtle dark:border-zaki-dark">
-              <div>
-                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">{t("sidebar.spaceSettings")}</div>
-                <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted mt-1 truncate">
-                  {spaceSettingsTarget.title}
-                </div>
-                <div className="mt-2 text-[11px] text-zaki-disabled dark:text-zaki-dark-muted">
-                  {t("sidebar.spaceSettingsSubtitle")}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="size-8 rounded-full border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card text-zaki-secondary dark:text-zaki-dark-muted hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
-                onClick={() => {
-                  setSpaceSettingsOpen(false);
-                  setSpaceSettingsTarget(null);
-                }}
-                aria-label={sidebarCopy.closeSpaceSettingsAria}
-              >
-                <span className="block text-lg leading-none">×</span>
-              </button>
-            </div>
-            <div className="px-5 py-4 flex flex-col gap-5">
-              <section className="flex flex-col gap-2">
-                <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{t("sidebar.basics")}</div>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{sidebarCopy.description}</span>
-                <textarea
-                  className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
-                  rows={3}
-                  maxLength={200}
-                  value={spaceDescriptionDraft}
-                  onChange={(event) => setSpaceDescriptionDraft(event.target.value)}
-                  placeholder={sidebarCopy.descriptionPlaceholder}
-                />
-                <div className="text-[10px] text-zaki-muted text-right">
-                  {spaceDescriptionDraft.length}/200
-                </div>
-                </label>
-              </section>
-
-              <section className="flex flex-col gap-3">
-                <div>
-                  <div className="text-2xs uppercase tracking-[0.2em] text-zaki-muted">{t("sidebar.sharedContext")}</div>
-                  <div className="mt-1 text-[11px] text-zaki-disabled dark:text-zaki-dark-muted">
-                    {t("sidebar.sharedContextSubtitle")}
-                  </div>
-                </div>
-                <div className="grid gap-3">
-                  <button
-                    type="button"
-                    className="w-full rounded-zaki-xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3.5 py-3 text-left hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
-                    onClick={() => {
-                      setSpaceSettingsOpen(false);
-                      setSpaceSettingsTarget(null);
-                      window.dispatchEvent(
-                        new CustomEvent("zaki:edit-space-instructions", { detail: { id: spaceSettingsTarget.id } })
-                      );
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                          {t("sidebar.instructionsTitle")}
-                        </div>
-                        <div className="mt-1 text-[11px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                          {t("sidebar.instructionsBody")}
-                        </div>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
-                        {t("sidebar.editAction")}
-                      </span>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="w-full rounded-zaki-xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3.5 py-3 text-left hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors"
-                    onClick={() => {
-                      setSpaceSettingsOpen(false);
-                      setSpaceSettingsTarget(null);
-                      window.dispatchEvent(
-                        new CustomEvent("zaki:upload-space-files", { detail: { id: spaceSettingsTarget.id } })
-                      );
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                          {t("sidebar.knowledgeFilesTitle")}
-                        </div>
-                        <div className="mt-1 text-[11px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                          {t("sidebar.knowledgeFilesBody")}
-                        </div>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
-                        {t("sidebar.filesBadge", { count: spaceSettingsTarget.pinnedFiles?.length ?? 0 })}
-                      </span>
-                    </div>
-                  </button>
-                </div>
-
-                <div className="rounded-zaki-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base/50 dark:bg-zaki-dark-elevated px-3.5 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
-                    {t("sidebar.contextSummaryTitle")}
-                  </div>
-                  <div className="mt-3 space-y-2.5">
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
-                        <Brain className="size-3.5" />
-                      </span>
-                      <div>
-                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                          {t("sidebar.contextSummaryMemoryLabel")}
-                        </div>
-                        <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                          {t("sidebar.contextSummaryMemoryBody")}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-zaki-brand shadow-sm dark:bg-zaki-dark-card">
-                        <FileText className="size-3.5" />
-                      </span>
-                      <div>
-                        <div className="text-xs font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                          {t("sidebar.contextSummarySpaceLabel")}
-                        </div>
-                        <div className="text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                          {t("sidebar.contextSummarySpaceBody")}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {(spaceSettingsTarget.pinnedFiles ?? []).length > 0 ? (
-                    (spaceSettingsTarget.pinnedFiles ?? []).map((file) => {
-                      const status = file.status ?? "embedded";
-                      const tone = fileStatusTone[status];
-                      const removeKey = `${spaceSettingsTarget.id}:${String(file.location || "")}`;
-                      return (
-                        <div
-                          key={`${file.name}:${file.size}:${file.type}:${file.location ?? ""}`}
-                          className="flex items-start justify-between gap-3 rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-3 py-2.5"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
-                              {file.name}
-                            </div>
-                            <div className="mt-1 flex items-center gap-2 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-                              <span>{file.type || "document"}</span>
-                              <span className={`rounded-full px-2 py-0.5 font-semibold ${tone.chip}`}>
-                                {tone.label}
-                              </span>
-                            </div>
-                            {status === "failed" && file.error && (
-                              <div className="mt-1 text-[11px] text-rose-700">{file.error}</div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            className="shrink-0 rounded-full border border-zaki-subtle dark:border-zaki-dark px-2.5 py-1 text-[11px] text-zaki-secondary dark:text-zaki-dark-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover disabled:opacity-50"
-                            onClick={() => removeWorkspaceDocument(spaceSettingsTarget.id, file)}
-                            disabled={!file.location || removingDocumentKey === removeKey}
-                          >
-                            {removingDocumentKey === removeKey
-                              ? t("sidebar.removingAction")
-                              : t("sidebar.removeAction")}
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="rounded-zaki-lg border border-dashed border-zaki-subtle dark:border-zaki-dark px-3 py-3 text-sm text-zaki-muted dark:text-zaki-dark-muted">
-                      {t("sidebar.workspaceFilesEmpty")}
-                    </div>
-                  )}
-                </div>
-
-                {!spaceSettingsTarget.fixed && (
-                  <section className="rounded-zaki-xl border border-rose-200/80 bg-rose-50/55 px-3.5 py-3 dark:border-rose-900/40 dark:bg-rose-950/10">
-                    <div className="text-2xs uppercase tracking-[0.2em] text-rose-700/90 dark:text-rose-300">
-                      {t("sidebar.dangerZone")}
-                    </div>
-                    <div className="mt-2 text-[11px] leading-5 text-rose-800/80 dark:text-rose-200/80">
-                      {t("sidebar.dangerZoneBody")}
-                    </div>
-                    <button
-                      type="button"
-                      className="mt-3 w-full rounded-zaki-lg border border-rose-200 bg-white px-3 py-2 text-left text-sm text-zaki-brand hover:bg-[rgba(210,68,48,0.08)] transition-colors dark:border-rose-900/40 dark:bg-zaki-dark-card"
-                      onClick={() => {
-                        setSpaceSettingsOpen(false);
-                        setSpaceSettingsTarget(null);
-                        setConfirmDelete({
-                          type: "space",
-                          id: spaceSettingsTarget.id,
-                          label: spaceSettingsTarget.title || spaceSettingsTarget.id,
-                        });
-                      }}
-                    >
-                      Delete space
-                    </button>
-                  </section>
-                )}
-              </section>
-            </div>
-            <div className="flex items-center justify-between px-5 py-4 border-t border-zaki-subtle dark:border-zaki-dark">
-              <button
-                type="button"
-                className="zaki-btn zaki-btn-secondary"
-                onClick={() => {
-                  setSpaceSettingsOpen(false);
-                  setSpaceSettingsTarget(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="zaki-btn bg-zaki-accent text-white hover:bg-zaki-accent-hover transition-colors zaki-pressable"
-                onClick={() => {
-                  if (!spaceSettingsTarget) return;
-                  window.dispatchEvent(
-                    new CustomEvent("zaki:update-space", {
-                      detail: { id: spaceSettingsTarget.id, description: spaceDescriptionDraft.trim() },
-                    })
-                  );
-                  setSpaceSettingsOpen(false);
-                  setSpaceSettingsTarget(null);
-                }}
-              >
-                Save changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
         </>
       )}
+      <SettingsModal
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        displayName={displayName}
+        email={user?.username || ""}
+        onDisplayNameChange={setDisplayName}
+        themePreference={themePreference}
+        onThemeChange={(value: "light" | "dark" | "system") =>
+          setThemePreference(value as "light" | "dark" | "system")
+        }
+        onSave={async () => {
+          await saveDisplayName();
+        }}
+        onAccountDeleted={() => {
+          setSettingsModalOpen(false);
+          setProfileMenuOpen(false);
+          logout();
+        }}
+        saving={profileSaving}
+      />
+      <ZakiSettingsSheet
+        isOpen={zakiSettingsOpen}
+        onClose={() => setZakiSettingsOpen(false)}
+      />
+      <SpaceSettingsSheet
+        isOpen={spaceSettingsOpen}
+        space={spaceSettingsTarget}
+        nameDraft={spaceNameDraft}
+        onNameChange={setSpaceNameDraft}
+        onClose={() => {
+          setSpaceSettingsOpen(false);
+          setSpaceSettingsTarget(null);
+        }}
+        onSave={() => {
+          if (!spaceSettingsTarget) return;
+          const trimmedName = spaceNameDraft.trim();
+          if (!trimmedName) return;
+          window.dispatchEvent(
+            new CustomEvent("zaki:update-space", {
+              detail: { id: spaceSettingsTarget.id, name: trimmedName },
+            })
+          );
+          setSpaceSettingsOpen(false);
+          setSpaceSettingsTarget(null);
+        }}
+        onEditInstructions={() => {
+          if (!spaceSettingsTarget) return;
+          setSpaceSettingsOpen(false);
+          setSpaceSettingsTarget(null);
+          window.dispatchEvent(
+            new CustomEvent("zaki:edit-space-instructions", {
+              detail: { id: spaceSettingsTarget.id },
+            })
+          );
+        }}
+        onUploadFiles={() => {
+          if (!spaceSettingsTarget) return;
+          setSpaceSettingsOpen(false);
+          setSpaceSettingsTarget(null);
+          window.dispatchEvent(
+            new CustomEvent("zaki:upload-space-files", {
+              detail: { id: spaceSettingsTarget.id },
+            })
+          );
+        }}
+        onRemoveFile={(file) => {
+          if (!spaceSettingsTarget) return;
+          removeWorkspaceDocument(spaceSettingsTarget.id, file);
+        }}
+        onDelete={() => {
+          if (!spaceSettingsTarget) return;
+          setSpaceSettingsOpen(false);
+          setSpaceSettingsTarget(null);
+          setConfirmDelete({
+            type: "space",
+            id: spaceSettingsTarget.id,
+            label: spaceSettingsTarget.title || spaceSettingsTarget.id,
+          });
+        }}
+        removingDocumentKey={removingDocumentKey}
+        fileStatusTone={fileStatusTone}
+      />
       {collapsed && confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
           <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} aria-hidden="true" />
@@ -2266,10 +2068,6 @@ export function Sidebar() {
           </div>
         </div>
       )}
-      <ZakiBotControlPanel
-        isOpen={zakiBotControlsOpen}
-        onClose={() => setZakiBotControlsOpen(false)}
-      />
     </nav>
   );
 }

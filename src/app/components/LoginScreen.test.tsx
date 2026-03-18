@@ -150,4 +150,41 @@ describe("LoginScreen legal consent", () => {
       });
     });
   });
+
+  it("submits a reset-link request and shows the reset notice", async () => {
+    const user = userEvent.setup();
+    render(<LoginScreen />);
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await user.type(screen.getByPlaceholderText("Email address"), "reset@example.com");
+    await user.click(screen.getByRole("button", { name: "Send reset link" }));
+
+    await waitFor(() => {
+      expect(requestPasswordReset).toHaveBeenCalledWith("reset@example.com");
+    });
+    expect(
+      await screen.findByText("If the account exists, a reset link has been sent.")
+    ).toBeInTheDocument();
+  });
+
+  it("submits reset confirmation when a reset token is present", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/reset?token=reset-token-123");
+
+    render(<LoginScreen />);
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("New password"), "Password123");
+    await user.type(screen.getByPlaceholderText("Confirm new password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Update password" }));
+
+    await waitFor(() => {
+      expect(confirmPasswordReset).toHaveBeenCalledWith({
+        token: "reset-token-123",
+        password: "Password123",
+      });
+    });
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
 });

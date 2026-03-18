@@ -797,9 +797,9 @@ const contactContent: Record<Locale, ContactContent> = {
     emailLabel: "support@chatzaki.com",
     appLabel: "Open app",
     seo: {
-      title: "Contact ZAKI AI | Support and Inquiries",
+      title: "Contact ZAKI | Support and Inquiries",
       description:
-        "Contact ZAKI AI for support, privacy, legal, and account inquiries across Arabic and English workflows.",
+        "Contact ZAKI for support, privacy, legal, and account inquiries.",
       imageAlt: "Contact ZAKI AI support page",
       keywords: "ZAKI contact, ZAKI support, ZAKI privacy requests, ZAKI legal contact",
     },

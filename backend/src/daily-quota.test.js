@@ -38,12 +38,12 @@ describe("daily quota helpers", () => {
     });
     expect(getSurfaceQuotaConfig({}, APP_CHAT_SURFACE)).toEqual({
       surface: APP_CHAT_SURFACE,
-      limit: 5,
+      limit: 10,
       bucket: "app_chat",
     });
     expect(getSurfaceQuotaConfig({}, ZAKI_BOT_SURFACE)).toEqual({
       surface: ZAKI_BOT_SURFACE,
-      limit: 5,
+      limit: 10,
       bucket: "zaki_bot",
     });
   });
@@ -62,7 +62,7 @@ describe("daily quota helpers", () => {
   it("builds structured exceeded payloads for app and bot surfaces", () => {
     expect(
       buildDailyLimitExceededPayload({
-        limit: 5,
+        limit: 10,
         resetAt: "2026-03-10T00:00:00.000Z",
         surface: APP_CHAT_SURFACE,
       })
@@ -70,13 +70,13 @@ describe("daily quota helpers", () => {
       expect.objectContaining({
         code: "daily_limit_reached",
         surface: APP_CHAT_SURFACE,
-        limit: 5,
+        limit: 10,
         remaining: 0,
       })
     );
     expect(
       buildDailyLimitExceededPayload({
-        limit: 5,
+        limit: 10,
         resetAt: "2026-03-10T00:00:00.000Z",
         surface: ZAKI_BOT_SURFACE,
       })
@@ -84,7 +84,7 @@ describe("daily quota helpers", () => {
       expect.objectContaining({
         code: "daily_limit_reached",
         surface: ZAKI_BOT_SURFACE,
-        limit: 5,
+        limit: 10,
         remaining: 0,
       })
     );
@@ -110,14 +110,14 @@ describe("daily quota helpers", () => {
       dbGet,
       userId: 17,
       bucket: "app_chat",
-      limit: 5,
+      limit: 10,
       nowDate: new Date("2026-03-09T11:00:00.000Z"),
     });
     expect(result).toMatchObject({
       allowed: true,
-      limit: 5,
+      limit: 10,
       used: 4,
-      remaining: 1,
+      remaining: 6,
       resetAt: "2026-03-10T00:00:00.000Z",
     });
     expect(dbQuery).toHaveBeenCalledTimes(1);
@@ -126,19 +126,19 @@ describe("daily quota helpers", () => {
 
   it("rejects quota when at limit", async () => {
     const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
-    const dbGet = jest.fn().mockResolvedValue({ used_count: 5 });
+    const dbGet = jest.fn().mockResolvedValue({ used_count: 10 });
     const result = await consumeDailyPromptQuota({
       dbQuery,
       dbGet,
       userId: 17,
       bucket: "zaki_bot",
-      limit: 5,
+      limit: 10,
       nowDate: new Date("2026-03-09T12:00:00.000Z"),
     });
     expect(result).toMatchObject({
       allowed: false,
-      limit: 5,
-      used: 5,
+      limit: 10,
+      used: 10,
       remaining: 0,
       resetAt: "2026-03-10T00:00:00.000Z",
     });

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/queries";
+import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { toast } from "sonner";
 
@@ -35,8 +36,7 @@ export function InputArea({
   sendLocked?: boolean;
   zakiBotMode?: boolean;
   quotaBadge?: {
-    remaining: number;
-    limit: number;
+    label: string;
     tone: "neutral" | "warning" | "danger";
   } | null;
 }) {
@@ -56,11 +56,10 @@ export function InputArea({
   const wasSendingRef = useRef(isSending);
   const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
-  const planTier = entitlementsResult?.data?.plan?.tier ?? "free";
-  const planStatus = entitlementsResult?.data?.plan?.status ?? "inactive";
-  const isPremium =
-    ["student", "personal"].includes(planTier) &&
-    ["active", "trialing", "past_due"].includes(planStatus);
+  const entitlements = entitlementsResult?.data ?? null;
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const isPremium = effectiveEntitlement.premium;
+  const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
 
@@ -200,7 +199,7 @@ export function InputArea({
       style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
     >
       {/* Input Box */}
-      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir="ltr">
+      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir={isRtl ? "rtl" : "ltr"}>
         <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
@@ -215,22 +214,28 @@ export function InputArea({
                     type="button"
                     className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
                     onClick={() => {
-                      void trackProductEvent({
-                        event: "upgrade_cta_clicked",
-                        source: "chat_input",
-                        language: isRtl ? "ar" : "en",
-                        plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                        interval: "monthly",
-                      }).catch(() => {
-                        // Best-effort telemetry only.
-                      });
+                      if (!isPremium) {
+                        void trackProductEvent({
+                          event: "upgrade_cta_clicked",
+                          source: "chat_input",
+                          language: isRtl ? "ar" : "en",
+                          plan: "personal",
+                          interval: "monthly",
+                        }).catch(() => {
+                          // Best-effort telemetry only.
+                        });
+                      }
                       navigate("/pricing?source=chat_input");
                     }}
                   >
-                    {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
+                    {activeViaAccessCode
+                      ? t("input.manageAccessCta")
+                      : isPremium
+                      ? t("sidebar.profile.managePlan")
+                      : t("input.upgradeCta")}
                   </button>
                   <span className="text-zaki-secondary">
-                    {t("input.upgradeLabel")}
+                    {activeViaAccessCode ? t("input.accessLabel") : t("input.upgradeLabel")}
                   </span>
                   <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
                     <Zap className="size-3" />
@@ -242,25 +247,31 @@ export function InputArea({
                     <Zap className="size-3" />
                   </span>
                   <span className="text-zaki-secondary">
-                    {t("input.upgradeLabel")}
+                    {activeViaAccessCode ? t("input.accessLabel") : t("input.upgradeLabel")}
                   </span>
                   <button
                     type="button"
                     className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
                     onClick={() => {
-                      void trackProductEvent({
-                        event: "upgrade_cta_clicked",
-                        source: "chat_input",
-                        language: isRtl ? "ar" : "en",
-                        plan: isPremium ? (planTier === "student" || planTier === "personal" ? planTier : "personal") : "personal",
-                        interval: "monthly",
-                      }).catch(() => {
-                        // Best-effort telemetry only.
-                      });
+                      if (!isPremium) {
+                        void trackProductEvent({
+                          event: "upgrade_cta_clicked",
+                          source: "chat_input",
+                          language: isRtl ? "ar" : "en",
+                          plan: "personal",
+                          interval: "monthly",
+                        }).catch(() => {
+                          // Best-effort telemetry only.
+                        });
+                      }
                       navigate("/pricing?source=chat_input");
                     }}
                   >
-                    {isPremium ? t("sidebar.profile.managePlan") : t("input.upgradeCta")}
+                    {activeViaAccessCode
+                      ? t("input.manageAccessCta")
+                      : isPremium
+                      ? t("sidebar.profile.managePlan")
+                      : t("input.upgradeCta")}
                   </button>
                 </>
               )}
@@ -288,7 +299,10 @@ export function InputArea({
                     />
                     <button
                       type="button"
-                      className="absolute -top-1 -right-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                      className={cn(
+                        "absolute -top-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent",
+                        isRtl ? "-left-1" : "-right-1"
+                      )}
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -380,7 +394,10 @@ export function InputArea({
             </button>
             {menuOpen && (
               <div
-                className="absolute left-0 bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30"
+                className={cn(
+                  "absolute bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30",
+                  isRtl ? "right-0" : "left-0"
+                )}
                 role="menu"
               >
                 <button
@@ -560,7 +577,7 @@ export function InputArea({
                   : "border-zaki-subtle bg-white text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-muted"
             )}
           >
-            {quotaBadge.remaining}/{quotaBadge.limit}
+            {quotaBadge.label}
           </span>
         </div>
       ) : null}

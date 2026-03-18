@@ -192,7 +192,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
       title:
         locale === "ar"
           ? "زكي | البيتا العامة لمشغّل ذكاء شخصي"
-          : "ZAKI | Public Beta for a Personal AI Operator",
+          : "ZAKI | Personal Assistant AI & Smooth Operator",
       description,
       canonical: locale === "ar" ? `${SITE_URL}/ar/zaki-bot/` : `${SITE_URL}/zaki-bot/`,
       lang: locale,
@@ -203,7 +203,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
       keywords:
         locale === "ar"
           ? "زكي, ZAKI, مشغّل ذكاء شخصي, بيتا زكي, مساعد ذكاء شخصي"
-          : "ZAKI, Personal AI Operator, ZAKI beta, Arabic AI product",
+          : "ZAKI, Personal AI Operator, ZAKI beta, persistent intelligence, smooth operator",
       schema: [
         ...buildCommonSchema(locale, description),
         {
@@ -404,8 +404,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
   return {
     title:
       locale === "ar"
-        ? "زكي | دردشة يومية الآن ومشغّل شخصي للمستقبل"
-        : "ZAKI | Daily AI Now, Personal Operator Next",
+        ? "زكي | مساعد شخصي ذكي ومشغّل سلس"
+        : "ZAKI | Personal Assistant AI & Smooth Operator",
     description,
     canonical: locale === "ar" ? `${SITE_URL}/ar/` : `${SITE_URL}/`,
     lang: locale,
@@ -415,8 +415,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
     altLocaleTag,
       keywords:
         locale === "ar"
-          ? "زكي, ZAKI, Spaces, مساعد ذكاء شخصي, AI عربي"
-          : "ZAKI, Spaces, Personal AI Operator, Arabic AI, bilingual AI",
+          ? "زكي, ZAKI, Spaces, مساعد شخصي ذكي, ذكاء مستمر"
+          : "ZAKI, Spaces, Personal AI Operator, smooth operator, persistent AI",
     schema: [
       ...buildCommonSchema(locale, description),
       {

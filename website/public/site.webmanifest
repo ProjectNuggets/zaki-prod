@@ -1,7 +1,7 @@
 {
   "name": "ZAKI AI",
   "short_name": "ZAKI",
-  "description": "Personal assistant AI for Arabic and English, with user-controlled memory.",
+  "description": "Personal assistant AI with user-controlled memory, continuity, and context.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fcfcfd",

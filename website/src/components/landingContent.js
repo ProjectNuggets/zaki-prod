@@ -103,7 +103,7 @@ export const content = {
         "It does not claim to outperform the latest GPT or Claude models on raw capability.",
         "It is more affordable, more organized, and more controlled for everyday work.",
         "Spaces keep projects, research, and planning in separate contexts.",
-        "Full Arabic-English support with natural mixed-language handling.",
+        "Works naturally across languages, including mixed-language input.",
       ],
       honestyLine:
         "Spaces are not built to outperform the latest GPT or Claude models on raw capability. They are built to be more usable, more structured, and more controllable in everyday work.",
@@ -170,7 +170,7 @@ export const content = {
       human: "Intelligence that stays useful because it keeps context.",
       points: [
         "Spaces keep projects organized with cleaner separation.",
-        "Full Arabic-English support with natural mixed-language handling.",
+        "Works naturally across languages, including mixed-language input.",
         "Memory keeps useful context so work continues naturally.",
         "Designed for speed, clarity, and real daily workflows.",
       ],
@@ -546,7 +546,7 @@ export const content = {
         {
           question: "What is ZAKI?",
           answer:
-            "ZAKI is the persistent agent and the long-term product direction. Spaces are the live paid workspaces for organized daily productivity. ZAKI is also the public beta for persistent personal intelligence — the experimental personal operator we are building toward. Both support Arabic and English natively.",
+            "ZAKI is the persistent agent and the long-term product direction. Spaces are the live paid workspaces for organized daily productivity. ZAKI is also the public beta for persistent personal intelligence — the experimental personal operator we are building toward. It works across languages natively.",
         },
         {
           question: "What is the difference between ZAKI and Spaces?",
@@ -591,7 +591,7 @@ export const content = {
         {
           question: "Does ZAKI claim to outperform ChatGPT or Claude?",
           answer:
-            "No. Spaces do not claim to beat the latest GPT or Claude models on raw capability. The case for ZAKI is product shape: organization, pricing, control, workspace structure, and the operator direction. It also supports Arabic and English natively.",
+            "No. Spaces do not claim to beat the latest GPT or Claude models on raw capability. The case for ZAKI is product shape: organization, pricing, control, workspace structure, and the operator direction. It also works across languages natively.",
         },
         {
           question: "What does powered by Nullalis mean?",
@@ -629,7 +629,7 @@ export const content = {
     hero: {
       title: "Spaces للعمل. وزكي للاستمرارية.",
       subtitle:
-        "Spaces تمنحك إنتاجية منظّمة اليوم. وزكي هو البيتا العامة لذكاء شخصي مستمر — ذاكرة متواصلة، ومراحل عمل مرئية، وسياق يمتد مع الوقت.",
+        "Spaces تمنحك إنتاجية منظمة اليوم. وزكي هو البيتا العامة لذكاء شخصي مستمر بذاكرة متواصلة، ومراحل عمل مرئية، وسياق يمتد مع الوقت.",
       betaLine:
         "بيتا زكي مفتوحة الآن. الوصول المبكر يتضمن 5 رسائل مجانية يوميًا للتجربة.",
       hint: "Spaces متاحة الآن. بيتا زكي مفتوحة.",
@@ -703,11 +703,11 @@ export const content = {
     beta: {
       heading: "البيتا العامة: ماذا تتوقع؟",
       warning:
-        "زكي تجريبي بالتصميم. الذاكرة المستمرة، العملية المرئية، والاستمرارية لكل مستخدم — مشاكل صعبة. لذلك نطلقه علنيًا ونتعلم أثناء البناء.",
+        "زكي تجريبي بالتصميم. الذاكرة المستمرة، والعملية المرئية، والاستمرارية لكل مستخدم هي مشاكل صعبة. لذلك نطلقه علنيًا ونتعلم أثناء البناء.",
       bullets: [
-        "البيتا العامة مفتوحة الآن — الأماكن محدودة",
+        "البيتا العامة مفتوحة الآن، والأماكن محدودة",
         "5 رسائل مجانية يوميًا للتجربة المبكرة",
-        "هذا ليس المنتج النهائي — بل أرض الاختبار",
+        "هذا ليس المنتج النهائي، بل أرض الاختبار",
         "ملاحظاتك تشكّل النسخة المميزة القادمة مباشرة",
       ],
       primaryCta: "انضم إلى البيتا",
@@ -737,7 +737,7 @@ export const content = {
         "مجاني ومحدود في البيتا؛ والاشتراكات تأتي لاحقًا",
       ],
       bridgeLine:
-        "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت — لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
+        "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت، لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
     },
     nullalis: {
       heading: "مدعوم بـ Nullalis",
@@ -777,7 +777,7 @@ export const content = {
       heading: "الذكاء الاصطناعي يجيب جيدًا. لكن القليل منه يصبح نظيرًا رقميًا حقيقيًا.",
       subheading: "زكي بُني ليغلق هذه المسافة الأخيرة بين الإنسان والذكاء الاصطناعي.",
       intro:
-        "الإنتاجية الحقيقية ليست في إجابة إضافية. بل في عمل منظّم الآن، وسياق مستمر لاحقًا، ونظام يصبح أكثر فائدة كلما تعلّم إيقاعك وطريقتك في العمل.",
+        "الإنتاجية الحقيقية ليست في إجابة إضافية. بل في عمل منظّم الآن، وسياق مستمر، ونظام يصبح أكثر فائدة كلما تعلّم إيقاعك وطريقتك في العمل.",
       builtLine: "ولهذا بنينا زكي.",
       description:
         "مساحة عمل ذكاء اصطناعي مهيكلة وشخصية بطبيعتها. طبقة الذاكرة مبنية لتبقى تحت إدارتك وتحكمك.",
@@ -796,7 +796,7 @@ export const content = {
     geo: {
       definitionHeading: "ما هو زكي بالضبط؟",
       definitionText:
-        "زكي هو الوكيل المستمر. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظّمة. وزكي هو أيضًا البيتا العامة لذكاء شخصي مستمر — العلاقة طويلة الخيط خلف العمل.",
+        "زكي هو الوكيل المستمر. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظّمة. وزكي هو أيضًا البيتا العامة لذكاء شخصي مستمر، أي العلاقة طويلة الخيط خلف العمل.",
       statsHeading: "لماذا يختار الناس زكي؟",
       statsSource: "السلّم الذي يقف خلف العلامة.",
       stats: [
@@ -1083,7 +1083,7 @@ export const content = {
     pricing: {
       heading: "استخدم Spaces اليوم. جرّب زكي الآن.",
       subheading:
-        "Spaces هي مساحات العمل المدفوعة المتاحة الآن. وزكي هو البيتا العامة لذكاء شخصي مستمر — مجاني أثناء البيتا مع 5 رسائل كل 24 ساعة. تبدأ الاشتراكات بعد أن نتعلم من هذه المرحلة.",
+        "Spaces هي مساحات العمل المدفوعة المتاحة الآن. وزكي هو البيتا العامة لذكاء شخصي مستمر، مجاني أثناء البيتا مع 5 رسائل كل 24 ساعة. تبدأ الاشتراكات بعد أن نتعلم من هذه المرحلة.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
@@ -1135,9 +1135,9 @@ export const content = {
         description:
           "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ 5 رسائل كل 24 ساعة حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
         bullets: [
-          "5 رسائل كل 24 ساعة — تتجدد يوميًا",
+          "5 رسائل كل 24 ساعة تتجدد يوميًا",
           "ذاكرة مستمرة تنتقل بين الجلسات",
-          "مراحل عمل مرئية — تشاهد ما يفعله زكي",
+          "مراحل عمل مرئية تشاهد فيها ما يفعله زكي",
           "مجاني الآن. الاشتراكات تبدأ بعد البيتا.",
         ],
         cta: "انضم إلى البيتا",
@@ -1164,7 +1164,7 @@ export const content = {
         {
           question: "ما هو زكي؟",
           answer:
-            "زكي هو الوكيل المستمر والاتجاه الطويل للمنتج. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظمة. أما زكي نفسه فهو البيتا العامة للذكاء الشخصي المستمر — الاتجاه التجريبي الذي نبنيه علنًا. وكلاهما يدعم العربية والإنجليزية طبيعيًا.",
+            "زكي هو الوكيل المستمر والاتجاه الطويل للمنتج. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظمة. أما زكي نفسه فهو البيتا العامة للذكاء الشخصي المستمر، وهو الاتجاه التجريبي الذي نبنيه علنًا. وكلاهما يدعم العربية والإنجليزية طبيعيًا.",
         },
         {
           question: "ما الفرق بين زكي وSpaces؟",

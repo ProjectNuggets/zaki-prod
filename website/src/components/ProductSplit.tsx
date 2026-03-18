@@ -15,7 +15,7 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
             </p>
             <h2 className="font-display mt-4 text-[28px] font-extrabold leading-[1.08] tracking-[-0.04em] text-chat-text md:text-[44px]">
               {isArabic
-                ? "منتج عملي الآن. وبيتا للذكاء المستمر تتشكل علنًا."
+                ? "منتج عملي اليوم. وبيتا عامة لذكاء مستمر تتشكل أمامك."
                 : "A practical product now. A public beta for persistent intelligence taking shape in the open."}
             </h2>
           </div>
@@ -33,7 +33,7 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
               </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-chat-muted">
                 {isArabic
-                  ? "مساحات عمل ذكاء اصطناعي منظّمة يمكنك استخدامها الآن. المشاريع تبقى منفصلة، والسياق يبقى نظيفًا، والعمل اليومي لا يضيع داخل فوضى خيوط عامة. هذا هو ما قد يشير إليه التطبيق حاليًا باسم ZAKI Chat."
+                  ? "مساحات عمل منظمة يمكنك استخدامها الآن. كل مشروع يبقى في سياقه، والعمل اليومي لا يضيع داخل خيط عام. هذا هو المنتج الذي قد يظهر في التطبيق حاليًا باسم ZAKI Chat."
                   : "Structured AI workspaces you can use right now. Projects stay separated, context stays clean, and daily work does not dissolve into generic chat threads. This is the layer the current app may still call ZAKI Chat."}
               </p>
               <div className="mt-auto flex items-baseline justify-between pt-8">
@@ -56,14 +56,14 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
               <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-chat-accent/[0.03] to-transparent" />
               <div className="relative flex h-full flex-col">
                 <p className="font-mono-ui text-[10px] uppercase tracking-[0.28em] text-chat-accent">
-                  {isArabic ? "تجريبي — مجاني" : "Experimental — free"}
+                  {isArabic ? "تجريبي مجاني" : "Experimental — free"}
                 </p>
                 <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-chat-text md:text-[36px]">
                   ZAKI
                 </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-chat-muted">
                 {isArabic
-                   ? "معظم الذكاء الاصطناعي يعيد الضبط مع كل جلسة. زكي يختبر ماذا يحدث عندما لا يفعل ذلك: استمرارية، وذاكرة، وعلاقة طويلة الخيط. وعندما يصبح العمل بحاجة إلى كتابة أو بحث أو تنفيذ منظّم، تنتقل إلى Spaces."
+                   ? "معظم الذكاء الاصطناعي يبدأ من جديد كل مرة. زكي يختبر شكلًا آخر: استمرارية، وذاكرة، وعلاقة تمتد مع الوقت. وعندما يتحول العمل إلى كتابة أو بحث أو تنفيذ منظم، تنتقل إلى Spaces."
                    : "Most AI resets with every session. ZAKI explores what happens when it does not: continuity, memory, and a long-running relationship. When the work needs writing, research, or organized execution, you move into Spaces."}
               </p>
                 <div className="mt-auto flex items-baseline justify-between pt-8">

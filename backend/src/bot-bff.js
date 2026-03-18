@@ -18,6 +18,13 @@ export const UI_SPECIFIC_FIELDS = Object.freeze([
   "layout_variant",
 ]);
 
+export const BOT_CHAT_SESSION_KEY_ERROR_CODES = Object.freeze([
+  "missing_session_key",
+  "invalid_session_key",
+  "session_key_user_mismatch",
+  "invalid_session_lane",
+]);
+
 export const LOCK_RETRY_MAX_ATTEMPTS = 3;
 export const LOCK_RETRY_MAX_WALL_TIME_MS = 1500;
 export const LOCK_RETRY_FALLBACK_DELAYS_MS = Object.freeze([100, 250, 500]);
@@ -114,6 +121,68 @@ function sanitizeProductSetupValue(value) {
 
 function extractPayloadMessage(payload) {
   return payload && typeof payload === "object" ? normalizedString(payload.message || payload.prompt) : "";
+}
+
+function extractSessionKeyOverride(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { present: false, value: null };
+  }
+  if (!Object.prototype.hasOwnProperty.call(payload, "session_key")) {
+    return { present: false, value: null };
+  }
+  if (typeof payload.session_key !== "string") {
+    return { present: true, value: null };
+  }
+  const normalized = normalizedString(payload.session_key);
+  return { present: true, value: normalized || null };
+}
+
+export function isValidCanonicalChatSessionLane(lane) {
+  const normalizedLane = normalizedString(lane);
+  if (normalizedLane === "main") return true;
+
+  for (const prefix of ["thread", "task", "cron"]) {
+    const marker = `${prefix}:`;
+    if (normalizedLane.startsWith(marker) && normalizedString(normalizedLane.slice(marker.length))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function buildCanonicalThreadSessionKey(userId, threadId = "main") {
+  const normalizedUserId = normalizedString(userId);
+  const normalizedThreadId = normalizedString(threadId) || "main";
+  return `agent:zaki-bot:user:${normalizedUserId}:thread:${normalizedThreadId}`;
+}
+
+export function resolveCanonicalChatSessionKey({ userId, payload }) {
+  const normalizedUserId = normalizedString(userId);
+  const override = extractSessionKeyOverride(payload);
+  if (!normalizedUserId) {
+    return { success: false, message: "invalid chat payload or session_key" };
+  }
+
+  if (override.present) {
+    if (!override.value) {
+      return { success: false, message: "invalid chat payload or session_key" };
+    }
+    const expectedPrefix = `agent:zaki-bot:user:${normalizedUserId}:`;
+    if (!override.value.startsWith(expectedPrefix)) {
+      return { success: false, message: "invalid chat payload or session_key" };
+    }
+    const lane = override.value.slice(expectedPrefix.length);
+    if (!isValidCanonicalChatSessionLane(lane)) {
+      return { success: false, message: "invalid chat payload or session_key" };
+    }
+    return { success: true, sessionKey: override.value };
+  }
+
+  return {
+    success: true,
+    sessionKey: buildCanonicalThreadSessionKey(normalizedUserId, payload?.threadId),
+  };
 }
 
 function pickRetryAfterMs(headers, payload) {
@@ -384,6 +453,15 @@ function isTelegramTokenError(payload) {
   return /invalid[_\s-]*token|telegram token|unauthorized|forbidden|401\b/.test(text);
 }
 
+export function isChatSessionKeyValidationFailure(payload) {
+  const code = normalizedString(payload?.code || payload?.error).toLowerCase();
+  if (BOT_CHAT_SESSION_KEY_ERROR_CODES.includes(code)) {
+    return true;
+  }
+  const text = textFromPayload(payload);
+  return BOT_CHAT_SESSION_KEY_ERROR_CODES.some((value) => text.includes(value));
+}
+
 function mapAuthError(type, requestId) {
   if (type === "unauthorized") {
     return {
@@ -520,6 +598,18 @@ function buildMidstreamSseError() {
 function writeSseEvent(res, eventName, payload) {
   res.write(`event: ${eventName}\n`);
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function mapChatStreamError(status, payload, requestId) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  if (isChatSessionKeyValidationFailure(payload)) {
+    return mapForbiddenError("invalid chat payload or session_key", requestId, 400);
+  }
+  return mapForbiddenError(
+    normalizedString(payload?.message || payload?.error) || "invalid chat payload",
+    requestId,
+    status >= 500 ? 503 : 400
+  );
 }
 
 async function proxySseResponse(upstream, res) {
@@ -806,10 +896,21 @@ export function createBotBffHandlers({
         return;
       }
 
+      const sessionKey = resolveCanonicalChatSessionKey({
+        userId: context.userId,
+        payload,
+      });
+      if (!sessionKey.success) {
+        const normalized = mapForbiddenError(sessionKey.message, requestId, 400);
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
       const existingContext = payload.context && typeof payload.context === "object" ? payload.context : {};
       const upstreamPayload = {
         ...payload,
         message,
+        session_key: sessionKey.sessionKey,
         stream: true,
         context: {
           ...existingContext,
@@ -841,13 +942,7 @@ export function createBotBffHandlers({
 
       if (!result.response.ok) {
         const payloadError = await readResponsePayload(result.response.clone());
-        const normalized = result.response.status === 401
-          ? mapAuthError("unauthorized", requestId)
-          : mapForbiddenError(
-              normalizedString(payloadError?.message || payloadError?.error) || "invalid chat payload",
-              requestId,
-              result.response.status >= 500 ? 503 : 400
-            );
+        const normalized = mapChatStreamError(result.response.status, payloadError, requestId);
         res.status(normalized.status).json(normalized.body);
         return;
       }

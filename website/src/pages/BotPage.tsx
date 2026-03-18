@@ -33,7 +33,7 @@ export function BotPage({ locale }: { locale: Locale }) {
             </h1>
             <p className="mt-6 max-w-[58ch] text-sm leading-7 text-bot-muted md:text-base md:leading-8">
               {isArabic
-                ? "زكي هو البيتا العامة لذكاء شخصي مستمر: طبقة وكيل قابلة للتدريب، بسياق لا يُعاد ضبطه بين الجلسات، وذاكرة لكل مستخدم، ومراحل عمل مرئية. وعندما تحتاج إلى التنفيذ المنظّم، تنتقل إلى Spaces."
+                ? "زكي هو البيتا العامة لذكاء شخصي مستمر. طبقة وكيل قابلة للتدريب، بسياق لا يُعاد ضبطه بين الجلسات، وذاكرة لكل مستخدم، ومراحل عمل مرئية. وعندما تحتاج إلى تنفيذ منظم، تنتقل إلى Spaces."
                 : "ZAKI is the public beta for persistent personal intelligence: a trainable agent layer with context that does not reset between sessions, per-user memory, and visible work phases. When the work needs structure and execution, you move into Spaces."}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -151,7 +151,7 @@ export function BotPage({ locale }: { locale: Locale }) {
               </h2>
               <p className="mt-3 max-w-[44ch] text-sm leading-7 text-bot-muted">
                 {isArabic
-                  ? "البيتا تشمل 5 رسائل كل 24 ساعة — مجانًا بينما نتعلّم ما ينجح. الاشتراكات المدفوعة تبدأ بعد هذه المرحلة."
+                  ? "البيتا تشمل 5 رسائل كل 24 ساعة مجانًا بينما نتعلّم ما ينجح. الاشتراكات المدفوعة تبدأ بعد هذه المرحلة."
                   : "The beta includes 5 messages every 24 hours — free while we learn what works, limited enough to stay honest about what is still experimental. Paid subscriptions start after this phase."}
               </p>
 

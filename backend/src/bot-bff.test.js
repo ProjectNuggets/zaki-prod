@@ -230,6 +230,148 @@ describe("bot BFF T6 contract", () => {
     );
   });
 
+  it("derives session_key from auth-bound user identity and thread id", async () => {
+    const sendUpstreamRequest = jest.fn(async ({ userId, body }) => {
+      expect(userId).toBe("7");
+      expect(body.session_key).toBe("agent:zaki-bot:user:7:thread:thread-42");
+      expect(body.user_id).toBeUndefined();
+      return sseResponse(['event: done\ndata: {"ok":true}\n\n']);
+    });
+    const { handlers } = createHandlers({ sendUpstreamRequest });
+    const req = { body: { message: "hello", threadId: "thread-42", user_id: "999" }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.chunks.join("")).toContain("event: done");
+  });
+
+  it("defaults derived session_key to thread:main when thread id is absent", async () => {
+    const sendUpstreamRequest = jest.fn(async ({ body }) => {
+      expect(body.session_key).toBe("agent:zaki-bot:user:7:thread:main");
+      return sseResponse(['event: done\ndata: {"ok":true}\n\n']);
+    });
+    const { handlers } = createHandlers({ sendUpstreamRequest });
+    const req = { body: { message: "hello" }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects client supplied session_key for a different user", async () => {
+    const { handlers, sendUpstreamRequest } = createHandlers();
+    const req = {
+      body: {
+        message: "hello",
+        session_key: "agent:zaki-bot:user:99:thread:thread-42",
+      },
+      headers: {},
+    };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(sendUpstreamRequest).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual(
+      expect.objectContaining({
+        error: PRODUCT_ERROR_CODES.FORBIDDEN,
+        message: "invalid chat payload or session_key",
+      })
+    );
+  });
+
+  it("rejects invalid session_key lane classes", async () => {
+    const { handlers, sendUpstreamRequest } = createHandlers();
+    const req = {
+      body: {
+        message: "hello",
+        session_key: "agent:zaki-bot:user:7:workspace:thread-42",
+      },
+      headers: {},
+    };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(sendUpstreamRequest).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual(
+      expect.objectContaining({
+        error: PRODUCT_ERROR_CODES.FORBIDDEN,
+        message: "invalid chat payload or session_key",
+      })
+    );
+  });
+
+  it("accepts valid explicit thread session_key overrides", async () => {
+    const sendUpstreamRequest = jest.fn(async ({ body }) => {
+      expect(body.session_key).toBe("agent:zaki-bot:user:7:thread:thread-99");
+      return sseResponse(['event: done\ndata: {"ok":true}\n\n']);
+    });
+    const { handlers } = createHandlers({ sendUpstreamRequest });
+    const req = {
+      body: {
+        message: "hello",
+        threadId: "thread-42",
+        session_key: "agent:zaki-bot:user:7:thread:thread-99",
+      },
+      headers: {},
+    };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("accepts valid explicit task session_key overrides", async () => {
+    const sendUpstreamRequest = jest.fn(async ({ body }) => {
+      expect(body.session_key).toBe("agent:zaki-bot:user:7:task:task-77");
+      return sseResponse(['event: done\ndata: {"ok":true}\n\n']);
+    });
+    const { handlers } = createHandlers({ sendUpstreamRequest });
+    const req = {
+      body: {
+        message: "hello",
+        session_key: "agent:zaki-bot:user:7:task:task-77",
+      },
+      headers: {},
+    };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("normalizes upstream session_key validation failures to a clear 400 product error", async () => {
+    const { handlers } = createHandlers({
+      sendUpstreamRequest: jest.fn(async () =>
+        jsonResponse({ error: "invalid_session_lane", message: "invalid_session_lane" }, { status: 400 })
+      ),
+    });
+    const req = { body: { message: "hello", session_key: "agent:zaki-bot:user:7:main" }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.chatStream(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual(
+      expect.objectContaining({
+        error: PRODUCT_ERROR_CODES.FORBIDDEN,
+        message: "invalid chat payload or session_key",
+      })
+    );
+  });
+
   it("retries SSE conflicts before stream establishment but never retries after stream bytes are forwarded", async () => {
     const preStreamSend = jest
       .fn()

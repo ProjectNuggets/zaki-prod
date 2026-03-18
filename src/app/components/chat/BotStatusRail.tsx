@@ -51,19 +51,22 @@ export function BotStatusRail({
   if (!visibleEvents.length) return null;
 
   return (
-    <div className="max-w-[80%] rounded-zaki-lg border border-zaki-subtle bg-zaki-elevated/35 px-3 py-2">
-      <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-zaki-muted">
+    <div className="max-w-[80%] rounded-zaki-lg border border-zaki-subtle bg-zaki-elevated/35 px-3 py-2 dark:border-[#31261c] dark:bg-[#16110d]">
+      <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-zaki-muted dark:text-zaki-dark-muted">
         Process
       </div>
       <div className="space-y-1.5">
         {visibleEvents.map((event, index) => {
           const isLatest = index === visibleEvents.length - 1;
           return (
-            <div key={event.id} className="flex items-center gap-2 text-xs text-zaki-secondary">
+            <div
+              key={event.id}
+              className="flex items-center gap-2 text-xs text-zaki-secondary dark:text-zaki-dark-subtle"
+            >
               <span
                 className={[
-                  "inline-block size-1.5 rounded-full bg-zaki-muted/70 transition-colors",
-                  isStreaming && isLatest ? "animate-pulse bg-zaki-primary/80" : "",
+                  "inline-block size-1.5 rounded-full bg-zaki-muted/70 transition-colors dark:bg-zaki-dark-muted/70",
+                  isStreaming && isLatest ? "animate-pulse bg-zaki-primary/80 dark:bg-zaki-dark-primary/80" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}

@@ -394,6 +394,12 @@ export async function fetchEntitlements() {
       expiresAt?: string | null;
       campaign?: string | null;
     };
+    effective?: {
+      tier?: string;
+      status?: string;
+      source?: "free" | "subscription" | "access_code";
+      premium?: boolean;
+    };
     features?: Record<string, boolean>;
     error?: string | null;
   } = {};

@@ -22,6 +22,8 @@ jest.mock("react-i18next", () => ({
       "pricingPage.billingNotices.manage": "Returned from billing portal.",
       "pricingPage.interval.monthly": "Monthly",
       "pricingPage.interval.yearly": "Yearly",
+      "pricingPage.subtitleAccessActive":
+        "Your access code already unlocks Personal access in Spaces. You can still review the ladder here, but checkout stays paused while the current code is active.",
       "pricingPage.cancelSubscription": "Cancel subscription",
       "pricingPage.cancellationScheduled": "Cancellation scheduled",
       "pricingPage.cancelScheduled": "Subscription will cancel at period end.",
@@ -33,22 +35,31 @@ jest.mock("react-i18next", () => ({
         "Yearly pricing is not available for this plan yet.",
       "pricingPage.yearlyStripeOnly":
         "Yearly billing is currently available only through Stripe.",
-      "pricingPage.access.purchase.cta": "Buy 1-month gift code",
+      "pricingPage.access.purchase.cta": "Buy 30-day code",
       "pricingPage.access.purchase.unavailable":
         "Code purchase is not enabled in this environment yet.",
       "pricingPage.access.purchase.processing": "Opening checkout...",
       "pricingPage.access.purchase.checkoutError":
         "Unable to start code purchase checkout.",
-      "pricingPage.plans.free.features": ["Core chat", "Memory basics", "Standard response quality"],
+      "pricingPage.access.extendHint": "Redeem another code to extend your Personal access window.",
+      "pricingPage.viewPlans": "View plans",
+      "pricingPage.accessActiveCta": "Access active",
+      "pricingPage.studentToggle": "I’m a student",
+      "pricingPage.plans.free.features": ["10 Spaces chats per day", "10 ZAKI experimental messages per day", "Memory basics"],
       "pricingPage.plans.student.features": [
+        "Unlimited chat across Spaces",
         "Premium models for better answers",
-        "Priority responses during busy hours",
-        "Stronger help with notes, drafts, and study sessions",
+        "Priority responses and stronger study support",
       ],
       "pricingPage.plans.personal.features": [
+        "Unlimited chat across Spaces",
         "Premium models with richer reasoning",
-        "Priority responses and stronger context",
-        "More personal memory and assistant-style support",
+        "Priority responses, stronger context, and deeper support",
+      ],
+      "pricingPage.plans.zaki.features": [
+        "Same daily cap for everyone",
+        "Long-term memory is part of the test",
+        "Behavior is still being benchmarked",
       ],
     };
     return {
@@ -80,6 +91,12 @@ let entitlementsData = {
       active: false,
       expiresAt: null,
       campaign: null,
+    },
+    effective: {
+      tier: "free",
+      status: "inactive",
+      source: "free",
+      premium: false,
     },
   },
 };
@@ -161,6 +178,12 @@ describe("PricingPage", () => {
           active: false,
           expiresAt: null,
           campaign: null,
+        },
+        effective: {
+          tier: "free",
+          status: "inactive",
+          source: "free",
+          premium: false,
         },
       },
     };
@@ -286,7 +309,8 @@ describe("PricingPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "I’m a student" }));
+    fireEvent.click(screen.getByRole("button", { name: "pricingPage.choose" }));
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
@@ -324,7 +348,8 @@ describe("PricingPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "I’m a student" }));
+    fireEvent.click(screen.getByRole("button", { name: "pricingPage.choose" }));
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
@@ -342,7 +367,8 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "I’m a student" }));
+    fireEvent.click(screen.getByRole("button", { name: "pricingPage.choose" }));
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
@@ -364,7 +390,7 @@ describe("PricingPage", () => {
       expect(checkoutMutateAsync).not.toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "pricingPage.choose" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "pricingPage.choose" }));
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
@@ -382,13 +408,49 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Buy 1-month gift code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buy 30-day code" }));
 
     await waitFor(() => {
       expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({ source: "pricing_page" })
       );
     });
+  });
+
+  it("shows active access state and blocks checkout for access-code users", () => {
+    entitlementsData = {
+      data: {
+        plan: {
+          tier: "free",
+          status: "inactive",
+          cancelAtPeriodEnd: false,
+        },
+        access: {
+          active: true,
+          expiresAt: "2026-04-20T00:00:00.000Z",
+          campaign: "Founders Circle",
+        },
+        effective: {
+          tier: "personal",
+          status: "active",
+          source: "access_code",
+          premium: true,
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Your access code already unlocks Personal access in Spaces. You can still review the ladder here, but checkout stays paused while the current code is active.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Access active" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Cancel subscription" })).not.toBeInTheDocument();
+    expect(screen.getByText("Redeem another code to extend your Personal access window.")).toBeInTheDocument();
   });
 
   it("does not autostart access-code purchase checkout from gift intent query", async () => {
@@ -406,7 +468,7 @@ describe("PricingPage", () => {
       expect(accessCodePurchaseCheckoutMutateAsync).not.toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Buy 1-month gift code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buy 30-day code" }));
 
     await waitFor(() => {
       expect(accessCodePurchaseCheckoutMutateAsync).toHaveBeenCalledWith(
@@ -443,7 +505,7 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("button", { name: "Buy 1-month gift code" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Buy 30-day code" })).toBeDisabled();
     expect(
       screen.getByText("Code purchase is not enabled in this environment yet.")
     ).toBeInTheDocument();
