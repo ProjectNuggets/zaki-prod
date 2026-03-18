@@ -98,7 +98,7 @@
     "nav": {
       "newSpace": "New space",
       "spaces": "Spaces",
-      "zakiBot": "ZAKI BOT",
+      "zakiBot": "ZAKI",
       "botChat": "Chat",
       "search": "Search",
       "newChat": "New chat"
@@ -240,33 +240,33 @@
     ],
     "quickStart": [
       {
-        "title": "Build my weekly execution plan from these priorities: [list].",
-        "body": "Structured plan with focus blocks, risks, and next actions."
+        "title": "Plan my day for focus, energy, and calm.",
+        "body": "A full-day routine with work blocks, meals, and reset moments."
       },
       {
-        "title": "Turn this brainstorm into a launch brief with milestones and owners.",
-        "body": "From raw notes to an actionable launch document."
+        "title": "Teach me something useful in 5 minutes.",
+        "body": "A fast lesson with examples and one simple exercise."
       },
       {
-        "title": "Challenge my strategy: find weak points and propose a stronger version.",
-        "body": "Get a sharp critique plus a better plan."
+        "title": "Give me three smart ideas I can use today.",
+        "body": "Clear options for work, life, or learning with next steps."
       }
     ],
     "missionSlides": [
       {
-        "title": "Local-first intelligence",
-        "body": "Most AI is trained on global data that misses local culture. We build ZAKI to feel native, not generic — shaped by how communities think, speak, and decide."
+        "title": "More than a chat window",
+        "body": "ZAKI is being built as a digital twin: something that remembers your context, understands your direction, and keeps pace with how you think."
       },
       {
-        "title": "Built on a powerful base model",
-        "body": "ZAKI starts with strong reasoning, then adapts to local language, context, and norms — so answers sound right, not translated."
+        "title": "Made to carry real weight",
+        "body": "The point is not endless prompting. It is help that can plan, write, organize, and challenge ideas with enough continuity to feel genuinely useful."
       },
       {
-        "title": "Improves with you",
-        "body": "With every interaction, ZAKI learns to align more closely with your culture, heritage, and way of thinking — becoming more personal over time."
+        "title": "It should scale with your life",
+        "body": "As your work, ambition, and responsibilities grow, ZAKI should become more personal, more capable, and more present wherever you need it."
       }
     ],
-    "missionCarouselHint": "Slide {{current}} of {{total}} • Auto-rotates",
+    "missionCarouselHint": "Slide {{current}} of {{total}}",
     "news": [
       {
         "title": "Confirm or skip before save",
@@ -417,17 +417,43 @@
     ]
   },
   "zakiExperimentalNotice": {
-    "badge": "Open beta",
-    "title": "ZAKI is our beta for persistent personal intelligence",
-    "intro": "This space is where we test a longer-term relationship with your AI: memory continuity, visible work phases, and context that carries across sessions.",
-    "whyExperimentalTitle": "Why it is experimental",
-    "whyExperimentalBody": "We are learning from real usage in public, so behavior, limits, and availability may shift while we refine the product.",
-    "expectationsTitle": "What to expect right now",
-    "expectationsBody": "Free access is limited, resets daily, and may vary with traffic or prompt complexity while the beta is still early.",
+    "eyebrow": "Experimental note",
+    "badge": "Experimental branch",
+    "areaLabel": "Repo intro",
+    "title": "ZAKI is still experimental",
+    "intro": "This is a different interaction model: state-of-the-art agent behavior with long-term persistent memory and continuity across sessions.",
+    "footer": "It is marked experimental because the behavior is still new enough that we had to build our own benchmark for it at Nova Nuggets Labs before treating it as stable.",
     "dismissAria": "Dismiss ZAKI experimental notice",
+    "repo": {
+      "branch": "// branch: zaki/experimental-persistent-agents",
+      "origin": "// built at Nova Nuggets Labs",
+      "benchmark": "// in-house benchmark required",
+      "goal": "// long-term persistent memory in real use"
+    },
     "actions": {
       "continue": "Continue",
       "learnMore": "Learn more"
+    }
+  },
+  "zakiBootstrapCard": {
+    "eyebrow": "First contact",
+    "title": "Before the conversation starts",
+    "dismissAria": "Dismiss ZAKI first-contact note",
+    "arabic": {
+      "headline": "سأبدأ معك بالإنجليزية أيضًا، لكن هذه ملاحظة قصيرة قبل أن نبدأ.",
+      "body": "لا تقلق، أنا أتحدث أي لغة. سؤالي الأول سيكون: من أنا؟ من أنت؟ وما الذي نعمل عليه؟ وبعدها سأكمل معك من هناك."
+    },
+    "english": {
+      "label": "English translation",
+      "body": "I will ask this in English too. Do not worry, I speak any language. My first question will be: Who am I? Who are you? What are we working on?"
+    },
+    "repo": {
+      "prep": "// bootstrap note",
+      "languages": "// Arabic first, English next, any language welcome",
+      "questions": "// who am I / who are you / what are we working on"
+    },
+    "actions": {
+      "continue": "Continue"
     }
   },
   "zakiSettingsSheet": {
@@ -555,10 +581,10 @@
       "openHelp": "Open help"
     },
     "success": {
-      "provisioned": "ZAKI BOT space provisioned.",
+      "provisioned": "ZAKI space provisioned.",
       "onboardingComplete": "Onboarding marked complete.",
       "onboardingReopened": "Onboarding reopened for further setup.",
-      "settingsSaved": "ZAKI BOT settings saved.",
+      "settingsSaved": "ZAKI settings saved.",
       "telegramConnected": "Telegram connected. Send a message to your bot to confirm routing.",
       "telegramDisconnected": "Telegram disconnected."
     },

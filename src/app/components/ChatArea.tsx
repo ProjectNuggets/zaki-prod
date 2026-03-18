@@ -41,6 +41,10 @@ import { useMessages } from "@/queries/useThreads";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import {
+  ZakiBootstrapCard,
+  hasSeenZakiBootstrapCard,
+} from "./ZakiBootstrapCard";
+import {
   createZakiBotThread,
   isZakiBotSpaceId,
   ZAKI_BOT_LABEL,
@@ -66,7 +70,6 @@ class ChatRequestError extends Error {
   }
 }
 
-const HOME_STARTER_MESSAGE = "hello, how are you zaki";
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -563,6 +566,9 @@ export function ChatArea() {
         : "";
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
+  const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(() =>
+    authUserId ? hasSeenZakiBootstrapCard(authUserId) : true
+  );
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -697,14 +703,6 @@ export function ChatArea() {
   // Computed values
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const primarySpace = spacesList[0] ?? null;
-  const homeConversationSpaceId = useMemo(() => {
-    const zakiSpace = spacesList.find(
-      (space) => String(space.id || "").trim().toLowerCase() === "zaki"
-    );
-    if (zakiSpace?.id) return zakiSpace.id;
-    const fixedSpace = spacesList.find((space) => Boolean(space.fixed));
-    return fixedSpace?.id ?? primarySpace?.id ?? null;
-  }, [primarySpace?.id, spacesList]);
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
@@ -727,6 +725,14 @@ export function ChatArea() {
   const showReady = (!activeThreadId || messages.length === 0) && !isZakiBotActiveSpace;
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !authUserId) {
+      setZakiBootstrapCompleted(true);
+      return;
+    }
+    setZakiBootstrapCompleted(hasSeenZakiBootstrapCard(authUserId));
+  }, [authUserId, isZakiBotActiveSpace]);
   const zakiBotQuotaInfo =
     isZakiBotActiveSpace &&
     freeDailyQuota &&
@@ -2464,7 +2470,7 @@ export function ChatArea() {
           const message = String(
             (data as { error?: string; message?: string } | null)?.error ||
               (data as { error?: string; message?: string } | null)?.message ||
-              "Unable to initialize ZAKI BOT."
+              "Unable to initialize ZAKI."
           );
           if (!silent) toast.error(message);
           return false;
@@ -2474,7 +2480,7 @@ export function ChatArea() {
       })()
         .catch((error) => {
           if (!silent) {
-            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI BOT.");
+            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI.");
           }
           return false;
         })
@@ -2790,15 +2796,6 @@ export function ChatArea() {
     }
     window.dispatchEvent(new CustomEvent("zaki:create-thread", { detail: { spaceId } }));
   }, [activeWorkspaceSlug, goToSpaces, primarySpace?.id]);
-
-  const handleHomeStartConversation = useCallback(() => {
-    const workspaceSlug = homeConversationSpaceId;
-    if (!workspaceSlug) {
-      goToSpaces();
-      return;
-    }
-    handleSend(HOME_STARTER_MESSAGE, [], workspaceSlug);
-  }, [goToSpaces, handleSend, homeConversationSpaceId]);
 
   // Track previous thread for summarization on switch
   const prevThreadRef = useRef<{ id: string; workspaceSlug: string; title: string } | null>(null);
@@ -3116,7 +3113,6 @@ export function ChatArea() {
       return (
         <ZakiHomeView
           primarySpace={primarySpace}
-          onStartConversation={handleHomeStartConversation}
           onSendExample={(example) => handleSend(example, [])}
           onGoToThread={goToThread}
           onDeleteThread={(threadId, spaceId) => {
@@ -3351,7 +3347,14 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
-              <ZakiExperimentalNotice active={isZakiBotActiveSpace} />
+              <ZakiBootstrapCard
+                active={isZakiBotActiveSpace && Boolean(authUserId) && !zakiBootstrapCompleted}
+                userId={authUserId}
+                onDismiss={() => setZakiBootstrapCompleted(true)}
+              />
+              <ZakiExperimentalNotice
+                active={isZakiBotActiveSpace && zakiBootstrapCompleted}
+              />
               <InputArea
                 onSend={handleSend}
                 attachments={attachments}

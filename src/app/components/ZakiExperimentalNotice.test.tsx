@@ -10,17 +10,18 @@ jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const dictionary: Record<string, string> = {
-        "zakiExperimentalNotice.badge": "Open beta",
-        "zakiExperimentalNotice.title":
-          "ZAKI is our beta for persistent personal intelligence",
+        "zakiExperimentalNotice.eyebrow": "Experimental note",
+        "zakiExperimentalNotice.badge": "Experimental branch",
+        "zakiExperimentalNotice.areaLabel": "Repo intro",
+        "zakiExperimentalNotice.title": "ZAKI is still experimental",
         "zakiExperimentalNotice.intro":
-          "This space is where we test a longer-term relationship with your AI: memory continuity, visible work phases, and context that carries across sessions.",
-        "zakiExperimentalNotice.whyExperimentalTitle": "Why it is experimental",
-        "zakiExperimentalNotice.whyExperimentalBody":
-          "We are learning from real usage in public, so behavior, limits, and availability may shift while we refine the product.",
-        "zakiExperimentalNotice.expectationsTitle": "What to expect right now",
-        "zakiExperimentalNotice.expectationsBody":
-          "Free access is limited, resets daily, and may vary with traffic or prompt complexity while the beta is still early.",
+          "This is a different interaction model: state-of-the-art agent behavior with long-term persistent memory and continuity across sessions.",
+        "zakiExperimentalNotice.footer":
+          "It is marked experimental because the behavior is still new enough that we had to build our own benchmark for it at Nova Nuggets Labs before treating it as stable.",
+        "zakiExperimentalNotice.repo.branch": "// branch: zaki/experimental-persistent-agents",
+        "zakiExperimentalNotice.repo.origin": "// built at Nova Nuggets Labs",
+        "zakiExperimentalNotice.repo.benchmark": "// in-house benchmark required",
+        "zakiExperimentalNotice.repo.goal": "// long-term persistent memory in real use",
         "zakiExperimentalNotice.dismissAria": "Dismiss ZAKI experimental notice",
         "zakiExperimentalNotice.actions.continue": "Continue",
         "zakiExperimentalNotice.actions.learnMore": "Learn more",
@@ -39,10 +40,9 @@ describe("ZakiExperimentalNotice", () => {
   it("renders when active and not yet dismissed in the session", () => {
     render(<ZakiExperimentalNotice active />);
 
-    expect(
-      screen.getByText("ZAKI is our beta for persistent personal intelligence")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Why it is experimental")).toBeInTheDocument();
+    expect(screen.getByText("ZAKI is still experimental")).toBeInTheDocument();
+    expect(screen.getByText("// built at Nova Nuggets Labs")).toBeInTheDocument();
+    expect(screen.getByText("// in-house benchmark required")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Learn more" })).toHaveAttribute(
       "href",
       "https://www.chatzaki.com/zaki-bot/"
@@ -55,21 +55,15 @@ describe("ZakiExperimentalNotice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(window.sessionStorage.getItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY)).toBe("1");
-    expect(
-      screen.queryByText("ZAKI is our beta for persistent personal intelligence")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("ZAKI is still experimental")).not.toBeInTheDocument();
 
     rerender(<ZakiExperimentalNotice active />);
-    expect(
-      screen.queryByText("ZAKI is our beta for persistent personal intelligence")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("ZAKI is still experimental")).not.toBeInTheDocument();
   });
 
   it("does not render when inactive", () => {
     render(<ZakiExperimentalNotice active={false} />);
 
-    expect(
-      screen.queryByText("ZAKI is our beta for persistent personal intelligence")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("ZAKI is still experimental")).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Compass, FlaskConical, Sparkles, TimerReset, X } from "lucide-react";
+import { ArrowUpRight, FileCode2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -30,66 +30,35 @@ export function ZakiExperimentalNotice({ active, className }: Props) {
   return (
     <section
       className={cn(
-        "mx-auto mb-3 w-full max-w-3xl rounded-[24px] border border-[#ddc0a7] bg-[linear-gradient(180deg,#fff8f1_0%,#f7e7d5_100%)] p-4 shadow-[0px_16px_36px_rgba(15,15,15,0.08)] dark:border-[#3a2a1f] dark:bg-[linear-gradient(180deg,#1b140f_0%,#140f0b_100%)] dark:shadow-[0px_24px_48px_rgba(0,0,0,0.42)]",
+        "mx-auto mb-3 w-full max-w-4xl overflow-hidden rounded-[28px] border border-[#e7d8c8] bg-[linear-gradient(180deg,#fffcf8_0%,#f7eee3_100%)] shadow-[0px_16px_34px_rgba(15,15,15,0.06)] dark:border-[#33261d] dark:bg-[linear-gradient(180deg,#17120f_0%,#120e0b_100%)] dark:shadow-[0px_24px_48px_rgba(0,0,0,0.34)]",
         className
       )}
       dir={isRtl ? "rtl" : "ltr"}
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border border-zaki-brand/20 bg-zaki-brand/10 text-zaki-brand dark:border-zaki-brand/25 dark:bg-zaki-brand/15">
-          <FlaskConical className="size-4" />
-        </div>
+      <div className="flex items-start justify-between gap-4 px-5 py-4">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="inline-flex items-center gap-1 rounded-full border border-zaki-accent/20 bg-zaki-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zaki-accent dark:border-zaki-accent/20 dark:bg-zaki-accent/10">
-                <Sparkles className="size-3" />
-                {t("zakiExperimentalNotice.badge")}
-              </div>
-              <h3 className="mt-2 text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                {t("zakiExperimentalNotice.title")}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
-                {t("zakiExperimentalNotice.intro")}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex size-8 items-center justify-center rounded-xl border border-zaki-subtle bg-white/70 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary dark:border-[#2c2118] dark:bg-[#17110d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
-              aria-label={t("zakiExperimentalNotice.dismissAria")}
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.sessionStorage.setItem(
-                    ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY,
-                    "1"
-                  );
-                }
-                setDismissed(true);
-              }}
-            >
-              <X className="size-4" />
-            </button>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#eadfce] bg-white/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2c2118] dark:bg-[#17110d]/75 dark:text-zaki-dark-muted">
+            <FileCode2 className="size-3.5" />
+            {t("zakiExperimentalNotice.eyebrow")}
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-[18px] border border-[#e8d4c0] bg-white/70 px-3.5 py-3 dark:border-[#32251b] dark:bg-[#18110d]">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-zaki-primary dark:text-zaki-dark-primary">
-                <Compass className="size-3.5 text-zaki-brand" />
-                {t("zakiExperimentalNotice.whyExperimentalTitle")}
-              </div>
-              <p className="mt-2 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                {t("zakiExperimentalNotice.whyExperimentalBody")}
-              </p>
-            </div>
-            <div className="rounded-[18px] border border-[#e8d4c0] bg-white/70 px-3.5 py-3 dark:border-[#32251b] dark:bg-[#18110d]">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-zaki-primary dark:text-zaki-dark-primary">
-                <TimerReset className="size-3.5 text-zaki-brand" />
-                {t("zakiExperimentalNotice.expectationsTitle")}
-              </div>
-              <p className="mt-2 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                {t("zakiExperimentalNotice.expectationsBody")}
-              </p>
-            </div>
+          <h3 className="mt-3 max-w-3xl text-[1.14rem] font-semibold leading-tight text-zaki-primary dark:text-zaki-dark-primary">
+            {t("zakiExperimentalNotice.title")}
+          </h3>
+          <p className="mt-2 max-w-3xl text-[14px] leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+            {t("zakiExperimentalNotice.intro")}
+          </p>
+
+          <div className="mt-3 rounded-[18px] border border-[#eadfce] bg-white/50 px-4 py-2.5 font-mono text-[11.5px] leading-5.5 text-zaki-secondary dark:border-[#2f241c] dark:bg-[#17110d]/40 dark:text-zaki-dark-subtle">
+            <div>{t("zakiExperimentalNotice.repo.branch")}</div>
+            <div>{t("zakiExperimentalNotice.repo.origin")}</div>
+            <div>{t("zakiExperimentalNotice.repo.benchmark")}</div>
+            <div>{t("zakiExperimentalNotice.repo.goal")}</div>
           </div>
+
+          <p className="mt-3 max-w-3xl text-[13.5px] leading-5.5 text-zaki-muted dark:text-zaki-dark-muted">
+            {t("zakiExperimentalNotice.footer")}
+          </p>
+
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
@@ -112,10 +81,27 @@ export function ZakiExperimentalNotice({ active, className }: Props) {
               target="_blank"
               rel="noreferrer"
             >
-              {t("zakiExperimentalNotice.actions.learnMore")}
+              <span>{t("zakiExperimentalNotice.actions.learnMore")}</span>
+              <ArrowUpRight className="size-4" />
             </a>
           </div>
         </div>
+        <button
+          type="button"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl border border-zaki-subtle bg-white/70 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary dark:border-[#2c2118] dark:bg-[#17110d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
+          aria-label={t("zakiExperimentalNotice.dismissAria")}
+          onClick={() => {
+            if (typeof window !== "undefined") {
+              window.sessionStorage.setItem(
+                ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY,
+                "1"
+              );
+            }
+            setDismissed(true);
+          }}
+        >
+          <X className="size-4" />
+        </button>
       </div>
     </section>
   );
