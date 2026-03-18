@@ -10,7 +10,7 @@ on:
       namespace:
         description: "Kubernetes namespace"
         required: false
-        default: "zaki"
+        default: "zaki-bot-staging"
       deployment:
         description: "Nullalis deployment name"
         required: false
@@ -51,13 +51,13 @@ jobs:
         run: |
           if [ "${EVENT_NAME}" = "repository_dispatch" ]; then
             echo "cluster=${PAYLOAD_CLUSTER:-zaki-prod}" >> "$GITHUB_OUTPUT"
-            echo "namespace=${PAYLOAD_NAMESPACE:-zaki}" >> "$GITHUB_OUTPUT"
+            echo "namespace=${PAYLOAD_NAMESPACE:-zaki-bot-staging}" >> "$GITHUB_OUTPUT"
             echo "deployment=${PAYLOAD_DEPLOYMENT:-nullclaw}" >> "$GITHUB_OUTPUT"
             echo "container=${PAYLOAD_CONTAINER:-nullclaw}" >> "$GITHUB_OUTPUT"
             echo "image_ref=${PAYLOAD_IMAGE_REF:-}" >> "$GITHUB_OUTPUT"
           else
             echo "cluster=${INPUT_CLUSTER:-zaki-prod}" >> "$GITHUB_OUTPUT"
-            echo "namespace=${INPUT_NAMESPACE:-zaki}" >> "$GITHUB_OUTPUT"
+            echo "namespace=${INPUT_NAMESPACE:-zaki-bot-staging}" >> "$GITHUB_OUTPUT"
             echo "deployment=${INPUT_DEPLOYMENT:-nullclaw}" >> "$GITHUB_OUTPUT"
             echo "container=${INPUT_CONTAINER:-nullclaw}" >> "$GITHUB_OUTPUT"
             echo "image_ref=${INPUT_IMAGE_REF:-}" >> "$GITHUB_OUTPUT"
@@ -70,6 +70,16 @@ jobs:
 
       - name: Configure kubectl
         run: doctl kubernetes cluster kubeconfig save "${{ steps.inputs.outputs.cluster }}"
+
+      - name: Preflight — verify deployment exists
+        run: |
+          echo "Target: ${{ steps.inputs.outputs.deployment }} in namespace ${{ steps.inputs.outputs.namespace }}"
+          if ! kubectl get deployment "${{ steps.inputs.outputs.deployment }}" -n "${{ steps.inputs.outputs.namespace }}" > /dev/null 2>&1; then
+            echo "::error::Deployment '${{ steps.inputs.outputs.deployment }}' not found in namespace '${{ steps.inputs.outputs.namespace }}'. Aborting."
+            exit 1
+          fi
+          echo "✅ Deployment exists"
+          kubectl get deployment "${{ steps.inputs.outputs.deployment }}" -n "${{ steps.inputs.outputs.namespace }}" -o wide
 
       - name: Set Nullalis image
         if: ${{ steps.inputs.outputs.image_ref != '' }}
