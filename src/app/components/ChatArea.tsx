@@ -3320,7 +3320,7 @@ export function ChatArea() {
 
           {showScrollToBottom && !showZakiHome && !showSpacesView && !showSpaceDetail && (
             <div
-              className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20"
+              className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-30"
               style={{ bottom: Math.max(24, inputHeight + 24 + inputOffset) + 20 }}
             >
               <button
