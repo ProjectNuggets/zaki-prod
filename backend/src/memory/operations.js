@@ -1618,6 +1618,8 @@ export async function buildContext({
   return { context, sources: usedMemories };
 }
 
+// Legacy lower-level selector retained for compatibility; normal chat should use
+// buildChatMemoryContext so all runtime callers share one retrieval contract.
 export async function buildFastContext({
   userId,
   query,
@@ -1773,6 +1775,168 @@ export async function buildFastContext({
   }
 
   return { context, sources: usedMemories };
+}
+
+function getChatContextBucket(memory) {
+  const metadata = getMemoryMetadata(memory);
+  const conflictKey = String(metadata?.conflictKey || "").toLowerCase();
+  const content = String(memory?.content || "");
+  const normalizedContent = content.toLowerCase();
+  const type = String(memory?.type || "").toLowerCase();
+
+  if (
+    conflictKey.startsWith("identity:") ||
+    /^name is\b/i.test(content) ||
+    /^from\b/i.test(content) ||
+    /^lives in\b/i.test(content)
+  ) {
+    return "profile";
+  }
+
+  if (
+    type === "preference" ||
+    conflictKey.startsWith("preference:") ||
+    conflictKey.startsWith("constraint:")
+  ) {
+    return "preferences";
+  }
+
+  if (
+    type === "goal" ||
+    type === "event" ||
+    type === "struggle" ||
+    /^(working on|preparing|launching|building|tracking|trying to|planning to)\b/i.test(content) ||
+    normalizedContent.includes("project") ||
+    normalizedContent.includes("launch")
+  ) {
+    return "active";
+  }
+
+  return "recent";
+}
+
+function buildBucketedChatContext(memories, maxChars = 800) {
+  const bucketOrder = [
+    { key: "profile", title: "Profile", limit: 2 },
+    { key: "preferences", title: "Preferences", limit: 2 },
+    { key: "active", title: "Active", limit: 3 },
+    { key: "recent", title: "Recent", limit: 3 },
+  ];
+
+  const grouped = new Map(bucketOrder.map((bucket) => [bucket.key, []]));
+  for (const memory of memories) {
+    const bucket = getChatContextBucket(memory);
+    const bucketEntry = grouped.get(bucket);
+    if (!bucketEntry) continue;
+    if (bucketEntry.length >= bucketOrder.find((entry) => entry.key === bucket).limit) {
+      continue;
+    }
+    bucketEntry.push(memory);
+  }
+
+  let context = "";
+  let charCount = 0;
+  const usedMemories = [];
+
+  for (const bucket of bucketOrder) {
+    const entries = grouped.get(bucket.key) || [];
+    if (entries.length === 0) continue;
+
+    const header = `${bucket.title}:\n`;
+    if (charCount + header.length > maxChars) break;
+    context += header;
+    charCount += header.length;
+
+    for (const memory of entries) {
+      const line = `- ${String(memory?.content || "").trim()}\n`;
+      if (charCount + line.length > maxChars) break;
+      context += line;
+      charCount += line.length;
+      usedMemories.push(memory);
+    }
+
+    if (usedMemories.length > 0 && charCount + 1 <= maxChars) {
+      context += "\n";
+      charCount += 1;
+    }
+  }
+
+  return {
+    context: context.trim(),
+    sources: usedMemories,
+  };
+}
+
+export async function buildChatMemoryContext({
+  userId,
+  query,
+  maxChars = 800,
+  currentThreadId = null,
+  limit = 6,
+  mode = "default",
+}) {
+  const normalizedMode =
+    mode === "introspection_summary" || mode === "introspection_fact" ? mode : "default";
+  const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 6));
+  const effectiveLimit =
+    normalizedMode === "introspection_summary"
+      ? Math.max(boundedLimit, 4)
+      : normalizedMode === "introspection_fact"
+      ? Math.min(boundedLimit, 1)
+      : boundedLimit;
+  const fallbackFloor =
+    normalizedMode === "introspection_summary"
+      ? 4
+      : normalizedMode === "introspection_fact"
+      ? 1
+      : 3;
+  const base = await buildFastContext({
+    userId,
+    query,
+    maxChars,
+    currentThreadId,
+    limit: effectiveLimit,
+  });
+
+  const sources = dedupeMemoryRows(
+    (base.sources || [])
+      .map((memory) => normalizeMemoryRowForUse(memory))
+      .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end")
+  );
+
+  if (sources.length < fallbackFloor) {
+    const fallbackRows = (
+      await dbAll(
+        `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+         FROM memories
+         WHERE user_id = $1
+         ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+         LIMIT 12`,
+        [normalizeUserId(userId)]
+      )
+    )
+      .map((memory) => normalizeMemoryRowForUse(memory))
+      .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end");
+
+    const seenIds = new Set(sources.map((memory) => String(memory?.id || "")));
+    for (const memory of fallbackRows) {
+      const memoryId = String(memory?.id || "");
+      if (!memoryId || seenIds.has(memoryId)) continue;
+      sources.push(memory);
+      seenIds.add(memoryId);
+      if (sources.length >= effectiveLimit) break;
+    }
+  }
+
+  if (sources.length > effectiveLimit) {
+    sources.length = effectiveLimit;
+  }
+
+  if (sources.length === 0) {
+    return { context: "", sources: [] };
+  }
+
+  return buildBucketedChatContext(sources, maxChars);
 }
 
 export function normalizeMemoryRecordForMaintenance(row) {

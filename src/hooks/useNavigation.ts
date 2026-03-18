@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useNavigationStore } from '@/stores';
+import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from '@/lib/zakiBot';
 
 /**
  * Navigation hook that syncs Zustand store with React Router
@@ -31,6 +32,11 @@ export function useNavigation() {
     store.goToThread(spaceId, threadId);
     navigate(`/spaces/${spaceId}/threads/${threadId}`);
   };
+
+  const goToZakiBot = () => {
+    store.goToThread(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID);
+    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`);
+  };
   
   const clearThread = () => {
     store.clearThread();
@@ -48,6 +54,7 @@ export function useNavigation() {
     goToSpaces,
     goToSpace,
     goToThread,
+    goToZakiBot,
     clearThread,
   };
 }

@@ -3,33 +3,137 @@ export const content = {
     lang: "en",
     dir: "ltr",
     nav: {
-      why: "Why",
-      story: "Story",
+      why: "Chat",
+      story: "ZAKI",
       faq: "FAQs",
       switchLang: "AR",
     },
     hero: {
-      title: "Meet ZAKI: The personal AI shaped by our culture, built to understand you.",
-      hint: "Your ideas just found their favorite thinking partner.",
-      cta: "Try ZAKI",
-      pricingCta: "See pricing",
+      title: "Spaces for work. ZAKI for continuity.",
+      subtitle:
+        "Spaces give you structured productivity today. ZAKI is the public beta for persistent personal intelligence — memory continuity, visible work phases, and context that carries forward.",
+      betaLine:
+        "ZAKI beta is now open. Early access includes 5 free messages per day for experimentation.",
+      hint: "Spaces are live. ZAKI beta is open.",
+      cta: "Join the Beta",
+      pricingCta: "Try Spaces",
+      tertiaryCta: "What is ZAKI?",
       placeholder: "How can I help you today?",
       rotatingPrompts: [
         "Plan my week in 20 minutes with clear priorities.",
         "Turn this rough idea into a launch plan.",
-        "Explain this concept in Arabic and English.",
         "Summarize this article and give me key actions.",
         "Draft a sharp email I can send right now.",
         "Help me decide between these two options.",
         "Create a content calendar for the next 30 days.",
-        "Translate this text naturally, not word by word.",
+        "Break down this concept simply and clearly.",
         "Challenge my thinking and find what I missed.",
+        "Organize my notes into an actionable structure.",
       ],
       submit: "Start",
-      helper: "Try writing in Arabic, English, or both.",
+      helper: "Spaces work in Arabic, English, or both. They are the structured workspaces inside the app.",
+    },
+    productSplit: {
+      heading: "Three stages. One product ladder.",
+      subheading:
+        "Spaces are live now. ZAKI public beta is open. The premium experience comes later, after we learn from the beta.",
+      cards: [
+        {
+          stage: "Stage 1",
+          title: "Spaces",
+          badge: "Live now",
+          description:
+            "A paid, spaces-based AI workspace built for organized daily productivity. Structured, controlled, and ready to use today.",
+          bullets: [
+            "Unlimited chat access with a paid subscription",
+            "Dedicated spaces keep work, research, and planning separated cleanly",
+            "User-controlled memory and stronger data discipline",
+          ],
+          ctaLabel: "Try Spaces",
+          ctaHref: "https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_chat_live",
+        },
+        {
+          stage: "Stage 2",
+          title: "ZAKI Public Beta",
+          badge: "Open beta",
+          description:
+            "An experimental Personal AI Operator with persistence, memory continuity, and visible work phases. The first public step beyond ordinary chat.",
+          bullets: [
+            "5 free beta messages for experimentation",
+            "Experimental, limited, and intentionally early",
+            "Persistent memory across sessions",
+          ],
+          ctaLabel: "Join the Beta",
+          ctaHref: "/zaki-bot/#beta",
+        },
+        {
+          stage: "Stage 3",
+          title: "ZAKI Premium",
+          badge: "Coming later",
+          description:
+            "The fuller product arrives after beta learning: deeper controls, stronger reliability, and a more complete personal operator experience.",
+          bullets: [
+            "Subscriptions start after the public beta phase",
+            "The premium version is shaped by real beta usage",
+            "This is where the product becomes deeper and more reliable",
+          ],
+          ctaLabel: "See the vision",
+          ctaHref: "/zaki-bot/",
+        },
+      ],
+    },
+    beta: {
+      heading: "Public Beta: What to expect",
+      warning:
+        "ZAKI is experimental by design. It is our public test of persistent personal intelligence: memory continuity, visible work phases, and per-user context that does not reset every time you start over.",
+      bullets: [
+        "Public beta is open now with 5 messages every 24 hours",
+        "Free during beta, limited by design, and intentionally early",
+        "This is where we test the next product shape in public",
+        "Real usage here shapes the later premium product",
+      ],
+      primaryCta: "Join the beta",
+      secondaryCta: "Read about ZAKI",
+    },
+    chatProduct: {
+      heading: "Why Spaces matter",
+      intro:
+        "Spaces are the practical layer: a paid AI workspace built for everyday use, not benchmark headlines.",
+      bullets: [
+        "It does not claim to outperform the latest GPT or Claude models on raw capability.",
+        "It is more affordable, more organized, and more controlled for everyday work.",
+        "Spaces keep projects, research, and planning in separate contexts.",
+        "Works naturally across languages, including mixed-language input.",
+      ],
+      honestyLine:
+        "Spaces are not built to outperform the latest GPT or Claude models on raw capability. They are built to be more usable, more structured, and more controllable in everyday work.",
+    },
+    botProduct: {
+      heading: "Why ZAKI matters",
+      intro:
+        "An OpenClaw-inspired SaaS agent with persistent memory, visible work phases, and a more controlled product shape users can actually trust and train over time.",
+      bullets: [
+        "Persistent thread and memory continuity",
+        "Visible process phases while it works",
+        "A trainable operator layer built for daily working context",
+        "Free and limited during public beta; premium subscriptions come later",
+      ],
+      bridgeLine:
+        "Most AI still resets the relationship every time you start over. ZAKI is testing what happens when context carries forward instead — not just from prompt to prompt, but across time, channels, and recurring work.",
+    },
+    nullalis: {
+      heading: "Powered by Nullalis",
+      intro:
+        "Nullalis is the private runtime behind ZAKI. It gives the product continuity, memory discipline, and agentic capability without turning the public product into a fragile demo.",
+      bullets: [
+        "Persistent per-user sessions",
+        "Durable memory and runtime state",
+        "Process visibility through live streaming updates",
+        "Multitenant safety, trainability, and deployment discipline",
+      ],
     },
     earlyAccess: {
-      badge: "🎉 ZAKI is 1 week old",
+      badge: "🎉 ZAKI is live",
       heading: "Start your relationship with ZAKI today",
       description:
         "ZAKI is now live. Subscribe and start building a personal, memory-aware workflow that evolves with you.",
@@ -40,156 +144,197 @@ export const content = {
       },
       highlights: [
         "Personal assistant, not just a chatbot",
-        "Culturally-aware conversations",
+        "Structured workspaces for real productivity",
         "Memory with full user control"
       ],
       cta: "🚀 Subscribe now",
       secondary: "Jump to plans below to choose Student or Personal.",
       campaignLabel: "✨ Coming soon: ZAKI Inner Circle",
       campaignTeaser:
-        "A limited campaign for early supporters who believe AI should be personal, culturally aware, and always user-controlled. 🧠🌍🔐",
+        "A limited campaign for early supporters who believe AI should be personal, structured, and always user-controlled. 🧠🔐",
       instagramNote:
         "Want a free access code?\nDM us on Instagram after follow + share to request access codes:",
     },
     why: {
-      heading: "The Arab world thinks, speaks, and works differently.",
-      subheading: "So why does AI still feel foreign?",
+      heading: "Most AI answers well. Very little of it becomes a real counterpart.",
+      subheading: "ZAKI is built to close that last mile between humans and AI.",
       intro:
-        "In a region rich with culture, nuance, and context, most tools miss the point. They don't understand how we speak, what we mean, or how we actually get things done.",
-      builtLine: "That's why we built Zaki.",
+        "Real productivity is not about one more answer. It is about structured work now, persistent context later, and a system that becomes more useful the more it learns your operating rhythm.",
+      builtLine: "That is why we built ZAKI.",
       description:
-        "Culturally aware AI that is personal by design, Zaki's memory layer is built to be managed and controlled by you.",
+        "A structured AI workspace that's personal by design. ZAKI's memory layer is built to be managed and controlled by you.",
       workflow:
-        "Plan your day, write, think, translate, decide, naturally, effortlessly.",
-      friction: "No friction. No awkward prompts.",
-      postFriction: "Just keep up with its edgy comments and wit.",
-      human: "Just intelligence that feels local, useful, and human.",
+        "Plan your day, write, think, translate, and decide inside a product that keeps your work organized.",
+      friction: "No generic sprawl. No prompt gymnastics.",
+      postFriction: "Just a clearer working relationship with AI.",
+      human: "Intelligence that stays useful because it keeps context.",
       points: [
-        "Built for Arabic-first context and mixed-language conversations.",
-        "Spaces keep projects organized with cleaner collaboration.",
+        "Spaces keep projects organized with cleaner separation.",
+        "Works naturally across languages, including mixed-language input.",
         "Memory keeps useful context so work continues naturally.",
         "Designed for speed, clarity, and real daily workflows.",
       ],
     },
+    geo: {
+      definitionHeading: "What is ZAKI, exactly?",
+      definitionText:
+        "ZAKI is the persistent agent. Spaces are the live paid workspaces for organized daily productivity. ZAKI is also the experimental public beta for persistent personal intelligence — the long-thread relationship behind the work.",
+      statsHeading: "Why people choose ZAKI",
+      statsSource: "The product ladder behind the brand.",
+      stats: [
+        "Spaces are live now for organized daily use",
+        "Public beta is now open with 5 free experimental messages",
+        "Memory and personalization stay under clearer user control",
+        "Persistence and runtime continuity are built in"
+      ],
+      citationHeading: "Why most AI still feels generic",
+      citationQuote:
+        "Most AI stops at answers. ZAKI starts with disciplined work in Spaces, then moves toward persistent intelligence that remembers context instead of resetting every session.",
+      citationSource: "Nova Nuggets Team",
+      compareLabel: "Compare ZAKI vs Spaces",
+      roundupLabel: "See the AI workspace comparison",
+      howToHeading: "What can you do with ZAKI?",
+      howToIntro:
+        "These examples show the kind of practical work ZAKI is designed to support.",
+      howTos: [
+        {
+          name: "Draft professional emails fast",
+          text: "Ask ZAKI to draft a formal email, then refine the tone based on the recipient, industry, and urgency. Works in Arabic, English, or both.",
+          link: "/how-to/write-arabic-emails-ai/",
+        },
+        {
+          name: "Translate between Arabic and English naturally",
+          text: "Paste any Arabic dialect or English text and get a natural translation that preserves meaning, tone, and context — not word-by-word output.",
+          link: "/how-to/translate-dialects-arabic-english/",
+        },
+        {
+          name: "Create social media content",
+          text: "Generate captions, posts, or threads with clear brand voice. ZAKI handles Arabic, English, or mixed-language content naturally.",
+          link: "/how-to/create-social-media-content-arabic/",
+        },
+      ],
+      howToLinkLabel: "Read guide",
+    },
     updatesCarousel: {
-      heading: "Inside ZAKI: Building In Public",
-      subheading: "Build updates and AI signals, shared as we go.",
-      batchLabel: "Week 1",
+      heading: "Inside ZAKI: What shaped this release",
+      subheading: "Product milestones and AI ecosystem signals that explain why ZAKI is being built this way.",
+      batchLabel: "Release view",
       statusLabels: {
         done: "Done",
         next: "Next",
       },
       slides: [
         {
-          id: "launch",
+          id: "week-two-zaki-bot-beta",
           tag: "launch",
-          title: "Launch: Ramadan Day One",
+          title: "ZAKI public beta is now open",
           description:
-            "ZAKI opened to real users on day one of Ramadan, marking our first public cohort.",
-          dateLabel: "Launch week",
-          emoji: "🚀",
+            "The first public version of ZAKI is live with one persistent operator thread per user and visible work phases during execution.",
+          dateLabel: "Current release",
+          emoji: "⚡",
           status: "done",
-          ramadanBadge: {
-            label: "🌙 Ramadan Kareem",
-          },
           link: {
-            label: "Follow the journey",
-            url: "https://instagram.com/chatzaki.ai",
+            label: "Open ZAKI app",
+            url: "https://app.chatzaki.com",
           },
         },
         {
-          id: "first-24h-thanks",
+          id: "week-two-hardening",
           tag: "milestone",
-          title: "Thank you, early friends 🫶",
+          title: "Multi-user hardening and quota controls",
           description:
-            "First 24h: 200+ registrations and 1,000+ website views. You made this real. Spread the word, we are done with generic chat AI.",
-          dateLabel: "First 24h",
-          emoji: "🎉",
+            "The beta now runs with stronger per-user isolation, safer stream handling, and daily quota controls that keep the public release disciplined.",
+          dateLabel: "Current release",
+          emoji: "🛡️",
+          status: "done",
+        },
+        {
+          id: "openai-tools-for-agents",
+          tag: "ecosystem",
+          title: "OpenAI: new tools for building agents",
+          description:
+            "OpenAI introduced production tooling for agents, reinforcing the shift from chatbot UX to reliable execution workflows.",
+          dateLabel: "Ecosystem signal",
+          emoji: "🧱",
           status: "done",
           link: {
-            label: "Spread the word",
-            url: "https://instagram.com/chatzaki.ai",
+            label: "Read announcement",
+            url: "https://openai.com/index/new-tools-for-building-agents/",
           },
         },
         {
-          id: "week-one-stable",
-          tag: "milestone",
-          title: "Week One: Stability Locked",
+          id: "openai-chatgpt-agent",
+          tag: "ecosystem",
+          title: "OpenAI: bridging research and action",
           description:
-            "We tightened reliability, improved response quality, and made daily conversations meaningfully smoother.",
-          dateLabel: "Week 1",
-          emoji: "🛠️",
-          status: "done",
-        },
-        {
-          id: "payments-websearch",
-          tag: "feature",
-          title: "Payments + Web Search, Live",
-          description:
-            "Subscriptions are live and web search is integrated, making ZAKI stronger for real everyday workflows.",
-          dateLabel: "This week",
-          emoji: "💳",
+            "OpenAI's ChatGPT agent launch is a clear signal: user expectations are moving from answers to actions.",
+          dateLabel: "Product signal",
+          emoji: "🧭",
           status: "done",
           link: {
-            label: "Explore plans",
-            url: "https://app.chatzaki.com/pricing?auth=signup",
+            label: "Read announcement",
+            url: "https://openai.com/index/introducing-chatgpt-agent/",
           },
         },
         {
-          id: "openclaw-personal-agent",
-          tag: "feature",
-          title: "Personal agent signal: OpenClaw",
+          id: "linux-foundation-aaif",
+          tag: "ecosystem",
+          title: "Linux Foundation launched AAIF",
           description:
-            "OpenClaw reflects the shift from chat-only tools to personal agents that can reason across user context and act more proactively.",
-          dateLabel: "Ecosystem watch",
-          emoji: "🤖",
+            "The Agentic AI Foundation launched with MCP, Goose, and AGENTS.md under neutral governance, accelerating interoperability across agent stacks.",
+          dateLabel: "Standards signal",
+          emoji: "🧩",
           status: "done",
           link: {
-            label: "Explore OpenClaw",
-            url: "https://openclaw.ai",
+            label: "Read announcement",
+            url: "https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation",
           },
         },
         {
-          id: "world-monitor-open-source",
-          tag: "feature",
-          title: "Open-source signal: World Monitor",
+          id: "anthropic-context-management",
+          tag: "ecosystem",
+          title: "Anthropic: context management matters",
           description:
-            "World Monitor, built by Anghami co-founder Elie Habib, is open source and moving fast. Build-in-public momentum is real.",
-          dateLabel: "Regional builder signal",
-          emoji: "🌍",
+            "Anthropic highlighted context management as critical for long-running agents, matching ZAKI's memory-first architecture.",
+          dateLabel: "Engineering signal",
+          emoji: "🧠",
           status: "done",
           link: {
-            label: "See project",
-            url: "https://worldmonitor.app",
+            label: "Read article",
+            url: "https://www.anthropic.com/news/context-management",
           },
         },
         {
-          id: "sovereign-ai-shift",
-          tag: "feature",
-          title: "Industry shift: local-first, sovereign AI",
+          id: "eu-ai-act-signal",
+          tag: "ecosystem",
+          title: "EU AI Act implementation is active",
           description:
-            "More teams are choosing deploy-anywhere and local inference paths for privacy and control. This is exactly where ZAKI is heading.",
-          dateLabel: "Strategy signal",
-          emoji: "🔐",
+            "With AI Act implementation milestones active, trust, controls, and policy clarity are becoming core product requirements.",
+          dateLabel: "Policy signal",
+          emoji: "⚖️",
           status: "done",
+          link: {
+            label: "View EU update",
+            url: "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai",
+          },
         },
         {
-          id: "agent-planning",
+          id: "next-bot-controls",
           tag: "next",
-          title: "Next Up: Agent Workflows",
+          title: "Next up: deeper controls",
           description:
-            "Next week we test agent-powered flows so ZAKI can help execute tasks, not only discuss them.",
-          dateLabel: "Next week",
-          emoji: "🤖",
+            "Next, we deepen the beta with better channel controls, stronger reliability loops, and clearer operator guardrails.",
+          dateLabel: "Next phase",
+          emoji: "🛣️",
           status: "next",
         },
         {
           id: "weekly-newsroom",
           tag: "next",
-          title: "Weekly newsroom updates",
+          title: "Ongoing public updates",
           description:
-            "We publish product progress and relevant AI signals every week on our way to the ultimate personal assistant AI.",
-          dateLabel: "Stay tuned",
+            "We keep publishing product progress and relevant AI signals as the product moves from disciplined chat toward persistent intelligence.",
+          dateLabel: "Ongoing",
           emoji: "📣",
           status: "next",
           link: {
@@ -200,7 +345,7 @@ export const content = {
       ],
     },
     features: {
-      heading: "Built to be truly yours, wrapped in authenticity\nand high-impact intelligence.",
+      heading: "What Spaces give you today.",
       cards: [
         {
           title: "Structured thinking",
@@ -225,44 +370,44 @@ export const content = {
       ],
     },
     horizontal: {
-      heading: "Zaki gets you",
-      subheading: "Here is the story.",
+      heading: "Why ZAKI exists",
+      subheading: "The product logic behind the brand.",
       cards: [
         {
           pill: "Origin",
-          title: "Culture Shapes Models",
+          title: "Product fit is deeper than model quality",
           description:
-            "LLMs are shaped by the data they are trained on.\nThat data carries language, assumptions, and cultural patterns.\nSo intelligence is never neutral, it reflects its source.",
+            "Models are shaped by language, assumptions, and the people they are built around.\nUseful AI is never just about model quality.\nIt is also product fit, language fit, workflow fit, and context fit.",
         },
         {
           pill: "Gap",
-          title: "Context Gap",
+          title: "The real gap is continuity",
           description:
-            "Most global models miss Arab nuance in tone, meaning, and intent.\nThey often return generic answers that feel technically correct but culturally off.\nThat is the gap Zaki is built to close.",
+            "Most AI still behaves like a reset button.\nYou ask, it answers, and the working relationship starts over again.\nZAKI is being built to close that last mile between people and AI.",
         },
         {
           pill: "Launch",
-          title: "Levant First",
+          title: "Start with structured productivity",
           description:
-            "We start with Zaki Levant, built by a team with Levantine roots.\nThis gives us a focused base to model real regional expression.\nFrom there, we expand with depth, not guesswork.",
+            "Spaces are the live product layer.\nThey give users a disciplined workspace for Arabic-English daily work.\nThat practical layer is how we earn the right to build the next product step.",
         },
         {
           pill: "Learn",
-          title: "Grows With You",
+          title: "Persistence changes the relationship",
           description:
-            "Zaki learns from user interaction through memory and review loops.\nYou can approve, edit, or reject what is remembered.\nPersonalization grows with trust and stays under your control.",
+            "When context carries forward, AI becomes more useful, more trainable, and more accountable.\nMemory continuity, review loops, and user control matter more than one-off answers.\nThat is what ZAKI is testing in public.",
         },
         {
           pill: "Focus",
-          title: "Feature Stack",
+          title: "What matters operationally",
           description:
-            "Spaces keep context organized for each project and workflow.\nMemory keeps continuity so conversations become more useful over time.\nConflict handling and review flows keep outputs stable and clear.",
+            "Spaces keep work organized.\nMemory keeps continuity useful.\nPer-user isolation, trainability, and visible work phases make the product safer and easier to trust.",
         },
         {
           pill: "Vision",
-          title: "Flagship Path",
+          title: "The next product step",
           description:
-            "The goal is an authentic Arabic model users truly relate to.\nNot generic global replies, but intelligence with local relevance.\nZaki is the foundation we are building into that flagship.",
+            "The long-term goal is not another generic AI surface.\nIt is persistent personal intelligence that behaves more like a digital counterpart than a one-shot tool.\nZAKI is the public path toward that fuller product.",
         },
       ],
     },
@@ -300,7 +445,7 @@ export const content = {
       countLabel: "characters",
     },
     useCases: {
-      heading: "Where ZAKI fits best",
+      heading: "Where Spaces fit best today",
       items: [
         {
           title: "Work",
@@ -312,15 +457,15 @@ export const content = {
         },
         {
           title: "Personal",
-          description: "Get memory-aware help for your day-to-day flow with control over what Zaki keeps.",
+          description: "Get memory-aware help for your day-to-day flow with control over what ZAKI keeps.",
         },
       ],
-      note: "Built with memory review and user control by default.",
+      note: "ZAKI goes further, but Spaces already cover the daily-use layer.",
     },
     pricing: {
-      heading: "Simple plans for a more personal ZAKI",
+      heading: "Use Spaces today. Explore ZAKI now.",
       subheading:
-        "Start free, upgrade when you want more, or gift one focused month of ZAKI to someone who needs a real personal AI assistant.",
+        "Spaces are the paid workspaces you can use right now. ZAKI is the public beta for persistent personal intelligence — free during beta with 5 messages every 24 hours. Subscriptions start after we learn from this phase.",
       interval: {
         monthly: "Monthly",
         yearly: "Yearly",
@@ -366,59 +511,101 @@ export const content = {
         cta: "Buy 1-month gift code",
       },
       note: "Student requires a .edu email or manual verification with proof of enrollment.",
+      botBeta: {
+        heading: "ZAKI Public Beta",
+        badge: "Open beta",
+        description:
+          "ZAKI keeps context between sessions, shows its work phases, and maintains per-user memory. The beta is intentionally limited to 5 messages every 24 hours so users can test the direction without mistaking it for the finished product.",
+        bullets: [
+          "5 messages every 24 hours — resets daily",
+          "Persistent memory that carries across sessions",
+          "Visible work phases — you see what ZAKI is doing",
+          "Free now. Paid subscriptions start after beta.",
+        ],
+        cta: "Join the Beta",
+        href: "/zaki-bot/#beta",
+      },
+      botPremium: {
+        heading: "ZAKI Premium",
+        badge: "Later",
+        description:
+          "The premium product follows the beta. That version brings subscriptions, deeper controls, and a more complete experience.",
+        bullets: [
+          "Subscriptions later",
+          "Shaped by beta learning",
+          "Fuller product",
+        ],
+        cta: "See the roadmap",
+        href: "/zaki-bot/",
+      },
     },
     faq: {
       heading: "FAQs",
       subheading: "FAQs",
       items: [
         {
-          question: "What is Zaki, and why does it matter?",
+          question: "What is ZAKI?",
           answer:
-            "Zaki is our attempt to build culturally aware Arabic intelligence, not generic global output. We believe AI should understand how people actually speak, think, and decide in their own context.",
+            "ZAKI is the persistent agent and the long-term product direction. Spaces are the live paid workspaces for organized daily productivity. ZAKI is also the public beta for persistent personal intelligence — the experimental personal operator we are building toward. It works across languages natively.",
         },
         {
-          question: "Who is building Zaki?",
+          question: "What is the difference between ZAKI and Spaces?",
           answer:
-            "We are Nova Nuggets L.L.C, an AI company founded by Arab expats. Our team works across time zones from Tokyo to Canada, with Dubai as HQ and a base in Hamburg, Germany.",
+            "ZAKI is the persistent agent layer focused on continuity, memory, and a long-running relationship. Spaces are the structured execution surfaces you can subscribe to now for daily work. ZAKI helps decide what to do. Spaces help you do it cleanly.",
         },
         {
-          question: "What technology does Zaki use right now?",
+          question: "Is Spaces the same as ZAKI Chat?",
           answer:
-            "Today, Zaki focuses on text generation using open-source models. Image generation and broader capabilities are planned for upcoming releases.",
+            "Yes. Spaces is the clearer public name for what the current website and app may still refer to as ZAKI Chat. The product remains the same during this transition.",
         },
         {
-          question: "How is Zaki different from generic AI tools?",
+          question: "Why are there both ZAKI and Spaces?",
           answer:
-            "Most models are trained for global averages. Zaki is being shaped for local nuance, especially Levantine and Arabic-first context, so answers feel relevant, not distant.",
+            "Because planning and continuity are different from focused execution. ZAKI handles the long-thread relationship and continuity layer. Spaces handle dedicated task execution, drafting, research, and organized project work.",
         },
         {
-          question: "How does Zaki improve over time?",
+          question: "When should I use ZAKI instead of Spaces?",
           answer:
-            "User interaction is essential. Every meaningful conversation helps us refine behavior, memory quality, and cultural alignment. We are building intelligence that grows with its users.",
+            "Use ZAKI when you want continuity, planning, memory, and an ongoing thread that carries across time. Use Spaces when the work needs a dedicated place: drafting, translation, research, execution, or project-by-project focus.",
         },
         {
-          question: "What about data privacy and trust?",
+          question: "Is the ZAKI beta live?",
           answer:
-            "We operate from Europe and align with strict EU data privacy standards. We take secure handling seriously and design memory flows with review and user control in mind.",
+            "Yes. The public beta is open now with 5 free messages per day. It is not the final premium product — it is the first public experimental release.",
         },
         {
-          question: "How is this project funded?",
+          question: "Why is ZAKI experimental?",
           answer:
-            "Zaki is currently self-funded. We are focused on technology first, and we are building sustainably while trying to keep access as open as possible.",
+            "Because it is testing a new product shape: a Personal AI Operator with persistence and continuity, not just a prompt-response session. The beta exists to show what is possible and to learn from real usage.",
         },
         {
-          question: "How can people support the mission?",
+          question: "How many messages are included in the beta?",
           answer:
-            "Use Zaki, share it, and give us feedback. Support can be financial, marketing, community advocacy, or daily usage. Every form of support helps us build a stronger Arabic AI future.",
+            "The public beta includes 5 free messages per day for experimentation.",
         },
         {
-          question: "Why should I support Zaki now?",
+          question: "Is the beta free?",
           answer:
-            "Because this is the critical phase where real usage shapes real intelligence. Every conversation, referral, and contribution helps us build an Arabic AI people can genuinely trust and relate to.",
+            "Yes. The public beta is free and limited. Premium subscriptions come later, after the beta phase.",
         },
         {
-          question: "Where are the Arabs in the AI world?",
-          answer: "Here.",
+          question: "Does ZAKI claim to outperform ChatGPT or Claude?",
+          answer:
+            "No. Spaces do not claim to beat the latest GPT or Claude models on raw capability. The case for ZAKI is product shape: organization, pricing, control, workspace structure, and the operator direction. It also works across languages natively.",
+        },
+        {
+          question: "What does powered by Nullalis mean?",
+          answer:
+            "Nullalis is the private runtime behind ZAKI. It provides the memory continuity, process visibility, trainability, and agentic discipline that let ZAKI behave more like a persistent digital counterpart than an ordinary chat session.",
+        },
+        {
+          question: "When will premium subscriptions start?",
+          answer:
+            "After the public beta phase. The premium product comes later, once the beta has shown where the product should deepen.",
+        },
+        {
+          question: "Why should I care about the beta now?",
+          answer: "Because this is the first public look at the next product shape. The beta is where users can test what persistent personal intelligence feels like before the fuller premium product arrives.",
         },
       ],
     },
@@ -434,33 +621,137 @@ export const content = {
     lang: "ar",
     dir: "rtl",
     nav: {
-      why: "لماذا",
-      story: "القصة",
+      why: "الدردشة",
+      story: "ZAKI",
       faq: "الأسئلة",
       switchLang: "EN",
     },
     hero: {
-      title: "تعرّف على زكي، ذكاء اصطناعي من ثقافتنا وبشخصية تفهمك.",
-      hint: "أفكارك لقت شريكها المفضل.",
-      cta: "جرّب زكي",
-      pricingCta: "عرض الأسعار",
+      title: "Spaces للعمل. وزكي للاستمرارية.",
+      subtitle:
+        "Spaces تمنحك إنتاجية منظمة اليوم. وزكي هو البيتا العامة لذكاء شخصي مستمر بذاكرة متواصلة، ومراحل عمل مرئية، وسياق يمتد مع الوقت.",
+      betaLine:
+        "بيتا زكي مفتوحة الآن. الوصول المبكر يتضمن 5 رسائل مجانية يوميًا للتجربة.",
+      hint: "Spaces متاحة الآن. بيتا زكي مفتوحة.",
+      cta: "انضم إلى البيتا",
+      pricingCta: "جرّب Spaces",
+      tertiaryCta: "ما هو زكي؟",
       placeholder: "كيف يمكنني مساعدتك اليوم؟",
       rotatingPrompts: [
         "رتّب أسبوعي بخطة واضحة وأولويات عملية.",
         "حوّل هذه الفكرة إلى خطة إطلاق.",
-        "اشرح هذا المفهوم بالعربية والإنجليزية.",
         "لخّص هذا المقال وأعطني خطوات تنفيذ.",
         "اكتب لي رسالة إيميل جاهزة للإرسال.",
         "ساعدني أختار بين هذين الخيارين.",
         "ابنِ لي تقويم محتوى للشهر القادم.",
-        "ترجم النص بشكل طبيعي مش حرفي.",
+        "نظّم ملاحظاتي بهيكل قابل للتنفيذ.",
         "تحداني فكريًا وبيّن لي ما فاتني.",
+        "حلّل الخيارات وساعدني أقرر.",
       ],
       submit: "ابدأ",
-      helper: "اكتب بالعربية أو الإنجليزية أو بالاثنين معًا.",
+      helper: "Spaces تعمل بالعربية والإنجليزية أو بالاثنين. وهي مساحات العمل المنظمة داخل التطبيق.",
+    },
+    productSplit: {
+      heading: "ثلاث مراحل. سلّم منتج واحد.",
+      subheading:
+        "Spaces متاحة ومدفوعة الآن. البيتا العامة لزكي مفتوحة. والنسخة المميزة تأتي لاحقًا بعد التعلّم من البيتا.",
+      cards: [
+        {
+          stage: "المرحلة 1",
+          title: "Spaces",
+          badge: "متاح الآن",
+          description:
+            "مساحة عمل ذكاء اصطناعي مدفوعة للإنتاجية اليومية المنظّمة. منضبطة، مهيكلة، وجاهزة للاستخدام اليوم.",
+          bullets: [
+            "وصول غير محدود للدردشة مع الاشتراك المدفوع",
+            "المساحات تفصل العمل والبحث والتخطيط بوضوح",
+            "تحكم أوضح في الذاكرة والبيانات",
+          ],
+          ctaLabel: "جرّب Spaces",
+          ctaHref: "https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_chat_live",
+        },
+        {
+          stage: "المرحلة 2",
+          title: "بيتا زكي العامة",
+          badge: "بيتا مفتوحة",
+          description:
+            "مشغّل ذكاء شخصي تجريبي باستمرارية وذاكرة ومراحل عمل مرئية. أول خطوة علنية تتجاوز شكل الدردشة التقليدي.",
+          bullets: [
+            "5 رسائل بيتا مجانية للتجربة",
+            "تجريبي ومحدود ومبكر عن قصد",
+            "ذاكرة مستمرة عبر الجلسات",
+          ],
+          ctaLabel: "انضم إلى البيتا",
+          ctaHref: "/zaki-bot/#beta",
+        },
+        {
+          stage: "المرحلة 3",
+          title: "زكي المميز",
+          badge: "لاحقًا",
+          description:
+            "النسخة الكاملة تأتي بعد البيتا: تحكم أعمق، واعتمادية أقوى، وتجربة مشغّل شخصي أكثر نضجًا.",
+          bullets: [
+            "الاشتراكات تبدأ بعد البيتا العامة",
+            "النسخة المميزة تتشكل من تعلّم البيتا",
+            "هنا يصبح المنتج أعمق وأكثر اعتمادية",
+          ],
+          ctaLabel: "شاهد الرؤية",
+          ctaHref: "/zaki-bot/",
+        },
+      ],
+    },
+    beta: {
+      heading: "البيتا العامة: ماذا تتوقع؟",
+      warning:
+        "زكي تجريبي بالتصميم. الذاكرة المستمرة، والعملية المرئية، والاستمرارية لكل مستخدم هي مشاكل صعبة. لذلك نطلقه علنيًا ونتعلم أثناء البناء.",
+      bullets: [
+        "البيتا العامة مفتوحة الآن، والأماكن محدودة",
+        "5 رسائل مجانية يوميًا للتجربة المبكرة",
+        "هذا ليس المنتج النهائي، بل أرض الاختبار",
+        "ملاحظاتك تشكّل النسخة المميزة القادمة مباشرة",
+      ],
+      primaryCta: "انضم إلى البيتا",
+      secondaryCta: "اقرأ عن زكي",
+    },
+    chatProduct: {
+      heading: "لماذا تهم Spaces؟",
+      intro:
+        "Spaces هي الطبقة العملية: مساحة عمل ذكاء اصطناعي مبنية للاستخدام اليومي المنظّم، لا لاستعراض التفوق على النماذج الرائدة.",
+      bullets: [
+        "لا يدّعي التفوق على أحدث GPT أو Claude في القدرة الخام.",
+        "أرخص، أكثر تنظيمًا، وأوضح تحكمًا في العمل اليومي.",
+        "المساحات تفصل المشاريع والبحث والتخطيط بسياقات مستقلة.",
+        "دعم كامل للعربية والإنجليزية مع تعامل طبيعي مع اللغة المختلطة.",
+      ],
+      honestyLine:
+        "Spaces ليست مبنية لتتفوق على أحدث GPT أو Claude في القدرة الخام. بل بُنيت لتكون أكثر قابلية للاستخدام، وأكثر تنظيمًا، وأوضح تحكمًا في العمل اليومي.",
+    },
+    botProduct: {
+      heading: "لماذا يهم زكي؟",
+      intro:
+        "وكيل SaaS مستوحى من OpenClaw بذاكرة مستمرة ومراحل عمل مرئية، لكن بصيغة أكثر انضباطًا يمكن للمستخدم العادي أن يثق بها ويُدرّبها مع الوقت.",
+      bullets: [
+        "خيط ثابت واستمرارية في الذاكرة",
+        "مراحل عمل مرئية أثناء التنفيذ",
+        "طبقة مشغّل قابلة للتدريب لسياق العمل اليومي",
+        "مجاني ومحدود في البيتا؛ والاشتراكات تأتي لاحقًا",
+      ],
+      bridgeLine:
+        "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت، لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
+    },
+    nullalis: {
+      heading: "مدعوم بـ Nullalis",
+      intro:
+        "Nullalis هو المحرك الداخلي الخاص خلف زكي. وهو ما يمنح المنتج الاستمرارية وانضباط الذاكرة والقدرة الـ Agentic دون تحويل المنتج العام إلى عرض هش أو فوضوي.",
+      bullets: [
+        "جلسات ثابتة لكل مستخدم",
+        "ذاكرة وحالة تشغيلية قابلة للاستمرار",
+        "عرض حي لمراحل العمل عبر البث",
+        "عزل متعدد المستخدمين وقابلية تدريب وانضباط تشغيلي",
+      ],
     },
     earlyAccess: {
-      badge: "🎉 زكي صار له أسبوع واحد",
+      badge: "🎉 زكي متاح الآن",
       heading: "ابدأ مع زكي من اليوم",
       description:
         "زكي أصبح متاحًا الآن. اشترك وابدأ تجربة شخصية مع ذاكرة تتطور معك.",
@@ -483,144 +774,185 @@ export const content = {
         "بدك كود وصول مجاني؟\nراسلنا على إنستغرام بعد المتابعة + المشاركة لطلب أكواد الوصول:",
     },
     why: {
-      heading: "العالم العربي يفكر ويتحدث ويعمل بطريقة مختلفة.",
-      subheading: "فلماذا يبدو الذكاء الاصطناعي غريبًا؟",
+      heading: "الذكاء الاصطناعي يجيب جيدًا. لكن القليل منه يصبح نظيرًا رقميًا حقيقيًا.",
+      subheading: "زكي بُني ليغلق هذه المسافة الأخيرة بين الإنسان والذكاء الاصطناعي.",
       intro:
-        "في منطقة غنية بالثقافة والخصوصية والسياق، كثير من الأدوات لا تفهم التفاصيل. لا تدرك كيف نتحدث، ماذا نقصد، وكيف ننجز أعمالنا فعليًا.",
-      builtLine: "لهذا بنينا زكي.",
+        "الإنتاجية الحقيقية ليست في إجابة إضافية. بل في عمل منظّم الآن، وسياق مستمر، ونظام يصبح أكثر فائدة كلما تعلّم إيقاعك وطريقتك في العمل.",
+      builtLine: "ولهذا بنينا زكي.",
       description:
-        "AI واعٍ ثقافيًا ومصمم ليكون شخصيًا، مع طبقة ذاكرة تبقى تحت إدارتك وتحكمك.",
+        "مساحة عمل ذكاء اصطناعي مهيكلة وشخصية بطبيعتها. طبقة الذاكرة مبنية لتبقى تحت إدارتك وتحكمك.",
       workflow:
-        "خطط يومك، اكتب، فكّر، ترجم، وقرّر بشكل طبيعي وسلس.",
-      friction: "بدون تعقيد. بدون Prompts مربكة.",
-      postFriction: "وإذا لحقته… بتلاحظ تعليقاته الذكية والخفيفة.",
-      human: "ذكاء محلي، مفيد، وإنساني.",
+        "خطط يومك، اكتب، فكّر، ترجم، وقرّر داخل منتج يحافظ على تنظيم عملك.",
+      friction: "بدون فوضى عامة. وبدون ألعاب Prompts.",
+      postFriction: "فقط علاقة أوضح وأكثر فائدة مع الذكاء الاصطناعي.",
+      human: "ذكاء يبقى مفيدًا لأنه يحتفظ بالسياق.",
       points: [
-        "مصمم لفهم السياق العربي والمحادثات متعددة اللغات.",
-        "المساحات ترتب العمل والمشاريع بصورة أوضح.",
-        "الذاكرة تحفظ ما يهمك مع تدفق مراجعة واضح.",
-        "تجربة سريعة وواضحة تناسب العمل اليومي.",
+        "المساحات ترتب المشاريع بسياقات منفصلة وواضحة.",
+        "دعم كامل للعربية والإنجليزية مع تعامل طبيعي مع اللغة المختلطة.",
+        "الذاكرة تحفظ السياق المفيد مع تدفق مراجعة واضح.",
+        "تجربة مصممة للسرعة والوضوح وسير العمل اليومي.",
       ],
     },
+    geo: {
+      definitionHeading: "ما هو زكي بالضبط؟",
+      definitionText:
+        "زكي هو الوكيل المستمر. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظّمة. وزكي هو أيضًا البيتا العامة لذكاء شخصي مستمر، أي العلاقة طويلة الخيط خلف العمل.",
+      statsHeading: "لماذا يختار الناس زكي؟",
+      statsSource: "السلّم الذي يقف خلف العلامة.",
+      stats: [
+        "Spaces متاحة الآن للاستخدام اليومي المنظّم",
+        "البيتا العامة مفتوحة الآن مع 5 رسائل مجانية للتجربة",
+        "الذاكرة والتخصيص تحت تحكم أوضح للمستخدم",
+        "الاستمرارية والانضباط التشغيلي مدمجان في البنية"
+      ],
+      citationHeading: "لماذا يبدو معظم الذكاء الاصطناعي عامًا؟",
+      citationQuote:
+        "معظم الذكاء الاصطناعي يتوقف عند الإجابة. زكي يبدأ بعمل منظم داخل Spaces، ثم يتجه نحو ذكاء مستمر يتذكر السياق بدل أن يعيد الضبط في كل جلسة.",
+      citationSource: "فريق Nova Nuggets",
+      compareLabel: "قارن زكي مع Spaces",
+      roundupLabel: "شاهد مقارنة مساحات العمل الذكية",
+      howToHeading: "ماذا يمكنك أن تفعل مع زكي؟",
+      howToIntro:
+        "هذه أمثلة عملية مكتوبة بطريقة سهلة الاستخراج لأنظمة البحث بالذكاء الاصطناعي، وتوضح نوع العمل الذي صُمم زكي لدعمه.",
+      howTos: [
+        {
+          name: "كتابة إيميلات مهنية بالعربية",
+          text: "اطلب من زكي صياغة رسالة عربية رسمية ثم عدّل النبرة بحسب المستلم، والقطاع، ودرجة الاستعجال.",
+          link: "/how-to/write-arabic-emails-ai/",
+        },
+        {
+          name: "ترجمة اللهجات إلى الإنجليزية",
+          text: "ألصق نصًا باللهجة الشامية أو الخليجية أو المصرية واطلب ترجمة إنجليزية طبيعية تحافظ على المعنى والسياق.",
+          link: "/how-to/translate-dialects-arabic-english/",
+        },
+        {
+          name: "إنشاء محتوى عربي للسوشال ميديا",
+          text: "أنشئ كابشنات إنستغرام أو منشورات لينكدإن أو سلاسل X بالعربية بصياغة محلية وصوت علامة أوضح.",
+          link: "/how-to/create-social-media-content-arabic/",
+        },
+      ],
+      howToLinkLabel: "اقرأ الدليل",
+    },
     updatesCarousel: {
-      heading: "داخل زكي: نبني على المكشوف",
-      subheading: "آخر تحديثات المنتج وإشارات AI المهمة، بنشاركها أولًا بأول.",
-      batchLabel: "الأسبوع 1",
+      heading: "داخل زكي: ما الذي شكّل هذا الإصدار",
+      subheading: "محطات المنتج وإشارات منظومة الذكاء الاصطناعي التي تفسّر لماذا يُبنى زكي بهذه الطريقة.",
+      batchLabel: "منظور الإصدار",
       statusLabels: {
         done: "تم",
         next: "القادم",
       },
       slides: [
         {
-          id: "launch",
+          id: "week-two-zaki-bot-beta",
           tag: "launch",
-          title: "الإطلاق: أول يوم من رمضان",
+          title: "بيتا زكي العامة أصبحت مفتوحة",
           description:
-            "انطلق زكي مع مستخدمين حقيقيين منذ اليوم الأول من رمضان، كأول دفعة استخدام علني.",
-          dateLabel: "أسبوع الإطلاق",
-          emoji: "🚀",
+            "أول نسخة علنية من زكي أصبحت متاحة: خيط تشغيلي ثابت لكل مستخدم ومراحل عمل مرئية أثناء التنفيذ.",
+          dateLabel: "الإصدار الحالي",
+          emoji: "⚡",
           status: "done",
-          ramadanBadge: {
-            label: "🌙 رمضان كريم",
-          },
           link: {
-            label: "تابع الرحلة",
-            url: "https://instagram.com/chatzaki.ai",
+            label: "افتح تطبيق زكي",
+            url: "https://app.chatzaki.com",
           },
         },
         {
-          id: "first-24h-thanks",
+          id: "week-two-hardening",
           tag: "milestone",
-          title: "شكرًا يا أصدقاء البداية 🫶",
+          title: "تقوية العزل وضبط الحصص",
           description:
-            "خلال أول 24 ساعة: +200 تسجيل و+1000 زيارة للموقع. أنتم من صنع البداية. انشروا زكي، خلّونا ننتقل من chat AI العام إلى Personal Assistant AI.",
-          dateLabel: "أول 24 ساعة",
-          emoji: "🎉",
+            "قوّينا العزل متعدد المستخدمين، وثبّتنا البث، وأضفنا حصصًا يومية تجعل البيتا العامة أكثر انضباطًا وأمانًا.",
+          dateLabel: "الإصدار الحالي",
+          emoji: "🛡️",
+          status: "done",
+        },
+        {
+          id: "openai-tools-for-agents",
+          tag: "ecosystem",
+          title: "OpenAI: أدوات جديدة لبناء AI Agents",
+          description:
+            "OpenAI قدّمت أدوات إنتاجية جديدة لبناء الـ Agents، وهذا يؤكد التحول من chatbots إلى مسارات تنفيذ موثوقة.",
+          dateLabel: "إشارة من المنظومة",
+          emoji: "🧱",
           status: "done",
           link: {
-            label: "انشرها مع أصحابك",
-            url: "https://instagram.com/chatzaki.ai",
+            label: "اقرأ الإعلان",
+            url: "https://openai.com/index/new-tools-for-building-agents/",
           },
         },
         {
-          id: "week-one-stable",
-          tag: "milestone",
-          title: "الأسبوع الأول: تثبيت الأساس",
+          id: "openai-chatgpt-agent",
+          tag: "ecosystem",
+          title: "OpenAI: جسر بين البحث والتنفيذ",
           description:
-            "رفعنا الاعتمادية، حسّنا جودة الردود، وجعلنا التجربة اليومية أكثر سلاسة.",
-          dateLabel: "الأسبوع الأول",
-          emoji: "🛠️",
-          status: "done",
-        },
-        {
-          id: "payments-websearch",
-          tag: "feature",
-          title: "الدفع + بحث الويب: متاح الآن",
-          description:
-            "الفوترة أصبحت مباشرة وتم دمج بحث الويب، ليصبح زكي أقوى في الاستخدام اليومي العملي.",
-          dateLabel: "هذا الأسبوع",
-          emoji: "💳",
+            "إطلاق ChatGPT Agent يؤكد اتجاه السوق: المستخدم يريد مساعدًا ينفّذ، لا مجرد مساعد يرد.",
+          dateLabel: "إشارة منتج",
+          emoji: "🧭",
           status: "done",
           link: {
-            label: "اكتشف الخطط",
-            url: "https://app.chatzaki.com/pricing?auth=signup",
+            label: "اقرأ الإعلان",
+            url: "https://openai.com/index/introducing-chatgpt-agent/",
           },
         },
         {
-          id: "openclaw-personal-agent",
-          tag: "feature",
-          title: "إشارة AI Agent: OpenClaw",
+          id: "linux-foundation-aaif",
+          tag: "ecosystem",
+          title: "Linux Foundation أطلقت AAIF",
           description:
-            "OpenClaw يعكس تحوّل السوق من chatbots إلى AI Agents يفهمون سياق المستخدم ويتصرفون بشكل استباقي.",
-          dateLabel: "متابعة المنظومة",
-          emoji: "🤖",
+            "إطلاق Agentic AI Foundation مع MCP وGoose وAGENTS.md ضمن حوكمة محايدة يسرّع قابلية التشغيل البيني بين منظومات الـ Agents.",
+          dateLabel: "إشارة معايير",
+          emoji: "🧩",
           status: "done",
           link: {
-            label: "استكشف OpenClaw",
-            url: "https://openclaw.ai",
+            label: "اقرأ الإعلان",
+            url: "https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation",
           },
         },
         {
-          id: "world-monitor-open-source",
-          tag: "feature",
-          title: "إشارة مفتوحة المصدر: World Monitor",
+          id: "anthropic-context-management",
+          tag: "ecosystem",
+          title: "Anthropic: إدارة السياق أساسية",
           description:
-            "مشروع World Monitor من تطوير إيلي حبيب، الشريك المؤسس لأنغامي، مفتوح المصدر ويتطور بسرعة. البناء العلني يصنع فرقًا.",
-          dateLabel: "إشارة من المنطقة",
-          emoji: "🌍",
+            "Anthropic أكدت أن إدارة السياق عامل حاسم في موثوقية الـ Agents طويلة المدى، وهذا ينسجم مع معمارية زكي المعتمدة على الذاكرة.",
+          dateLabel: "إشارة هندسية",
+          emoji: "🧠",
           status: "done",
           link: {
-            label: "شاهد المشروع",
-            url: "https://worldmonitor.app",
+            label: "اقرأ المقال",
+            url: "https://www.anthropic.com/news/context-management",
           },
         },
         {
-          id: "sovereign-ai-shift",
-          tag: "feature",
-          title: "تحول السوق: ذكاء محلي وسيادي",
+          id: "eu-ai-act-signal",
+          tag: "ecosystem",
+          title: "تطبيق AI Act الأوروبي بدأ فعليًا",
           description:
-            "المزيد من الفرق يتجه إلى تشغيل محلي ومسارات نشر مرنة لضمان الخصوصية والتحكم. وهذا يتطابق مع اتجاه زكي.",
-          dateLabel: "إشارة استراتيجية",
-          emoji: "🔐",
+            "مع دخول مراحل من AI Act حيّز التنفيذ، أصبحت الثقة والضبط والوضوح التنظيمي متطلبات أساسية في المنتج.",
+          dateLabel: "إشارة تنظيمية",
+          emoji: "⚖️",
           status: "done",
+          link: {
+            label: "تفاصيل من الاتحاد الأوروبي",
+            url: "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai",
+          },
         },
         {
-          id: "agent-planning",
+          id: "next-bot-controls",
           tag: "next",
-          title: "القادم: مسارات AI Agents",
+          title: "القادم: تعميق تحكم زكي",
           description:
-            "الأسبوع القادم سنختبر مسارات مدعومة بـ AI Agents لينتقل زكي من المحادثة إلى المساعدة التنفيذية.",
-          dateLabel: "الأسبوع القادم",
-          emoji: "🤖",
+            "المرحلة القادمة توسّع بيتا زكي بضوابط قنوات أعمق، وحلقات اعتمادية أقوى، وحوكمة تشغيل أوضح.",
+          dateLabel: "المرحلة التالية",
+          emoji: "🛣️",
           status: "next",
         },
         {
           id: "weekly-newsroom",
           tag: "next",
-          title: "تحديثات غرفة الأخبار أسبوعيًا",
+          title: "تحديثات علنية مستمرة",
           description:
-            "ننشر تقدم المنتج وإشارات AI المهمة كل أسبوع في طريقنا لبناء أفضل Personal Assistant AI.",
-          dateLabel: "ترقّبوا",
+            "نواصل نشر تقدم المنتج وإشارات الذكاء الاصطناعي المهمة بينما يتحرك زكي من دردشة منضبطة نحو ذكاء شخصي مستمر.",
+          dateLabel: "مستمر",
           emoji: "📣",
           status: "next",
           link: {
@@ -631,7 +963,7 @@ export const content = {
       ],
     },
     features: {
-      heading: "مصمم ليكون لك فعلًا،\nمغلف بالأصالة وذكاء عالي التأثير.",
+      heading: "ماذا تمنحك Spaces اليوم.",
       cards: [
         {
           title: "تفكير منظم",
@@ -656,44 +988,44 @@ export const content = {
       ],
     },
     horizontal: {
-      heading: "زكي بيفهمك",
-      subheading: "هنا تبدأ الحكاية.",
+      heading: "لماذا يوجد زكي",
+      subheading: "المنطق الذي بُني عليه المنتج.",
       cards: [
         {
           pill: "الأصل",
-          title: "الثقافة تصنع النموذج",
+          title: "ملاءمة المنتج أعمق من جودة النموذج",
           description:
-            "نماذج اللغة تتشكل من البيانات التي تتدرّب عليها.\nوهذه البيانات تحمل لغة الناس وافتراضاتهم وسياقهم الثقافي.\nلذلك الذكاء ليس محايدًا، بل انعكاسٌ لمصدره.",
+            "النماذج تتشكل باللغة والافتراضات والناس الذين بُنيت حولهم.\nلذلك ففائدة الذكاء الاصطناعي ليست جودة النموذج وحدها.\nبل أيضًا ملاءمته للغة، والسياق، وسير العمل، وطريقة الاستخدام.",
         },
         {
           pill: "الفجوة",
-          title: "فجوة السياق",
+          title: "الفجوة الحقيقية هي الاستمرارية",
           description:
-            "أغلب النماذج العالمية لا تلتقط تفاصيل المنطقة العربية.\nتعطي إجابات صحيحة تقنيًا لكنها بعيدة ثقافيًا.\nوهذه هي الفجوة التي بُني زكي ليسدّها.",
+            "معظم الذكاء الاصطناعي ما زال يتصرف كزر إعادة ضبط.\nتسأل، يجيب، ثم تبدأ العلاقة من الصفر مرة أخرى.\nزكي يُبنى ليغلق هذه المسافة الأخيرة بين الإنسان والذكاء الاصطناعي.",
         },
         {
           pill: "الانطلاق",
-          title: "بداية من بلاد الشام",
+          title: "ابدأ بإنتاجية منظّمة",
           description:
-            "بدأنا بزكي الشام على يد فريق جذوره شامية.\nلنبني أساسًا حقيقيًا يعكس التعبير اليومي المحلي.\nثم نتوسع بعمق، لا بتخمين.",
+            "Spaces هي طبقة المنتج الحية اليوم.\nتمنح المستخدم مساحة عمل منضبطة للعربية والإنجليزية في العمل اليومي.\nومن هذه الطبقة العملية نكسب حق بناء الخطوة التالية.",
         },
         {
           pill: "يتعلّم",
-          title: "ينمو معك",
+          title: "الاستمرارية تغيّر العلاقة",
           description:
-            "زكي يتطور عبر تفاعل المستخدم وحلقات المراجعة.\nتقدر توافق أو تعدل أو ترفض ما يُحفظ في الذاكرة.\nالتخصيص يكبر مع الثقة وتحت سيطرتك.",
+            "عندما يبقى السياق، يصبح الذكاء الاصطناعي أكثر فائدة وأكثر قابلية للتدريب والمحاسبة.\nاستمرارية الذاكرة، والمراجعة، وتحكم المستخدم أهم من إجابة واحدة جيدة.\nوهذا ما يختبره زكي علنًا.",
         },
         {
           pill: "التركيز",
-          title: "منظومة الميزات",
+          title: "ما الذي يهم عمليًا",
           description:
-            "المساحات تنظّم السياق لكل مشروع ولكل سير عمل.\nالذاكرة تحفظ الاستمرارية فتصير المحادثات أذكى مع الوقت.\nوآليات كشف التعارض والمراجعة تضمن وضوحًا وثباتًا.",
+            "المساحات تحفظ العمل منظمًا.\nالذاكرة تجعل الاستمرارية مفيدة.\nوالعزل لكل مستخدم، وقابلية التدريب، ومراحل العمل المرئية تجعل المنتج أوضح وأكثر قابلية للثقة.",
         },
         {
           pill: "الرؤية",
-          title: "طريق الريادة",
+          title: "خطوة المنتج التالية",
           description:
-            "هدفنا نموذج عربي أصيل يثق به المستخدم ويرتبط به.\nليس إجابات عالمية عامة، بل ذكاء محلي الصلة والمعنى.\nوزكي هو الأساس الذي نبنيه ليصبح نموذجًا رائدًا.",
+            "الهدف ليس واجهة ذكاء اصطناعي عامة أخرى.\nالهدف هو ذكاء شخصي مستمر يتصرف أكثر كنظير رقمي لا كأداة عابرة.\nوزكي هو الطريق العلني نحو هذا المنتج الكامل.",
         },
       ],
     },
@@ -731,7 +1063,7 @@ export const content = {
       countLabel: "حرف",
     },
     useCases: {
-      heading: "وين زكي بيفيدك أكثر",
+      heading: "أين تفيدك Spaces اليوم؟",
       items: [
         {
           title: "العمل",
@@ -746,12 +1078,12 @@ export const content = {
           description: "مساعدة يومية مع ذاكرة يمكن مراجعتها والتحكم الكامل بها.",
         },
       ],
-      note: "مصمم بذاكرة قابلة للمراجعة وتحكم المستخدم من الأساس.",
+      note: "زكي يذهب أبعد من ذلك، لكن Spaces تغطي طبقة الاستخدام اليومي الآن.",
     },
     pricing: {
-      heading: "خطط بسيطة لنسخة أكثر شخصية من زكي",
+      heading: "استخدم Spaces اليوم. جرّب زكي الآن.",
       subheading:
-        "ابدأ مجانًا، ثم قم بالترقية عندما تريد المزيد، أو أهدِ شهرًا واحدًا من زكي لشخص يحتاج مساعد AI شخصي فعلاً.",
+        "Spaces هي مساحات العمل المدفوعة المتاحة الآن. وزكي هو البيتا العامة لذكاء شخصي مستمر، مجاني أثناء البيتا مع 5 رسائل كل 24 ساعة. تبدأ الاشتراكات بعد أن نتعلم من هذه المرحلة.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
@@ -797,59 +1129,101 @@ export const content = {
         cta: "اشترِ كود هدية لشهر",
       },
       note: "خطة الطالب تتطلب بريد .edu أو تحققًا يدويًا مع إثبات دراسة.",
+      botBeta: {
+        heading: "بيتا زكي العامة",
+        badge: "بيتا مفتوحة",
+        description:
+          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ 5 رسائل كل 24 ساعة حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
+        bullets: [
+          "5 رسائل كل 24 ساعة تتجدد يوميًا",
+          "ذاكرة مستمرة تنتقل بين الجلسات",
+          "مراحل عمل مرئية تشاهد فيها ما يفعله زكي",
+          "مجاني الآن. الاشتراكات تبدأ بعد البيتا.",
+        ],
+        cta: "انضم إلى البيتا",
+        href: "/zaki-bot/#beta",
+      },
+      botPremium: {
+        heading: "زكي المميز",
+        badge: "لاحقًا",
+        description:
+          "المنتج المميز يأتي بعد البيتا. هناك تبدأ الاشتراكات، وتظهر النسخة الكاملة بتجربة أعمق وأكثر نضجًا.",
+        bullets: [
+          "الاشتراكات لاحقًا",
+          "يتشكل من تعلم البيتا",
+          "المنتج الكامل",
+        ],
+        cta: "شاهد خارطة الطريق",
+        href: "/zaki-bot/",
+      },
     },
     faq: {
       heading: "الأسئلة الشائعة",
       subheading: "الأسئلة الشائعة",
       items: [
         {
-          question: "ما هو زكي؟ ولماذا مهم؟",
+          question: "ما هو زكي؟",
           answer:
-            "زكي هو محاولتنا لبناء ذكاء اصطناعي عربي واعٍ ثقافيًا، وليس مخرجات عامة بلا روح. نحن نؤمن أن الذكاء يجب أن يفهم طريقة الناس في الكلام والتفكير واتخاذ القرار داخل سياقهم الحقيقي.",
+            "زكي هو الوكيل المستمر والاتجاه الطويل للمنتج. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظمة. أما زكي نفسه فهو البيتا العامة للذكاء الشخصي المستمر، وهو الاتجاه التجريبي الذي نبنيه علنًا. وكلاهما يدعم العربية والإنجليزية طبيعيًا.",
         },
         {
-          question: "من الفريق الذي يبني زكي؟",
+          question: "ما الفرق بين زكي وSpaces؟",
           answer:
-            "نحن Nova Nuggets L.L.C، شركة ذكاء اصطناعي أسسها عرب مغتربون. فريقنا موزع من طوكيو إلى كندا، مع مقر رئيسي في دبي وقاعدة تشغيلية في هامبورغ، ألمانيا.",
+            "زكي هو طبقة الوكيل المستمر التي تركز على الاستمرارية والذاكرة والعلاقة طويلة المدى. أما Spaces فهي مساحات التنفيذ المنظمة التي يمكن الاشتراك بها الآن للاستخدام اليومي. زكي يساعدك على تقرير ما يجب فعله، وSpaces تساعدك على إنجازه بوضوح.",
         },
         {
-          question: "ما التقنية التي يستخدمها زكي اليوم؟",
+          question: "هل Spaces هي نفسها ZAKI Chat؟",
           answer:
-            "حاليًا يركز زكي على توليد النصوص باستخدام نماذج مفتوحة المصدر. قدرات الصور وإمكانات أوسع قادمة في الإصدارات القادمة.",
+            "نعم. Spaces هو الاسم العام الأوضح لما قد يشير إليه الموقع أو التطبيق الحالي باسم ZAKI Chat. المنتج نفسه لا يتغير أثناء هذا الانتقال.",
         },
         {
-          question: "ما الفرق بين زكي وأدوات الذكاء الاصطناعي العامة؟",
+          question: "لماذا يوجد زكي وSpaces معًا؟",
           answer:
-            "معظم النماذج العالمية مبنية على متوسطات عامة. زكي يُصاغ ليلتقط الفروقات المحلية، خاصة في السياق العربي والشامي، ليعطي إجابات أقرب وأكثر صلة.",
+            "لأن التخطيط والاستمرارية يختلفان عن التنفيذ المركز. زكي يعتني بطبقة العلاقة والاستمرارية، بينما Spaces تعتني بالتنفيذ المنظم للمهمات والبحث والكتابة والعمل بحسب كل مشروع.",
         },
         {
-          question: "كيف يتحسن زكي مع الوقت؟",
+          question: "متى أستخدم زكي بدلًا من Spaces؟",
           answer:
-            "تفاعل المستخدمين هو الأساس. كل محادثة مفيدة تساعدنا على تحسين السلوك وجودة الذاكرة والاتساق الثقافي. نحن نبني ذكاءً ينمو مع مستخدميه.",
+            "استخدم زكي عندما تحتاج إلى الاستمرارية والتخطيط والذاكرة وخيط ممتد عبر الوقت. واستخدم Spaces عندما يحتاج العمل إلى مكان مخصص: كتابة، أو ترجمة، أو بحث، أو تنفيذ، أو تركيز بحسب كل مشروع.",
         },
         {
-          question: "ماذا عن الخصوصية والثقة؟",
+          question: "هل بيتا زكي متاحة الآن؟",
           answer:
-            "نحن نعمل من أوروبا ونلتزم بمعايير خصوصية صارمة متوافقة مع القواعد الأوروبية. كما نصمم تدفقات الذاكرة بحيث تبقى المراجعة والتحكم بيد المستخدم.",
+            "نعم. البيتا العامة مفتوحة الآن بـ 5 رسائل مجانية يوميًا. وهي ليست المنتج المميز النهائي، بل أول إصدار علني تجريبي.",
         },
         {
-          question: "كيف يتم تمويل المشروع؟",
+          question: "لماذا زكي تجريبي؟",
           answer:
-            "زكي ممول ذاتيًا حاليًا. تركيزنا الأول هو التكنولوجيا، ونبني المشروع بشكل مستدام مع محاولة إبقاء الوصول متاحًا قدر الإمكان.",
+            "لأنه يختبر شكلًا جديدًا للمنتج: مشغّل ذكاء شخصي مع استمرارية وذاكرة، وليس مجرد جلسة سؤال وجواب. البيتا موجودة لتُظهر ما أصبح ممكنًا ولتتعلم من الاستخدام الحقيقي.",
         },
         {
-          question: "كيف يمكنني دعم هذه المهمة؟",
+          question: "كم عدد الرسائل المجانية في البيتا؟",
           answer:
-            "استخدم زكي، شاركه، وأعطنا ملاحظاتك. الدعم قد يكون ماليًا أو تسويقيًا أو عبر الاستخدام اليومي. كل دعم يُقربنا من مستقبل ذكاء عربي أقوى.",
+            "البيتا العامة تتضمن 5 رسائل مجانية يوميًا للتجربة.",
         },
         {
-          question: "ليش مهم تدعم زكي الآن؟",
+          question: "هل البيتا مجانية؟",
           answer:
-            "لأن هذه المرحلة هي الأكثر حساسية؛ فيها يتشكل الذكاء من الاستخدام الحقيقي. كل محادثة ومشاركة ودعم يساعدنا نبني نموذجًا عربيًا موثوقًا وقريبًا من الناس.",
+            "نعم. البيتا العامة مجانية ومحدودة. الاشتراكات المميزة تأتي لاحقًا بعد مرحلة البيتا.",
         },
         {
-          question: "وين العرب في عالم الذكاء الاصطناعي؟",
-          answer: "هون.",
+          question: "هل يدّعي زكي التفوق على ChatGPT أو Claude؟",
+          answer:
+            "لا. Spaces لا تدّعي التفوق على أحدث GPT أو Claude في القدرة الخام. القيمة الأساسية هي شكل المنتج: التنظيم، السعر، التحكم، ودعم العربية-الإنجليزية، واتجاه المشغّل.",
+        },
+        {
+          question: "ماذا يعني أنه مدعوم بـ Nullalis؟",
+          answer:
+            "Nullalis هو المحرك الداخلي الخاص خلف زكي. وهو ما يوفّر استمرارية الذاكرة، ووضوح مراحل العمل، وقابلية التدريب، والانضباط الـAgentic الذي يجعل زكي أقرب إلى نظير رقمي مستمر منه إلى جلسة دردشة عادية.",
+        },
+        {
+          question: "متى تبدأ الاشتراكات المميزة؟",
+          answer:
+            "بعد انتهاء مرحلة البيتا العامة. المنتج المميز يأتي لاحقًا بعد أن نتعلم من تجربة البيتا.",
+        },
+        {
+          question: "لماذا أهتم بالبيتا الآن؟",
+          answer: "لأنها أول نظرة علنية على شكل المنتج القادم. هنا يختبر المستخدم ما الذي يمكن أن يصبح عليه الذكاء الشخصي المستمر قبل وصول النسخة الكاملة.",
         },
       ],
     },

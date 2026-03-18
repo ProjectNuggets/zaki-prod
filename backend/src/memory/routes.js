@@ -30,6 +30,7 @@ import {
   autoSaveWithUndo as autoSaveWithUndoOp,
   undoMemory as undoMemoryOp,
 } from "./auto-save.js";
+import { processChatMemoryCapture as processChatMemoryCaptureOp } from "./capture.js";
 
 import {
   extractFacts as extractFactsOp,
@@ -199,6 +200,7 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     probeEmbeddingsProvider = probeEmbeddingsProviderOp,
     autoSaveWithUndo = autoSaveWithUndoOp,
     undoMemory = undoMemoryOp,
+    processChatMemoryCapture = processChatMemoryCaptureOp,
   } = dependencies || {};
 
   const requireMemoryUser = (req, res) =>
@@ -467,6 +469,57 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
       }
       void publishMemoryStatus(scope.userId, "delete");
       res.json({ deleted: success });
+    } catch (err) {
+      recordMemoryTelemetry("pipeline.error");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================================================
+  // Simplified normal-chat capture flow
+  // ==========================================================================
+
+  app.post("/api/memory/capture", async (req, res) => {
+    try {
+      const scope = await requireMemoryUser(req, res);
+      if (!scope) return;
+      recordMemoryTelemetry("request.capture");
+
+      const { message, threadId } = req.body || {};
+      const normalizedMessage = toBoundedString(message, {
+        maxChars: MAX_MESSAGE_CHARS,
+      });
+      if (!normalizedMessage) {
+        return res.status(400).json({ error: "message required" });
+      }
+      const normalizedThreadId = toBoundedString(threadId, {
+        maxChars: MAX_THREAD_ID_CHARS,
+      });
+
+      const result = await processChatMemoryCapture({
+        userId: scope.userId,
+        message: normalizedMessage,
+        threadId: normalizedThreadId || null,
+      });
+
+      recordMemoryTelemetry(
+        "store.saved",
+        Array.isArray(result?.saved) ? result.saved.length : 0
+      );
+      recordMemoryTelemetry(
+        "queue.pending",
+        Array.isArray(result?.review) ? result.review.length : 0
+      );
+      recordMemoryTelemetry(
+        "store.duplicate",
+        Array.isArray(result?.duplicates) ? result.duplicates.length : 0
+      );
+      recordMemoryTelemetry(
+        "queue.conflict",
+        Array.isArray(result?.conflicts) ? result.conflicts.length : 0
+      );
+      void publishMemoryStatus(scope.userId, "capture");
+      res.json(result);
     } catch (err) {
       recordMemoryTelemetry("pipeline.error");
       res.status(500).json({ error: err.message });

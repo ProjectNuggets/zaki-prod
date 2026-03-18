@@ -1,0 +1,162 @@
+@import "./tokens.css";
+@import "./animations.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: var(--chat-text);
+  background: var(--chat-bg);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(210, 68, 48, 0.07), transparent 30%),
+    linear-gradient(180deg, #f8f2e9 0%, #f8f2e9 60%, #efe3d2 100%);
+  color: var(--chat-text);
+  overflow-x: hidden;
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+body[data-route="bot"] {
+  background:
+    radial-gradient(circle at top left, rgba(210, 68, 48, 0.12), transparent 25%),
+    radial-gradient(circle at 80% 10%, rgba(210, 68, 48, 0.06), transparent 22%),
+    linear-gradient(180deg, #0d0b09 0%, #0d0b09 48%, #1f1a14 100%);
+  color: var(--bot-text);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* ── Ambient layers ── */
+.site-mesh {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 10% 12%, rgba(210, 68, 48, 0.10), transparent 26%),
+    radial-gradient(circle at 82% 0%, rgba(255, 77, 46, 0.08), transparent 24%),
+    radial-gradient(circle at 50% 100%, rgba(255, 236, 219, 0.45), transparent 34%);
+  z-index: -2;
+}
+
+body[data-route="bot"] .site-mesh {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 77, 46, 0.16), transparent 20%),
+    radial-gradient(circle at 80% 0%, rgba(255, 77, 46, 0.08), transparent 20%),
+    radial-gradient(circle at 50% 100%, rgba(72, 31, 22, 0.22), transparent 30%);
+}
+
+.site-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image:
+    linear-gradient(transparent 0, rgba(0, 0, 0, 0.9) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+  z-index: -1;
+}
+
+.theme-bot {
+  color: var(--bot-text);
+}
+
+/* ── Typography ── */
+[dir="rtl"] {
+  font-family: "IBM Plex Sans Arabic", "Plus Jakarta Sans", sans-serif;
+}
+
+.font-display {
+  font-family: "Cabinet Grotesk", sans-serif;
+}
+
+.font-mono-ui {
+  font-family: "DM Mono", monospace;
+}
+
+[dir="rtl"] .font-display {
+  font-family: "IBM Plex Sans Arabic", sans-serif;
+}
+
+/* ── Animation perf ── */
+.reveal-block {
+  will-change: transform, opacity;
+}
+
+.hero-rotating-phrase {
+  display: inline-block;
+  min-width: 5.2ch;
+  white-space: nowrap;
+  will-change: transform, opacity, filter;
+}
+
+.hero-rotating-phrase.is-visible {
+  animation: hero-phrase-in 220ms ease-out forwards;
+}
+
+.hero-rotating-phrase.is-hidden {
+  animation: hero-phrase-out 180ms ease-in forwards;
+}
+
+/* ── Focus ring ── */
+:focus-visible {
+  outline: 2px solid var(--chat-accent);
+  outline-offset: 2px;
+}
+
+.theme-bot :focus-visible {
+  outline-color: var(--bot-accent);
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(210, 68, 48, 0.16);
+  color: var(--chat-text);
+}
+
+.theme-bot ::selection {
+  background: rgba(255, 77, 46, 0.24);
+  color: var(--bot-text);
+}
+
+@media (max-width: 767px) {
+  .site-mesh,
+  .site-grain {
+    opacity: 0.7;
+  }
+}

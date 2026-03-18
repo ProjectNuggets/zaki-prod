@@ -6,7 +6,7 @@ Last updated: February 23, 2026
 
 The backend memory layer provides:
 - extraction of memory facts from user messages
-- autosave/manual capture workflows
+- capture, review, and reversible-save workflows
 - conflict detection + resolution
 - context retrieval for chat injection
 - realtime status updates (SSE)
@@ -35,22 +35,34 @@ Important dedupe constraint:
 
 ## Operational behavior
 
-### Autosave
-1. `POST /api/memory/autosave`
-2. extract facts
-3. store immediately (or classify as duplicate/conflict)
-4. write undo window (`memory_undo_windows`)
+### Normal chat capture
+1. `POST /api/memory/capture`
+2. extract candidate memories
+3. classify each candidate into:
+   - `saved_reversible`
+   - `needs_review`
+   - `duplicate`
+   - `conflict`
+   - `skipped`
+4. saved memories write an undo window in `memory_undo_windows`
+5. review/conflict items appear in the memory viewer queues
 
-Undo window: 8 seconds.
+### Undo
+- default undo window: 5 seconds
+- undo may succeed, partially succeed, or fail
+- the UI should remain visible until the outcome is known
 
-### Manual mode
-1. `POST /api/memory/preview`
-2. extracted facts are staged in `memory_confirmations`
-3. user confirms/rejects
+### Legacy compatibility
+- `POST /api/memory/autosave`
+- `POST /api/memory/preview`
+- retained for compatibility/testing only, not the primary app flow
 
 ### Context retrieval
-- `buildContext()` uses lexical + vector retrieval when available.
-- optional relevance filtering narrows context before injection.
+- normal chat uses `buildChatMemoryContext()`
+- introspection prompts also use `buildChatMemoryContext()` with introspection mode
+- `buildContext()` remains available for broader retrieval workflows when needed
+- `buildFastContext()` is retained as a lower-level selector, not a primary runtime contract
+- session-end memories are excluded from the default chat retrieval contract
 - stream-chat injects context in versioned envelope markers:
   - `[[ZAKI_MEMORY_CONTEXT_V2]]`
   - `[[/ZAKI_MEMORY_CONTEXT_V2]]`

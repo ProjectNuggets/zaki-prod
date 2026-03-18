@@ -13,7 +13,6 @@ export { MessageComposer } from "./MessageComposer";
 export { StreamingMessage } from "./StreamingMessage";
 
 // Memory components (P0 Fix)
-export { MemoryConfirmationPanel } from "../memory/MemoryConfirmationPanel";
 export { MemoryToast } from "../memory/MemoryToast";
 
 // Views

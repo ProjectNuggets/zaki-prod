@@ -269,6 +269,47 @@ describe("memory routes integration", () => {
     });
   });
 
+  it("uses the simplified capture route for normal chat memory ingestion", async () => {
+    const app = createMockApp();
+    const processChatMemoryCapture = jest.fn(async () => ({
+      saved: [
+        {
+          id: VALID_UUID,
+          content: "Prefers concise answers",
+          type: "preference",
+          state: "saved_reversible",
+          undoUntil: "2026-03-13T12:34:56.000Z",
+        },
+      ],
+      review: [],
+      duplicates: [],
+      conflicts: [],
+      skipped: [],
+    }));
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: { processChatMemoryCapture },
+    });
+
+    const res = await invokeRoute(app, {
+      method: "POST",
+      path: "/api/memory/capture",
+      body: {
+        message: "  I prefer concise answers  ",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(processChatMemoryCapture).toHaveBeenCalledWith({
+      userId: OWNER_EMAIL,
+      message: "I prefer concise answers",
+      threadId: null,
+    });
+    expect(res.body?.saved).toHaveLength(1);
+    expect(res.body?.review).toEqual([]);
+  });
+
   it("clamps confirmations limit and keeps user scoped", async () => {
     const app = createMockApp();
     const getPendingConfirmations = jest.fn(async () => []);

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  ArrowRight,
   BookOpen,
   Brain,
   CalendarClock,
@@ -68,6 +67,7 @@ interface PendingMemoryRecord {
 interface MemoryViewerProps {
   userId: string;
   initialSearchQuery?: string | null;
+  initialTab?: "memories" | "pending" | "conflicts";
 }
 
 type MemoryTypeStyle = {
@@ -204,7 +204,11 @@ function getTypeStyle(type: string) {
   };
 }
 
-export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerProps) {
+export function MemoryViewer({
+  userId,
+  initialSearchQuery = "",
+  initialTab = "memories",
+}: MemoryViewerProps) {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMoreMemories, setHasMoreMemories] = useState(false);
@@ -216,7 +220,7 @@ export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerPr
   const [conflictsLoading, setConflictsLoading] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"memories" | "pending" | "conflicts">("memories");
+  const [activeTab, setActiveTab] = useState<"memories" | "pending" | "conflicts">(initialTab);
   const [searchQuery, setSearchQuery] = useState(String(initialSearchQuery || "").trim());
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
@@ -357,10 +361,14 @@ export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerPr
   useEffect(() => {
     const nextQuery = String(initialSearchQuery || "").trim();
     if (!nextQuery) return;
-    setActiveTab("memories");
+    setActiveTab(initialTab || "memories");
     setTypeFilter("all");
     setSearchQuery(nextQuery);
-  }, [initialSearchQuery]);
+  }, [initialSearchQuery, initialTab]);
+
+  useEffect(() => {
+    setActiveTab(initialTab || "memories");
+  }, [initialTab]);
 
   useEffect(() => {
     if (activeTab === "pending") {
@@ -592,15 +600,6 @@ export function MemoryViewer({ userId, initialSearchQuery = "" }: MemoryViewerPr
               {memoryStats.filtered}
             </div>
           </div>
-        </div>
-        <div className={cn("mt-3 flex items-center gap-2 text-2xs text-zaki-muted dark:text-zaki-dark-muted", isRtl && "flex-row-reverse")}>
-          <span>{t("memoryViewer.pipeline.stageExtract")}</span>
-          <ArrowRight className="size-3" />
-          <span>{t("memoryViewer.pipeline.stageReview")}</span>
-          <ArrowRight className="size-3" />
-          <span>{t("memoryViewer.pipeline.stageResolve")}</span>
-          <ArrowRight className="size-3" />
-          <span>{t("memoryViewer.pipeline.stageInject")}</span>
         </div>
       </div>
 

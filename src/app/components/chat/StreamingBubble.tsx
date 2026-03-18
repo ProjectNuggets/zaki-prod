@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CenterLogo } from "../icons";
-import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageActions } from "./MessageActions";
+import { MessageContent } from "./rendering/MessageContent";
 
 interface StreamingBubbleProps {
   content: string;
@@ -14,6 +14,7 @@ interface StreamingBubbleProps {
 
 export function StreamingBubble({
   content,
+  isStreaming = false,
   showActions = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -45,9 +46,16 @@ export function StreamingBubble({
         </div>
       </div>
 
-      <div className="zaki-message-stack max-w-[80%] flex flex-col gap-2 items-start">
-        <div className="zaki-message-bubble zaki-assistant-bubble rounded-zaki-lg px-4 py-3 text-sm leading-relaxed bg-transparent text-zaki-primary">
-          <ChatMarkdown content={displayedContent} />
+      <div className="zaki-message-stack w-full max-w-[780px] flex flex-col gap-2 items-start">
+        <div
+          className={[
+            "zaki-message-bubble zaki-assistant-bubble w-full px-0 py-0 text-sm leading-relaxed text-zaki-primary",
+            isStreaming
+              ? "bg-transparent"
+              : "bg-transparent",
+          ].join(" ")}
+        >
+          <MessageContent content={displayedContent} role="assistant" surface="chat" streaming={isStreaming} />
         </div>
         {showActions && (
           <div className="text-zaki-disabled">

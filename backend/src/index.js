@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
@@ -21,7 +21,11 @@ import {
   buildConsentStatus,
 } from "./legal-consent.js";
 import { validateRuntimeConfig } from "./config-validation.js";
-import { createMemoryRoutes, buildFastContext, findDuplicateMemory } from "./memory/index.js";
+import {
+  createMemoryRoutes,
+  buildChatMemoryContext,
+  findDuplicateMemory,
+} from "./memory/index.js";
 import {
   configureMemoryTelemetryAlerts,
   getMemoryTelemetrySnapshot,
@@ -53,6 +57,45 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import {
+  buildAgentForwardHeaders,
+  buildAgentRetrySsePayload,
+  extractAgentTokenChunk,
+  normalizeTelegramConnectPayload,
+  resolveCanonicalAgentUserId,
+} from "./agent-proxy-contract.js";
+import {
+  buildBotProvisionPayload,
+  normalizeTelegramDisconnectErrorPayload,
+  registerBotBffAliases,
+  registerTelegramDisconnectAliases,
+} from "./agent-bff-contract.js";
+import {
+  createBotBffHandlers,
+  isChatSessionKeyValidationFailure,
+  mapBotBffAuthFailure,
+  normalizeBotUsageSummaryFromQuota,
+  resolveCanonicalChatSessionKey,
+} from "./bot-bff.js";
+import {
+  APP_CHAT_SURFACE,
+  ZAKI_BOT_SURFACE,
+  consumeDailyPromptQuota,
+  getQuotaResetAtUtcIso,
+  getSurfaceQuotaConfig,
+  isUnlimitedUser,
+  readDailyPromptUsage,
+  resolveQuotaSurface,
+} from "./daily-quota.js";
+import {
+  buildUsageQuotaResponse,
+  enforcePromptQuotaForIngress,
+} from "./quota-route-handlers.js";
+import {
+  getAccessStatus,
+  getEffectiveEntitlementState,
+  isPaidActive,
+} from "./effective-entitlements.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -132,6 +175,9 @@ const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
 const NULLCLAW_INTERNAL_TOKEN = (process.env.NULLCLAW_INTERNAL_TOKEN || "").trim();
+const ZAKI_AGENT_WEBHOOK_BASE_URL = (
+  process.env.ZAKI_AGENT_WEBHOOK_BASE_URL || ""
+).trim().replace(/\/+$/, "");
 const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
     .toLowerCase()
@@ -214,6 +260,22 @@ const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 45_000)
 );
+const APP_CHAT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, APP_CHAT_SURFACE);
+const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
+const AGENT_HISTORY_MODE_DEFAULT = "merged";
+const ZAKI_BOT_SPACE_ID = "zaki-bot";
+const ZAKI_BOT_THREAD_ID = "main";
+const ZAKI_AGENT_SURFACE = "zaki_agent";
+const DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE = Math.max(
+  1,
+  Number(process.env.ZAKI_AGENT_RATE_LIMIT_PER_MINUTE || 60)
+);
+const RATE_LIMITS_RUNTIME_SETTINGS_KEY = "rate_limits";
+const RATE_LIMITS_RUNTIME_SETTINGS_VERSION = 1;
+const AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS = Math.max(
+  500,
+  Number(process.env.ZAKI_AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS || 3_000)
+);
 const ZAKI_BILLING_ALERT_WEBHOOK_URL = (
   process.env.ZAKI_BILLING_ALERT_WEBHOOK_URL || ""
 ).trim();
@@ -256,6 +318,12 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
   timeoutMs: ZAKI_BILLING_ALERT_TIMEOUT_MS,
   cooldownMs: ZAKI_BILLING_ALERT_COOLDOWN_MS,
 });
+
+let runtimeRateLimitSettings = {
+  appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
+  zakiBotDailyPromptLimit: ZAKI_BOT_QUOTA_CONFIG.limit,
+  agentPerMinuteLimit: DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE,
+};
 
 const configReport = validateRuntimeConfig(process.env);
 if (configReport.warnings.length > 0) {
@@ -1479,6 +1547,25 @@ const streamChatLimiter = rateLimit({
   message: { error: "Too many chat requests. Please retry in a minute." },
 });
 
+const agentRouteLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: () => runtimeRateLimitSettings.agentPerMinuteLimit,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const scopedUserId = String(req.agentUserId || "").trim();
+    if (scopedUserId) return `agent_user:${scopedUserId}`;
+    const rawIp =
+      String(req.ip || "").trim() ||
+      String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+      String(req.socket?.remoteAddress || "").trim() ||
+      "unknown";
+    const ipKey = ipKeyGenerator(rawIp);
+    return `agent_anon:${ipKey}`;
+  },
+  message: { error: "Too many agent requests. Please retry in a minute.", code: "agent_rate_limited" },
+});
+
 const productTelemetryLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -1501,6 +1588,14 @@ const websiteFeedbackVoteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many votes. Please slow down for a minute." },
+});
+
+const websiteBetaWaitlistLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many waitlist submissions. Please retry a bit later." },
 });
 
 const memoryReadPathMatchers = [
@@ -1796,6 +1891,19 @@ function getPublicAgentWsBase(req) {
 function getNullclawBase() {
   if (!NULLCLAW_BASE_URL) return null;
   return NULLCLAW_BASE_URL.replace(/\/+$/, "");
+}
+
+const agentStreamDiagnosticsByUser = new Map();
+
+function trackAgentStreamDiagnostic(userId, error) {
+  const key = String(userId || "").trim();
+  if (!key) return;
+  const err = error instanceof Error ? error : new Error(String(error || "unknown_error"));
+  agentStreamDiagnosticsByUser.set(key, {
+    at: new Date().toISOString(),
+    class: err.name || "Error",
+    message: String(err.message || "unknown_error"),
+  });
 }
 
 async function novaAdminRequest(path, options = {}) {
@@ -2379,6 +2487,16 @@ const AdminMemberUpsertSchema = z.object({
   email: z.string().trim().email("Invalid admin email address"),
 });
 
+const AdminRateLimitsUpdateSchema = z
+  .object({
+    appChatDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    zakiBotDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    agentPerMinuteLimit: z.coerce.number().int().min(1).max(10000).optional(),
+  })
+  .refine((value) => Object.keys(value || {}).length > 0, {
+    message: "At least one field is required.",
+  });
+
 const ClientErrorEventSchema = z.object({
   message: z.string().trim().min(1).max(2000),
   stack: z.string().max(12000).optional(),
@@ -2436,6 +2554,21 @@ const WebsiteFeedbackVoteSchema = z.object({
   clientId: WebsiteFeedbackClientIdSchema,
 });
 
+const WebsiteBetaWaitlistSchema = z.object({
+  email: z.string().trim().email("Invalid email address").max(320),
+  name: z.string().trim().max(120).optional().or(z.literal("")),
+  role: z.string().trim().max(120).optional().or(z.literal("")),
+  useCase: z.string().trim().max(2000).optional().or(z.literal("")),
+  locale: z.enum(["en", "ar"]).optional(),
+  source: z.string().trim().max(120).optional().or(z.literal("")),
+});
+
+const WebsiteBetaWaitlistAdminListSchema = z.object({
+  search: z.string().trim().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 // Validation helper
 function validateInput(schema, data) {
   const result = schema.safeParse(data);
@@ -2465,6 +2598,27 @@ function normalizeWebsiteFeedbackPost(row) {
         ? 0
         : Number(row.viewer_vote || 0),
     createdAt: row.created_at,
+  };
+}
+
+function normalizeWebsiteBetaWaitlistRow(row) {
+  return {
+    id: String(row?.id || ""),
+    email: String(row?.email || ""),
+    name: row?.name ? String(row.name) : null,
+    role: row?.role ? String(row.role) : null,
+    useCase: row?.use_case ? String(row.use_case) : null,
+    locale: row?.locale ? String(row.locale) : null,
+    source: row?.source ? String(row.source) : null,
+    submissionCount: Number(row?.submission_count || 0),
+    firstSubmittedAt: row?.first_submitted_at
+      ? new Date(row.first_submitted_at).toISOString()
+      : null,
+    lastSubmittedAt: row?.last_submitted_at
+      ? new Date(row.last_submitted_at).toISOString()
+      : null,
+    createdAt: row?.created_at ? new Date(row.created_at).toISOString() : null,
+    updatedAt: row?.updated_at ? new Date(row.updated_at).toISOString() : null,
   };
 }
 
@@ -2606,6 +2760,154 @@ app.post(
   }
 );
 
+app.post(
+  "/api/website-beta-waitlist",
+  websiteBetaWaitlistLimiter,
+  express.json({ limit: "50kb" }),
+  async (req, res) => {
+    const validation = validateInput(WebsiteBetaWaitlistSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((issue) => issue.message).join(", "),
+        code: "invalid_payload",
+      });
+      return;
+    }
+
+    const email = normalizeEmail(validation.data.email);
+    const name = String(validation.data.name || "").replace(/\s+/g, " ").trim() || null;
+    const role = String(validation.data.role || "").replace(/\s+/g, " ").trim() || null;
+    const useCase = String(validation.data.useCase || "").replace(/\s+/g, " ").trim() || null;
+    const locale = validation.data.locale || null;
+    const source = String(validation.data.source || "").replace(/\s+/g, " ").trim() || null;
+    const ipAddress = getClientIp(req);
+    const userAgent = req.get("user-agent") || null;
+
+    try {
+      const existing = await dbGet(
+        `SELECT id
+         FROM website_beta_waitlist
+         WHERE email = $1
+         LIMIT 1`,
+        [email]
+      );
+
+      if (existing?.id) {
+        const updated = await dbGet(
+          `UPDATE website_beta_waitlist
+           SET name = COALESCE($2, name),
+               role = COALESCE($3, role),
+               use_case = COALESCE($4, use_case),
+               locale = COALESCE($5, locale),
+               source = COALESCE($6, source),
+               submission_count = submission_count + 1,
+               last_submitted_at = NOW(),
+               ip_address = COALESCE($7, ip_address),
+               user_agent = COALESCE($8, user_agent),
+               updated_at = NOW()
+           WHERE email = $1
+           RETURNING id`,
+          [email, name, role, useCase, locale, source, ipAddress, userAgent]
+        );
+        res.status(200).json({ success: true, id: String(updated.id), duplicate: true });
+        return;
+      }
+
+      const inserted = await dbGet(
+        `INSERT INTO website_beta_waitlist
+          (email, name, role, use_case, locale, source, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id`,
+        [email, name, role, useCase, locale, source, ipAddress, userAgent]
+      );
+
+      res.status(201).json({ success: true, id: String(inserted.id) });
+    } catch (error) {
+      console.error("[Website Waitlist] create failed:", error);
+      res.status(500).json({
+        success: false,
+        error: "Unable to capture that waitlist request right now.",
+        code: "waitlist_persist_failed",
+      });
+    }
+  }
+);
+
+app.get("/api/admin/website-beta-waitlist", async (req, res) => {
+  const authResult = await requireAdminUser(req, res);
+  if (!authResult) return;
+
+  const validation = validateInput(WebsiteBetaWaitlistAdminListSchema, req.query || {});
+  if (!validation.valid) {
+    res.status(400).json({
+      success: false,
+      error: validation.errors.map((issue) => issue.message).join(", "),
+    });
+    return;
+  }
+
+  const search = String(validation.data.search || "").trim();
+  const searchLike = search ? `%${search}%` : null;
+
+  try {
+    const [rows, totalRow] = await Promise.all([
+      dbAll(
+        `SELECT
+           id,
+           email,
+           name,
+           role,
+           use_case,
+           locale,
+           source,
+           submission_count,
+           first_submitted_at,
+           last_submitted_at,
+           created_at,
+           updated_at
+         FROM website_beta_waitlist
+         WHERE (
+           $1::text IS NULL
+           OR email ILIKE $1
+           OR COALESCE(name, '') ILIKE $1
+           OR COALESCE(role, '') ILIKE $1
+           OR COALESCE(source, '') ILIKE $1
+           OR COALESCE(use_case, '') ILIKE $1
+         )
+         ORDER BY last_submitted_at DESC, created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [searchLike, validation.data.limit, validation.data.offset]
+      ),
+      dbGet(
+        `SELECT COUNT(*)::int AS total
+         FROM website_beta_waitlist
+         WHERE (
+           $1::text IS NULL
+           OR email ILIKE $1
+           OR COALESCE(name, '') ILIKE $1
+           OR COALESCE(role, '') ILIKE $1
+           OR COALESCE(source, '') ILIKE $1
+           OR COALESCE(use_case, '') ILIKE $1
+         )`,
+        [searchLike]
+      ),
+    ]);
+
+    res.json({
+      success: true,
+      total: Number(totalRow?.total || 0),
+      items: rows.map(normalizeWebsiteBetaWaitlistRow),
+    });
+  } catch (error) {
+    console.error("[Website Waitlist] admin list failed:", error);
+    res.status(500).json({
+      success: false,
+      error: "Unable to load website waitlist entries right now.",
+    });
+  }
+});
+
 app.post("/api/telemetry/client-error", express.json({ limit: "200kb" }), async (req, res) => {
   const validation = validateInput(ClientErrorEventSchema, req.body || {});
   if (!validation.valid) {
@@ -2636,6 +2938,10 @@ app.post(
   async (req, res) => {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
+    const userId = String(authResult.zakiUser?.id || "").trim();
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user." });
+    }
 
     const validation = validateInput(ProductEventSchema, req.body || {});
     if (!validation.valid) {
@@ -2653,7 +2959,7 @@ app.post(
           (user_id, event, source, language, viewport, plan, billing_interval, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()))`,
         [
-          authResult.zakiUser.id,
+          userId,
           payload.event,
           payload.source,
           payload.language || null,
@@ -2702,6 +3008,7 @@ app.get("/api/admin/telemetry/billing", async (req, res) => {
 
 await initDb();
 await ensureSuperAdminMembersSeed();
+await loadRuntimeRateLimitSettings();
 
 const smtpHost = (process.env.SMTP_HOST || "").trim();
 const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -2879,22 +3186,162 @@ function resolveTier(tier) {
   return tier || "free";
 }
 
-function isPaidActive(tier, status) {
-  return (
-    ["student", "personal"].includes(resolveTier(tier)) &&
-    ["active", "trialing", "past_due"].includes(status || "")
-  );
+function normalizeRateLimitValue(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(10_000, Math.floor(parsed));
 }
 
-function getAccessStatus(zakiUser) {
-  const expiresAt = zakiUser?.access_expires_at
-    ? new Date(zakiUser.access_expires_at)
-    : null;
-  const active = expiresAt ? expiresAt.getTime() > Date.now() : false;
+function sanitizeRuntimeRateLimitSettings(raw = null) {
+  const source =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   return {
-    active,
-    expiresAt: expiresAt ? expiresAt.toISOString() : null,
-    campaign: zakiUser?.access_code_campaign || null,
+    appChatDailyPromptLimit: normalizeRateLimitValue(
+      source.appChatDailyPromptLimit,
+      APP_CHAT_QUOTA_CONFIG.limit
+    ),
+    zakiBotDailyPromptLimit: normalizeRateLimitValue(
+      source.zakiBotDailyPromptLimit,
+      ZAKI_BOT_QUOTA_CONFIG.limit
+    ),
+    agentPerMinuteLimit: normalizeRateLimitValue(
+      source.agentPerMinuteLimit,
+      DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE
+    ),
+  };
+}
+
+function buildRateLimitSettingsResponse(settings = runtimeRateLimitSettings) {
+  return {
+    appChatDailyPromptLimit: settings.appChatDailyPromptLimit,
+    appChatDailyPromptBucket: APP_CHAT_QUOTA_CONFIG.bucket,
+    zakiBotDailyPromptLimit: settings.zakiBotDailyPromptLimit,
+    zakiBotDailyPromptBucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
+    agentPerMinuteLimit: settings.agentPerMinuteLimit,
+  };
+}
+
+async function loadRuntimeRateLimitSettings() {
+  const row = await dbGet(
+    `SELECT value_json
+     FROM zaki_runtime_settings
+     WHERE setting_key = $1
+     LIMIT 1`,
+    [RATE_LIMITS_RUNTIME_SETTINGS_KEY]
+  );
+  const valueJson = row?.value_json && typeof row.value_json === "object" ? row.value_json : null;
+  runtimeRateLimitSettings = sanitizeRuntimeRateLimitSettings(valueJson);
+  return runtimeRateLimitSettings;
+}
+
+async function saveRuntimeRateLimitSettings(patch = {}, updatedBy = null) {
+  const nextSettings = sanitizeRuntimeRateLimitSettings({
+    ...runtimeRateLimitSettings,
+    ...(patch || {}),
+  });
+  const valueJson = JSON.stringify({
+    version: RATE_LIMITS_RUNTIME_SETTINGS_VERSION,
+    ...nextSettings,
+  });
+  await dbQuery(
+    `INSERT INTO zaki_runtime_settings (setting_key, value_json, updated_by, created_at, updated_at)
+     VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+     ON CONFLICT (setting_key)
+     DO UPDATE SET
+       value_json = EXCLUDED.value_json,
+       updated_by = EXCLUDED.updated_by,
+       updated_at = NOW()`,
+    [RATE_LIMITS_RUNTIME_SETTINGS_KEY, valueJson, normalizeEmail(updatedBy) || null]
+  );
+  runtimeRateLimitSettings = nextSettings;
+  return runtimeRateLimitSettings;
+}
+
+function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
+  const normalizedSurface = resolveQuotaSurface(surface);
+  if (normalizedSurface === ZAKI_BOT_SURFACE) {
+    return {
+      surface: ZAKI_BOT_SURFACE,
+      bucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
+      limit: runtimeRateLimitSettings.zakiBotDailyPromptLimit,
+    };
+  }
+  return {
+    surface: APP_CHAT_SURFACE,
+    bucket: APP_CHAT_QUOTA_CONFIG.bucket,
+    limit: runtimeRateLimitSettings.appChatDailyPromptLimit,
+  };
+}
+
+function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
+  const normalizedSurface = resolveQuotaSurface(surface);
+  const tier = resolveTier(zakiUser?.plan_tier || "free");
+  const status = zakiUser?.plan_status || "inactive";
+  const access = getAccessStatus(zakiUser);
+  const unlimited =
+    normalizedSurface === ZAKI_BOT_SURFACE
+      ? false
+      : isUnlimitedUser({
+          tier,
+          status,
+          accessActive: access.active,
+        });
+  return { tier, status, access, surface: normalizedSurface, unlimited };
+}
+
+function setPromptQuotaHeaders(res, quota) {
+  if (!quota) return;
+  const limitValue = quota.limit === null ? "unlimited" : String(quota.limit);
+  const remainingValue = quota.remaining === null ? "unlimited" : String(quota.remaining);
+  res.setHeader("X-Zaki-Quota-Limit", limitValue);
+  res.setHeader("X-Zaki-Quota-Remaining", remainingValue);
+  if (quota.resetAt) {
+    res.setHeader("X-Zaki-Quota-Reset-At", String(quota.resetAt));
+  }
+  if (quota.surface) {
+    res.setHeader("X-Zaki-Quota-Surface", String(quota.surface));
+  }
+  if (quota.bucket) {
+    res.setHeader("X-Zaki-Quota-Bucket", String(quota.bucket));
+  }
+}
+
+async function consumePromptQuotaForUser(
+  zakiUser,
+  { surface = APP_CHAT_SURFACE, nowDate = new Date() } = {}
+) {
+  const normalizedSurface = resolveQuotaSurface(surface);
+  const quotaConfig = resolveSurfaceQuotaConfig(normalizedSurface);
+  const quotaContext = buildUserQuotaContext(zakiUser, { surface: normalizedSurface });
+  const resetAt = getQuotaResetAtUtcIso(nowDate);
+
+  if (quotaContext.unlimited) {
+    return {
+      allowed: true,
+      unlimited: true,
+      limit: null,
+      used: 0,
+      remaining: null,
+      resetAt,
+      bucket: quotaConfig.bucket,
+      surface: normalizedSurface,
+    };
+  }
+
+  const consumed = await consumeDailyPromptQuota({
+    dbQuery,
+    dbGet,
+    userId: zakiUser.id,
+    bucket: quotaConfig.bucket,
+    limit: quotaConfig.limit,
+    nowDate,
+  });
+
+  return {
+    ...consumed,
+    unlimited: false,
+    bucket: quotaConfig.bucket,
+    surface: normalizedSurface,
   };
 }
 
@@ -4609,6 +5056,29 @@ const updateProfileHandler = async (req, res) => {
 app.get("/api/profile", getProfileHandler);
 app.patch("/api/profile", express.json({ limit: "1mb" }), updateProfileHandler);
 
+app.get("/api/usage/quota", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { zakiUser } = authResult;
+    const requestedSurface =
+      typeof req.query.surface === "string" ? req.query.surface : APP_CHAT_SURFACE;
+    const surface = resolveQuotaSurface(requestedSurface);
+    const payload = await buildUsageQuotaResponse({
+      zakiUser,
+      surface,
+      buildUserQuotaContext,
+      readDailyPromptUsage,
+      resolveSurfaceQuotaConfig,
+      dbGet,
+    });
+    res.status(200).json(payload);
+  } catch (error) {
+    console.error("[Usage] Quota endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load usage quota." });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // Account: export + irreversible account deletion
 // -----------------------------------------------------------------------------
@@ -4847,12 +5317,11 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
     const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
     if (!email || !zakiUser) return;
 
-    const currentTier = resolveTier(zakiUser.plan_tier || "free");
-    const currentStatus = zakiUser.plan_status || "inactive";
-    if (isPaidActive(currentTier, currentStatus)) {
+    const effective = getEffectiveEntitlementState(zakiUser);
+    if (effective.premium) {
       res.status(409).json({
         success: false,
-        error: "You are already subscribed to an active paid plan.",
+        error: "You already have active premium access.",
       });
       return;
     }
@@ -4980,11 +5449,10 @@ app.get("/api/entitlements", async (req, res) => {
       stripePricingCatalog,
       zakiUser.stripe_price_id || null
     );
-    const premiumActive = isPaidActive(tier, status);
     const access = getAccessStatus(zakiUser);
-    const accessActive = premiumActive || access.active;
-    const readOnly = !premiumActive && !access.active;
-    const hasPersonal = premiumActive && tier === "personal";
+    const effective = getEffectiveEntitlementState(zakiUser);
+    const readOnly = !effective.premium;
+    const hasPersonal = effective.tier === "personal" && effective.premium;
 
     res.status(200).json({
       success: true,
@@ -4997,15 +5465,21 @@ app.get("/api/entitlements", async (req, res) => {
         cancelAtPeriodEnd: Boolean(zakiUser.cancel_at_period_end),
       },
       access: {
-        active: accessActive,
+        active: access.active,
         readOnly,
         expiresAt: access.expiresAt,
         campaign: access.campaign,
       },
+      effective: {
+        tier: effective.tier,
+        status: effective.status,
+        source: effective.source,
+        premium: effective.premium,
+      },
       features: {
-        premium: premiumActive,
+        premium: effective.premium,
         imageGeneration: hasPersonal,
-        advancedModels: premiumActive,
+        advancedModels: effective.premium,
         deepResearch: hasPersonal,
         agentMode: hasPersonal,
       },
@@ -5013,6 +5487,65 @@ app.get("/api/entitlements", async (req, res) => {
   } catch (error) {
     console.error("[Billing] Entitlements error:", error);
     res.status(500).json({ error: error?.message || "Entitlements failed." });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Admin Runtime Controls (super admin only)
+// -----------------------------------------------------------------------------
+app.get("/api/admin/rate-limits", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    res.status(200).json({
+      success: true,
+      actor: {
+        email: authResult.email,
+        role: authResult.admin.role,
+        isSuperAdmin: authResult.admin.isSuperAdmin,
+      },
+      settings: buildRateLimitSettingsResponse(),
+    });
+  } catch (error) {
+    console.error("[Admin] Rate limits load error:", error);
+    res.status(500).json({ error: error?.message || "Failed to load rate limits." });
+  }
+});
+
+app.patch("/api/admin/rate-limits", express.json({ limit: "50kb" }), async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const validation = validateInput(AdminRateLimitsUpdateSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const patch = {};
+    if (validation.data.appChatDailyPromptLimit !== undefined) {
+      patch.appChatDailyPromptLimit = validation.data.appChatDailyPromptLimit;
+    }
+    if (validation.data.zakiBotDailyPromptLimit !== undefined) {
+      patch.zakiBotDailyPromptLimit = validation.data.zakiBotDailyPromptLimit;
+    }
+    if (validation.data.agentPerMinuteLimit !== undefined) {
+      patch.agentPerMinuteLimit = validation.data.agentPerMinuteLimit;
+    }
+
+    const saved = await saveRuntimeRateLimitSettings(patch, authResult.email);
+    res.status(200).json({
+      success: true,
+      settings: buildRateLimitSettingsResponse(saved),
+    });
+  } catch (error) {
+    console.error("[Admin] Rate limits update error:", error);
+    res.status(500).json({ error: error?.message || "Failed to update rate limits." });
   }
 });
 
@@ -6820,21 +7353,6 @@ const streamChatHandler = async (req, res) => {
     const zakiUser = authResult.zakiUser;
     console.log(`[Chat] User: ${userEmail}`);
 
-    if (zakiUser) {
-      const tier = resolveTier(zakiUser.plan_tier || "free");
-      const status = zakiUser.plan_status || "inactive";
-      const premiumActive = isPaidActive(tier, status);
-      const access = getAccessStatus(zakiUser);
-      if (!premiumActive && !access.active) {
-        return res.status(403).json({
-          error: "Access code required.",
-          code: "access_expired",
-          message:
-            "Your access code took a coffee break. Add a fresh code to keep chatting.",
-        });
-      }
-    }
-
     const requestPayload = req.body;
     const originalMessage = extractStreamMessage(requestPayload);
     const requestedFormat = getRequestedResponseFormat(originalMessage);
@@ -6848,6 +7366,17 @@ const streamChatHandler = async (req, res) => {
       return res.status(400).json({
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
+    }
+
+    const streamQuotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser,
+      res,
+      surface: APP_CHAT_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!streamQuotaDecision.allowed) {
+      return res.status(streamQuotaDecision.status).json(streamQuotaDecision.payload);
     }
 
     if (isIdentityProbePrompt(originalMessage)) {
@@ -6864,15 +7393,19 @@ const streamChatHandler = async (req, res) => {
     if (userEmail && introspectionMode) {
       try {
         const memoryResult = await withTimeout(
-          buildFastContext({
+          buildChatMemoryContext({
             userId: userEmail,
             query: originalMessage,
             maxChars: 600,
             currentThreadId: req.params.threadSlug,
             limit: introspectionMode === "summary" ? 4 : 1,
+            mode:
+              introspectionMode === "summary"
+                ? "introspection_summary"
+                : "introspection_fact",
           }),
           ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS,
-          "Fast memory introspection build"
+          "Chat memory introspection build"
         );
         const memorySources = (memoryResult.sources || []).map((source) => ({
           id: source.id,
@@ -6930,15 +7463,15 @@ const streamChatHandler = async (req, res) => {
         const contextStartedAt = Date.now();
         // Build context from memory
         const memoryResult = await withTimeout(
-          buildFastContext({
+          buildChatMemoryContext({
             userId: userEmail,
             query: originalMessage,
             maxChars: 800,
             currentThreadId: threadSlug,
-            limit: 3,
+            limit: 6,
           }),
           ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS,
-          "Fast memory context build"
+          "Chat memory context build"
         );
         console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 
@@ -7120,6 +7653,12 @@ const agentChatStreamHandler = async (req, res) => {
 
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+    req.agentUserId = userId;
+    let promptQuota = null;
 
     const payload = req.body;
     const originalMessage = extractStreamMessage(payload);
@@ -7131,50 +7670,100 @@ const agentChatStreamHandler = async (req, res) => {
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
     }
-
-    const userId =
-      String(authResult?.zakiUser?.id || "").trim() ||
-      normalizeEmail(String(authResult?.email || ""));
-    if (!userId) {
-      return res.status(400).json({ error: "Invalid user." });
+    const agentQuotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser: authResult.zakiUser,
+      res,
+      surface: ZAKI_BOT_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!agentQuotaDecision.allowed) {
+      return res.status(agentQuotaDecision.status).json(agentQuotaDecision.payload);
     }
+    promptQuota = agentQuotaDecision.quota;
 
     const targetUrl = `${nullclawBase}/api/v1/chat/stream`;
+    const normalizedPayload = payload && typeof payload === "object" ? payload : {};
+    const rawThreadId = String(normalizedPayload.threadId || "").trim();
+    const rawSpaceId = String(normalizedPayload.spaceId || "").trim();
+    const existingContext =
+      normalizedPayload.context && typeof normalizedPayload.context === "object"
+        ? normalizedPayload.context
+        : {};
     const upstreamPayload = {
-      ...(payload && typeof payload === "object" ? payload : {}),
+      ...normalizedPayload,
       message: originalMessage,
+      stream: true,
+      context: {
+        ...existingContext,
+        surface:
+          rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID
+            ? ZAKI_BOT_SURFACE
+            : ZAKI_AGENT_SURFACE,
+        ...(rawSpaceId ? { space_id: rawSpaceId } : {}),
+        ...(rawThreadId ? { thread_id: rawThreadId } : {}),
+      },
     };
+    const sessionKey = resolveCanonicalChatSessionKey({
+      userId,
+      payload: normalizedPayload,
+    });
+    if (!sessionKey.success) {
+      return res.status(400).json({ error: sessionKey.message, code: "invalid_chat_payload" });
+    }
+    upstreamPayload.session_key = sessionKey.sessionKey;
+    delete upstreamPayload.user_id;
+
+    const isZakiBotSpace = rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID;
+    const resolvedSpaceId = rawSpaceId || ZAKI_BOT_SPACE_ID;
+    const resolvedThreadId = rawThreadId || ZAKI_BOT_THREAD_ID;
+
+    if (isZakiBotSpace) {
+      await dbQuery(
+        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
+         VALUES ($1, $2, $3, 'user', $4)`,
+        [userId, resolvedSpaceId, resolvedThreadId, originalMessage]
+      );
+    }
 
     const upstream = await fetchWithTimeout(
       targetUrl,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
-          "X-Zaki-User-Id": userId,
-          "X-Request-Id": String(req.requestId || crypto.randomUUID()),
-        },
+        headers: buildAgentForwardHeaders({
+          internalToken: NULLCLAW_INTERNAL_TOKEN,
+          userId,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
         body: JSON.stringify(upstreamPayload),
       },
       ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
       "Agent upstream request"
     );
 
+    const contentType = String(upstream.headers.get("content-type") || "");
+    if (!upstream.ok && contentType.toLowerCase().includes("application/json")) {
+      const payloadError = await upstream.json().catch(() => null);
+      if (isChatSessionKeyValidationFailure(payloadError)) {
+        setPromptQuotaHeaders(res, promptQuota);
+        return res
+          .status(400)
+          .json({ error: "invalid chat payload or session_key", code: "invalid_chat_payload" });
+      }
+    }
+
     res.status(upstream.status);
     copyResponseHeaders(upstream, res);
+    setPromptQuotaHeaders(res, promptQuota);
 
     if (!upstream.body) {
-      if (upstream.status === 409 || upstream.status === 503) {
+      const retryPayload = buildAgentRetrySsePayload(upstream.status);
+      if (retryPayload) {
         res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-        const retryMessage =
-          upstream.status === 409
-            ? "agent is handling another request for this user, retry shortly"
-            : "agent is draining, retry shortly";
         res.end(
           `event: error\ndata: ${JSON.stringify({
-            code: upstream.status === 409 ? "ownership_lock_conflict" : "gateway_draining",
-            message: retryMessage,
+            code: retryPayload.code,
+            message: retryPayload.message,
           })}\n\nevent: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`
         );
         return;
@@ -7182,10 +7771,87 @@ const agentChatStreamHandler = async (req, res) => {
       res.end();
       return;
     }
+    const isSse = contentType.toLowerCase().includes("text/event-stream");
 
-    const nodeStream = Readable.fromWeb(upstream.body);
-    pipeReadableToResponse(nodeStream, res, "Agent stream");
+    if (!isSse) {
+      const nodeStream = Readable.fromWeb(upstream.body);
+      pipeReadableToResponse(nodeStream, res, "Agent stream");
+      return;
+    }
+
+    const reader = upstream.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let assistantAccumulated = "";
+
+    const processSseBlock = async (block) => {
+      if (!isZakiBotSpace) return;
+      const normalized = String(block || "").replace(/\r/g, "");
+      const lines = normalized.split("\n");
+      const dataLines = [];
+      let eventType = "";
+
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+        if (!line || line.startsWith(":")) continue;
+        if (line.startsWith("event:")) {
+          eventType = line.slice(6).trim();
+          continue;
+        }
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trimStart());
+        }
+      }
+
+      if (dataLines.length === 0) return;
+      const payloadText = dataLines.join("\n").trim();
+      if (!payloadText || payloadText === "[DONE]") return;
+
+      try {
+        const payload = JSON.parse(payloadText);
+        const chunk = extractAgentTokenChunk(eventType, payload);
+        if (chunk) assistantAccumulated += chunk;
+      } catch {
+        // Ignore parse failures for persistence, still stream to client.
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const decoded = decoder.decode(value, { stream: true });
+      if (!decoded) continue;
+      res.write(decoded);
+      buffer += decoded;
+
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        await processSseBlock(block);
+        separatorIndex = buffer.indexOf("\n\n");
+      }
+    }
+
+    const trailing = buffer.trim();
+    if (trailing) {
+      await processSseBlock(trailing);
+    }
+
+    if (isZakiBotSpace && assistantAccumulated.trim()) {
+      await dbQuery(
+        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
+         VALUES ($1, $2, $3, 'assistant', $4)`,
+        [userId, resolvedSpaceId, resolvedThreadId, assistantAccumulated.trim()]
+      );
+    }
+
+    res.end();
   } catch (error) {
+    const trackedUserId = String(req.agentUserId || "").trim();
+    if (trackedUserId) {
+      trackAgentStreamDiagnostic(trackedUserId, error);
+    }
     console.error("[Agent] Stream error:", error);
     const message = error?.message || "Agent stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
@@ -7193,11 +7859,730 @@ const agentChatStreamHandler = async (req, res) => {
   }
 };
 
+app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req, res) => {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+
+  const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+  if (!authResult) return;
+
+  const userId = resolveCanonicalAgentUserId(authResult);
+  if (!userId) {
+    return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+  }
+
+  const spaceId = String(req.query.spaceId || ZAKI_BOT_SPACE_ID).trim() || ZAKI_BOT_SPACE_ID;
+  const threadId = String(req.query.threadId || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
+  const requestedMode = String(req.query.mode || AGENT_HISTORY_MODE_DEFAULT)
+    .trim()
+    .toLowerCase();
+  const historyMode = requestedMode === "app" ? "app" : AGENT_HISTORY_MODE_DEFAULT;
+
+  const loadAppHistory = async () => {
+    const rows = await dbAll(
+      `SELECT id, role, content, created_at
+       FROM zaki_bot_messages
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
+       ORDER BY id ASC`,
+      [userId, spaceId, threadId]
+    );
+    return rows.map((row, index) => ({
+      id: `bot-${row.id}-${row.role}-${index}`,
+      role: row.role,
+      content: row.content || "",
+      createdAt: row.created_at,
+    }));
+  };
+
+  try {
+    if (historyMode === "app") {
+      const history = await loadAppHistory();
+      res.json({
+        history,
+        historyMode: "app",
+        source: "zaki_bot_messages",
+        spaceId,
+        threadId,
+      });
+      return;
+    }
+
+    const nullclawBase = getNullclawBase();
+    if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+      const fallbackHistory = await loadAppHistory();
+      res.json({
+        history: fallbackHistory,
+        historyMode: "merged",
+        source: "zaki_bot_messages_fallback",
+        spaceId,
+        threadId,
+        warning: "nullclaw_unavailable",
+      });
+      return;
+    }
+
+    const upstreamUrl =
+      `${nullclawBase}/api/v1/users/${encodeURIComponent(userId)}/history` +
+      `?space_id=${encodeURIComponent(spaceId)}` +
+      `&thread_id=${encodeURIComponent(threadId)}`;
+    const upstreamResponse = await fetchWithTimeout(
+      upstreamUrl,
+      {
+        method: "GET",
+        headers: {
+          "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
+          "X-Zaki-User-Id": userId,
+          "X-Request-Id": String(req.requestId || crypto.randomUUID()),
+        },
+      },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Agent history request"
+    );
+    const upstreamData = await upstreamResponse.json().catch(() => ({}));
+
+    if (!upstreamResponse.ok) {
+      const fallbackHistory = await loadAppHistory();
+      res.json({
+        history: fallbackHistory,
+        historyMode: "merged",
+        source: "zaki_bot_messages_fallback",
+        spaceId,
+        threadId,
+        warning:
+          String(upstreamData?.code || upstreamData?.error || "").trim() || "upstream_history_unavailable",
+      });
+      return;
+    }
+
+    const upstreamItems = Array.isArray(upstreamData?.history)
+      ? upstreamData.history
+      : Array.isArray(upstreamData?.items)
+      ? upstreamData.items
+      : Array.isArray(upstreamData?.messages)
+      ? upstreamData.messages
+      : [];
+
+    const history = upstreamItems.map((item, index) => {
+      const role = String(item?.role || "").trim().toLowerCase() === "assistant" ? "assistant" : "user";
+      return {
+        id: String(item?.id || `merged-${index}`),
+        role,
+        content: String(item?.content || item?.text || ""),
+        createdAt: item?.createdAt || item?.created_at || null,
+      };
+    });
+
+    res.json({
+      history,
+      historyMode: "merged",
+      source: "nullclaw",
+      spaceId,
+      threadId,
+    });
+  } catch (error) {
+    console.error("[Agent] History error:", error);
+    res.status(500).json({ error: "Failed to load ZAKI BOT history." });
+  }
+});
+
+app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async (req, res) => {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+
+  const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+  if (!authResult) return;
+  const userId = resolveCanonicalAgentUserId(authResult);
+  if (!userId) {
+    return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+  }
+
+  let upstreamHealth = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
+  const nullclawBase = getNullclawBase();
+  if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
+    const startedAt = Date.now();
+    try {
+      const upstream = await fetchWithTimeout(
+        `${nullclawBase}/health`,
+        {
+          method: "GET",
+          headers: buildAgentForwardHeaders({
+            internalToken: NULLCLAW_INTERNAL_TOKEN,
+            userId,
+            requestId: String(req.requestId || crypto.randomUUID()),
+            contentType: "application/json",
+          }),
+        },
+        AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+        "Agent diagnostics health check"
+      );
+      upstreamHealth = {
+        ok: upstream.ok,
+        status: Number(upstream.status || 0),
+        latencyMs: Date.now() - startedAt,
+        reason: upstream.ok ? "ok" : "upstream_error",
+      };
+    } catch (error) {
+      upstreamHealth = {
+        ok: false,
+        status: 0,
+        latencyMs: Date.now() - startedAt,
+        reason: error instanceof Error ? error.name || "health_error" : "health_error",
+      };
+    }
+  }
+
+  const streamState = agentStreamDiagnosticsByUser.get(userId) || null;
+  res.json({
+    userId,
+    agentBackendEnabled: ZAKI_AGENT_BACKEND_ENABLED,
+    nullclawBaseConfigured: Boolean(nullclawBase),
+    historyModeDefault: AGENT_HISTORY_MODE_DEFAULT,
+    upstreamHealth,
+    lastAgentStreamError: streamState,
+  });
+});
+
+function resolveAgentUserId(authResult) {
+  return resolveCanonicalAgentUserId(authResult);
+}
+
+function getOrCreateRequestId(req) {
+  return String(req?.requestId || crypto.randomUUID());
+}
+
+function getOrCreateIdempotencyKey(req, requestId) {
+  const headerValue = String(
+    req?.headers?.["idempotency-key"] || req?.headers?.["Idempotency-Key"] || ""
+  ).trim();
+  return headerValue || requestId;
+}
+
+async function requireBotBffContext(req, res, next) {
+  const existingUserId = String(req.botBffContext?.userId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const requestId = getOrCreateRequestId(req);
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  let sessionResponse;
+  try {
+    sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, {
+      method: "GET",
+    });
+  } catch (error) {
+    console.error("[Auth][BFF] Session refresh failed:", error);
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const sessionData = await sessionResponse.json().catch(() => ({}));
+  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const email = normalizeEmail(String(sessionData.user.username || ""));
+  if (!email) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [email]);
+  if (!zakiUser) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const userId = resolveCanonicalAgentUserId({ zakiUser });
+  if (!userId) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  req.botBffContext = {
+    email,
+    sessionUser: sessionData.user,
+    zakiUser,
+    userId,
+  };
+  next();
+}
+
+async function requireAgentContext(req, res, next) {
+  const existingUserId = String(req.agentUserId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return;
+
+  const userId = resolveCanonicalAgentUserId(authResult);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    return;
+  }
+
+  req.agentAuthResult = authResult;
+  req.agentUserId = userId;
+  next();
+}
+
+async function proxyNullclawRequest(req, res, targetPath, options = {}) {
+  const nullclawBase = getNullclawBase();
+  if (!nullclawBase) {
+    return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
+  }
+  if (!NULLCLAW_INTERNAL_TOKEN) {
+    return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
+  }
+
+  let userId = String(options.userId || "").trim();
+  if (!userId) {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    userId = resolveCanonicalAgentUserId(authResult);
+  }
+  if (!userId) {
+    return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+  }
+
+  const targetUrl = `${nullclawBase}${targetPath}`;
+  const headers = new Headers(
+    buildAgentForwardHeaders({
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId: String(req.requestId || crypto.randomUUID()),
+      extraHeaders: Object.fromEntries(new Headers(options.headers || {}).entries()),
+    })
+  );
+
+  const method = String(options.method || req.method || "GET").toUpperCase();
+  const allowBody = !["GET", "HEAD"].includes(method);
+  const body = allowBody
+    ? options.body === undefined
+      ? req.body
+      : options.body
+    : undefined;
+  if (body instanceof FormData) {
+    headers.delete("Content-Type");
+  } else if (body !== undefined && body !== null) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const upstream = await fetchWithTimeout(
+    targetUrl,
+    {
+      method,
+      headers,
+      body:
+        body === undefined || body === null
+          ? undefined
+          : body instanceof FormData
+          ? body
+          : JSON.stringify(body),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    "Nullclaw proxy request"
+  );
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  Readable.fromWeb(upstream.body).pipe(res);
+}
+
+const agentProvisionHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const payload =
+      req.body && typeof req.body === "object" ? req.body : {};
+
+    await proxyNullclawRequest(req, res, "/api/v1/users/provision", {
+      method: "POST",
+      userId,
+      body: buildBotProvisionPayload(userId, payload),
+    });
+    return;
+  } catch (error) {
+    console.error("[Agent] Provision error:", error);
+    return res.status(500).json({ error: error?.message || "Agent provision failed." });
+  }
+};
+
+const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+    const targetPath = pathBuilder(userId, req);
+    await proxyNullclawRequest(req, res, targetPath);
+    return;
+  } catch (error) {
+    console.error("[Agent] Control proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Agent control request failed." });
+  }
+};
+
+const agentTelegramConnectHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const payload = normalizeTelegramConnectPayload(req.body);
+    const hasWebhookUrl =
+      typeof payload.webhook_url === "string" && payload.webhook_url.length > 0;
+    const hasWebhookBaseUrl =
+      typeof payload.webhook_base_url === "string" &&
+      payload.webhook_base_url.length > 0;
+
+    const extraHeaders = {};
+    if (!hasWebhookUrl && !hasWebhookBaseUrl && ZAKI_AGENT_WEBHOOK_BASE_URL) {
+      extraHeaders["X-Webhook-Base-Url"] = ZAKI_AGENT_WEBHOOK_BASE_URL;
+    }
+
+    await proxyNullclawRequest(
+      req,
+      res,
+      `/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/connect`,
+      {
+        method: "POST",
+        userId,
+        body: payload,
+        headers: extraHeaders,
+      }
+    );
+    return;
+  } catch (error) {
+    console.error("[Agent] Telegram connect proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Telegram connect failed." });
+  }
+};
+
+const agentTelegramDisconnectHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const nullclawBase = getNullclawBase();
+    if (!nullclawBase) {
+      return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
+    }
+    if (!NULLCLAW_INTERNAL_TOKEN) {
+      return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
+    }
+
+    const upstream = await fetchWithTimeout(
+      `${nullclawBase}/api/v1/users/${encodeURIComponent(userId)}/channels/telegram/disconnect`,
+      {
+        method: "DELETE",
+        headers: buildAgentForwardHeaders({
+          internalToken: NULLCLAW_INTERNAL_TOKEN,
+          userId,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
+      },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Telegram disconnect request"
+    );
+
+    const contentType = String(upstream.headers.get("content-type") || "");
+    if (upstream.ok) {
+      res.status(upstream.status);
+      copyResponseHeaders(upstream, res);
+      if (!upstream.body) {
+        res.end();
+        return;
+      }
+      Readable.fromWeb(upstream.body).pipe(res);
+      return;
+    }
+
+    let payload = null;
+    try {
+      payload = contentType.toLowerCase().includes("application/json")
+        ? await upstream.json()
+        : null;
+    } catch {
+      payload = null;
+    }
+
+    const normalizedPayload = normalizeTelegramDisconnectErrorPayload(
+      payload && typeof payload === "object"
+        ? payload
+        : {
+            error: "Telegram disconnect failed.",
+            message: "Telegram disconnect failed.",
+          },
+      upstream.status
+    );
+
+    res.status(upstream.status).json(normalizedPayload);
+    return;
+  } catch (error) {
+    console.error("[Agent] Telegram disconnect proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Telegram disconnect failed." });
+  }
+};
+
+const botUsageHandler = async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const { zakiUser } = authResult;
+    const payload = await buildUsageQuotaResponse({
+      zakiUser,
+      surface: ZAKI_BOT_SURFACE,
+      buildUserQuotaContext,
+      readDailyPromptUsage,
+      resolveSurfaceQuotaConfig,
+      dbGet,
+    });
+    res.status(200).json(payload);
+  } catch (error) {
+    console.error("[Usage] BOT quota endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load usage quota." });
+  }
+};
+
+async function sendBotBffUpstreamRequest({
+  method,
+  path,
+  userId,
+  requestId,
+  idempotencyKey,
+  body,
+  headers = {},
+}) {
+  const nullclawBase = getNullclawBase();
+  if (!nullclawBase) {
+    throw new Error("NULLCLAW_BASE_URL is not configured.");
+  }
+  if (!NULLCLAW_INTERNAL_TOKEN) {
+    throw new Error("NULLCLAW_INTERNAL_TOKEN is not configured.");
+  }
+
+  const requestHeaders = buildAgentForwardHeaders({
+    internalToken: NULLCLAW_INTERNAL_TOKEN,
+    userId,
+    requestId,
+    extraHeaders: {
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      ...headers,
+    },
+  });
+
+  return fetchWithTimeout(
+    `${nullclawBase}${path}`,
+    {
+      method,
+      headers: requestHeaders,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    "BOT BFF upstream request"
+  );
+}
+
+async function buildBotBffUsageSummary({ zakiUser }) {
+  const quotaPayload = await buildUsageQuotaResponse({
+    zakiUser,
+    surface: ZAKI_BOT_SURFACE,
+    buildUserQuotaContext,
+    readDailyPromptUsage,
+    resolveSurfaceQuotaConfig,
+    dbGet,
+  });
+  return normalizeBotUsageSummaryFromQuota(quotaPayload);
+}
+
+const botBffHandlers = createBotBffHandlers({
+  getAuthContext: async (req) => {
+    if (req.botBffContext?.userId) return req.botBffContext;
+    return null;
+  },
+  sendUpstreamRequest: sendBotBffUpstreamRequest,
+  buildUsageSummary: buildBotBffUsageSummary,
+  createRequestId: getOrCreateRequestId,
+  createIdempotencyKey: getOrCreateIdempotencyKey,
+});
+
+const agentJson10mb = express.json({ limit: "10mb" });
+const agentJson1mb = express.json({ limit: "1mb" });
+
 app.post(
   "/api/agent/chat/stream",
-  streamChatLimiter,
-  express.json({ limit: "10mb" }),
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson10mb,
   agentChatStreamHandler
+);
+
+app.post(
+  "/api/agent/provision",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  agentProvisionHandler
+);
+app.get(
+  "/api/agent/onboarding",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
+);
+app.put(
+  "/api/agent/onboarding",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
+);
+app.get(
+  "/api/agent/config",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
+);
+app.patch(
+  "/api/agent/config",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
+);
+app.get(
+  "/api/agent/secrets/:key",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
+  )
+);
+app.put(
+  "/api/agent/secrets/:key",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
+  )
+);
+app.delete(
+  "/api/agent/secrets/:key",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
+  )
+);
+app.post(
+  "/api/agent/channels/telegram/connect",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  agentTelegramConnectHandler
+);
+registerTelegramDisconnectAliases(app, {
+  requireAgentContext,
+  agentRouteLimiter,
+  agentTelegramDisconnectHandler,
+});
+app.get(
+  "/api/agent/heartbeat",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
+);
+app.put(
+  "/api/agent/heartbeat",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
+);
+app.get(
+  "/api/agent/cron",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
+);
+app.post(
+  "/api/agent/cron",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
+);
+app.patch(
+  "/api/agent/cron/:id",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
+  )
+);
+
+registerBotBffAliases(app, {
+  requireAgentContext: requireBotBffContext,
+  agentRouteLimiter,
+  json1mb: agentJson1mb,
+  json10mb: agentJson10mb,
+  provisionHandler: botBffHandlers.provision,
+  onboardingGetHandler: botBffHandlers.getOnboarding,
+  onboardingPutHandler: botBffHandlers.putOnboarding,
+  chatStreamHandler: botBffHandlers.chatStream,
+  settingsGetHandler: botBffHandlers.getSettings,
+  settingsPatchHandler: botBffHandlers.patchSettings,
+  telegramConnectHandler: botBffHandlers.telegramConnect,
+  telegramDisconnectHandler: botBffHandlers.telegramDisconnect,
+  usageHandler: botBffHandlers.usage,
+});
+app.delete(
+  "/api/agent/cron/:id",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
+  )
 );
 
 // =============================================================================

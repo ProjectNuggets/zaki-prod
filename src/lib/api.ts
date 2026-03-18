@@ -1,6 +1,40 @@
 import type { ProductTelemetrySource } from "./productTelemetry";
 const TOKEN_KEY = "zaki.auth.token";
 
+export type MemoryCaptureResponse = {
+  saved: Array<{
+    id: string;
+    content: string;
+    type: string;
+    state: "saved_reversible";
+    undoUntil: string;
+  }>;
+  review: Array<{
+    id: string;
+    content: string;
+    type: string;
+    state: "needs_review";
+    reason: string;
+  }>;
+  duplicates: Array<{
+    content: string;
+    type: string;
+  }>;
+  conflicts: Array<{
+    id: string;
+    content: string;
+    type: string;
+    conflictingContent?: string;
+  }>;
+  skipped: Array<{
+    content: string;
+    type: string;
+    reason: string;
+    stage?: "extraction" | "quality_filter" | "policy" | "duplicate_guard";
+    detail?: string;
+  }>;
+};
+
 type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
 };
@@ -117,6 +151,31 @@ export async function backendAuthRequest(
     requestHeaders.set("Authorization", `Bearer ${token}`);
   }
   return backendRequest(path, { ...rest, headers: requestHeaders });
+}
+
+export async function captureMemory({
+  message,
+  threadId,
+}: {
+  message: string;
+  threadId?: string | null;
+}) {
+  const response = await apiRequest("/api/memory/capture", {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      threadId: threadId ?? null,
+    }),
+  });
+
+  let data: MemoryCaptureResponse | null = null;
+  try {
+    data = (await response.json()) as MemoryCaptureResponse;
+  } catch {
+    data = null;
+  }
+
+  return { response, data };
 }
 
 export async function requestLogin({
@@ -334,6 +393,12 @@ export async function fetchEntitlements() {
       readOnly?: boolean;
       expiresAt?: string | null;
       campaign?: string | null;
+    };
+    effective?: {
+      tier?: string;
+      status?: string;
+      source?: "free" | "subscription" | "access_code";
+      premium?: boolean;
     };
     features?: Record<string, boolean>;
     error?: string | null;
@@ -570,6 +635,14 @@ export type AdminStudentVerificationUser = {
   studentVerifiedAt: string | null;
 };
 
+export type AdminRateLimitSettings = {
+  appChatDailyPromptLimit: number;
+  appChatDailyPromptBucket: string;
+  zakiBotDailyPromptLimit: number;
+  zakiBotDailyPromptBucket: string;
+  agentPerMinuteLimit: number;
+};
+
 export async function listAdminMembers() {
   const response = await backendAuthRequest("/api/admin/admins", {
     method: "GET",
@@ -668,6 +741,35 @@ export async function updateAdminStudentVerification(email: string, verified: bo
   } catch {
     // Ignore JSON parsing failures.
   }
+  return { response, data };
+}
+
+export async function getAdminRateLimits() {
+  const response = await backendAuthRequest("/api/admin/rate-limits", {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function updateAdminRateLimits(payload: {
+  appChatDailyPromptLimit?: number;
+  zakiBotDailyPromptLimit?: number;
+  agentPerMinuteLimit?: number;
+}) {
+  const response = await backendAuthRequest("/api/admin/rate-limits", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
   return { response, data };
 }
 
@@ -796,5 +898,349 @@ export async function deleteAccount(confirmEmail: string) {
   } catch {
     // Ignore JSON parsing failures.
   }
+  return { response, data };
+}
+
+async function parseApiJson<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+export type UsageQuotaSurface = "app_chat" | "zaki_bot";
+export type BotErrorCode =
+  | "temporary_contention"
+  | "unauthorized"
+  | "forbidden"
+  | "invalid_telegram_token"
+  | "provision_failed"
+  | "settings_update_failed"
+  | "usage_unavailable";
+
+export type BotApiError = {
+  error?: BotErrorCode | string | null;
+  message?: string | null;
+  retryable?: boolean;
+  request_id?: string;
+};
+
+export type BotProvisionStatus = {
+  status: string;
+};
+
+export type BotOnboardingSetup = Record<string, unknown>;
+
+export type BotOnboardingState = BotApiError & {
+  completed?: boolean;
+  completed_at_s?: number | null;
+  setup?: BotOnboardingSetup | null;
+};
+
+export type BotSettingsProfile = BotApiError & {
+  assistant_mode?: "fast" | "balanced" | "deep";
+  group_activation?: "mention" | "always";
+  proactive_updates?: boolean;
+  voice_replies?: boolean;
+  session_timeout_minutes?: number;
+};
+
+export type BotSettingsPatch = {
+  assistant_mode?: "fast" | "balanced" | "deep";
+  group_activation?: "mention" | "always";
+  proactive_updates?: boolean;
+  voice_replies?: boolean;
+  session_timeout_minutes?: number;
+};
+
+export type BotTelegramConnectPayload = {
+  bot_token?: string;
+  webhook_url?: string;
+  webhook_base_url?: string;
+  webhook_secret_token?: string;
+  account_id?: string;
+  chat_id?: string;
+  allow_from?: string[];
+  drop_pending_updates?: boolean;
+};
+
+export type BotTelegramConnectionState = BotApiError & {
+  status?: "connected" | "disconnected";
+  channel?: "telegram";
+};
+
+export type BotUsageSummary = BotApiError & {
+  state?: string;
+  requests_day?: number;
+  tokens_day?: number;
+  tokens_month?: number;
+};
+
+export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
+  const params = new URLSearchParams({ surface });
+  const response = await backendAuthRequest(`/api/usage/quota?${params.toString()}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    unlimited?: boolean;
+    limit?: number | null;
+    used?: number;
+    remaining?: number | null;
+    resetAt?: string;
+    bucket?: string;
+    surface?: UsageQuotaSurface;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function provisionBot(payload: Record<string, unknown> = {}) {
+  const response = await backendAuthRequest("/v1/me/bot/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotProvisionStatus & BotApiError>(response);
+  return { response, data };
+}
+
+export async function fetchBotOnboarding() {
+  const response = await backendAuthRequest("/v1/me/bot/onboarding", { method: "GET" });
+  const data = await parseApiJson<BotOnboardingState>(response);
+  return { response, data };
+}
+
+export async function updateBotOnboarding(payload: { completed: boolean }) {
+  const response = await backendAuthRequest("/v1/me/bot/onboarding", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotOnboardingState>(response);
+  return { response, data };
+}
+
+export async function fetchBotSettings() {
+  const response = await backendAuthRequest("/v1/me/bot/settings", { method: "GET" });
+  const data = await parseApiJson<BotSettingsProfile>(response);
+  return { response, data };
+}
+
+export async function updateBotSettings(payload: BotSettingsPatch) {
+  const response = await backendAuthRequest("/v1/me/bot/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotSettingsProfile>(response);
+  return { response, data };
+}
+
+export async function connectBotTelegram(payload: BotTelegramConnectPayload) {
+  const response = await backendAuthRequest("/v1/me/bot/telegram/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotTelegramConnectionState>(response);
+  return { response, data };
+}
+
+export async function disconnectBotTelegram() {
+  const response = await backendAuthRequest("/v1/me/bot/telegram/disconnect", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const data = await parseApiJson<BotTelegramConnectionState>(response);
+  return { response, data };
+}
+
+export async function fetchBotUsage() {
+  const response = await backendAuthRequest("/v1/me/bot/usage", { method: "GET" });
+  const data = await parseApiJson<BotUsageSummary>(response);
+  return { response, data };
+}
+
+export async function provisionAgent(payload: Record<string, unknown> = {}) {
+  const response = await backendAuthRequest("/api/agent/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentOnboarding() {
+  const response = await backendAuthRequest("/api/agent/onboarding", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function saveAgentOnboarding(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/onboarding", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentConfig() {
+  const response = await backendAuthRequest("/api/agent/config", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentConfig(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/config", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function getAgentSecret(key: string) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function putAgentSecret(key: string, value: unknown) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentSecret(key: string) {
+  const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export type ConnectAgentTelegramPayload = {
+  bot_token?: string;
+  webhook_url?: string;
+  webhook_base_url?: string;
+  webhook_secret_token?: string;
+  account_id?: string;
+  chat_id?: string;
+  allow_from?: string[];
+  drop_pending_updates?: boolean;
+};
+
+export async function connectAgentTelegram(payload: ConnectAgentTelegramPayload) {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function disconnectAgentTelegram() {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/disconnect", {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentHeartbeat() {
+  const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentHeartbeat(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/heartbeat", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function listAgentCron() {
+  const response = await backendAuthRequest("/api/agent/cron", { method: "GET" });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function createAgentCron(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/cron", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentCron(id: string, payload: Record<string, unknown>) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentCron(id: string) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentHistory(
+  spaceId = "zaki-bot",
+  threadId = "main",
+  mode: "merged" | "app" = "merged"
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/history?spaceId=${encodeURIComponent(spaceId)}&threadId=${encodeURIComponent(threadId)}&mode=${encodeURIComponent(mode)}`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{
+    history?: Array<{
+      id?: string;
+      role?: "user" | "assistant";
+      content?: string;
+      createdAt?: string;
+    }>;
+    historyMode?: "merged" | "app";
+    source?: string;
+    warning?: string;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentDiagnostics() {
+  const response = await backendAuthRequest("/api/agent/diagnostics", { method: "GET" });
+  const data = await parseApiJson<{
+    userId?: string;
+    agentBackendEnabled?: boolean;
+    nullclawBaseConfigured?: boolean;
+    historyModeDefault?: string;
+    upstreamHealth?: {
+      ok?: boolean;
+      status?: number;
+      latencyMs?: number | null;
+      reason?: string;
+    };
+    lastAgentStreamError?: {
+      at?: string;
+      class?: string;
+      message?: string;
+    } | null;
+    error?: string | null;
+  }>(response);
   return { response, data };
 }

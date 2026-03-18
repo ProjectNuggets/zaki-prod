@@ -47,6 +47,7 @@
       "activeViaAccessCode": "Active via access code",
       "until": "until",
       "viewPricing": "View pricing",
+      "manageAccess": "Manage access",
       "managePlan": "Manage plan",
       "upgrade": "Upgrade",
       "cancelSubscription": "Cancel subscription",
@@ -97,7 +98,8 @@
     "nav": {
       "newSpace": "New space",
       "spaces": "Spaces",
-      "zakiBot": "ZAKI Bot",
+      "zakiBot": "ZAKI",
+      "botChat": "Chat",
       "search": "Search",
       "newChat": "New chat"
     },
@@ -211,9 +213,9 @@
     "welcome": "Welcome back",
     "guestName": "there",
     "memoryOn": "Memory is on",
-    "memoryOnHelper": "We only store what you approve.",
+    "memoryOnHelper": "ZAKI saves useful memory automatically. You can undo or delete it anytime.",
     "conflictsBadge": "Conflicts {{count}}",
-    "learnMemory": "See memory pipeline",
+    "learnMemory": "See how memory works",
     "quickStartLabel": "Quick start",
     "latestLabel": "Your controls",
     "viewAll": "View all",
@@ -224,8 +226,8 @@
     "aboutZaki": "About ZAKI",
     "aboutNovaNuggets": "About Nova Nuggets",
     "missionLabel": "Why we exist",
-    "memoryClarityLabel": "Memory pipeline",
-    "memoryClarityBody": "ZAKI extracts potential memory from chat, routes it through pending review and conflict checks, then uses only approved memory in future replies.",
+    "memoryClarityLabel": "How memory works",
+    "memoryClarityBody": "ZAKI saves clear, useful details automatically, gives you a short undo window, and sends only sensitive or conflicting items to review.",
     "examplesLabel": "Examples",
     "examplesSets": {
       "default": "Examples",
@@ -238,33 +240,33 @@
     ],
     "quickStart": [
       {
-        "title": "Build my weekly execution plan from these priorities: [list].",
-        "body": "Structured plan with focus blocks, risks, and next actions."
+        "title": "Plan my day for focus, energy, and calm.",
+        "body": "A full-day routine with work blocks, meals, and reset moments."
       },
       {
-        "title": "Turn this brainstorm into a launch brief with milestones and owners.",
-        "body": "From raw notes to an actionable launch document."
+        "title": "Teach me something useful in 5 minutes.",
+        "body": "A fast lesson with examples and one simple exercise."
       },
       {
-        "title": "Challenge my strategy: find weak points and propose a stronger version.",
-        "body": "Get a sharp critique plus a better plan."
+        "title": "Give me three smart ideas I can use today.",
+        "body": "Clear options for work, life, or learning with next steps."
       }
     ],
     "missionSlides": [
       {
-        "title": "Local-first intelligence",
-        "body": "Most AI is trained on global data that misses local culture. We build ZAKI to feel native, not generic — shaped by how communities think, speak, and decide."
+        "title": "More than a chat window",
+        "body": "ZAKI is being built as a digital twin: something that remembers your context, understands your direction, and keeps pace with how you think."
       },
       {
-        "title": "Built on a powerful base model",
-        "body": "ZAKI starts with strong reasoning, then adapts to local language, context, and norms — so answers sound right, not translated."
+        "title": "Made to carry real weight",
+        "body": "The point is not endless prompting. It is help that can plan, write, organize, and challenge ideas with enough continuity to feel genuinely useful."
       },
       {
-        "title": "Improves with you",
-        "body": "With every interaction, ZAKI learns to align more closely with your culture, heritage, and way of thinking — becoming more personal over time."
+        "title": "It should scale with your life",
+        "body": "As your work, ambition, and responsibilities grow, ZAKI should become more personal, more capable, and more present wherever you need it."
       }
     ],
-    "missionCarouselHint": "Slide {{current}} of {{total}} • Auto-rotates",
+    "missionCarouselHint": "Slide {{current}} of {{total}}",
     "news": [
       {
         "title": "Confirm or skip before save",
@@ -369,7 +371,9 @@
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
     "uploadUnavailableToast": "Add files to the space when you want them available across chats.",
     "upgradeLabel": "ZAKI the chat",
+    "accessLabel": "Premium access active",
     "upgradeCta": "Upgrade!",
+    "manageAccessCta": "Manage access",
     "queryMode": {
       "label": "Query mode",
       "onBadge": "ON",
@@ -390,7 +394,7 @@
       "label": "Memory",
       "auto": "Auto",
       "manual": "Manual",
-      "autosaveHint": "Auto-save memories with 8s undo",
+      "autosaveHint": "Auto-save memories with 5s undo",
       "manualHint": "Manually confirm each memory"
     },
     "sendAria": "Send message",
@@ -411,6 +415,191 @@
       "Draft a message or email",
       "Turn this into a checklist"
     ]
+  },
+  "zakiExperimentalNotice": {
+    "eyebrow": "Experimental note",
+    "badge": "Experimental branch",
+    "areaLabel": "Repo intro",
+    "title": "ZAKI is still experimental",
+    "intro": "This is a different interaction model: state-of-the-art agent behavior with long-term persistent memory and continuity across sessions.",
+    "footer": "It is marked experimental because the behavior is still new enough that we had to build our own benchmark for it at Nova Nuggets Labs before treating it as stable.",
+    "dismissAria": "Dismiss ZAKI experimental notice",
+    "repo": {
+      "branch": "// branch: zaki/experimental-persistent-agents",
+      "origin": "// built at Nova Nuggets Labs",
+      "benchmark": "// in-house benchmark required",
+      "goal": "// long-term persistent memory in real use"
+    },
+    "actions": {
+      "continue": "Continue",
+      "learnMore": "Learn more"
+    }
+  },
+  "zakiBootstrapCard": {
+    "eyebrow": "First contact",
+    "title": "Before the conversation starts",
+    "dismissAria": "Dismiss ZAKI first-contact note",
+    "arabic": {
+      "headline": "سأبدأ معك بالإنجليزية أيضًا، لكن هذه ملاحظة قصيرة قبل أن نبدأ.",
+      "body": "لا تقلق، أنا أتحدث أي لغة. سؤالي الأول سيكون: من أنا؟ من أنت؟ وما الذي نعمل عليه؟ وبعدها سأكمل معك من هناك."
+    },
+    "english": {
+      "label": "English translation",
+      "body": "I will ask this in English too. Do not worry, I speak any language. My first question will be: Who am I? Who are you? What are we working on?"
+    },
+    "repo": {
+      "prep": "// bootstrap note",
+      "languages": "// Arabic first, English next, any language welcome",
+      "questions": "// who am I / who are you / what are we working on"
+    },
+    "actions": {
+      "continue": "Continue"
+    }
+  },
+  "zakiSettingsSheet": {
+    "badge": "ZAKI settings",
+    "title": "Tune how ZAKI shows up",
+    "header": {
+      "readySummary": "{{mode}} replies, {{join}} access, ready to use.",
+      "setupSummary": "Core behavior first. Setup, channels, and limits stay tucked behind quick sections."
+    },
+    "closeAria": "Close ZAKI settings",
+    "loading": {
+      "onboarding": "Loading your current ZAKI setup..."
+    },
+    "summary": {
+      "ready": "Ready to use",
+      "setupInProgress": "Setup in progress"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "sections": {
+      "core": {
+        "title": "Core behavior",
+        "summary": "{{style}} replies, {{join}} access"
+      },
+      "workspace": {
+        "title": "Workspace context",
+        "summary": "{{connected}} of {{total}} channels connected"
+      },
+      "limits": {
+        "title": "Limits and plan",
+        "summary": "Usage, access, and premium controls"
+      },
+      "advanced": {
+        "title": "Advanced and privacy",
+        "summary": "Account shortcuts and product help"
+      }
+    },
+    "fields": {
+      "responseStyle": {
+        "title": "Response style",
+        "helper": "Choose whether ZAKI leans toward speed, balance, or deeper reasoning."
+      },
+      "sessionWindow": {
+        "title": "Session window",
+        "summary": "{{minutes}} minute session",
+        "helper": "Choose how long ZAKI should treat nearby activity as one working session."
+      },
+      "joinBehavior": {
+        "title": "When ZAKI joins",
+        "helper": "Control whether ZAKI waits for a mention or stays available in shared channel conversations."
+      },
+      "proactiveUpdates": {
+        "title": "Proactive updates",
+        "helper": "Let ZAKI surface updates first instead of waiting for every prompt."
+      },
+      "voiceReplies": {
+        "title": "Voice replies",
+        "helper": "Enable spoken responses when the channel supports them."
+      }
+    },
+    "options": {
+      "fast": "Fast",
+      "balanced": "Balanced",
+      "deep": "Deep",
+      "mentionOnly": "Mention only",
+      "alwaysActive": "Always active"
+    },
+    "workspace": {
+      "memoryTitle": "Memory and help",
+      "memorySummary": "Review what ZAKI remembers and open help when you need product context.",
+      "memoryHelper": "Memory stays editable. Help stays one step away.",
+      "reviewMemory": "Review memory",
+      "openHelp": "Open help",
+      "setupTitle": "Setup status",
+      "setupNotCompleted": "Not completed yet",
+      "setupHelper": "{{status}}. Last update: {{updated}}.",
+      "channelsTitle": "Connected channels",
+      "channelsSummary": "{{connected}} of {{total}} channels connected",
+      "channelsSummaryLine": "{{connected}} of {{total}} channels are ready right now.",
+      "channelsHelper": "Provider details stay hidden until you open one.",
+      "channelStatus": {
+        "connected": "Connected",
+        "notConnected": "Not connected",
+        "needsSetup": "Needs setup"
+      },
+      "channelDescriptions": {
+        "telegram": "Connect Telegram so ZAKI can receive and reply through your bot.",
+        "slack": "Keep Slack ready for workspace rollout.",
+        "discord": "Keep Discord instructions nearby without opening a separate admin page."
+      },
+      "telegramToken": "Telegram bot token",
+      "telegramWebhook": "Webhook URL override (optional)"
+    },
+    "limits": {
+      "currentPlanTitle": "Current plan",
+      "currentPlanHelper": "Keep premium access and billing actions in one compact row.",
+      "planSummary": "{{plan}} plan, {{status}} status",
+      "planSummaryWithExpiry": "{{plan}} plan, {{status}} until {{expiry}}",
+      "usageTitle": "Usage today",
+      "usageSummary": "{{requests}} requests today, {{state}} status",
+      "usageUnavailable": "Usage is temporarily unavailable, but ZAKI still works.",
+      "usageHelper": "The usage view stays compact here. Full billing and pricing stay in the main settings surface."
+    },
+    "advanced": {
+      "generalSettingsTitle": "General account settings",
+      "generalSettingsSummary": "Profile, language, theme, export, and account actions live in the main settings surface.",
+      "generalSettingsHelper": "This panel stays focused on ZAKI. Use the main settings surface for broader account changes.",
+      "helpTitle": "Product help",
+      "helpSummary": "Open help when you want the longer explanation behind how ZAKI works.",
+      "helpHelper": "This keeps the main panel quiet while still making documentation easy to reach."
+    },
+    "actions": {
+      "provisioning": "Provisioning...",
+      "provision": "Provision ZAKI",
+      "markIncomplete": "Mark as incomplete",
+      "markComplete": "Mark as complete",
+      "connecting": "Connecting...",
+      "connectTelegram": "Connect Telegram",
+      "disconnect": "Disconnect",
+      "manage": "Manage",
+      "hide": "Hide",
+      "openSettings": "Open settings",
+      "openHelp": "Open help"
+    },
+    "success": {
+      "provisioned": "ZAKI space provisioned.",
+      "onboardingComplete": "Onboarding marked complete.",
+      "onboardingReopened": "Onboarding reopened for further setup.",
+      "settingsSaved": "ZAKI settings saved.",
+      "telegramConnected": "Telegram connected. Send a message to your bot to confirm routing.",
+      "telegramDisconnected": "Telegram disconnected."
+    },
+    "errors": {
+      "onboardingLoad": "Unable to load ZAKI setup right now.",
+      "settingsLoad": "Unable to load ZAKI settings right now.",
+      "botStateUnavailable": "ZAKI settings are temporarily unavailable for this account.",
+      "botStateUnavailableUnknownUser": "ZAKI settings are not available for this account yet.",
+      "sessionTimeoutRange": "Session window must be between 5 and 180 minutes.",
+      "telegramTokenRequired": "Enter a Telegram bot token before connecting."
+    },
+    "footer": {
+      "unsaved": "Unsaved changes",
+      "saving": "Saving..."
+    }
   },
   "onboarding": {
     "eyebrow": "Welcome",
@@ -637,17 +826,30 @@
   },
   "pricingPage": {
     "eyebrow": "Plans",
-    "title": "Choose the plan that makes ZAKI feel personal",
-    "subtitle": "Start free. Upgrade when you want faster answers, better memory, and a more capable personal assistant.",
+    "title": "Choose how you want to work with ZAKI",
+    "subtitle": "Spaces is where ongoing work gets done. ZAKI is where a new interaction model is still being tested.",
+    "subtitleAccessActive": "Your code already unlocks Personal in Spaces. The ladder stays visible here, but checkout remains paused while that access is active.",
     "highlightsTemplates": {
-      "student": "Student: {{price}} with .edu or manual verification",
+      "free": "Free: 10 Spaces chats a day",
       "personal": "Personal: {{price}} for everyday assistant use",
-      "gift": "Gift a month: {{price}}"
+      "zaki": "ZAKI: experimental, 10 messages a day"
+    },
+    "productNotes": {
+      "spaces": {
+        "label": "Spaces",
+        "title": "Where work gets structured",
+        "body": "Spaces is for repeat use, projects, and continuity. Personal removes the cap. Student is the same access at a lower rate."
+      },
+      "zaki": {
+        "label": "ZAKI",
+        "title": "Where interaction is being tested",
+        "body": "ZAKI is the experimental surface. Same daily cap for everyone while we keep shaping the behavior."
+      }
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Start free, then upgrade when you want more from ZAKI.",
+    "currentPlanFree": "Start free, then move up the ladder when you need more room in Spaces.",
     "codeActivePlanLabel": "Code active",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
@@ -655,6 +857,8 @@
       "manage": "Returned from billing portal."
     },
     "managePlan": "Manage plan",
+    "viewPlans": "View plans",
+    "accessActiveCta": "Access active",
     "intervalLabel": "Billing cycle",
     "interval": {
       "monthly": "Monthly",
@@ -677,25 +881,19 @@
       "code_active": "Code active"
     },
     "access": {
-      "title": "Access code",
-      "description": "Redeem a campaign code to activate ZAKI access for 30 days.",
+      "title": "Activation code",
+      "description": "Unlock Personal in Spaces for 30 days. ZAKI stays on the same experimental cap for everyone.",
       "stateActive": "Active",
       "stateInactive": "Inactive",
       "placeholder": "Enter access code",
       "apply": "Apply code",
       "applying": "Applying...",
       "purchase": {
-        "badge": "Gift a month",
-        "title": "Gift a 30-day ZAKI pass",
-        "description": "A thoughtful gift for a student, friend, or teammate who needs a sharp personal AI assistant for a month.",
-        "highlights": [
-          "Perfect for exam season, writing sprints, and deadline-heavy weeks.",
-          "Delivered by email as a single-use code you can forward instantly.",
-          "A simple one-time purchase for one month of premium access."
-        ],
-        "note": "Buy it once, keep it ready, and send it when someone needs real help.",
+        "eyebrow": "30-day code",
+        "title": "Buy a 30-day code",
+        "description": "Use it yourself, or pass it on to someone who needs a month of Personal in Spaces.",
         "price": "$15 one-time",
-        "cta": "Buy 1-month gift code",
+        "cta": "Buy 30-day code",
         "processing": "Opening checkout...",
         "unavailable": "Code purchase is not enabled in this environment yet.",
         "checkoutError": "Unable to start code purchase checkout."
@@ -707,17 +905,18 @@
       "summaryActiveUntil": "Access active until {{date}}.",
       "summaryActiveCampaign": "Access active ({{campaign}}).",
       "summaryActiveUntilCampaign": "Access active until {{date}} ({{campaign}}).",
-      "summaryInactive": "No active access code. Redeem one to keep chatting."
+      "summaryInactive": "No active code.",
+      "extendHint": "Redeem another code to extend your access."
     },
     "plans": {
       "free": {
         "label": "Free",
         "price": "$0",
-        "blurb": "Great for trying ZAKI and basic workflows.",
+        "blurb": "For trying the system without committing to it yet.",
         "features": [
-          "Core chat",
-          "Memory basics",
-          "Standard response quality"
+          "10 Spaces chats per day",
+          "10 ZAKI experimental messages per day",
+          "Memory basics"
         ]
       },
       "student": {
@@ -725,11 +924,11 @@
         "price": "$8 / month",
         "priceMonthly": "$8 / month",
         "priceYearly": "$96 / year",
-        "blurb": "For focused studying, clearer writing, and better support across your coursework.",
+        "blurb": "Unlimited Spaces at the student rate.",
         "features": [
-          "Premium models for better answers",
-          "Priority responses during busy hours",
-          "Stronger help with notes, drafts, and study sessions"
+          "Unlimited chat across Spaces",
+          "Premium models",
+          "Stronger study support"
         ]
       },
       "personal": {
@@ -737,14 +936,27 @@
         "price": "$13 / month",
         "priceMonthly": "$13 / month",
         "priceYearly": "$156 / year",
-        "blurb": "For everyday work and life when you want ZAKI to remember context and move faster with you.",
+        "blurb": "For repeat work, real continuity, and unlimited Spaces.",
         "features": [
-          "Premium models with richer reasoning",
-          "Priority responses and stronger context",
-          "More personal memory and assistant-style support"
+          "Unlimited chat across Spaces",
+          "Premium models",
+          "Deeper context and support"
         ]
+      },
+      "zaki": {
+        "label": "ZAKI",
+        "badge": "Experimental",
+        "price": "Open beta / Free",
+        "blurb": "A state-of-the-art agent surface still being shaped in public.",
+        "features": [
+          "Same daily cap for everyone",
+          "Long-term memory is part of the test",
+          "Behavior is still being benchmarked"
+        ],
+        "cta": "Included in free"
       }
     },
+    "studentToggle": "I’m a student",
     "studentEligibilityTitle": "Student plan eligibility:",
     "studentEligibilityBody": "use your .edu email at checkout, or email any proof of enrollment for manual verification at",
     "currentBadge": "Current",
@@ -825,7 +1037,14 @@
   },
   "memory": {
     "saved": "memory saved",
+    "savedSingle": "Saved to memory",
+    "savedMultiple": "Saved {{count}} memories",
     "toReview": "memory to review",
+    "reviewNotice": "{{count}} item needs review",
+    "conflictNotice": "{{count}} conflict needs review",
+    "manageAnytime": "You can review or delete memories anytime.",
+    "reviewPendingHelper": "{{count}} item is waiting in review.",
+    "reviewConflictsHelper": "{{count}} conflict needs your decision.",
     "review": "Review",
     "hide": "Hide",
     "remember": "Remember",
@@ -834,6 +1053,9 @@
     "open": "Open",
     "rememberAll": "Remember all",
     "undo": "Undo",
+    "undoRetry": "Retry undo",
+    "undoFailed": "Undo failed. The memory is still saved.",
+    "undoPartialError": "{{count}} memory could not be undone.",
     "pending": "Pending",
     "more": "more",
     "dismissAria": "Dismiss memory rail",
@@ -868,7 +1090,7 @@
     "mode": {
       "title": "Memory Mode",
       "autosave": "Auto-Save",
-      "autosaveHint": "Save instantly, 8s undo",
+      "autosaveHint": "Save instantly, 5s undo",
       "manual": "Manual",
       "manualHint": "Confirm each memory"
     }
@@ -905,8 +1127,8 @@
       "retry": "Try again"
     },
     "pipeline": {
-      "title": "Memory Pipeline",
-      "body": "ZAKI extracts from chat, queues manual reviews, flags contradictions, then stores approved memory for context injection.",
+      "title": "Memory at a glance",
+      "body": "Useful details are saved automatically, with quick undo. Sensitive or conflicting memories wait here for review.",
       "pending": "Pending Review",
       "stored": "Stored",
       "conflicts": "Conflicts",

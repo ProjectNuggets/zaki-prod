@@ -200,6 +200,30 @@ function cleanPreferenceValue(value) {
     .trim();
 }
 
+function splitPreferenceValues(value) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+
+  const parts = normalized
+    .split(/\s*,\s*|\s+(?:and|&)\s+|\s+و\s+/i)
+    .map((part) => cleanPreferenceValue(part))
+    .filter(Boolean);
+
+  if (parts.length < 2) return [];
+  if (parts.some((part) => part.length < 2)) return [];
+  if (parts.some((part) => countClauseSignals(part) > 1)) return [];
+
+  const unique = [];
+  const seen = new Set();
+  for (const part of parts) {
+    const key = part.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(part);
+  }
+  return unique.length >= 2 ? unique : [];
+}
+
 function normalizePreferenceMemory(content, polarity) {
   const raw = String(content || "").replace(/\s+/g, " ").trim();
   if (!raw) {
@@ -225,6 +249,21 @@ function normalizePreferenceMemory(content, polarity) {
     {
       regex:
         /^(?:dislikes?|i\s+(?:don't like|dont like|do not like|dislike|hate))\s+(.+)$/i,
+      polarity: "negative",
+      verb: "Dislikes",
+    },
+    {
+      regex: /^(?:أفضل|أفضّل|افضل)\s+(.+)$/i,
+      polarity: "positive",
+      verb: "Prefers",
+    },
+    {
+      regex: /^(?:أحب|احب|بحب)\s+(.+)$/i,
+      polarity: "positive",
+      verb: "Likes",
+    },
+    {
+      regex: /^(?:لا\s+أحب|لا\s+احب|أكره|اكره|ما\s+بحب|مابحب)\s+(.+)$/i,
       polarity: "negative",
       verb: "Dislikes",
     },
@@ -272,6 +311,7 @@ function normalizePreferenceMemory(content, polarity) {
     content: `${verb} ${value}`,
     value,
     polarity: resolvedPolarity,
+    verb,
   };
 }
 
@@ -404,15 +444,15 @@ function countClauseSignals(value) {
     /\bloves?\b/g,
     /\benjoys?\b/g,
     /\bprefers?\b/g,
-    /\bplans?\b/g,
-    /\bwants?\b/g,
-    /\btravels?\b/g,
-    /\bvisits?\b/g,
-    /\blives?\b/g,
-    /\bfrom\b/g,
-    /\bworks?\b/g,
-    /\bstudies?\b/g,
-    /\bfeels?\b/g,
+    /\bplans?\s+to\b/g,
+    /\bwants?\s+to\b/g,
+    /\btravels?\s+to\b/g,
+    /\bvisits?\s+to\b/g,
+    /\blives?\s+in\b/g,
+    /\b(?:i\s+am|i'?m|im)\s+from\b/g,
+    /\bworks?\s+(?:at|for|as)\b/g,
+    /\bstudies?\s+(?:at|in)\b/g,
+    /\bfeels?\s+(?:very|really|so|\w+)\b/g,
     /\bname is\b/g,
   ];
   return signals.reduce((count, pattern) => count + (normalized.match(pattern)?.length || 0), 0);
@@ -441,10 +481,13 @@ function isLowQualityExtractedMemory(memory) {
 }
 
 function normalizeExtractedMemory(memory) {
+  const parsedConfidence = Number(memory?.confidence);
   const base = {
     content: String(memory?.content || "").replace(/\s+/g, " ").trim(),
     type: String(memory?.type || "").trim().toLowerCase(),
-    confidence: memory?.confidence || 0.8,
+    confidence: Number.isFinite(parsedConfidence)
+      ? Math.max(0, Math.min(1, parsedConfidence))
+      : null,
     conflictKey: canonicalizeConflictKey(memory?.conflictKey || memory?.conflict_key) || null,
     polarity: memory?.polarity || null,
   };
@@ -487,10 +530,37 @@ function normalizeExtractedMemory(memory) {
   return base;
 }
 
+function expandPreferenceMemory(memory) {
+  if (memory?.type !== "preference") return [memory];
+  const normalized = normalizePreferenceMemory(memory.content, memory.polarity);
+  const value = String(normalized?.value || "").trim();
+  if (!value) return [memory];
+
+  const splitValues = splitPreferenceValues(value);
+  if (splitValues.length < 2) return [memory];
+
+  const nextConfidence =
+    memory.confidence == null
+      ? null
+      : Math.max(0, Math.min(1, Number(memory.confidence) - 0.05));
+
+  return splitValues.map((part) => ({
+    ...memory,
+    content: `${normalized.verb || "Likes"} ${part}`,
+    confidence: nextConfidence,
+    conflictKey: canonicalizeConflictKey(`preference:${part}`) || null,
+    polarity: normalized.polarity || memory.polarity || "positive",
+  }));
+}
+
 export function sanitizeExtractedMemories(memories, limit = MAX_EXTRACTED_MEMORIES_PER_MESSAGE) {
   const boundedLimit = Math.max(1, Math.min(50, Number(limit) || MAX_EXTRACTED_MEMORIES_PER_MESSAGE));
   const normalized = (Array.isArray(memories) ? memories : [])
-    .map((memory) => normalizeExtractedMemory(memory))
+    .flatMap((memory) => {
+      const normalizedMemory = normalizeExtractedMemory(memory);
+      if (!normalizedMemory) return [];
+      return expandPreferenceMemory(normalizedMemory);
+    })
     .filter(Boolean)
     .filter((memory) => !isLowQualityExtractedMemory(memory));
   return finalizeExtractedMemories(normalized).slice(0, boundedLimit);
@@ -547,7 +617,7 @@ function classifyWithHeuristics(message) {
     /\bim\b/i,
     /\bmy\b/i,
     /\bme\b/i,
-    /أنا|انا|اسمي|عندي|لدي|أحب|احب|بحب|أكره|اكره|أفضّل|افضل|ما بحب|مابحب/,
+    /أنا|انا|اسمي|عندي|لدي|أعاني|اعاني|أحب|احب|بحب|أكره|اكره|أفضّل|أفضل|افضل|ما بحب|مابحب/,
   ];
   if (firstPersonSignals.some((r) => r.test(text))) return "user_statement";
 
@@ -702,10 +772,10 @@ export async function extractFacts(message) {
     );
   }
 
-  if (llmMemories.length === 0) return finalizeExtractedMemories(patternMemories);
-  if (patternMemories.length === 0) return finalizeExtractedMemories(llmMemories);
+  if (llmMemories.length === 0) return sanitizeExtractedMemories(patternMemories);
+  if (patternMemories.length === 0) return sanitizeExtractedMemories(llmMemories);
 
-  const merged = finalizeExtractedMemories([...llmMemories, ...patternMemories]);
+  const merged = sanitizeExtractedMemories([...llmMemories, ...patternMemories]);
   if (shouldDebug()) {
     console.log(`[Memory] Extracted ${merged.length} total memories`);
   }
@@ -880,7 +950,7 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     facts.push({
       content: `Likes ${value}`,
       type: "preference",
-      confidence: 0.8,
+      confidence: 0.9,
       conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
       polarity: "positive",
     });
@@ -899,7 +969,7 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     facts.push({
       content: `Dislikes ${value}`,
       type: "preference",
-      confidence: 0.8,
+      confidence: 0.9,
       conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
       polarity: "negative",
     });
@@ -947,6 +1017,45 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     });
   }
 
+  const emailMatch = message.match(
+    /(?:my\s+email(?:\s+address)?\s+is|email\s+me\s+at|reach\s+me\s+at)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i
+  );
+  if (emailMatch) {
+    facts.push({
+      content: `Reach me at ${emailMatch[1].trim()}`,
+      type: "fact",
+      confidence: 0.92,
+      polarity: "neutral",
+    });
+  }
+
+  const phoneMatch = message.match(
+    /(?:my\s+phone(?:\s+number)?\s+is|call\s+me\s+at|reach\s+me\s+at|رقم\s+هاتفي|رقم\s+الهاتف)\s+([+\d][\d\s().-]{6,}\d)/i
+  );
+  if (phoneMatch) {
+    facts.push({
+      content: `Reach me at ${phoneMatch[1].trim()}`,
+      type: "fact",
+      confidence: 0.92,
+      polarity: "neutral",
+    });
+  }
+
+  const healthMatch = message.match(
+    /(?:i\s+(?:have|am\s+dealing\s+with|suffer\s+from|was\s+diagnosed\s+with)|أعاني\s+من|تم\s+تشخيصي\s+بـ?)\s+([^.,!?]+)/i
+  );
+  if (healthMatch) {
+    const value = cleanStructuredValue(healthMatch[1] || "");
+    if (value) {
+      facts.push({
+        content: `Health detail: ${value}`,
+        type: "struggle",
+        confidence: 0.82,
+        polarity: "neutral",
+      });
+    }
+  }
+
   if (!simpleOnly) {
     const travelGoalValues = collectPatternValues(
       message,
@@ -988,7 +1097,7 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
       facts.push({
         content: `Likes ${value}`,
         type: "preference",
-        confidence: 0.8,
+        confidence: 0.9,
         conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
         polarity: "positive",
       });
@@ -1004,7 +1113,7 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
       facts.push({
         content: `Dislikes ${value}`,
         type: "preference",
-        confidence: 0.8,
+        confidence: 0.9,
         conflictKey: canonicalizeConflictKey(`preference:${normalizedValue}`),
         polarity: "negative",
       });

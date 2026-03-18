@@ -41,7 +41,15 @@ export function buildStreamUpstreamPayload(body, enrichedMessage) {
 export function getRequestedResponseFormat(message = "") {
   const text = String(message || "").trim();
   if (!text) return null;
-  if (/\btable\b/i.test(text) || /(?:^|\s)(جدول|table)(?:\s|$)/i.test(text)) {
+  const tableFormatIntentPatterns = [
+    /\b(?:as|into|in)\s+(?:a\s+)?(?:markdown\s+)?table\b/i,
+    /\b(?:return|respond|reply|output|format|present|show|organize|summari[sz]e|compare)\b[\s\S]{0,80}\b(?:a\s+)?(?:markdown\s+)?table\b/i,
+    /\b(?:table|tabular)\s+format\b/i,
+    /(?:^|\s)(?:please|kindly)\s+use\s+(?:a\s+)?(?:markdown\s+)?table(?:\s|$)/i,
+    /(?:^|\s)(?:حولها|حوّلها|رتبها|قدّمها|اعرضها|لخّصها|لخصها|قارنها)\s+(?:في|ب)?\s*جدول(?:\s|$)/i,
+    /(?:^|\s)(?:على شكل جدول|بصيغة جدول|بتنسيق جدول|جدول مقارنة)(?:\s|$)/i,
+  ];
+  if (tableFormatIntentPatterns.some((pattern) => pattern.test(text))) {
     return "table";
   }
   if (

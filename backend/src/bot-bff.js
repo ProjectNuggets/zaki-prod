@@ -1,0 +1,1069 @@
+import { z } from "zod";
+
+export const PRODUCT_ERROR_CODES = Object.freeze({
+  TEMPORARY_CONTENTION: "temporary_contention",
+  UNAUTHORIZED: "unauthorized",
+  FORBIDDEN: "forbidden",
+  INVALID_TELEGRAM_TOKEN: "invalid_telegram_token",
+  PROVISION_FAILED: "provision_failed",
+  SETTINGS_UPDATE_FAILED: "settings_update_failed",
+  USAGE_UNAVAILABLE: "usage_unavailable",
+});
+
+export const UI_SPECIFIC_FIELDS = Object.freeze([
+  "panel_tab",
+  "screen_state",
+  "view_mode",
+  "mobile_compact",
+  "layout_variant",
+]);
+
+export const BOT_CHAT_SESSION_KEY_ERROR_CODES = Object.freeze([
+  "missing_session_key",
+  "invalid_session_key",
+  "session_key_user_mismatch",
+  "invalid_session_lane",
+]);
+
+export const LOCK_RETRY_MAX_ATTEMPTS = 3;
+export const LOCK_RETRY_MAX_WALL_TIME_MS = 1500;
+export const LOCK_RETRY_FALLBACK_DELAYS_MS = Object.freeze([100, 250, 500]);
+
+const botProvisionStatusSchema = z.object({ status: z.string().trim().min(1) }).strict();
+
+const botOnboardingStateSchema = z
+  .object({
+    completed: z.boolean(),
+    completed_at_s: z.number().int().nonnegative().nullable(),
+    setup: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .strict();
+
+const botOnboardingUpdateSchema = z.object({ completed: z.boolean() }).strict();
+
+const botSettingsProfileSchema = z
+  .object({
+    assistant_mode: z.enum(["fast", "balanced", "deep"]),
+    group_activation: z.enum(["mention", "always"]),
+    proactive_updates: z.boolean(),
+    voice_replies: z.boolean(),
+    session_timeout_minutes: z.number().int().min(5).max(180),
+  })
+  .strict();
+
+const botSettingsPatchSchema = z
+  .object({
+    assistant_mode: z.enum(["fast", "balanced", "deep"]).optional(),
+    group_activation: z.enum(["mention", "always"]).optional(),
+    proactive_updates: z.boolean().optional(),
+    voice_replies: z.boolean().optional(),
+    session_timeout_minutes: z.number().int().min(5).max(180).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "at least one settings field is required",
+  });
+
+const telegramConnectionStateSchema = z
+  .object({
+    status: z.enum(["connected", "disconnected"]),
+    channel: z.literal("telegram"),
+  })
+  .strict();
+
+const botUsageSummarySchema = z
+  .object({
+    state: z.string().trim().min(1),
+    requests_day: z.number().int().nonnegative(),
+    tokens_day: z.number().int().nonnegative(),
+    tokens_month: z.number().int().nonnegative(),
+  })
+  .strict();
+
+function normalizedString(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizedIntegerOrNull(value) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return null;
+}
+
+function sanitizeProductSetupValue(value) {
+  if (value === null) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeProductSetupValue(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const uiFields = findUiSpecificFields(value);
+  if (uiFields.length > 0) {
+    throw new Error(`ui-specific fields are not allowed: ${uiFields.join(", ")}`);
+  }
+
+  const sanitized = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const nextValue = sanitizeProductSetupValue(nestedValue);
+    if (typeof nextValue !== "undefined") {
+      sanitized[key] = nextValue;
+    }
+  }
+  return sanitized;
+}
+
+function extractPayloadMessage(payload) {
+  return payload && typeof payload === "object" ? normalizedString(payload.message || payload.prompt) : "";
+}
+
+function extractSessionKeyOverride(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { present: false, value: null };
+  }
+  if (!Object.prototype.hasOwnProperty.call(payload, "session_key")) {
+    return { present: false, value: null };
+  }
+  if (typeof payload.session_key !== "string") {
+    return { present: true, value: null };
+  }
+  const normalized = normalizedString(payload.session_key);
+  return { present: true, value: normalized || null };
+}
+
+export function isValidCanonicalChatSessionLane(lane) {
+  const normalizedLane = normalizedString(lane);
+  if (normalizedLane === "main") return true;
+
+  for (const prefix of ["thread", "task", "cron"]) {
+    const marker = `${prefix}:`;
+    if (normalizedLane.startsWith(marker) && normalizedString(normalizedLane.slice(marker.length))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function buildCanonicalThreadSessionKey(userId, threadId = "main") {
+  const normalizedUserId = normalizedString(userId);
+  const normalizedThreadId = normalizedString(threadId) || "main";
+  return `agent:zaki-bot:user:${normalizedUserId}:thread:${normalizedThreadId}`;
+}
+
+export function resolveCanonicalChatSessionKey({ userId, payload }) {
+  const normalizedUserId = normalizedString(userId);
+  const override = extractSessionKeyOverride(payload);
+  if (!normalizedUserId) {
+    return { success: false, message: "invalid chat payload or session_key" };
+  }
+
+  if (override.present) {
+    if (!override.value) {
+      return { success: false, message: "invalid chat payload or session_key" };
+    }
+    const expectedPrefix = `agent:zaki-bot:user:${normalizedUserId}:`;
+    if (!override.value.startsWith(expectedPrefix)) {
+      return { success: false, message: "invalid chat payload or session_key" };
+    }
+    const lane = override.value.slice(expectedPrefix.length);
+    if (!isValidCanonicalChatSessionLane(lane)) {
+      return { success: false, message: "invalid chat payload or session_key" };
+    }
+    return { success: true, sessionKey: override.value };
+  }
+
+  return {
+    success: true,
+    sessionKey: buildCanonicalThreadSessionKey(normalizedUserId, payload?.threadId),
+  };
+}
+
+function pickRetryAfterMs(headers, payload) {
+  const bodyDelay = normalizedIntegerOrNull(payload?.retry_after_ms);
+  if (bodyDelay !== null && bodyDelay > 0) return bodyDelay;
+  const retryAfterHeader =
+    headers && typeof headers.get === "function" ? headers.get("retry-after") : null;
+  const retryAfterSeconds = normalizedIntegerOrNull(retryAfterHeader);
+  if (retryAfterSeconds !== null && retryAfterSeconds > 0) return retryAfterSeconds * 1000;
+  return null;
+}
+
+function tryParseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+async function readResponsePayload(response) {
+  if (!response) return null;
+  const contentType = normalizedString(response.headers?.get?.("content-type")).toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const text = await response.text();
+    if (!text) return null;
+    const directJson = tryParseJson(text);
+    if (directJson && typeof directJson === "object") return directJson;
+    const sseDataMatch = text.match(/data:\s*(\{.*\})/s);
+    if (!sseDataMatch) return { message: text.trim() };
+    const sseJson = tryParseJson(sseDataMatch[1]);
+    return sseJson && typeof sseJson === "object" ? sseJson : { message: text.trim() };
+  } catch {
+    return null;
+  }
+}
+
+export function buildProductError({ error, message, retryable, requestId }) {
+  return {
+    error,
+    message,
+    retryable,
+    request_id: normalizedString(requestId) || "unknown_request",
+  };
+}
+
+export function buildSseProductError({ error, message, retryable }) {
+  return { code: error, message, retryable };
+}
+
+export function isOwnershipLockConflict(statusCode, payload) {
+  return (
+    Number(statusCode) === 409 &&
+    normalizedString(payload?.error || payload?.code).toLowerCase() === "ownership_lock_conflict"
+  );
+}
+
+export function computeLockRetryDelayMs({
+  attempt,
+  retryAfterMs = null,
+  jitterFn = Math.random,
+}) {
+  if (retryAfterMs !== null && retryAfterMs > 0) return retryAfterMs;
+  const baseDelay =
+    LOCK_RETRY_FALLBACK_DELAYS_MS[
+      Math.min(Math.max(0, Number(attempt) || 0), LOCK_RETRY_FALLBACK_DELAYS_MS.length - 1)
+    ];
+  const jitter = (Math.max(0, Math.min(1, Number(jitterFn()) || 0.5)) * 0.4) - 0.2;
+  return Math.max(0, Math.round(baseDelay * (1 + jitter)));
+}
+
+export async function withOwnershipLockRetry({
+  performRequest,
+  readConflictPayload = readResponsePayload,
+  nowFn = Date.now,
+  sleepFn = (delay) => new Promise((resolve) => setTimeout(resolve, delay)),
+  jitterFn = Math.random,
+  maxAttempts = LOCK_RETRY_MAX_ATTEMPTS,
+  maxWallTimeMs = LOCK_RETRY_MAX_WALL_TIME_MS,
+}) {
+  const startedAt = nowFn();
+  let attempt = 0;
+
+  while (true) {
+    const response = await performRequest({ attempt });
+    let conflictPayload = null;
+    if (Number(response?.status) === 409) {
+      conflictPayload = await readConflictPayload(response.clone());
+    }
+
+    if (!isOwnershipLockConflict(response?.status, conflictPayload)) {
+      return { response, conflictPayload, attempts: attempt + 1, exhausted: false };
+    }
+
+    const elapsed = nowFn() - startedAt;
+    if (attempt >= maxAttempts - 1 || elapsed >= maxWallTimeMs) {
+      return { response, conflictPayload, attempts: attempt + 1, exhausted: true };
+    }
+
+    const delayMs = computeLockRetryDelayMs({
+      attempt,
+      retryAfterMs: pickRetryAfterMs(response.headers, conflictPayload),
+      jitterFn,
+    });
+    if (elapsed + delayMs > maxWallTimeMs) {
+      return { response, conflictPayload, attempts: attempt + 1, exhausted: true };
+    }
+
+    await sleepFn(delayMs);
+    attempt += 1;
+  }
+}
+
+export function findUiSpecificFields(payload) {
+  const found = [];
+  const visit = (value, path = "") => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
+      return;
+    }
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const nextPath = path ? `${path}.${key}` : key;
+      if (UI_SPECIFIC_FIELDS.includes(key)) {
+        found.push(nextPath);
+      }
+      visit(nestedValue, nextPath);
+    }
+  };
+  visit(payload);
+  return found;
+}
+
+export function buildBotProvisionPayload(userId, payload = {}) {
+  return {
+    ...(payload && typeof payload === "object" ? payload : {}),
+    user_id: normalizedString(userId),
+  };
+}
+
+export function sanitizeBotProvisionStatus(payload) {
+  const parsed = botProvisionStatusSchema.safeParse(payload);
+  if (parsed.success) return parsed.data;
+  return { status: "provisioned" };
+}
+
+export function sanitizeBotOnboardingState(payload, fallbackCompleted = false) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const completed =
+    typeof source.completed === "boolean" ? source.completed : Boolean(fallbackCompleted);
+  const completedAt = normalizedIntegerOrNull(source.completed_at_s ?? source.completedAtS);
+  const setup =
+    source.setup && typeof source.setup === "object" && !Array.isArray(source.setup)
+      ? sanitizeProductSetupValue(source.setup)
+      : null;
+  return botOnboardingStateSchema.parse({
+    completed,
+    completed_at_s: completed ? completedAt : null,
+    setup: setup && typeof setup === "object" ? setup : null,
+  });
+}
+
+export function validateBotOnboardingUpdate(payload) {
+  const uiFields = findUiSpecificFields(payload);
+  if (uiFields.length > 0) {
+    return {
+      success: false,
+      message: `ui-specific fields are not allowed: ${uiFields.join(", ")}`,
+    };
+  }
+  const parsed = botOnboardingUpdateSchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message || "invalid onboarding payload",
+    };
+  }
+  return { success: true, data: parsed.data };
+}
+
+export function sanitizeBotSettingsProfile(payload) {
+  return botSettingsProfileSchema.parse(payload);
+}
+
+export function validateBotSettingsPatch(payload) {
+  const uiFields = findUiSpecificFields(payload);
+  if (uiFields.length > 0) {
+    return {
+      success: false,
+      message: `ui-specific fields are not allowed: ${uiFields.join(", ")}`,
+    };
+  }
+  const parsed = botSettingsPatchSchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message || "invalid settings payload",
+    };
+  }
+  return { success: true, data: parsed.data };
+}
+
+export function sanitizeTelegramConnectionState(status) {
+  return telegramConnectionStateSchema.parse({ status, channel: "telegram" });
+}
+
+export function normalizeTelegramConnectPayload(payload) {
+  if (!payload || typeof payload !== "object") return {};
+
+  const source = payload;
+  const normalized = {};
+  const map = [
+    ["bot_token", source.bot_token ?? source.botToken],
+    ["webhook_url", source.webhook_url ?? source.webhookUrl],
+    ["webhook_base_url", source.webhook_base_url ?? source.webhookBaseUrl],
+    ["webhook_secret_token", source.webhook_secret_token ?? source.webhookSecretToken],
+    ["account_id", source.account_id ?? source.accountId],
+    ["chat_id", source.chat_id ?? source.chatId],
+  ];
+  for (const [key, value] of map) {
+    const normalizedValue = normalizedString(value);
+    if (normalizedValue) normalized[key] = normalizedValue;
+  }
+
+  const allowFrom = Array.isArray(source.allow_from ?? source.allowFrom)
+    ? (source.allow_from ?? source.allowFrom)
+        .map((entry) => normalizedString(entry))
+        .filter(Boolean)
+    : null;
+  if (allowFrom && allowFrom.length > 0) normalized.allow_from = allowFrom;
+
+  const dropPending = source.drop_pending_updates ?? source.dropPendingUpdates;
+  if (typeof dropPending === "boolean") normalized.drop_pending_updates = dropPending;
+
+  return normalized;
+}
+
+export function normalizeBotUsageSummaryFromQuota(payload) {
+  const used = normalizedIntegerOrNull(payload?.used) ?? 0;
+  const remaining = normalizedIntegerOrNull(payload?.remaining);
+  const state = remaining !== null && remaining <= 0 ? "limit_reached" : "normal";
+  return botUsageSummarySchema.parse({
+    state,
+    requests_day: used,
+    tokens_day: 0,
+    tokens_month: 0,
+  });
+}
+
+function textFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  return [payload.error, payload.code, payload.message, payload.detail]
+    .map((value) => normalizedString(value))
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function isTelegramTokenError(payload) {
+  const text = textFromPayload(payload);
+  return /invalid[_\s-]*token|telegram token|unauthorized|forbidden|401\b/.test(text);
+}
+
+export function isChatSessionKeyValidationFailure(payload) {
+  const code = normalizedString(payload?.code || payload?.error).toLowerCase();
+  if (BOT_CHAT_SESSION_KEY_ERROR_CODES.includes(code)) {
+    return true;
+  }
+  const text = textFromPayload(payload);
+  return BOT_CHAT_SESSION_KEY_ERROR_CODES.some((value) => text.includes(value));
+}
+
+function mapAuthError(type, requestId) {
+  if (type === "unauthorized") {
+    return {
+      status: 401,
+      body: buildProductError({
+        error: PRODUCT_ERROR_CODES.UNAUTHORIZED,
+        message: "Authentication is required.",
+        retryable: false,
+        requestId,
+      }),
+    };
+  }
+  return {
+    status: 403,
+    body: buildProductError({
+      error: PRODUCT_ERROR_CODES.FORBIDDEN,
+      message: "Access to this bot capability is not allowed.",
+      retryable: false,
+      requestId,
+    }),
+  };
+}
+
+function mapContentionError(requestId) {
+  return {
+    status: 503,
+    body: buildProductError({
+      error: PRODUCT_ERROR_CODES.TEMPORARY_CONTENTION,
+      message: "Agent is busy on another node. Retry shortly.",
+      retryable: true,
+      requestId,
+    }),
+  };
+}
+
+function mapForbiddenError(message, requestId, status = 403) {
+  return {
+    status,
+    body: buildProductError({
+      error: PRODUCT_ERROR_CODES.FORBIDDEN,
+      message,
+      retryable: false,
+      requestId,
+    }),
+  };
+}
+
+function mapProvisionError(status, payload, requestId) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  if (status === 403 || status === 404) {
+    return mapForbiddenError("bot provisioning is not accessible", requestId, 403);
+  }
+  return {
+    status: status >= 500 ? 502 : 400,
+    body: buildProductError({
+      error: PRODUCT_ERROR_CODES.PROVISION_FAILED,
+      message: normalizedString(payload?.message || payload?.error) || "provision request invalid",
+      retryable: false,
+      requestId,
+    }),
+  };
+}
+
+function mapOnboardingError(status, payload, requestId, message) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  return mapForbiddenError(
+    normalizedString(payload?.message || payload?.error) || message,
+    requestId,
+    status >= 500 ? 503 : 403
+  );
+}
+
+function mapSettingsError(status, payload, requestId, fallbackMessage) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  return {
+    status: status >= 500 ? 503 : 400,
+    body: buildProductError({
+      error: PRODUCT_ERROR_CODES.SETTINGS_UPDATE_FAILED,
+      message: normalizedString(payload?.message || payload?.error) || fallbackMessage,
+      retryable: false,
+      requestId,
+    }),
+  };
+}
+
+function mapTelegramConnectError(status, payload, requestId) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  if (isTelegramTokenError(payload)) {
+    return {
+      status: 400,
+      body: buildProductError({
+        error: PRODUCT_ERROR_CODES.INVALID_TELEGRAM_TOKEN,
+        message: "telegram token is invalid",
+        retryable: false,
+        requestId,
+      }),
+    };
+  }
+  return mapForbiddenError(
+    normalizedString(payload?.message || payload?.error) || "telegram connect request invalid",
+    requestId,
+    status >= 500 ? 503 : 403
+  );
+}
+
+function mapTelegramDisconnectError(status, payload, requestId) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  if (isTelegramTokenError(payload)) {
+    return {
+      status: 400,
+      body: buildProductError({
+        error: PRODUCT_ERROR_CODES.INVALID_TELEGRAM_TOKEN,
+        message: "telegram token is invalid",
+        retryable: false,
+        requestId,
+      }),
+    };
+  }
+  return mapForbiddenError(
+    normalizedString(payload?.message || payload?.error) || "telegram channel not connected",
+    requestId,
+    status >= 500 ? 503 : 403
+  );
+}
+
+function buildMidstreamSseError() {
+  return buildSseProductError({
+    error: PRODUCT_ERROR_CODES.TEMPORARY_CONTENTION,
+    message: "Agent stream interrupted. Retry shortly.",
+    retryable: true,
+  });
+}
+
+function writeSseEvent(res, eventName, payload) {
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function mapChatStreamError(status, payload, requestId) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  if (isChatSessionKeyValidationFailure(payload)) {
+    return mapForbiddenError("invalid chat payload or session_key", requestId, 400);
+  }
+  return mapForbiddenError(
+    normalizedString(payload?.message || payload?.error) || "invalid chat payload",
+    requestId,
+    status >= 500 ? 503 : 400
+  );
+}
+
+async function proxySseResponse(upstream, res) {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let hasForwardedBytes = false;
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const decoded = decoder.decode(value, { stream: true });
+      if (!decoded) continue;
+      hasForwardedBytes = true;
+      res.write(decoded);
+    }
+  } catch {
+    if (hasForwardedBytes) {
+      writeSseEvent(res, "error", buildMidstreamSseError());
+    }
+  } finally {
+    res.end();
+  }
+}
+
+async function runJsonUpstreamRequest({
+  req,
+  res,
+  method,
+  path,
+  body,
+  requestId,
+  idempotencyKey,
+  sendUpstreamRequest,
+  mapSuccess,
+  mapError,
+  retryable = false,
+  nowFn,
+  sleepFn,
+  jitterFn,
+}) {
+  const performRequest = () =>
+    sendUpstreamRequest({
+      method,
+      path,
+      userId: req.botBffContext.userId,
+      requestId,
+      idempotencyKey,
+      body,
+    });
+
+  const result = retryable
+    ? await withOwnershipLockRetry({ performRequest, nowFn, sleepFn, jitterFn })
+    : {
+        response: await performRequest(),
+        conflictPayload: null,
+        attempts: 1,
+        exhausted: false,
+      };
+
+  if (result.exhausted) {
+    const contention = mapContentionError(requestId);
+    res.status(contention.status).json(contention.body);
+    return;
+  }
+
+  const payload = await readResponsePayload(result.response.clone());
+  if (!result.response.ok) {
+    const normalized = mapError(result.response.status, payload, requestId);
+    res.status(normalized.status).json(normalized.body);
+    return;
+  }
+
+  res.status(result.response.status).json(mapSuccess(payload));
+}
+
+export function createBotBffHandlers({
+  getAuthContext,
+  sendUpstreamRequest,
+  buildUsageSummary,
+  nowFn = Date.now,
+  sleepFn = (delay) => new Promise((resolve) => setTimeout(resolve, delay)),
+  jitterFn = Math.random,
+  createRequestId,
+  createIdempotencyKey,
+}) {
+  const wrapHandler = (handler, fallbackBuilder) => async (req, res) => {
+    try {
+      await handler(req, res);
+    } catch (error) {
+      if (res.headersSent) {
+        if (!res.writableEnded) res.end();
+        return;
+      }
+      const requestId = createRequestId(req);
+      const normalized = fallbackBuilder(requestId, error);
+      res.status(normalized.status).json(normalized.body);
+    }
+  };
+
+  const ensureContext = async (req, res) => {
+    if (req.botBffContext?.userId) return req.botBffContext;
+    const requestId = createRequestId(req);
+    const authResult = await getAuthContext(req, res, requestId);
+    if (!authResult) return null;
+    req.botBffContext = authResult;
+    return authResult;
+  };
+
+  return {
+    provision: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      const idempotencyKey = createIdempotencyKey(req, requestId);
+      const payload = buildBotProvisionPayload(context.userId, req.body);
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "POST",
+        path: "/api/v1/users/provision",
+        body: payload,
+        requestId,
+        idempotencyKey,
+        sendUpstreamRequest,
+        mapSuccess: sanitizeBotProvisionStatus,
+        mapError: mapProvisionError,
+        retryable: true,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) => mapProvisionError(502, { message: error?.message }, requestId)),
+
+    getOnboarding: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/onboarding`,
+        requestId,
+        idempotencyKey: null,
+        sendUpstreamRequest,
+        mapSuccess: (payload) => sanitizeBotOnboardingState(payload, false),
+        mapError: (status, payload, currentRequestId) =>
+          mapOnboardingError(status, payload, currentRequestId, "onboarding state not accessible"),
+        retryable: false,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapOnboardingError(503, { message: error?.message }, requestId, "onboarding state not accessible")),
+
+    putOnboarding: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      const validation = validateBotOnboardingUpdate(req.body);
+      if (!validation.success) {
+        const normalized = mapOnboardingError(
+          400,
+          { message: validation.message },
+          requestId,
+          "onboarding payload invalid"
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "PUT",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/onboarding`,
+        body: validation.data,
+        requestId,
+        idempotencyKey: createIdempotencyKey(req, requestId),
+        sendUpstreamRequest,
+        mapSuccess: (payload) => sanitizeBotOnboardingState(payload, validation.data.completed),
+        mapError: (status, payload, currentRequestId) =>
+          mapOnboardingError(status, payload, currentRequestId, "onboarding payload invalid"),
+        retryable: true,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapOnboardingError(503, { message: error?.message }, requestId, "onboarding payload invalid")),
+
+    getSettings: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/settings`,
+        requestId,
+        idempotencyKey: null,
+        sendUpstreamRequest,
+        mapSuccess: sanitizeBotSettingsProfile,
+        mapError: (status, payload, currentRequestId) =>
+          mapSettingsError(status, payload, currentRequestId, "settings unavailable"),
+        retryable: false,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapSettingsError(503, { message: error?.message }, requestId, "settings unavailable")),
+
+    patchSettings: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      const validation = validateBotSettingsPatch(req.body);
+      if (!validation.success) {
+        const normalized = mapSettingsError(
+          400,
+          { message: validation.message },
+          requestId,
+          validation.message
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "PATCH",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/settings`,
+        body: validation.data,
+        requestId,
+        idempotencyKey: createIdempotencyKey(req, requestId),
+        sendUpstreamRequest,
+        mapSuccess: sanitizeBotSettingsProfile,
+        mapError: (status, payload, currentRequestId) =>
+          mapSettingsError(status, payload, currentRequestId, "settings update failed"),
+        retryable: true,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapSettingsError(503, { message: error?.message }, requestId, "settings update failed")),
+
+    chatStream: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      const payload = req.body && typeof req.body === "object" ? req.body : {};
+      const uiFields = findUiSpecificFields(payload);
+      if (uiFields.length > 0) {
+        const normalized = mapForbiddenError(
+          `invalid chat payload: ${uiFields.join(", ")}`,
+          requestId,
+          400
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      const message = extractPayloadMessage(payload);
+      if (!message) {
+        const normalized = mapForbiddenError("invalid chat payload", requestId, 400);
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      const sessionKey = resolveCanonicalChatSessionKey({
+        userId: context.userId,
+        payload,
+      });
+      if (!sessionKey.success) {
+        const normalized = mapForbiddenError(sessionKey.message, requestId, 400);
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      const existingContext = payload.context && typeof payload.context === "object" ? payload.context : {};
+      const upstreamPayload = {
+        ...payload,
+        message,
+        session_key: sessionKey.sessionKey,
+        stream: true,
+        context: {
+          ...existingContext,
+          surface: "zaki_bot",
+        },
+      };
+      delete upstreamPayload.user_id;
+
+      const result = await withOwnershipLockRetry({
+        performRequest: () =>
+          sendUpstreamRequest({
+            method: "POST",
+            path: "/api/v1/chat/stream",
+            userId: context.userId,
+            requestId,
+            idempotencyKey: createIdempotencyKey(req, requestId),
+            body: upstreamPayload,
+          }),
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+
+      if (result.exhausted) {
+        const contention = mapContentionError(requestId);
+        res.status(contention.status).json(contention.body);
+        return;
+      }
+
+      if (!result.response.ok) {
+        const payloadError = await readResponsePayload(result.response.clone());
+        const normalized = mapChatStreamError(result.response.status, payloadError, requestId);
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      if (!result.response.body) {
+        res.status(502).json(
+          buildProductError({
+            error: PRODUCT_ERROR_CODES.TEMPORARY_CONTENTION,
+            message: "Agent stream interrupted. Retry shortly.",
+            retryable: true,
+            requestId,
+          })
+        );
+        return;
+      }
+
+      await proxySseResponse(result.response, res);
+    }, (requestId, error) => ({
+      status: 503,
+      body: buildProductError({
+        error: PRODUCT_ERROR_CODES.TEMPORARY_CONTENTION,
+        message: normalizedString(error?.message) || "Agent stream interrupted. Retry shortly.",
+        retryable: true,
+        requestId,
+      }),
+    })),
+
+    telegramConnect: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      const uiFields = findUiSpecificFields(req.body);
+      if (uiFields.length > 0) {
+        const normalized = mapForbiddenError(
+          `telegram connect payload invalid: ${uiFields.join(", ")}`,
+          requestId,
+          400
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+      const payload = normalizeTelegramConnectPayload(req.body);
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "POST",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/channels/telegram/connect`,
+        body: payload,
+        requestId,
+        idempotencyKey: createIdempotencyKey(req, requestId),
+        sendUpstreamRequest,
+        mapSuccess: () => sanitizeTelegramConnectionState("connected"),
+        mapError: mapTelegramConnectError,
+        retryable: false,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapTelegramConnectError(503, { message: error?.message }, requestId)),
+
+    telegramDisconnect: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "POST",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/channels/telegram/disconnect`,
+        body: {},
+        requestId,
+        idempotencyKey: createIdempotencyKey(req, requestId),
+        sendUpstreamRequest,
+        mapSuccess: () => sanitizeTelegramConnectionState("disconnected"),
+        mapError: mapTelegramDisconnectError,
+        retryable: false,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapTelegramDisconnectError(503, { message: error?.message }, requestId)),
+
+    usage: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      try {
+        const usagePayload = await buildUsageSummary({
+          req,
+          requestId,
+          userId: context.userId,
+          zakiUser: context.zakiUser,
+        });
+        res.status(200).json(usagePayload);
+      } catch {
+        const normalized = {
+          status: 503,
+          body: buildProductError({
+            error: PRODUCT_ERROR_CODES.USAGE_UNAVAILABLE,
+            message: "usage telemetry unavailable",
+            retryable: true,
+            requestId,
+          }),
+        };
+        res.status(normalized.status).json(normalized.body);
+      }
+    }, (requestId) => ({
+      status: 503,
+      body: buildProductError({
+        error: PRODUCT_ERROR_CODES.USAGE_UNAVAILABLE,
+        message: "usage telemetry unavailable",
+        retryable: true,
+        requestId,
+      }),
+    })),
+  };
+}
+
+export function mapBotBffAuthFailure(type, requestId) {
+  return mapAuthError(type, requestId);
+}

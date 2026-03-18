@@ -115,6 +115,7 @@ ZAKI_EMAIL_MODE=console
 ZAKI_AGENT_BACKEND_ENABLED=true
 NULLCLAW_BASE_URL=http://localhost:8788
 NULLCLAW_INTERNAL_TOKEN=replace_me
+ZAKI_AGENT_WEBHOOK_BASE_URL=https://agent-dev.zaki.com
 ```
 
 **Frontend** (`.env`):
@@ -186,6 +187,15 @@ If frontend and backend are split (`chatzaki.com` + `api.chatzaki.com`), ensure:
 - Backend `ZAKI_ALLOWED_ORIGINS` contains the exact website origins.
 - Ingress does not strip/alter HTTP methods on `/signup`, `/login`, `/api/*` (405 errors usually come from path/method routing mismatch).
 - TLS is enabled for both app and API hostnames.
+
+Recommended SEO edge redirects (301):
+- `http://chatzaki.com/*` -> `https://chatzaki.com/$1`
+- `http://www.chatzaki.com/*` -> `https://chatzaki.com/$1`
+- `https://www.chatzaki.com/*` -> `https://chatzaki.com/$1`
+- `https://chatzaki.com/?lang=ar` -> `https://chatzaki.com/ar/`
+- `https://www.chatzaki.com/?lang=ar` -> `https://chatzaki.com/ar/`
+
+If you use NGINX ingress, keep this logic at the edge (ingress/Cloudflare) so crawlers see canonical URLs before app rendering.
 
 ### Workspace/Thread Permission Model (Current)
 

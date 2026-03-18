@@ -11,6 +11,7 @@ export {
   searchMemories,
   buildContext,
   buildFastContext,
+  buildChatMemoryContext,
   stageMemory,
   getPendingConfirmations,
   getPendingConfirmationCount,
