@@ -186,6 +186,7 @@ function CompactRow({
   control,
   children,
   isRtl = false,
+  disabled = false,
 }: {
   title: string;
   summary: string;
@@ -193,11 +194,17 @@ function CompactRow({
   control?: ReactNode;
   children?: ReactNode;
   isRtl?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <div className="group rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 transition-colors dark:border-[#2b2119] dark:bg-[#17120f]">
+    <div
+      className={cn(
+        "group rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 transition-colors dark:border-[#2b2119] dark:bg-[#17120f]",
+        disabled && "bg-[#fcf8f3] dark:bg-[#15110e]"
+      )}
+    >
       <div className={cn("flex flex-col gap-3 sm:items-start sm:justify-between", isRtl ? "sm:flex-row-reverse" : "sm:flex-row")}>
-        <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
+        <div className={cn("min-w-0 flex-1", disabled && "opacity-75", isRtl && "text-right")}>
           <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             {title}
           </div>
@@ -210,7 +217,7 @@ function CompactRow({
             </p>
           ) : null}
         </div>
-        {control ? <div className="w-full shrink-0 sm:w-[220px]">{control}</div> : null}
+        {control ? <div className={cn("w-full shrink-0 sm:w-[220px]", disabled && "opacity-80")}>{control}</div> : null}
       </div>
       {children ? <div className="mt-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">{children}</div> : null}
     </div>
@@ -261,6 +268,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSectionValue>("");
   const [expandedChannel, setExpandedChannel] = useState<ChannelValue>(null);
+  const nullalisSettingsLocked = true;
 
   const setup = useMemo(
     () => (onboarding?.setup && typeof onboarding.setup === "object" ? onboarding.setup : null),
@@ -513,6 +521,14 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
           </div>
 
           <div className="relative flex-1 overflow-y-auto px-5 py-5">
+            <div className="mb-4 rounded-2xl border border-[#e3d4c4] bg-[#fbf6ef] px-4 py-3 dark:border-[#2b2119] dark:bg-[#15110e]">
+              <p className={cn("text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary", isRtl && "text-right")}>
+                {t("zakiSettingsSheet.locked.title")}
+              </p>
+              <p className={cn("mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle", isRtl && "text-right")}>
+                {t("zakiSettingsSheet.locked.note")}
+              </p>
+            </div>
             <Accordion
               type="single"
               collapsible
@@ -542,11 +558,13 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       summary={responseStyleLabel}
                       helper={t("zakiSettingsSheet.fields.responseStyle.helper")}
                       isRtl={isRtl}
+                      disabled={nullalisSettingsLocked}
                       control={
                         <select
                           aria-label={t("zakiSettingsSheet.fields.responseStyle.title")}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus disabled:cursor-not-allowed disabled:bg-[#f6efe6] disabled:text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary dark:disabled:bg-[#181310]"
                           value={settingsDraft.assistant_mode}
+                          disabled={nullalisSettingsLocked}
                           onChange={(event) =>
                             setSettingsDraft((current) => ({
                               ...current,
@@ -566,11 +584,13 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       summary={joinBehaviorLabel}
                       helper={t("zakiSettingsSheet.fields.joinBehavior.helper")}
                       isRtl={isRtl}
+                      disabled={nullalisSettingsLocked}
                       control={
                         <select
                           aria-label={t("zakiSettingsSheet.fields.joinBehavior.title")}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus disabled:cursor-not-allowed disabled:bg-[#f6efe6] disabled:text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary dark:disabled:bg-[#181310]"
                           value={settingsDraft.group_activation}
+                          disabled={nullalisSettingsLocked}
                           onChange={(event) =>
                             setSettingsDraft((current) => ({
                               ...current,
@@ -593,6 +613,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       )}
                       helper={t("zakiSettingsSheet.fields.proactiveUpdates.helper")}
                       isRtl={isRtl}
+                      disabled={nullalisSettingsLocked}
                       control={
                         <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
                           <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
@@ -606,6 +627,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                             aria-label={t("zakiSettingsSheet.fields.proactiveUpdates.title")}
                             type="checkbox"
                             checked={settingsDraft.proactive_updates}
+                            disabled={nullalisSettingsLocked}
                             onChange={(event) =>
                               setSettingsDraft((current) => ({
                                 ...current,
@@ -626,6 +648,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       )}
                       helper={t("zakiSettingsSheet.fields.voiceReplies.helper")}
                       isRtl={isRtl}
+                      disabled={nullalisSettingsLocked}
                       control={
                         <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
                           <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
@@ -639,6 +662,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                             aria-label={t("zakiSettingsSheet.fields.voiceReplies.title")}
                             type="checkbox"
                             checked={settingsDraft.voice_replies}
+                            disabled={nullalisSettingsLocked}
                             onChange={(event) =>
                               setSettingsDraft((current) => ({
                                 ...current,
@@ -657,14 +681,16 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       })}
                       helper={t("zakiSettingsSheet.fields.sessionWindow.helper")}
                       isRtl={isRtl}
+                      disabled={nullalisSettingsLocked}
                       control={
                         <input
                           aria-label={t("zakiSettingsSheet.fields.sessionWindow.title")}
                           type="number"
                           min={5}
                           max={180}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus disabled:cursor-not-allowed disabled:bg-[#f6efe6] disabled:text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary dark:disabled:bg-[#181310]"
                           value={settingsDraft.session_timeout_minutes}
+                          disabled={nullalisSettingsLocked}
                           onChange={(event) =>
                             setSettingsDraft((current) => ({
                               ...current,
@@ -812,8 +838,9 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         connected: connectedChannelsCount,
                         total: 3,
                       })}
-                      helper={t("zakiSettingsSheet.workspace.channelsHelper")}
+                      helper={t("zakiSettingsSheet.locked.note")}
                       isRtl={isRtl}
+                      disabled={nullalisSettingsLocked}
                     >
                       <div className="space-y-3">
                         {([
@@ -874,20 +901,23 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                                 </div>
                                 <button
                                   type="button"
-                                  className="zaki-btn-sm zaki-btn-secondary"
+                                  className="zaki-btn-sm zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                                  disabled={nullalisSettingsLocked}
                                   onClick={() =>
                                     setExpandedChannel((current) =>
                                       current === channel.key ? null : channel.key
                                     )
                                   }
                                 >
-                                  {expanded
-                                    ? t("zakiSettingsSheet.actions.hide")
-                                    : t("zakiSettingsSheet.actions.manage")}
+                                  {nullalisSettingsLocked
+                                    ? t("zakiSettingsSheet.actions.comingSoon")
+                                    : expanded
+                                      ? t("zakiSettingsSheet.actions.hide")
+                                      : t("zakiSettingsSheet.actions.manage")}
                                 </button>
                               </div>
 
-                              {expanded ? (
+                              {expanded && !nullalisSettingsLocked ? (
                                 channel.key === "telegram" ? (
                                   <div className="mt-3 grid gap-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">
                                     <input

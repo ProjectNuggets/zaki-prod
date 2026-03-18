@@ -459,6 +459,10 @@
   "zakiSettingsSheet": {
     "badge": "ZAKI settings",
     "title": "Tune how ZAKI shows up",
+    "locked": {
+      "title": "Coming soon",
+      "note": "channels + advanced agent behavior coming soon; currently available in app only."
+    },
     "header": {
       "readySummary": "{{mode}} replies, {{join}} access, ready to use.",
       "setupSummary": "Core behavior first. Setup, channels, and limits stay tucked behind quick sections."
@@ -576,6 +580,7 @@
       "connectTelegram": "Connect Telegram",
       "disconnect": "Disconnect",
       "manage": "Manage",
+      "comingSoon": "Coming soon",
       "hide": "Hide",
       "openSettings": "Open settings",
       "openHelp": "Open help"

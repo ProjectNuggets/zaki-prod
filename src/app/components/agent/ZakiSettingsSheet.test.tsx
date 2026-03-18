@@ -157,51 +157,34 @@ describe("ZakiSettingsSheet", () => {
     expect(screen.queryByText("settingsModal.profile.displayName")).not.toBeInTheDocument();
   });
 
-  it("saves the product settings payload from the unified footer action", async () => {
-    const user = userEvent.setup();
+  it("shows the locked end-user note and disables core behavior edits", async () => {
     render(<TestHarness />);
 
     await screen.findByText("zakiSettingsSheet.title");
+    expect(screen.getByText("zakiSettingsSheet.locked.note")).toBeInTheDocument();
+
+    const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.core.title/i }));
 
-    await user.selectOptions(
-      screen.getByLabelText("zakiSettingsSheet.fields.responseStyle.title"),
-      "deep"
-    );
-    await user.selectOptions(
-      screen.getByLabelText("zakiSettingsSheet.fields.joinBehavior.title"),
-      "always"
-    );
-    await user.clear(screen.getByLabelText("zakiSettingsSheet.fields.sessionWindow.title"));
-    await user.type(screen.getByLabelText("zakiSettingsSheet.fields.sessionWindow.title"), "45");
-    await user.click(screen.getByLabelText("zakiSettingsSheet.fields.proactiveUpdates.title"));
-    await user.click(screen.getByLabelText("zakiSettingsSheet.fields.voiceReplies.title"));
-    await user.click(screen.getByRole("button", { name: "settingsModal.footer.saveChanges" }));
-
-    await waitFor(() => {
-      expect(updateBotSettings).toHaveBeenCalledWith({
-        assistant_mode: "deep",
-        group_activation: "always",
-        proactive_updates: false,
-        voice_replies: true,
-        session_timeout_minutes: 45,
-      });
-    });
+    expect(screen.getByLabelText("zakiSettingsSheet.fields.responseStyle.title")).toBeDisabled();
+    expect(screen.getByLabelText("zakiSettingsSheet.fields.joinBehavior.title")).toBeDisabled();
+    expect(screen.getByLabelText("zakiSettingsSheet.fields.sessionWindow.title")).toBeDisabled();
+    expect(screen.getByLabelText("zakiSettingsSheet.fields.proactiveUpdates.title")).toBeDisabled();
+    expect(screen.getByLabelText("zakiSettingsSheet.fields.voiceReplies.title")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "settingsModal.footer.saveChanges" })).toBeDisabled();
+    expect(updateBotSettings).not.toHaveBeenCalled();
   });
 
-  it("shows only one channel configuration panel at a time", async () => {
+  it("shows channel controls as coming soon for end users", async () => {
     const user = userEvent.setup();
     render(<TestHarness />);
 
     await screen.findByText("zakiSettingsSheet.title");
 
     await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.workspace.title/i }));
-    await user.click(screen.getAllByRole("button", { name: "zakiSettingsSheet.actions.manage" })[0]);
-    expect(screen.getByPlaceholderText("zakiSettingsSheet.workspace.telegramToken")).toBeInTheDocument();
-
-    await user.click(screen.getAllByRole("button", { name: "zakiSettingsSheet.actions.manage" })[0]);
+    expect(screen.getAllByRole("button", { name: "zakiSettingsSheet.actions.comingSoon" })).toHaveLength(3);
     expect(screen.queryByPlaceholderText("zakiSettingsSheet.workspace.telegramToken")).not.toBeInTheDocument();
-    expect(screen.getByText("Open Slack")).toBeInTheDocument();
+    expect(screen.queryByText("Open Slack")).not.toBeInTheDocument();
   });
 
   it("shows load-specific copy when settings fail to load for an unknown bot user", async () => {
