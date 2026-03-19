@@ -51,14 +51,31 @@ jobs:
         run: npm --prefix backend test
 
   api-smoke:
-    if: ${{ env.SMOKE_BASE_URL != '' && env.SMOKE_EMAIL != '' && env.SMOKE_PASSWORD != '' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve smoke config
+        id: smoke-config
+        env:
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SMOKE_BASE_URL}" ] && [ -n "${SMOKE_EMAIL}" ] && [ -n "${SMOKE_PASSWORD}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping API smoke: SMOKE_BASE_URL / SMOKE_EMAIL / SMOKE_PASSWORD not fully configured."
+          fi
+
       - uses: actions/checkout@v4
+        if: ${{ steps.smoke-config.outputs.enabled == 'true' }}
       - uses: actions/setup-node@v4
+        if: ${{ steps.smoke-config.outputs.enabled == 'true' }}
         with:
           node-version: 20
       - name: API smoke test (auth + profile + entitlements)
+        if: ${{ steps.smoke-config.outputs.enabled == 'true' }}
         env:
           SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
@@ -88,17 +105,36 @@ jobs:
           fi
 
   memory-load:
-    if: ${{ env.LOAD_BASE_URL != '' && (env.LOAD_TOKEN != '' || (env.LOAD_EMAIL != '' && env.LOAD_PASSWORD != '')) }}
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve load config
+        id: load-config
+        env:
+          LOAD_BASE_URL: ${{ secrets.LOAD_BASE_URL }}
+          LOAD_TOKEN: ${{ secrets.LOAD_TOKEN }}
+          LOAD_EMAIL: ${{ secrets.LOAD_EMAIL }}
+          LOAD_PASSWORD: ${{ secrets.LOAD_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LOAD_BASE_URL}" ] && { [ -n "${LOAD_TOKEN}" ] || { [ -n "${LOAD_EMAIL}" ] && [ -n "${LOAD_PASSWORD}" ]; }; }; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping memory load sanity: LOAD_BASE_URL and auth secrets are not fully configured."
+          fi
+
       - uses: actions/checkout@v4
+        if: ${{ steps.load-config.outputs.enabled == 'true' }}
       - uses: actions/setup-node@v4
+        if: ${{ steps.load-config.outputs.enabled == 'true' }}
         with:
           node-version: 20
           cache: npm
       - name: Install frontend deps
+        if: ${{ steps.load-config.outputs.enabled == 'true' }}
         run: npm ci
       - name: Memory load sanity
+        if: ${{ steps.load-config.outputs.enabled == 'true' }}
         env:
           LOAD_BASE_URL: ${{ secrets.LOAD_BASE_URL }}
           LOAD_TOKEN: ${{ secrets.LOAD_TOKEN }}
