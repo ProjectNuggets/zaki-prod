@@ -102,7 +102,7 @@ jobs:
         env:
           LOAD_BASE_URL: ${{ secrets.LOAD_BASE_URL }}
           LOAD_TOKEN: ${{ secrets.LOAD_TOKEN }}
-          LOAD_EMAIL: ${{ env.LOAD_EMAIL }}
+          LOAD_EMAIL: ${{ secrets.LOAD_EMAIL }}
           LOAD_PASSWORD: ${{ secrets.LOAD_PASSWORD }}
           LOAD_POLICY_VERSION: ${{ secrets.LOAD_POLICY_VERSION }}
         run: |
