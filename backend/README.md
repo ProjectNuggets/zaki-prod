@@ -15,7 +15,7 @@ cp .env.example .env
 - `NOVA_TYP_BASE_URL` (ex: `https://typ.novanuggets.com`)
 - `NOVA_TYP_API_KEY` (admin API key from NOVA.TYP)
 - `ZAKI_AGENT_BACKEND_ENABLED` (`true` to enable Nullclaw adapter route)
-- `NULLCLAW_BASE_URL` (ex: `https://agent-staging.zaki.com`)
+- `NULLCLAW_BASE_URL` (canonical production value: `http://nullclaw:3000`)
 - `NULLCLAW_INTERNAL_TOKEN` (must match Nullclaw `X-Internal-Token` allowlist)
 - `ZAKI_AGENT_WEBHOOK_BASE_URL` (optional but recommended; used for Telegram connect when UI does not pass a webhook URL, ex: `https://agent-dev.zaki.com`)
 - `ZAKI_AGENT_RATE_LIMIT_PER_MINUTE` (optional per-user limiter for `/api/agent/*`, default `60`)
@@ -107,6 +107,10 @@ npm run migrate:sqlite
 - `GET /api/agent/diagnostics` — authenticated per-user agent diagnostics (no secrets returned)
 
 Billing endpoints may return `503` with code `billing_unavailable` when Stripe is not configured in the runtime environment.
+
+Nullclaw ownership note:
+- `zaki-prod` owns only the backend proxy contract to Nullclaw.
+- `zaki-prod` does not own Nullclaw provider selection, Together AI configuration, or Kubernetes deployment topology.
 
 If `ZAKI_MEMORY_ALERT_WEBHOOK_URL` is configured, memory telemetry alerts are forwarded as JSON POST requests to that endpoint.
 

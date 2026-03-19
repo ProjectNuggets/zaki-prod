@@ -79,11 +79,14 @@ import {
 } from "./agent-bff-contract.js";
 import {
   createBotBffHandlers,
+  PRODUCT_ERROR_CODES,
+  buildProductError,
   isChatSessionKeyValidationFailure,
   mapBotBffAuthFailure,
   normalizeBotUsageSummaryFromQuota,
   resolveCanonicalChatSessionKey,
 } from "./bot-bff.js";
+import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -2438,30 +2441,45 @@ function copyResponseHeaders(upstream, res) {
   });
 }
 
+function sanitizeAgentUpstreamPayload(payload) {
+  if (payload == null) return null;
+  if (typeof payload === "string") {
+    return payload.slice(0, 500);
+  }
+  if (typeof payload !== "object") {
+    return payload;
+  }
+
+  const sanitized = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (["error", "code", "message", "status", "request_id", "retryable"].includes(key)) {
+      sanitized[key] = typeof value === "string" ? value.slice(0, 300) : value;
+    }
+  }
+  return sanitized;
+}
+
+async function readAgentUpstreamPayload(response) {
+  if (!response) return null;
+  try {
+    const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
+    if (contentType.includes("application/json")) {
+      return sanitizeAgentUpstreamPayload(await response.json());
+    }
+
+    const text = await response.text();
+    return sanitizeAgentUpstreamPayload(text.trim());
+  } catch (err) {
+    return sanitizeAgentUpstreamPayload(err instanceof Error ? err.message : String(err || ""));
+  }
+}
+
 async function getBackendHealthStatus() {
   try {
     await dbQuery("SELECT 1");
-    return {
-      ok: true,
-      statusCode: 200,
-      body: {
-        ok: true,
-        status: "healthy",
-        database: "connected",
-        timestamp: new Date().toISOString(),
-      },
-    };
+    return buildBackendHealthStatus();
   } catch (err) {
-    return {
-      ok: false,
-      statusCode: 503,
-      body: {
-        ok: false,
-        status: "unhealthy",
-        database: "disconnected",
-        error: err.message,
-      },
-    };
+    return buildBackendHealthStatus(err);
   }
 }
 
@@ -2471,32 +2489,9 @@ app.get("/health", async (_, res) => {
 });
 
 app.get("/ready", async (_, res) => {
-  if (isDraining) {
-    res.status(503).json({
-      ok: false,
-      status: "draining",
-      signal: shutdownSignal,
-      retryable: true,
-    });
-    return;
-  }
-
   const health = await getBackendHealthStatus();
-  if (!health.ok) {
-    res.status(503).json({
-      ...health.body,
-      status: "not_ready",
-      retryable: true,
-    });
-    return;
-  }
-
-  res.status(200).json({
-    ok: true,
-    status: "ready",
-    database: "connected",
-    timestamp: health.body.timestamp,
-  });
+  const ready = buildBackendReadyStatus({ health, isDraining, shutdownSignal });
+  res.status(ready.statusCode).json(ready.body);
 });
 
 // =============================================================================
@@ -8370,6 +8365,10 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     "Nullclaw proxy request"
   );
 
+  if (typeof options.onUpstreamResponse === "function") {
+    await options.onUpstreamResponse(upstream);
+  }
+
   res.status(upstream.status);
   copyResponseHeaders(upstream, res);
   if (!upstream.body) {
@@ -8380,13 +8379,21 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
 }
 
 const agentProvisionHandler = async (req, res) => {
+  const requestId = String(req.requestId || crypto.randomUUID());
   try {
     const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
     if (!authResult) return;
 
     const userId = resolveCanonicalAgentUserId(authResult);
     if (!userId) {
-      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+      return res.status(400).json(
+        buildProductError({
+          error: "invalid_user_id",
+          message: "Invalid user.",
+          retryable: false,
+          requestId,
+        })
+      );
     }
 
     const payload =
@@ -8396,11 +8403,32 @@ const agentProvisionHandler = async (req, res) => {
       method: "POST",
       userId,
       body: buildBotProvisionPayload(userId, payload),
+      async onUpstreamResponse(upstream) {
+        if (upstream.ok) return;
+
+        const upstreamPayload = await readAgentUpstreamPayload(upstream.clone());
+        console.error("[Agent] Provision upstream failure:", {
+          requestId,
+          userId,
+          upstreamStatus: upstream.status,
+          upstreamPayload,
+        });
+      },
     });
     return;
   } catch (error) {
-    console.error("[Agent] Provision error:", error);
-    return res.status(500).json({ error: error?.message || "Agent provision failed." });
+    console.error("[Agent] Provision upstream unavailable:", {
+      requestId,
+      error: error?.message || "Agent provision failed.",
+    });
+    return res.status(503).json(
+      buildProductError({
+        error: PRODUCT_ERROR_CODES.PROVISION_FAILED,
+        message: "Agent provisioning is temporarily unavailable.",
+        retryable: true,
+        requestId,
+      })
+    );
   }
 };
 
