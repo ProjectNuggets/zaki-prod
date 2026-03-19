@@ -8447,6 +8447,11 @@ const botBffHandlers = createBotBffHandlers({
 const agentJson10mb = express.json({ limit: "10mb" });
 const agentJson1mb = express.json({ limit: "1mb" });
 
+// CORS preflight for agent routes - must handle OPTIONS before auth middleware
+app.options("/api/agent/chat/stream", cors());
+app.options("/api/agent/provision", cors());
+app.options("/api/agent/disconnect", cors());
+
 app.post(
   "/api/agent/chat/stream",
   requireAgentContext,
