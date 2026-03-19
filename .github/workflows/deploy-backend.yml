@@ -57,4 +57,4 @@ jobs:
       - name: Restart backend deployment
         run: |
           kubectl rollout restart deployment/"${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}"
-          kubectl rollout status deployment/"${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}" --timeout=180s
+          kubectl rollout status deployment/"${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}" --timeout=600s

@@ -162,6 +162,11 @@ async function previewAndNotify({ userId, message, threadId = null }) {
 
 const PORT = Number(process.env.PORT || 8787);
 const isProduction = process.env.NODE_ENV === "production";
+const SHUTDOWN_GRACE_MS = Math.max(Number(process.env.ZAKI_SHUTDOWN_GRACE_MS || 45000), 1000);
+const SOCKET_DRAIN_TIMEOUT_MS = Math.max(
+  Number(process.env.ZAKI_SOCKET_DRAIN_TIMEOUT_MS || 15000),
+  1000
+);
 const TRUST_PROXY_SETTING = (() => {
   const raw = String(process.env.ZAKI_TRUST_PROXY || "").trim().toLowerCase();
   if (!raw) return isProduction ? 1 : false;
@@ -178,6 +183,24 @@ function normalizeEmailValue(value) {
 const app = express();
 app.set("trust proxy", TRUST_PROXY_SETTING);
 const billingHealth = createBillingHealthTracker();
+let isDraining = false;
+let shutdownSignal = null;
+let shutdownTimer = null;
+const activeConnections = new Set();
+
+app.use((req, res, next) => {
+  if (!isDraining || req.path === "/health" || req.path === "/ready") {
+    next();
+    return;
+  }
+
+  res.setHeader("Connection", "close");
+  res.status(503).json({
+    error: "ZAKI backend is draining for deployment. Please retry shortly.",
+    code: "backend_draining",
+    retryable: true,
+  });
+});
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
@@ -2415,24 +2438,65 @@ function copyResponseHeaders(upstream, res) {
   });
 }
 
-app.get("/health", async (_, res) => {
+async function getBackendHealthStatus() {
   try {
-    // Check database connection using dbQuery
-    await dbQuery('SELECT 1');
-    res.status(200).json({ 
-      ok: true, 
-      status: 'healthy',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    });
+    await dbQuery("SELECT 1");
+    return {
+      ok: true,
+      statusCode: 200,
+      body: {
+        ok: true,
+        status: "healthy",
+        database: "connected",
+        timestamp: new Date().toISOString(),
+      },
+    };
   } catch (err) {
-    res.status(503).json({ 
-      ok: false, 
-      status: 'unhealthy',
-      database: 'disconnected',
-      error: err.message
-    });
+    return {
+      ok: false,
+      statusCode: 503,
+      body: {
+        ok: false,
+        status: "unhealthy",
+        database: "disconnected",
+        error: err.message,
+      },
+    };
   }
+}
+
+app.get("/health", async (_, res) => {
+  const health = await getBackendHealthStatus();
+  res.status(health.statusCode).json(health.body);
+});
+
+app.get("/ready", async (_, res) => {
+  if (isDraining) {
+    res.status(503).json({
+      ok: false,
+      status: "draining",
+      signal: shutdownSignal,
+      retryable: true,
+    });
+    return;
+  }
+
+  const health = await getBackendHealthStatus();
+  if (!health.ok) {
+    res.status(503).json({
+      ...health.body,
+      status: "not_ready",
+      retryable: true,
+    });
+    return;
+  }
+
+  res.status(200).json({
+    ok: true,
+    status: "ready",
+    database: "connected",
+    timestamp: health.body.timestamp,
+  });
 });
 
 // =============================================================================
@@ -9097,6 +9161,12 @@ agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
+  if (isDraining) {
+    socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
   const url = new URL(req.url || "", "http://localhost");
   const match = url.pathname.match(/^\/api\/agent-invocation\/([^/]+)$/);
   if (!match) {
@@ -9114,6 +9184,70 @@ server.on("upgrade", (req, socket, head) => {
     agentProxyWss.emit("connection", ws, req, invocationId);
   });
 });
+
+server.on("connection", (socket) => {
+  activeConnections.add(socket);
+
+  if (isDraining) {
+    socket.end();
+  }
+
+  socket.on("close", () => {
+    activeConnections.delete(socket);
+  });
+});
+
+function beginGracefulShutdown(signal) {
+  if (isDraining) {
+    return;
+  }
+
+  isDraining = true;
+  shutdownSignal = signal;
+  console.log(`[Shutdown] Received ${signal}. Draining zaki-api before exit.`);
+
+  for (const client of agentProxyWss.clients) {
+    client.close(1001, "server_shutdown");
+  }
+
+  server.close((error) => {
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
+      shutdownTimer = null;
+    }
+
+    if (error) {
+      console.error("[Shutdown] Error while closing HTTP server:", error);
+      process.exit(1);
+      return;
+    }
+
+    console.log("[Shutdown] zaki-api drained successfully.");
+    process.exit(0);
+  });
+
+  for (const socket of activeConnections) {
+    socket.end();
+  }
+
+  setTimeout(() => {
+    for (const socket of activeConnections) {
+      socket.destroy();
+    }
+  }, SOCKET_DRAIN_TIMEOUT_MS).unref();
+
+  shutdownTimer = setTimeout(() => {
+    console.error(`[Shutdown] Force exiting after ${SHUTDOWN_GRACE_MS}ms drain timeout.`);
+    for (const socket of activeConnections) {
+      socket.destroy();
+    }
+    process.exit(1);
+  }, SHUTDOWN_GRACE_MS);
+  shutdownTimer.unref();
+}
+
+process.on("SIGTERM", () => beginGracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => beginGracefulShutdown("SIGINT"));
 
 server.listen(PORT, () => {
   console.log(`ZAKI backend listening on port ${PORT}`);
