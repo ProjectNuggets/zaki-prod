@@ -64,6 +64,7 @@ import {
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
+import { resolveInternalAgentSmokeRequest } from "./agent-internal-auth.js";
 import {
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
@@ -275,6 +276,10 @@ const RATE_LIMITS_RUNTIME_SETTINGS_VERSION = 1;
 const AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS || 3_000)
+);
+const ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS = Math.max(
+  250,
+  Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 1_500)
 );
 const ZAKI_BILLING_ALERT_WEBHOOK_URL = (
   process.env.ZAKI_BILLING_ALERT_WEBHOOK_URL || ""
@@ -2936,7 +2941,7 @@ app.post(
   productTelemetryLimiter,
   express.json({ limit: "100kb" }),
   async (req, res) => {
-    const authResult = await requireAuthUser(req, res);
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
     if (!authResult) return;
     const userId = String(authResult.zakiUser?.id || "").trim();
     if (!userId) {
@@ -7651,7 +7656,7 @@ const agentChatStreamHandler = async (req, res) => {
       return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
     }
 
-    const authResult = await requireAuthUser(req, res);
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
     if (!authResult) return;
     const userId = resolveCanonicalAgentUserId(authResult);
     if (!userId) {
@@ -7670,6 +7675,50 @@ const agentChatStreamHandler = async (req, res) => {
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
     }
+
+    try {
+      const readyProbe = await fetchWithTimeout(
+        `${nullclawBase}/ready`,
+        {
+          method: "GET",
+          headers: buildAgentForwardHeaders({
+            internalToken: NULLCLAW_INTERNAL_TOKEN,
+            userId,
+            requestId: String(req.requestId || crypto.randomUUID()),
+            contentType: "application/json",
+          }),
+        },
+        ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
+        "Agent upstream ready probe"
+      );
+      if (!readyProbe.ok) {
+        if (String(req.headers.accept || "").includes("text/event-stream")) {
+          sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
+            code: "agent_unavailable",
+            retryable: true,
+          });
+          return;
+        }
+        return res.status(503).json({
+          error: "ZAKI agent is temporarily unavailable. Please try again shortly.",
+          code: "agent_unavailable",
+        });
+      }
+    } catch (error) {
+      trackAgentStreamDiagnostic(userId, error);
+      if (String(req.headers.accept || "").includes("text/event-stream")) {
+        sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
+          code: "agent_unavailable",
+          retryable: true,
+        });
+        return;
+      }
+      return res.status(503).json({
+        error: "ZAKI agent is temporarily unavailable. Please try again shortly.",
+        code: "agent_unavailable",
+      });
+    }
+
     const agentQuotaDecision = await enforcePromptQuotaForIngress({
       zakiUser: authResult.zakiUser,
       res,
@@ -7999,20 +8048,24 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
   }
 
   let upstreamHealth = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
+  let upstreamReady = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
+  let upstreamSummary = null;
   const nullclawBase = getNullclawBase();
   if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
-    const startedAt = Date.now();
+    const headers = buildAgentForwardHeaders({
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId: String(req.requestId || crypto.randomUUID()),
+      contentType: "application/json",
+    });
+
+    const healthStartedAt = Date.now();
     try {
       const upstream = await fetchWithTimeout(
         `${nullclawBase}/health`,
         {
           method: "GET",
-          headers: buildAgentForwardHeaders({
-            internalToken: NULLCLAW_INTERNAL_TOKEN,
-            userId,
-            requestId: String(req.requestId || crypto.randomUUID()),
-            contentType: "application/json",
-          }),
+          headers,
         },
         AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
         "Agent diagnostics health check"
@@ -8020,15 +8073,81 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
       upstreamHealth = {
         ok: upstream.ok,
         status: Number(upstream.status || 0),
-        latencyMs: Date.now() - startedAt,
+        latencyMs: Date.now() - healthStartedAt,
         reason: upstream.ok ? "ok" : "upstream_error",
       };
     } catch (error) {
       upstreamHealth = {
         ok: false,
         status: 0,
-        latencyMs: Date.now() - startedAt,
+        latencyMs: Date.now() - healthStartedAt,
         reason: error instanceof Error ? error.name || "health_error" : "health_error",
+      };
+    }
+
+    const readyStartedAt = Date.now();
+    try {
+      const ready = await fetchWithTimeout(
+        `${nullclawBase}/ready`,
+        {
+          method: "GET",
+          headers,
+        },
+        AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+        "Agent diagnostics ready check"
+      );
+      upstreamReady = {
+        ok: ready.ok,
+        status: Number(ready.status || 0),
+        latencyMs: Date.now() - readyStartedAt,
+        reason: ready.ok ? "ok" : "upstream_error",
+      };
+    } catch (error) {
+      upstreamReady = {
+        ok: false,
+        status: 0,
+        latencyMs: Date.now() - readyStartedAt,
+        reason: error instanceof Error ? error.name || "ready_error" : "ready_error",
+      };
+    }
+
+    try {
+      const diagnostics = await fetchWithTimeout(
+        `${nullclawBase}/internal/diagnostics`,
+        {
+          method: "GET",
+          headers,
+        },
+        AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+        "Agent diagnostics upstream summary"
+      );
+      const diagnosticsPayload = await diagnostics.json().catch(() => ({}));
+      if (diagnostics.ok) {
+        upstreamSummary = {
+          provider:
+            diagnosticsPayload?.startup_self_check?.chat_provider_effective ||
+            diagnosticsPayload?.startup_self_check?.chat_provider ||
+            null,
+          stateBackend:
+            diagnosticsPayload?.startup_self_check?.state_backend_effective ||
+            diagnosticsPayload?.startup_self_check?.state_backend ||
+            null,
+          schedulerBackend: diagnosticsPayload?.startup_self_check?.scheduler_backend || null,
+          degraded:
+            typeof diagnosticsPayload?.startup_self_check?.degraded === "boolean"
+              ? diagnosticsPayload.startup_self_check.degraded
+              : null,
+          providerDataSource:
+            diagnosticsPayload?.startup_self_check?.provider_data_source || null,
+        };
+      }
+    } catch (error) {
+      upstreamSummary = {
+        provider: null,
+        stateBackend: null,
+        schedulerBackend: null,
+        degraded: null,
+        providerDataSource: error instanceof Error ? error.name || "summary_error" : "summary_error",
       };
     }
   }
@@ -8040,6 +8159,8 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
     nullclawBaseConfigured: Boolean(nullclawBase),
     historyModeDefault: AGENT_HISTORY_MODE_DEFAULT,
     upstreamHealth,
+    upstreamReady,
+    upstreamSummary,
     lastAgentStreamError: streamState,
   });
 });
@@ -8126,6 +8247,31 @@ async function requireBotBffContext(req, res, next) {
 async function requireAgentContext(req, res, next) {
   const existingUserId = String(req.agentUserId || "").trim();
   if (existingUserId) {
+    next();
+    return;
+  }
+
+  const internalSmokeRequest = resolveInternalAgentSmokeRequest(req, NULLCLAW_INTERNAL_TOKEN);
+  if (internalSmokeRequest.mode === "error") {
+    res.status(internalSmokeRequest.status).json(internalSmokeRequest.body);
+    return;
+  }
+  if (internalSmokeRequest.mode === "authorized") {
+    const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1", [
+      Number(internalSmokeRequest.userId),
+    ]);
+    if (!zakiUser) {
+      res.status(404).json({ error: "ZAKI user not found." });
+      return;
+    }
+
+    req.agentAuthResult = {
+      email: normalizeEmail(String(zakiUser.email || "")),
+      sessionUser: null,
+      zakiUser,
+      internalSmoke: true,
+    };
+    req.agentUserId = internalSmokeRequest.userId;
     next();
     return;
   }

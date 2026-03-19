@@ -20,6 +20,11 @@ The alias surface is additive and backward compatible. Existing `/api/agent/*` r
   - `X-Internal-Token`
   - `X-Zaki-User-Id`
   - `X-Request-Id`
+- Production smoke checks may use a tightly scoped internal-token bypass for:
+  - `POST /api/agent/chat/stream`
+  - `GET /api/agent/diagnostics`
+  - `POST /v1/me/bot/chat/stream`
+  This is restricted to internal-token callers and canonical numeric `X-Zaki-User-Id` values.
 
 ## Route mapping
 
