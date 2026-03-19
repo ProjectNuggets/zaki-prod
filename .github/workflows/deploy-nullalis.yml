@@ -90,7 +90,7 @@ jobs:
             echo "::error::Backend deployment '${{ steps.inputs.outputs.backend_deployment }}' not found in namespace '${{ steps.inputs.outputs.backend_namespace }}'."
             exit 1
           fi
-          for object in "secret/nullclaw-runtime-secrets" "serviceaccount/nullclaw" "configmap/nullclaw-litestream-config" "pvc/nullclaw-data-rwx"; do
+          for object in "secret/nullclaw-runtime-secrets" "serviceaccount/nullclaw" "configmap/nullclaw-litestream-config" "pvc/nullclaw-data-rwx" "service/${{ steps.inputs.outputs.deployment }}"; do
             if ! kubectl get "${object}" -n "${{ steps.inputs.outputs.namespace }}" > /dev/null 2>&1; then
               echo "::error::Required object '${object}' not found in namespace '${{ steps.inputs.outputs.namespace }}'."
               exit 1
@@ -180,9 +180,36 @@ jobs:
           }
           trap cleanup EXIT
 
-          kubectl port-forward deployment/"${deployment}" -n "${namespace}" 13000:3000 >/tmp/nullalis-port-forward.log 2>&1 &
+          wait_for_http() {
+            name="$1"
+            url="$2"
+            pid="$3"
+            log_file="$4"
+
+            for _ in $(seq 1 30); do
+              if curl -fsS "${url}" >/dev/null 2>&1; then
+                return 0
+              fi
+              if ! kill -0 "${pid}" >/dev/null 2>&1; then
+                echo "${name} port-forward exited before becoming ready."
+                cat "${log_file}" || true
+                return 1
+              fi
+              sleep 2
+            done
+
+            echo "${name} port-forward did not become ready in time."
+            cat "${log_file}" || true
+            return 1
+          }
+
+          kubectl port-forward service/"${deployment}" -n "${namespace}" 13000:80 >/tmp/nullalis-port-forward.log 2>&1 &
+          nullalis_pf_pid=$!
           kubectl port-forward deployment/"${backend_deployment}" -n "${backend_namespace}" 18787:8787 >/tmp/zaki-api-port-forward.log 2>&1 &
-          sleep 6
+          backend_pf_pid=$!
+
+          wait_for_http "nullalis" "http://127.0.0.1:13000/health" "${nullalis_pf_pid}" /tmp/nullalis-port-forward.log
+          wait_for_http "zaki-api" "http://127.0.0.1:18787/health" "${backend_pf_pid}" /tmp/zaki-api-port-forward.log
 
           BASE_URL="http://127.0.0.1:13000" \
           INTERNAL_TOKEN="${internal_token}" \
