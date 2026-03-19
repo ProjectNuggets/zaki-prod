@@ -51,7 +51,7 @@ jobs:
         run: npm --prefix backend test
 
   api-smoke:
-    if: ${{ secrets.SMOKE_BASE_URL != '' && secrets.SMOKE_EMAIL != '' && secrets.SMOKE_PASSWORD != '' }}
+    if: ${{ env.SMOKE_BASE_URL != '' && env.SMOKE_EMAIL != '' && env.SMOKE_PASSWORD != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +88,7 @@ jobs:
           fi
 
   memory-load:
-    if: ${{ secrets.LOAD_BASE_URL != '' && (secrets.LOAD_TOKEN != '' || (secrets.LOAD_EMAIL != '' && secrets.LOAD_PASSWORD != '')) }}
+    if: ${{ env.LOAD_BASE_URL != '' && (env.LOAD_TOKEN != '' || (secrets.LOAD_EMAIL != '' && env.LOAD_PASSWORD != '')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
