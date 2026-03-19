@@ -64,7 +64,13 @@ import {
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
-import { resolveInternalAgentSmokeRequest } from "./agent-internal-auth.js";
+import {
+  fetchNullclawPath,
+  fetchNullclawUserHistory,
+  getNullclawBase,
+  probeNullclawReady,
+  requestNullclawChatStream,
+} from "./agent-client.js";
 import {
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
@@ -1891,11 +1897,6 @@ function getPublicAgentWsBase(req) {
   const publicBase = getPublicRequestBase(req);
   if (!publicBase) return null;
   return publicBase.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
-}
-
-function getNullclawBase() {
-  if (!NULLCLAW_BASE_URL) return null;
-  return NULLCLAW_BASE_URL.replace(/\/+$/, "");
 }
 
 const agentStreamDiagnosticsByUser = new Map();
@@ -7648,7 +7649,7 @@ const agentChatStreamHandler = async (req, res) => {
   }
 
   try {
-    const nullclawBase = getNullclawBase();
+    const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
     if (!nullclawBase) {
       return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
     }
@@ -7677,20 +7678,14 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     try {
-      const readyProbe = await fetchWithTimeout(
-        `${nullclawBase}/ready`,
-        {
-          method: "GET",
-          headers: buildAgentForwardHeaders({
-            internalToken: NULLCLAW_INTERNAL_TOKEN,
-            userId,
-            requestId: String(req.requestId || crypto.randomUUID()),
-            contentType: "application/json",
-          }),
-        },
-        ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
-        "Agent upstream ready probe"
-      );
+      const readyProbe = await probeNullclawReady({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId,
+        requestId: String(req.requestId || crypto.randomUUID()),
+        fetchWithTimeout,
+        timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
+      });
       if (!readyProbe.ok) {
         if (String(req.headers.accept || "").includes("text/event-stream")) {
           sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
@@ -7731,7 +7726,6 @@ const agentChatStreamHandler = async (req, res) => {
     }
     promptQuota = agentQuotaDecision.quota;
 
-    const targetUrl = `${nullclawBase}/api/v1/chat/stream`;
     const normalizedPayload = payload && typeof payload === "object" ? payload : {};
     const rawThreadId = String(normalizedPayload.threadId || "").trim();
     const rawSpaceId = String(normalizedPayload.spaceId || "").trim();
@@ -7775,20 +7769,15 @@ const agentChatStreamHandler = async (req, res) => {
       );
     }
 
-    const upstream = await fetchWithTimeout(
-      targetUrl,
-      {
-        method: "POST",
-        headers: buildAgentForwardHeaders({
-          internalToken: NULLCLAW_INTERNAL_TOKEN,
-          userId,
-          requestId: String(req.requestId || crypto.randomUUID()),
-        }),
-        body: JSON.stringify(upstreamPayload),
-      },
-      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-      "Agent upstream request"
-    );
+    const upstream = await requestNullclawChatStream({
+      baseUrl: nullclawBase,
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId: String(req.requestId || crypto.randomUUID()),
+      payload: upstreamPayload,
+      fetchWithTimeout,
+      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    });
 
     const contentType = String(upstream.headers.get("content-type") || "");
     if (!upstream.ok && contentType.toLowerCase().includes("application/json")) {
@@ -7957,7 +7946,7 @@ app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req
       return;
     }
 
-    const nullclawBase = getNullclawBase();
+    const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
     if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
       const fallbackHistory = await loadAppHistory();
       res.json({
@@ -7971,23 +7960,16 @@ app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req
       return;
     }
 
-    const upstreamUrl =
-      `${nullclawBase}/api/v1/users/${encodeURIComponent(userId)}/history` +
-      `?space_id=${encodeURIComponent(spaceId)}` +
-      `&thread_id=${encodeURIComponent(threadId)}`;
-    const upstreamResponse = await fetchWithTimeout(
-      upstreamUrl,
-      {
-        method: "GET",
-        headers: {
-          "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
-          "X-Zaki-User-Id": userId,
-          "X-Request-Id": String(req.requestId || crypto.randomUUID()),
-        },
-      },
-      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-      "Agent history request"
-    );
+    const upstreamResponse = await fetchNullclawUserHistory({
+      baseUrl: nullclawBase,
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId: String(req.requestId || crypto.randomUUID()),
+      spaceId,
+      threadId,
+      fetchWithTimeout,
+      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    });
     const upstreamData = await upstreamResponse.json().catch(() => ({}));
 
     if (!upstreamResponse.ok) {
@@ -8050,26 +8032,23 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
   let upstreamHealth = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
   let upstreamReady = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
   let upstreamSummary = null;
-  const nullclawBase = getNullclawBase();
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
-    const headers = buildAgentForwardHeaders({
-      internalToken: NULLCLAW_INTERNAL_TOKEN,
-      userId,
-      requestId: String(req.requestId || crypto.randomUUID()),
-      contentType: "application/json",
-    });
+    const requestId = String(req.requestId || crypto.randomUUID());
 
     const healthStartedAt = Date.now();
     try {
-      const upstream = await fetchWithTimeout(
-        `${nullclawBase}/health`,
-        {
-          method: "GET",
-          headers,
-        },
-        AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
-        "Agent diagnostics health check"
-      );
+      const upstream = await fetchNullclawPath({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId,
+        requestId,
+        path: "/health",
+        method: "GET",
+        fetchWithTimeout,
+        timeoutMs: AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+        label: "Agent diagnostics health check",
+      });
       upstreamHealth = {
         ok: upstream.ok,
         status: Number(upstream.status || 0),
@@ -8087,15 +8066,17 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
 
     const readyStartedAt = Date.now();
     try {
-      const ready = await fetchWithTimeout(
-        `${nullclawBase}/ready`,
-        {
-          method: "GET",
-          headers,
-        },
-        AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
-        "Agent diagnostics ready check"
-      );
+      const ready = await fetchNullclawPath({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId,
+        requestId,
+        path: "/ready",
+        method: "GET",
+        fetchWithTimeout,
+        timeoutMs: AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+        label: "Agent diagnostics ready check",
+      });
       upstreamReady = {
         ok: ready.ok,
         status: Number(ready.status || 0),
@@ -8112,15 +8093,17 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
     }
 
     try {
-      const diagnostics = await fetchWithTimeout(
-        `${nullclawBase}/internal/diagnostics`,
-        {
-          method: "GET",
-          headers,
-        },
-        AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
-        "Agent diagnostics upstream summary"
-      );
+      const diagnostics = await fetchNullclawPath({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId,
+        requestId,
+        path: "/internal/diagnostics",
+        method: "GET",
+        fetchWithTimeout,
+        timeoutMs: AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+        label: "Agent diagnostics upstream summary",
+      });
       const diagnosticsPayload = await diagnostics.json().catch(() => ({}));
       if (diagnostics.ok) {
         upstreamSummary = {
@@ -8251,31 +8234,6 @@ async function requireAgentContext(req, res, next) {
     return;
   }
 
-  const internalSmokeRequest = resolveInternalAgentSmokeRequest(req, NULLCLAW_INTERNAL_TOKEN);
-  if (internalSmokeRequest.mode === "error") {
-    res.status(internalSmokeRequest.status).json(internalSmokeRequest.body);
-    return;
-  }
-  if (internalSmokeRequest.mode === "authorized") {
-    const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1", [
-      Number(internalSmokeRequest.userId),
-    ]);
-    if (!zakiUser) {
-      res.status(404).json({ error: "ZAKI user not found." });
-      return;
-    }
-
-    req.agentAuthResult = {
-      email: normalizeEmail(String(zakiUser.email || "")),
-      sessionUser: null,
-      zakiUser,
-      internalSmoke: true,
-    };
-    req.agentUserId = internalSmokeRequest.userId;
-    next();
-    return;
-  }
-
   const authResult = await requireAuthUser(req, res);
   if (!authResult) return;
 
@@ -8291,7 +8249,7 @@ async function requireAgentContext(req, res, next) {
 }
 
 async function proxyNullclawRequest(req, res, targetPath, options = {}) {
-  const nullclawBase = getNullclawBase();
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (!nullclawBase) {
     return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
   }
@@ -8447,7 +8405,7 @@ const agentTelegramDisconnectHandler = async (req, res) => {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
     }
 
-    const nullclawBase = getNullclawBase();
+    const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
     if (!nullclawBase) {
       return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
     }
@@ -8537,7 +8495,7 @@ async function sendBotBffUpstreamRequest({
   body,
   headers = {},
 }) {
-  const nullclawBase = getNullclawBase();
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (!nullclawBase) {
     throw new Error("NULLCLAW_BASE_URL is not configured.");
   }
