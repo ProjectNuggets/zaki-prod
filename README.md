@@ -143,6 +143,11 @@ Visit `http://localhost:5173` 🎉
 
 See [DEPLOYMENT_BRIEFING.md](./DEPLOYMENT_BRIEFING.md) for detailed cloud deployment options.
 
+Production promotion rule:
+- `zaki-prod` builds and publishes images on `main`.
+- `zaki-infra` is the only repo that promotes image tags into production.
+- Production rollouts happen when ArgoCD sees an updated immutable tag in `zaki-infra`, not when `zaki-prod` pushes `latest`.
+
 **Quick Deploy (Railway):**
 ```bash
 # 1. Push to GitHub

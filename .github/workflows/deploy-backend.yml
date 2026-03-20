@@ -1,4 +1,4 @@
-name: Deploy ZAKI Backend
+name: Build and Publish ZAKI Backend Image
 
 on:
   push:
@@ -11,16 +11,13 @@ on:
 env:
   REGISTRY: ghcr.io/projectnuggets
   IMAGE_NAME: zaki-api
-  K8S_CLUSTER: zaki-prod
-  K8S_NAMESPACE: zaki
-  K8S_DEPLOYMENT: zaki-api
 
 concurrency:
-  group: deploy-backend
+  group: publish-backend-image
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build-and-publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,26 +32,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image refs
+        id: image
+        run: |
+          image_repo="${REGISTRY}/${IMAGE_NAME}"
+          sha_tag="${image_repo}:sha-${GITHUB_SHA}"
+          raw_tag="${image_repo}:${GITHUB_SHA}"
+          echo "sha_tag=${sha_tag}" >> "$GITHUB_OUTPUT"
+          echo "raw_tag=${raw_tag}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "${sha_tag}"
+            echo "${raw_tag}"
+            if [ "${GITHUB_REF_NAME}" = "main" ]; then
+              echo "${image_repo}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          tags: ${{ steps.image.outputs.tags }}
           platforms: linux/amd64
 
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DO_API_TOKEN }}
-
-      - name: Configure kubectl
-        run: doctl kubernetes cluster kubeconfig save "${K8S_CLUSTER}"
-
-      - name: Restart backend deployment
+      - name: Publish summary
         run: |
-          kubectl rollout restart deployment/"${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}"
-          kubectl rollout status deployment/"${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}" --timeout=600s
+          echo "Published image: ${{ steps.image.outputs.sha_tag }}"
+          echo "Immutable alias: ${{ steps.image.outputs.raw_tag }}"
+          echo "Production promotion is owned by zaki-infra."

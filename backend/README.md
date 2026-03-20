@@ -111,6 +111,7 @@ Billing endpoints may return `503` with code `billing_unavailable` when Stripe i
 Nullclaw ownership note:
 - `zaki-prod` owns only the backend proxy contract to Nullclaw.
 - `zaki-prod` does not own Nullclaw provider selection, Together AI configuration, or Kubernetes deployment topology.
+- `zaki-prod` publishes backend images, but `zaki-infra` is the only repo that promotes backend image tags into production.
 
 If `ZAKI_MEMORY_ALERT_WEBHOOK_URL` is configured, memory telemetry alerts are forwarded as JSON POST requests to that endpoint.
 
