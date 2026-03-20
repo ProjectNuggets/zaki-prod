@@ -26,6 +26,6 @@ jobs:
       - name: Install website deps
         run: npm --prefix website ci
       - name: Website typecheck
-        run: npx tsc --noEmit -p website/tsconfig.json
+        run: npm --prefix website run typecheck
       - name: Website build
         run: npm --prefix website run build
