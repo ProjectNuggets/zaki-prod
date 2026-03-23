@@ -29,12 +29,6 @@ export function buildStreamUpstreamPayload(body, enrichedMessage) {
     payload.webSearchEnabled = payload.webSearch;
   }
 
-  // NOVA.TYP stream-chat contract explicitly supports mode=query|chat.
-  // Use query mode when web-search toggle is on so the request follows a deterministic path.
-  if (payload.webSearchEnabled === true && typeof payload.mode !== "string") {
-    payload.mode = "query";
-  }
-
   return payload;
 }
 

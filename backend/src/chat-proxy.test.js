@@ -56,7 +56,7 @@ describe("chat proxy payload helpers", () => {
 
     expect(payload.webSearch).toBe(true);
     expect(payload.webSearchEnabled).toBe(true);
-    expect(payload.mode).toBe("query");
+    expect(payload.mode).toBeUndefined();
   });
 
   it("respects explicit webSearchEnabled over legacy key", () => {
@@ -84,6 +84,20 @@ describe("chat proxy payload helpers", () => {
     );
 
     expect(payload.mode).toBe("chat");
+  });
+
+  it("preserves explicit query mode without forcing it from web search", () => {
+    const payload = buildStreamUpstreamPayload(
+      {
+        message: "hello",
+        webSearchEnabled: true,
+        mode: "query",
+      },
+      "hello"
+    );
+
+    expect(payload.webSearchEnabled).toBe(true);
+    expect(payload.mode).toBe("query");
   });
 
   it("detects the balanced formatting intents only", () => {
