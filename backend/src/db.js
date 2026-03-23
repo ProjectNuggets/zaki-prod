@@ -636,6 +636,7 @@ export async function initDb() {
     await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_verified BOOLEAN DEFAULT FALSE;`);
     await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
     await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_message_id TEXT;`);
+    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';`);
     
     // Create indexes for efficient querying
     await pool.query(`
@@ -753,6 +754,20 @@ export async function initDb() {
     console.warn("[DB] Memory confirmations table creation failed:", err.message);
   }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS zaki_memory_preferences (
+        user_id TEXT PRIMARY KEY,
+        policy TEXT NOT NULL DEFAULT 'balanced',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    console.log("[DB] Memory preferences table ready");
+  } catch (err) {
+    console.warn("[DB] Memory preferences table creation failed:", err.message);
+  }
+
   // Translation cache for memory conflict keys
   try {
     await pool.query(`
@@ -794,6 +809,8 @@ export async function initDb() {
         resolved_at TIMESTAMPTZ
       );
     `);
+
+    await pool.query(`ALTER TABLE memory_conflicts ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
 
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memory_conflicts_user_pending

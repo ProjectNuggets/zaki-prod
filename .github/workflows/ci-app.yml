@@ -68,5 +68,5 @@ jobs:
         run: npm ci
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-      - name: Frontend e2e (memory rail)
+      - name: Frontend e2e
         run: npm run test:e2e

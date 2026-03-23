@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CloudRain,
   Download,
+  Edit2,
   FileText,
   Filter,
   GitBranch,
@@ -24,8 +25,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, fetchMemoryActivity, patchMemory, type MemoryActivity } from "@/lib/api";
 import { SkeletonMemoryViewer } from "../ui/skeleton";
+import { MemoryModeToggle, useMemoryPolicy } from "./MemoryModeToggle";
 
 type MemoryMetadata = {
   conflictKey?: string;
@@ -39,8 +41,10 @@ interface MemoryRecord {
   id: string;
   content: string;
   type: string;
+  status?: "active" | "outdated" | string;
   createdAt?: string;
   created_at?: string;
+  updated_at?: string;
   threadId?: string | null;
   metadata?: MemoryMetadata | null;
 }
@@ -69,6 +73,13 @@ interface MemoryViewerProps {
   initialSearchQuery?: string | null;
   initialTab?: "memories" | "pending" | "conflicts";
 }
+
+type MemorySummaryGroup =
+  | "about_you"
+  | "preferences"
+  | "ongoing_work"
+  | "relationships"
+  | "recent_changes";
 
 type MemoryTypeStyle = {
   label: string;
@@ -145,6 +156,25 @@ const memoryTypeStyles: Record<string, MemoryTypeStyle> = {
 
 const MEMORY_PAGE_SIZE = 80;
 
+function getSummaryGroupForMemory(memory: MemoryRecord): Exclude<MemorySummaryGroup, "recent_changes"> {
+  switch (memory.type) {
+    case "preference":
+      return "preferences";
+    case "goal":
+    case "context":
+    case "episode":
+    case "event":
+    case "struggle":
+      return "ongoing_work";
+    case "relationship":
+      return "relationships";
+    case "fact":
+    case "emotion":
+    default:
+      return "about_you";
+  }
+}
+
 function normalizeCreatedAt(value?: string) {
   if (!value) return new Date().toISOString();
   const parsed = new Date(value);
@@ -176,6 +206,28 @@ function shortId(id?: string | null) {
   if (!id) return null;
   if (id.length <= 10) return id;
   return `${id.slice(0, 6)}...${id.slice(-4)}`;
+}
+
+function buildActivityLabel(
+  activity: MemoryActivity,
+  t: (key: string, options?: Record<string, unknown>) => string,
+  locale?: string
+) {
+  const content = String(activity?.content || "").trim();
+  const date = formatDateLabel(activity?.occurredAt || "", locale);
+  if (activity.kind === "review") {
+    return t("memoryViewer.notebook.activity.review", { content, date });
+  }
+  if (activity.kind === "conflict") {
+    return t("memoryViewer.notebook.activity.conflict", { content, date });
+  }
+  if (activity.kind === "edited") {
+    return t("memoryViewer.notebook.activity.edited", { content, date });
+  }
+  if (activity.kind === "outdated") {
+    return t("memoryViewer.notebook.activity.outdated", { content, date });
+  }
+  return t("memoryViewer.notebook.activity.saved", { content, date });
 }
 
 function mergeMemoriesById(
@@ -215,11 +267,17 @@ export function MemoryViewer({
   const [loadingMoreMemories, setLoadingMoreMemories] = useState(false);
   const [conflicts, setConflicts] = useState<MemoryConflictRecord[]>([]);
   const [pendingMemories, setPendingMemories] = useState<PendingMemoryRecord[]>([]);
+  const [recentActivity, setRecentActivity] = useState<MemoryActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [conflictsLoading, setConflictsLoading] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editType, setEditType] = useState("context");
+  const [editStatus, setEditStatus] = useState<"active" | "outdated">("active");
+  const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"memories" | "pending" | "conflicts">(initialTab);
   const [searchQuery, setSearchQuery] = useState(String(initialSearchQuery || "").trim());
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -227,6 +285,12 @@ export function MemoryViewer({
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const locale = i18n.language || undefined;
+  const {
+    policy: memoryPolicy,
+    setPolicy: setMemoryPolicy,
+    loading: memoryPolicyLoading,
+    saving: memoryPolicySaving,
+  } = useMemoryPolicy();
 
   const fetchPendingMemories = async (showErrors = true) => {
     setPendingLoading(true);
@@ -253,6 +317,22 @@ export function MemoryViewer({
       }
     } finally {
       setPendingLoading(false);
+    }
+  };
+
+  const fetchActivity = async (showErrors = false) => {
+    try {
+      const { response, data } = await fetchMemoryActivity(8);
+      if (!response.ok) {
+        throw new Error(t("memoryViewer.errors.fetchActivity"));
+      }
+      setRecentActivity(Array.isArray(data?.activities) ? data.activities : []);
+    } catch (err) {
+      if (showErrors) {
+        toast.error(
+          err instanceof Error ? err.message : t("memoryViewer.errors.loadActivity")
+        );
+      }
     }
   };
 
@@ -356,6 +436,7 @@ export function MemoryViewer({
     void fetchMemories();
     void fetchPendingMemories(false);
     void fetchConflicts(false);
+    void fetchActivity(false);
   }, [userId]);
 
   useEffect(() => {
@@ -391,6 +472,7 @@ export function MemoryViewer({
       }
       setPendingMemories((prev) => prev.filter((memory) => memory.id !== confirmationId));
       await fetchMemories();
+      await fetchActivity(false);
       toast.success(t("memoryViewer.toasts.memoryStored"));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("memoryViewer.errors.confirmMemory");
@@ -410,6 +492,7 @@ export function MemoryViewer({
         throw new Error(t("memoryViewer.errors.rejectMemory"));
       }
       setPendingMemories((prev) => prev.filter((memory) => memory.id !== confirmationId));
+      await fetchActivity(false);
       toast.success(t("memoryViewer.toasts.memorySkipped"));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("memoryViewer.errors.rejectMemory");
@@ -439,6 +522,7 @@ export function MemoryViewer({
         );
       }
       await fetchMemories();
+      await fetchActivity(false);
       toast.success(
         action === "use_new"
           ? t("memoryViewer.toasts.incomingMemorySaved")
@@ -465,6 +549,7 @@ export function MemoryViewer({
         throw new Error(t("memoryViewer.errors.deleteMemory"));
       }
       setMemories((prev) => prev.filter((memory) => memory.id !== memoryId));
+      await fetchActivity(false);
       window.dispatchEvent(
         new CustomEvent("zaki:onboarding-memory-deleted", {
           detail: { id: memoryId },
@@ -475,6 +560,78 @@ export function MemoryViewer({
       const message = err instanceof Error ? err.message : t("memoryViewer.errors.deleteMemory");
       toast.error(message);
     }
+  };
+
+  const beginEditMemory = (memory: MemoryRecord) => {
+    setEditingMemoryId(memory.id);
+    setEditContent(memory.content);
+    setEditType(memory.type);
+    setEditStatus(memory.status === "outdated" ? "outdated" : "active");
+  };
+
+  const cancelEditMemory = () => {
+    setEditingMemoryId(null);
+    setEditContent("");
+    setEditType("context");
+    setEditStatus("active");
+  };
+
+  const applyMemoryPatch = async (
+    memoryId: string,
+    patch: { content?: string; type?: string; status?: "active" | "outdated" }
+  ) => {
+    setSavingMemoryId(memoryId);
+    try {
+      const { response, data } = await patchMemory(memoryId, patch);
+      if (!response.ok || !data?.memory) {
+        throw new Error(
+          data?.error || t("memoryViewer.errors.updateMemory")
+        );
+      }
+      const nextMemory = {
+        ...(data.memory as MemoryRecord),
+        createdAt: normalizeCreatedAt(
+          (data.memory as MemoryRecord).createdAt ||
+            (data.memory as MemoryRecord).created_at
+        ),
+      };
+      setMemories((prev) =>
+        prev.map((memory) => (memory.id === memoryId ? nextMemory : memory))
+      );
+      await fetchActivity(false);
+      return true;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("memoryViewer.errors.updateMemory")
+      );
+      return false;
+    } finally {
+      setSavingMemoryId(null);
+    }
+  };
+
+  const saveEditedMemory = async (memoryId: string) => {
+    const saved = await applyMemoryPatch(memoryId, {
+      content: editContent.trim(),
+      type: editType,
+      status: editStatus,
+    });
+    if (!saved) return;
+    cancelEditMemory();
+    toast.success(t("memoryViewer.toasts.memoryUpdated"));
+  };
+
+  const setMemoryStatus = async (
+    memoryId: string,
+    status: "active" | "outdated"
+  ) => {
+    const saved = await applyMemoryPatch(memoryId, { status });
+    if (!saved) return;
+    toast.success(
+      status === "outdated"
+        ? t("memoryViewer.toasts.memoryMarkedOutdated")
+        : t("memoryViewer.toasts.memoryRestored")
+    );
   };
 
   const filteredMemories = useMemo(() => {
@@ -510,13 +667,85 @@ export function MemoryViewer({
   }, [memories]);
 
   const memoryStats = useMemo(() => {
+    const activeMemories = memories.filter(
+      (memory) => (memory.status || "active") !== "outdated"
+    );
     return {
-      stored: memories.length,
+      stored: activeMemories.length,
       pending: pendingMemories.length,
       conflicts: conflicts.length,
       filtered: filteredMemories.length,
     };
-  }, [memories.length, pendingMemories.length, conflicts.length, filteredMemories.length]);
+  }, [memories, pendingMemories.length, conflicts.length, filteredMemories.length]);
+
+  const notebookGroups = useMemo(() => {
+    const orderedMemories = memories
+      .filter((memory) => (memory.status || "active") !== "outdated")
+      .sort((a, b) => {
+      const aTime = new Date(a.createdAt || a.created_at || "").getTime();
+      const bTime = new Date(b.createdAt || b.created_at || "").getTime();
+      return bTime - aTime;
+      });
+
+    const grouped = new Map<Exclude<MemorySummaryGroup, "recent_changes">, string[]>([
+      ["about_you", []],
+      ["preferences", []],
+      ["ongoing_work", []],
+      ["relationships", []],
+    ]);
+
+    for (const memory of orderedMemories) {
+      const bucket = grouped.get(getSummaryGroupForMemory(memory));
+      if (!bucket) continue;
+      const content = String(memory.content || "").trim();
+      if (!content || bucket.includes(content)) continue;
+      if (bucket.length < 3) {
+        bucket.push(content);
+      }
+    }
+
+    const recentChanges = recentActivity.map((activity) =>
+      buildActivityLabel(activity, t, locale)
+    );
+
+    return [
+      {
+        id: "about_you" as const,
+        icon: Brain,
+        title: t("memoryViewer.notebook.groups.about_you.title"),
+        body: t("memoryViewer.notebook.groups.about_you.body"),
+        items: grouped.get("about_you") || [],
+      },
+      {
+        id: "preferences" as const,
+        icon: SlidersHorizontal,
+        title: t("memoryViewer.notebook.groups.preferences.title"),
+        body: t("memoryViewer.notebook.groups.preferences.body"),
+        items: grouped.get("preferences") || [],
+      },
+      {
+        id: "ongoing_work" as const,
+        icon: Target,
+        title: t("memoryViewer.notebook.groups.ongoing_work.title"),
+        body: t("memoryViewer.notebook.groups.ongoing_work.body"),
+        items: grouped.get("ongoing_work") || [],
+      },
+      {
+        id: "relationships" as const,
+        icon: Users,
+        title: t("memoryViewer.notebook.groups.relationships.title"),
+        body: t("memoryViewer.notebook.groups.relationships.body"),
+        items: grouped.get("relationships") || [],
+      },
+      {
+        id: "recent_changes" as const,
+        icon: RefreshCw,
+        title: t("memoryViewer.notebook.groups.recent_changes.title"),
+        body: t("memoryViewer.notebook.groups.recent_changes.body"),
+        items: recentChanges.slice(0, 4),
+      },
+    ];
+  }, [locale, memories, recentActivity, t]);
 
   if (loading) {
     return <SkeletonMemoryViewer />;
@@ -559,12 +788,62 @@ export function MemoryViewer({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-              {t("memoryViewer.pipeline.title")}
+              {t("memoryViewer.notebook.title")}
             </h3>
             <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-              {t("memoryViewer.pipeline.body")}
+              {t("memoryViewer.notebook.body")}
+            </p>
+            <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+              {t("memoryViewer.notebook.helper")}
             </p>
           </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-3">
+            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.scope.personal.title")}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.scope.personal.body")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-3">
+            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.scope.space.title")}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.scope.space.body")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-3">
+            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.scope.session.title")}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.scope.session.body")}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <MemoryModeToggle
+            value={memoryPolicy}
+            onChange={(nextPolicy) => {
+              void (async () => {
+                const saved = await setMemoryPolicy(nextPolicy);
+                if (!saved) {
+                  toast.error(t("memoryViewer.policy.saveFailed"));
+                  return;
+                }
+                toast.success(t("memoryViewer.policy.saved"));
+              })();
+            }}
+            disabled={memoryPolicyLoading || memoryPolicySaving}
+          />
+          <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+            {memoryPolicyLoading
+              ? t("memoryViewer.policy.loading")
+              : t("memoryViewer.policy.helper")}
+          </p>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-4">
           <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-2">
@@ -599,6 +878,65 @@ export function MemoryViewer({
             <div className="mt-1 text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
               {memoryStats.filtered}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {notebookGroups.map((group) => {
+          const Icon = group.icon;
+          const hasItems = group.items.length > 0;
+          return (
+            <section
+              key={group.id}
+              className="rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-4 py-4 shadow-[0px_12px_28px_rgba(15,15,15,0.05)]"
+            >
+              <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-zaki-hover text-zaki-brand dark:bg-zaki-dark-elevated dark:text-[#ffb6a4]">
+                  <Icon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {group.title}
+                  </h4>
+                  <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+                    {group.body}
+                  </p>
+                </div>
+              </div>
+              {hasItems ? (
+                <ul className={cn("mt-4 space-y-2", isRtl && "text-right")}>
+                  {group.items.map((item) => (
+                    <li
+                      key={`${group.id}:${item}`}
+                      className="rounded-xl border border-zaki-subtle/70 dark:border-zaki-dark bg-zaki-base/70 dark:bg-zaki-dark-elevated px-3 py-2 text-sm leading-6 text-zaki-primary dark:text-zaki-dark-primary"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-4 rounded-xl border border-dashed border-zaki-subtle dark:border-zaki-dark bg-zaki-base/70 dark:bg-zaki-dark-elevated px-3 py-3 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                  {t("memoryViewer.notebook.empty")}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-4 py-4 shadow-[0px_12px_28px_rgba(15,15,15,0.05)]">
+        <div className="flex items-start gap-3">
+          <div className="size-9 rounded-xl bg-zaki-hover dark:bg-zaki-dark-elevated flex items-center justify-center text-zaki-brand dark:text-[#ffb6a4]">
+            <BookOpen className="size-4" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.raw.title")}
+            </h4>
+            <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.raw.body")}
+            </p>
           </div>
         </div>
       </div>
@@ -938,6 +1276,9 @@ export function MemoryViewer({
                         const Icon = typeStyle.icon;
                         const createdAt = memory.createdAt || new Date().toISOString();
                         const conflictKey = memory.metadata?.conflictKey;
+                        const isEditing = editingMemoryId === memory.id;
+                        const isSaving = savingMemoryId === memory.id;
+                        const isOutdated = (memory.status || "active") === "outdated";
 
                         return (
                           <article
@@ -960,8 +1301,15 @@ export function MemoryViewer({
                                     {t(`memory.types.${memory.type}`, { defaultValue: typeStyle.label })}
                                   </span>
                                   <span className="inline-flex items-center rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
-                                    {t("memoryViewer.memories.storedBadge")}
+                                    {isOutdated
+                                      ? t("memoryViewer.memories.outdatedBadge")
+                                      : t("memoryViewer.memories.storedBadge")}
                                   </span>
+                                  {memory.metadata?.editedFrom ? (
+                                    <span className="inline-flex items-center rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-2 py-0.5 text-[10px] font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+                                      {t("memoryViewer.memories.editedBadge")}
+                                    </span>
+                                  ) : null}
                                   {conflictKey ? (
                                     <span className="inline-flex items-center rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-2 py-0.5 text-[10px] font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
                                       {conflictKey}
@@ -969,9 +1317,53 @@ export function MemoryViewer({
                                   ) : null}
                                 </div>
 
-                                <p className="mt-2 text-sm text-zaki-primary dark:text-zaki-dark-primary leading-relaxed">
-                                  {memory.content}
-                                </p>
+                                {isEditing ? (
+                                  <div className="mt-2 space-y-3">
+                                    <textarea
+                                      value={editContent}
+                                      onChange={(event) => setEditContent(event.target.value)}
+                                      rows={3}
+                                      className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
+                                    />
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                      <select
+                                        value={editType}
+                                        onChange={(event) => setEditType(event.target.value)}
+                                        className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
+                                      >
+                                        {Object.keys(memoryTypeStyles).map((type) => (
+                                          <option key={type} value={type}>
+                                            {t(`memory.types.${type}`, {
+                                              defaultValue: getTypeStyle(type).label,
+                                            })}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={editStatus}
+                                        onChange={(event) =>
+                                          setEditStatus(
+                                            event.target.value === "outdated"
+                                              ? "outdated"
+                                              : "active"
+                                          )
+                                        }
+                                        className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
+                                      >
+                                        <option value="active">
+                                          {t("memoryViewer.memories.statusActive")}
+                                        </option>
+                                        <option value="outdated">
+                                          {t("memoryViewer.memories.statusOutdated")}
+                                        </option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 text-sm text-zaki-primary dark:text-zaki-dark-primary leading-relaxed">
+                                    {memory.content}
+                                  </p>
+                                )}
 
                                 <div className={cn("mt-3 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted dark:text-zaki-dark-muted", isRtl && "justify-end")}>
                                   <span className="inline-flex items-center gap-1">
@@ -987,12 +1379,64 @@ export function MemoryViewer({
                                     </span>
                                   ) : null}
                                 </div>
+                                <div className={cn("mt-3 flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-primary disabled:opacity-60"
+                                        disabled={isSaving}
+                                        onClick={() => void saveEditedMemory(memory.id)}
+                                      >
+                                        {isSaving
+                                          ? t("memoryViewer.memories.savingEdit")
+                                          : t("memoryViewer.memories.saveEdit")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-secondary"
+                                        disabled={isSaving}
+                                        onClick={cancelEditMemory}
+                                      >
+                                        {t("memoryViewer.memories.cancelEdit")}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-secondary"
+                                        disabled={isSaving}
+                                        onClick={() => beginEditMemory(memory)}
+                                      >
+                                        <Edit2 className="size-3.5" />
+                                        {t("memoryViewer.memories.edit")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-secondary"
+                                        disabled={isSaving}
+                                        onClick={() =>
+                                          void setMemoryStatus(
+                                            memory.id,
+                                            isOutdated ? "active" : "outdated"
+                                          )
+                                        }
+                                      >
+                                        {isOutdated
+                                          ? t("memoryViewer.memories.restore")
+                                          : t("memoryViewer.memories.markOutdated")}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
 
                               <button
                                 type="button"
                                 onClick={() => void deleteMemory(memory.id)}
-                                className="shrink-0 inline-flex size-8 items-center justify-center rounded-lg border border-transparent text-zaki-muted dark:text-zaki-dark-muted hover:border-[#f0d7d1] dark:hover:border-[#5a2e27] hover:bg-[#fff1ed] dark:hover:bg-[#2a1613] hover:text-zaki-brand transition-colors"
+                                disabled={isSaving}
+                                className="shrink-0 inline-flex size-8 items-center justify-center rounded-lg border border-transparent text-zaki-muted dark:text-zaki-dark-muted hover:border-[#f0d7d1] dark:hover:border-[#5a2e27] hover:bg-[#fff1ed] dark:hover:bg-[#2a1613] hover:text-zaki-brand transition-colors disabled:opacity-50"
                                 aria-label={t("memoryViewer.delete.aria")}
                                 data-onboarding-id="memory-delete-button"
                               >

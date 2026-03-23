@@ -10,7 +10,7 @@ import { MemoryRouter } from "react-router-dom";
 import { ChatArea } from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, fetchMemoryActivity } from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 import { getZakiBootstrapCardStorageKey } from "./ZakiBootstrapCard";
 
@@ -19,6 +19,14 @@ jest.mock("@/lib/api", () => ({
     ok: true,
     status: 200,
     json: async () => ({}),
+  })),
+  fetchMemoryActivity: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ activities: [] }),
+    },
+    data: { activities: [] },
   })),
 }));
 
@@ -85,6 +93,7 @@ describe("ChatArea Component", () => {
 
   beforeEach(() => {
     (apiRequest as jest.Mock).mockClear();
+    (fetchMemoryActivity as jest.Mock).mockClear();
     window.sessionStorage.clear();
     window.localStorage.clear();
     navState = {

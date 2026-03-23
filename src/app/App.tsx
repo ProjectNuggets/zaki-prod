@@ -19,6 +19,7 @@ import {
   fetchLegalConsentStatus,
   submitLegalReconsent,
 } from "@/lib/api";
+import { openSpacesMemoryViewer } from "@/lib/spacesMemory";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { isZakiBotSpaceId } from "@/lib/zakiBot";
 
@@ -286,14 +287,7 @@ export default function App() {
   };
 
   const openMemory = () => {
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
-      setMobileSidebarOpen(true);
-      window.setTimeout(() => {
-        window.dispatchEvent(new Event("zaki:open-memory"));
-      }, 0);
-      return;
-    }
-    window.dispatchEvent(new Event("zaki:open-memory"));
+    openSpacesMemoryViewer({ enabled: !isZakiBotRoute });
   };
 
   const openSettings = () => {

@@ -45,7 +45,7 @@ const HELP_COPY = {
       {
         key: "memory",
         title: "Memory not visible or conflict not clear",
-        body: "Open Memory from profile, review pending items, and resolve conflicts. If a memory toast appears but the item is missing, report the exact prompt and timestamp.",
+        body: "Open Memory from profile, review anything that needs attention, and resolve conflicts. Personal memory follows your account, while Space files and instructions stay scoped to the Space. If a memory notice appears but the item is missing, report the exact prompt and timestamp.",
       },
     ],
     contactTitle: "Contact support",
@@ -103,7 +103,7 @@ const HELP_COPY = {
       {
         key: "memory",
         title: "الذاكرة غير ظاهرة أو التعارض غير واضح",
-        body: "افتح الذاكرة من الملف الشخصي، وراجع العناصر المعلقة، ثم احسم التعارضات. إذا ظهر إشعار ذاكرة ولم تجد العنصر، أرسل النص الدقيق والتوقيت.",
+        body: "افتح الذاكرة من الملف الشخصي، وراجع ما يحتاج انتباهك، ثم احسم التعارضات. الذاكرة الشخصية ترافق حسابك، بينما تبقى ملفات وتعليمات المساحة داخل المساحة نفسها. إذا ظهر إشعار ذاكرة ولم تجد العنصر، أرسل النص الدقيق والتوقيت.",
       },
     ],
     contactTitle: "تواصل مع الدعم",

@@ -24,7 +24,13 @@ import {
   resolveConflict as resolveConflictOp,
   checkStorage as checkStorageOp,
   probeEmbeddingsProvider as probeEmbeddingsProviderOp,
+  getMemoryPreferences as getMemoryPreferencesOp,
+  resolveMemoryCapturePolicy as resolveMemoryCapturePolicyOp,
+  setMemoryPreferences as setMemoryPreferencesOp,
+  updateMemory as updateMemoryOp,
+  getMemoryActivity as getMemoryActivityOp,
 } from "./operations.js";
+import { normalizeMemoryPolicy } from "./policy.js";
 
 import {
   autoSaveWithUndo as autoSaveWithUndoOp,
@@ -198,6 +204,11 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     extractFacts = extractFactsOp,
     probeMemoryExtractionProvider = probeMemoryExtractionProviderOp,
     probeEmbeddingsProvider = probeEmbeddingsProviderOp,
+    getMemoryPreferences = getMemoryPreferencesOp,
+    resolveMemoryCapturePolicy = resolveMemoryCapturePolicyOp,
+    setMemoryPreferences = setMemoryPreferencesOp,
+    updateMemory = updateMemoryOp,
+    getMemoryActivity = getMemoryActivityOp,
     autoSaveWithUndo = autoSaveWithUndoOp,
     undoMemory = undoMemoryOp,
     processChatMemoryCapture = processChatMemoryCaptureOp,
@@ -400,6 +411,95 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     }
   });
 
+  app.get("/api/memory/preferences", async (req, res) => {
+    try {
+      const scope = await requireMemoryUser(req, res);
+      if (!scope) return;
+      const preferences = await getMemoryPreferences(scope.userId);
+      res.json(preferences);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/memory/preferences", async (req, res) => {
+    try {
+      const scope = await requireMemoryUser(req, res);
+      if (!scope) return;
+      const { policy } = req.body || {};
+      const normalizedPolicy = normalizeMemoryPolicy(policy);
+      if (!normalizedPolicy) {
+        return res.status(400).json({ error: "Invalid memory policy." });
+      }
+      const preferences = await setMemoryPreferences(scope.userId, {
+        policy: normalizedPolicy,
+      });
+      res.json(preferences);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/memory/:id", async (req, res) => {
+    try {
+      const scope = await requireMemoryUser(req, res);
+      if (!scope) return;
+      if (!isValidUuid(req.params.id)) {
+        return res.status(400).json({ error: "Invalid memory id." });
+      }
+
+      const { content, type, status } = req.body || {};
+      if (content === undefined && type === undefined && status === undefined) {
+        return res.status(400).json({ error: "At least one field is required." });
+      }
+
+      const normalizedContent =
+        content === undefined
+          ? undefined
+          : toBoundedString(content, { maxChars: MAX_MEMORY_CONTENT_CHARS });
+      if (content !== undefined && !normalizedContent) {
+        return res.status(400).json({ error: "content required" });
+      }
+
+      const normalizedStatus =
+        status === undefined
+          ? undefined
+          : ["active", "outdated"].includes(String(status || "").trim().toLowerCase())
+            ? String(status || "").trim().toLowerCase()
+            : null;
+      if (status !== undefined && !normalizedStatus) {
+        return res.status(400).json({ error: "status must be active or outdated" });
+      }
+
+      const result = await updateMemory({
+        id: req.params.id,
+        userId: scope.userId,
+        content: normalizedContent,
+        type: type === undefined ? undefined : normalizeMemoryType(type),
+        status: normalizedStatus,
+      });
+
+      if (result?.error === "not_found") {
+        return res.status(404).json({ error: "Memory not found." });
+      }
+      if (result?.error === "duplicate") {
+        return res.status(409).json({
+          error: "Updated memory duplicates an existing memory.",
+          duplicateId: result.duplicateId || null,
+        });
+      }
+      if (result?.error === "invalid_content") {
+        return res.status(400).json({ error: "content required" });
+      }
+
+      void publishMemoryStatus(scope.userId, "update");
+      res.json(result);
+    } catch (err) {
+      recordMemoryTelemetry("pipeline.error");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const listMemoriesHandler = async (req, res) => {
     try {
       const scope = await requireMemoryUser(req, res);
@@ -425,6 +525,22 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
   };
   app.get("/api/memory/list", listMemoriesHandler);
   app.get("/api/memory/list/:userId", listMemoriesHandler);
+
+  app.get("/api/memory/activity", async (req, res) => {
+    try {
+      const scope = await requireMemoryUser(req, res);
+      if (!scope) return;
+      const limit = toBoundedInt(req.query.limit, {
+        fallback: 8,
+        min: 1,
+        max: 50,
+      });
+      const activities = await getMemoryActivity(scope.userId, limit);
+      res.json({ activities });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   app.post("/api/memory/search", async (req, res) => {
     try {
@@ -496,10 +612,12 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
         maxChars: MAX_THREAD_ID_CHARS,
       });
 
+      const { capturePolicy } = await resolveMemoryCapturePolicy(scope.userId);
       const result = await processChatMemoryCapture({
         userId: scope.userId,
         message: normalizedMessage,
         threadId: normalizedThreadId || null,
+        policy: capturePolicy,
       });
 
       recordMemoryTelemetry(
@@ -585,6 +703,7 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
             newContent: fact.content,
             newType: fact.type,
             newConfidenceScore: 0.8,
+            sourceThreadId: normalizedThreadId || null,
             conflictMemory: conflict,
           });
           results.conflicts.push({

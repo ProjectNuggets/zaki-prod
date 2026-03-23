@@ -65,9 +65,14 @@ describe("session end route", () => {
 
   it("queues processing for valid authenticated sessions", async () => {
     const summarizeConversation = jest.fn(async () => ({ stored: 2, duplicates: 1, conflicts: 0, errors: 0 }));
+    const resolveMemoryCapturePolicy = jest.fn(async () => ({
+      policy: "balanced",
+      capturePolicy: { id: "balanced" },
+    }));
     const handler = createSessionEndHandler({
       requireAuthUser: async () => ({ email: "user@example.com" }),
       summarizeConversation,
+      resolveMemoryCapturePolicy,
       isEnabled: () => true,
     });
 
@@ -88,12 +93,13 @@ describe("session end route", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ ok: true, queued: true });
     await Promise.resolve();
+    expect(resolveMemoryCapturePolicy).toHaveBeenCalledWith("user@example.com");
     expect(summarizeConversation).toHaveBeenCalledWith({
       userId: "user@example.com",
       messages: req.body.messages,
       threadId: "thread-1",
       threadTitle: "Session",
+      policy: { id: "balanced" },
     });
   });
 });
-

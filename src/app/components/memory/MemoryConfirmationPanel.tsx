@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Check, X, Edit2, Brain, Sparkles, Lightbulb, Heart, Target, Users, CloudRain, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
-import { MemoryModeToggle, useMemoryMode } from "./MemoryModeToggle";
+import { MemoryModeToggle, useMemoryPolicy } from "./MemoryModeToggle";
 
 interface PendingMemory {
   id: string;
@@ -45,7 +45,12 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [memoryMode, setMemoryMode] = useMemoryMode();
+  const {
+    policy: memoryPolicy,
+    setPolicy: setMemoryPolicy,
+    loading: memoryPolicyLoading,
+    saving: memoryPolicySaving,
+  } = useMemoryPolicy();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
 
   // Fetch pending confirmations
@@ -164,7 +169,13 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
 
         {/* Memory Mode Toggle */}
         <div className="px-6 py-3 border-b border-zaki-subtle bg-zaki-base">
-          <MemoryModeToggle value={memoryMode} onChange={setMemoryMode} />
+          <MemoryModeToggle
+            value={memoryPolicy}
+            onChange={(nextPolicy) => {
+              void setMemoryPolicy(nextPolicy);
+            }}
+            disabled={memoryPolicyLoading || memoryPolicySaving}
+          />
         </div>
 
         {/* Content */}

@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+const AUTH_TOKEN_KEY = "zaki.auth.token";
+
 async function json(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -116,21 +118,23 @@ test("pricing page displays expected student, personal, and gift-code prices", a
   page,
 }) => {
   await mockAuthAndPricing(page);
-  await page.addInitScript(() => {
+  await page.addInitScript(({ tokenKey, token }) => {
+    window.localStorage.setItem(tokenKey, token);
     window.localStorage.setItem("zaki:onboarding:v1:user@example.com", "done");
+  }, {
+    tokenKey: AUTH_TOKEN_KEY,
+    token: "pricing-user-token-123",
   });
 
   await page.goto("/pricing");
 
-  await page.getByPlaceholder("Email address").fill("user@example.com");
-  await page.getByPlaceholder("Password").fill("Password123");
-  await page.getByRole("button", { name: "Sign in" }).click();
-
   await expect(
-    page.getByRole("heading", { name: "Choose the plan that makes ZAKI feel personal" })
+    page.getByRole("heading", { name: "Choose how you want to work with ZAKI" })
   ).toBeVisible();
-  await expect(page.getByText("$8 / month", { exact: true })).toBeVisible();
   await expect(page.getByText("$13 / month", { exact: true })).toBeVisible();
+  await page.getByRole("checkbox", { name: "I’m a student" }).check();
+  await expect(page.getByText("$8 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("Buy a 30-day code", { exact: true })).toBeVisible();
   await expect(page.getByText("$15 one-time", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Buy 1-month gift code" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Buy 30-day code" })).toBeVisible();
 });

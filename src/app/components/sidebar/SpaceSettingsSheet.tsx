@@ -1,4 +1,4 @@
-import { Brain, FileText, X } from "lucide-react";
+import { Brain, FileText, MessageSquareQuote, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -166,7 +166,7 @@ export function SpaceSettingsSheet({
 
               <section className="border-b border-[#e6d8c8] pb-6 dark:border-[#2b2119]">
                 <SectionLabel>{t("sidebar.contextSummaryTitle")}</SectionLabel>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className={cn("flex items-start gap-3 rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]", isRtl && "flex-row-reverse text-right")}>
                     <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
                       <Brain className="size-4" />
@@ -190,6 +190,19 @@ export function SpaceSettingsSheet({
                       </div>
                       <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
                         {t("sidebar.contextSummarySpaceBody")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={cn("flex items-start gap-3 rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]", isRtl && "flex-row-reverse text-right")}>
+                    <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
+                      <MessageSquareQuote className="size-4" />
+                    </span>
+                    <div>
+                      <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        {t("sidebar.contextSummaryThreadLabel")}
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                        {t("sidebar.contextSummaryThreadBody")}
                       </div>
                     </div>
                   </div>

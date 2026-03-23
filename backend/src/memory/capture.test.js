@@ -127,6 +127,35 @@ describe("memory capture", () => {
     expect(result.review).toEqual([]);
   });
 
+  it("respects always-review policy for otherwise safe memories", async () => {
+    const { processChatMemoryCapture } = await loadCaptureModule();
+    extractFactsMock.mockResolvedValue([
+      {
+        content: "Prefers concise answers",
+        type: "preference",
+        confidence: 0.97,
+        conflictKey: "preference:concise-answers",
+        polarity: "positive",
+      },
+    ]);
+
+    const result = await processChatMemoryCapture({
+      userId: "user@example.com",
+      message: "I prefer concise answers",
+      policy: { id: "ask_before_saving", alwaysReview: true },
+    });
+
+    expect(result.saved).toEqual([]);
+    expect(result.review).toEqual([
+      expect.objectContaining({
+        content: "Prefers concise answers",
+        reason: "policy_review",
+      }),
+    ]);
+    expect(stageMemoryMock).toHaveBeenCalledTimes(1);
+    expect(storeMemoryMock).not.toHaveBeenCalled();
+  });
+
   it("creates conflict records for contradictory memories", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
     extractFactsMock.mockResolvedValue([
@@ -150,6 +179,12 @@ describe("memory capture", () => {
     });
 
     expect(createConflictMock).toHaveBeenCalledTimes(1);
+    expect(createConflictMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user@example.com",
+        sourceThreadId: null,
+      })
+    );
     expect(result.conflicts).toEqual([
       expect.objectContaining({
         id: "conf-1",

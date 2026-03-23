@@ -14,6 +14,7 @@ function createMockApp() {
     routes,
     get: register("GET"),
     post: register("POST"),
+    patch: register("PATCH"),
     delete: register("DELETE"),
   };
 }
@@ -289,7 +290,14 @@ describe("memory routes integration", () => {
 
     createMemoryRoutes(app, {
       requireAuthUser: buildAuthedUser(),
-      dependencies: { processChatMemoryCapture },
+      dependencies: {
+        processChatMemoryCapture,
+        resolveMemoryCapturePolicy: jest.fn(async () => ({
+          policy: "balanced",
+          source: "stored",
+          capturePolicy: { id: "balanced" },
+        })),
+      },
     });
 
     const res = await invokeRoute(app, {
@@ -305,9 +313,114 @@ describe("memory routes integration", () => {
       userId: OWNER_EMAIL,
       message: "I prefer concise answers",
       threadId: null,
+      policy: { id: "balanced" },
     });
     expect(res.body?.saved).toHaveLength(1);
     expect(res.body?.review).toEqual([]);
+  });
+
+  it("roundtrips memory preferences under authenticated scope", async () => {
+    const app = createMockApp();
+    const getMemoryPreferences = jest.fn(async () => ({
+      policy: "balanced",
+      source: "default",
+    }));
+    const setMemoryPreferences = jest.fn(async () => ({
+      policy: "save_less",
+      source: "stored",
+    }));
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: { getMemoryPreferences, setMemoryPreferences },
+    });
+
+    const getRes = await invokeRoute(app, {
+      method: "GET",
+      path: "/api/memory/preferences",
+    });
+    const patchRes = await invokeRoute(app, {
+      method: "PATCH",
+      path: "/api/memory/preferences",
+      body: { policy: "save_less" },
+    });
+
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.body?.policy).toBe("balanced");
+    expect(getMemoryPreferences).toHaveBeenCalledWith(OWNER_EMAIL);
+    expect(patchRes.statusCode).toBe(200);
+    expect(setMemoryPreferences).toHaveBeenCalledWith(OWNER_EMAIL, {
+      policy: "save_less",
+    });
+    expect(patchRes.body?.policy).toBe("save_less");
+  });
+
+  it("updates an existing memory record with scoped ownership", async () => {
+    const app = createMockApp();
+    const updateMemory = jest.fn(async () => ({
+      memory: {
+        id: VALID_UUID,
+        content: "Prefers concise weekly plans",
+        type: "preference",
+        status: "outdated",
+      },
+    }));
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: { updateMemory },
+    });
+
+    const res = await invokeRoute(app, {
+      method: "PATCH",
+      path: "/api/memory/:id",
+      params: { id: VALID_UUID },
+      body: {
+        content: "Prefers concise weekly plans",
+        type: "preference",
+        status: "outdated",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(updateMemory).toHaveBeenCalledWith({
+      id: VALID_UUID,
+      userId: OWNER_EMAIL,
+      content: "Prefers concise weekly plans",
+      type: "preference",
+      status: "outdated",
+    });
+    expect(res.body?.memory?.status).toBe("outdated");
+  });
+
+  it("returns recent activity under authenticated scope", async () => {
+    const app = createMockApp();
+    const getMemoryActivity = jest.fn(async () => [
+      {
+        id: VALID_UUID,
+        kind: "saved",
+        content: "Prefers concise answers",
+        type: "preference",
+        threadId: "thread-1",
+        occurredAt: "2026-03-23T10:00:00.000Z",
+      },
+    ]);
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: { getMemoryActivity },
+    });
+
+    const res = await invokeRoute(app, {
+      method: "GET",
+      path: "/api/memory/activity",
+      query: { limit: "9" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(getMemoryActivity).toHaveBeenCalledWith(OWNER_EMAIL, 9);
+    expect(res.body?.activities).toHaveLength(1);
+    expect(res.body?.activities?.[0]?.kind).toBe("saved");
   });
 
   it("clamps confirmations limit and keeps user scoped", async () => {
