@@ -48,4 +48,42 @@ describe("MessageContent", () => {
     expect(container.firstChild).toHaveTextContent("- stays plain");
     expect(container.querySelector("ul, ol, blockquote, pre")).toBeNull();
   });
+
+  it("renders assistant markdown tables with desktop and mobile layouts", () => {
+    const { container } = render(
+      <MessageContent
+        role="assistant"
+        content={"| Plan | Price | Notes |\n| --- | --- | --- |\n| Personal | $13 / month | Best for ongoing work |\n| Student | $8 / month | Use your .edu email |"}
+      />,
+    );
+
+    const desktopTable = screen.getByTestId("message-table-desktop");
+    const mobileCards = screen.getByTestId("message-table-mobile");
+
+    expect(desktopTable).toHaveClass("hidden", "sm:block");
+    expect(mobileCards).toHaveClass("sm:hidden");
+    expect(container.querySelector("table")).not.toBeNull();
+    expect(screen.getAllByText("Plan").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("$13 / month").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Best for ongoing work").length).toBeGreaterThan(0);
+  });
+
+  it("preserves links, inline code, and long prose in table cells", () => {
+    render(
+      <MessageContent
+        role="assistant"
+        content={
+          "| Item | Details |\n| --- | --- |\n| Link | Visit [docs](https://example.com/docs) and run `npm run dev` |\n| Notes | This is a longer sentence that should wrap naturally instead of collapsing into unreadable narrow columns on mobile. |"
+        }
+      />,
+    );
+
+    expect(screen.getAllByRole("link", { name: "docs" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("npm run dev").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        "This is a longer sentence that should wrap naturally instead of collapsing into unreadable narrow columns on mobile.",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
 });
