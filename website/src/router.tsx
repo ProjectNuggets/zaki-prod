@@ -3,6 +3,7 @@ import { HomePage } from "./pages/Home";
 import { BotPage } from "./pages/BotPage";
 import { FaqPage } from "./pages/FaqPage";
 import { StoryPage } from "./pages/StoryPage";
+import { AutismGuidancePage } from "./pages/AutismGuidancePage";
 import { ComparisonPage } from "./pages/ComparisonPage";
 import { HowToPage } from "./pages/HowToPage";
 import { ContactPage } from "./pages/ContactPage";
@@ -17,6 +18,8 @@ export function AppRoutes() {
       <Route path="/ar/zaki-bot" element={<BotPage locale="ar" />} />
       <Route path="/story" element={<StoryPage locale="en" />} />
       <Route path="/ar/story" element={<StoryPage locale="ar" />} />
+      <Route path="/autism-guidance" element={<AutismGuidancePage locale="en" />} />
+      <Route path="/ar/autism-guidance" element={<AutismGuidancePage locale="ar" />} />
       <Route path="/faq" element={<FaqPage locale="en" />} />
       <Route path="/ar/faq" element={<FaqPage locale="ar" />} />
       <Route path="/vs-chatgpt" element={<ComparisonPage slug="vs-chatgpt" />} />

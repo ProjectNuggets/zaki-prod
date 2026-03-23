@@ -279,6 +279,45 @@ export function getRouteSeo(pathname: string): RouteSeo {
     };
   }
 
+  if (route === "/autism-guidance/" || route === "/ar/autism-guidance/") {
+    const description =
+      locale === "ar"
+        ? "صفحة ثنائية اللغة لإثبات مفهوم مساعد زكي للإرشاد حول التوحّد: للتثقيف، وتنظيم الملاحظات، والاستعداد للتقييم، لا للتشخيص الرسمي."
+        : "A bilingual proof-of-concept page for ZAKI's autism guidance assistant: designed for education, structured observations, and assessment preparation, not formal diagnosis.";
+    const canonical = toAbsoluteUrl(route);
+    return {
+      title:
+        locale === "ar"
+          ? "زكي | مساعد للإرشاد حول التوحّد"
+          : "ZAKI | Autism Guidance Assistant",
+      description,
+      canonical,
+      lang: locale,
+      dir,
+      imageAlt:
+        locale === "ar"
+          ? "صفحة زكي للإرشاد حول التوحّد"
+          : "ZAKI autism guidance proof-of-concept page",
+      localeTag,
+      altLocaleTag,
+      keywords:
+        locale === "ar"
+          ? "زكي, التوحّد, إرشاد التوحّد, الاستعداد للتقييم, مساعد ثنائي اللغة"
+          : "ZAKI, autism guidance, autism assessment preparation, bilingual autism assistant, autism support",
+      schema: [
+        ...buildCommonSchema(locale, description),
+        buildWebPageSchema(
+          locale === "ar" ? "زكي | مساعد للإرشاد حول التوحّد" : "ZAKI | Autism Guidance Assistant",
+          canonical,
+          locale,
+          description
+        ),
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
   if (
     route === "/vs-chatgpt/" ||
     route === "/zaki-vs-spaces/" ||

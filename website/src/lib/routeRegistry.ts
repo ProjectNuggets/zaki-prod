@@ -5,6 +5,7 @@ export type RoutePageKind =
   | "bot"
   | "faq"
   | "story"
+  | "autism-guidance"
   | "comparison"
   | "howto"
   | "legal"
@@ -92,6 +93,24 @@ export const routeRegistry: RouteDefinition[] = [
     requiresAlternates: true,
     requiresSchema: true,
     alternatesGroup: "story",
+  },
+  {
+    pathname: "/autism-guidance/",
+    locale: "en",
+    pageKind: "autism-guidance",
+    seoKey: "autism-guidance",
+    requiresAlternates: true,
+    requiresSchema: true,
+    alternatesGroup: "autism-guidance",
+  },
+  {
+    pathname: "/ar/autism-guidance/",
+    locale: "ar",
+    pageKind: "autism-guidance",
+    seoKey: "autism-guidance",
+    requiresAlternates: true,
+    requiresSchema: true,
+    alternatesGroup: "autism-guidance",
   },
   {
     pathname: "/vs-chatgpt/",

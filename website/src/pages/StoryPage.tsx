@@ -353,6 +353,13 @@ export function StoryPage({ locale }: { locale: Locale }) {
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
+                to={isArabic ? "/ar/autism-guidance/" : "/autism-guidance/"}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+              >
+                {isArabic ? "دليل التوحّد مع زكي" : "Autism guidance with ZAKI"}
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
                 to="/zaki-vs-spaces/"
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
               >
