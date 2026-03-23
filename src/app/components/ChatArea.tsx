@@ -16,6 +16,7 @@ import {
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
 } from "@/lib/api";
+import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   readResponseFormattingConfig,
@@ -530,8 +531,6 @@ export function ChatArea() {
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
-
-  type MemoryViewerTab = "memories" | "pending" | "conflicts";
 
   // Memory state for the simplified normal-chat capture flow
   const [recentSavedMemories, setRecentSavedMemories] = useState<
@@ -2118,20 +2117,8 @@ export function ChatArea() {
   }, [dismissMemoryToast]);
 
   const openMemoryViewer = useCallback((query?: string, tab?: MemoryViewerTab) => {
-    if (typeof window === "undefined") return;
-    if (query || tab) {
-      window.dispatchEvent(
-        new CustomEvent("zaki:open-memory", {
-          detail: {
-            ...(query ? { query } : {}),
-            ...(tab ? { tab } : {}),
-          },
-        })
-      );
-      return;
-    }
-    window.dispatchEvent(new Event("zaki:open-memory"));
-  }, []);
+    openSpacesMemoryViewer({ enabled: isMemoryPipelineEnabled, query, tab });
+  }, [isMemoryPipelineEnabled]);
 
   const syncMemoryStatus = useCallback(
     async (notifyOnNewConflicts = false) => {

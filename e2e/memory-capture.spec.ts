@@ -274,8 +274,9 @@ test.describe("memory capture UX", () => {
     await expect(page.getByText("1 item needs review")).toBeVisible();
     await page.getByRole("button", { name: "Review" }).first().click();
 
-    await expect(page.getByRole("dialog", { name: "Memory viewer" })).toBeVisible();
-    await expect(page.getByText("Sensitive phone detail")).toBeVisible();
+    const memoryViewer = page.getByRole("dialog", { name: "Memory viewer" });
+    await expect(memoryViewer).toBeVisible();
+    await expect(memoryViewer.getByText("Sensitive phone detail")).toBeVisible();
   });
 
   test("undo failure stays visible and offers retry", async ({ page }) => {
