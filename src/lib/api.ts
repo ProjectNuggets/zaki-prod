@@ -35,6 +35,24 @@ export type MemoryCaptureResponse = {
   }>;
 };
 
+export type MemoryPolicy =
+  | "balanced"
+  | "ask_before_saving"
+  | "save_less"
+  | "save_more";
+
+export type MemoryPreferencesResponse = {
+  policy: MemoryPolicy;
+  source?: "default" | "stored";
+  updatedAt?: string | null;
+};
+
+export type MemoryPatch = {
+  content?: string;
+  type?: string;
+  status?: "active" | "outdated";
+};
+
 type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
 };
@@ -175,6 +193,49 @@ export async function captureMemory({
     data = null;
   }
 
+  return { response, data };
+}
+
+export async function fetchMemoryPreferences() {
+  const response = await apiRequest("/api/memory/preferences");
+  let data: MemoryPreferencesResponse | null = null;
+  try {
+    data = (await response.json()) as MemoryPreferencesResponse;
+  } catch {
+    data = null;
+  }
+  return { response, data };
+}
+
+export async function updateMemoryPreferences(policy: MemoryPolicy) {
+  const response = await apiRequest("/api/memory/preferences", {
+    method: "PATCH",
+    body: JSON.stringify({ policy }),
+  });
+  let data: MemoryPreferencesResponse | null = null;
+  try {
+    data = (await response.json()) as MemoryPreferencesResponse;
+  } catch {
+    data = null;
+  }
+  return { response, data };
+}
+
+export async function patchMemory(memoryId: string, patch: MemoryPatch) {
+  const response = await apiRequest(`/api/memory/${memoryId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  let data: { memory?: unknown; error?: string; duplicateId?: string | null } | null = null;
+  try {
+    data = (await response.json()) as {
+      memory?: unknown;
+      error?: string;
+      duplicateId?: string | null;
+    };
+  } catch {
+    data = null;
+  }
   return { response, data };
 }
 

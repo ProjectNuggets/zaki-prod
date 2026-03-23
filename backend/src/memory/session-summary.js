@@ -4,9 +4,12 @@ import {
 } from "../memory-extraction.js";
 import {
   storeMemory as storeMemoryOp,
+  findDuplicateMemory as findDuplicateMemoryOp,
   findConflict as findConflictOp,
   createConflict as createConflictOp,
+  stageMemory as stageMemoryOp,
 } from "./operations.js";
+import { classifyMemoryCandidate } from "./capture.js";
 
 const DEFAULT_MAX_USER_MESSAGES = Number.parseInt(
   process.env.ZAKI_SESSION_MEMORY_MAX_USER_MESSAGES || "8",
@@ -63,13 +66,16 @@ function buildFactDedupeKey(fact) {
 }
 
 export async function summarizeConversation(
-  { userId, messages, threadId, threadTitle },
+  { userId, messages, threadId, threadTitle, policy = {} },
   dependencies = {}
 ) {
   const extractFacts = dependencies.extractFacts || extractFactsOp;
   const storeMemory = dependencies.storeMemory || storeMemoryOp;
+  const findDuplicateMemory =
+    dependencies.findDuplicateMemory || findDuplicateMemoryOp;
   const findConflict = dependencies.findConflict || findConflictOp;
   const createConflict = dependencies.createConflict || createConflictOp;
+  const stageMemory = dependencies.stageMemory || stageMemoryOp;
 
   const scopedUserId = String(userId || "").trim().toLowerCase();
   if (!scopedUserId) {
@@ -86,10 +92,12 @@ export async function summarizeConversation(
     processedMessages: userMessages.length,
     extracted: 0,
     stored: 0,
+    review: 0,
     duplicates: 0,
     conflicts: 0,
     errors: 0,
     storedIds: [],
+    reviewIds: [],
     conflictIds: [],
     skippedFacts: 0,
     factsCapped: false,
@@ -141,6 +149,12 @@ export async function summarizeConversation(
       seenFacts.add(dedupeKey);
 
       try {
+        const duplicate = await findDuplicateMemory({
+          userId: scopedUserId,
+          content: fact.content,
+          conflictKey: fact.conflictKey,
+          polarity: fact.polarity,
+        });
         const conflict = await findConflict({
           userId: scopedUserId,
           content: fact.content,
@@ -148,16 +162,47 @@ export async function summarizeConversation(
           polarity: fact.polarity,
         });
 
-        if (conflict) {
+        const decision = classifyMemoryCandidate({
+          fact,
+          duplicate: Boolean(duplicate),
+          conflict: Boolean(conflict),
+          policy,
+        });
+
+        if (decision.action === "duplicate") {
+          result.duplicates += 1;
+          continue;
+        }
+
+        if (decision.action === "conflict") {
           const created = await createConflict({
             userId: scopedUserId,
             newContent: fact.content,
             newType: fact.type,
-            newConfidenceScore: 0.8,
+            newConfidenceScore: decision.confidence ?? 0.8,
             conflictMemory: conflict,
           });
           result.conflicts += 1;
           if (created?.id) result.conflictIds.push(created.id);
+          continue;
+        }
+
+        if (decision.action === "needs_review") {
+          const staged = await stageMemory({
+            userId: scopedUserId,
+            content: fact.content,
+            type: fact.type,
+            sourceThreadId: threadId || null,
+            confidenceScore: decision.confidence ?? 0.8,
+            conflictKey: fact.conflictKey,
+            polarity: fact.polarity,
+          });
+          if (staged?.duplicate) {
+            result.duplicates += 1;
+            continue;
+          }
+          result.review += 1;
+          if (staged?.id) result.reviewIds.push(staged.id);
           continue;
         }
 

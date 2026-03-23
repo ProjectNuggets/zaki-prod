@@ -2,10 +2,18 @@ import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryViewer } from "./MemoryViewer";
-import { apiRequest } from "@/lib/api";
+import {
+  apiRequest,
+  fetchMemoryPreferences,
+  patchMemory,
+  updateMemoryPreferences,
+} from "@/lib/api";
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(),
+  fetchMemoryPreferences: jest.fn(),
+  updateMemoryPreferences: jest.fn(),
+  patchMemory: jest.fn(),
 }));
 
 jest.mock("react-i18next", () => ({
@@ -56,6 +64,9 @@ function jsonResponse(payload: unknown, ok = true) {
 describe("MemoryViewer", () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockReset();
+    (fetchMemoryPreferences as jest.Mock).mockReset();
+    (updateMemoryPreferences as jest.Mock).mockReset();
+    (patchMemory as jest.Mock).mockReset();
     (apiRequest as jest.Mock).mockImplementation((path: string) => {
       if (String(path).startsWith("/api/memory/list")) {
         return Promise.resolve(
@@ -73,6 +84,18 @@ describe("MemoryViewer", () => {
         return Promise.resolve(jsonResponse({ conflicts: [] }));
       }
       return Promise.resolve(jsonResponse({}));
+    });
+    (fetchMemoryPreferences as jest.Mock).mockResolvedValue({
+      response: jsonResponse({ policy: "balanced", source: "stored" }),
+      data: { policy: "balanced", source: "stored" },
+    });
+    (updateMemoryPreferences as jest.Mock).mockResolvedValue({
+      response: jsonResponse({ policy: "balanced", source: "stored" }),
+      data: { policy: "balanced", source: "stored" },
+    });
+    (patchMemory as jest.Mock).mockResolvedValue({
+      response: jsonResponse({ memory: null }),
+      data: { memory: null },
     });
   });
 

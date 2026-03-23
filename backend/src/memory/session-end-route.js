@@ -1,8 +1,10 @@
 import { summarizeConversation as summarizeConversationOp } from "./session-summary.js";
+import { resolveMemoryCapturePolicy as resolveMemoryCapturePolicyOp } from "./operations.js";
 
 export function createSessionEndHandler({
   requireAuthUser,
   summarizeConversation = summarizeConversationOp,
+  resolveMemoryCapturePolicy = resolveMemoryCapturePolicyOp,
   isEnabled = () => process.env.ZAKI_ENABLE_SESSION_SUMMARIZATION === "true",
 } = {}) {
   return async function sessionEndHandler(req, res) {
@@ -26,11 +28,13 @@ export function createSessionEndHandler({
         return res.json({ skipped: true, reason: "disabled" });
       }
 
+      const { capturePolicy } = await resolveMemoryCapturePolicy(userEmail);
       summarizeConversation({
         userId: userEmail,
         messages,
         threadId,
         threadTitle,
+        policy: capturePolicy,
       })
         .then((result) => {
           if (result?.skipped) {
@@ -54,4 +58,3 @@ export function createSessionEndHandler({
     }
   };
 }
-

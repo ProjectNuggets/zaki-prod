@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CloudRain,
   Download,
+  Edit2,
   FileText,
   Filter,
   GitBranch,
@@ -24,8 +25,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, patchMemory } from "@/lib/api";
 import { SkeletonMemoryViewer } from "../ui/skeleton";
+import { MemoryModeToggle, useMemoryPolicy } from "./MemoryModeToggle";
 
 type MemoryMetadata = {
   conflictKey?: string;
@@ -39,8 +41,10 @@ interface MemoryRecord {
   id: string;
   content: string;
   type: string;
+  status?: "active" | "outdated" | string;
   createdAt?: string;
   created_at?: string;
+  updated_at?: string;
   threadId?: string | null;
   metadata?: MemoryMetadata | null;
 }
@@ -246,6 +250,11 @@ export function MemoryViewer({
   const [conflictsLoading, setConflictsLoading] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editType, setEditType] = useState("context");
+  const [editStatus, setEditStatus] = useState<"active" | "outdated">("active");
+  const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"memories" | "pending" | "conflicts">(initialTab);
   const [searchQuery, setSearchQuery] = useState(String(initialSearchQuery || "").trim());
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -253,6 +262,12 @@ export function MemoryViewer({
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const locale = i18n.language || undefined;
+  const {
+    policy: memoryPolicy,
+    setPolicy: setMemoryPolicy,
+    loading: memoryPolicyLoading,
+    saving: memoryPolicySaving,
+  } = useMemoryPolicy();
 
   const fetchPendingMemories = async (showErrors = true) => {
     setPendingLoading(true);
@@ -503,6 +518,77 @@ export function MemoryViewer({
     }
   };
 
+  const beginEditMemory = (memory: MemoryRecord) => {
+    setEditingMemoryId(memory.id);
+    setEditContent(memory.content);
+    setEditType(memory.type);
+    setEditStatus(memory.status === "outdated" ? "outdated" : "active");
+  };
+
+  const cancelEditMemory = () => {
+    setEditingMemoryId(null);
+    setEditContent("");
+    setEditType("context");
+    setEditStatus("active");
+  };
+
+  const applyMemoryPatch = async (
+    memoryId: string,
+    patch: { content?: string; type?: string; status?: "active" | "outdated" }
+  ) => {
+    setSavingMemoryId(memoryId);
+    try {
+      const { response, data } = await patchMemory(memoryId, patch);
+      if (!response.ok || !data?.memory) {
+        throw new Error(
+          data?.error || t("memoryViewer.errors.updateMemory")
+        );
+      }
+      const nextMemory = {
+        ...(data.memory as MemoryRecord),
+        createdAt: normalizeCreatedAt(
+          (data.memory as MemoryRecord).createdAt ||
+            (data.memory as MemoryRecord).created_at
+        ),
+      };
+      setMemories((prev) =>
+        prev.map((memory) => (memory.id === memoryId ? nextMemory : memory))
+      );
+      return true;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("memoryViewer.errors.updateMemory")
+      );
+      return false;
+    } finally {
+      setSavingMemoryId(null);
+    }
+  };
+
+  const saveEditedMemory = async (memoryId: string) => {
+    const saved = await applyMemoryPatch(memoryId, {
+      content: editContent.trim(),
+      type: editType,
+      status: editStatus,
+    });
+    if (!saved) return;
+    cancelEditMemory();
+    toast.success(t("memoryViewer.toasts.memoryUpdated"));
+  };
+
+  const setMemoryStatus = async (
+    memoryId: string,
+    status: "active" | "outdated"
+  ) => {
+    const saved = await applyMemoryPatch(memoryId, { status });
+    if (!saved) return;
+    toast.success(
+      status === "outdated"
+        ? t("memoryViewer.toasts.memoryMarkedOutdated")
+        : t("memoryViewer.toasts.memoryRestored")
+    );
+  };
+
   const filteredMemories = useMemo(() => {
     return memories
       .filter((memory) => {
@@ -536,20 +622,25 @@ export function MemoryViewer({
   }, [memories]);
 
   const memoryStats = useMemo(() => {
+    const activeMemories = memories.filter(
+      (memory) => (memory.status || "active") !== "outdated"
+    );
     return {
-      stored: memories.length,
+      stored: activeMemories.length,
       pending: pendingMemories.length,
       conflicts: conflicts.length,
       filtered: filteredMemories.length,
     };
-  }, [memories.length, pendingMemories.length, conflicts.length, filteredMemories.length]);
+  }, [memories, pendingMemories.length, conflicts.length, filteredMemories.length]);
 
   const notebookGroups = useMemo(() => {
-    const orderedMemories = [...memories].sort((a, b) => {
+    const orderedMemories = memories
+      .filter((memory) => (memory.status || "active") !== "outdated")
+      .sort((a, b) => {
       const aTime = new Date(a.createdAt || a.created_at || "").getTime();
       const bTime = new Date(b.createdAt || b.created_at || "").getTime();
       return bTime - aTime;
-    });
+      });
 
     const grouped = new Map<Exclude<MemorySummaryGroup, "recent_changes">, string[]>([
       ["about_you", []],
@@ -701,6 +792,27 @@ export function MemoryViewer({
               {t("memoryViewer.scope.session.body")}
             </p>
           </div>
+        </div>
+        <div className="mt-4">
+          <MemoryModeToggle
+            value={memoryPolicy}
+            onChange={(nextPolicy) => {
+              void (async () => {
+                const saved = await setMemoryPolicy(nextPolicy);
+                if (!saved) {
+                  toast.error(t("memoryViewer.policy.saveFailed"));
+                  return;
+                }
+                toast.success(t("memoryViewer.policy.saved"));
+              })();
+            }}
+            disabled={memoryPolicyLoading || memoryPolicySaving}
+          />
+          <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+            {memoryPolicyLoading
+              ? t("memoryViewer.policy.loading")
+              : t("memoryViewer.policy.helper")}
+          </p>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-4">
           <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-2">
@@ -1133,6 +1245,9 @@ export function MemoryViewer({
                         const Icon = typeStyle.icon;
                         const createdAt = memory.createdAt || new Date().toISOString();
                         const conflictKey = memory.metadata?.conflictKey;
+                        const isEditing = editingMemoryId === memory.id;
+                        const isSaving = savingMemoryId === memory.id;
+                        const isOutdated = (memory.status || "active") === "outdated";
 
                         return (
                           <article
@@ -1155,8 +1270,15 @@ export function MemoryViewer({
                                     {t(`memory.types.${memory.type}`, { defaultValue: typeStyle.label })}
                                   </span>
                                   <span className="inline-flex items-center rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
-                                    {t("memoryViewer.memories.storedBadge")}
+                                    {isOutdated
+                                      ? t("memoryViewer.memories.outdatedBadge")
+                                      : t("memoryViewer.memories.storedBadge")}
                                   </span>
+                                  {memory.metadata?.editedFrom ? (
+                                    <span className="inline-flex items-center rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-2 py-0.5 text-[10px] font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+                                      {t("memoryViewer.memories.editedBadge")}
+                                    </span>
+                                  ) : null}
                                   {conflictKey ? (
                                     <span className="inline-flex items-center rounded-full border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-2 py-0.5 text-[10px] font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
                                       {conflictKey}
@@ -1164,9 +1286,53 @@ export function MemoryViewer({
                                   ) : null}
                                 </div>
 
-                                <p className="mt-2 text-sm text-zaki-primary dark:text-zaki-dark-primary leading-relaxed">
-                                  {memory.content}
-                                </p>
+                                {isEditing ? (
+                                  <div className="mt-2 space-y-3">
+                                    <textarea
+                                      value={editContent}
+                                      onChange={(event) => setEditContent(event.target.value)}
+                                      rows={3}
+                                      className="w-full rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
+                                    />
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                      <select
+                                        value={editType}
+                                        onChange={(event) => setEditType(event.target.value)}
+                                        className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
+                                      >
+                                        {Object.keys(memoryTypeStyles).map((type) => (
+                                          <option key={type} value={type}>
+                                            {t(`memory.types.${type}`, {
+                                              defaultValue: getTypeStyle(type).label,
+                                            })}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={editStatus}
+                                        onChange={(event) =>
+                                          setEditStatus(
+                                            event.target.value === "outdated"
+                                              ? "outdated"
+                                              : "active"
+                                          )
+                                        }
+                                        className="rounded-zaki-lg border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-elevated px-3 py-2 text-sm text-zaki-primary dark:text-zaki-dark-primary outline-none focus:border-zaki-focus"
+                                      >
+                                        <option value="active">
+                                          {t("memoryViewer.memories.statusActive")}
+                                        </option>
+                                        <option value="outdated">
+                                          {t("memoryViewer.memories.statusOutdated")}
+                                        </option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 text-sm text-zaki-primary dark:text-zaki-dark-primary leading-relaxed">
+                                    {memory.content}
+                                  </p>
+                                )}
 
                                 <div className={cn("mt-3 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted dark:text-zaki-dark-muted", isRtl && "justify-end")}>
                                   <span className="inline-flex items-center gap-1">
@@ -1182,12 +1348,64 @@ export function MemoryViewer({
                                     </span>
                                   ) : null}
                                 </div>
+                                <div className={cn("mt-3 flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-primary disabled:opacity-60"
+                                        disabled={isSaving}
+                                        onClick={() => void saveEditedMemory(memory.id)}
+                                      >
+                                        {isSaving
+                                          ? t("memoryViewer.memories.savingEdit")
+                                          : t("memoryViewer.memories.saveEdit")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-secondary"
+                                        disabled={isSaving}
+                                        onClick={cancelEditMemory}
+                                      >
+                                        {t("memoryViewer.memories.cancelEdit")}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-secondary"
+                                        disabled={isSaving}
+                                        onClick={() => beginEditMemory(memory)}
+                                      >
+                                        <Edit2 className="size-3.5" />
+                                        {t("memoryViewer.memories.edit")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="zaki-btn-sm zaki-btn-secondary"
+                                        disabled={isSaving}
+                                        onClick={() =>
+                                          void setMemoryStatus(
+                                            memory.id,
+                                            isOutdated ? "active" : "outdated"
+                                          )
+                                        }
+                                      >
+                                        {isOutdated
+                                          ? t("memoryViewer.memories.restore")
+                                          : t("memoryViewer.memories.markOutdated")}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
 
                               <button
                                 type="button"
                                 onClick={() => void deleteMemory(memory.id)}
-                                className="shrink-0 inline-flex size-8 items-center justify-center rounded-lg border border-transparent text-zaki-muted dark:text-zaki-dark-muted hover:border-[#f0d7d1] dark:hover:border-[#5a2e27] hover:bg-[#fff1ed] dark:hover:bg-[#2a1613] hover:text-zaki-brand transition-colors"
+                                disabled={isSaving}
+                                className="shrink-0 inline-flex size-8 items-center justify-center rounded-lg border border-transparent text-zaki-muted dark:text-zaki-dark-muted hover:border-[#f0d7d1] dark:hover:border-[#5a2e27] hover:bg-[#fff1ed] dark:hover:bg-[#2a1613] hover:text-zaki-brand transition-colors disabled:opacity-50"
                                 aria-label={t("memoryViewer.delete.aria")}
                                 data-onboarding-id="memory-delete-button"
                               >

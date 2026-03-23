@@ -50,6 +50,7 @@ export function classifyMemoryCandidate({
       Number(policy.autoSaveMinConfidence ?? DEFAULT_AUTO_SAVE_MIN_CONFIDENCE)
     )
   );
+  const alwaysReview = policy.alwaysReview === true;
   const reviewIfConfidenceMissing =
     policy.reviewIfConfidenceMissing ?? REVIEW_IF_CONFIDENCE_MISSING;
 
@@ -76,6 +77,14 @@ export function classifyMemoryCandidate({
       confidence,
       sensitive,
       sensitiveCategory: sensitivity.category || null,
+    };
+  }
+  if (alwaysReview) {
+    return {
+      action: "needs_review",
+      reason: "policy_review",
+      confidence,
+      sensitive,
     };
   }
   if (confidence == null && reviewIfConfidenceMissing) {

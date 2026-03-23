@@ -1118,10 +1118,14 @@
     "footerLine2": "يمكنك دائمًا مراجعة الذكريات أو حذفها لاحقًا.",
     "mode": {
       "title": "وضع الذاكرة",
-      "autosave": "حفظ تلقائي",
-      "autosaveHint": "يحفظ فورًا مع تراجع لمدة 5 ثوانٍ",
-      "manual": "يدوي",
-      "manualHint": "أكد كل ذاكرة يدويًا"
+      "balanced": "متوازن",
+      "balancedHint": "يحفظ الذكريات الآمنة بهدوء ويطلب المراجعة فقط عند الحاجة",
+      "ask_before_saving": "اسأل قبل الحفظ",
+      "ask_before_savingHint": "راجع معظم الذكريات قبل أن يحتفظ بها ZAKI",
+      "save_less": "احفظ أقل",
+      "save_lessHint": "كن أكثر تشددًا فيما يتحول إلى ذاكرة دائمة",
+      "save_more": "احفظ أكثر",
+      "save_moreHint": "احفظ مزيدًا من الذكريات الآمنة دون مقاطعة زائدة"
     }
   },
   "memoryViewer": {
@@ -1174,6 +1178,12 @@
       "title": "السجلات التفصيلية",
       "body": "ابحث وفلتر وصدّر وراجع واحسم السجلات الفعلية للذاكرة من هنا."
     },
+    "policy": {
+      "loading": "جارٍ تحميل تفضيل الذاكرة...",
+      "helper": "ينطبق هذا التفضيل على دردشات ومساحات Spaces فقط.",
+      "saved": "تم تحديث تفضيل الذاكرة.",
+      "saveFailed": "تعذر حفظ تفضيل الذاكرة."
+    },
     "errors": {
       "fetchPending": "تعذر جلب الذكريات المعلقة",
       "loadPending": "تعذر تحميل الذكريات المعلقة",
@@ -1185,6 +1195,7 @@
       "rejectMemory": "تعذر تخطي الذاكرة",
       "resolveConflict": "تعذر حل التعارض",
       "deleteMemory": "تعذر حذف الذاكرة",
+      "updateMemory": "تعذر تحديث الذاكرة",
       "exportMemories": "تعذر تصدير الذكريات."
     },
     "toasts": {
@@ -1193,6 +1204,9 @@
       "incomingMemorySaved": "تم حفظ الذاكرة الجديدة.",
       "existingMemoryKept": "تم الإبقاء على الذاكرة الحالية.",
       "memoryDeleted": "تم حذف الذاكرة.",
+      "memoryUpdated": "تم تحديث الذاكرة.",
+      "memoryMarkedOutdated": "تم وضع علامة قديمة على الذاكرة.",
+      "memoryRestored": "تمت استعادة الذاكرة.",
       "refreshing": "جارٍ تحديث الذكريات...",
       "exported": "تم تصدير {{count}} ذاكرة."
     },
@@ -1258,6 +1272,16 @@
       "emptyFilteredBody": "جرّب بحثًا أوسع أو أعد ضبط فلتر النوع.",
       "emptyBody": "عندما يحتفظ ZAKI بشيء يستحق التذكر سيظهر هنا ويساعده على تقديم ردود أنفع لاحقًا.",
       "storedBadge": "محفوظة",
+      "outdatedBadge": "قديمة",
+      "editedBadge": "معدلة",
+      "statusActive": "نشطة",
+      "statusOutdated": "قديمة",
+      "edit": "تعديل",
+      "markOutdated": "وضع كقديمة",
+      "restore": "استعادة",
+      "saveEdit": "حفظ التغييرات",
+      "cancelEdit": "إلغاء",
+      "savingEdit": "جارٍ الحفظ...",
       "threadLabel": "المحادثة {{id}}",
       "loadingMore": "جارٍ تحميل المزيد...",
       "loadMore": "تحميل المزيد من الذكريات"

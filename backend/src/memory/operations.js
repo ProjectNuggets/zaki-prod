@@ -6,8 +6,12 @@
 
 import crypto from "node:crypto";
 import { z } from "zod";
-import { dbQuery, dbGet, dbAll, hasPgVector } from "../db.js";
+import { dbQuery, dbGet, dbAll, hasPgVector, withDbTransaction } from "../db.js";
 import { callNovaTypChat, parseJsonObjectFromText } from "./nova-chat.js";
+import {
+  buildMemoryCapturePolicyConfig,
+  normalizeMemoryPolicy,
+} from "./policy.js";
 
 // ============================================================================
 // Storage Detection
@@ -198,6 +202,7 @@ const ALLOWED_MEMORY_TYPES = new Set([
   "relationship",
   "struggle",
 ]);
+const ALLOWED_MEMORY_STATUSES = new Set(["active", "outdated"]);
 
 function normalizeStoredContent(value) {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
@@ -210,6 +215,12 @@ function normalizeStoredType(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) return "context";
   return ALLOWED_MEMORY_TYPES.has(normalized) ? normalized : "context";
+}
+
+function normalizeMemoryStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "active";
+  return ALLOWED_MEMORY_STATUSES.has(normalized) ? normalized : "active";
 }
 
 function sanitizeStoredMetadata(value) {
@@ -802,7 +813,9 @@ export async function findDuplicateMemory({
   const exact = await dbGet(
     `SELECT id, content, type, metadata
      FROM memories
-     WHERE user_id = $1 AND content_hash = $2
+     WHERE user_id = $1
+       AND content_hash = $2
+       AND COALESCE(status, 'active') = 'active'
      LIMIT 1`,
     [normalizedUserId, hash]
   );
@@ -819,6 +832,7 @@ export async function findDuplicateMemory({
     `SELECT id, content, type, metadata
      FROM memories
      WHERE user_id = $1
+       AND COALESCE(status, 'active') = 'active'
      ORDER BY created_at DESC
      LIMIT 300`,
     [normalizedUserId]
@@ -976,6 +990,55 @@ export function hashText(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+export async function getMemoryPreferences(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  const row = await dbGet(
+    `SELECT policy, updated_at
+     FROM zaki_memory_preferences
+     WHERE user_id = $1
+     LIMIT 1`,
+    [normalizedUserId]
+  );
+  const policy = normalizeMemoryPolicy(row?.policy) || "balanced";
+  return {
+    policy,
+    source: row ? "stored" : "default",
+    updatedAt: row?.updated_at || null,
+  };
+}
+
+export async function setMemoryPreferences(userId, { policy }) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) {
+    throw new Error("Invalid memory user.");
+  }
+  const normalizedPolicy = normalizeMemoryPolicy(policy);
+  if (!normalizedPolicy) {
+    throw new Error("Invalid memory policy.");
+  }
+  const row = await dbGet(
+    `INSERT INTO zaki_memory_preferences (user_id, policy, created_at, updated_at)
+     VALUES ($1, $2, NOW(), NOW())
+     ON CONFLICT (user_id)
+     DO UPDATE SET policy = EXCLUDED.policy, updated_at = NOW()
+     RETURNING policy, updated_at`,
+    [normalizedUserId, normalizedPolicy]
+  );
+  return {
+    policy: normalizeMemoryPolicy(row?.policy) || normalizedPolicy,
+    source: "stored",
+    updatedAt: row?.updated_at || null,
+  };
+}
+
+export async function resolveMemoryCapturePolicy(userId) {
+  const preferences = await getMemoryPreferences(userId);
+  return {
+    ...preferences,
+    capturePolicy: buildMemoryCapturePolicyConfig(preferences.policy),
+  };
+}
+
 export async function storeMemory({
   userId,
   content,
@@ -1096,6 +1159,129 @@ export async function deleteMemory(id, userId) {
   return result.rowCount > 0;
 }
 
+export async function updateMemory({
+  id,
+  userId,
+  content,
+  type,
+  status,
+}) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) {
+    throw new Error("Invalid memory user.");
+  }
+
+  return await withDbTransaction(async (client) => {
+    const existingResult = await client.query(
+      `SELECT id, content, type, status, metadata
+       FROM memories
+       WHERE id = $1 AND user_id = $2
+       LIMIT 1`,
+      [id, normalizedUserId]
+    );
+    const existing = existingResult.rows?.[0];
+    if (!existing) {
+      return { error: "not_found" };
+    }
+
+    const existingMetadata = sanitizeStoredMetadata(existing.metadata || {});
+    const nextType =
+      type === undefined ? normalizeStoredType(existing.type) : normalizeStoredType(type);
+    const nextStatus =
+      status === undefined ? normalizeMemoryStatus(existing.status) : normalizeMemoryStatus(status);
+    const nextContent =
+      content === undefined
+        ? normalizeStoredContent(existing.content)
+        : normalizeStoredMemoryContent(content, nextType, existingMetadata);
+
+    if (!nextContent) {
+      return { error: "invalid_content" };
+    }
+
+    const nextMetadata = sanitizeStoredMetadata(existingMetadata);
+    const contentChanged =
+      normalizeText(existing.content || "") !== normalizeText(nextContent) ||
+      normalizeStoredType(existing.type) !== nextType;
+
+    if (contentChanged && !nextMetadata.editedFrom) {
+      nextMetadata.editedFrom = String(existingMetadata.editedFrom || id)
+        .trim()
+        .slice(0, 120);
+    }
+
+    const nextHash = hashText(nextContent);
+    const duplicateResult = await client.query(
+      `SELECT id
+       FROM memories
+       WHERE user_id = $1 AND content_hash = $2 AND id <> $3
+       LIMIT 1`,
+      [normalizedUserId, nextHash, id]
+    );
+    const duplicateId = duplicateResult.rows?.[0]?.id || null;
+    if (duplicateId) {
+      return { error: "duplicate", duplicateId };
+    }
+
+    if (contentChanged) {
+      let embeddingLiteral = null;
+      let embeddingProvider = null;
+      try {
+        const embeddingResult = await getEmbeddings(nextContent);
+        const nextEmbedding = embeddingResult?.embeddings?.[0];
+        if (Array.isArray(nextEmbedding) && nextEmbedding.length > 0) {
+          embeddingLiteral = `[${nextEmbedding.join(",")}]`;
+          embeddingProvider = embeddingResult.provider || null;
+        }
+      } catch (error) {
+        console.warn("[Memory] Could not refresh embedding for edited memory:", error.message);
+      }
+
+      await client.query(
+        `UPDATE memories
+         SET content = $1,
+             content_hash = $2,
+             type = $3,
+             status = $4,
+             metadata = $5,
+             embedding = $6::vector,
+             embedding_provider = $7,
+             updated_at = NOW()
+         WHERE id = $8 AND user_id = $9`,
+        [
+          nextContent,
+          nextHash,
+          nextType,
+          nextStatus,
+          nextMetadata,
+          embeddingLiteral,
+          embeddingProvider,
+          id,
+          normalizedUserId,
+        ]
+      );
+    } else {
+      await client.query(
+        `UPDATE memories
+         SET type = $1,
+             status = $2,
+             metadata = $3,
+             updated_at = NOW()
+         WHERE id = $4 AND user_id = $5`,
+        [nextType, nextStatus, nextMetadata, id, normalizedUserId]
+      );
+    }
+
+    const updatedResult = await client.query(
+      `SELECT id, content, type, status, metadata, created_at, updated_at, source_thread_id as "threadId"
+       FROM memories
+       WHERE id = $1 AND user_id = $2
+       LIMIT 1`,
+      [id, normalizedUserId]
+    );
+    return { memory: updatedResult.rows?.[0] || null };
+  });
+}
+
 export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
   const normalizedUserId = normalizeUserId(userId);
   const pageLimit = Math.max(1, Math.min(100, Number(limit) || 100));
@@ -1104,7 +1290,7 @@ export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
 
   const rows = cursorValue
     ? await dbAll(
-        `SELECT id, content, type, content_hash, metadata, created_at, importance_score as importance, source_thread_id as "threadId"
+        `SELECT id, content, type, status, content_hash, metadata, created_at, updated_at, importance_score as importance, source_thread_id as "threadId"
          FROM memories
          WHERE user_id = $1
            AND (
@@ -1116,7 +1302,7 @@ export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
         [normalizedUserId, cursorValue.createdAt, cursorValue.id, fetchLimit]
       )
     : await dbAll(
-        `SELECT id, content, type, content_hash, metadata, created_at, importance_score as importance, source_thread_id as "threadId"
+        `SELECT id, content, type, status, content_hash, metadata, created_at, updated_at, importance_score as importance, source_thread_id as "threadId"
          FROM memories
          WHERE user_id = $1
          ORDER BY created_at DESC, id DESC
@@ -1296,7 +1482,12 @@ export async function findConflict({ userId, content, conflictKey = null, polari
   if (!newKey) return null;
 
   const existing = await dbAll(
-    `SELECT id, content, type, metadata FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`,
+    `SELECT id, content, type, metadata
+     FROM memories
+     WHERE user_id = $1
+       AND COALESCE(status, 'active') = 'active'
+     ORDER BY created_at DESC
+     LIMIT 200`,
     [normalizedUserId]
   );
 
@@ -1500,6 +1691,7 @@ export async function buildContext({
               END AS retrieval_score
        FROM memories
        WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
          AND (content ILIKE $3 ESCAPE '\\' OR $2 ILIKE '%' || content || '%')
        ORDER BY retrieval_score DESC, importance_score DESC, last_accessed_at DESC NULLS LAST
        LIMIT 20`,
@@ -1519,6 +1711,7 @@ export async function buildContext({
                     (1 - (embedding <=> $2::vector)) AS retrieval_score
              FROM memories
              WHERE user_id = $1
+               AND COALESCE(status, 'active') = 'active'
                AND embedding IS NOT NULL
              ORDER BY embedding <=> $2::vector ASC, importance_score DESC
              LIMIT 20`,
@@ -1542,6 +1735,7 @@ export async function buildContext({
       `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
        ORDER BY importance_score DESC, created_at DESC
        LIMIT 12`,
       [normalizedUserId]
@@ -1582,6 +1776,7 @@ export async function buildContext({
       `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
          AND metadata->>'source' = 'session_end'
          AND ($2::text IS NULL OR COALESCE(source_thread_id, '') <> $2)
        ORDER BY created_at DESC
@@ -1647,6 +1842,7 @@ export async function buildFastContext({
             0.0 AS retrieval_score
      FROM memories
      WHERE user_id = $1
+       AND COALESCE(status, 'active') = 'active'
      ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
      LIMIT $2`,
     [normalizedUserId, 50]
@@ -1695,6 +1891,7 @@ export async function buildFastContext({
       `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
        ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
        LIMIT 12`,
       [normalizedUserId]
@@ -1717,6 +1914,7 @@ export async function buildFastContext({
         `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
          FROM memories
          WHERE user_id = $1
+           AND COALESCE(status, 'active') = 'active'
          ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
          LIMIT 12`,
         [normalizedUserId]
@@ -1739,6 +1937,7 @@ export async function buildFastContext({
       `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
        FROM memories
        WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
          AND metadata->>'source' = 'session_end'
          AND ($2::text IS NULL OR COALESCE(source_thread_id, '') <> $2)
        ORDER BY created_at DESC
@@ -1910,6 +2109,7 @@ export async function buildChatMemoryContext({
         `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
          FROM memories
          WHERE user_id = $1
+           AND COALESCE(status, 'active') = 'active'
          ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
          LIMIT 12`,
         [normalizeUserId(userId)]
@@ -1962,7 +2162,10 @@ export async function searchMemories({ userId, query, limit = 5 }) {
   const normalizedUserId = normalizeUserId(userId);
   return await dbAll(
     `SELECT id, content, type, 0.8 AS similarity
-     FROM memories WHERE user_id = $1 AND content ILIKE $2
+     FROM memories
+     WHERE user_id = $1
+       AND COALESCE(status, 'active') = 'active'
+       AND content ILIKE $2
      ORDER BY created_at DESC LIMIT $3`,
     [normalizedUserId, `%${query}%`, limit]
   );

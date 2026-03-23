@@ -1109,10 +1109,14 @@
     "footerLine2": "You can always review and delete memories later.",
     "mode": {
       "title": "Memory Mode",
-      "autosave": "Auto-Save",
-      "autosaveHint": "Save instantly, 5s undo",
-      "manual": "Manual",
-      "manualHint": "Confirm each memory"
+      "balanced": "Balanced",
+      "balancedHint": "Save safe memories quietly and ask only when needed",
+      "ask_before_saving": "Ask before saving",
+      "ask_before_savingHint": "Review most memories before ZAKI keeps them",
+      "save_less": "Save less",
+      "save_lessHint": "Be stricter about what becomes lasting memory",
+      "save_more": "Save more",
+      "save_moreHint": "Save more safe memories without extra interruption"
     }
   },
     "memoryViewer": {
@@ -1161,13 +1165,19 @@
           "body": "Short-lived chat context helps in the moment and is only kept if it becomes useful memory."
         }
       },
-      "raw": {
-        "title": "Raw records",
-        "body": "Search, filter, export, review, and resolve the underlying memory records here."
-      },
-      "errors": {
-        "fetchPending": "Failed to fetch pending memories",
-        "loadPending": "Failed to load pending memories",
+    "raw": {
+      "title": "Raw records",
+      "body": "Search, filter, export, review, and resolve the underlying memory records here."
+    },
+    "policy": {
+      "loading": "Loading your memory policy...",
+      "helper": "This preference applies to your Spaces chats and threads only.",
+      "saved": "Memory preference updated.",
+      "saveFailed": "Unable to save your memory preference."
+    },
+    "errors": {
+      "fetchPending": "Failed to fetch pending memories",
+      "loadPending": "Failed to load pending memories",
       "fetchMemories": "Failed to fetch memories",
       "loadMemories": "Failed to load memories",
       "fetchConflicts": "Failed to fetch conflicts",
@@ -1176,6 +1186,7 @@
       "rejectMemory": "Failed to reject memory",
       "resolveConflict": "Failed to resolve conflict",
       "deleteMemory": "Failed to delete memory",
+      "updateMemory": "Failed to update memory",
       "exportMemories": "Failed to export memories."
     },
     "toasts": {
@@ -1184,6 +1195,9 @@
       "incomingMemorySaved": "Incoming memory saved.",
       "existingMemoryKept": "Existing memory kept.",
       "memoryDeleted": "Memory deleted.",
+      "memoryUpdated": "Memory updated.",
+      "memoryMarkedOutdated": "Memory marked as outdated.",
+      "memoryRestored": "Memory restored.",
       "refreshing": "Refreshing memories...",
       "exported": "Exported {{count}} memories."
     },
@@ -1249,6 +1263,16 @@
       "emptyFilteredBody": "Try a broader search query or reset the type filter.",
       "emptyBody": "When ZAKI keeps something worth remembering, it will appear here and help future replies stay useful.",
       "storedBadge": "Saved",
+      "outdatedBadge": "Outdated",
+      "editedBadge": "Edited",
+      "statusActive": "Active",
+      "statusOutdated": "Outdated",
+      "edit": "Edit",
+      "markOutdated": "Mark outdated",
+      "restore": "Restore",
+      "saveEdit": "Save changes",
+      "cancelEdit": "Cancel",
+      "savingEdit": "Saving...",
       "threadLabel": "Thread {{id}}",
       "loadingMore": "Loading more...",
       "loadMore": "Load more memories"

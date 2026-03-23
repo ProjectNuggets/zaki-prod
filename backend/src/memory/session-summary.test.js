@@ -23,14 +23,16 @@ describe("session memory summarization", () => {
     const extractFacts = jest
       .fn()
       .mockResolvedValueOnce([
-        { content: "Likes coffee", type: "preference", conflictKey: "preference:coffee", polarity: "positive" },
+        { content: "Likes coffee", type: "preference", conflictKey: "preference:coffee", polarity: "positive", confidence: 0.93 },
       ])
       .mockResolvedValueOnce([
-        { content: "Likes coffee", type: "preference", conflictKey: "preference:coffee", polarity: "positive" },
+        { content: "Likes coffee", type: "preference", conflictKey: "preference:coffee", polarity: "positive", confidence: 0.93 },
       ]);
 
     const findConflict = jest.fn(async () => null);
+    const findDuplicateMemory = jest.fn(async () => null);
     const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
     const storeMemory = jest.fn().mockResolvedValueOnce({ id: "m1", duplicate: false });
 
     const result = await summarizeConversation(
@@ -43,7 +45,7 @@ describe("session memory summarization", () => {
         ],
         threadId: "thread-1",
       },
-      { extractFacts, findConflict, createConflict, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -56,6 +58,8 @@ describe("session memory summarization", () => {
     expect(result.errors).toBe(0);
     expect(result.storedIds).toEqual(["m1"]);
     expect(findConflict).toHaveBeenCalledTimes(1);
+    expect(findDuplicateMemory).toHaveBeenCalledTimes(1);
+    expect(stageMemory).not.toHaveBeenCalled();
     expect(createConflict).not.toHaveBeenCalled();
     expect(storeMemory).toHaveBeenCalledTimes(1);
     expect(storeMemory).toHaveBeenNthCalledWith(
@@ -78,8 +82,10 @@ describe("session memory summarization", () => {
         type: "preference",
         conflictKey: "preference:coffee",
         polarity: "negative",
+        confidence: 0.9,
       },
     ]);
+    const findDuplicateMemory = jest.fn(async () => null);
     const findConflict = jest.fn(async () => ({
       id: "existing-memory",
       content: "Likes coffee",
@@ -93,7 +99,7 @@ describe("session memory summarization", () => {
         userId: "user@example.com",
         messages: [{ role: "user", content: "I don't like coffee anymore" }],
       },
-      { extractFacts, findConflict, createConflict, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory: jest.fn(), storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -114,14 +120,16 @@ describe("session memory summarization", () => {
     const extractFacts = jest
       .fn()
       .mockResolvedValueOnce([
-        { content: "Likes tea", type: "preference", conflictKey: "preference:tea", polarity: "positive" },
-        { content: "Likes tea", type: "preference", conflictKey: "preference:tea", polarity: "positive" },
+        { content: "Likes tea", type: "preference", conflictKey: "preference:tea", polarity: "positive", confidence: 0.92 },
+        { content: "Likes tea", type: "preference", conflictKey: "preference:tea", polarity: "positive", confidence: 0.92 },
       ])
       .mockResolvedValueOnce([
-        { content: "Likes tea", type: "preference", conflictKey: "preference:tea", polarity: "positive" },
+        { content: "Likes tea", type: "preference", conflictKey: "preference:tea", polarity: "positive", confidence: 0.92 },
       ]);
     const findConflict = jest.fn(async () => null);
+    const findDuplicateMemory = jest.fn(async () => null);
     const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
     const storeMemory = jest.fn(async () => ({ id: "m-tea", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -132,7 +140,7 @@ describe("session memory summarization", () => {
           { role: "user", content: "I like tea very much" },
         ],
       },
-      { extractFacts, findConflict, createConflict, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -141,6 +149,7 @@ describe("session memory summarization", () => {
     expect(result.conflicts).toBe(0);
     expect(result.skippedFacts).toBe(1);
     expect(storeMemory).toHaveBeenCalledTimes(1);
+    expect(stageMemory).not.toHaveBeenCalled();
     expect(createConflict).not.toHaveBeenCalled();
   });
 
@@ -149,10 +158,12 @@ describe("session memory summarization", () => {
       .fn()
       .mockRejectedValueOnce(new Error("extract failed"))
       .mockResolvedValueOnce([
-        { content: "Lives in Dubai", type: "fact", conflictKey: "identity:location", polarity: "neutral" },
+        { content: "Lives in Dubai", type: "fact", conflictKey: "identity:location", polarity: "neutral", confidence: 0.93 },
       ]);
     const findConflict = jest.fn(async () => null);
+    const findDuplicateMemory = jest.fn(async () => null);
     const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
     const storeMemory = jest.fn(async () => ({ id: "m2", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -163,7 +174,7 @@ describe("session memory summarization", () => {
           { role: "user", content: "message 2" },
         ],
       },
-      { extractFacts, findConflict, createConflict, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -178,10 +189,13 @@ describe("session memory summarization", () => {
       type: "fact",
       conflictKey: `fact:${index + 1}`,
       polarity: "neutral",
+      confidence: 0.92,
     }));
     const extractFacts = jest.fn(async () => burstFacts);
     const findConflict = jest.fn(async () => null);
+    const findDuplicateMemory = jest.fn(async () => null);
     const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
     let storedIndex = 0;
     const storeMemory = jest.fn(async () => {
       storedIndex += 1;
@@ -196,7 +210,7 @@ describe("session memory summarization", () => {
           { role: "assistant", content: "assistant message should not be processed" },
         ],
       },
-      { extractFacts, findConflict, createConflict, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -218,6 +232,7 @@ describe("session memory summarization", () => {
         content: "Plans to travel to Dubai",
         type: "goal",
         polarity: "neutral",
+        confidence: 0.91,
       },
       {
         content: "Likes travel and plan to travel to Dubai",
@@ -226,7 +241,9 @@ describe("session memory summarization", () => {
       },
     ]);
     const findConflict = jest.fn(async () => null);
+    const findDuplicateMemory = jest.fn(async () => null);
     const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
     const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -234,7 +251,7 @@ describe("session memory summarization", () => {
         userId: "user@example.com",
         messages: [{ role: "user", content: "compound message" }],
       },
-      { extractFacts, findConflict, createConflict, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -248,6 +265,45 @@ describe("session memory summarization", () => {
         type: "goal",
       })
     );
+    expect(createConflict).not.toHaveBeenCalled();
+  });
+
+  it("routes session-end memories to review when ask-before-saving policy is active", async () => {
+    const extractFacts = jest.fn(async () => [
+      {
+        content: "Prefers concise weekly plans",
+        type: "preference",
+        confidence: 0.94,
+        conflictKey: "preference:concise-weekly-plans",
+        polarity: "positive",
+      },
+    ]);
+    const findDuplicateMemory = jest.fn(async () => null);
+    const findConflict = jest.fn(async () => null);
+    const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
+
+    const result = await summarizeConversation(
+      {
+        userId: "user@example.com",
+        messages: [{ role: "user", content: "I prefer concise weekly plans" }],
+        policy: { id: "ask_before_saving", alwaysReview: true },
+      },
+      {
+        extractFacts,
+        findDuplicateMemory,
+        findConflict,
+        createConflict,
+        stageMemory,
+        storeMemory,
+      }
+    );
+
+    expect(result.review).toBe(1);
+    expect(result.reviewIds).toEqual(["pending-1"]);
+    expect(stageMemory).toHaveBeenCalledTimes(1);
+    expect(storeMemory).not.toHaveBeenCalled();
     expect(createConflict).not.toHaveBeenCalled();
   });
 });
