@@ -9,10 +9,12 @@ import {
   apiRequest,
   buildApiUrl,
   captureMemory,
+  fetchMemoryActivity,
   fetchAgentHistory,
   fetchUsageQuota,
   getApiBase,
   provisionAgent,
+  type MemoryActivity,
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
 } from "@/lib/api";
@@ -556,6 +558,11 @@ export function ChatArea() {
   const conflictCountRef = useRef(0);
   const memoryStatusHydratedRef = useRef(false);
   const lastMemoryStatusSyncAtRef = useRef(0);
+  const pendingSessionSummaryRef = useRef<{
+    threadId: string;
+    queuedAt: number;
+  } | null>(null);
+  const sessionSummaryCueKeyRef = useRef<string | null>(null);
   const authUser = useAuthStore((s) => s.user);
   const authUserId = useMemo(() => {
     const fallbackEmail =
@@ -2154,6 +2161,55 @@ export function ChatArea() {
     openSpacesMemoryViewer({ enabled: isMemoryPipelineEnabled, query, tab });
   }, [isMemoryPipelineEnabled]);
 
+  const maybeShowSessionSummaryCue = useCallback(
+    async (threadId?: string | null) => {
+      if (!authUserId || !isMemoryPipelineEnabled) return;
+      const pendingSummary = pendingSessionSummaryRef.current;
+      const scopedThreadId = String(threadId || pendingSummary?.threadId || "").trim();
+      if (!pendingSummary || !scopedThreadId || pendingSummary.threadId !== scopedThreadId) {
+        return;
+      }
+
+      try {
+        const { response, data } = await fetchMemoryActivity(8);
+        if (!response.ok) return;
+        const activities = Array.isArray(data?.activities) ? data.activities : [];
+        const matchingActivity = activities.find((activity: MemoryActivity) => {
+          const activityThreadId = String(activity?.threadId || "").trim();
+          const occurredAt = Date.parse(String(activity?.occurredAt || ""));
+          if (!activityThreadId || activityThreadId !== scopedThreadId) return false;
+          if (!Number.isFinite(occurredAt) || occurredAt < pendingSummary.queuedAt - 1000) {
+            return false;
+          }
+          return ["saved", "review", "conflict"].includes(String(activity?.kind || ""));
+        });
+
+        if (!matchingActivity) return;
+        const cueKey = `${matchingActivity.kind}:${matchingActivity.id}:${matchingActivity.occurredAt}`;
+        if (sessionSummaryCueKeyRef.current === cueKey) return;
+        sessionSummaryCueKeyRef.current = cueKey;
+        pendingSessionSummaryRef.current = null;
+
+        const targetTab =
+          matchingActivity.kind === "review"
+            ? "pending"
+            : matchingActivity.kind === "conflict"
+              ? "conflicts"
+              : "memories";
+
+        toast.info(t("memory.sessionSummaryUpdated"), {
+          action: {
+            label: t("memory.open"),
+            onClick: () => openMemoryViewer(undefined, targetTab),
+          },
+        });
+      } catch {
+        // Best-effort cue only.
+      }
+    },
+    [authUserId, isMemoryPipelineEnabled, openMemoryViewer, t]
+  );
+
   const syncMemoryStatus = useCallback(
     async (notifyOnNewConflicts = false) => {
       if (!authUserId || !isMemoryPipelineEnabled) return;
@@ -2190,12 +2246,13 @@ export function ChatArea() {
             })
           );
         }
+        void maybeShowSessionSummaryCue();
 
       } catch {
         // Sync is best-effort and should never block chat.
       }
     },
-    [authUserId, isMemoryPipelineEnabled, presentMemoryToast]
+    [authUserId, isMemoryPipelineEnabled, maybeShowSessionSummaryCue, presentMemoryToast]
   );
 
   const requestMemoryStatusSync = useCallback(
@@ -2329,24 +2386,51 @@ export function ChatArea() {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
       lastMemoryStatusSyncAtRef.current = 0;
+      pendingSessionSummaryRef.current = null;
+      sessionSummaryCueKeyRef.current = null;
       queuedMemoryCheckRef.current = null;
       memoryInFlightRef.current = false;
-      dismissMemoryToast();
-      setMemoryPendingCount(0);
-      setMemoryConflictCount(0);
-      setMemoryError(null);
+      if (
+        showMemoryToast ||
+        recentSavedMemories.length > 0 ||
+        recentReviewCount > 0 ||
+        recentConflictCount > 0 ||
+        memoryToastUndoError ||
+        memoryToastPartialUndoCount > 0
+      ) {
+        dismissMemoryToast();
+      }
+      if (memoryPendingCount !== 0) setMemoryPendingCount(0);
+      if (memoryConflictCount !== 0) setMemoryConflictCount(0);
+      if (memoryError !== null) setMemoryError(null);
       return;
     }
     if (!authUserId) {
       conflictCountRef.current = 0;
       memoryStatusHydratedRef.current = false;
       lastMemoryStatusSyncAtRef.current = 0;
-      setMemoryPendingCount(0);
-      setMemoryConflictCount(0);
+      pendingSessionSummaryRef.current = null;
+      sessionSummaryCueKeyRef.current = null;
+      if (memoryPendingCount !== 0) setMemoryPendingCount(0);
+      if (memoryConflictCount !== 0) setMemoryConflictCount(0);
       return;
     }
     requestMemoryStatusSync(false, true);
-  }, [authUserId, dismissMemoryToast, isMemoryPipelineEnabled, requestMemoryStatusSync]);
+  }, [
+    authUserId,
+    dismissMemoryToast,
+    isMemoryPipelineEnabled,
+    memoryConflictCount,
+    memoryError,
+    memoryPendingCount,
+    memoryToastPartialUndoCount,
+    memoryToastUndoError,
+    recentConflictCount,
+    recentReviewCount,
+    recentSavedMemories.length,
+    requestMemoryStatusSync,
+    showMemoryToast,
+  ]);
 
   useEffect(() => {
     if (!authUserId || !isMemoryPipelineEnabled) return;
@@ -2846,9 +2930,23 @@ export function ChatArea() {
             threadId: prevThread.id,
             threadTitle: prevThread.title,
           }),
-        }).catch((err) => {
-          console.warn("[Memory] Failed to summarize session:", err);
-        });
+        })
+          .then((response) => {
+            if (!response.ok) return;
+            pendingSessionSummaryRef.current = {
+              threadId: prevThread.id,
+              queuedAt: Date.now(),
+            };
+            window.setTimeout(() => {
+              void maybeShowSessionSummaryCue(prevThread.id);
+            }, 2500);
+            window.setTimeout(() => {
+              void maybeShowSessionSummaryCue(prevThread.id);
+            }, 7000);
+          })
+          .catch((err) => {
+            console.warn("[Memory] Failed to summarize session:", err);
+          });
       }
     }
 
@@ -2862,7 +2960,7 @@ export function ChatArea() {
     } else {
       prevThreadRef.current = null;
     }
-  }, [activeThreadId, activeWorkspaceSlug, activeThread?.label, messagesByThread]);
+  }, [activeThreadId, activeWorkspaceSlug, activeThread?.label, maybeShowSessionSummaryCue, messagesByThread]);
 
   // Auto-scroll effect
   useEffect(() => {

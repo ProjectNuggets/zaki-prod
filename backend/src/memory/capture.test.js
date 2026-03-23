@@ -179,6 +179,12 @@ describe("memory capture", () => {
     });
 
     expect(createConflictMock).toHaveBeenCalledTimes(1);
+    expect(createConflictMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user@example.com",
+        sourceThreadId: null,
+      })
+    );
     expect(result.conflicts).toEqual([
       expect.objectContaining({
         id: "conf-1",

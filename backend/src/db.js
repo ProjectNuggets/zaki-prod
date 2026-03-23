@@ -810,6 +810,8 @@ export async function initDb() {
       );
     `);
 
+    await pool.query(`ALTER TABLE memory_conflicts ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
+
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memory_conflicts_user_pending
       ON memory_conflicts(user_id, status)

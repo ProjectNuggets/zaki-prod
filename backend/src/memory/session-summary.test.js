@@ -112,6 +112,7 @@ describe("session memory summarization", () => {
       expect.objectContaining({
         userId: "user@example.com",
         newContent: "Dislikes coffee",
+        sourceThreadId: null,
       })
     );
   });

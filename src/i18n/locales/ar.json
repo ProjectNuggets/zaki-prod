@@ -1085,6 +1085,7 @@
     "more": "أخرى",
     "dismiss": "إخفاء",
     "later": "لاحقًا",
+    "sessionSummaryUpdated": "تم تحديث الذاكرة من هذه المحادثة.",
     "duplicateSingle": "هذا محفوظ بالفعل: \"{{content}}\".",
     "duplicateMultiple": "هذه الذكريات محفوظة بالفعل: {{count}}.",
     "dismissAria": "إخفاء تنبيه الذاكرة",
@@ -1137,6 +1138,13 @@
       "recentPending": "{{count}} ذكريات ما زالت بانتظار المراجعة.",
       "recentConflicts": "{{count}} تعارضات محتملة ما زالت تحتاج قرارًا.",
       "recentSaved": "تم حفظ: {{content}} ({{date}})",
+      "activity": {
+        "saved": "تم الحفظ: {{content}} ({{date}})",
+        "review": "تحتاج للمراجعة: {{content}} ({{date}})",
+        "conflict": "تعارض محتمل: {{content}} ({{date}})",
+        "edited": "تم التعديل: {{content}} ({{date}})",
+        "outdated": "تم وضع علامة قديمة: {{content}} ({{date}})"
+      },
       "groups": {
         "about_you": {
           "title": "عنك",
@@ -1191,6 +1199,8 @@
       "loadMemories": "تعذر تحميل الذكريات",
       "fetchConflicts": "تعذر جلب التعارضات",
       "loadConflicts": "تعذر تحميل التعارضات",
+      "fetchActivity": "تعذر جلب نشاط الذاكرة الأخير",
+      "loadActivity": "تعذر تحميل نشاط الذاكرة الأخير",
       "confirmMemory": "تعذر تأكيد الذاكرة",
       "rejectMemory": "تعذر تخطي الذاكرة",
       "resolveConflict": "تعذر حل التعارض",

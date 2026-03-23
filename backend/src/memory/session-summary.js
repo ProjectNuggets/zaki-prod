@@ -180,6 +180,7 @@ export async function summarizeConversation(
             newContent: fact.content,
             newType: fact.type,
             newConfidenceScore: decision.confidence ?? 0.8,
+            sourceThreadId: threadId || null,
             conflictMemory: conflict,
           });
           result.conflicts += 1;

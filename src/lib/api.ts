@@ -53,6 +53,16 @@ export type MemoryPatch = {
   status?: "active" | "outdated";
 };
 
+export type MemoryActivity = {
+  id: string;
+  kind: "saved" | "review" | "conflict" | "edited" | "outdated";
+  content: string;
+  type: string;
+  threadId?: string | null;
+  source?: string | null;
+  occurredAt: string;
+};
+
 type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
 };
@@ -233,6 +243,19 @@ export async function patchMemory(memoryId: string, patch: MemoryPatch) {
       error?: string;
       duplicateId?: string | null;
     };
+  } catch {
+    data = null;
+  }
+  return { response, data };
+}
+
+export async function fetchMemoryActivity(limit = 8) {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  const response = await apiRequest(`/api/memory/activity?${params.toString()}`);
+  let data: { activities?: MemoryActivity[] } | null = null;
+  try {
+    data = (await response.json()) as { activities?: MemoryActivity[] };
   } catch {
     data = null;
   }

@@ -688,16 +688,160 @@ function selectPersonalizationFallbackMemories(rows, limit = 2) {
 function rankContextCandidates(rows) {
   return [...(rows || [])].sort((a, b) => {
     const aScore =
-      toFiniteNumber(a?.retrieval_score, 0) * 0.55 +
-      getMemoryImportanceScore(a) * 0.2 +
-      getMemoryActionabilityScore(a) * 0.2 +
+      toFiniteNumber(a?.retrieval_score, 0) * 0.4 +
+      getMemoryReplyUsefulnessScore(a) * 0.3 +
+      getMemoryImportanceScore(a) * 0.15 +
+      getMemoryActionabilityScore(a) * 0.1 +
       getMemoryConfidenceScore(a) * 0.05;
     const bScore =
-      toFiniteNumber(b?.retrieval_score, 0) * 0.55 +
-      getMemoryImportanceScore(b) * 0.2 +
-      getMemoryActionabilityScore(b) * 0.2 +
+      toFiniteNumber(b?.retrieval_score, 0) * 0.4 +
+      getMemoryReplyUsefulnessScore(b) * 0.3 +
+      getMemoryImportanceScore(b) * 0.15 +
+      getMemoryActionabilityScore(b) * 0.1 +
       getMemoryConfidenceScore(b) * 0.05;
     return bScore - aScore;
+  });
+}
+
+function getMemoryReplyUsefulnessScore(memory) {
+  const bucket = getChatContextBucket(memory);
+  const metadata = getMemoryMetadata(memory);
+  const source = String(metadata?.source || "").toLowerCase();
+  const normalizedContent = String(memory?.content || "").toLowerCase();
+  let score = 0.2;
+
+  if (bucket === "preferences") score += 0.34;
+  else if (bucket === "active") score += 0.3;
+  else if (bucket === "profile") score += 0.22;
+  else if (bucket === "recent") score += 0.04;
+
+  if (metadata.userVerified === true) score += 0.08;
+  if (typeof metadata.editedFrom === "string" && metadata.editedFrom.trim()) score += 0.08;
+  if (String(memory?.status || "active").toLowerCase() === "outdated") score -= 0.5;
+  if (source === "session_end") score -= 0.12;
+  if (normalizedContent.includes("project") || normalizedContent.includes("launch")) score += 0.05;
+  if (/^(prefer|likes?|dislikes?|working on|preparing|planning|building|tracking)\b/i.test(normalizedContent)) {
+    score += 0.04;
+  }
+
+  return Math.min(1, Math.max(0, score));
+}
+
+function createActivityTimestamp(value) {
+  const parsed = new Date(value || "");
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date(0).toISOString();
+  }
+  return parsed.toISOString();
+}
+
+function normalizeMemoryActivityRows({
+  memories = [],
+  confirmations = [],
+  conflicts = [],
+  limit = 8,
+}) {
+  const activity = [];
+
+  for (const memory of memories) {
+    const metadata = getMemoryMetadata(memory);
+    const createdAt = createActivityTimestamp(memory?.created_at || memory?.createdAt);
+    const updatedAt = createActivityTimestamp(memory?.updated_at || memory?.updatedAt || createdAt);
+    const status = String(memory?.status || "active").toLowerCase();
+    let kind = "saved";
+    let occurredAt = createdAt;
+
+    if (status === "outdated" && updatedAt > createdAt) {
+      kind = "outdated";
+      occurredAt = updatedAt;
+    } else if (typeof metadata.editedFrom === "string" && metadata.editedFrom.trim() && updatedAt > createdAt) {
+      kind = "edited";
+      occurredAt = updatedAt;
+    }
+
+    activity.push({
+      id: memory.id,
+      kind,
+      content: String(memory?.content || "").trim(),
+      type: String(memory?.type || "").trim() || "context",
+      threadId: memory?.threadId || memory?.source_thread_id || null,
+      source: String(metadata?.source || "").trim().toLowerCase() || null,
+      occurredAt,
+    });
+  }
+
+  for (const confirmation of confirmations) {
+    activity.push({
+      id: confirmation.id,
+      kind: "review",
+      content: String(confirmation?.content || "").trim(),
+      type: String(confirmation?.type || "").trim() || "context",
+      threadId: confirmation?.threadId || confirmation?.source_thread_id || null,
+      source: confirmation?.source || null,
+      occurredAt: createActivityTimestamp(confirmation?.created_at),
+    });
+  }
+
+  for (const conflict of conflicts) {
+    activity.push({
+      id: conflict.id,
+      kind: "conflict",
+      content: String(conflict?.new_content || "").trim(),
+      type: String(conflict?.new_type || "").trim() || "context",
+      threadId: conflict?.threadId || conflict?.source_thread_id || null,
+      source: conflict?.source || null,
+      occurredAt: createActivityTimestamp(conflict?.created_at),
+    });
+  }
+
+  return activity
+    .filter((item) => item.content && item.occurredAt)
+    .sort((a, b) => {
+      if (a.occurredAt === b.occurredAt) {
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }
+      return a.occurredAt < b.occurredAt ? 1 : -1;
+    })
+    .slice(0, Math.max(1, Math.min(50, Number(limit) || 8)));
+}
+
+export async function getMemoryActivity(userId, limit = 8) {
+  const normalizedUserId = normalizeUserId(userId);
+  const boundedLimit = Math.max(1, Math.min(50, Number(limit) || 8));
+  const fetchLimit = Math.max(boundedLimit * 4, 16);
+
+  const [memories, confirmations, conflicts] = await Promise.all([
+    dbAll(
+      `SELECT id, content, type, status, metadata, created_at, updated_at, source_thread_id as "threadId"
+       FROM memories
+       WHERE user_id = $1
+       ORDER BY GREATEST(created_at, updated_at) DESC, id DESC
+       LIMIT $2`,
+      [normalizedUserId, fetchLimit]
+    ),
+    dbAll(
+      `SELECT id, content, type, source_thread_id as "threadId", created_at
+       FROM memory_confirmations
+       WHERE user_id = $1 AND status = 'pending'
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2`,
+      [normalizedUserId, fetchLimit]
+    ),
+    dbAll(
+      `SELECT id, new_content, new_type, source_thread_id as "threadId", created_at
+       FROM memory_conflicts
+       WHERE user_id = $1 AND status = 'pending'
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2`,
+      [normalizedUserId, fetchLimit]
+    ),
+  ]);
+
+  return normalizeMemoryActivityRows({
+    memories,
+    confirmations,
+    conflicts,
+    limit: boundedLimit,
   });
 }
 
@@ -1556,6 +1700,7 @@ export async function createConflict({
   newContent,
   newType,
   newConfidenceScore = 0.8,
+  sourceThreadId = null,
   conflictMemory,
 }) {
   const normalizedUserId = normalizeUserId(userId);
@@ -1587,8 +1732,8 @@ export async function createConflict({
   const id = crypto.randomUUID();
   await dbQuery(
     `INSERT INTO memory_conflicts
-     (id, user_id, new_content, new_type, new_confidence_score, conflicting_memory_id, conflicting_content, conflicting_type, status, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW())`,
+     (id, user_id, new_content, new_type, new_confidence_score, conflicting_memory_id, conflicting_content, conflicting_type, source_thread_id, status, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())`,
     [
       id,
       normalizedUserId,
@@ -1598,6 +1743,7 @@ export async function createConflict({
       conflictMemory?.memoryId || null,
       conflictMemory?.content || null,
       conflictMemory?.type || null,
+      sourceThreadId || null,
     ]
   );
   return { id };
@@ -1607,7 +1753,7 @@ export async function getConflicts(userId, limit = 50) {
   const normalizedUserId = normalizeUserId(userId);
   return await dbAll(
     `SELECT id, new_content, new_type, new_confidence_score, conflicting_memory_id,
-            conflicting_content, conflicting_type, status, created_at, resolved_at, resolution
+            conflicting_content, conflicting_type, source_thread_id as "threadId", status, created_at, resolved_at, resolution
      FROM memory_conflicts
      WHERE user_id = $1 AND status = 'pending'
      ORDER BY created_at DESC
@@ -1643,6 +1789,7 @@ export async function resolveConflict({ userId, conflictId, action }) {
       userId: normalizedUserId,
       content: conflict.new_content,
       type: conflict.new_type,
+      sourceThreadId: conflict.source_thread_id || null,
     });
     await dbQuery(
       `UPDATE memory_conflicts

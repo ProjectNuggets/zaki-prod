@@ -1076,6 +1076,7 @@
     "more": "more",
     "dismiss": "Dismiss",
     "later": "Later",
+    "sessionSummaryUpdated": "Memory updated from this conversation.",
     "duplicateSingle": "Already remembered: \"{{content}}\".",
     "duplicateMultiple": "Already remembered {{count}} memories.",
     "dismissAria": "Dismiss memory notice",
@@ -1128,6 +1129,13 @@
         "recentPending": "{{count}} memories are waiting for review.",
         "recentConflicts": "{{count}} possible conflicts are waiting for a decision.",
         "recentSaved": "Saved: {{content}} ({{date}})",
+        "activity": {
+          "saved": "Saved: {{content}} ({{date}})",
+          "review": "Needs review: {{content}} ({{date}})",
+          "conflict": "Possible conflict: {{content}} ({{date}})",
+          "edited": "Edited: {{content}} ({{date}})",
+          "outdated": "Marked outdated: {{content}} ({{date}})"
+        },
         "groups": {
           "about_you": {
             "title": "About you",
@@ -1182,6 +1190,8 @@
       "loadMemories": "Failed to load memories",
       "fetchConflicts": "Failed to fetch conflicts",
       "loadConflicts": "Failed to load conflicts",
+      "fetchActivity": "Failed to fetch recent memory activity",
+      "loadActivity": "Failed to load recent memory activity",
       "confirmMemory": "Failed to confirm memory",
       "rejectMemory": "Failed to reject memory",
       "resolveConflict": "Failed to resolve conflict",

@@ -393,6 +393,36 @@ describe("memory routes integration", () => {
     expect(res.body?.memory?.status).toBe("outdated");
   });
 
+  it("returns recent activity under authenticated scope", async () => {
+    const app = createMockApp();
+    const getMemoryActivity = jest.fn(async () => [
+      {
+        id: VALID_UUID,
+        kind: "saved",
+        content: "Prefers concise answers",
+        type: "preference",
+        threadId: "thread-1",
+        occurredAt: "2026-03-23T10:00:00.000Z",
+      },
+    ]);
+
+    createMemoryRoutes(app, {
+      requireAuthUser: buildAuthedUser(),
+      dependencies: { getMemoryActivity },
+    });
+
+    const res = await invokeRoute(app, {
+      method: "GET",
+      path: "/api/memory/activity",
+      query: { limit: "9" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(getMemoryActivity).toHaveBeenCalledWith(OWNER_EMAIL, 9);
+    expect(res.body?.activities).toHaveLength(1);
+    expect(res.body?.activities?.[0]?.kind).toBe("saved");
+  });
+
   it("clamps confirmations limit and keeps user scoped", async () => {
     const app = createMockApp();
     const getPendingConfirmations = jest.fn(async () => []);

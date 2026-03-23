@@ -167,6 +167,7 @@ export async function processChatMemoryCapture({
         newContent: fact.content,
         newType: fact.type,
         newConfidenceScore: decision.confidence,
+        sourceThreadId: threadId,
         conflictMemory,
       });
       conflicts.push({

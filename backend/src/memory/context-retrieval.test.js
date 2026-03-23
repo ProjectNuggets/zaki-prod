@@ -12,6 +12,10 @@ async function loadOperations() {
     dbGet: dbGetMock,
     dbQuery: dbQueryMock,
     hasPgVector: hasPgVectorMock,
+    withDbTransaction: async (callback) =>
+      callback({
+        query: dbQueryMock,
+      }),
   }));
   return await import("./operations.js");
 }
@@ -124,6 +128,45 @@ describe("memory context retrieval behavior", () => {
     ]);
 
     expect(ranked[0]?.id).toBe("actionable");
+  });
+
+  it("prefers preferences and active work over episodic recent details when reply usefulness is higher", async () => {
+    const { rankContextCandidatesForTests } = await loadOperations();
+    const ranked = rankContextCandidatesForTests([
+      {
+        id: "episodic",
+        content: "Chatted about lunch yesterday",
+        type: "event",
+        metadata: {},
+        retrieval_score: 0.92,
+        importance_score: 0.4,
+        confidence_score: 0.8,
+      },
+      {
+        id: "preference",
+        content: "Prefers concise answers",
+        type: "preference",
+        metadata: { conflictKey: "preference:concise-answers" },
+        retrieval_score: 0.8,
+        importance_score: 0.7,
+        confidence_score: 0.9,
+      },
+      {
+        id: "active",
+        content: "Working on the summit launch deck",
+        type: "goal",
+        metadata: {},
+        retrieval_score: 0.79,
+        importance_score: 0.82,
+        confidence_score: 0.88,
+      },
+    ]);
+
+    expect(ranked.slice(0, 2).map((memory) => memory.id).sort()).toEqual([
+      "active",
+      "preference",
+    ]);
+    expect(ranked[2]?.id).toBe("episodic");
   });
 
   it("injects one short session-end delta memory at thread start, once per thread", async () => {

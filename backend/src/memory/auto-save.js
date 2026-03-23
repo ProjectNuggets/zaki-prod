@@ -58,6 +58,7 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
           newContent: fact.content,
           newType: fact.type,
           newConfidenceScore: 0.8,
+          sourceThreadId: threadId,
           conflictMemory: conflict,
         });
         conflicts.push({

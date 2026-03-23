@@ -22,6 +22,8 @@ jest.mock("react-i18next", () => ({
       if (key === "memoryViewer.notebook.title") return "What ZAKI currently knows";
       if (key === "memoryViewer.notebook.groups.preferences.title") return "Preferences";
       if (key === "memoryViewer.notebook.groups.recent_changes.title") return "Recent changes";
+      if (key === "memoryViewer.notebook.activity.saved")
+        return `Saved: ${(options as unknown as { content?: string })?.content ?? ""}`;
       if (key === "memoryViewer.notebook.recentSaved")
         return `Saved: ${(options as unknown as { content?: string })?.content ?? ""}`;
       if (key === "memoryViewer.tabs.memories") return `Saved memories (${options?.count ?? 0})`;
@@ -82,6 +84,9 @@ describe("MemoryViewer", () => {
       }
       if (path === "/api/memory/conflicts") {
         return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(jsonResponse({ activities: [] }));
       }
       return Promise.resolve(jsonResponse({}));
     });
@@ -146,6 +151,21 @@ describe("MemoryViewer", () => {
       }
       if (path === "/api/memory/conflicts") {
         return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(
+          jsonResponse({
+            activities: [
+              {
+                id: "activity-1",
+                kind: "saved",
+                content: "Prefers concise weekly plans",
+                type: "preference",
+                occurredAt: "2026-03-23T10:00:00.000Z",
+              },
+            ],
+          })
+        );
       }
       return Promise.resolve(jsonResponse({}));
     });

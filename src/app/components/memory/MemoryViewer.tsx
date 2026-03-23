@@ -25,7 +25,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { apiRequest, patchMemory } from "@/lib/api";
+import { apiRequest, fetchMemoryActivity, patchMemory, type MemoryActivity } from "@/lib/api";
 import { SkeletonMemoryViewer } from "../ui/skeleton";
 import { MemoryModeToggle, useMemoryPolicy } from "./MemoryModeToggle";
 
@@ -208,6 +208,28 @@ function shortId(id?: string | null) {
   return `${id.slice(0, 6)}...${id.slice(-4)}`;
 }
 
+function buildActivityLabel(
+  activity: MemoryActivity,
+  t: (key: string, options?: Record<string, unknown>) => string,
+  locale?: string
+) {
+  const content = String(activity?.content || "").trim();
+  const date = formatDateLabel(activity?.occurredAt || "", locale);
+  if (activity.kind === "review") {
+    return t("memoryViewer.notebook.activity.review", { content, date });
+  }
+  if (activity.kind === "conflict") {
+    return t("memoryViewer.notebook.activity.conflict", { content, date });
+  }
+  if (activity.kind === "edited") {
+    return t("memoryViewer.notebook.activity.edited", { content, date });
+  }
+  if (activity.kind === "outdated") {
+    return t("memoryViewer.notebook.activity.outdated", { content, date });
+  }
+  return t("memoryViewer.notebook.activity.saved", { content, date });
+}
+
 function mergeMemoriesById(
   current: MemoryRecord[],
   incoming: MemoryRecord[]
@@ -245,6 +267,7 @@ export function MemoryViewer({
   const [loadingMoreMemories, setLoadingMoreMemories] = useState(false);
   const [conflicts, setConflicts] = useState<MemoryConflictRecord[]>([]);
   const [pendingMemories, setPendingMemories] = useState<PendingMemoryRecord[]>([]);
+  const [recentActivity, setRecentActivity] = useState<MemoryActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [conflictsLoading, setConflictsLoading] = useState(false);
@@ -294,6 +317,22 @@ export function MemoryViewer({
       }
     } finally {
       setPendingLoading(false);
+    }
+  };
+
+  const fetchActivity = async (showErrors = false) => {
+    try {
+      const { response, data } = await fetchMemoryActivity(8);
+      if (!response.ok) {
+        throw new Error(t("memoryViewer.errors.fetchActivity"));
+      }
+      setRecentActivity(Array.isArray(data?.activities) ? data.activities : []);
+    } catch (err) {
+      if (showErrors) {
+        toast.error(
+          err instanceof Error ? err.message : t("memoryViewer.errors.loadActivity")
+        );
+      }
     }
   };
 
@@ -397,6 +436,7 @@ export function MemoryViewer({
     void fetchMemories();
     void fetchPendingMemories(false);
     void fetchConflicts(false);
+    void fetchActivity(false);
   }, [userId]);
 
   useEffect(() => {
@@ -432,6 +472,7 @@ export function MemoryViewer({
       }
       setPendingMemories((prev) => prev.filter((memory) => memory.id !== confirmationId));
       await fetchMemories();
+      await fetchActivity(false);
       toast.success(t("memoryViewer.toasts.memoryStored"));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("memoryViewer.errors.confirmMemory");
@@ -451,6 +492,7 @@ export function MemoryViewer({
         throw new Error(t("memoryViewer.errors.rejectMemory"));
       }
       setPendingMemories((prev) => prev.filter((memory) => memory.id !== confirmationId));
+      await fetchActivity(false);
       toast.success(t("memoryViewer.toasts.memorySkipped"));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("memoryViewer.errors.rejectMemory");
@@ -480,6 +522,7 @@ export function MemoryViewer({
         );
       }
       await fetchMemories();
+      await fetchActivity(false);
       toast.success(
         action === "use_new"
           ? t("memoryViewer.toasts.incomingMemorySaved")
@@ -506,6 +549,7 @@ export function MemoryViewer({
         throw new Error(t("memoryViewer.errors.deleteMemory"));
       }
       setMemories((prev) => prev.filter((memory) => memory.id !== memoryId));
+      await fetchActivity(false);
       window.dispatchEvent(
         new CustomEvent("zaki:onboarding-memory-deleted", {
           detail: { id: memoryId },
@@ -554,6 +598,7 @@ export function MemoryViewer({
       setMemories((prev) =>
         prev.map((memory) => (memory.id === memoryId ? nextMemory : memory))
       );
+      await fetchActivity(false);
       return true;
     } catch (err) {
       toast.error(
@@ -659,23 +704,9 @@ export function MemoryViewer({
       }
     }
 
-    const recentChanges: string[] = [];
-    if (pendingMemories.length > 0) {
-      recentChanges.push(t("memoryViewer.notebook.recentPending", { count: pendingMemories.length }));
-    }
-    if (conflicts.length > 0) {
-      recentChanges.push(t("memoryViewer.notebook.recentConflicts", { count: conflicts.length }));
-    }
-    for (const memory of orderedMemories.slice(0, 3)) {
-      const content = String(memory.content || "").trim();
-      if (!content) continue;
-      recentChanges.push(
-        t("memoryViewer.notebook.recentSaved", {
-          content,
-          date: formatDateLabel(memory.createdAt || memory.created_at || "", locale),
-        })
-      );
-    }
+    const recentChanges = recentActivity.map((activity) =>
+      buildActivityLabel(activity, t, locale)
+    );
 
     return [
       {
@@ -714,7 +745,7 @@ export function MemoryViewer({
         items: recentChanges.slice(0, 4),
       },
     ];
-  }, [conflicts, locale, memories, pendingMemories, t]);
+  }, [locale, memories, recentActivity, t]);
 
   if (loading) {
     return <SkeletonMemoryViewer />;

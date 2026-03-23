@@ -28,6 +28,7 @@ import {
   resolveMemoryCapturePolicy as resolveMemoryCapturePolicyOp,
   setMemoryPreferences as setMemoryPreferencesOp,
   updateMemory as updateMemoryOp,
+  getMemoryActivity as getMemoryActivityOp,
 } from "./operations.js";
 import { normalizeMemoryPolicy } from "./policy.js";
 
@@ -207,6 +208,7 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     resolveMemoryCapturePolicy = resolveMemoryCapturePolicyOp,
     setMemoryPreferences = setMemoryPreferencesOp,
     updateMemory = updateMemoryOp,
+    getMemoryActivity = getMemoryActivityOp,
     autoSaveWithUndo = autoSaveWithUndoOp,
     undoMemory = undoMemoryOp,
     processChatMemoryCapture = processChatMemoryCaptureOp,
@@ -524,6 +526,22 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
   app.get("/api/memory/list", listMemoriesHandler);
   app.get("/api/memory/list/:userId", listMemoriesHandler);
 
+  app.get("/api/memory/activity", async (req, res) => {
+    try {
+      const scope = await requireMemoryUser(req, res);
+      if (!scope) return;
+      const limit = toBoundedInt(req.query.limit, {
+        fallback: 8,
+        min: 1,
+        max: 50,
+      });
+      const activities = await getMemoryActivity(scope.userId, limit);
+      res.json({ activities });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/memory/search", async (req, res) => {
     try {
       const scope = await requireMemoryUser(req, res);
@@ -685,6 +703,7 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
             newContent: fact.content,
             newType: fact.type,
             newConfidenceScore: 0.8,
+            sourceThreadId: normalizedThreadId || null,
             conflictMemory: conflict,
           });
           results.conflicts.push({
