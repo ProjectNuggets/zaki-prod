@@ -271,7 +271,7 @@ test.describe("memory capture UX", () => {
     await textarea.fill("My phone number is +49 170 123 4567");
     await textarea.press("Enter");
 
-    await expect(page.getByText("1 item needs review")).toBeVisible();
+    await expect(page.getByText("Something may be worth remembering")).toBeVisible();
     await page.getByRole("button", { name: "Review" }).first().click();
 
     const memoryViewer = page.getByRole("dialog", { name: "Memory viewer" });
@@ -323,7 +323,7 @@ test.describe("memory capture UX", () => {
     await textarea.fill("I prefer concise answers");
     await textarea.press("Enter");
 
-    await expect(page.getByText("Saved to memory")).toBeVisible();
+    await expect(page.getByText("Memory updated")).toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
 
     await expect(page.getByText("Undo window expired.")).toBeVisible();

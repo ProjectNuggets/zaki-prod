@@ -214,7 +214,7 @@
     "guestName": "there",
     "memoryOn": "Memory is on",
     "memoryOnHelper": "ZAKI saves useful memory automatically. You can undo or delete it anytime.",
-    "conflictsBadge": "Conflicts {{count}}",
+    "conflictsBadge": "Needs review {{count}}",
     "learnMemory": "See how memory works",
     "quickStartLabel": "Quick start",
     "latestLabel": "Your controls",
@@ -227,7 +227,7 @@
     "aboutNovaNuggets": "About Nova Nuggets",
     "missionLabel": "Why we exist",
     "memoryClarityLabel": "How memory works",
-    "memoryClarityBody": "ZAKI saves clear, useful details automatically, gives you a short undo window, and sends only sensitive or conflicting items to review.",
+    "memoryClarityBody": "ZAKI quietly keeps helpful details in memory, gives you a short undo window, and only asks you to step in when something needs review.",
     "examplesLabel": "Examples",
     "examplesSets": {
       "default": "Examples",
@@ -269,32 +269,32 @@
     "missionCarouselHint": "Slide {{current}} of {{total}}",
     "news": [
       {
-        "title": "Confirm or skip before save",
-        "body": "Pending memories stay in review until you press Remember or Skip.",
+        "title": "Helpful memory stays light",
+        "body": "Safe details can be kept quietly, while anything uncertain stays ready for your review.",
         "meta": "Control"
       },
       {
-        "title": "Resolve contradictions explicitly",
-        "body": "When facts clash, ZAKI opens a conflict so you decide: keep existing or use new.",
+        "title": "Possible conflicts stay explicit",
+        "body": "When new details clash with saved memory, ZAKI asks you which version to keep.",
         "meta": "Safety"
       }
     ],
     "memoryCards": [
       {
-        "title": "Extract useful signals",
-        "body": "ZAKI detects likely facts, preferences, goals, and context from your messages."
+        "title": "Notice useful details",
+        "body": "ZAKI picks up likely preferences, goals, and context from the conversations that matter."
       },
       {
-        "title": "Queue pending review",
-        "body": "New candidates land in Pending so you can approve or skip each one."
+        "title": "Keep review for exceptions",
+        "body": "Sensitive or uncertain details stay in review so you stay in control."
       },
       {
-        "title": "Flag conflicts",
-        "body": "If new info contradicts saved memory, ZAKI opens a conflict instead of overwriting silently."
+        "title": "Flag possible conflicts",
+        "body": "If new information contradicts saved memory, ZAKI asks before changing what it knows."
       },
       {
-        "title": "Inject approved context",
-        "body": "Only approved memory is used to personalize future responses."
+        "title": "Use memory when it helps",
+        "body": "Saved memory comes back when it makes future replies more useful."
       }
     ],
     "capabilitiesLabel": "Capabilities",
@@ -1053,28 +1053,32 @@
   },
   "memory": {
     "saved": "memory saved",
-    "savedSingle": "Saved to memory",
+    "savedSingle": "Memory updated",
     "savedMultiple": "Saved {{count}} memories",
     "toReview": "memory to review",
-    "reviewNotice": "{{count}} item needs review",
-    "conflictNotice": "{{count}} conflict needs review",
-    "manageAnytime": "You can review or delete memories anytime.",
-    "reviewPendingHelper": "{{count}} item is waiting in review.",
-    "reviewConflictsHelper": "{{count}} conflict needs your decision.",
+    "reviewNotice": "Something may be worth remembering",
+    "conflictNotice": "A memory may conflict with what ZAKI already knows",
+    "savedHelper": "You can undo it now or open memory any time.",
+    "reviewPendingHelper": "{{count}} memories need review before ZAKI keeps them.",
+    "reviewConflictsHelper": "{{count}} possible conflicts need your decision.",
     "review": "Review",
     "hide": "Hide",
     "remember": "Remember",
     "skip": "Not now",
     "reviewAll": "Review all memories",
-    "open": "Open",
+    "open": "Open memory",
     "rememberAll": "Remember all",
     "undo": "Undo",
     "undoRetry": "Retry undo",
     "undoFailed": "Undo failed. The memory is still saved.",
     "undoPartialError": "{{count}} memory could not be undone.",
-    "pending": "Pending",
+    "pending": "Needs review",
     "more": "more",
-    "dismissAria": "Dismiss memory rail",
+    "dismiss": "Dismiss",
+    "later": "Later",
+    "duplicateSingle": "Already remembered: \"{{content}}\".",
+    "duplicateMultiple": "Already remembered {{count}} memories.",
+    "dismissAria": "Dismiss memory notice",
     "toggleAria": "Toggle memory list",
     "types": {
       "fact": "Fact",
@@ -1143,27 +1147,27 @@
       "retry": "Try again"
     },
     "pipeline": {
-      "title": "Memory at a glance",
-      "body": "Useful details are saved automatically, with quick undo. Sensitive or conflicting memories wait here for review.",
-      "pending": "Pending Review",
-      "stored": "Stored",
-      "conflicts": "Conflicts",
-      "visible": "Visible",
+      "title": "What ZAKI knows",
+      "body": "Saved memories help ZAKI stay useful over time. Only sensitive or conflicting details wait here for your review.",
+      "pending": "Needs review",
+      "stored": "Saved memories",
+      "conflicts": "Possible conflicts",
+      "visible": "Showing now",
       "stageExtract": "Extract",
       "stageReview": "Review",
       "stageResolve": "Resolve",
       "stageInject": "Inject in chat"
     },
     "tabs": {
-      "memories": "Memories ({{count}})",
-      "pending": "Pending ({{count}})",
-      "conflicts": "Conflicts ({{count}})"
+      "memories": "Saved memories ({{count}})",
+      "pending": "Needs review ({{count}})",
+      "conflicts": "Possible conflicts ({{count}})"
     },
     "pending": {
-      "loading": "Loading pending memories...",
-      "emptyTitle": "No pending memories",
-      "emptyBody": "New extractions that require review will show here.",
-      "reviewRequired": "Review required",
+      "loading": "Loading memories that need review...",
+      "emptyTitle": "Nothing needs review",
+      "emptyBody": "If something needs your approval before ZAKI keeps it, it will appear here.",
+      "reviewRequired": "Needs review",
       "confidence": "{{value}}% confidence",
       "queuedAt": "Queued {{date}} - {{time}}",
       "queuedRecent": "Queued from latest extraction",
@@ -1171,13 +1175,13 @@
     },
     "conflicts": {
       "loading": "Loading conflicts...",
-      "emptyTitle": "No conflicts to resolve",
-      "emptyBody": "Your stored memory is consistent.",
-      "cardTitle": "Conflict needs your decision",
+      "emptyTitle": "No conflicts to review",
+      "emptyBody": "What ZAKI knows is currently consistent.",
+      "cardTitle": "Possible conflict",
       "detectedAt": "Detected {{date}} - {{time}}",
       "detectedRecent": "Detected from latest extraction",
-      "currentMemory": "Current Stored Memory",
-      "incomingMemory": "Incoming Memory",
+      "currentMemory": "Saved memory",
+      "incomingMemory": "New detail",
       "typeLabel": "Type",
       "unknown": "unknown",
       "notAvailable": "N/A",
@@ -1188,14 +1192,14 @@
       "applying": "Applying..."
     },
     "memories": {
-      "searchPlaceholder": "Search stored memories",
+      "searchPlaceholder": "Search saved memories",
       "allTypes": "All types",
       "shownCount": "{{count}} shown",
       "emptyFilteredTitle": "No memories match current filters",
-      "emptyTitle": "No stored memories yet",
+      "emptyTitle": "No saved memories yet",
       "emptyFilteredBody": "Try a broader search query or reset the type filter.",
-      "emptyBody": "Once confirmed or auto-saved, memories appear here and become available for relevant chat responses.",
-      "storedBadge": "Stored",
+      "emptyBody": "When ZAKI keeps something worth remembering, it will appear here and help future replies stay useful.",
+      "storedBadge": "Saved",
       "threadLabel": "Thread {{id}}",
       "loadingMore": "Loading more...",
       "loadMore": "Load more memories"

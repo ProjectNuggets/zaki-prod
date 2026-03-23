@@ -6,18 +6,23 @@ import { MemoryCaptureToast } from "./MemoryCaptureToast";
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { count?: number }) => {
-      if (key === "memory.savedSingle") return "Saved to memory";
+      if (key === "memory.savedSingle") return "Memory updated";
       if (key === "memory.savedMultiple") return `Saved ${options?.count ?? 0} memories`;
-      if (key === "memory.reviewNotice") return `${options?.count ?? 0} item needs review`;
-      if (key === "memory.conflictNotice") return `${options?.count ?? 0} conflict needs review`;
-      if (key === "memory.reviewPendingHelper") return `${options?.count ?? 0} item is waiting in review.`;
-      if (key === "memory.reviewConflictsHelper") return `${options?.count ?? 0} conflict needs your decision.`;
-      if (key === "memory.manageAnytime") return "You can review or delete memories anytime.";
+      if (key === "memory.reviewNotice") return "Something may be worth remembering";
+      if (key === "memory.conflictNotice") return "A memory may conflict with what ZAKI already knows";
+      if (key === "memory.reviewPendingHelper")
+        return `${options?.count ?? 0} memories need review before ZAKI keeps them.`;
+      if (key === "memory.reviewConflictsHelper")
+        return `${options?.count ?? 0} possible conflicts need your decision.`;
+      if (key === "memory.savedHelper") return "You can undo it now or open memory any time.";
       if (key === "memory.undo") return "Undo";
       if (key === "memory.undoRetry") return "Retry undo";
       if (key === "memory.review") return "Review";
+      if (key === "memory.open") return "Open memory";
+      if (key === "memory.dismiss") return "Dismiss";
+      if (key === "memory.later") return "Later";
       if (key === "memory.undoPartialError") return `${options?.count ?? 0} memory could not be undone.`;
-      if (key === "memory.dismissAria") return "Dismiss memory rail";
+      if (key === "memory.dismissAria") return "Dismiss memory notice";
       return key;
     },
   }),
@@ -36,6 +41,7 @@ describe("MemoryCaptureToast", () => {
         conflictCount={0}
         undoError="Undo failed. The memory is still saved."
         onUndo={() => {}}
+        onOpenMemory={() => {}}
         onDismiss={() => {}}
       />
     );
@@ -69,52 +75,47 @@ describe("MemoryCaptureToast", () => {
   it("disables dismiss, undo, and review actions while processing", () => {
     const onDismiss = jest.fn();
     const onUndo = jest.fn();
-    const onReview = jest.fn();
+    const onOpenMemory = jest.fn();
 
     render(
       <MemoryCaptureToast
         position={position}
-        tone="review"
+        tone="saved"
         savedCount={1}
-        reviewCount={1}
+        reviewCount={0}
         conflictCount={0}
         processing
         onUndo={onUndo}
-        onReview={onReview}
+        onOpenMemory={onOpenMemory}
         onDismiss={onDismiss}
       />
     );
 
-    const dismissButton = screen.getByRole("button", { name: "Dismiss memory rail" });
     const undoButton = screen.getByRole("button", { name: "Undo" });
-    const reviewButton = screen.getByRole("button", { name: "Review" });
+    const openButton = screen.getByRole("button", { name: "Open memory" });
 
-    expect(dismissButton).toBeDisabled();
     expect(undoButton).toBeDisabled();
-    expect(reviewButton).toBeDisabled();
+    expect(openButton).toBeDisabled();
 
-    fireEvent.click(dismissButton);
     fireEvent.click(undoButton);
-    fireEvent.click(reviewButton);
+    fireEvent.click(openButton);
 
     expect(onDismiss).not.toHaveBeenCalled();
     expect(onUndo).not.toHaveBeenCalled();
-    expect(onReview).not.toHaveBeenCalled();
+    expect(onOpenMemory).not.toHaveBeenCalled();
   });
 
   it("restores interactivity after processing completes", () => {
     const onDismiss = jest.fn();
-    const onUndo = jest.fn();
     const onReview = jest.fn();
     const { rerender } = render(
       <MemoryCaptureToast
         position={position}
-        tone="review"
-        savedCount={1}
+        tone="conflict"
+        savedCount={0}
         reviewCount={1}
-        conflictCount={0}
+        conflictCount={1}
         processing
-        onUndo={onUndo}
         onReview={onReview}
         onDismiss={onDismiss}
       />
@@ -123,23 +124,20 @@ describe("MemoryCaptureToast", () => {
     rerender(
       <MemoryCaptureToast
         position={position}
-        tone="review"
-        savedCount={1}
+        tone="conflict"
+        savedCount={0}
         reviewCount={1}
-        conflictCount={0}
+        conflictCount={1}
         processing={false}
-        onUndo={onUndo}
         onReview={onReview}
         onDismiss={onDismiss}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss memory rail" }));
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Later" }));
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
-    expect(onUndo).toHaveBeenCalledTimes(1);
     expect(onReview).toHaveBeenCalledTimes(1);
   });
 });

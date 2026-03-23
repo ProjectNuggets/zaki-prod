@@ -545,7 +545,6 @@ export function ChatArea() {
   );
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
-  const [showConflictToast, setShowConflictToast] = useState(false);
   const [memoryToastUndoError, setMemoryToastUndoError] = useState<string | null>(null);
   const [memoryToastPartialUndoCount, setMemoryToastPartialUndoCount] = useState(0);
   const lastMemoryRequestRef = useRef<{ message: string; threadId?: string } | null>(null);
@@ -2094,6 +2093,13 @@ export function ChatArea() {
     upsertZakiBotToolCall,
   ]);
 
+  const clearMemoryToastDismiss = useCallback(() => {
+    if (autoDismissTimerRef.current) {
+      window.clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+  }, []);
+
   const dismissMemoryToast = useCallback(() => {
     setShowMemoryToast(false);
     setRecentSavedMemories([]);
@@ -2101,20 +2107,48 @@ export function ChatArea() {
     setRecentConflictCount(0);
     setMemoryToastUndoError(null);
     setMemoryToastPartialUndoCount(0);
-    if (autoDismissTimerRef.current) {
-      window.clearTimeout(autoDismissTimerRef.current);
-      autoDismissTimerRef.current = null;
-    }
-  }, []);
+    clearMemoryToastDismiss();
+  }, [clearMemoryToastDismiss]);
 
   const scheduleMemoryToastDismiss = useCallback(() => {
-    if (autoDismissTimerRef.current) {
-      window.clearTimeout(autoDismissTimerRef.current);
-    }
+    clearMemoryToastDismiss();
     autoDismissTimerRef.current = window.setTimeout(() => {
       dismissMemoryToast();
     }, 5000);
-  }, [dismissMemoryToast]);
+  }, [clearMemoryToastDismiss, dismissMemoryToast]);
+
+  const presentMemoryToast = useCallback(
+    ({
+      saved,
+      reviewCount,
+      conflictCount,
+      mode,
+    }: {
+      saved: MemoryCaptureResponse["saved"];
+      reviewCount: number;
+      conflictCount: number;
+      mode: "saved" | "review" | "conflict";
+    }) => {
+      const shouldShow = saved.length > 0 || reviewCount > 0 || conflictCount > 0;
+      setRecentSavedMemories(saved);
+      setRecentReviewCount(reviewCount);
+      setRecentConflictCount(conflictCount);
+      setMemoryToastMode(mode);
+      setShowMemoryToast(shouldShow);
+
+      if (!shouldShow) {
+        clearMemoryToastDismiss();
+        return;
+      }
+
+      if (mode === "saved") {
+        scheduleMemoryToastDismiss();
+      } else {
+        clearMemoryToastDismiss();
+      }
+    },
+    [clearMemoryToastDismiss, scheduleMemoryToastDismiss]
+  );
 
   const openMemoryViewer = useCallback((query?: string, tab?: MemoryViewerTab) => {
     openSpacesMemoryViewer({ enabled: isMemoryPipelineEnabled, query, tab });
@@ -2138,11 +2172,13 @@ export function ChatArea() {
         setMemoryPendingCount(pendingCount);
         if (!memoryStatusHydratedRef.current) {
           memoryStatusHydratedRef.current = true;
-          if (conflictCount > 0) {
-            setShowConflictToast(true);
-          }
         } else if (notifyOnNewConflicts && conflictCount > previousConflictCount) {
-          setShowConflictToast(true);
+          presentMemoryToast({
+            saved: [],
+            reviewCount: 0,
+            conflictCount: conflictCount - previousConflictCount,
+            mode: "conflict",
+          });
         }
 
         conflictCountRef.current = conflictCount;
@@ -2159,7 +2195,7 @@ export function ChatArea() {
         // Sync is best-effort and should never block chat.
       }
     },
-    [authUserId, isMemoryPipelineEnabled]
+    [authUserId, isMemoryPipelineEnabled, presentMemoryToast]
   );
 
   const requestMemoryStatusSync = useCallback(
@@ -2213,7 +2249,12 @@ export function ChatArea() {
           return true;
         });
         if (newConflicts.length > 0) {
-          setShowConflictToast(true);
+          presentMemoryToast({
+            saved: [],
+            reviewCount: 0,
+            conflictCount: newConflicts.length,
+            mode: "conflict",
+          });
         }
       }
 
@@ -2221,8 +2262,8 @@ export function ChatArea() {
         const firstDuplicate = String(duplicates[0]?.content || "").trim();
         toast.info(
           duplicates.length === 1 && firstDuplicate
-            ? `Already remembered: "${firstDuplicate}".`
-            : `Already remembered ${duplicates.length} memories.`
+            ? t("memory.duplicateSingle", { content: firstDuplicate })
+            : t("memory.duplicateMultiple", { count: duplicates.length })
         );
         return;
       }
@@ -2253,16 +2294,12 @@ export function ChatArea() {
           }
         }
       }
-      setRecentSavedMemories(saved);
-      setRecentReviewCount(review.length);
-      setRecentConflictCount(conflicts.length);
-      setShowMemoryToast(saved.length > 0 || review.length > 0 || conflicts.length > 0);
-      setMemoryToastMode(
-        conflicts.length > 0 ? "conflict" : review.length > 0 ? "review" : "saved"
-      );
-      if (saved.length > 0 || review.length > 0 || conflicts.length > 0) {
-        scheduleMemoryToastDismiss();
-      }
+      presentMemoryToast({
+        saved,
+        reviewCount: review.length,
+        conflictCount: conflicts.length,
+        mode: conflicts.length > 0 ? "conflict" : review.length > 0 ? "review" : "saved",
+      });
     } catch (err) {
       // Silent fail - not critical for chat
       console.log("[Memory] Check failed:", err);
@@ -2282,8 +2319,9 @@ export function ChatArea() {
     activeThreadId,
     isMemoryPipelineEnabled,
     isRtl,
+    presentMemoryToast,
     requestMemoryStatusSync,
-    scheduleMemoryToastDismiss,
+    t,
   ]);
 
   useEffect(() => {
@@ -2295,7 +2333,6 @@ export function ChatArea() {
       memoryInFlightRef.current = false;
       dismissMemoryToast();
       setMemoryPendingCount(0);
-      setShowConflictToast(false);
       setMemoryConflictCount(0);
       setMemoryError(null);
       return;
@@ -2306,7 +2343,6 @@ export function ChatArea() {
       lastMemoryStatusSyncAtRef.current = 0;
       setMemoryPendingCount(0);
       setMemoryConflictCount(0);
-      setShowConflictToast(false);
       return;
     }
     requestMemoryStatusSync(false, true);
@@ -2373,7 +2409,12 @@ export function ChatArea() {
                   const previousConflictCount = conflictCountRef.current;
                   setMemoryPendingCount(nextPendingCount);
                   if (nextConflictCount > conflictCountRef.current) {
-                    setShowConflictToast(true);
+                    presentMemoryToast({
+                      saved: [],
+                      reviewCount: 0,
+                      conflictCount: nextConflictCount - conflictCountRef.current,
+                      mode: "conflict",
+                    });
                   }
                   conflictCountRef.current = nextConflictCount;
                   setMemoryConflictCount(nextConflictCount);
@@ -2418,7 +2459,7 @@ export function ChatArea() {
       }
       controller?.abort();
     };
-  }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
+  }, [authUserId, isMemoryPipelineEnabled, presentMemoryToast, requestMemoryStatusSync]);
 
   useEffect(() => {
     if (!authUserId || !isMemoryPipelineEnabled) return;
@@ -3499,7 +3540,7 @@ export function ChatArea() {
                           recentConflictCount > 0 ? "conflict" : recentReviewCount > 0 ? "review" : "saved"
                         );
                         setShowMemoryToast(true);
-                        scheduleMemoryToastDismiss();
+                        clearMemoryToastDismiss();
                       } else {
                         dismissMemoryToast();
                       }
@@ -3529,6 +3570,10 @@ export function ChatArea() {
                 }
               : undefined
           }
+          onOpenMemory={() => {
+            dismissMemoryToast();
+            openMemoryViewer();
+          }}
           onReview={() => {
             dismissMemoryToast();
             openMemoryViewer(
@@ -3540,50 +3585,6 @@ export function ChatArea() {
           undoError={memoryToastUndoError}
           partialUndoCount={memoryToastPartialUndoCount}
         />
-      )}
-
-      {showConflictToast && memoryConflictCount > 0 && (
-        <div
-          className="fixed z-40"
-          aria-live="polite"
-          style={{
-            left: toastPosition.left,
-            width: toastPosition.width,
-            bottom: toastPosition.bottom + (showMemoryToast ? 48 : 16),
-          }}
-        >
-          <div className="rounded-full border border-zaki-subtle dark:border-zaki-dark bg-white/95 dark:bg-zaki-dark-card px-3 py-1.5 text-2xs text-zaki-secondary dark:text-zaki-dark-subtle shadow-[0px_8px_20px_rgba(15,15,15,0.08)] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="inline-flex size-5 items-center justify-center rounded-full bg-zaki-hover text-zaki-brand">
-                !
-              </span>
-              <span className="truncate">
-                {memoryConflictCount} memory conflict{memoryConflictCount > 1 ? "s" : ""} detected
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="text-zaki-brand font-semibold hover:underline"
-                onClick={() => {
-                  openMemoryViewer(undefined, "conflicts");
-                  setShowConflictToast(false);
-                }}
-              >
-                Review
-              </button>
-              <button
-                type="button"
-                className="text-zaki-muted dark:text-zaki-dark-muted font-medium hover:underline"
-                onClick={() => {
-                  setShowConflictToast(false);
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {memoryError && (
