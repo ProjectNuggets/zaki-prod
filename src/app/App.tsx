@@ -195,6 +195,10 @@ export default function App() {
       setOnboardingOpen(false);
       return;
     }
+    if (guidedOnboardingOpen) {
+      setOnboardingOpen(false);
+      return;
+    }
     const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
     const completed = window.localStorage.getItem(key) === "done";
     if (completed) {
@@ -205,7 +209,7 @@ export default function App() {
       setOnboardingOpen(true);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [user?.username, authLoading, isZakiBotRoute]);
+  }, [user?.username, authLoading, isZakiBotRoute, guidedOnboardingOpen]);
 
   useEffect(() => {
     if (!token || !user?.username || authLoading) {
@@ -242,6 +246,7 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleOpenOnboarding = () => {
+      if (isZakiBotRoute) return;
       setOnboardingOpen(false);
       setGuidedOnboardingOpen(true);
     };
@@ -249,7 +254,7 @@ export default function App() {
     return () => {
       window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
     };
-  }, []);
+  }, [isZakiBotRoute]);
 
   const dismissOnboarding = () => {
     setOnboardingOpen(false);
