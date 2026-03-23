@@ -141,8 +141,8 @@
     "contextSummaryMemoryBody": "Follows your account.",
     "contextSummarySpaceLabel": "Space context",
     "contextSummarySpaceBody": "Shared across chats in this space.",
-    "contextSummaryThreadLabel": "Thread files",
-    "contextSummaryThreadBody": "Only used in one conversation.",
+    "contextSummaryThreadLabel": "Session context",
+    "contextSummaryThreadBody": "Short-lived chat context stays temporary unless it becomes lasting memory.",
     "filesBadge": "{{count}} files",
     "dangerZone": "Danger zone",
     "dangerZoneBody": "Delete this space only if you no longer need its chats or shared context.",
@@ -1115,10 +1115,59 @@
       "manualHint": "Confirm each memory"
     }
   },
-  "memoryViewer": {
-    "errors": {
-      "fetchPending": "Failed to fetch pending memories",
-      "loadPending": "Failed to load pending memories",
+    "memoryViewer": {
+      "notebook": {
+        "title": "What ZAKI currently knows",
+        "body": "This is the personal memory layer that helps ZAKI stay useful across your Spaces.",
+        "helper": "You can change, remove, or review anything here.",
+        "empty": "Nothing notable here yet.",
+        "recentPending": "{{count}} memories are waiting for review.",
+        "recentConflicts": "{{count}} possible conflicts are waiting for a decision.",
+        "recentSaved": "Saved: {{content}} ({{date}})",
+        "groups": {
+          "about_you": {
+            "title": "About you",
+            "body": "Stable details, identity cues, and facts ZAKI can reuse carefully."
+          },
+          "preferences": {
+            "title": "Preferences",
+            "body": "How you like to work, write, plan, or receive help."
+          },
+          "ongoing_work": {
+            "title": "Ongoing work",
+            "body": "Projects, goals, and active context that may matter again soon."
+          },
+          "relationships": {
+            "title": "Relationships",
+            "body": "People or roles that help ZAKI understand your context."
+          },
+          "recent_changes": {
+            "title": "Recent changes",
+            "body": "The latest updates, reviews, and conflict signals across your memory."
+          }
+        }
+      },
+      "scope": {
+        "personal": {
+          "title": "Personal memory",
+          "body": "Follows you across Spaces and improves future replies over time."
+        },
+        "space": {
+          "title": "Space context",
+          "body": "Files and instructions belong to the Space and stay shared inside it."
+        },
+        "session": {
+          "title": "Temporary session context",
+          "body": "Short-lived chat context helps in the moment and is only kept if it becomes useful memory."
+        }
+      },
+      "raw": {
+        "title": "Raw records",
+        "body": "Search, filter, export, review, and resolve the underlying memory records here."
+      },
+      "errors": {
+        "fetchPending": "Failed to fetch pending memories",
+        "loadPending": "Failed to load pending memories",
       "fetchMemories": "Failed to fetch memories",
       "loadMemories": "Failed to load memories",
       "fetchConflicts": "Failed to fetch conflicts",

@@ -70,6 +70,13 @@ interface MemoryViewerProps {
   initialTab?: "memories" | "pending" | "conflicts";
 }
 
+type MemorySummaryGroup =
+  | "about_you"
+  | "preferences"
+  | "ongoing_work"
+  | "relationships"
+  | "recent_changes";
+
 type MemoryTypeStyle = {
   label: string;
   icon: LucideIcon;
@@ -144,6 +151,25 @@ const memoryTypeStyles: Record<string, MemoryTypeStyle> = {
 };
 
 const MEMORY_PAGE_SIZE = 80;
+
+function getSummaryGroupForMemory(memory: MemoryRecord): Exclude<MemorySummaryGroup, "recent_changes"> {
+  switch (memory.type) {
+    case "preference":
+      return "preferences";
+    case "goal":
+    case "context":
+    case "episode":
+    case "event":
+    case "struggle":
+      return "ongoing_work";
+    case "relationship":
+      return "relationships";
+    case "fact":
+    case "emotion":
+    default:
+      return "about_you";
+  }
+}
 
 function normalizeCreatedAt(value?: string) {
   if (!value) return new Date().toISOString();
@@ -518,6 +544,87 @@ export function MemoryViewer({
     };
   }, [memories.length, pendingMemories.length, conflicts.length, filteredMemories.length]);
 
+  const notebookGroups = useMemo(() => {
+    const orderedMemories = [...memories].sort((a, b) => {
+      const aTime = new Date(a.createdAt || a.created_at || "").getTime();
+      const bTime = new Date(b.createdAt || b.created_at || "").getTime();
+      return bTime - aTime;
+    });
+
+    const grouped = new Map<Exclude<MemorySummaryGroup, "recent_changes">, string[]>([
+      ["about_you", []],
+      ["preferences", []],
+      ["ongoing_work", []],
+      ["relationships", []],
+    ]);
+
+    for (const memory of orderedMemories) {
+      const bucket = grouped.get(getSummaryGroupForMemory(memory));
+      if (!bucket) continue;
+      const content = String(memory.content || "").trim();
+      if (!content || bucket.includes(content)) continue;
+      if (bucket.length < 3) {
+        bucket.push(content);
+      }
+    }
+
+    const recentChanges: string[] = [];
+    if (pendingMemories.length > 0) {
+      recentChanges.push(t("memoryViewer.notebook.recentPending", { count: pendingMemories.length }));
+    }
+    if (conflicts.length > 0) {
+      recentChanges.push(t("memoryViewer.notebook.recentConflicts", { count: conflicts.length }));
+    }
+    for (const memory of orderedMemories.slice(0, 3)) {
+      const content = String(memory.content || "").trim();
+      if (!content) continue;
+      recentChanges.push(
+        t("memoryViewer.notebook.recentSaved", {
+          content,
+          date: formatDateLabel(memory.createdAt || memory.created_at || "", locale),
+        })
+      );
+    }
+
+    return [
+      {
+        id: "about_you" as const,
+        icon: Brain,
+        title: t("memoryViewer.notebook.groups.about_you.title"),
+        body: t("memoryViewer.notebook.groups.about_you.body"),
+        items: grouped.get("about_you") || [],
+      },
+      {
+        id: "preferences" as const,
+        icon: SlidersHorizontal,
+        title: t("memoryViewer.notebook.groups.preferences.title"),
+        body: t("memoryViewer.notebook.groups.preferences.body"),
+        items: grouped.get("preferences") || [],
+      },
+      {
+        id: "ongoing_work" as const,
+        icon: Target,
+        title: t("memoryViewer.notebook.groups.ongoing_work.title"),
+        body: t("memoryViewer.notebook.groups.ongoing_work.body"),
+        items: grouped.get("ongoing_work") || [],
+      },
+      {
+        id: "relationships" as const,
+        icon: Users,
+        title: t("memoryViewer.notebook.groups.relationships.title"),
+        body: t("memoryViewer.notebook.groups.relationships.body"),
+        items: grouped.get("relationships") || [],
+      },
+      {
+        id: "recent_changes" as const,
+        icon: RefreshCw,
+        title: t("memoryViewer.notebook.groups.recent_changes.title"),
+        body: t("memoryViewer.notebook.groups.recent_changes.body"),
+        items: recentChanges.slice(0, 4),
+      },
+    ];
+  }, [conflicts, locale, memories, pendingMemories, t]);
+
   if (loading) {
     return <SkeletonMemoryViewer />;
   }
@@ -559,10 +666,39 @@ export function MemoryViewer({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-              {t("memoryViewer.pipeline.title")}
+              {t("memoryViewer.notebook.title")}
             </h3>
             <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-              {t("memoryViewer.pipeline.body")}
+              {t("memoryViewer.notebook.body")}
+            </p>
+            <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+              {t("memoryViewer.notebook.helper")}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-3">
+            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.scope.personal.title")}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.scope.personal.body")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-3">
+            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.scope.space.title")}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.scope.space.body")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zaki-subtle dark:border-zaki-dark bg-zaki-base dark:bg-zaki-dark-elevated px-3 py-3">
+            <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.scope.session.title")}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.scope.session.body")}
             </p>
           </div>
         </div>
@@ -599,6 +735,65 @@ export function MemoryViewer({
             <div className="mt-1 text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
               {memoryStats.filtered}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {notebookGroups.map((group) => {
+          const Icon = group.icon;
+          const hasItems = group.items.length > 0;
+          return (
+            <section
+              key={group.id}
+              className="rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-4 py-4 shadow-[0px_12px_28px_rgba(15,15,15,0.05)]"
+            >
+              <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-zaki-hover text-zaki-brand dark:bg-zaki-dark-elevated dark:text-[#ffb6a4]">
+                  <Icon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {group.title}
+                  </h4>
+                  <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+                    {group.body}
+                  </p>
+                </div>
+              </div>
+              {hasItems ? (
+                <ul className={cn("mt-4 space-y-2", isRtl && "text-right")}>
+                  {group.items.map((item) => (
+                    <li
+                      key={`${group.id}:${item}`}
+                      className="rounded-xl border border-zaki-subtle/70 dark:border-zaki-dark bg-zaki-base/70 dark:bg-zaki-dark-elevated px-3 py-2 text-sm leading-6 text-zaki-primary dark:text-zaki-dark-primary"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-4 rounded-xl border border-dashed border-zaki-subtle dark:border-zaki-dark bg-zaki-base/70 dark:bg-zaki-dark-elevated px-3 py-3 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                  {t("memoryViewer.notebook.empty")}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="rounded-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card px-4 py-4 shadow-[0px_12px_28px_rgba(15,15,15,0.05)]">
+        <div className="flex items-start gap-3">
+          <div className="size-9 rounded-xl bg-zaki-hover dark:bg-zaki-dark-elevated flex items-center justify-center text-zaki-brand dark:text-[#ffb6a4]">
+            <BookOpen className="size-4" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {t("memoryViewer.raw.title")}
+            </h4>
+            <p className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("memoryViewer.raw.body")}
+            </p>
           </div>
         </div>
       </div>

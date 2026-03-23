@@ -11,9 +11,14 @@ jest.mock("@/lib/api", () => ({
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { count?: number; value?: number }) => {
-      if (key === "memoryViewer.tabs.memories") return `Memories (${options?.count ?? 0})`;
-      if (key === "memoryViewer.tabs.pending") return `Pending (${options?.count ?? 0})`;
-      if (key === "memoryViewer.tabs.conflicts") return `Conflicts (${options?.count ?? 0})`;
+      if (key === "memoryViewer.notebook.title") return "What ZAKI currently knows";
+      if (key === "memoryViewer.notebook.groups.preferences.title") return "Preferences";
+      if (key === "memoryViewer.notebook.groups.recent_changes.title") return "Recent changes";
+      if (key === "memoryViewer.notebook.recentSaved")
+        return `Saved: ${(options as unknown as { content?: string })?.content ?? ""}`;
+      if (key === "memoryViewer.tabs.memories") return `Saved memories (${options?.count ?? 0})`;
+      if (key === "memoryViewer.tabs.pending") return `Needs review (${options?.count ?? 0})`;
+      if (key === "memoryViewer.tabs.conflicts") return `Possible conflicts (${options?.count ?? 0})`;
       if (key === "memoryViewer.pending.emptyTitle") return "Nothing needs review";
       if (key === "memoryViewer.conflicts.emptyTitle") return "No conflicts";
       if (key === "memoryViewer.memories.emptyTitle") return "No memories yet";
@@ -93,5 +98,43 @@ describe("MemoryViewer", () => {
     await waitFor(() => {
       expect(screen.getByText("No conflicts")).toBeInTheDocument();
     });
+  });
+
+  it("renders notebook summaries from saved memories", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({
+            memories: [
+              {
+                id: "m-1",
+                content: "Prefers concise weekly plans",
+                type: "preference",
+                createdAt: "2026-03-23T10:00:00.000Z",
+              },
+            ],
+            nextCursor: null,
+            hasMore: false,
+          })
+        );
+      }
+      if (path === "/api/memory/confirmations") {
+        return Promise.resolve(jsonResponse({ confirmations: [] }));
+      }
+      if (path === "/api/memory/conflicts") {
+        return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("What ZAKI currently knows")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Preferences")).toBeInTheDocument();
+    expect(screen.getAllByText("Prefers concise weekly plans").length).toBeGreaterThan(0);
+    expect(screen.getByText("Recent changes")).toBeInTheDocument();
   });
 });
