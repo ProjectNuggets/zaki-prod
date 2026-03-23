@@ -143,18 +143,18 @@ test("user can sign in on pricing route and complete provider-selected checkout"
     window.localStorage.setItem("zaki:onboarding:v1:user@example.com", "done");
   });
 
-  await page.goto("/pricing");
+  await page.goto("/pricing?auth=signup&plan=student&interval=monthly&source=website_pricing");
 
+  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+  await page.getByRole("tab", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
   await page.getByPlaceholder("Email address").fill("user@example.com");
   await page.getByPlaceholder("Password").fill("Password123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(
-    page.getByRole("heading", { name: "Choose the plan that makes ZAKI feel personal" })
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Choose Student" }).click();
+  await expect(page.getByRole("heading", { name: "Choose how you want to work with ZAKI" })).toBeVisible();
+  await page.getByRole("button", { name: "Choose Personal" }).click();
 
   await expect(page.getByText("Choose payment provider")).toBeVisible();
   await page.getByRole("button", { name: /Stripe/ }).click();

@@ -23,7 +23,7 @@ export function Footer({ locale }: { locale: Locale }) {
             {isArabic ? "المنتج" : "Product"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm">
-            <a href="https://app.chatzaki.com/pricing?auth=signup&source=website_footer" className="transition-colors hover:text-chat-accent">{isArabic ? "Spaces (حاليًا ZAKI Chat)" : "Spaces (currently ZAKI Chat)"}</a>
+            <a href="https://app.chatzaki.com/?auth=signup&source=website_footer" className="transition-colors hover:text-chat-accent">{isArabic ? "Spaces (حاليًا ZAKI Chat)" : "Spaces (currently ZAKI Chat)"}</a>
             <Link to={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="transition-colors hover:text-chat-accent">{isArabic ? "زكي" : "ZAKI"}</Link>
             <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-chat-accent">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Link>
             <Link to={isArabic ? "/ar/faq/" : "/faq/"} className="transition-colors hover:text-chat-accent">{isArabic ? "الأسئلة" : "FAQ"}</Link>

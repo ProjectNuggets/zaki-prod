@@ -417,40 +417,28 @@
     ]
   },
   "zakiExperimentalNotice": {
-    "eyebrow": "Experimental note",
-    "badge": "Experimental branch",
-    "areaLabel": "Repo intro",
-    "title": "ZAKI is still experimental",
-    "intro": "This is a different interaction model: state-of-the-art agent behavior with long-term persistent memory and continuity across sessions.",
-    "footer": "It is marked experimental because the behavior is still new enough that we had to build our own benchmark for it at Nova Nuggets Labs before treating it as stable.",
+    "eyebrow": "Experimental",
+    "title": "ZAKI is powerful by design.",
+    "intro": "Ask ZAKI about anything. It will try to find a way forward, not just answer back.",
+    "capability": "11K+ vetted skills available through hub.decision.ai. ZAKI can discover, download, and execute them when needed.",
+    "footer": "This stays experimental because the tool is ambitious, the behavior is still evolving, and we benchmark it as we shape it in public.",
     "dismissAria": "Dismiss ZAKI experimental notice",
-    "repo": {
-      "branch": "// branch: zaki/experimental-persistent-agents",
-      "origin": "// built at Nova Nuggets Labs",
-      "benchmark": "// in-house benchmark required",
-      "goal": "// long-term persistent memory in real use"
-    },
     "actions": {
       "continue": "Continue",
       "learnMore": "Learn more"
     }
   },
   "zakiBootstrapCard": {
-    "eyebrow": "First contact",
-    "title": "Before the conversation starts",
+    "eyebrow": "First exchange",
+    "title": "Give me the shape of the relationship first.",
     "dismissAria": "Dismiss ZAKI first-contact note",
     "arabic": {
-      "headline": "سأبدأ معك بالإنجليزية أيضًا، لكن هذه ملاحظة قصيرة قبل أن نبدأ.",
-      "body": "لا تقلق، أنا أتحدث أي لغة. سؤالي الأول سيكون: من أنا؟ من أنت؟ وما الذي نعمل عليه؟ وبعدها سأكمل معك من هناك."
+      "headline": "سأبدأ بالإنجليزية أيضًا، لكن هذه التهيئة أولًا.",
+      "body": "قل لي من أنت، من أكون بالنسبة لك، وما الذي نعمل عليه. يمكنك أن تبدأ بأي لغة، ثم سأكمل معك من هناك."
     },
     "english": {
       "label": "English translation",
-      "body": "I will ask this in English too. Do not worry, I speak any language. My first question will be: Who am I? Who are you? What are we working on?"
-    },
-    "repo": {
-      "prep": "// bootstrap note",
-      "languages": "// Arabic first, English next, any language welcome",
-      "questions": "// who am I / who are you / what are we working on"
+      "body": "I will ask in English too. Tell me who you are, who I am for you, and what we are working on. You can start in any language."
     },
     "actions": {
       "continue": "Continue"
@@ -614,6 +602,29 @@
     "skip": "Skip for now",
     "back": "Back",
     "finish": "Finish",
+    "simple": {
+      "eyebrow": "Getting started",
+      "title": "Start clean, {{userName}}",
+      "subtitle": "Two quick notes before you begin.",
+      "dismissAria": "Close onboarding",
+      "progress": "Step {{current}} of {{total}}",
+      "skip": "Skip",
+      "back": "Back",
+      "next": "Next",
+      "createSpace": "Create a space",
+      "steps": {
+        "model": {
+          "title": "ZAKI holds the relationship. Spaces hold the work.",
+          "body": "Use ZAKI when you want continuity, memory, and direction across time. Use Spaces when the work needs a clean place to be written, researched, or moved forward.",
+          "note": "Think of ZAKI as the long-running thread with you. Think of each Space as a focused work surface."
+        },
+        "spaces": {
+          "title": "Each Space keeps its own context.",
+          "body": "Threads, files, and instructions stay inside the Space they belong to. By default, content does not jump across Spaces.",
+          "note": "That means one Space for one project, topic, client, or stream of work."
+        }
+      }
+    },
     "steps": {
       "space": {
         "title": "Create your first space",

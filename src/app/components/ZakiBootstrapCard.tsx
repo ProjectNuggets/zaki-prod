@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileCode2, X } from "lucide-react";
+import { MessageSquareQuote, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +49,7 @@ export function ZakiBootstrapCard({
   return (
     <section
       className={cn(
-        "mx-auto mb-3 w-full max-w-4xl overflow-hidden rounded-[28px] border border-[#e7d9cb] bg-[linear-gradient(180deg,#fffdf9_0%,#f8efe4_100%)] shadow-[0px_18px_40px_rgba(15,15,15,0.07)] dark:border-[#33261d] dark:bg-[linear-gradient(180deg,#17120f_0%,#120e0b_100%)] dark:shadow-[0px_24px_48px_rgba(0,0,0,0.34)]",
+        "mx-auto mb-3 w-full max-w-3xl overflow-hidden rounded-[28px] border border-[#e4d5c6] bg-[linear-gradient(180deg,#fffdf9_0%,#f7efe6_100%)] shadow-[0px_16px_38px_rgba(15,15,15,0.06)] dark:border-[#33261d] dark:bg-[linear-gradient(180deg,#17120f_0%,#120e0b_100%)] dark:shadow-[0px_24px_48px_rgba(0,0,0,0.34)]",
         className
       )}
       dir={isRtl ? "rtl" : "ltr"}
@@ -58,12 +58,12 @@ export function ZakiBootstrapCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#eadfce] bg-white/75 px-3 py-1 dark:border-[#2c2118] dark:bg-[#17110d]/75">
-              <FileCode2 className="size-3.5" />
+              <MessageSquareQuote className="size-3.5" />
               {t("zakiBootstrapCard.eyebrow")}
             </span>
           </div>
 
-          <h3 className="mt-3 text-[1.14rem] font-semibold leading-tight text-zaki-primary dark:text-zaki-dark-primary">
+          <h3 className="mt-3 text-[1.12rem] font-semibold leading-tight text-zaki-primary dark:text-zaki-dark-primary">
             {t("zakiBootstrapCard.title")}
           </h3>
 
@@ -75,12 +75,6 @@ export function ZakiBootstrapCard({
               <p className="mt-1.5 text-[14px] leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
                 {t("zakiBootstrapCard.arabic.body")}
               </p>
-            </div>
-
-            <div className="rounded-[18px] border border-[#eadfce] bg-white/50 px-4 py-2.5 font-mono text-[11.5px] leading-5.5 text-zaki-secondary dark:border-[#2f241c] dark:bg-[#17110d]/40 dark:text-zaki-dark-subtle">
-              <div>{t("zakiBootstrapCard.repo.prep")}</div>
-              <div>{t("zakiBootstrapCard.repo.languages")}</div>
-              <div>{t("zakiBootstrapCard.repo.questions")}</div>
             </div>
 
             <div>

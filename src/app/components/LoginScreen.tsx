@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LogoArabicOrange } from "./icons";
 import {
   requestPublicSignup,
@@ -13,6 +14,36 @@ import {
 import { useAuthStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+const PRICING_INTENT_SOURCES = new Set([
+  "website_pricing",
+  "website_nav_pricing",
+  "website_footer_pricing",
+  "pricing_split",
+  "product_split",
+  "upgrade",
+  "settings",
+  "chat_input",
+  "billing_success",
+  "access_expired",
+]);
+
+export function hasExplicitPricingIntent(input: {
+  pathname: string;
+  searchParams: URLSearchParams;
+}) {
+  if (input.pathname !== "/pricing") return false;
+
+  const { searchParams } = input;
+  if (searchParams.get("plan")) return true;
+  if (searchParams.get("interval")) return true;
+  if (searchParams.get("intent")) return true;
+  if (searchParams.get("autostart") === "1") return true;
+
+  const source = String(searchParams.get("source") || "")
+    .trim()
+    .toLowerCase();
+  return PRICING_INTENT_SOURCES.has(source);
+}
 
 const AUTH_COPY = {
   en: {
@@ -207,6 +238,8 @@ function getInitialLegalPolicyVersion() {
 export function LoginScreen() {
   const { i18n } = useTranslation();
   const { setToken } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const locale = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
   const isRtl = locale === "ar";
   const copy = useMemo(() => AUTH_COPY[locale], [locale]);
@@ -488,6 +521,15 @@ export function LoginScreen() {
       setToken(data.token);
       setLoginAccessCode("");
       setShowLoginAccessCode(false);
+      if (
+        location.pathname === "/pricing" &&
+        !hasExplicitPricingIntent({
+          pathname: location.pathname,
+          searchParams: new URLSearchParams(location.search),
+        })
+      ) {
+        navigate("/", { replace: true });
+      }
     } catch (err) {
       setError(
         mode === "signup"

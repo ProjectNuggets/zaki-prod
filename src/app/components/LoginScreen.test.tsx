@@ -2,7 +2,8 @@ import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { LoginScreen } from "./LoginScreen";
+import { BrowserRouter } from "react-router-dom";
+import { hasExplicitPricingIntent, LoginScreen } from "./LoginScreen";
 import { useAuthStore } from "@/stores";
 import {
   requestPublicSignup,
@@ -75,9 +76,16 @@ describe("LoginScreen legal consent", () => {
     });
   });
 
+  const renderLoginScreen = () =>
+    render(
+      <BrowserRouter>
+        <LoginScreen />
+      </BrowserRouter>
+    );
+
   it("shows verification success notice from redirect query params", async () => {
     window.history.replaceState({}, "", "/?auth=login&verified=success");
-    render(<LoginScreen />);
+    renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
     expect(
       await screen.findByText("Email verified successfully. You can sign in now.")
@@ -86,7 +94,7 @@ describe("LoginScreen legal consent", () => {
 
   it("opens signup mode from auth=signup query params", async () => {
     window.history.replaceState({}, "", "/pricing?auth=signup&plan=student&interval=yearly");
-    render(<LoginScreen />);
+    renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     expect(await screen.findByRole("button", { name: "Create account" })).toBeInTheDocument();
@@ -94,7 +102,7 @@ describe("LoginScreen legal consent", () => {
 
   it("does not require consent checkbox on login and sends auth payload only", async () => {
     const user = userEvent.setup();
-    render(<LoginScreen />);
+    renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     expect(screen.queryByText(new RegExp(`policy\\s+${policyVersion}`))).not.toBeInTheDocument();
@@ -118,7 +126,7 @@ describe("LoginScreen legal consent", () => {
 
   it("requires consent checkbox and sends consent payload on signup", async () => {
     const user = userEvent.setup();
-    render(<LoginScreen />);
+    renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
@@ -153,7 +161,7 @@ describe("LoginScreen legal consent", () => {
 
   it("submits a reset-link request and shows the reset notice", async () => {
     const user = userEvent.setup();
-    render(<LoginScreen />);
+    renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: "Forgot password?" }));
@@ -172,7 +180,7 @@ describe("LoginScreen legal consent", () => {
     const user = userEvent.setup();
     window.history.replaceState({}, "", "/reset?token=reset-token-123");
 
-    render(<LoginScreen />);
+    renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     await user.type(screen.getByPlaceholderText("New password"), "Password123");
@@ -186,5 +194,64 @@ describe("LoginScreen legal consent", () => {
       });
     });
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("redirects generic pricing-route auth back to home after login", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/pricing?auth=signup&source=website_nav");
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("tab", { name: "Sign in" }));
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(setToken).toHaveBeenCalledWith("token-123");
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+    });
+  });
+
+  it("keeps explicit pricing-intent auth on pricing after login", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/pricing?auth=signup&plan=personal&interval=monthly");
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("tab", { name: "Sign in" }));
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(setToken).toHaveBeenCalledWith("token-123");
+    });
+    expect(window.location.pathname).toBe("/pricing");
+    expect(window.location.search).toBe("?plan=personal&interval=monthly");
+  });
+});
+
+describe("hasExplicitPricingIntent", () => {
+  it("returns false for generic pricing auth routes", () => {
+    expect(
+      hasExplicitPricingIntent({
+        pathname: "/pricing",
+        searchParams: new URLSearchParams("auth=signup&source=website_nav"),
+      })
+    ).toBe(false);
+  });
+
+  it("returns true for plan-based pricing entry", () => {
+    expect(
+      hasExplicitPricingIntent({
+        pathname: "/pricing",
+        searchParams: new URLSearchParams("auth=signup&plan=student&interval=yearly"),
+      })
+    ).toBe(true);
   });
 });
