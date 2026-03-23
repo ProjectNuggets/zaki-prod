@@ -11,6 +11,7 @@ import { LegalPage } from "./components/LegalPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import { OnboardingModal } from "./components/onboarding/OnboardingModal";
+import { SimpleOnboardingModal } from "./components/onboarding/SimpleOnboardingModal";
 import {
   clearAuthToken,
   fetchCurrentUser,
@@ -45,6 +46,7 @@ export default function App() {
   // Auth state from Zustand
   const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [guidedOnboardingOpen, setGuidedOnboardingOpen] = useState(false);
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
     getInitialLegalPolicyVersion
   );
@@ -182,6 +184,7 @@ export default function App() {
   useEffect(() => {
     if (isZakiBotRoute) {
       setOnboardingOpen(false);
+      setGuidedOnboardingOpen(false);
     }
   }, [isZakiBotRoute]);
 
@@ -239,17 +242,21 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleOpenOnboarding = () => {
-      if (isZakiBotRoute) return;
-      setOnboardingOpen(true);
+      setOnboardingOpen(false);
+      setGuidedOnboardingOpen(true);
     };
     window.addEventListener("zaki:open-onboarding", handleOpenOnboarding);
     return () => {
       window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
     };
-  }, [isZakiBotRoute]);
+  }, []);
 
   const dismissOnboarding = () => {
     setOnboardingOpen(false);
+  };
+
+  const dismissGuidedOnboarding = () => {
+    setGuidedOnboardingOpen(false);
   };
 
   const completeOnboarding = () => {
@@ -258,6 +265,14 @@ export default function App() {
       window.localStorage.setItem(key, "done");
     }
     setOnboardingOpen(false);
+  };
+
+  const completeGuidedOnboarding = () => {
+    if (typeof window !== "undefined" && user?.username) {
+      const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
+      window.localStorage.setItem(key, "done");
+    }
+    setGuidedOnboardingOpen(false);
   };
 
   const openCreateSpace = () => {
@@ -423,11 +438,18 @@ export default function App() {
           </div>
         </div>
       )}
-      <OnboardingModal
+      <SimpleOnboardingModal
         isOpen={onboardingOpen}
         userName={user?.fullName || user?.username || t("home.guestName")}
         onDismiss={dismissOnboarding}
         onComplete={completeOnboarding}
+        onCreateSpace={openCreateSpace}
+      />
+      <OnboardingModal
+        isOpen={guidedOnboardingOpen}
+        userName={user?.fullName || user?.username || t("home.guestName")}
+        onDismiss={dismissGuidedOnboarding}
+        onComplete={completeGuidedOnboarding}
         onCreateSpace={openCreateSpace}
         onOpenMemory={openMemory}
         onOpenSettings={openSettings}

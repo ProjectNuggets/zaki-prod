@@ -79,7 +79,7 @@ export function NavBar({ locale }: { locale: Locale }) {
           </Link>
 
           <a
-            href="https://app.chatzaki.com/pricing?auth=signup&source=website_nav"
+            href="https://app.chatzaki.com/?auth=signup&source=website_nav"
             className="ms-1 inline-flex items-center rounded-full bg-chat-accent px-4 py-1.5 text-[12px] font-semibold tracking-wide text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.28)] dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
           >
             {isArabic ? "انضم الآن" : "Join now"}
@@ -125,7 +125,7 @@ export function NavBar({ locale }: { locale: Locale }) {
             </Link>
           ))}
           <a
-            href="https://app.chatzaki.com/pricing?auth=signup&source=website_nav_mobile"
+            href="https://app.chatzaki.com/?auth=signup&source=website_nav_mobile"
             className="mt-2 flex items-center justify-center rounded-lg bg-chat-accent px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.28)] dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
           >
             {isArabic ? "انضم الآن" : "Join now"}
