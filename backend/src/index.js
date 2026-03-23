@@ -8091,6 +8091,7 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
   let upstreamHealth = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
   let upstreamReady = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
   let upstreamSummary = null;
+  let upstreamControlPlane = null;
   const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
     const requestId = String(req.requestId || crypto.randomUUID());
@@ -8165,6 +8166,7 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
       });
       const diagnosticsPayload = await diagnostics.json().catch(() => ({}));
       if (diagnostics.ok) {
+        upstreamControlPlane = diagnosticsPayload?.control_plane || null;
         upstreamSummary = {
           provider:
             diagnosticsPayload?.startup_self_check?.chat_provider_effective ||
@@ -8203,6 +8205,7 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
     upstreamHealth,
     upstreamReady,
     upstreamSummary,
+    upstreamControlPlane,
     lastAgentStreamError: streamState,
   });
 });
@@ -8680,13 +8683,6 @@ app.get(
   "/api/agent/config",
   requireAgentContext,
   agentRouteLimiter,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
-);
-app.patch(
-  "/api/agent/config",
-  requireAgentContext,
-  agentRouteLimiter,
-  agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
 app.get(

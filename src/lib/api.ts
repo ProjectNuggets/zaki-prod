@@ -1083,21 +1083,6 @@ export async function saveAgentOnboarding(payload: Record<string, unknown>) {
   return { response, data };
 }
 
-export async function fetchAgentConfig() {
-  const response = await backendAuthRequest("/api/agent/config", { method: "GET" });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
-export async function updateAgentConfig(payload: Record<string, unknown>) {
-  const response = await backendAuthRequest("/api/agent/config", {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
 export async function getAgentSecret(key: string) {
   const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
     method: "GET",
@@ -1235,6 +1220,20 @@ export async function fetchAgentDiagnostics() {
       latencyMs?: number | null;
       reason?: string;
     };
+    upstreamReady?: {
+      ok?: boolean;
+      status?: number;
+      latencyMs?: number | null;
+      reason?: string;
+    };
+    upstreamSummary?: {
+      provider?: string | null;
+      stateBackend?: string | null;
+      schedulerBackend?: string | null;
+      degraded?: boolean | null;
+      providerDataSource?: string | null;
+    } | null;
+    upstreamControlPlane?: Record<string, unknown> | null;
     lastAgentStreamError?: {
       at?: string;
       class?: string;
