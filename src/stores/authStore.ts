@@ -29,16 +29,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   setToken: (token) => {
     if (token) {
       setAuthToken(token);
+      set({ token, user: null, isLoading: true });
     } else {
       clearAuthToken();
+      set({ token: null, user: null, isLoading: false });
     }
-    set({ token });
   },
   setUser: (user) => set({ user }),
   setLoading: (isLoading) => set({ isLoading }),
   logout: () => {
     clearAuthToken();
-    set({ token: null, user: null });
+    set({ token: null, user: null, isLoading: false });
   },
-  initFromStorage: () => set({ token: getAuthToken() }),
+  initFromStorage: () => {
+    const token = getAuthToken();
+    set({ token, isLoading: !!token });
+  },
 }));

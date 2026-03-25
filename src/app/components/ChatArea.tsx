@@ -563,6 +563,7 @@ export function ChatArea() {
     queuedAt: number;
   } | null>(null);
   const sessionSummaryCueKeyRef = useRef<string | null>(null);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const authUser = useAuthStore((s) => s.user);
   const authUserId = useMemo(() => {
     const fallbackEmail =
@@ -571,6 +572,7 @@ export function ChatArea() {
         : "";
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
+  const isAuthReady = !authLoading && Boolean(authUserId);
   const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(() =>
     authUserId ? hasSeenZakiBootstrapCard(authUserId) : true
   );
@@ -2568,6 +2570,7 @@ export function ChatArea() {
   const ensureZakiBotProvisioned = useCallback(
     async (silent = false) => {
       if (!isZakiBotActiveSpace) return true;
+      if (!isAuthReady) return false;
       if (zakiBotProvisionedRef.current) return true;
       if (zakiBotProvisionPromiseRef.current) {
         return zakiBotProvisionPromiseRef.current;
@@ -2603,13 +2606,13 @@ export function ChatArea() {
       zakiBotProvisionPromiseRef.current = pending;
       return pending;
     },
-    [isZakiBotActiveSpace]
+    [isAuthReady, isZakiBotActiveSpace]
   );
 
   useEffect(() => {
-    if (!isZakiBotActiveSpace) return;
+    if (!isZakiBotActiveSpace || !isAuthReady) return;
     void ensureZakiBotProvisioned(true);
-  }, [ensureZakiBotProvisioned, isZakiBotActiveSpace]);
+  }, [ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
   useEffect(() => {
     zakiBotProvisionedRef.current = false;
@@ -2991,7 +2994,7 @@ export function ChatArea() {
   }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
 
   useEffect(() => {
-    if (!isZakiBotActiveSpace || !activeThreadId) return;
+    if (!isZakiBotActiveSpace || !activeThreadId || !isAuthReady) return;
     if (historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
       historyLoadedRef.current[activeThreadId] = true;
@@ -3032,7 +3035,7 @@ export function ChatArea() {
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
+  }, [activeThreadId, isAuthReady, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
 
   // First message transition effect
   useEffect(() => {

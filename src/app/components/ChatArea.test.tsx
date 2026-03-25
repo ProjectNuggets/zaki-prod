@@ -10,7 +10,7 @@ import { MemoryRouter } from "react-router-dom";
 import { ChatArea } from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
-import { apiRequest, fetchMemoryActivity } from "@/lib/api";
+import { apiRequest, fetchAgentHistory, fetchMemoryActivity, provisionAgent } from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 import { getZakiBootstrapCardStorageKey } from "./ZakiBootstrapCard";
 
@@ -19,6 +19,22 @@ jest.mock("@/lib/api", () => ({
     ok: true,
     status: 200,
     json: async () => ({}),
+  })),
+  provisionAgent: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "provisioned" }),
+    },
+    data: { status: "provisioned" },
+  })),
+  fetchAgentHistory: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ history: [] }),
+    },
+    data: { history: [] },
   })),
   fetchMemoryActivity: jest.fn(async () => ({
     response: {
@@ -90,10 +106,13 @@ async function renderChatAreaAndWaitForEffects() {
 
 describe("ChatArea Component", () => {
   let navState: NavState;
+  let authState: { user: { username: string } | null; isLoading: boolean };
 
   beforeEach(() => {
     (apiRequest as jest.Mock).mockClear();
+    (fetchAgentHistory as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
+    (provisionAgent as jest.Mock).mockClear();
     window.sessionStorage.clear();
     window.localStorage.clear();
     navState = {
@@ -111,10 +130,12 @@ describe("ChatArea Component", () => {
       selector ? selector(navState) : navState
     );
 
-    (useAuthStore as jest.Mock).mockImplementation((selector?: (state: { user: { username: string } | null }) => unknown) => {
-      const state = { user: null };
-      return selector ? selector(state) : state;
-    });
+    authState = { user: null, isLoading: false };
+
+    (useAuthStore as jest.Mock).mockImplementation(
+      (selector?: (state: { user: { username: string } | null; isLoading: boolean }) => unknown) =>
+        selector ? selector(authState) : authState
+    );
 
     (useMessages as jest.Mock).mockReturnValue({ data: [], isLoading: false });
   });
@@ -212,5 +233,37 @@ describe("ChatArea Component", () => {
       window.localStorage.getItem(getZakiBootstrapCardStorageKey("nova@test.com"))
     ).toBe("done");
     expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
+  });
+
+  it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = {
+      user: { username: "nova@test.com" },
+      isLoading: true,
+    };
+
+    const view = await renderChatAreaAndWaitForEffects();
+
+    expect(provisionAgent).not.toHaveBeenCalled();
+    expect(fetchAgentHistory).not.toHaveBeenCalled();
+
+    authState = {
+      user: { username: "nova@test.com" },
+      isLoading: false,
+    };
+    view.rerender(
+      <MemoryRouter>
+        <ChatArea />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(provisionAgent).toHaveBeenCalledWith({
+        spaceId: "zaki-bot",
+        threadId: "main",
+      });
+    });
   });
 });
