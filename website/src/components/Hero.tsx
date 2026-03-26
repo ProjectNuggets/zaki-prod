@@ -34,7 +34,9 @@ export function Hero({
   t: WebsiteContent;
 }) {
   const isArabic = locale === "ar";
-  const botHref = isArabic ? "/ar/zaki-bot/#waitlist" : "/zaki-bot/#waitlist";
+  const tryZakiHref = `https://app.chatzaki.com/?auth=login&source=${
+    isArabic ? "website_home_hero_ar" : "website_home_hero"
+  }`;
   const askAiHref = `https://chatgpt.com/?q=${encodeURIComponent(ASK_AI_PROMPT)}`;
   const rotatingPhrases = isArabic
     ? ["يتذكرك", "يتابعك", "يبقى معك"]
@@ -91,8 +93,8 @@ export function Hero({
 
           <div className="mt-7 flex items-center gap-5">
             <Button asChild>
-              <a href={botHref}>
-                {isArabic ? "انضم إلى البيتا" : "Join the Beta"}
+              <a href={tryZakiHref}>
+                {isArabic ? "جرّب زكي" : "Try ZAKI"}
               </a>
             </Button>
             <a href={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent">

@@ -5,6 +5,7 @@ import type { Locale, WebsiteContent } from "../lib/content";
 
 export function ClosingCta({ locale, t, source }: { locale: Locale; t: WebsiteContent; source: string }) {
   const isArabic = locale === "ar";
+  const authMode = source === "website_home_cta" ? "login" : "signup";
 
   return (
     <section className="relative z-10 px-4 py-16 md:px-8 md:py-24">
@@ -22,7 +23,7 @@ export function ClosingCta({ locale, t, source }: { locale: Locale; t: WebsiteCo
         <Reveal delay={120}>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <a
-              href={`https://app.chatzaki.com/?auth=signup&source=${source}`}
+              href={`https://app.chatzaki.com/?auth=${authMode}&source=${source}`}
               className="inline-flex min-h-12 items-center gap-2 rounded-full bg-chat-accent px-6 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(201,57,42,0.3)] transition hover:-translate-y-0.5 hover:bg-chat-accent-hover"
             >
               {t.cta.secondary}
