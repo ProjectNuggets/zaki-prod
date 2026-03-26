@@ -3,6 +3,7 @@ import { describe, expect, it, beforeEach, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ZakiBotControlPanel } from "./ZakiBotControlPanel";
+import { useAuthStore } from "@/stores";
 import {
   connectBotTelegram,
   disconnectBotTelegram,
@@ -25,9 +26,21 @@ jest.mock("@/lib/api", () => ({
   updateBotSettings: jest.fn(),
 }));
 
+jest.mock("@/stores", () => ({
+  useAuthStore: jest.fn(),
+}));
+
 describe("ZakiBotControlPanel", () => {
+  let authState: { user: { username: string } | null; isLoading: boolean };
+
   beforeEach(() => {
     jest.clearAllMocks();
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    (useAuthStore as unknown as jest.Mock).mockImplementation(
+      (
+        selector?: (state: { user: { username: string } | null; isLoading: boolean }) => unknown
+      ) => (selector ? selector(authState) : authState)
+    );
 
     (fetchBotOnboarding as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
@@ -161,6 +174,54 @@ describe("ZakiBotControlPanel", () => {
     await user.click(screen.getByRole("button", { name: "Connect Telegram" }));
 
     expect(await screen.findByText("The Telegram token is invalid. Check it and try again.")).toBeInTheDocument();
+  });
+
+  it("only shows Telegram success after onboarding confirms a real connected state", async () => {
+    let onboardingCalls = 0;
+    (fetchBotOnboarding as unknown as jest.Mock).mockImplementation(async () => {
+      onboardingCalls += 1;
+      return onboardingCalls === 1
+        ? {
+            response: { ok: true },
+            data: {
+              completed: false,
+              completed_at_s: null,
+              setup: {
+                channels: {
+                  telegram: {
+                    status: "disconnected",
+                  },
+                },
+              },
+            },
+          }
+        : {
+            response: { ok: true },
+            data: {
+              completed: true,
+              completed_at_s: 1760000000,
+              setup: {
+                channels: {
+                  telegram: {
+                    status: "connected",
+                    webhook_url: "https://agent.zaki.test/webhook/telegram?user_id=1",
+                  },
+                },
+              },
+            },
+          };
+    });
+
+    const user = userEvent.setup();
+    render(<ZakiBotControlPanel isOpen onClose={jest.fn()} />);
+
+    await screen.findByText("Personal intelligence settings");
+    await user.type(screen.getByPlaceholderText("Telegram bot token"), "123456:ABC");
+    await user.click(screen.getByRole("button", { name: "Connect Telegram" }));
+
+    expect(
+      await screen.findByText("Telegram connected. Send a message to your bot to confirm routing.")
+    ).toBeInTheDocument();
   });
 
   it("shows usage unavailable state cleanly", async () => {

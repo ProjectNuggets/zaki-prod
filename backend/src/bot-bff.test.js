@@ -104,6 +104,7 @@ function createHandlers(overrides = {}) {
       getAuthContext,
       sendUpstreamRequest,
       buildUsageSummary,
+      telegramWebhookBaseUrl: overrides.telegramWebhookBaseUrl,
       createRequestId: () => "req-1",
       createIdempotencyKey: () => "idem-1",
       nowFn: overrides.nowFn || (() => 0),
@@ -184,7 +185,30 @@ describe("bot BFF T6 contract", () => {
     ).toEqual({
       completed: true,
       completed_at_s: 1760000000,
+      can_start_chat_now: undefined,
+      minimum_required: undefined,
+      operator_configure_model_provider: undefined,
       setup,
+    });
+  });
+
+  it("preserves onboarding readiness metadata needed by the settings plane", () => {
+    expect(
+      sanitizeBotOnboardingState({
+        completed: false,
+        completed_at_s: null,
+        can_start_chat_now: false,
+        minimum_required: ["telegram", " model_provider "],
+        operator_configure_model_provider: true,
+        setup: null,
+      })
+    ).toEqual({
+      completed: false,
+      completed_at_s: null,
+      can_start_chat_now: false,
+      minimum_required: ["telegram", "model_provider"],
+      operator_configure_model_provider: true,
+      setup: null,
     });
   });
 
@@ -444,8 +468,41 @@ describe("bot BFF T6 contract", () => {
     );
   });
 
+  it("roundtrips heartbeat state through the bot BFF", async () => {
+    const { handlers } = createHandlers({
+      sendUpstreamRequest: jest.fn(async ({ method, body }) => {
+        if (method === "GET") {
+          return jsonResponse({ enabled: true, interval_minutes: 15, prompt: "Daily summary" });
+        }
+        expect(body).toEqual({ enabled: false });
+        return jsonResponse({ enabled: false, interval_minutes: 15, prompt: "Daily summary" });
+      }),
+    });
+
+    const getReq = { body: {}, headers: {} };
+    const getRes = createMockRes();
+    await handlers.getHeartbeat(getReq, getRes);
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.jsonBody).toEqual({
+      enabled: true,
+      interval_minutes: 15,
+      prompt: "Daily summary",
+    });
+
+    const putReq = { body: { enabled: false }, headers: {} };
+    const putRes = createMockRes();
+    await handlers.putHeartbeat(putReq, putRes);
+    expect(putRes.statusCode).toBe(200);
+    expect(putRes.jsonBody).toEqual({
+      enabled: false,
+      interval_minutes: 15,
+      prompt: "Daily summary",
+    });
+  });
+
   it("maps invalid telegram token failures to invalid_telegram_token", async () => {
     const { handlers } = createHandlers({
+      telegramWebhookBaseUrl: "https://agent.zaki.test",
       sendUpstreamRequest: jest.fn(async () =>
         jsonResponse({ error: "telegram returned invalid token" }, { status: 400 })
       ),
@@ -461,6 +518,46 @@ describe("bot BFF T6 contract", () => {
         error: PRODUCT_ERROR_CODES.INVALID_TELEGRAM_TOKEN,
       })
     );
+  });
+
+  it("fails Telegram connect fast when no platform webhook base or override is available", async () => {
+    const { handlers, sendUpstreamRequest } = createHandlers();
+    const req = { body: { bot_token: "123456:ABC", allow_from: ["1"] }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.telegramConnect(req, res);
+
+    expect(sendUpstreamRequest).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual(
+      expect.objectContaining({
+        error: PRODUCT_ERROR_CODES.FORBIDDEN,
+        message: expect.stringContaining("Webhook base URL is not configured"),
+      })
+    );
+  });
+
+  it("injects the platform webhook base header for Telegram connect when the user does not provide one", async () => {
+    const sendUpstreamRequest = jest.fn(async ({ headers }) => {
+      expect(headers).toEqual(
+        expect.objectContaining({
+          "X-Webhook-Base-Url": "https://agent.zaki.test",
+        })
+      );
+      return jsonResponse({ status: "connected", channel: "telegram" });
+    });
+    const { handlers } = createHandlers({
+      telegramWebhookBaseUrl: "https://agent.zaki.test",
+      sendUpstreamRequest,
+    });
+    const req = { body: { bot_token: "123456:ABC", allow_from: ["1"] }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.telegramConnect(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody).toEqual({ status: "connected", channel: "telegram" });
   });
 
   it("maps unavailable usage telemetry to usage_unavailable", async () => {

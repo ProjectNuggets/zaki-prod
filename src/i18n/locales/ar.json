@@ -447,6 +447,7 @@
   "zakiSettingsSheet": {
     "badge": "إعدادات زكي",
     "title": "اضبط كيف يظهر زكي",
+    "subtitle": "تحكم في سلوك المساعد، وربط تيليجرام، ودرجة الاستقلالية من مكان واحد.",
     "locked": {
       "title": "قريبًا",
       "note": "القنوات + سلوك الوكيل المتقدم قريبًا؛ وهو متاح حاليًا داخل التطبيق فقط."
@@ -457,7 +458,8 @@
     },
     "closeAria": "إغلاق إعدادات زكي",
     "loading": {
-      "onboarding": "جارٍ تحميل إعداد زكي الحالي..."
+      "onboarding": "جارٍ تحميل إعداد زكي الحالي...",
+      "state": "جارٍ تحميل إعدادات الوكيل..."
     },
     "summary": {
       "ready": "جاهز للاستخدام",
@@ -468,9 +470,30 @@
       "disabled": "متوقف"
     },
     "sections": {
+      "overview": {
+        "title": "نظرة عامة",
+        "summary": "الجاهزية والمتطلبات وحالة تيليجرام"
+      },
       "core": {
         "title": "السلوك الأساسي",
         "summary": "ردود {{style}}، ووصول {{join}}"
+      },
+      "assistant": {
+        "title": "المساعد",
+        "summary": "ردود {{style}}، ووصول {{join}}"
+      },
+      "telegram": {
+        "title": "تيليجرام",
+        "summaryConnected": "متصل وجاهز للدردشة الخارجية.",
+        "summaryDisconnected": "اربط تيليجرام لتوصيل الردود خارج التطبيق.",
+        "summaryConnecting": "جارٍ ربط بوت تيليجرام الآن.",
+        "summaryVerifying": "جارٍ التحقق من المسار وحالة تيليجرام.",
+        "summaryNeedsAttention": "يحتاج تيليجرام إلى انتباه قبل أن يصبح جاهزًا."
+      },
+      "autonomy": {
+        "title": "الاستقلالية",
+        "summaryEnabled": "النبض مفعّل.",
+        "summaryDisabled": "النبض متوقف."
       },
       "workspace": {
         "title": "سياق المساحة",
@@ -541,6 +564,48 @@
       "telegramToken": "رمز بوت تيليجرام",
       "telegramWebhook": "رابط Webhook بديل (اختياري)"
     },
+    "overview": {
+      "operatorRequired": "ما يزال إعداد المشغل مطلوبًا قبل أن يتمكن هذا المستخدم من البدء خارجيًا.",
+      "readyToStart": "يمكن لهذا الوكيل أن يبدأ الدردشة الآن.",
+      "missingRequirements": "ما تزال بعض المتطلبات الدنيا غير مكتملة.",
+      "awaitingStatus": "ما تزال الحالة قيد التحضير.",
+      "operatorBlockingTitle": "ما يزال إعداد المشغل مطلوبًا",
+      "operatorBlockingBody": "يجب أن يكتمل إعداد النموذج ومزود الخدمة من جهة المشغل قبل أن يتمكن هذا المستخدم من إتمام التفعيل.",
+      "statusHelper": "آخر تحديث للإعداد: {{updated}}.",
+      "readinessTitle": "الجاهزية",
+      "readinessHelper": "تأتي هذه الحالة من مسار الإعداد وتعكس ما إذا كان التوصيل الخارجي جاهزًا.",
+      "telegramTitle": "حالة تيليجرام",
+      "telegramHelper": "اربط تيليجرام لكي يتمكن هذا الوكيل من الاستقبال والرد خارج التطبيق.",
+      "minimumRequiredTitle": "الحد الأدنى المطلوب",
+      "minimumRequiredHelper": "هذه هي المتطلبات المتبقية كما يذكرها مسار الإعداد.",
+      "nothingMissing": "لا يوجد شيء ناقص حاليًا.",
+      "notReady": "ليس جاهزًا بعد"
+    },
+    "telegram": {
+      "statusTitle": "الاتصال",
+      "statusHelper": "استخدم رمز بوت تيليجرام ومعرّفات الدردشات المسموح بها لتفعيل التوصيل.",
+      "statusConnecting": "جارٍ الاتصال",
+      "statusVerifying": "جارٍ التحقق",
+      "statusNeedsAttention": "يحتاج إلى انتباه",
+      "connectingHelper": "جارٍ تسجيل Webhook الخاص بتيليجرام الآن.",
+      "verifyingHelper": "يجري التحقق من تيليجرام الآن. قد يستغرق ذلك بضع ثوانٍ بعد الإعداد.",
+      "needsAttentionHelper": "لم يتم تأكيد تيليجرام بالكامل بعد. إذا كان البوت يرد بالفعل، فحدّث الصفحة بعد بضع ثوانٍ.",
+      "botTokenLabel": "رمز البوت",
+      "botTokenMasked": "الرمز المحفوظ مخفي",
+      "webhookBaseLabel": "مسار الـ webhook",
+      "webhookBaseSummary": "تديره زكي",
+      "webhookBaseHelper": "يتولى زكي إدارة نطاق Webhook الخاص بتيليجرام نيابةً عنك. إذا فشل الإعداد فيمكن للدعم فحص إعداد Webhook الخاص بالمساحة.",
+      "allowFromLabel": "معرّفات تيليجرام المسموح بها (اختياري)",
+      "allowFromPlaceholder": "أدخل معرّف دردشة أو حساب في كل سطر، أو افصل بينها بفواصل.",
+      "allowFromHelper": "اختياري. أضف معرّفات دردشة أو حسابات تيليجرام إذا أردت تقييد من يمكنه الوصول إلى وكيلك. اتركه فارغًا في المسار المعتاد."
+    },
+    "autonomy": {
+      "proactiveTitle": "التحديثات الاستباقية",
+      "proactiveHelper": "يبقى هذا الخيار ضمن إعدادات المساعد لأنه يتحكم بالسلوك، لا بإيقاع التوصيل.",
+      "heartbeatTitle": "النبض",
+      "heartbeatHelper": "توقيت النبض تديره ZAKI. هذا المفتاح يتحكم فقط في تفعيل أو إيقاف توصيل النبض.",
+      "heartbeatRequiresTelegram": "يجب ربط تيليجرام أولًا."
+    },
     "limits": {
       "currentPlanTitle": "الخطة الحالية",
       "currentPlanHelper": "اجمع الوصول المدفوع وعناصر الفوترة في صف واحد مختصر.",
@@ -566,6 +631,7 @@
       "markComplete": "وضعه كمكتمل",
       "connecting": "جارٍ الاتصال...",
       "connectTelegram": "اتصال تيليجرام",
+      "reconnectTelegram": "إعادة ربط تيليجرام",
       "disconnect": "فصل الاتصال",
       "manage": "إدارة",
       "comingSoon": "قريبًا",
@@ -579,19 +645,39 @@
       "onboardingReopened": "تمت إعادة فتح الإعداد لمتابعة الضبط.",
       "settingsSaved": "تم حفظ إعدادات ZAKI.",
       "telegramConnected": "تم ربط تيليجرام. أرسل رسالة إلى البوت للتأكد من المسار.",
-      "telegramDisconnected": "تم فصل تيليجرام."
+      "telegramDisconnected": "تم فصل تيليجرام.",
+      "heartbeatEnabled": "تم تفعيل النبض.",
+      "heartbeatDisabled": "تم إيقاف النبض."
     },
     "errors": {
       "onboardingLoad": "تعذر تحميل إعداد زكي الآن.",
       "settingsLoad": "تعذر تحميل إعدادات زكي الآن.",
+      "heartbeatLoad": "تعذر تحميل حالة النبض الآن.",
       "botStateUnavailable": "إعدادات زكي غير متاحة مؤقتًا لهذا الحساب.",
       "botStateUnavailableUnknownUser": "إعدادات زكي غير متاحة لهذا الحساب بعد.",
       "sessionTimeoutRange": "يجب أن تكون نافذة الجلسة بين 5 و180 دقيقة.",
-      "telegramTokenRequired": "أدخل رمز بوت تيليجرام قبل الاتصال."
+      "telegramTokenRequired": "أدخل رمز بوت تيليجرام قبل الاتصال.",
+      "telegramTokenInvalid": "رمز بوت تيليجرام غير صالح.",
+      "telegramWebhookRequired": "لم يتم إعداد عنوان webhook الأساسي بعد. اطلب من المشغّل ضبطه للمساحة، أو أدخل قيمة https:// صالحة.",
+      "telegramWebhookInvalid": "يجب أن يبدأ عنوان webhook الأساسي بـ https://.",
+      "telegramAllowFromRequired": "أضف معرّف دردشة أو حساب واحدًا على الأقل مسموحًا له.",
+      "telegramConnectFailed": "تعذر ربط تيليجرام.",
+      "telegramConnectUnconfirmed": "لم يكتمل ربط تيليجرام. تحقّق من عنوان webhook وتسجيله ثم حاول مرة أخرى.",
+      "telegramConnectStillVerifying": "ما يزال تيليجرام قيد التحقق. حدّث الصفحة بعد بضع ثوانٍ إذا كان البوت يرد بالفعل في تيليجرام.",
+      "telegramDisconnectFailed": "تعذر فصل تيليجرام.",
+      "telegramDisconnectUnconfirmed": "ما يزال تيليجرام يظهر كمتصل بعد الفصل. حدّث الصفحة وحاول مرة أخرى.",
+      "heartbeatSave": "تعذر تحديث النبض الآن.",
+      "settingsSave": "تعذر حفظ إعدادات زكي.",
+      "invalidAssistantMode": "اختر وضع مساعد صالحًا.",
+      "invalidGroupActivation": "اختر وضع تفعيل صالحًا.",
+      "invalidProactiveUpdates": "يجب أن تكون التحديثات الاستباقية مفعلة أو متوقفة فقط.",
+      "invalidVoiceReplies": "يجب أن تكون الردود الصوتية مفعلة أو متوقفة فقط.",
+      "invalidSessionTimeoutMinutes": "يجب أن تكون مهلة الجلسة بين 5 و180 دقيقة."
     },
     "footer": {
       "unsaved": "تغييرات غير محفوظة",
-      "saving": "جارٍ الحفظ..."
+      "saving": "جارٍ الحفظ...",
+      "saveAssistant": "احفظ إعدادات المساعد"
     }
   },
   "onboarding": {

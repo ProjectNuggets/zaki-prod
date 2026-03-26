@@ -35,6 +35,9 @@ const botOnboardingStateSchema = z
   .object({
     completed: z.boolean(),
     completed_at_s: z.number().int().nonnegative().nullable(),
+    can_start_chat_now: z.boolean().optional(),
+    minimum_required: z.array(z.string().trim().min(1)).optional(),
+    operator_configure_model_provider: z.boolean().optional(),
     setup: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict();
@@ -68,6 +71,20 @@ const telegramConnectionStateSchema = z
   .object({
     status: z.enum(["connected", "disconnected"]),
     channel: z.literal("telegram"),
+  })
+  .strict();
+
+const heartbeatStateSchema = z
+  .object({
+    enabled: z.boolean(),
+    interval_minutes: z.number().int().nonnegative().optional(),
+    prompt: z.string().nullable().optional(),
+  })
+  .strict();
+
+const heartbeatPatchSchema = z
+  .object({
+    enabled: z.boolean(),
   })
   .strict();
 
@@ -341,6 +358,9 @@ export function sanitizeBotOnboardingState(payload, fallbackCompleted = false) {
   const completed =
     typeof source.completed === "boolean" ? source.completed : Boolean(fallbackCompleted);
   const completedAt = normalizedIntegerOrNull(source.completed_at_s ?? source.completedAtS);
+  const minimumRequired = Array.isArray(source.minimum_required)
+    ? source.minimum_required.map((entry) => normalizedString(entry)).filter(Boolean)
+    : undefined;
   const setup =
     source.setup && typeof source.setup === "object" && !Array.isArray(source.setup)
       ? sanitizeProductSetupValue(source.setup)
@@ -348,6 +368,13 @@ export function sanitizeBotOnboardingState(payload, fallbackCompleted = false) {
   return botOnboardingStateSchema.parse({
     completed,
     completed_at_s: completed ? completedAt : null,
+    can_start_chat_now:
+      typeof source.can_start_chat_now === "boolean" ? source.can_start_chat_now : undefined,
+    minimum_required: minimumRequired,
+    operator_configure_model_provider:
+      typeof source.operator_configure_model_provider === "boolean"
+        ? source.operator_configure_model_provider
+        : undefined,
     setup: setup && typeof setup === "object" ? setup : null,
   });
 }
@@ -394,6 +421,29 @@ export function validateBotSettingsPatch(payload) {
 
 export function sanitizeTelegramConnectionState(status) {
   return telegramConnectionStateSchema.parse({ status, channel: "telegram" });
+}
+
+export function sanitizeHeartbeatState(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  return heartbeatStateSchema.parse({
+    enabled: Boolean(source.enabled),
+    interval_minutes: normalizedIntegerOrNull(source.interval_minutes ?? source.intervalMinutes) ?? undefined,
+    prompt:
+      typeof source.prompt === "string" || source.prompt === null
+        ? source.prompt ?? null
+        : undefined,
+  });
+}
+
+export function validateHeartbeatPatch(payload) {
+  const parsed = heartbeatPatchSchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message || "invalid heartbeat payload",
+    };
+  }
+  return { success: true, data: parsed.data };
 }
 
 export function normalizeTelegramConnectPayload(payload) {
@@ -567,6 +617,10 @@ function mapTelegramConnectError(status, payload, requestId) {
   );
 }
 
+function hasHttpsUrl(value) {
+  return typeof value === "string" && /^https:\/\//i.test(String(value).trim());
+}
+
 function mapTelegramDisconnectError(status, payload, requestId) {
   if (status === 401) return mapAuthError("unauthorized", requestId);
   if (isTelegramTokenError(payload)) {
@@ -585,6 +639,19 @@ function mapTelegramDisconnectError(status, payload, requestId) {
     requestId,
     status >= 500 ? 503 : 403
   );
+}
+
+function mapHeartbeatError(status, payload, requestId, fallbackMessage) {
+  if (status === 401) return mapAuthError("unauthorized", requestId);
+  return {
+    status: status >= 500 ? 503 : 400,
+    body: buildProductError({
+      error: PRODUCT_ERROR_CODES.SETTINGS_UPDATE_FAILED,
+      message: normalizedString(payload?.message || payload?.error) || fallbackMessage,
+      retryable: false,
+      requestId,
+    }),
+  };
 }
 
 function buildMidstreamSseError() {
@@ -652,6 +719,7 @@ async function runJsonUpstreamRequest({
   requestId,
   idempotencyKey,
   sendUpstreamRequest,
+  requestHeaders,
   mapSuccess,
   mapError,
   retryable = false,
@@ -667,6 +735,7 @@ async function runJsonUpstreamRequest({
       requestId,
       idempotencyKey,
       body,
+      headers: requestHeaders,
     });
 
   const result = retryable
@@ -698,6 +767,7 @@ export function createBotBffHandlers({
   getAuthContext,
   sendUpstreamRequest,
   buildUsageSummary,
+  telegramWebhookBaseUrl = "",
   nowFn = Date.now,
   sleepFn = (delay) => new Promise((resolve) => setTimeout(resolve, delay)),
   jitterFn = Math.random,
@@ -873,6 +943,66 @@ export function createBotBffHandlers({
     }, (requestId, error) =>
       mapSettingsError(503, { message: error?.message }, requestId, "settings update failed")),
 
+    getHeartbeat: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/heartbeat`,
+        requestId,
+        idempotencyKey: null,
+        sendUpstreamRequest,
+        mapSuccess: sanitizeHeartbeatState,
+        mapError: (status, payload, currentRequestId) =>
+          mapHeartbeatError(status, payload, currentRequestId, "heartbeat unavailable"),
+        retryable: false,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapHeartbeatError(503, { message: error?.message }, requestId, "heartbeat unavailable")),
+
+    putHeartbeat: wrapHandler(async (req, res) => {
+      const context = await ensureContext(req, res);
+      if (!context) return;
+      const requestId = createRequestId(req);
+      const validation = validateHeartbeatPatch(req.body);
+      if (!validation.success) {
+        const normalized = mapHeartbeatError(
+          400,
+          { message: validation.message },
+          requestId,
+          validation.message
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      await runJsonUpstreamRequest({
+        req,
+        res,
+        method: "PUT",
+        path: `/api/v1/users/${encodeURIComponent(context.userId)}/heartbeat`,
+        body: validation.data,
+        requestId,
+        idempotencyKey: createIdempotencyKey(req, requestId),
+        sendUpstreamRequest,
+        mapSuccess: sanitizeHeartbeatState,
+        mapError: (status, payload, currentRequestId) =>
+          mapHeartbeatError(status, payload, currentRequestId, "heartbeat update failed"),
+        retryable: false,
+        nowFn,
+        sleepFn,
+        jitterFn,
+      });
+    }, (requestId, error) =>
+      mapHeartbeatError(503, { message: error?.message }, requestId, "heartbeat update failed")),
+
     chatStream: wrapHandler(async (req, res) => {
       const context = await ensureContext(req, res);
       if (!context) return;
@@ -985,6 +1115,38 @@ export function createBotBffHandlers({
         return;
       }
       const payload = normalizeTelegramConnectPayload(req.body);
+      const hasWebhookUrl =
+        typeof payload.webhook_url === "string" && payload.webhook_url.length > 0;
+      const hasWebhookBaseUrl =
+        typeof payload.webhook_base_url === "string" && payload.webhook_base_url.length > 0;
+      const configuredWebhookBase = normalizedString(telegramWebhookBaseUrl);
+
+      if (!hasWebhookUrl && !hasWebhookBaseUrl && !configuredWebhookBase) {
+        const normalized = mapForbiddenError(
+          "Webhook base URL is not configured. Ask the operator to configure ZAKI_AGENT_WEBHOOK_BASE_URL.",
+          requestId,
+          400
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      if (hasWebhookUrl && !hasHttpsUrl(payload.webhook_url)) {
+        const normalized = mapForbiddenError("Webhook URL must start with https://.", requestId, 400);
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
+      if (hasWebhookBaseUrl && !hasHttpsUrl(payload.webhook_base_url)) {
+        const normalized = mapForbiddenError(
+          "Webhook base URL must start with https://.",
+          requestId,
+          400
+        );
+        res.status(normalized.status).json(normalized.body);
+        return;
+      }
+
       await runJsonUpstreamRequest({
         req,
         res,
@@ -994,6 +1156,10 @@ export function createBotBffHandlers({
         requestId,
         idempotencyKey: createIdempotencyKey(req, requestId),
         sendUpstreamRequest,
+        requestHeaders:
+          !hasWebhookUrl && !hasWebhookBaseUrl && configuredWebhookBase
+            ? { "X-Webhook-Base-Url": configuredWebhookBase }
+            : undefined,
         mapSuccess: () => sanitizeTelegramConnectionState("connected"),
         mapError: mapTelegramConnectError,
         retryable: false,

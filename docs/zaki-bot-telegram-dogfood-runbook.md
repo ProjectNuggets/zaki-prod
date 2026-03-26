@@ -14,6 +14,13 @@ Set these in zaki-prod backend runtime:
 Notes:
 - `ZAKI_AGENT_WEBHOOK_BASE_URL` is used as default when the UI does not provide webhook URL.
 - URL must be HTTPS and publicly reachable by Telegram.
+- In deployed environments this should be treated as required operator config, not optional end-user input.
+- `NULLCLAW_BASE_URL` must remain the internal backend -> nullALIS URL, while `ZAKI_AGENT_WEBHOOK_BASE_URL` must be the public Telegram-facing HTTPS domain.
+
+Local dev example:
+- `NULLCLAW_BASE_URL=http://127.0.0.1:3000`
+- `ZAKI_AGENT_WEBHOOK_BASE_URL=https://novas-mac-studio.tail57d51b.ts.net:8443`
+- this assumes `tailscale serve` is forwarding `https://novas-mac-studio.tail57d51b.ts.net:8443` -> `http://127.0.0.1:3000`
 
 ## 2) Dogfooder onboarding steps
 
@@ -22,7 +29,7 @@ For each user:
 1. Open **ZAKI BOT** space.
 2. Open ZAKI BOT settings panel.
 3. Paste Telegram bot token.
-4. Leave webhook URL empty (default header flow) unless overriding.
+4. Leave webhook URL empty. The platform should inject the public webhook base automatically.
 5. Click **Connect Telegram**.
 6. Send a message to the bot from Telegram app.
 7. Verify reply arrives in Telegram and app history.
@@ -30,6 +37,7 @@ For each user:
 Important:
 - One dogfooder = one bot token.
 - Do not share a single bot token across multiple users.
+- `account_id` and `allow_from` are optional advanced fields. Basic channel activation should work with bot token only.
 
 ## 3) Go/no-go smoke checklist
 

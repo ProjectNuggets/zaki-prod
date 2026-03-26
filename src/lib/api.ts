@@ -1019,7 +1019,19 @@ export type BotOnboardingSetup = Record<string, unknown>;
 export type BotOnboardingState = BotApiError & {
   completed?: boolean;
   completed_at_s?: number | null;
+  can_start_chat_now?: boolean;
+  minimum_required?: string[] | null;
+  operator_configure_model_provider?: boolean;
   setup?: BotOnboardingSetup | null;
+};
+
+export type AgentOnboardingState = BotApiError & {
+  completed?: boolean;
+  completed_at_s?: number | null;
+  can_start_chat_now?: boolean;
+  minimum_required?: string[] | null;
+  operator_configure_model_provider?: boolean;
+  setup?: Record<string, unknown> | null;
 };
 
 export type BotSettingsProfile = BotApiError & {
@@ -1059,6 +1071,18 @@ export type BotUsageSummary = BotApiError & {
   requests_day?: number;
   tokens_day?: number;
   tokens_month?: number;
+};
+
+export type AgentHeartbeatState = BotApiError & {
+  enabled?: boolean;
+  interval_minutes?: number;
+  prompt?: string | null;
+};
+
+export type BotHeartbeatState = BotApiError & {
+  enabled?: boolean;
+  interval_minutes?: number;
+  prompt?: string | null;
 };
 
 export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
@@ -1119,6 +1143,21 @@ export async function updateBotSettings(payload: BotSettingsPatch) {
   return { response, data };
 }
 
+export async function fetchBotHeartbeat() {
+  const response = await backendAuthRequest("/v1/me/bot/heartbeat", { method: "GET" });
+  const data = await parseApiJson<BotHeartbeatState>(response);
+  return { response, data };
+}
+
+export async function updateBotHeartbeat(payload: { enabled: boolean }) {
+  const response = await backendAuthRequest("/v1/me/bot/heartbeat", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotHeartbeatState>(response);
+  return { response, data };
+}
+
 export async function connectBotTelegram(payload: BotTelegramConnectPayload) {
   const response = await backendAuthRequest("/v1/me/bot/telegram/connect", {
     method: "POST",
@@ -1154,7 +1193,7 @@ export async function provisionAgent(payload: Record<string, unknown> = {}) {
 
 export async function fetchAgentOnboarding() {
   const response = await backendAuthRequest("/api/agent/onboarding", { method: "GET" });
-  const data = await parseApiJson<Record<string, unknown>>(response);
+  const data = await parseApiJson<AgentOnboardingState>(response);
   return { response, data };
 }
 
@@ -1222,16 +1261,16 @@ export async function disconnectAgentTelegram() {
 
 export async function fetchAgentHeartbeat() {
   const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
-  const data = await parseApiJson<Record<string, unknown>>(response);
+  const data = await parseApiJson<AgentHeartbeatState>(response);
   return { response, data };
 }
 
-export async function updateAgentHeartbeat(payload: Record<string, unknown>) {
+export async function updateAgentHeartbeat(payload: { enabled: boolean }) {
   const response = await backendAuthRequest("/api/agent/heartbeat", {
     method: "PUT",
     body: JSON.stringify(payload),
   });
-  const data = await parseApiJson<Record<string, unknown>>(response);
+  const data = await parseApiJson<AgentHeartbeatState>(response);
   return { response, data };
 }
 

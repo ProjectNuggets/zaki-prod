@@ -24,6 +24,7 @@ import {
   type BotSettingsProfile,
   type BotUsageSummary,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores";
 
 type Props = {
   isOpen: boolean;
@@ -50,6 +51,8 @@ const DEFAULT_SETTINGS: SettingsDraft = {
   voice_replies: false,
   session_timeout_minutes: "30",
 };
+
+const TELEGRAM_CONFIRMATION_DELAYS_MS = [0, 300, 1000, 2000];
 
 const FALLBACK_CHANNEL_STEPS = {
   slack: [
@@ -115,6 +118,12 @@ function getBotErrorText(payload: unknown, fallback: string) {
   return code ? ERROR_COPY[code] : fallback;
 }
 
+function getErrorText(payload: unknown, fallback: string) {
+  const record = asRecord(payload);
+  const stableText = getBotErrorText(payload, "");
+  return stableText || asString(record.message) || asString(record.error) || fallback;
+}
+
 function formatCompletedAt(value?: number | null) {
   if (!value) return "Not completed yet";
   const date = new Date(value * 1000);
@@ -146,6 +155,10 @@ function getChannelStatus(setup: Record<string, unknown>) {
     asString(setup.connection_status) ||
     asString(setup.state)
   );
+}
+
+function getTelegramConnected(status: string) {
+  return status === "connected" || status === "active" || status === "normal";
 }
 
 function getChannelMeta(setup: Record<string, unknown>) {
@@ -260,6 +273,9 @@ function ChannelInstructionCard({
 }
 
 export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
+  const authLoading = useAuthStore((state) => state.isLoading);
+  const authUser = useAuthStore((state) => state.user);
+  const isAuthReady = !authLoading && Boolean(authUser);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
@@ -268,7 +284,6 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
   const [usage, setUsage] = useState<BotUsageSummary | null>(null);
   const [usageUnavailable, setUsageUnavailable] = useState(false);
   const [telegramToken, setTelegramToken] = useState("");
-  const [telegramWebhookUrl, setTelegramWebhookUrl] = useState("");
   const [savingOnboarding, setSavingOnboarding] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
@@ -284,6 +299,10 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
 
   useEffect(() => {
     if (!isOpen) return;
+    if (!isAuthReady) {
+      setLoading(true);
+      return;
+    }
     let active = true;
 
     async function loadBotSpace() {
@@ -363,7 +382,7 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
     return () => {
       active = false;
     };
-  }, [isOpen]);
+  }, [isAuthReady, isOpen]);
 
   if (!isOpen) return null;
 
@@ -379,6 +398,42 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
   const telegramMeta = getChannelMeta(telegramSetup);
   const slackMeta = getChannelMeta(slackSetup);
   const discordMeta = getChannelMeta(discordSetup);
+  const refreshTelegramStatus = async (
+    targetState: "connected" | "disconnected",
+    enablePolling = false
+  ) => {
+    const readState = async () => {
+      const onboardingResult = await fetchBotOnboarding();
+      if (onboardingResult.response.ok) {
+        setOnboarding(onboardingResult.data);
+      }
+      const confirmedConnected = onboardingResult.response.ok
+        ? getTelegramConnected(
+            getChannelStatus(getChannelSetup(onboardingResult.data.setup, "telegram"))
+          )
+        : false;
+      return { onboardingResult, confirmedConnected };
+    };
+
+    let latestResult = await readState();
+    const targetReached =
+      targetState === "connected" ? latestResult.confirmedConnected : !latestResult.confirmedConnected;
+    if (targetReached || !enablePolling) {
+      return latestResult;
+    }
+
+    for (const delay of TELEGRAM_CONFIRMATION_DELAYS_MS.slice(1)) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      latestResult = await readState();
+      const nextTargetReached =
+        targetState === "connected" ? latestResult.confirmedConnected : !latestResult.confirmedConnected;
+      if (nextTargetReached) {
+        return latestResult;
+      }
+    }
+
+    return latestResult;
+  };
 
   return (
     <ModalShell
@@ -698,7 +753,7 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                       <p className="mt-1 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
                         {telegramStatus
                           ? `Current status: ${telegramStatus}${telegramMeta ? ` — ${telegramMeta}` : ""}`
-                          : "Connect Telegram so ZAKI BOT can receive and respond through your bot."}
+                          : "Connect Telegram so ZAKI BOT can receive and respond through your bot. ZAKI manages webhook routing for you."}
                       </p>
                     </div>
                     {telegramStatus === "connected" ? (
@@ -714,12 +769,6 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                       placeholder="Telegram bot token"
                       value={telegramToken}
                       onChange={(event) => setTelegramToken(event.target.value)}
-                    />
-                    <input
-                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
-                      placeholder="Webhook URL override (optional)"
-                      value={telegramWebhookUrl}
-                      onChange={(event) => setTelegramWebhookUrl(event.target.value)}
                     />
                   </div>
 
@@ -741,26 +790,30 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                         const payload: Parameters<typeof connectBotTelegram>[0] = {
                           bot_token: botToken,
                         };
-                        const webhookUrl = telegramWebhookUrl.trim();
-                        if (webhookUrl) payload.webhook_url = webhookUrl;
                         setTelegramBusy(true);
                         const { response, data } = await connectBotTelegram(payload);
-                        setTelegramBusy(false);
                         if (!response.ok) {
+                          setTelegramBusy(false);
                           setBanner({
                             tone: "error",
-                            text: getBotErrorText(data, "Unable to connect Telegram."),
+                            text: getErrorText(data, "Unable to connect Telegram."),
+                          });
+                          return;
+                        }
+                        const { confirmedConnected } = await refreshTelegramStatus("connected", true);
+                        setTelegramBusy(false);
+                        if (confirmedConnected) {
+                          setTelegramToken("");
+                          setBanner({
+                            tone: "success",
+                            text: "Telegram connected. Send a message to your bot to confirm routing.",
                           });
                           return;
                         }
                         setBanner({
-                          tone: "success",
-                          text: "Telegram connected. Send a message to your bot to confirm routing.",
+                          tone: "error",
+                          text: "Telegram is still being verified. Refresh in a few seconds if your bot already responds in Telegram.",
                         });
-                        const onboardingResult = await fetchBotOnboarding();
-                        if (onboardingResult.response.ok) {
-                          setOnboarding(onboardingResult.data);
-                        }
                       }}
                     >
                       {telegramBusy ? "Connecting…" : "Connect Telegram"}
@@ -772,19 +825,24 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                       onClick={async () => {
                         setTelegramBusy(true);
                         const { response, data } = await disconnectBotTelegram();
-                        setTelegramBusy(false);
                         if (!response.ok) {
+                          setTelegramBusy(false);
                           setBanner({
                             tone: "error",
-                            text: getBotErrorText(data, "Unable to disconnect Telegram."),
+                            text: getErrorText(data, "Unable to disconnect Telegram."),
                           });
                           return;
                         }
-                        setBanner({ tone: "success", text: "Telegram disconnected." });
-                        const onboardingResult = await fetchBotOnboarding();
-                        if (onboardingResult.response.ok) {
-                          setOnboarding(onboardingResult.data);
+                        const { confirmedConnected } = await refreshTelegramStatus("disconnected", true);
+                        setTelegramBusy(false);
+                        if (!confirmedConnected) {
+                          setBanner({ tone: "success", text: "Telegram disconnected." });
+                          return;
                         }
+                        setBanner({
+                          tone: "error",
+                          text: "Telegram disconnect is not confirmed yet. Refresh and try again.",
+                        });
                       }}
                     >
                       Disconnect

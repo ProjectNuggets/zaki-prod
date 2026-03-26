@@ -5,6 +5,8 @@ export const BOT_BFF_ALIAS_ROUTES = Object.freeze([
   { method: "post", path: "/v1/me/bot/chat/stream" },
   { method: "get", path: "/v1/me/bot/settings" },
   { method: "patch", path: "/v1/me/bot/settings" },
+  { method: "get", path: "/v1/me/bot/heartbeat" },
+  { method: "put", path: "/v1/me/bot/heartbeat" },
   { method: "post", path: "/v1/me/bot/telegram/connect" },
   { method: "post", path: "/v1/me/bot/telegram/disconnect" },
   { method: "get", path: "/v1/me/bot/usage" },
@@ -104,6 +106,8 @@ export function registerBotBffAliases(app, handlers) {
     chatStreamHandler,
     settingsGetHandler,
     settingsPatchHandler,
+    heartbeatGetHandler,
+    heartbeatPutHandler,
     telegramConnectHandler,
     telegramDisconnectHandler,
     usageHandler,
@@ -138,6 +142,14 @@ export function registerBotBffAliases(app, handlers) {
     agentRouteLimiter,
     json1mb,
     settingsPatchHandler
+  );
+  app.get("/v1/me/bot/heartbeat", requireAgentContext, agentRouteLimiter, heartbeatGetHandler);
+  app.put(
+    "/v1/me/bot/heartbeat",
+    requireAgentContext,
+    agentRouteLimiter,
+    json1mb,
+    heartbeatPutHandler
   );
   app.post(
     "/v1/me/bot/telegram/connect",

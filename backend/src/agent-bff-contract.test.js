@@ -17,6 +17,8 @@ describe("agent BOT BFF contract", () => {
       { method: "post", path: "/v1/me/bot/chat/stream" },
       { method: "get", path: "/v1/me/bot/settings" },
       { method: "patch", path: "/v1/me/bot/settings" },
+      { method: "get", path: "/v1/me/bot/heartbeat" },
+      { method: "put", path: "/v1/me/bot/heartbeat" },
       { method: "post", path: "/v1/me/bot/telegram/connect" },
       { method: "post", path: "/v1/me/bot/telegram/disconnect" },
       { method: "get", path: "/v1/me/bot/usage" },
@@ -116,6 +118,8 @@ describe("agent BOT BFF contract", () => {
       chatStreamHandler: jest.fn(),
       settingsGetHandler: jest.fn(),
       settingsPatchHandler: jest.fn(),
+      heartbeatGetHandler: jest.fn(),
+      heartbeatPutHandler: jest.fn(),
       telegramConnectHandler: jest.fn(),
       telegramDisconnectHandler: jest.fn(),
       usageHandler: jest.fn(),
@@ -142,6 +146,13 @@ describe("agent BOT BFF contract", () => {
       handlers.requireAgentContext,
       handlers.agentRouteLimiter,
       handlers.telegramDisconnectHandler
+    );
+    expect(app.put).toHaveBeenCalledWith(
+      "/v1/me/bot/heartbeat",
+      handlers.requireAgentContext,
+      handlers.agentRouteLimiter,
+      handlers.json1mb,
+      handlers.heartbeatPutHandler
     );
     expect(app.get).toHaveBeenCalledWith(
       "/v1/me/bot/usage",

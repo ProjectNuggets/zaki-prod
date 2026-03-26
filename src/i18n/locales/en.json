@@ -447,6 +447,7 @@
   "zakiSettingsSheet": {
     "badge": "ZAKI settings",
     "title": "Tune how ZAKI shows up",
+    "subtitle": "Control assistant behavior, Telegram delivery, and autonomy from one place.",
     "locked": {
       "title": "Coming soon",
       "note": "channels + advanced agent behavior coming soon; currently available in app only."
@@ -457,7 +458,8 @@
     },
     "closeAria": "Close ZAKI settings",
     "loading": {
-      "onboarding": "Loading your current ZAKI setup..."
+      "onboarding": "Loading your current ZAKI setup...",
+      "state": "Loading agent settings..."
     },
     "summary": {
       "ready": "Ready to use",
@@ -468,9 +470,30 @@
       "disabled": "Disabled"
     },
     "sections": {
+      "overview": {
+        "title": "Overview",
+        "summary": "Readiness, requirements, and Telegram status"
+      },
       "core": {
         "title": "Core behavior",
         "summary": "{{style}} replies, {{join}} access"
+      },
+      "assistant": {
+        "title": "Assistant",
+        "summary": "{{style}} replies, {{join}} access"
+      },
+      "telegram": {
+        "title": "Telegram",
+        "summaryConnected": "Connected and ready for external chat.",
+        "summaryDisconnected": "Connect Telegram to deliver replies outside the app.",
+        "summaryConnecting": "Connecting your Telegram bot now.",
+        "summaryVerifying": "Verifying Telegram routing and status.",
+        "summaryNeedsAttention": "Telegram needs attention before it is ready."
+      },
+      "autonomy": {
+        "title": "Autonomy",
+        "summaryEnabled": "Heartbeat is active.",
+        "summaryDisabled": "Heartbeat is off."
       },
       "workspace": {
         "title": "Workspace context",
@@ -541,6 +564,48 @@
       "telegramToken": "Telegram bot token",
       "telegramWebhook": "Webhook URL override (optional)"
     },
+    "overview": {
+      "operatorRequired": "Operator setup is still required before this user can start externally.",
+      "readyToStart": "This agent can start chatting now.",
+      "missingRequirements": "Some minimum requirements are still missing.",
+      "awaitingStatus": "Status is still being prepared.",
+      "operatorBlockingTitle": "Operator configuration still required",
+      "operatorBlockingBody": "Model and provider setup must be completed by the platform operator before this user can finish activation.",
+      "statusHelper": "Last onboarding update: {{updated}}.",
+      "readinessTitle": "Readiness",
+      "readinessHelper": "This status comes from onboarding and reflects whether external delivery is ready.",
+      "telegramTitle": "Telegram status",
+      "telegramHelper": "Connect Telegram so this agent can receive and answer outside the app.",
+      "minimumRequiredTitle": "Minimum required",
+      "minimumRequiredHelper": "These are the remaining prerequisites reported by onboarding.",
+      "nothingMissing": "Nothing is currently missing.",
+      "notReady": "Not ready yet"
+    },
+    "telegram": {
+      "statusTitle": "Connection",
+      "statusHelper": "Use your Telegram bot token and allowed chat IDs to activate delivery.",
+      "statusConnecting": "Connecting",
+      "statusVerifying": "Verifying",
+      "statusNeedsAttention": "Needs attention",
+      "connectingHelper": "Registering your Telegram webhook now.",
+      "verifyingHelper": "Telegram is being verified. This can take a few seconds after setup.",
+      "needsAttentionHelper": "Telegram is not fully confirmed yet. If your bot already responds, refresh in a few seconds.",
+      "botTokenLabel": "Bot token",
+      "botTokenMasked": "Saved token is hidden",
+      "webhookBaseLabel": "Webhook routing",
+      "webhookBaseSummary": "Managed by ZAKI",
+      "webhookBaseHelper": "ZAKI manages the Telegram webhook domain for you. If setup fails, support can inspect the workspace webhook configuration.",
+      "allowFromLabel": "Allowed Telegram ID(s) (optional)",
+      "allowFromPlaceholder": "One chat ID or account ID per line, or separate with commas.",
+      "allowFromHelper": "Optional. Add Telegram chat or account IDs if you want to restrict who can reach your agent. Leave it blank for the normal setup flow."
+    },
+    "autonomy": {
+      "proactiveTitle": "Proactive updates",
+      "proactiveHelper": "This stays in assistant settings because it controls behavior, not delivery cadence.",
+      "heartbeatTitle": "Heartbeat",
+      "heartbeatHelper": "Heartbeat cadence is managed by ZAKI. This switch only controls whether heartbeat delivery is enabled.",
+      "heartbeatRequiresTelegram": "Telegram must be connected first."
+    },
     "limits": {
       "currentPlanTitle": "Current plan",
       "currentPlanHelper": "Keep premium access and billing actions in one compact row.",
@@ -566,6 +631,7 @@
       "markComplete": "Mark as complete",
       "connecting": "Connecting...",
       "connectTelegram": "Connect Telegram",
+      "reconnectTelegram": "Reconnect Telegram",
       "disconnect": "Disconnect",
       "manage": "Manage",
       "comingSoon": "Coming soon",
@@ -579,19 +645,39 @@
       "onboardingReopened": "Onboarding reopened for further setup.",
       "settingsSaved": "ZAKI settings saved.",
       "telegramConnected": "Telegram connected. Send a message to your bot to confirm routing.",
-      "telegramDisconnected": "Telegram disconnected."
+      "telegramDisconnected": "Telegram disconnected.",
+      "heartbeatEnabled": "Heartbeat enabled.",
+      "heartbeatDisabled": "Heartbeat disabled."
     },
     "errors": {
       "onboardingLoad": "Unable to load ZAKI setup right now.",
       "settingsLoad": "Unable to load ZAKI settings right now.",
+      "heartbeatLoad": "Unable to load heartbeat status right now.",
       "botStateUnavailable": "ZAKI settings are temporarily unavailable for this account.",
       "botStateUnavailableUnknownUser": "ZAKI settings are not available for this account yet.",
       "sessionTimeoutRange": "Session window must be between 5 and 180 minutes.",
-      "telegramTokenRequired": "Enter a Telegram bot token before connecting."
+      "telegramTokenRequired": "Enter a Telegram bot token before connecting.",
+      "telegramTokenInvalid": "The Telegram bot token is invalid.",
+      "telegramWebhookRequired": "Webhook base URL is not configured yet. Ask the operator to set the workspace webhook base, or enter a valid https:// value.",
+      "telegramWebhookInvalid": "Webhook base URL must start with https://.",
+      "telegramAllowFromRequired": "Add at least one allowed Telegram chat or account ID.",
+      "telegramConnectFailed": "Unable to connect Telegram.",
+      "telegramConnectUnconfirmed": "Telegram setup did not finish. Check the webhook base and webhook registration, then try again.",
+      "telegramConnectStillVerifying": "Telegram is still being verified. Refresh in a few seconds if your bot already responds in Telegram.",
+      "telegramDisconnectFailed": "Unable to disconnect Telegram.",
+      "telegramDisconnectUnconfirmed": "Telegram still looks connected after disconnect. Refresh and try again.",
+      "heartbeatSave": "Unable to update heartbeat right now.",
+      "settingsSave": "Unable to save ZAKI settings.",
+      "invalidAssistantMode": "Choose a valid assistant mode.",
+      "invalidGroupActivation": "Choose a valid group activation mode.",
+      "invalidProactiveUpdates": "Proactive updates must be either enabled or disabled.",
+      "invalidVoiceReplies": "Voice replies must be either enabled or disabled.",
+      "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes."
     },
     "footer": {
       "unsaved": "Unsaved changes",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "saveAssistant": "Save assistant settings"
     }
   },
   "onboarding": {

@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, Brain, Sparkles, Volume2, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Activity, Bot, Link2, Sparkles, Volume2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   connectBotTelegram,
   disconnectBotTelegram,
+  fetchBotHeartbeat,
   fetchBotOnboarding,
   fetchBotSettings,
-  fetchBotUsage,
-  provisionBot,
-  updateBotOnboarding,
+  updateBotHeartbeat,
+  type BotHeartbeatState,
   updateBotSettings,
   type BotErrorCode,
-  type BotOnboardingSetup,
   type BotOnboardingState,
+  type BotTelegramConnectPayload,
   type BotSettingsPatch,
   type BotSettingsProfile,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
@@ -31,9 +31,14 @@ type BannerState =
   | { tone: "error"; text: string }
   | null;
 
-type SectionValue = "core" | "workspace";
+type SectionValue = "overview" | "assistant" | "telegram" | "autonomy";
 type OpenSectionValue = SectionValue | "";
-type ChannelValue = "telegram" | "slack" | "discord" | null;
+type TelegramUiStatus =
+  | "not_connected"
+  | "connecting"
+  | "verifying"
+  | "connected"
+  | "needs_attention";
 
 type SettingsDraft = {
   assistant_mode: "fast" | "balanced" | "deep";
@@ -43,6 +48,18 @@ type SettingsDraft = {
   session_timeout_minutes: string;
 };
 
+type SettingsFieldErrorKey =
+  | "assistant_mode"
+  | "group_activation"
+  | "proactive_updates"
+  | "voice_replies"
+  | "session_timeout_minutes";
+
+type TelegramFieldErrorKey = "bot_token" | "allow_from";
+
+type SettingsFieldErrors = Partial<Record<SettingsFieldErrorKey, string>>;
+type TelegramFieldErrors = Partial<Record<TelegramFieldErrorKey, string>>;
+
 const DEFAULT_SETTINGS: SettingsDraft = {
   assistant_mode: "balanced",
   group_activation: "mention",
@@ -51,18 +68,7 @@ const DEFAULT_SETTINGS: SettingsDraft = {
   session_timeout_minutes: "30",
 };
 
-const FALLBACK_CHANNEL_STEPS = {
-  slack: [
-    "Open your Slack workspace admin apps page.",
-    "Add the ZAKI Slack app when it is available to your workspace.",
-    "Complete authorization to let ZAKI receive mentions and send replies.",
-  ],
-  discord: [
-    "Open your Discord server settings and app integrations.",
-    "Invite the ZAKI app to the target server.",
-    "Grant message and channel permissions so ZAKI can respond when enabled.",
-  ],
-} as const;
+const TELEGRAM_CONFIRMATION_DELAYS_MS = [0, 300, 1000, 2000];
 
 const ERROR_COPY: Record<BotErrorCode, string> = {
   temporary_contention: "ZAKI is busy on another node. Retry shortly.",
@@ -82,6 +88,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function asBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : Boolean(value);
 }
 
 function asStringArray(value: unknown) {
@@ -111,17 +121,18 @@ function getBotErrorText(payload: unknown, fallback: string) {
   return code ? ERROR_COPY[code] : fallback;
 }
 
-function getBotErrorMessage(payload: unknown) {
-  return asString(asRecord(payload).message).toLowerCase();
+function getErrorText(payload: unknown, fallback: string) {
+  const record = asRecord(payload);
+  return asString(record.message) || asString(record.error) || getBotErrorText(payload, fallback);
 }
 
-function formatCompletedAt(value?: number | null, fallback?: string) {
-  if (!value) return fallback || "Not completed yet";
-  const date = new Date(value * 1000);
-  return Number.isNaN(date.getTime()) ? fallback || "Not completed yet" : date.toLocaleString();
+function isUnknownBotUserError(payload: unknown) {
+  const record = asRecord(payload);
+  const raw = `${asString(record.message)} ${asString(record.error)}`.toLowerCase();
+  return raw.includes("unknown_user_id");
 }
 
-function getSetupSummary(setup: BotOnboardingSetup | null | undefined) {
+function getSetupSummary(setup: Record<string, unknown> | null | undefined) {
   const source = asRecord(setup);
   return (
     asString(source.summary) ||
@@ -132,12 +143,13 @@ function getSetupSummary(setup: BotOnboardingSetup | null | undefined) {
 }
 
 function getChannelSetup(
-  setup: BotOnboardingSetup | null | undefined,
-  channel: "telegram" | "slack" | "discord"
+  setup: Record<string, unknown> | null | undefined,
+  channel: "telegram"
 ) {
   const source = asRecord(setup);
   const channels = asRecord(source.channels);
-  return asRecord(channels[channel] ?? source[channel]);
+  const channelGuides = asRecord(source.channel_guides);
+  return asRecord(channels[channel] ?? channelGuides[channel] ?? source[channel]);
 }
 
 function getChannelStatus(setup: Record<string, unknown>) {
@@ -148,35 +160,82 @@ function getChannelMeta(setup: Record<string, unknown>) {
   return (
     asString(setup.bot_username) ||
     asString(setup.username) ||
-    asString(setup.workspace_name) ||
-    asString(setup.workspace) ||
-    asString(setup.server_name) ||
-    asString(setup.server)
+    asString(setup.webhook_base_url) ||
+    asString(setup.webhook_url)
   );
 }
 
-function getInstructionSteps(setup: Record<string, unknown>, fallback: string[]) {
-  const candidates = [
-    asStringArray(setup.instructions),
-    asStringArray(setup.steps),
-    asStringArray(setup.connect_steps),
-    asStringArray(setup.how_to_connect),
-  ];
-  const steps = candidates.find((candidate) => candidate.length > 0) ?? [];
-  return steps.length > 0 ? steps : fallback;
+function normalizeAllowFromInput(value: string) {
+  return value
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
-function getStatusTone(status: string) {
-  if (status === "connected" || status === "active" || status === "normal") {
+function getTelegramConnected(status: string) {
+  return status === "connected" || status === "active" || status === "normal";
+}
+
+function getTelegramConnectedFromOnboarding(
+  onboarding: BotOnboardingState | null | undefined
+) {
+  return getTelegramConnected(getChannelStatus(getChannelSetup(asRecord(onboarding?.setup), "telegram")));
+}
+
+function getStatusTone(status: "ready" | "warning" | "error" | "neutral") {
+  if (status === "ready") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200";
   }
-  if (status === "needs_setup" || status === "pending" || status === "warmup") {
+  if (status === "warning") {
     return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200";
   }
-  if (status === "disconnected" || status === "error" || status === "throttled") {
+  if (status === "error") {
     return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200";
   }
   return "border-zaki-subtle bg-white text-zaki-secondary dark:border-[#2d2219] dark:bg-[#17110d] dark:text-zaki-dark-subtle";
+}
+
+function formatCompletedAt(value?: number | null, fallback?: string) {
+  if (!value) return fallback || "Not completed yet";
+  const date = new Date(value * 1000);
+  return Number.isNaN(date.getTime()) ? fallback || "Not completed yet" : date.toLocaleString();
+}
+
+function extractSettingsFieldErrors(payload: unknown, t: (key: string) => string): SettingsFieldErrors {
+  const record = asRecord(payload);
+  const raw = `${asString(record.error)} ${asString(record.message)}`.toLowerCase();
+  const fieldErrors: SettingsFieldErrors = {};
+  if (raw.includes("invalid_assistant_mode")) {
+    fieldErrors.assistant_mode = t("zakiSettingsSheet.errors.invalidAssistantMode");
+  }
+  if (raw.includes("invalid_group_activation")) {
+    fieldErrors.group_activation = t("zakiSettingsSheet.errors.invalidGroupActivation");
+  }
+  if (raw.includes("invalid_proactive_updates")) {
+    fieldErrors.proactive_updates = t("zakiSettingsSheet.errors.invalidProactiveUpdates");
+  }
+  if (raw.includes("invalid_voice_replies")) {
+    fieldErrors.voice_replies = t("zakiSettingsSheet.errors.invalidVoiceReplies");
+  }
+  if (raw.includes("invalid_session_timeout_minutes")) {
+    fieldErrors.session_timeout_minutes = t("zakiSettingsSheet.errors.invalidSessionTimeoutMinutes");
+  }
+  return fieldErrors;
+}
+
+function extractTelegramFieldErrors(payload: unknown, t: (key: string) => string): TelegramFieldErrors {
+  const record = asRecord(payload);
+  const raw = `${asString(record.error)} ${asString(record.message)}`.toLowerCase();
+  const fieldErrors: TelegramFieldErrors = {};
+  if (raw.includes("missing bot_token") || raw.includes("bot token") && raw.includes("required")) {
+    fieldErrors.bot_token = t("zakiSettingsSheet.errors.telegramTokenRequired");
+  } else if (raw.includes("invalid bot_token") || raw.includes("invalid_telegram_token") || raw.includes("telegram token is invalid")) {
+    fieldErrors.bot_token = t("zakiSettingsSheet.errors.telegramTokenInvalid");
+  }
+  if (raw.includes("allow_from")) {
+    fieldErrors.allow_from = t("zakiSettingsSheet.errors.telegramAllowFromRequired");
+  }
+  return fieldErrors;
 }
 
 function CompactRow({
@@ -208,16 +267,16 @@ function CompactRow({
           <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             {title}
           </div>
-          <div className="mt-1 truncate text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
+          <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
             {summary}
           </div>
           {helper ? (
-            <p className="mt-2 max-h-0 overflow-hidden text-xs leading-5 text-zaki-muted opacity-0 transition-all duration-200 group-hover:max-h-20 group-hover:opacity-100 group-focus-within:max-h-20 group-focus-within:opacity-100 dark:text-zaki-dark-muted">
+            <p className="mt-2 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
               {helper}
             </p>
           ) : null}
         </div>
-        {control ? <div className={cn("w-full shrink-0 sm:w-[220px]", disabled && "opacity-80")}>{control}</div> : null}
+        {control ? <div className={cn("w-full shrink-0 sm:w-[240px]", disabled && "opacity-80")}>{control}</div> : null}
       </div>
       {children ? <div className="mt-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">{children}</div> : null}
     </div>
@@ -244,7 +303,7 @@ function SectionBadge({
         <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
           {title}
         </div>
-        <div className="mt-1 truncate text-xs text-zaki-muted dark:text-zaki-dark-muted">
+        <div className="mt-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
           {summary}
         </div>
       </div>
@@ -252,39 +311,56 @@ function SectionBadge({
   );
 }
 
+function InlineFieldError({ text }: { text?: string }) {
+  if (!text) return null;
+  return <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">{text}</p>;
+}
+
 export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
+  const authLoading = useAuthStore((state) => state.isLoading);
+  const authUser = useAuthStore((state) => state.user);
+  const isAuthReady = !authLoading && Boolean(authUser);
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
   const [settings, setSettings] = useState<BotSettingsProfile | null>(null);
+  const [heartbeat, setHeartbeat] = useState<BotHeartbeatState | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(DEFAULT_SETTINGS);
   const [telegramToken, setTelegramToken] = useState("");
-  const [telegramWebhookUrl, setTelegramWebhookUrl] = useState("");
-  const [savingOnboarding, setSavingOnboarding] = useState(false);
+  const [telegramAllowFrom, setTelegramAllowFrom] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [telegramUiStatusOverride, setTelegramUiStatusOverride] = useState<TelegramUiStatus | null>(null);
+  const [heartbeatBusy, setHeartbeatBusy] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSectionValue>("");
-  const [expandedChannel, setExpandedChannel] = useState<ChannelValue>(null);
-  const nullalisSettingsLocked = true;
+  const [settingsErrors, setSettingsErrors] = useState<SettingsFieldErrors>({});
+  const [telegramErrors, setTelegramErrors] = useState<TelegramFieldErrors>({});
+  const [agentUserUnavailable, setAgentUserUnavailable] = useState(false);
 
   const setup = useMemo(
     () => (onboarding?.setup && typeof onboarding.setup === "object" ? onboarding.setup : null),
     [onboarding]
   );
   const telegramSetup = useMemo(() => getChannelSetup(setup, "telegram"), [setup]);
-  const slackSetup = useMemo(() => getChannelSetup(setup, "slack"), [setup]);
-  const discordSetup = useMemo(() => getChannelSetup(setup, "discord"), [setup]);
   const telegramStatus = getChannelStatus(telegramSetup);
-  const telegramMeta = getChannelMeta(telegramSetup);
-  const slackStatus = getChannelStatus(slackSetup);
-  const slackMeta = getChannelMeta(slackSetup);
-  const discordStatus = getChannelStatus(discordSetup);
-  const discordMeta = getChannelMeta(discordSetup);
-  const onboardingSummary = getSetupSummary(setup);
-
+  const telegramConnected = getTelegramConnected(telegramStatus);
+  const telegramUiStatus = telegramUiStatusOverride ?? (telegramConnected ? "connected" : "not_connected");
+  const minimumRequired = asStringArray(
+    onboarding?.minimum_required ?? asRecord(onboarding?.setup).minimum_required
+  );
+  const setupSummary = getSetupSummary(setup);
+  const operatorConfigRequired = asBoolean(
+    onboarding?.operator_configure_model_provider ??
+      asRecord(onboarding?.setup).operator_configure_model_provider
+  );
+  const canStartChatNow = asBoolean(
+    onboarding?.can_start_chat_now ?? asRecord(onboarding?.setup).can_start_chat_now
+  );
+  const heartbeatEnabled = Boolean(heartbeat?.enabled);
+  const heartbeatToggleDisabled = agentUserUnavailable || !telegramConnected || heartbeatBusy;
+  const voiceRepliesDisabled = agentUserUnavailable || !telegramConnected;
   const settingsDirty =
     settingsDraft.assistant_mode !== (settings?.assistant_mode ?? DEFAULT_SETTINGS.assistant_mode) ||
     settingsDraft.group_activation !== (settings?.group_activation ?? DEFAULT_SETTINGS.group_activation) ||
@@ -301,53 +377,108 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       ? "zakiSettingsSheet.options.alwaysActive"
       : "zakiSettingsSheet.options.mentionOnly"
   );
-  const connectedChannelsCount = [telegramStatus, slackStatus, discordStatus].filter(
-    (status) => status === "connected"
-  ).length;
-  const headerSummary = onboarding?.completed
-    ? t("zakiSettingsSheet.header.readySummary", {
-        mode: responseStyleLabel,
-        join: joinBehaviorLabel,
-      })
-    : t("zakiSettingsSheet.header.setupSummary");
-  const setupStatusLabel = onboarding?.completed
-    ? t("zakiSettingsSheet.summary.ready")
-    : t("zakiSettingsSheet.summary.setupInProgress");
   const setupDateLabel = formatCompletedAt(
     onboarding?.completed_at_s ?? null,
     t("zakiSettingsSheet.workspace.setupNotCompleted")
   );
-  const getBotLoadErrorText = (payload: unknown, fallbackKey: string) => {
-    if (getBotErrorMessage(payload) === "unknown_user_id") {
-      return t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser");
+  const overviewStatusTone: "ready" | "warning" | "error" | "neutral" = operatorConfigRequired
+    ? "error"
+    : canStartChatNow
+      ? "ready"
+      : minimumRequired.length > 0
+        ? "warning"
+        : "neutral";
+  const overviewSummary = operatorConfigRequired
+    ? t("zakiSettingsSheet.overview.operatorRequired")
+    : canStartChatNow
+      ? t("zakiSettingsSheet.overview.readyToStart")
+      : minimumRequired.length > 0
+        ? t("zakiSettingsSheet.overview.missingRequirements")
+        : t("zakiSettingsSheet.overview.awaitingStatus");
+
+  const suggestedSection: SectionValue = operatorConfigRequired
+    ? "overview"
+    : !telegramConnected
+      ? "telegram"
+      : minimumRequired.length > 0
+        ? "overview"
+        : "assistant";
+
+  const syncPostMutationTelegramState = async (
+    targetState: "connected" | "disconnected",
+    enablePolling = false
+  ) => {
+    const readState = async () => {
+      let nextAgentUserUnavailable = false;
+
+      const [onboardingResult, heartbeatResult] = await Promise.all([
+        fetchBotOnboarding(),
+        fetchBotHeartbeat(),
+      ]);
+
+      if (onboardingResult.response.ok) {
+        setOnboarding(onboardingResult.data);
+        const nextTelegram = getChannelSetup(asRecord(onboardingResult.data.setup), "telegram");
+        setTelegramAllowFrom(asStringArray(nextTelegram.allow_from).join(", "));
+      } else {
+        const unknownUser = isUnknownBotUserError(onboardingResult.data);
+        if (unknownUser) nextAgentUserUnavailable = true;
+        setOnboarding(null);
+      }
+
+      if (heartbeatResult.response.ok) {
+        setHeartbeat(heartbeatResult.data);
+      } else {
+        setHeartbeat({ enabled: false });
+      }
+
+      setAgentUserUnavailable(nextAgentUserUnavailable);
+      return {
+        onboardingResult,
+        confirmedConnected: onboardingResult.response.ok
+          ? getTelegramConnectedFromOnboarding(onboardingResult.data)
+          : false,
+      };
+    };
+
+    let latestResult = await readState();
+    const initialTargetReached =
+      targetState === "connected" ? latestResult.confirmedConnected : !latestResult.confirmedConnected;
+    if (initialTargetReached || !enablePolling) {
+      return latestResult;
     }
 
-    const code = getBotErrorCode(payload);
-    if (
-      code === "temporary_contention" ||
-      code === "unauthorized" ||
-      code === "forbidden" ||
-      code === "provision_failed" ||
-      code === "settings_update_failed"
-    ) {
-      return t("zakiSettingsSheet.errors.botStateUnavailable");
+    for (const delay of TELEGRAM_CONFIRMATION_DELAYS_MS.slice(1)) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      latestResult = await readState();
+      const targetReached =
+        targetState === "connected" ? latestResult.confirmedConnected : !latestResult.confirmedConnected;
+      if (targetReached) {
+        return latestResult;
+      }
     }
 
-    return t(fallbackKey);
+    return latestResult;
   };
 
   useEffect(() => {
     if (!isOpen) return;
+    if (!isAuthReady) {
+      setLoading(true);
+      return;
+    }
     let active = true;
 
-    async function loadBotSpace() {
+    async function loadSettingsState() {
       setLoading(true);
       setBanner(null);
+      setAgentUserUnavailable(false);
+      let nextAgentUserUnavailable = false;
 
-      const [onboardingResult, settingsResult, usageResult] = await Promise.allSettled([
+      const [onboardingResult, settingsResult, heartbeatResult] = await Promise.allSettled([
         fetchBotOnboarding(),
         fetchBotSettings(),
-        fetchBotUsage(),
+        fetchBotHeartbeat(),
       ]);
 
       if (!active) return;
@@ -356,10 +487,19 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         const { response, data } = onboardingResult.value;
         if (response.ok) {
           setOnboarding(data);
+          const nextSetup = asRecord(data.setup);
+          const nextTelegram = getChannelSetup(nextSetup, "telegram");
+          if (!telegramAllowFrom) {
+            setTelegramAllowFrom(asStringArray(nextTelegram.allow_from).join(", "));
+          }
         } else {
+          const unknownUser = isUnknownBotUserError(data);
+          if (unknownUser) nextAgentUserUnavailable = true;
           setBanner({
             tone: "error",
-            text: getBotLoadErrorText(data, "zakiSettingsSheet.errors.onboardingLoad"),
+            text: unknownUser
+              ? t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser")
+              : getErrorText(data, t("zakiSettingsSheet.errors.onboardingLoad")),
           });
           setOnboarding(null);
         }
@@ -383,9 +523,13 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 : DEFAULT_SETTINGS.session_timeout_minutes,
           });
         } else {
+          const unknownUser = isUnknownBotUserError(data);
+          if (unknownUser) nextAgentUserUnavailable = true;
           setBanner({
             tone: "error",
-            text: getBotLoadErrorText(data, "zakiSettingsSheet.errors.settingsLoad"),
+            text: unknownUser
+              ? t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser")
+              : getErrorText(data, t("zakiSettingsSheet.errors.settingsLoad")),
           });
           setSettings(null);
         }
@@ -394,39 +538,136 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         setSettings(null);
       }
 
-      if (usageResult.status === "fulfilled") {
-        void usageResult.value;
+      if (heartbeatResult.status === "fulfilled") {
+        const { response, data } = heartbeatResult.value;
+        if (response.ok) {
+          setHeartbeat(data);
+        } else {
+          setBanner({
+            tone: "error",
+            text: getErrorText(data, t("zakiSettingsSheet.errors.heartbeatLoad")),
+          });
+          setHeartbeat(null);
+        }
       } else {
-        void usageResult.reason;
+        setBanner({ tone: "error", text: t("zakiSettingsSheet.errors.heartbeatLoad") });
+        setHeartbeat(null);
       }
 
+      setAgentUserUnavailable(nextAgentUserUnavailable);
       setLoading(false);
     }
 
-    void loadBotSpace();
+    void loadSettingsState();
 
     return () => {
       active = false;
     };
-  }, [isOpen]);
+  }, [isAuthReady, isOpen, t]);
 
   useEffect(() => {
     if (isOpen) return;
     setTelegramToken("");
-    setTelegramWebhookUrl("");
+    setTelegramAllowFrom("");
+    setTelegramUiStatusOverride(null);
     setOpenSection("");
-    setExpandedChannel(null);
+    setSettingsErrors({});
+    setTelegramErrors({});
+    setAgentUserUnavailable(false);
   }, [isOpen]);
 
-  const handleSaveBotSettings = async () => {
+  useEffect(() => {
+    if (!isOpen || loading) return;
+    setOpenSection((current) => (current ? current : suggestedSection));
+  }, [isOpen, loading, suggestedSection]);
+
+  useEffect(() => {
+    if (telegramConnected || !settingsDraft.voice_replies) return;
+    setSettingsDraft((current) =>
+      current.voice_replies
+        ? {
+            ...current,
+            voice_replies: false,
+          }
+        : current
+    );
+  }, [telegramConnected, settingsDraft.voice_replies]);
+
+  useEffect(() => {
+    if (telegramBusy) return;
+    setTelegramUiStatusOverride((current) => {
+      if (telegramConnected) {
+        return null;
+      }
+      if (current === "connecting" || current === "verifying") {
+        return "not_connected";
+      }
+      return current;
+    });
+  }, [telegramBusy, telegramConnected]);
+
+  const telegramStatusSummary = (() => {
+    switch (telegramUiStatus) {
+      case "connecting":
+        return t("zakiSettingsSheet.telegram.statusConnecting");
+      case "verifying":
+        return t("zakiSettingsSheet.telegram.statusVerifying");
+      case "needs_attention":
+        return t("zakiSettingsSheet.telegram.statusNeedsAttention");
+      case "connected":
+        return t("zakiSettingsSheet.workspace.channelStatus.connected");
+      default:
+        return t("zakiSettingsSheet.workspace.channelStatus.notConnected");
+    }
+  })();
+
+  const telegramStatusHelper = (() => {
+    if (telegramUiStatus === "connecting") {
+      return t("zakiSettingsSheet.telegram.connectingHelper");
+    }
+    if (telegramUiStatus === "verifying") {
+      return t("zakiSettingsSheet.telegram.verifyingHelper");
+    }
+    if (telegramUiStatus === "needs_attention") {
+      return banner?.tone === "error"
+        ? banner.text
+        : t("zakiSettingsSheet.telegram.needsAttentionHelper");
+    }
+    return getChannelMeta(telegramSetup) || t("zakiSettingsSheet.telegram.statusHelper");
+  })();
+
+  const telegramSectionSummary = (() => {
+    switch (telegramUiStatus) {
+      case "connecting":
+        return t("zakiSettingsSheet.sections.telegram.summaryConnecting");
+      case "verifying":
+        return t("zakiSettingsSheet.sections.telegram.summaryVerifying");
+      case "needs_attention":
+        return t("zakiSettingsSheet.sections.telegram.summaryNeedsAttention");
+      case "connected":
+        return t("zakiSettingsSheet.sections.telegram.summaryConnected");
+      default:
+        return t("zakiSettingsSheet.sections.telegram.summaryDisconnected");
+    }
+  })();
+
+  const handleSaveAssistantSettings = async () => {
     setSavingSettings(true);
     setBanner(null);
-    const parsedTimeout = Number.parseInt(settingsDraft.session_timeout_minutes, 10);
-    if (!Number.isInteger(parsedTimeout) || parsedTimeout < 5 || parsedTimeout > 180) {
+    setSettingsErrors({});
+    if (agentUserUnavailable) {
       setSavingSettings(false);
       setBanner({
         tone: "error",
-        text: t("zakiSettingsSheet.errors.sessionTimeoutRange"),
+        text: t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser"),
+      });
+      return false;
+    }
+    const parsedTimeout = Number.parseInt(settingsDraft.session_timeout_minutes, 10);
+    if (!Number.isInteger(parsedTimeout) || parsedTimeout < 5 || parsedTimeout > 180) {
+      setSavingSettings(false);
+      setSettingsErrors({
+        session_timeout_minutes: t("zakiSettingsSheet.errors.sessionTimeoutRange"),
       });
       return false;
     }
@@ -435,18 +676,21 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       assistant_mode: settingsDraft.assistant_mode,
       group_activation: settingsDraft.group_activation,
       proactive_updates: settingsDraft.proactive_updates,
-      voice_replies: settingsDraft.voice_replies,
+      voice_replies: telegramConnected ? settingsDraft.voice_replies : false,
       session_timeout_minutes: parsedTimeout,
     };
     const { response, data } = await updateBotSettings(payload);
     setSavingSettings(false);
     if (!response.ok) {
+      const fieldErrors = extractSettingsFieldErrors(data, t);
+      setSettingsErrors(fieldErrors);
       setBanner({
         tone: "error",
-        text: getBotErrorText(data, "Unable to save ZAKI settings."),
+        text: getErrorText(data, t("zakiSettingsSheet.errors.settingsSave")),
       });
       return false;
     }
+
     setSettings(data);
     setSettingsDraft({
       assistant_mode: data.assistant_mode ?? DEFAULT_SETTINGS.assistant_mode,
@@ -460,6 +704,131 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
     });
     setBanner({ tone: "success", text: t("zakiSettingsSheet.success.settingsSaved") });
     return true;
+  };
+
+  const handleTelegramConnect = async () => {
+    setBanner(null);
+    setTelegramErrors({});
+    if (agentUserUnavailable) {
+      setBanner({
+        tone: "error",
+        text: t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser"),
+      });
+      return;
+    }
+
+    const botToken = telegramToken.trim();
+    const nextErrors: TelegramFieldErrors = {};
+
+    if (!botToken) {
+      nextErrors.bot_token = t("zakiSettingsSheet.errors.telegramTokenRequired");
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setTelegramErrors(nextErrors);
+      return;
+    }
+
+    const allowFrom = normalizeAllowFromInput(telegramAllowFrom);
+    const payload: BotTelegramConnectPayload = { bot_token: botToken };
+    if (allowFrom.length > 0) {
+      payload.allow_from = allowFrom;
+    }
+
+    setTelegramUiStatusOverride("connecting");
+    setTelegramBusy(true);
+    const { response, data } = await connectBotTelegram(payload);
+    if (!response.ok) {
+      setTelegramBusy(false);
+      setTelegramUiStatusOverride("needs_attention");
+      setTelegramErrors(extractTelegramFieldErrors(data, t));
+      setBanner({
+        tone: "error",
+        text: getErrorText(data, t("zakiSettingsSheet.errors.telegramConnectFailed")),
+      });
+      return;
+    }
+
+    setTelegramUiStatusOverride("verifying");
+    const { confirmedConnected } = await syncPostMutationTelegramState("connected", true);
+    setTelegramBusy(false);
+
+    if (confirmedConnected) {
+      setTelegramToken("");
+      setTelegramUiStatusOverride(null);
+      setBanner({
+        tone: "success",
+        text: t("zakiSettingsSheet.success.telegramConnected"),
+      });
+      return;
+    }
+
+    setTelegramUiStatusOverride("needs_attention");
+    setBanner({
+      tone: "error",
+      text: t("zakiSettingsSheet.errors.telegramConnectStillVerifying"),
+    });
+  };
+
+  const handleTelegramDisconnect = async () => {
+    setBanner(null);
+    setTelegramErrors({});
+    if (agentUserUnavailable) {
+      setBanner({
+        tone: "error",
+        text: t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser"),
+      });
+      return;
+    }
+    setTelegramBusy(true);
+    setTelegramUiStatusOverride("verifying");
+    const { response, data } = await disconnectBotTelegram();
+    const { confirmedConnected } = await syncPostMutationTelegramState("disconnected", response.ok);
+    setTelegramBusy(false);
+    if (response.ok && !confirmedConnected) {
+      setTelegramToken("");
+      setTelegramUiStatusOverride("not_connected");
+      setBanner({
+        tone: "success",
+        text: t("zakiSettingsSheet.success.telegramDisconnected"),
+      });
+      return;
+    }
+
+    setTelegramUiStatusOverride("needs_attention");
+    setBanner({
+      tone: "error",
+      text: response.ok
+        ? t("zakiSettingsSheet.errors.telegramDisconnectUnconfirmed")
+        : getErrorText(data, t("zakiSettingsSheet.errors.telegramDisconnectFailed")),
+    });
+  };
+
+  const handleHeartbeatToggle = async (enabled: boolean) => {
+    setBanner(null);
+    if (agentUserUnavailable) {
+      setBanner({
+        tone: "error",
+        text: t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser"),
+      });
+      return;
+    }
+    setHeartbeatBusy(true);
+    const { response, data } = await updateBotHeartbeat({ enabled });
+    setHeartbeatBusy(false);
+    if (!response.ok) {
+      setBanner({
+        tone: "error",
+        text: t("zakiSettingsSheet.errors.heartbeatSave"),
+      });
+      return;
+    }
+    setHeartbeat(data);
+    setBanner({
+      tone: "success",
+      text: enabled
+        ? t("zakiSettingsSheet.success.heartbeatEnabled")
+        : t("zakiSettingsSheet.success.heartbeatDisabled"),
+    });
   };
 
   if (!isOpen) return null;
@@ -483,8 +852,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 <SheetTitle className="mt-3 text-2xl font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
                   {t("zakiSettingsSheet.title")}
                 </SheetTitle>
-                <SheetDescription className="mt-2 max-w-[42ch] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
-                  {headerSummary}
+                <SheetDescription className="mt-2 max-w-[46ch] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+                  {t("zakiSettingsSheet.subtitle")}
                 </SheetDescription>
               </div>
               <button
@@ -495,15 +864,6 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               >
                 <X className="size-4" />
               </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[#e6d8c8] bg-white/70 px-3 py-1 text-xs text-zaki-secondary dark:border-[#2d231b] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
-                {setupStatusLabel}
-              </span>
-              <span className="rounded-full border border-[#e6d8c8] bg-white/70 px-3 py-1 text-xs text-zaki-secondary dark:border-[#2d231b] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
-                {responseStyleLabel}
-              </span>
             </div>
 
             {banner ? (
@@ -521,14 +881,6 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
           </div>
 
           <div className="relative flex-1 overflow-y-auto px-5 py-5">
-            <div className="mb-4 rounded-2xl border border-[#e3d4c4] bg-[#fbf6ef] px-4 py-3 dark:border-[#2b2119] dark:bg-[#15110e]">
-              <p className={cn("text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary", isRtl && "text-right")}>
-                {t("zakiSettingsSheet.locked.title")}
-              </p>
-              <p className={cn("mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle", isRtl && "text-right")}>
-                {t("zakiSettingsSheet.locked.note")}
-              </p>
-            </div>
             <Accordion
               type="single"
               collapsible
@@ -536,15 +888,75 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               onValueChange={(value) => setOpenSection((value as OpenSectionValue) || "")}
               className="space-y-0"
             >
-              <AccordionItem
-                value="core"
-                className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]"
-              >
+              <AccordionItem value="overview" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
+                <AccordionTrigger className="py-5 no-underline hover:no-underline">
+                  <SectionBadge
+                    icon={Bot}
+                    title={t("zakiSettingsSheet.sections.overview.title")}
+                    summary={overviewSummary}
+                    isRtl={isRtl}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="pb-6">
+                  <div className="space-y-3">
+                    <div className={cn("rounded-2xl border px-4 py-3 text-sm", getStatusTone(overviewStatusTone))}>
+                      <div className="font-semibold">{overviewSummary}</div>
+                      <div className="mt-1 text-xs opacity-90">
+                        {setupSummary || t("zakiSettingsSheet.overview.statusHelper", { updated: setupDateLabel })}
+                      </div>
+                    </div>
+
+                    {operatorConfigRequired ? (
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
+                        <p className="font-semibold">{t("zakiSettingsSheet.overview.operatorBlockingTitle")}</p>
+                        <p className="mt-1 text-xs leading-5">
+                          {t("zakiSettingsSheet.overview.operatorBlockingBody")}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <CompactRow
+                      title={t("zakiSettingsSheet.overview.readinessTitle")}
+                      summary={
+                        canStartChatNow
+                          ? t("zakiSettingsSheet.overview.readyToStart")
+                          : t("zakiSettingsSheet.overview.notReady")
+                      }
+                      helper={t("zakiSettingsSheet.overview.readinessHelper")}
+                      isRtl={isRtl}
+                    />
+
+                    <CompactRow
+                      title={t("zakiSettingsSheet.overview.telegramTitle")}
+                      summary={
+                        telegramConnected
+                          ? t("zakiSettingsSheet.workspace.channelStatus.connected")
+                          : t("zakiSettingsSheet.workspace.channelStatus.notConnected")
+                      }
+                      helper={getChannelMeta(telegramSetup) || t("zakiSettingsSheet.overview.telegramHelper")}
+                      isRtl={isRtl}
+                    />
+
+                    <CompactRow
+                      title={t("zakiSettingsSheet.overview.minimumRequiredTitle")}
+                      summary={
+                        minimumRequired.length > 0
+                          ? minimumRequired.join(", ")
+                          : t("zakiSettingsSheet.overview.nothingMissing")
+                      }
+                      helper={t("zakiSettingsSheet.overview.minimumRequiredHelper")}
+                      isRtl={isRtl}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="assistant" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
                 <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Volume2}
-                    title={t("zakiSettingsSheet.sections.core.title")}
-                    summary={t("zakiSettingsSheet.sections.core.summary", {
+                    title={t("zakiSettingsSheet.sections.assistant.title")}
+                    summary={t("zakiSettingsSheet.sections.assistant.summary", {
                       style: responseStyleLabel,
                       join: joinBehaviorLabel,
                     })}
@@ -558,24 +970,25 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       summary={responseStyleLabel}
                       helper={t("zakiSettingsSheet.fields.responseStyle.helper")}
                       isRtl={isRtl}
-                      disabled={nullalisSettingsLocked}
                       control={
-                        <select
-                          aria-label={t("zakiSettingsSheet.fields.responseStyle.title")}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus disabled:cursor-not-allowed disabled:bg-[#f6efe6] disabled:text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary dark:disabled:bg-[#181310]"
-                          value={settingsDraft.assistant_mode}
-                          disabled={nullalisSettingsLocked}
-                          onChange={(event) =>
-                            setSettingsDraft((current) => ({
-                              ...current,
-                              assistant_mode: event.target.value as SettingsDraft["assistant_mode"],
-                            }))
-                          }
-                        >
-                          <option value="fast">{t("zakiSettingsSheet.options.fast")}</option>
-                          <option value="balanced">{t("zakiSettingsSheet.options.balanced")}</option>
-                          <option value="deep">{t("zakiSettingsSheet.options.deep")}</option>
-                        </select>
+                        <div>
+                          <select
+                            aria-label={t("zakiSettingsSheet.fields.responseStyle.title")}
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                            value={settingsDraft.assistant_mode}
+                            onChange={(event) =>
+                              setSettingsDraft((current) => ({
+                                ...current,
+                                assistant_mode: event.target.value as SettingsDraft["assistant_mode"],
+                              }))
+                            }
+                          >
+                            <option value="fast">{t("zakiSettingsSheet.options.fast")}</option>
+                            <option value="balanced">{t("zakiSettingsSheet.options.balanced")}</option>
+                            <option value="deep">{t("zakiSettingsSheet.options.deep")}</option>
+                          </select>
+                          <InlineFieldError text={settingsErrors.assistant_mode} />
+                        </div>
                       }
                     />
 
@@ -584,23 +997,24 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       summary={joinBehaviorLabel}
                       helper={t("zakiSettingsSheet.fields.joinBehavior.helper")}
                       isRtl={isRtl}
-                      disabled={nullalisSettingsLocked}
                       control={
-                        <select
-                          aria-label={t("zakiSettingsSheet.fields.joinBehavior.title")}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus disabled:cursor-not-allowed disabled:bg-[#f6efe6] disabled:text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary dark:disabled:bg-[#181310]"
-                          value={settingsDraft.group_activation}
-                          disabled={nullalisSettingsLocked}
-                          onChange={(event) =>
-                            setSettingsDraft((current) => ({
-                              ...current,
-                              group_activation: event.target.value as SettingsDraft["group_activation"],
-                            }))
-                          }
-                        >
-                          <option value="mention">{t("zakiSettingsSheet.options.mentionOnly")}</option>
-                          <option value="always">{t("zakiSettingsSheet.options.alwaysActive")}</option>
-                        </select>
+                        <div>
+                          <select
+                            aria-label={t("zakiSettingsSheet.fields.joinBehavior.title")}
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                            value={settingsDraft.group_activation}
+                            onChange={(event) =>
+                              setSettingsDraft((current) => ({
+                                ...current,
+                                group_activation: event.target.value as SettingsDraft["group_activation"],
+                              }))
+                            }
+                          >
+                            <option value="mention">{t("zakiSettingsSheet.options.mentionOnly")}</option>
+                            <option value="always">{t("zakiSettingsSheet.options.alwaysActive")}</option>
+                          </select>
+                          <InlineFieldError text={settingsErrors.group_activation} />
+                        </div>
                       }
                     />
 
@@ -613,64 +1027,72 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       )}
                       helper={t("zakiSettingsSheet.fields.proactiveUpdates.helper")}
                       isRtl={isRtl}
-                      disabled={nullalisSettingsLocked}
                       control={
-                        <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
-                          <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                            {t(
-                              settingsDraft.proactive_updates
-                                ? "zakiSettingsSheet.status.enabled"
-                                : "zakiSettingsSheet.status.disabled"
-                            )}
-                          </span>
-                          <input
-                            aria-label={t("zakiSettingsSheet.fields.proactiveUpdates.title")}
-                            type="checkbox"
-                            checked={settingsDraft.proactive_updates}
-                            disabled={nullalisSettingsLocked}
-                            onChange={(event) =>
-                              setSettingsDraft((current) => ({
-                                ...current,
-                                proactive_updates: event.target.checked,
-                              }))
-                            }
-                          />
-                        </label>
+                        <div>
+                          <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
+                            <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                              {t(
+                                settingsDraft.proactive_updates
+                                  ? "zakiSettingsSheet.status.enabled"
+                                  : "zakiSettingsSheet.status.disabled"
+                              )}
+                            </span>
+                            <input
+                              aria-label={t("zakiSettingsSheet.fields.proactiveUpdates.title")}
+                              type="checkbox"
+                              checked={settingsDraft.proactive_updates}
+                              onChange={(event) =>
+                                setSettingsDraft((current) => ({
+                                  ...current,
+                                  proactive_updates: event.target.checked,
+                                }))
+                              }
+                            />
+                          </label>
+                          <InlineFieldError text={settingsErrors.proactive_updates} />
+                        </div>
                       }
                     />
 
                     <CompactRow
                       title={t("zakiSettingsSheet.fields.voiceReplies.title")}
-                      summary={t(
-                        settingsDraft.voice_replies
-                          ? "zakiSettingsSheet.status.enabled"
-                          : "zakiSettingsSheet.status.disabled"
-                      )}
-                      helper={t("zakiSettingsSheet.fields.voiceReplies.helper")}
-                      isRtl={isRtl}
-                      disabled={nullalisSettingsLocked}
-                      control={
-                        <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
-                          <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                            {t(
+                      summary={
+                        !telegramConnected
+                          ? t("zakiSettingsSheet.fields.voiceReplies.requiresTelegram")
+                          : t(
                               settingsDraft.voice_replies
                                 ? "zakiSettingsSheet.status.enabled"
                                 : "zakiSettingsSheet.status.disabled"
-                            )}
-                          </span>
-                          <input
-                            aria-label={t("zakiSettingsSheet.fields.voiceReplies.title")}
-                            type="checkbox"
-                            checked={settingsDraft.voice_replies}
-                            disabled={nullalisSettingsLocked}
-                            onChange={(event) =>
-                              setSettingsDraft((current) => ({
-                                ...current,
-                                voice_replies: event.target.checked,
-                              }))
-                            }
-                          />
-                        </label>
+                            )
+                      }
+                      helper={t("zakiSettingsSheet.fields.voiceReplies.helper")}
+                      isRtl={isRtl}
+                      disabled={!telegramConnected}
+                      control={
+                        <div>
+                          <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
+                            <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                              {t(
+                                settingsDraft.voice_replies
+                                  ? "zakiSettingsSheet.status.enabled"
+                                  : "zakiSettingsSheet.status.disabled"
+                              )}
+                            </span>
+                            <input
+                              aria-label={t("zakiSettingsSheet.fields.voiceReplies.title")}
+                              type="checkbox"
+                              checked={settingsDraft.voice_replies}
+                              disabled={voiceRepliesDisabled}
+                              onChange={(event) =>
+                                setSettingsDraft((current) => ({
+                                  ...current,
+                                  voice_replies: event.target.checked,
+                                }))
+                              }
+                            />
+                          </label>
+                          <InlineFieldError text={settingsErrors.voice_replies} />
+                        </div>
                       }
                     />
 
@@ -681,351 +1103,194 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       })}
                       helper={t("zakiSettingsSheet.fields.sessionWindow.helper")}
                       isRtl={isRtl}
-                      disabled={nullalisSettingsLocked}
                       control={
-                        <input
-                          aria-label={t("zakiSettingsSheet.fields.sessionWindow.title")}
-                          type="number"
-                          min={5}
-                          max={180}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus disabled:cursor-not-allowed disabled:bg-[#f6efe6] disabled:text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary dark:disabled:bg-[#181310]"
-                          value={settingsDraft.session_timeout_minutes}
-                          disabled={nullalisSettingsLocked}
-                          onChange={(event) =>
-                            setSettingsDraft((current) => ({
-                              ...current,
-                              session_timeout_minutes: event.target.value,
-                            }))
-                          }
-                        />
+                        <div>
+                          <input
+                            aria-label={t("zakiSettingsSheet.fields.sessionWindow.title")}
+                            type="number"
+                            min={5}
+                            max={180}
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                            value={settingsDraft.session_timeout_minutes}
+                            onChange={(event) =>
+                              setSettingsDraft((current) => ({
+                                ...current,
+                                session_timeout_minutes: event.target.value,
+                              }))
+                            }
+                          />
+                          <InlineFieldError text={settingsErrors.session_timeout_minutes} />
+                        </div>
                       }
                     />
                   </div>
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem
-                value="workspace"
-                className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]"
-              >
+              <AccordionItem value="telegram" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
                 <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
-                    icon={Brain}
-                    title={t("zakiSettingsSheet.sections.workspace.title")}
-                    summary={t("zakiSettingsSheet.sections.workspace.summary", {
-                      connected: connectedChannelsCount,
-                      total: 3,
-                    })}
+                    icon={Link2}
+                    title={t("zakiSettingsSheet.sections.telegram.title")}
+                    summary={telegramSectionSummary}
                     isRtl={isRtl}
                   />
                 </AccordionTrigger>
                 <AccordionContent className="pb-6">
                   <div className="space-y-3">
                     <CompactRow
-                      title={t("zakiSettingsSheet.workspace.memoryTitle")}
-                      summary={t("zakiSettingsSheet.workspace.memorySummary")}
-                      helper={t("zakiSettingsSheet.workspace.memoryHelper")}
+                      title={t("zakiSettingsSheet.telegram.statusTitle")}
+                      summary={telegramStatusSummary}
+                      helper={telegramStatusHelper}
                       isRtl={isRtl}
-                      control={
-                        <div className={cn("flex flex-col gap-2", isRtl ? "sm:items-start" : "sm:items-end")}>
-                          <button
-                            type="button"
-                            className="zaki-btn-sm zaki-btn-secondary"
-                            onClick={() => {
-                              onClose();
-                              window.dispatchEvent(new Event("zaki:open-memory"));
-                            }}
-                          >
-                            {t("zakiSettingsSheet.workspace.reviewMemory")}
-                          </button>
-                          <button
-                            type="button"
-                            className="zaki-btn-sm zaki-btn-secondary"
-                            onClick={() => {
-                              onClose();
-                              navigate("/help");
-                            }}
-                          >
-                            {t("zakiSettingsSheet.workspace.openHelp")}
-                          </button>
-                        </div>
-                      }
                     />
 
-                    <CompactRow
-                      title={t("zakiSettingsSheet.workspace.setupTitle")}
-                      summary={
-                        loading && !onboarding
-                          ? t("zakiSettingsSheet.loading.onboarding")
-                          : onboardingSummary || setupDateLabel
-                      }
-                      helper={t("zakiSettingsSheet.workspace.setupHelper", {
-                        status: setupStatusLabel,
-                        updated: setupDateLabel,
-                      })}
-                      isRtl={isRtl}
-                      control={
-                        <div className={cn("flex flex-col gap-2", isRtl ? "sm:items-start" : "sm:items-end")}>
+                    <div className="rounded-2xl border border-[#e1d4c6] bg-white px-4 py-4 dark:border-[#2b2119] dark:bg-[#17120f]">
+                      <div className="grid gap-3">
+                        <label className="block">
+                          <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                            {t("zakiSettingsSheet.telegram.botTokenLabel")}
+                          </span>
+                          <input
+                            aria-label={t("zakiSettingsSheet.telegram.botTokenLabel")}
+                            className="w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+                            placeholder={
+                              telegramConnected
+                                ? t("zakiSettingsSheet.telegram.botTokenMasked")
+                                : t("zakiSettingsSheet.workspace.telegramToken")
+                            }
+                            type="password"
+                            value={telegramToken}
+                            onChange={(event) => setTelegramToken(event.target.value)}
+                          />
+                          <InlineFieldError text={telegramErrors.bot_token} />
+                        </label>
+
+                        <CompactRow
+                          title={t("zakiSettingsSheet.telegram.webhookBaseLabel")}
+                          summary={t("zakiSettingsSheet.telegram.webhookBaseSummary")}
+                          helper={t("zakiSettingsSheet.telegram.webhookBaseHelper")}
+                          isRtl={isRtl}
+                        />
+
+                        <label className="block">
+                          <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                            {t("zakiSettingsSheet.telegram.allowFromLabel")}
+                          </span>
+                          <textarea
+                            aria-label={t("zakiSettingsSheet.telegram.allowFromLabel")}
+                            className="min-h-[96px] w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+                            placeholder={t("zakiSettingsSheet.telegram.allowFromPlaceholder")}
+                            value={telegramAllowFrom}
+                            onChange={(event) => setTelegramAllowFrom(event.target.value)}
+                          />
+                          <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                            {t("zakiSettingsSheet.telegram.allowFromHelper")}
+                          </p>
+                          <InlineFieldError text={telegramErrors.allow_from} />
+                        </label>
+
+                        <div className={cn("flex flex-wrap gap-2", isRtl && "justify-end")}>
                           <button
                             type="button"
-                            disabled={savingOnboarding}
+                            disabled={telegramBusy || agentUserUnavailable}
                             className="zaki-btn-sm zaki-btn-primary disabled:opacity-60"
-                            onClick={async () => {
-                              setSavingOnboarding(true);
-                              setBanner(null);
-                              const { response, data } = await provisionBot();
-                              setSavingOnboarding(false);
-                              if (!response.ok) {
-                                setBanner({
-                                  tone: "error",
-                                  text: getBotErrorText(data, "Unable to provision ZAKI."),
-                                });
-                                return;
-                              }
-                              const onboardingResult = await fetchBotOnboarding();
-                              if (onboardingResult.response.ok) {
-                                setOnboarding(onboardingResult.data);
-                              }
-                              setBanner({
-                                tone: "success",
-                                text: t("zakiSettingsSheet.success.provisioned"),
-                              });
+                            onClick={() => {
+                              void handleTelegramConnect();
                             }}
                           >
-                            {savingOnboarding
-                              ? t("zakiSettingsSheet.actions.provisioning")
-                              : t("zakiSettingsSheet.actions.provision")}
+                            {telegramBusy
+                              ? t("zakiSettingsSheet.actions.connecting")
+                              : telegramConnected
+                                ? t("zakiSettingsSheet.actions.reconnectTelegram")
+                                : t("zakiSettingsSheet.actions.connectTelegram")}
                           </button>
                           <button
                             type="button"
-                            disabled={savingOnboarding}
+                            disabled={telegramBusy || !telegramConnected || agentUserUnavailable}
                             className="zaki-btn-sm zaki-btn-secondary disabled:opacity-60"
-                            onClick={async () => {
-                              setSavingOnboarding(true);
-                              setBanner(null);
-                              const nextCompleted = !Boolean(onboarding?.completed);
-                              const { response, data } = await updateBotOnboarding({
-                                completed: nextCompleted,
-                              });
-                              setSavingOnboarding(false);
-                              if (!response.ok) {
-                                setBanner({
-                                  tone: "error",
-                                  text: getBotErrorText(data, "Unable to update onboarding state."),
-                                });
-                                return;
-                              }
-                              setOnboarding(data);
-                              setBanner({
-                                tone: "success",
-                                text: nextCompleted
-                                  ? t("zakiSettingsSheet.success.onboardingComplete")
-                                  : t("zakiSettingsSheet.success.onboardingReopened"),
-                              });
+                            onClick={() => {
+                              void handleTelegramDisconnect();
                             }}
                           >
-                            {onboarding?.completed
-                              ? t("zakiSettingsSheet.actions.markIncomplete")
-                              : t("zakiSettingsSheet.actions.markComplete")}
+                            {t("zakiSettingsSheet.actions.disconnect")}
                           </button>
                         </div>
-                      }
-                    />
-
-                    <CompactRow
-                      title={t("zakiSettingsSheet.workspace.channelsTitle")}
-                      summary={t("zakiSettingsSheet.workspace.channelsSummaryLine", {
-                        connected: connectedChannelsCount,
-                        total: 3,
-                      })}
-                      helper={t("zakiSettingsSheet.locked.note")}
-                      isRtl={isRtl}
-                      disabled={nullalisSettingsLocked}
-                    >
-                      <div className="space-y-3">
-                        {([
-                          {
-                            key: "telegram",
-                            title: "Telegram",
-                            status: telegramStatus,
-                            meta: telegramMeta,
-                            steps: [] as string[],
-                          },
-                          {
-                            key: "slack",
-                            title: "Slack",
-                            status: slackStatus,
-                            meta: slackMeta,
-                            steps: getInstructionSteps(slackSetup, [...FALLBACK_CHANNEL_STEPS.slack]),
-                          },
-                          {
-                            key: "discord",
-                            title: "Discord",
-                            status: discordStatus,
-                            meta: discordMeta,
-                            steps: getInstructionSteps(discordSetup, [...FALLBACK_CHANNEL_STEPS.discord]),
-                          },
-                        ] as const).map((channel) => {
-                          const statusKey =
-                            channel.status === "connected"
-                              ? "connected"
-                              : channel.status
-                                ? "needsSetup"
-                                : "notConnected";
-                          const expanded = expandedChannel === channel.key;
-
-                          return (
-                            <div
-                              key={channel.key}
-                              className="rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]"
-                            >
-                              <div className={cn("flex flex-col gap-3 sm:items-center sm:justify-between", isRtl ? "sm:flex-row-reverse" : "sm:flex-row")}>
-                                <div className={cn("min-w-0", isRtl && "text-right")}>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <h4 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                                      {channel.title}
-                                    </h4>
-                                    <span
-                                      className={cn(
-                                        "rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
-                                        getStatusTone(channel.status || statusKey)
-                                      )}
-                                    >
-                                      {t(`zakiSettingsSheet.workspace.channelStatus.${statusKey}`)}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 truncate text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                                    {channel.meta ||
-                                      t(`zakiSettingsSheet.workspace.channelDescriptions.${channel.key}`)}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="zaki-btn-sm zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
-                                  disabled={nullalisSettingsLocked}
-                                  onClick={() =>
-                                    setExpandedChannel((current) =>
-                                      current === channel.key ? null : channel.key
-                                    )
-                                  }
-                                >
-                                  {nullalisSettingsLocked
-                                    ? t("zakiSettingsSheet.actions.comingSoon")
-                                    : expanded
-                                      ? t("zakiSettingsSheet.actions.hide")
-                                      : t("zakiSettingsSheet.actions.manage")}
-                                </button>
-                              </div>
-
-                              {expanded && !nullalisSettingsLocked ? (
-                                channel.key === "telegram" ? (
-                                  <div className="mt-3 grid gap-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">
-                                    <input
-                                      className="w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
-                                      placeholder={t("zakiSettingsSheet.workspace.telegramToken")}
-                                      value={telegramToken}
-                                      onChange={(event) => setTelegramToken(event.target.value)}
-                                    />
-                                    <input
-                                      className="w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
-                                      placeholder={t("zakiSettingsSheet.workspace.telegramWebhook")}
-                                      value={telegramWebhookUrl}
-                                      onChange={(event) => setTelegramWebhookUrl(event.target.value)}
-                                    />
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        disabled={telegramBusy}
-                                        className="zaki-btn-sm zaki-btn-primary disabled:opacity-60"
-                                        onClick={async () => {
-                                          setBanner(null);
-                                          const botToken = telegramToken.trim();
-                                          if (!botToken) {
-                                            setBanner({
-                                              tone: "error",
-                                              text: t("zakiSettingsSheet.errors.telegramTokenRequired"),
-                                            });
-                                            return;
-                                          }
-                                          const payload: Parameters<typeof connectBotTelegram>[0] = {
-                                            bot_token: botToken,
-                                          };
-                                          const webhookUrl = telegramWebhookUrl.trim();
-                                          if (webhookUrl) payload.webhook_url = webhookUrl;
-                                          setTelegramBusy(true);
-                                          const { response, data } = await connectBotTelegram(payload);
-                                          setTelegramBusy(false);
-                                          if (!response.ok) {
-                                            setBanner({
-                                              tone: "error",
-                                              text: getBotErrorText(data, "Unable to connect Telegram."),
-                                            });
-                                            return;
-                                          }
-                                          setBanner({
-                                            tone: "success",
-                                            text: t("zakiSettingsSheet.success.telegramConnected"),
-                                          });
-                                          const onboardingResult = await fetchBotOnboarding();
-                                          if (onboardingResult.response.ok) {
-                                            setOnboarding(onboardingResult.data);
-                                          }
-                                        }}
-                                      >
-                                        {telegramBusy
-                                          ? t("zakiSettingsSheet.actions.connecting")
-                                          : t("zakiSettingsSheet.actions.connectTelegram")}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={telegramBusy}
-                                        className="zaki-btn-sm zaki-btn-secondary disabled:opacity-60"
-                                        onClick={async () => {
-                                          setTelegramBusy(true);
-                                          const { response, data } = await disconnectBotTelegram();
-                                          setTelegramBusy(false);
-                                          if (!response.ok) {
-                                            setBanner({
-                                              tone: "error",
-                                              text: getBotErrorText(data, "Unable to disconnect Telegram."),
-                                            });
-                                            return;
-                                          }
-                                          setBanner({
-                                            tone: "success",
-                                            text: t("zakiSettingsSheet.success.telegramDisconnected"),
-                                          });
-                                          const onboardingResult = await fetchBotOnboarding();
-                                          if (onboardingResult.response.ok) {
-                                            setOnboarding(onboardingResult.data);
-                                          }
-                                        }}
-                                      >
-                                        {t("zakiSettingsSheet.actions.disconnect")}
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <ol className={cn("mt-3 space-y-2 border-t border-[#e6d8c8] pt-3 text-xs leading-5 text-zaki-secondary dark:border-[#2b2119] dark:text-zaki-dark-subtle", isRtl && "text-right")}>
-                                    {channel.steps.map((step) => (
-                                      <li key={step} className={cn("flex gap-2", isRtl && "flex-row-reverse")}>
-                                        <span className="mt-[6px] size-1.5 shrink-0 rounded-full bg-zaki-brand" />
-                                        <span>{step}</span>
-                                      </li>
-                                    ))}
-                                  </ol>
-                                )
-                              ) : null}
-                            </div>
-                          );
-                        })}
                       </div>
-                    </CompactRow>
+                    </div>
                   </div>
                 </AccordionContent>
               </AccordionItem>
 
+              <AccordionItem value="autonomy" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
+                <AccordionTrigger className="py-5 no-underline hover:no-underline">
+                  <SectionBadge
+                    icon={Activity}
+                    title={t("zakiSettingsSheet.sections.autonomy.title")}
+                    summary={
+                      !telegramConnected
+                        ? t("zakiSettingsSheet.autonomy.heartbeatRequiresTelegram")
+                        : heartbeatEnabled
+                        ? t("zakiSettingsSheet.sections.autonomy.summaryEnabled")
+                        : t("zakiSettingsSheet.sections.autonomy.summaryDisabled")
+                    }
+                    isRtl={isRtl}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="pb-6">
+                  <div className="space-y-3">
+                    <CompactRow
+                      title={t("zakiSettingsSheet.autonomy.proactiveTitle")}
+                      summary={
+                        settingsDraft.proactive_updates
+                          ? t("zakiSettingsSheet.status.enabled")
+                          : t("zakiSettingsSheet.status.disabled")
+                      }
+                      helper={t("zakiSettingsSheet.autonomy.proactiveHelper")}
+                      isRtl={isRtl}
+                    />
+
+                    <CompactRow
+                      title={t("zakiSettingsSheet.autonomy.heartbeatTitle")}
+                      summary={
+                        !telegramConnected
+                          ? t("zakiSettingsSheet.autonomy.heartbeatRequiresTelegram")
+                          : heartbeatEnabled
+                            ? t("zakiSettingsSheet.status.enabled")
+                            : t("zakiSettingsSheet.status.disabled")
+                      }
+                      helper={t("zakiSettingsSheet.autonomy.heartbeatHelper")}
+                      isRtl={isRtl}
+                      disabled={!telegramConnected}
+                      control={
+                        <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
+                          <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {heartbeatEnabled
+                              ? t("zakiSettingsSheet.status.enabled")
+                              : t("zakiSettingsSheet.status.disabled")}
+                          </span>
+                          <input
+                            aria-label={t("zakiSettingsSheet.autonomy.heartbeatTitle")}
+                            type="checkbox"
+                            checked={heartbeatEnabled}
+                            disabled={heartbeatToggleDisabled}
+                            onChange={(event) => {
+                              void handleHeartbeatToggle(event.target.checked);
+                            }}
+                          />
+                        </label>
+                      }
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
+
+            {!loading ? null : (
+              <div className="mt-4 rounded-2xl border border-[#e6d8c8] bg-white/70 px-4 py-3 text-sm text-zaki-secondary dark:border-[#2b2119] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
+                {t("zakiSettingsSheet.loading.state")}
+              </div>
+            )}
           </div>
 
           <div className="sticky bottom-0 z-20 border-t border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
@@ -1043,15 +1308,13 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                   type="button"
                   className="zaki-btn zaki-btn-primary disabled:opacity-60"
                   onClick={() => {
-                    void handleSaveBotSettings().then((okay) => {
-                      if (okay) onClose();
-                    });
+                    void handleSaveAssistantSettings();
                   }}
-                  disabled={savingSettings || !settingsDirty}
+                  disabled={savingSettings || operatorConfigRequired || agentUserUnavailable}
                 >
                   {savingSettings
                     ? t("zakiSettingsSheet.footer.saving")
-                    : t("settingsModal.footer.saveChanges")}
+                    : t("zakiSettingsSheet.footer.saveAssistant")}
                 </button>
               </div>
             </div>

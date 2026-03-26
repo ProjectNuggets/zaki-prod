@@ -8467,9 +8467,32 @@ const agentTelegramConnectHandler = async (req, res) => {
     const hasWebhookBaseUrl =
       typeof payload.webhook_base_url === "string" &&
       payload.webhook_base_url.length > 0;
+    const hasConfiguredWebhookBase = Boolean(ZAKI_AGENT_WEBHOOK_BASE_URL);
+
+    if (!hasWebhookUrl && !hasWebhookBaseUrl && !hasConfiguredWebhookBase) {
+      return res.status(400).json({
+        error: "missing webhook_base_url",
+        message:
+          "Webhook base URL is not configured. Ask the operator to configure ZAKI_AGENT_WEBHOOK_BASE_URL or enter a valid https:// webhook base URL.",
+      });
+    }
+
+    if (hasWebhookBaseUrl && !/^https:\/\//i.test(payload.webhook_base_url)) {
+      return res.status(400).json({
+        error: "invalid webhook_base_url (https required)",
+        message: "Webhook base URL must start with https://.",
+      });
+    }
+
+    if (hasWebhookUrl && !/^https:\/\//i.test(payload.webhook_url)) {
+      return res.status(400).json({
+        error: "invalid webhook_url (https required)",
+        message: "Webhook URL must start with https://.",
+      });
+    }
 
     const extraHeaders = {};
-    if (!hasWebhookUrl && !hasWebhookBaseUrl && ZAKI_AGENT_WEBHOOK_BASE_URL) {
+    if (!hasWebhookUrl && !hasWebhookBaseUrl && hasConfiguredWebhookBase) {
       extraHeaders["X-Webhook-Base-Url"] = ZAKI_AGENT_WEBHOOK_BASE_URL;
     }
 
@@ -8639,6 +8662,7 @@ const botBffHandlers = createBotBffHandlers({
   },
   sendUpstreamRequest: sendBotBffUpstreamRequest,
   buildUsageSummary: buildBotBffUsageSummary,
+  telegramWebhookBaseUrl: ZAKI_AGENT_WEBHOOK_BASE_URL,
   createRequestId: getOrCreateRequestId,
   createIdempotencyKey: getOrCreateIdempotencyKey,
 });
@@ -8769,6 +8793,8 @@ registerBotBffAliases(app, {
   chatStreamHandler: botBffHandlers.chatStream,
   settingsGetHandler: botBffHandlers.getSettings,
   settingsPatchHandler: botBffHandlers.patchSettings,
+  heartbeatGetHandler: botBffHandlers.getHeartbeat,
+  heartbeatPutHandler: botBffHandlers.putHeartbeat,
   telegramConnectHandler: botBffHandlers.telegramConnect,
   telegramDisconnectHandler: botBffHandlers.telegramDisconnect,
   usageHandler: botBffHandlers.usage,

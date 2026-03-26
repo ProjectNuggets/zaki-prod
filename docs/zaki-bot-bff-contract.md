@@ -1,6 +1,6 @@
 # ZAKI BOT BFF Contract
 
-Last updated: March 13, 2026
+Last updated: March 26, 2026
 
 ## Summary
 
@@ -9,7 +9,7 @@ ZAKI-PROD exposes two compatible backend surfaces for ZAKI BOT:
 1. Existing agent routes under `/api/agent/*`
 2. Action-style aliases under `/v1/me/bot/*`
 
-The alias surface is additive and backward compatible. Existing `/api/agent/*` routes remain valid.
+The alias surface is additive and backward compatible. Existing `/api/agent/*` routes remain valid, but the product settings plane now uses `/v1/me/bot/*` as its canonical route family.
 
 ## Auth and user scope
 
@@ -36,9 +36,40 @@ The alias surface is additive and backward compatible. Existing `/api/agent/*` r
 | `POST /v1/me/bot/chat/stream` | `POST /api/agent/chat/stream` | SSE contract unchanged |
 | `GET /v1/me/bot/settings` | `GET /api/agent/config` | Read config |
 | `PATCH /v1/me/bot/settings` | `PATCH /api/agent/config` | Update config |
+| `GET /v1/me/bot/heartbeat` | `GET /api/agent/heartbeat` | Canonical heartbeat status for the settings plane |
+| `PUT /v1/me/bot/heartbeat` | `PUT /api/agent/heartbeat` | Heartbeat remains boolean-only in the product UX |
 | `POST /v1/me/bot/telegram/connect` | `POST /api/agent/channels/telegram/connect` | Connect Telegram |
 | `POST /v1/me/bot/telegram/disconnect` | `DELETE /api/agent/channels/telegram/disconnect` or `POST /api/agent/channels/telegram/disconnect` | Disconnect alias is POST-friendly for frontend actions |
 | `GET /v1/me/bot/usage` | `GET /api/usage/quota?surface=zaki_bot` | Returns zaki_bot quota shape |
+
+## Product-facing route policy
+
+For the ZAKI settings plane:
+
+- onboarding uses `/v1/me/bot/onboarding`
+- settings use `/v1/me/bot/settings`
+- heartbeat uses `/v1/me/bot/heartbeat`
+- Telegram connect/disconnect use `/v1/me/bot/telegram/*`
+
+Legacy `/api/agent/*` routes remain for compatibility and lower-level integrations, but product UI should not depend on them.
+
+## Telegram connect behavior
+
+The canonical product route is `POST /v1/me/bot/telegram/connect`.
+
+Normal product usage does not require users to supply:
+
+- `webhook_url`
+- `webhook_base_url`
+- `webhook_secret_token`
+
+Instead:
+
+- the backend injects `X-Webhook-Base-Url` from `ZAKI_AGENT_WEBHOOK_BASE_URL`
+- Nullalis derives the user-specific webhook path
+- product UI confirms connected state after refresh rather than trusting the mutation response alone
+
+When the platform webhook base is missing or invalid, the BFF fails fast with a stable operator-facing error instead of letting Telegram setup appear partially successful.
 
 ## Telegram disconnect behavior
 
