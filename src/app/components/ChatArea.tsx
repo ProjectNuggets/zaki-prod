@@ -3283,6 +3283,19 @@ export function ChatArea() {
       setSpacesList(detail?.spaces ?? []);
     };
 
+    const handleRenameThread = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; label: string }>).detail;
+      if (!detail?.id || !detail?.label) return;
+      setSpacesList((prev) =>
+        prev.map((space) => ({
+          ...space,
+          threads: (space.threads ?? []).map((thread) =>
+            thread.id === detail.id ? { ...thread, label: detail.label } : thread
+          ),
+        }))
+      );
+    };
+
     const handleOpenCreateSpace = () => {
       setCreateSpaceOpen(true);
     };
@@ -3322,6 +3335,7 @@ export function ChatArea() {
     window.addEventListener("zaki:clear-thread", handleClearThread);
     window.addEventListener("zaki:view-spaces", handleViewSpaces);
     window.addEventListener("zaki:spaces-data", handleSpacesData);
+    window.addEventListener("zaki:rename-thread", handleRenameThread);
     window.addEventListener("zaki:open-create-space", handleOpenCreateSpace);
     window.addEventListener("zaki:view-space", handleViewSpace);
     window.addEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
@@ -3333,6 +3347,7 @@ export function ChatArea() {
       window.removeEventListener("zaki:clear-thread", handleClearThread);
       window.removeEventListener("zaki:view-spaces", handleViewSpaces);
       window.removeEventListener("zaki:spaces-data", handleSpacesData);
+      window.removeEventListener("zaki:rename-thread", handleRenameThread);
       window.removeEventListener("zaki:open-create-space", handleOpenCreateSpace);
       window.removeEventListener("zaki:view-space", handleViewSpace);
       window.removeEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
