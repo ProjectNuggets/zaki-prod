@@ -5,7 +5,9 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
+  autoTitleThread,
   apiRequest,
   buildApiUrl,
   captureMemory,
@@ -18,6 +20,7 @@ import {
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
 } from "@/lib/api";
+import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -41,6 +44,7 @@ import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
+import { spaceKeys } from "@/queries/useSpaces";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import {
@@ -430,6 +434,7 @@ function extractToolResultPayload(payload: Record<string, unknown>) {
 }
 
 export function ChatArea() {
+  const queryClient = useQueryClient();
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
@@ -610,7 +615,7 @@ export function ChatArea() {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener(RESPONSE_FORMATTING_EVENT, syncResponseFormattingConfig);
     };
-  }, []);
+  }, [queryClient]);
 
   // UI state
   const [dragActive, setDragActive] = useState(false);
@@ -688,6 +693,10 @@ export function ChatArea() {
   const prevMessageCount = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRafRef = useRef<number | null>(null);
+  const spacesListRef = useRef<Space[]>([]);
+  const autoTitleAttemptsRef = useRef<Record<string, number>>({});
+  const autoTitleFinalizedRef = useRef<Record<string, boolean>>({});
+  const autoTitleInFlightRef = useRef<Record<string, boolean>>({});
 
   const measureInputMetrics = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -1041,6 +1050,10 @@ export function ChatArea() {
   );
   const [isBotHistoryLoading, setIsBotHistoryLoading] = useState(false);
 
+  useEffect(() => {
+    spacesListRef.current = spacesList;
+  }, [spacesList]);
+
   // Helper to update assistant message content
   const updateAssistantContent = useCallback((threadSlug: string, assistantId: string, newContent: string) => {
     setMessagesByThread((prev) => {
@@ -1081,6 +1094,114 @@ export function ChatArea() {
       });
     },
     []
+  );
+
+  const getThreadLabel = useCallback((spaceId: string, threadId: string) => {
+    const space = spacesListRef.current.find((entry) => entry.id === spaceId);
+    const thread = space?.threads?.find((entry) => entry.id === threadId);
+    return String(thread?.label || "").trim();
+  }, []);
+
+  const getAutoTitleKey = useCallback((spaceId: string, threadId: string) => {
+    return `${spaceId}::${threadId}`;
+  }, []);
+
+  const applyThreadLabelUpdate = useCallback((spaceId: string, threadId: string, label: string) => {
+    queryClient.setQueryData<Space[] | undefined>(spaceKeys.all, (previous) =>
+      Array.isArray(previous)
+        ? previous.map((space) =>
+            space.id === spaceId
+              ? {
+                  ...space,
+                  threads: (space.threads ?? []).map((thread) =>
+                    thread.id === threadId ? { ...thread, label } : thread
+                  ),
+                }
+              : space
+          )
+        : previous
+    );
+    setSpacesList((prev) =>
+      prev.map((space) =>
+        space.id === spaceId
+          ? {
+              ...space,
+              threads: (space.threads ?? []).map((thread) =>
+                thread.id === threadId ? { ...thread, label } : thread
+              ),
+            }
+          : space
+      )
+    );
+    window.dispatchEvent(
+      new CustomEvent("zaki:rename-thread", {
+        detail: { id: threadId, spaceId, label },
+      })
+    );
+  }, []);
+
+  const maybeAutoTitleThread = useCallback(
+    async (
+      spaceId: string,
+      threadId: string,
+      exchange?: { userMessage: string; assistantMessage: string }
+    ) => {
+      if (!spaceId || !threadId || isZakiBotSpaceId(spaceId)) return;
+      const autoTitleKey = getAutoTitleKey(spaceId, threadId);
+      if (autoTitleFinalizedRef.current[autoTitleKey]) return;
+      if (autoTitleInFlightRef.current[autoTitleKey]) return;
+
+      const currentLabel = getThreadLabel(spaceId, threadId);
+      if (!isDefaultThreadLabel(currentLabel)) {
+        autoTitleFinalizedRef.current[autoTitleKey] = true;
+        return;
+      }
+
+      if (!exchange?.userMessage?.trim() || !exchange?.assistantMessage?.trim()) {
+        return;
+      }
+
+      const attempts = autoTitleAttemptsRef.current[autoTitleKey] ?? 0;
+      if (attempts >= 2) {
+        autoTitleFinalizedRef.current[autoTitleKey] = true;
+        return;
+      }
+
+      autoTitleAttemptsRef.current[autoTitleKey] = attempts + 1;
+      autoTitleInFlightRef.current[autoTitleKey] = true;
+
+      try {
+        const { response, data } = await autoTitleThread(spaceId, threadId, {
+          userMessage: exchange.userMessage.trim(),
+          assistantMessage: exchange.assistantMessage.trim(),
+          currentLabel,
+        });
+
+        if (!response.ok || !data) {
+          return;
+        }
+
+        if (data.status === "updated" && data.thread?.name) {
+          const latestLabel = getThreadLabel(spaceId, threadId);
+          if (!isDefaultThreadLabel(latestLabel)) {
+            autoTitleFinalizedRef.current[autoTitleKey] = true;
+            return;
+          }
+          autoTitleFinalizedRef.current[autoTitleKey] = true;
+          applyThreadLabelUpdate(spaceId, threadId, data.thread.name);
+          return;
+        }
+
+        if (data.reason !== "generation_failed") {
+          autoTitleFinalizedRef.current[autoTitleKey] = true;
+        }
+      } catch {
+        // Best-effort only.
+      } finally {
+        autoTitleInFlightRef.current[autoTitleKey] = false;
+      }
+    },
+    [applyThreadLabelUpdate, getAutoTitleKey, getThreadLabel]
   );
 
   const updateAssistantSources = useCallback(
@@ -1757,12 +1878,6 @@ export function ChatArea() {
       throw new ChatRequestError(message, response.status, errorCode);
     }
 
-    if (!response.body) {
-      throw new Error("Chat stream returned no data.");
-    }
-
-    applyQuotaHeaders(response.headers, isZakiAgentSpace ? "zaki_bot" : "app_chat");
-
     const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
       const direct =
         (payload.agentInvocationUrl as string | undefined) ||
@@ -1902,29 +2017,31 @@ export function ChatArea() {
     };
 
     const contentType = response.headers.get("content-type") || "";
+    applyQuotaHeaders(response.headers, isZakiAgentSpace ? "zaki_bot" : "app_chat");
     let sawTerminalEvent = false;
     
     // If JSON response, check for agent invocation URL
     if (contentType.includes("application/json")) {
       const data = (await response.json()) as Record<string, unknown>;
       const agentUrl = resolveAgentUrl(data);
-      
       if (agentUrl) {
         await streamAgentInvocation(agentUrl, threadSlug, assistantId, signal);
-        return;
+        return { content: "" };
       }
 
       const result = readPayloadChunk(data);
       if (result.agentUrl) {
         await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
-        return;
+        return { content: "" };
       }
       if (result.chunk) {
+        const normalized = normalizeAssistantFormatting(message, result.chunk);
         updateAssistantContent(
           threadSlug,
           assistantId,
-          normalizeAssistantFormatting(message, result.chunk)
+          normalized
         );
+        return { content: normalized };
       }
       if (result.done) {
         sawTerminalEvent = true;
@@ -1932,7 +2049,11 @@ export function ChatArea() {
       if (isZakiAgentSpace && !sawTerminalEvent && !signal?.aborted) {
         finalizeZakiBotProgress("stream_end");
       }
-      return;
+      return { content: "" };
+    }
+
+    if (!response.body) {
+      throw new Error("Chat stream returned no data.");
     }
 
     // Stream SSE/text response
@@ -1985,11 +2106,12 @@ export function ChatArea() {
       }
 
       const result = readPayloadChunk(payload);
-      if (result.agentUrl) {
-        streamClosed = true;
-        await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
-        return;
-      }
+        if (result.agentUrl) {
+          streamClosed = true;
+          await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+          accumulated = "";
+          return;
+        }
       if (result.chunk) {
         appendChunk(result.chunk);
       }
@@ -2085,6 +2207,7 @@ export function ChatArea() {
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
+    return { content: finalized || accumulated };
   }, [
     applyQuotaHeaders,
     applyZakiBotToolResult,
@@ -2705,10 +2828,13 @@ export function ChatArea() {
           throw new Error("Unable to create thread.");
         }
         const data = (await response.json()) as {
-          thread?: { slug: string; name: string };
+          thread?: { slug?: string; id?: string; name?: string; label?: string };
         };
-        threadId = data.thread?.slug ?? `thread-${Date.now()}`;
-        const label = data.thread?.name || trimmed.split(/\n+/)[0]?.slice(0, 48) || "New chat";
+        threadId = data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`;
+        const threadName = data.thread?.name ?? data.thread?.label;
+        const label = isDefaultThreadLabel(threadName)
+          ? DEFAULT_THREAD_LABEL
+          : threadName || DEFAULT_THREAD_LABEL;
         window.dispatchEvent(
           new CustomEvent("zaki:thread-created", {
             detail: { id: threadId, label, spaceId: resolvedWorkspaceSlug },
@@ -2758,22 +2884,22 @@ export function ChatArea() {
     const assistantMessageId = `assistant-${Date.now()}`;
 
     setMessagesByThread((prev) => ({
-      ...prev,
-      [threadId]: [
-        ...(prev[threadId] ?? []),
-        {
-          id: userMessageId,
-          role: "user" as const,
-          content: trimmed,
-          attachments: attachmentsForMessage,
-        },
-        {
-          id: assistantMessageId,
-          role: "assistant" as const,
-          content: "",
-        },
-      ],
-    }));
+        ...prev,
+        [threadId]: [
+          ...(prev[threadId] ?? []),
+          {
+            id: userMessageId,
+            role: "user" as const,
+            content: trimmed,
+            attachments: attachmentsForMessage,
+          },
+          {
+            id: assistantMessageId,
+            role: "assistant" as const,
+            content: "",
+          },
+        ],
+      }));
 
     setAttachments([]);
     const manualAgentPrefix = /^@agent\b/i.test(trimmed);
@@ -2804,12 +2930,16 @@ export function ChatArea() {
         : trimmed;
 
     try {
-      await streamChatMessage({
+      const streamResult = await streamChatMessage({
         workspaceSlug: resolvedWorkspaceSlug,
         threadSlug: threadId,
         message: sendText,
         assistantId: assistantMessageId,
         signal: streamController.signal,
+      });
+      void maybeAutoTitleThread(resolvedWorkspaceSlug, threadId, {
+        userMessage: trimmed,
+        assistantMessage: String(streamResult?.content || "").trim(),
       });
       setWebSearchArmed(false);
       
@@ -2866,6 +2996,7 @@ export function ChatArea() {
     navigate,
     primarySpace?.id,
     streamChatMessage,
+    maybeAutoTitleThread,
     updateAssistantError,
     webSearchArmed,
   ]);
@@ -3349,7 +3480,11 @@ export function ChatArea() {
           {/* Header / Breadcrumb */}
           {!showZakiHome && !showSpacesView ? (
             <div className="px-6 py-4 flex items-center gap-2" dir="ltr">
-              <span className="zaki-subheader-pill" dir={isRtl ? "rtl" : "ltr"}>
+              <span
+                className="zaki-subheader-pill"
+                dir={isRtl ? "rtl" : "ltr"}
+                title={`${headerSpaceName} / ${headerThreadName}`}
+              >
                 {headerSpaceName}
                 <span className="text-zaki-muted">/</span>
                 {headerThreadName}

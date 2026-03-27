@@ -1085,6 +1085,25 @@ export type BotHeartbeatState = BotApiError & {
   prompt?: string | null;
 };
 
+export type ThreadAutoTitleRequest = {
+  userMessage: string;
+  assistantMessage: string;
+  currentLabel: string;
+};
+
+export type ThreadAutoTitleResponse = {
+  status: "updated" | "skipped";
+  reason?:
+    | "not_default_label"
+    | "insufficient_content"
+    | "generation_failed"
+    | "thread_not_found";
+  thread?: {
+    slug: string;
+    name: string;
+  };
+};
+
 export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
   const params = new URLSearchParams({ surface });
   const response = await backendAuthRequest(`/api/usage/quota?${params.toString()}`, {
@@ -1173,6 +1192,22 @@ export async function disconnectBotTelegram() {
     body: JSON.stringify({}),
   });
   const data = await parseApiJson<BotTelegramConnectionState>(response);
+  return { response, data };
+}
+
+export async function autoTitleThread(
+  workspaceSlug: string,
+  threadSlug: string,
+  payload: ThreadAutoTitleRequest
+) {
+  const response = await apiRequest(
+    `/workspace/${encodeURIComponent(workspaceSlug)}/thread/${encodeURIComponent(threadSlug)}/auto-title`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await parseApiJson<ThreadAutoTitleResponse>(response);
   return { response, data };
 }
 

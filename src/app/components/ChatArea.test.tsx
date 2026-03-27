@@ -7,10 +7,16 @@ import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatArea } from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
-import { apiRequest, fetchAgentHistory, fetchMemoryActivity, provisionAgent } from "@/lib/api";
+import {
+  apiRequest,
+  fetchAgentHistory,
+  fetchMemoryActivity,
+  provisionAgent,
+} from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 import { getZakiBootstrapCardStorageKey } from "./ZakiBootstrapCard";
 
@@ -19,6 +25,7 @@ jest.mock("@/lib/api", () => ({
     ok: true,
     status: 200,
     json: async () => ({}),
+    headers: new Headers(),
   })),
   provisionAgent: jest.fn(async () => ({
     response: {
@@ -91,11 +98,20 @@ type NavState = {
 };
 
 function renderChatArea() {
-  return render(
-    <MemoryRouter>
-      <ChatArea />
-    </MemoryRouter>
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <ChatArea />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
+  return { ...view, queryClient };
 }
 
 async function renderChatAreaAndWaitForEffects() {
@@ -254,9 +270,11 @@ describe("ChatArea Component", () => {
       isLoading: false,
     };
     view.rerender(
-      <MemoryRouter>
-        <ChatArea />
-      </MemoryRouter>
+      <QueryClientProvider client={view.queryClient}>
+        <MemoryRouter>
+          <ChatArea />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     await waitFor(() => {
@@ -265,5 +283,15 @@ describe("ChatArea Component", () => {
         threadId: "main",
       });
     });
+  });
+
+  it("does not auto-title ZAKI bot threads", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
   });
 });

@@ -106,6 +106,7 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
+import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -2128,11 +2129,11 @@ function normalizeWorkspacePayload(workspace) {
     ? workspace.threads
         .map((thread) => {
           if (!thread || typeof thread !== "object") return null;
-          const id = String(thread.slug || "").trim();
+          const id = String(thread.slug || thread.id || "").trim();
           if (!id) return null;
           return {
             id,
-            label: String(thread.name || "").trim() || "Thread",
+            label: String(thread.name || thread.label || "").trim() || "Thread",
           };
         })
         .filter(Boolean)
@@ -2144,6 +2145,46 @@ function normalizeWorkspacePayload(workspace) {
     pinnedFiles: documents.map((document) => ({ ...document })),
     documents,
     threads,
+  };
+}
+
+function normalizeThreadPayload(thread) {
+  if (!thread || typeof thread !== "object") return null;
+  const slug = String(thread.slug || thread.id || "").trim();
+  const name = String(thread.name || thread.label || "").trim();
+  if (!slug || !name) return null;
+  return { slug, name };
+}
+
+function mergeThreadNamesFromWorkspaceSummary(workspace, workspaceSummary) {
+  if (!workspace || typeof workspace !== "object") return workspace;
+  const detailThreads = Array.isArray(workspace.threads) ? workspace.threads : [];
+  const summaryThreads = Array.isArray(workspaceSummary?.threads) ? workspaceSummary.threads : [];
+  if (detailThreads.length === 0 || summaryThreads.length === 0) return workspace;
+
+  const summaryBySlug = new Map(
+    summaryThreads
+      .map((thread) => {
+        const slug = String(thread?.slug || thread?.id || "").trim();
+        const name = String(thread?.name || thread?.label || "").trim();
+        return slug ? [slug, name] : null;
+      })
+      .filter(Boolean)
+  );
+
+  return {
+    ...workspace,
+    threads: detailThreads.map((thread) => {
+      if (!thread || typeof thread !== "object") return thread;
+      const slug = String(thread.slug || thread.id || "").trim();
+      const summaryName = summaryBySlug.get(slug);
+      if (!summaryName) return thread;
+      return {
+        ...thread,
+        name: summaryName,
+        label: summaryName,
+      };
+    }),
   };
 }
 
@@ -6392,8 +6433,27 @@ const getWorkspaceDetailHandler = async (req, res) => {
       method: "GET",
     });
     const data = await response.json().catch(() => ({}));
+    let summariesData = {};
+    try {
+      const summariesResponse = await novaAdminRequest("/v1/workspaces", {
+        method: "GET",
+      });
+      summariesData = await summariesResponse.json().catch(() => ({}));
+    } catch {
+      summariesData = {};
+    }
+    const workspaceSummary = Array.isArray(summariesData?.workspaces)
+      ? summariesData.workspaces.find(
+          (workspace) => normalizeWorkspaceSlugValue(workspace?.slug) === access.slug
+        ) || null
+      : null;
     const workspace = mergeWorkspaceMetadata(
-      normalizeWorkspacePayload(extractWorkspaceFromUpstream(data)),
+      normalizeWorkspacePayload(
+        mergeThreadNamesFromWorkspaceSummary(
+          extractWorkspaceFromUpstream(data),
+          workspaceSummary
+        )
+      ),
       await getWorkspaceMetadata(access.slug)
     );
 
@@ -6518,7 +6578,9 @@ const createThreadHandler = async (req, res) => {
     });
     const data = await response.json().catch(() => ({}));
 
-    if (!response.ok || !data?.thread) {
+    const normalizedThread = normalizeThreadPayload(data?.thread);
+
+    if (!response.ok || !normalizedThread) {
       res.status(response.status || 400).json({
         error: data?.error || data?.message || "Unable to create thread.",
       });
@@ -6526,7 +6588,7 @@ const createThreadHandler = async (req, res) => {
     }
 
     res.status(200).json({
-      thread: data.thread,
+      thread: normalizedThread,
       message: data?.message || null,
     });
   } catch (error) {
@@ -6559,7 +6621,9 @@ const updateThreadHandler = async (req, res) => {
     );
     const data = await response.json().catch(() => ({}));
 
-    if (!response.ok || !data?.thread) {
+    const normalizedThread = normalizeThreadPayload(data?.thread);
+
+    if (!response.ok || !normalizedThread) {
       res.status(response.status || 400).json({
         error: data?.error || data?.message || "Unable to update thread.",
       });
@@ -6567,7 +6631,7 @@ const updateThreadHandler = async (req, res) => {
     }
 
     res.status(200).json({
-      thread: data.thread,
+      thread: normalizedThread,
       message: data?.message || null,
     });
   } catch (error) {
@@ -6585,6 +6649,22 @@ app.post(
   "/api/workspace/:slug/thread/:threadSlug/update",
   express.json({ limit: "200kb" }),
   updateThreadHandler
+);
+
+const threadAutoTitleHandler = createThreadAutoTitleHandler({
+  requireWorkspaceAccess,
+  novaAdminRequest,
+});
+
+app.post(
+  "/workspace/:slug/thread/:threadSlug/auto-title",
+  express.json({ limit: "200kb" }),
+  threadAutoTitleHandler
+);
+app.post(
+  "/api/workspace/:slug/thread/:threadSlug/auto-title",
+  express.json({ limit: "200kb" }),
+  threadAutoTitleHandler
 );
 
 const deleteThreadHandler = async (req, res) => {

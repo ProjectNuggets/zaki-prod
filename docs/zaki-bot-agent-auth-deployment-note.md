@@ -10,7 +10,35 @@ Three different issues overlapped:
 2. Local internal-token mismatch between `zaki-prod` backend and Nullalis
 3. Local canonical user-id mismatch between `zaki-prod` identity state and Nullalis identity state
 
+This branch also includes the final productization pass for the ZAKI settings plane and Spaces thread auto-titles.
+
 All three must be understood separately.
+
+## Deployment delta in this branch
+
+In addition to the auth/routing fixes already documented below, this branch ships:
+
+1. Canonical ZAKI settings routes on `/v1/me/bot/*`
+2. Product-grade Telegram connect/disconnect confirmation behavior
+3. Platform-owned Telegram webhook base injection
+4. Spaces thread auto-titles after the first assistant reply
+5. Sidebar/thread-title UX fixes for live thread renames and active-state highlighting
+
+There are no new cluster secrets or environment variables required for the Spaces thread auto-title feature.
+
+The ZAKI bot deployment contract remains:
+
+- `NULLCLAW_BASE_URL`
+- `NULLCLAW_INTERNAL_TOKEN`
+- `ZAKI_AGENT_WEBHOOK_BASE_URL`
+
+So the K8s/Helm deployment team should review this branch primarily for:
+
+- canonical bot-BFF route usage
+- Telegram webhook-base ownership
+- internal token alignment
+- canonical identity parity
+- post-deploy ZAKI bot smoke coverage
 
 ## Request path
 
@@ -192,6 +220,9 @@ Run these after deployment:
 5. Confirm onboarding/settings endpoints load after provision
 6. Confirm logged-out users are still blocked from protected routes
 7. Confirm invalid/expired browser tokens still fail safely
+8. Create a new Spaces thread, send the first prompt, and confirm the thread auto-title updates in-session
+9. Reload that Space and confirm the persisted thread title remains visible
+10. Confirm the sidebar highlights the active thread instead of leaving `New space` selected
 
 ## If `/api/agent/provision` fails again
 

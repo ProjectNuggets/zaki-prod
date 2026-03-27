@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import type { PinnedFile, Space, Thread } from "@/types";
+import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import {
   createZakiBotSpace,
   createZakiBotThread,
@@ -41,6 +42,11 @@ function normalizeWorkspaceIcon(icon?: string) {
   return icon === "zaki" ? "folder" : icon;
 }
 
+function normalizeThreadLabel(label?: string) {
+  const trimmed = String(label || "").trim();
+  return isDefaultThreadLabel(trimmed) ? DEFAULT_THREAD_LABEL : trimmed;
+}
+
 // Fetchers
 async function fetchSpaces(): Promise<Space[]> {
   const response = await apiRequest("/workspaces");
@@ -66,7 +72,7 @@ async function fetchSpaces(): Promise<Space[]> {
           pinnedFiles = detail?.pinnedFiles ?? pinnedFiles;
           threads = (detail?.threads ?? []).map((t) => ({
             id: t.slug ?? t.id ?? "",
-            label: t.name ?? t.label ?? "Thread",
+            label: normalizeThreadLabel(t.name ?? t.label),
           })).filter((thread) => thread.id);
         }
       } catch {

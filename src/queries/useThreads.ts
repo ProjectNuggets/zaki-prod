@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import type { Message } from "@/types";
+import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import { spaceKeys } from "./useSpaces";
 
 // Keys
@@ -53,12 +54,13 @@ async function createThread(
   }
   
   const data = await response.json() as {
-    thread?: { slug: string; name: string };
+    thread?: { slug?: string; id?: string; name?: string; label?: string };
   };
+  const threadLabel = data.thread?.name ?? data.thread?.label;
   
   return {
-    id: data.thread?.slug ?? `thread-${Date.now()}`,
-    label: data.thread?.name ?? "New chat",
+    id: data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`,
+    label: isDefaultThreadLabel(threadLabel) ? DEFAULT_THREAD_LABEL : threadLabel ?? DEFAULT_THREAD_LABEL,
   };
 }
 

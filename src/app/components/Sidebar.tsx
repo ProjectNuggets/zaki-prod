@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
 import { SettingsModal } from "./sidebar/SettingsModal";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
+import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import {
   isZakiBotSpaceId,
   ZAKI_BOT_LABEL,
@@ -68,7 +69,15 @@ export function Sidebar() {
   const { user, logout, setUser } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
-  const { goHome, goToSpaces, goToThread, goToZakiBot } = useNavigation();
+  const {
+    currentView,
+    activeSpaceId,
+    activeThreadId,
+    goHome,
+    goToSpaces,
+    goToThread,
+    goToZakiBot,
+  } = useNavigation();
   const navigate = useNavigate();
   const setCollapsed = setSidebarCollapsed;
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
@@ -322,6 +331,28 @@ export function Sidebar() {
     "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 transition-colors",
     isRtl ? "flex-row-reverse text-right" : "text-left"
   );
+
+  useEffect(() => {
+    if (currentView === "chat" && activeThreadId) {
+      setActiveItem(activeThreadId);
+      if (activeSpaceId) {
+        setExpandedSpace(activeSpaceId);
+      }
+      return;
+    }
+    if (currentView === "space-detail" && activeSpaceId) {
+      setActiveItem(activeSpaceId);
+      setExpandedSpace(activeSpaceId);
+      return;
+    }
+    if (currentView === "spaces") {
+      setActiveItem("new-space");
+      return;
+    }
+    if (currentView === "home") {
+      setActiveItem("zaki");
+    }
+  }, [activeSpaceId, activeThreadId, currentView]);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(expandStorageKey) : null;
@@ -806,10 +837,13 @@ export function Sidebar() {
         throw new Error("Failed to create thread.");
       }
       const data = (await response.json()) as {
-        thread?: { slug: string; name: string };
+        thread?: { slug?: string; id?: string; name?: string; label?: string };
       };
-      const threadId = data.thread?.slug ?? `thread-${Date.now()}`;
-      const threadLabel = data.thread?.name ?? "New chat";
+      const threadId = data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`;
+      const threadName = data.thread?.name ?? data.thread?.label;
+      const threadLabel = isDefaultThreadLabel(threadName)
+        ? DEFAULT_THREAD_LABEL
+        : threadName ?? DEFAULT_THREAD_LABEL;
 
       setSpaces((prev) =>
         prev.map((space) =>
@@ -1034,15 +1068,19 @@ export function Sidebar() {
       }
     };
     const handleRenameThread = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string; label: string }>).detail;
+      const detail = (event as CustomEvent<{ id: string; spaceId?: string; label: string }>).detail;
       if (!detail?.id || !detail?.label) return;
       setSpaces((prev) =>
-        prev.map((space) => ({
-          ...space,
-          threads: space.threads.map((thread) =>
-            thread.id === detail.id ? { ...thread, label: detail.label } : thread
-          ),
-        }))
+        prev.map((space) =>
+          detail.spaceId && space.id !== detail.spaceId
+            ? space
+            : {
+                ...space,
+                threads: space.threads.map((thread) =>
+                  thread.id === detail.id ? { ...thread, label: detail.label } : thread
+                ),
+              }
+        )
       );
     };
     const handleOpenSpaceSettings = (event: Event) => {
@@ -1378,6 +1416,7 @@ export function Sidebar() {
                           isRtl && "text-right",
                           isActive(thread.id) ? "zaki-nav-active" : ""
                         )}
+                        title={thread.label}
                         onClick={() => {
                           setExpandedSpace(space.id);
                           setActiveItem(thread.id);
@@ -1385,7 +1424,7 @@ export function Sidebar() {
                         }}
                         type="button"
                       >
-                        {thread.label}
+                        <span title={thread.label}>{thread.label}</span>
                       </button>
                       <button
                         type="button"
@@ -1575,7 +1614,7 @@ export function Sidebar() {
                             autoFocus
                           />
                         ) : (
-                          thread.label
+                          <span title={thread.label}>{thread.label}</span>
                         )}
                       </button>
                       <button

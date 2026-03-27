@@ -11,6 +11,12 @@ ZAKI-PROD exposes two compatible backend surfaces for ZAKI BOT:
 
 The alias surface is additive and backward compatible. Existing `/api/agent/*` routes remain valid, but the product settings plane now uses `/v1/me/bot/*` as its canonical route family.
 
+This release also ships a Spaces-only thread auto-title route:
+
+- `POST /workspace/:slug/thread/:threadSlug/auto-title`
+
+That route is app-internal and does not introduce any new Helm/K8s runtime configuration.
+
 ## Auth and user scope
 
 - ZAKI is the source of truth for authenticated user identity.
@@ -119,3 +125,4 @@ Response shape:
 - `/api/agent/*` remains the primary low-level integration surface.
 - `/v1/me/bot/*` is the action-style BFF surface for user-facing BOT flows.
 - No existing agent route behavior is removed or broken by this slice.
+- Spaces thread auto-title is separate from the BOT BFF surface and has no impact on Nullalis auth, identity, or Telegram runtime configuration.
