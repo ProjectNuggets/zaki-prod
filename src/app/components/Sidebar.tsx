@@ -5,6 +5,7 @@ import {
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { apiRequest, updateProfile } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -15,7 +16,7 @@ import { SkeletonSpaceList } from "./ui/skeleton";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
-import { useSpaces } from "@/queries/useSpaces";
+import { spaceKeys, useSpaces } from "@/queries/useSpaces";
 import { useEntitlements } from "@/queries";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
@@ -70,6 +71,7 @@ export function Sidebar() {
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
   const { goHome, goToSpaces, goToThread, goToZakiBot } = useNavigation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setCollapsed = setSidebarCollapsed;
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState("new-space");
@@ -574,22 +576,35 @@ export function Sidebar() {
       setEditingItem(null);
       return;
     }
-    setSpaces((prev) =>
-      prev.map((space) => {
+    const applyRename = <TSpace extends { id: string; title: string; threads?: { id: string; label: string }[] }>(
+      items: TSpace[]
+    ): TSpace[] =>
+      items.map((space) => {
         if (editingItem.type === "space" && space.id === editingItem.id) {
           return { ...space, title: trimmed };
         }
         if (editingItem.type === "thread") {
           return {
             ...space,
-            threads: space.threads.map((thread) =>
+            threads: (space.threads ?? []).map((thread) =>
               thread.id === editingItem.id ? { ...thread, label: trimmed } : thread
             ),
           };
         }
         return space;
-      })
+      });
+
+    setSpaces((prev) => applyRename(prev));
+    queryClient.setQueryData(spaceKeys.all, (prev: Space[] | undefined) =>
+      prev ? applyRename(prev) : prev
     );
+    if (editingItem.type === "thread") {
+      window.dispatchEvent(
+        new CustomEvent("zaki:rename-thread", {
+          detail: { id: editingItem.id, label: trimmed },
+        })
+      );
+    }
     syncRename(editingItem.type, editingItem.id, trimmed);
     setEditingItem(null);
   };
