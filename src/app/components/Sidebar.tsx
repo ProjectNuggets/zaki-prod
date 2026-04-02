@@ -75,6 +75,7 @@ export function Sidebar() {
     activeSpaceId,
     activeThreadId,
     goHome,
+    goToSpace,
     goToSpaces,
     goToThread,
     goToZakiBot,
@@ -212,6 +213,12 @@ export function Sidebar() {
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
 
   const isActive = (item: string) => activeItem === item;
+  const isCreateSpaceViewActive =
+    currentView === "spaces" && !activeSpaceId && !activeThreadId;
+  const isZakiBotNavActive =
+    isZakiBotSpaceId(activeSpaceId) ||
+    (currentView === "home" && activeItem === "zaki") ||
+    activeItem === ZAKI_BOT_SPACE_ID;
   const isSpaceExpanded = (spaceId: string) => expandedSpace === spaceId;
   const isSpaceActive = (spaceId: string) => {
     if (activeItem === spaceId) return true;
@@ -823,6 +830,11 @@ export function Sidebar() {
           detail: { id: newSpace.id, title: newSpace.title },
         })
       );
+      try {
+        await createThreadInSpace(newSpace.id);
+      } catch {
+        goToSpace(newSpace.id);
+      }
     } catch (error) {
       setSpacesError("Unable to create a workspace. Check your permissions.");
     }
@@ -834,7 +846,7 @@ export function Sidebar() {
       return;
     }
     const resolvedSpaceId =
-      spaceId && spaces.some((space) => space.id === spaceId)
+      spaceId
         ? spaceId
         : spaces.find((space) => !space.fixed)?.id ??
           spaces.find((space) => space.id !== "zaki")?.id ??
@@ -933,7 +945,7 @@ export function Sidebar() {
         setRemovingDocumentKey(null);
       }
     },
-    []
+    [goToSpace]
   );
 
   const handleQuickCreateThread = useCallback(() => {
@@ -1169,7 +1181,7 @@ export function Sidebar() {
             <button
               className={cn(
                 "size-9 rounded-zaki-md text-zaki-brand flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                isActive("new-space") ? "bg-zaki-brand-20" : "bg-zaki-brand-15 hover:bg-zaki-brand-20"
+                isCreateSpaceViewActive ? "bg-zaki-brand-20" : "bg-zaki-brand-15 hover:bg-zaki-brand-20"
               )}
               onClick={openCreateSpaceFlow}
               onMouseUp={blurButtonOnPointerClick}
@@ -1183,7 +1195,7 @@ export function Sidebar() {
             <button
               className={cn(
                 "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                isActive(ZAKI_BOT_SPACE_ID) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+                isZakiBotNavActive ? "bg-zaki-hover" : "hover:bg-zaki-hover"
               )}
               onClick={openZakiBotView}
               onMouseUp={blurButtonOnPointerClick}
@@ -1274,7 +1286,7 @@ export function Sidebar() {
           className={cn(
             "flex items-center gap-2 p-1.5 rounded-lg transition-colors group",
             isRtl ? "text-right flex-row-reverse" : "text-left",
-            isActive("new-space") ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+            isCreateSpaceViewActive ? "bg-zaki-hover" : "hover:bg-zaki-hover"
           )}
           onClick={openCreateSpaceFlow}
           onMouseUp={blurButtonOnPointerClick}
@@ -1292,7 +1304,7 @@ export function Sidebar() {
             className={cn(
               "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors",
               isRtl ? "text-right flex-row-reverse" : "text-left",
-              isSpaceActive(ZAKI_BOT_SPACE_ID) ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+              isZakiBotNavActive ? "bg-zaki-hover" : "hover:bg-zaki-hover"
             )}
             onClick={openZakiBotView}
             onMouseUp={blurButtonOnPointerClick}
@@ -1396,7 +1408,7 @@ export function Sidebar() {
                   {isZakiBotSpaceId(space.id) && (
                     <button
                       type="button"
-                      className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                      className="size-7 rounded-md p-0 flex items-center justify-center opacity-100 transition hover:bg-zaki-hover focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 md:opacity-0 md:group-hover:opacity-100"
                       onClick={(event) => {
                         event.stopPropagation();
                         setZakiSettingsOpen(true);
@@ -1444,7 +1456,7 @@ export function Sidebar() {
                       <button
                         type="button"
                         className={cn(
-                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-100 transition hover:bg-zaki-hover focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 md:opacity-0 md:group-hover:opacity-100",
                           isRtl ? "left-0" : "right-0"
                         )}
                         onClick={(event) => {
@@ -1567,7 +1579,7 @@ export function Sidebar() {
                     {!space.fixed && (
                       <button
                         type="button"
-                        className="size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                        className="size-7 rounded-md p-0 flex items-center justify-center opacity-100 transition hover:bg-zaki-hover focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 md:opacity-0 md:group-hover:opacity-100"
                         onClick={() => {
                           setSpaceSettingsTarget(space);
                           setSpaceNameDraft(space.title ?? "");
@@ -1635,7 +1647,7 @@ export function Sidebar() {
                       <button
                         type="button"
                         className={cn(
-                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                          "absolute top-1/2 -translate-y-1/2 size-6 rounded-md p-0 flex items-center justify-center opacity-100 transition hover:bg-zaki-hover focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 md:opacity-0 md:group-hover:opacity-100",
                           isRtl ? "left-0" : "right-0"
                         )}
                         onClick={(event) => {

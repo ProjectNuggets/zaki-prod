@@ -1,3 +1,5 @@
+import { buildApiUrl } from "./api";
+
 export type ProductTelemetryEvent =
   | "pricing_viewed"
   | "upgrade_cta_clicked"
@@ -43,7 +45,7 @@ export async function trackProductEvent(payload: ProductTelemetryPayload) {
       headers.set("Authorization", `Bearer ${token}`);
     }
   }
-  const response = await fetch("/api/telemetry/product-event", {
+  const response = await fetch(buildApiUrl("/api/telemetry/product-event"), {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -60,4 +62,3 @@ export async function trackProductEvent(payload: ProductTelemetryPayload) {
   }
   return { response, data };
 }
-

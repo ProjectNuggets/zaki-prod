@@ -53,9 +53,10 @@ export function CreateSpaceModal({
       isOpen={isOpen}
       onClose={onClose}
       ariaLabel={t("createSpaceModal.ariaLabel")}
-      className="w-[460px]"
+      className="w-full max-w-[460px] overflow-hidden"
+      containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
     >
-      <div className="px-6 py-5" dir={isRtl ? "rtl" : "ltr"}>
+      <div className="max-h-[calc(100vh-3rem)] overflow-y-auto px-5 py-5 sm:px-6" dir={isRtl ? "rtl" : "ltr"}>
         <div className={isRtl ? "flex items-start justify-between gap-3 flex-row-reverse" : "flex items-start justify-between gap-3"}>
           <div className={isRtl ? "text-right" : "text-left"}>
             <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
@@ -146,17 +147,17 @@ export function CreateSpaceModal({
             </div>
           </div>
         </div>
-        <div className="mt-6 flex items-center justify-end gap-2">
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
-            className="zaki-btn zaki-btn-secondary"
+            className="zaki-btn zaki-btn-secondary w-full sm:w-auto"
             onClick={onClose}
           >
             {t("createSpaceModal.actions.cancel")}
           </button>
           <button
             type="button"
-            className="zaki-btn zaki-btn-primary zaki-pressable"
+            className="zaki-btn zaki-btn-primary zaki-pressable w-full sm:w-auto"
             onClick={handleCreate}
             disabled={spaceName.trim().length === 0}
             data-onboarding-id="create-space-submit"

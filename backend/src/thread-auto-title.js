@@ -135,6 +135,20 @@ function extractFirstExchangeFromHistory(history = []) {
   };
 }
 
+function buildFallbackTitleFromUserMessage(userMessage) {
+  const normalized = String(userMessage || "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return "";
+
+  const withoutFiller = normalized
+    .replace(/^(help me|can you|could you|please|i need you to|i want to)\b[:,-]?\s*/i, "")
+    .trim();
+  const candidate = withoutFiller || normalized;
+  return sanitizeGeneratedThreadTitle(candidate);
+}
+
 export function createThreadAutoTitleHandler({
   requireWorkspaceAccess,
   novaAdminRequest,
@@ -220,6 +234,10 @@ export function createThreadAutoTitleHandler({
         generatedTitle = sanitizeGeneratedThreadTitle(parsed?.title);
       } catch {
         generatedTitle = "";
+      }
+
+      if (!generatedTitle) {
+        generatedTitle = buildFallbackTitleFromUserMessage(userMessage);
       }
 
       if (!generatedTitle) {

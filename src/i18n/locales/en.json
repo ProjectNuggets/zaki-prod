@@ -212,6 +212,8 @@
   "home": {
     "welcome": "Welcome back",
     "guestName": "there",
+    "heroHeadline": "Start with one clear ask",
+    "heroSubtext": "Use ZAKI as your personal AI partner for planning, drafting, explaining, and staying on top of what matters.",
     "memoryOn": "Memory is on",
     "memoryOnHelper": "ZAKI saves useful memory automatically. You can undo or delete it anytime.",
     "conflictsBadge": "Needs review {{count}}",
@@ -418,10 +420,10 @@
   },
   "zakiExperimentalNotice": {
     "eyebrow": "Experimental",
-    "title": "ZAKI is powerful by design.",
-    "intro": "Ask ZAKI about anything. It will try to find a way forward, not just answer back.",
-    "capability": "11K+ vetted skills available through hub.decision.ai. ZAKI can discover, download, and execute them when needed.",
-    "footer": "This stays experimental because the tool is ambitious, the behavior is still evolving, and we benchmark it as we shape it in public.",
+    "title": "ZAKI is still evolving.",
+    "intro": "Use it like a capable operator: ask clearly, give context, and expect it to help plan, draft, research, and move work forward.",
+    "capability": "ZAKI can use vetted tools and skills when a task needs more than a plain text reply.",
+    "footer": "Important outputs should still be reviewed, especially when the task is high-stakes or time-sensitive.",
     "dismissAria": "Dismiss ZAKI experimental notice",
     "actions": {
       "continue": "Continue",
@@ -429,19 +431,19 @@
     }
   },
   "zakiBootstrapCard": {
-    "eyebrow": "First exchange",
-    "title": "Give me the shape of the relationship first.",
+    "eyebrow": "Start here",
+    "title": "Tell ZAKI who you are and what you need.",
     "dismissAria": "Dismiss ZAKI first-contact note",
     "arabic": {
-      "headline": "سأبدأ بالإنجليزية أيضًا، لكن هذه التهيئة أولًا.",
-      "body": "قل لي من أنت، من أكون بالنسبة لك، وما الذي نعمل عليه. يمكنك أن تبدأ بأي لغة، ثم سأكمل معك من هناك."
+      "headline": "ابدأ بالطريقة الطبيعية لك.",
+      "body": "قل لي من أنت، وما الذي تعمل عليه الآن، وكيف تريدني أن أساعدك. يمكنك أن تبدأ بالعربية أو بالإنجليزية."
     },
     "english": {
-      "label": "English translation",
-      "body": "I will ask in English too. Tell me who you are, who I am for you, and what we are working on. You can start in any language."
+      "label": "Helpful first message",
+      "body": "A strong first prompt includes who you are, what you are working on, and the kind of help you want from me."
     },
     "actions": {
-      "continue": "Continue"
+      "continue": "Start chatting"
     }
   },
   "zakiSettingsSheet": {

@@ -370,8 +370,11 @@ export function ZakiHomeView({
         window.innerWidth - viewportPadding,
         mainRect.right - viewportPadding
       );
-      const maxAllowedWidth = Math.max(340, safeRight - safeLeft);
-      const panelWidth = Math.min(680, maxAllowedWidth);
+      const availableWidth = Math.max(0, safeRight - safeLeft);
+      const panelWidth = Math.max(
+        0,
+        Math.min(680, window.innerWidth - viewportPadding * 2, availableWidth)
+      );
 
       // Keep the panel attached to the trigger's right edge in both LTR/RTL,
       // then clamp to the main content bounds so it never slides under sidebar.
@@ -465,10 +468,10 @@ export function ZakiHomeView({
             <span className="inline-flex size-12 md:size-14 items-center justify-center">
               <LogoArabicOrange />
             </span>
-            <span>{t("empty.headline")}</span>
+            <span>{t("home.heroHeadline")}</span>
           </h1>
           <div className="mt-3 text-base md:text-lg text-zaki-secondary max-w-2xl leading-relaxed">
-            {t("empty.subtext")}
+            {t("home.heroSubtext")}
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-2 relative">
             {conflictCount > 0 ? (

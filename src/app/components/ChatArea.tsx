@@ -518,7 +518,6 @@ export function ChatArea() {
     "done" | "error" | "abort" | "stream_end" | null
   >(null);
   const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
-  const [zakiBotHistorySource, setZakiBotHistorySource] = useState<string>("");
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
     unlimited: boolean;
     limit: number | null;
@@ -1185,10 +1184,18 @@ export function ChatArea() {
           const latestLabel = getThreadLabel(spaceId, threadId);
           if (!isDefaultThreadLabel(latestLabel)) {
             autoTitleFinalizedRef.current[autoTitleKey] = true;
+            await queryClient.invalidateQueries({ queryKey: spaceKeys.all });
             return;
           }
           autoTitleFinalizedRef.current[autoTitleKey] = true;
           applyThreadLabelUpdate(spaceId, threadId, data.thread.name);
+          await queryClient.invalidateQueries({ queryKey: spaceKeys.all });
+          return;
+        }
+
+        if (data.reason === "not_default_label") {
+          autoTitleFinalizedRef.current[autoTitleKey] = true;
+          await queryClient.invalidateQueries({ queryKey: spaceKeys.all });
           return;
         }
 
@@ -1201,7 +1208,7 @@ export function ChatArea() {
         autoTitleInFlightRef.current[autoTitleKey] = false;
       }
     },
-    [applyThreadLabelUpdate, getAutoTitleKey, getThreadLabel]
+    [applyThreadLabelUpdate, getAutoTitleKey, getThreadLabel, queryClient]
   );
 
   const updateAssistantSources = useCallback(
@@ -3148,11 +3155,6 @@ export function ChatArea() {
               };
             })
           : [];
-        setZakiBotHistorySource(
-          String(data.historyMode || zakiBotHistoryMode) +
-            ":" +
-            String(data.source || "unknown")
-        );
         setMessagesByThread((prev) => ({
           ...prev,
           [activeThreadId]: history,
@@ -3504,11 +3506,6 @@ export function ChatArea() {
                 <span className="text-zaki-muted">/</span>
                 {headerThreadName}
               </span>
-              {isZakiBotActiveSpace ? (
-                <span className="rounded-full border border-zaki-subtle bg-white/70 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-zaki-muted">
-                  History {zakiBotHistorySource || `${zakiBotHistoryMode}:loading`}
-                </span>
-              ) : null}
               <div className="ml-auto flex items-center gap-2 relative" ref={menuRef}>
                 <button
                   type="button"

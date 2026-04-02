@@ -125,7 +125,7 @@ export function SpaceDetailView({
           {iconPickerOpen && !spaceDetail.fixed && (
             <div
               ref={iconPickerRef}
-              className="absolute top-14 left-0 w-[240px] rounded-zaki-xl border border-zaki-subtle bg-white text-zaki-primary shadow-[0px_18px_36px_rgba(15,15,15,0.16)] p-3 z-30"
+              className="absolute top-14 left-0 z-30 w-[min(240px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-zaki-xl border border-zaki-subtle bg-white p-3 text-zaki-primary shadow-[0px_18px_36px_rgba(15,15,15,0.16)]"
             >
               <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider mb-3">
                 {t("spaceDetailView.appearance")}

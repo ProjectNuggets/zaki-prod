@@ -439,7 +439,7 @@ export function InputArea({
                   {t("input.menu.uploadFile")}
                 </button>
                 <button
-                  className="group relative w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
                   type="button"
                   role="menuitem"
                   onClick={() => {
@@ -451,17 +451,17 @@ export function InputArea({
                   data-onboarding-id="chat-control-study-learn"
                 >
                   <GraduationCap className="size-4 text-zaki-muted" />
-                  {t("input.menu.studyLearn")}
+                  <span className="flex-1 text-left rtl:text-right">{t("input.menu.studyLearn")}</span>
                   <span className={cn(
-                    "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
-                    isRtl ? "left-2" : "right-2"
+                    "inline-flex shrink-0 items-center rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    isRtl ? "mr-auto" : "ml-auto"
                   )}>
                     {t("input.menu.comingSoonPill")}
                   </span>
                 </button>
                 <div className="my-1 h-px bg-zaki-subtle" />
                 <button
-                  className="group relative w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
                   type="button"
                   role="menuitem"
                   onClick={() => {
@@ -473,10 +473,10 @@ export function InputArea({
                   data-onboarding-id="chat-control-generate-image"
                 >
                   <Sparkles className="size-4 text-zaki-muted" />
-                  {t("input.menu.generateImage")}
+                  <span className="flex-1 text-left rtl:text-right">{t("input.menu.generateImage")}</span>
                   <span className={cn(
-                    "pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
-                    isRtl ? "left-2" : "right-2"
+                    "inline-flex shrink-0 items-center rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    isRtl ? "mr-auto" : "ml-auto"
                   )}>
                     {t("input.menu.comingSoonPill")}
                   </span>

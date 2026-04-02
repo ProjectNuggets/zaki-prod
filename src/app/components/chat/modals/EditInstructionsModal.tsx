@@ -31,9 +31,10 @@ export function EditInstructionsModal({
       isOpen={isOpen}
       onClose={onClose}
       ariaLabel="Edit instructions"
-      className="w-[460px]"
+      className="w-full max-w-[460px] overflow-hidden"
+      containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
     >
-      <div className="px-6 py-5">
+      <div className="max-h-[calc(100vh-3rem)] overflow-y-auto px-5 py-5 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
             Edit instructions
@@ -55,17 +56,17 @@ export function EditInstructionsModal({
             onChange={(event) => setValue(event.target.value)}
           />
         </div>
-        <div className="mt-5 flex items-center justify-end gap-2">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
-            className="zaki-btn zaki-btn-secondary"
+            className="zaki-btn zaki-btn-secondary w-full sm:w-auto"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="zaki-btn zaki-btn-primary"
+            className="zaki-btn zaki-btn-primary w-full sm:w-auto"
             onClick={() => {
               onSave(value);
               onClose();

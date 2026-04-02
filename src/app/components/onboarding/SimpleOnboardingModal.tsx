@@ -90,11 +90,12 @@ export function SimpleOnboardingModal({
       isOpen={isOpen}
       onClose={handleClose}
       ariaLabel={t("onboarding.simple.title", { userName })}
-      className="w-[560px] max-w-[calc(100%-2rem)] overflow-hidden rounded-[28px] border border-zaki-subtle bg-[linear-gradient(180deg,#fffdf9_0%,#f7f0e7_100%)] shadow-[0px_20px_60px_rgba(15,15,15,0.12)] dark:border-[#2d221a] dark:bg-[linear-gradient(180deg,#17120f_0%,#120e0b_100%)] dark:shadow-[0px_28px_60px_rgba(0,0,0,0.4)]"
+      className="w-full max-w-[560px] overflow-hidden rounded-[28px] border border-zaki-subtle bg-[linear-gradient(180deg,#fffdf9_0%,#f7f0e7_100%)] shadow-[0px_20px_60px_rgba(15,15,15,0.12)] dark:border-[#2d221a] dark:bg-[linear-gradient(180deg,#17120f_0%,#120e0b_100%)] dark:shadow-[0px_28px_60px_rgba(0,0,0,0.4)]"
+      containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
       backdropClassName="bg-[rgba(20,14,10,0.48)] backdrop-blur-[2px]"
     >
-      <section dir={isRtl ? "rtl" : "ltr"}>
-        <div className="flex items-start justify-between gap-4 border-b border-zaki-subtle/70 px-6 py-5 dark:border-[#2d221a]">
+      <section dir={isRtl ? "rtl" : "ltr"} className="max-h-[calc(100vh-3rem)] overflow-y-auto">
+        <div className="flex items-start justify-between gap-4 border-b border-zaki-subtle/70 px-5 py-5 dark:border-[#2d221a] sm:px-6">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
               {t("onboarding.simple.eyebrow")}
@@ -116,7 +117,7 @@ export function SimpleOnboardingModal({
           </button>
         </div>
 
-        <div className="px-6 py-6">
+        <div className="px-5 py-6 sm:px-6">
           <div className="flex items-center gap-3">
             <span className="inline-flex size-11 items-center justify-center rounded-2xl border border-zaki-subtle bg-white/70 text-zaki-primary dark:border-[#2d221a] dark:bg-[#17110d]/75 dark:text-zaki-dark-primary">
               <StepIcon className="size-5" />
@@ -146,8 +147,8 @@ export function SimpleOnboardingModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-zaki-subtle/70 px-6 py-5 dark:border-[#2d221a]">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 border-t border-zaki-subtle/70 px-5 py-5 dark:border-[#2d221a] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex flex-wrap items-center gap-2">
             {stepIndex > 0 ? (
               <button
                 type="button"
@@ -168,7 +169,7 @@ export function SimpleOnboardingModal({
 
           <button
             type="button"
-            className="zaki-btn zaki-btn-primary h-10 px-4"
+            className="zaki-btn zaki-btn-primary h-10 w-full px-4 sm:w-auto"
             onClick={handlePrimary}
           >
             <span>

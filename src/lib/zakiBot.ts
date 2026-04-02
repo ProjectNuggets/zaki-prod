@@ -3,8 +3,8 @@ import type { Space, Thread } from "@/types";
 export const ZAKI_BOT_SPACE_ID = "zaki-bot";
 export const ZAKI_BOT_THREAD_ID = "main";
 export const ZAKI_BOT_LABEL = "ZAKI";
-export const ZAKI_BOT_THREAD_LABEL = "NULLALIS";
-export const ZAKI_BOT_DESCRIPTION = "Your personal AI operator";
+export const ZAKI_BOT_THREAD_LABEL = "Direct chat";
+export const ZAKI_BOT_DESCRIPTION = "Your personal AI partner";
 
 export function createZakiBotThread(): Thread {
   return {

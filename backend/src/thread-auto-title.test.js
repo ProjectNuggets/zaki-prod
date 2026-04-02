@@ -295,6 +295,81 @@ describe("thread auto-title", () => {
     expect(res.jsonBody).toEqual({ status: "skipped", reason: "generation_failed" });
   });
 
+  it("falls back to a sanitized user-message title when model generation fails", async () => {
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const novaAdminRequest = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          workspace: {
+            threads: [{ slug: "thread-1", name: DEFAULT_THREAD_LABEL }],
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          workspaces: [
+            {
+              slug: "space-1",
+              threads: [{ slug: "thread-1", name: DEFAULT_THREAD_LABEL }],
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          history: [
+            { role: "user", content: "Help me organize my weekly priorities for work and health" },
+            { role: "assistant", content: "Let's group your priorities and decide what matters first." },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          thread: { slug: "thread-1", name: "organize my weekly priorities for work and health" },
+        }),
+      });
+    const chatFn = jest.fn(async () => ({
+      content: JSON.stringify({ title: "Conversation" }),
+    }));
+    const handler = createThreadAutoTitleHandler({
+      requireWorkspaceAccess,
+      novaAdminRequest,
+      chatFn,
+    });
+    const req = {
+      params: { threadSlug: "thread-1" },
+      body: {
+        userMessage: "Help me organize my weekly priorities for work and health",
+        assistantMessage: "Let's group your priorities and decide what matters first.",
+      },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(novaAdminRequest).toHaveBeenLastCalledWith(
+      "/v1/workspace/space-1/thread/thread-1/update",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "organize my weekly priorities for work and healt",
+        }),
+      })
+    );
+    expect(res.jsonBody).toEqual({
+      status: "updated",
+      thread: {
+        slug: "thread-1",
+        name: "organize my weekly priorities for work and health",
+      },
+    });
+  });
+
   it("prefers the persisted first exchange from thread history over the current client exchange", async () => {
     const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
     const novaAdminRequest = jest

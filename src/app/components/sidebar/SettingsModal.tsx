@@ -106,12 +106,13 @@ export function SettingsModal({
       isOpen={isOpen}
       onClose={onClose}
       ariaLabel={t("settingsModal.aria.label")}
-      className="w-[620px] overflow-hidden rounded-[28px] border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#120e0b] shadow-[0px_30px_80px_rgba(15,15,15,0.18)] dark:shadow-[0px_44px_110px_rgba(0,0,0,0.62)]"
+      className="w-full max-w-[620px] overflow-hidden rounded-[28px] border border-zaki-subtle bg-white shadow-[0px_30px_80px_rgba(15,15,15,0.18)] dark:border-[#2e241b] dark:bg-[#120e0b] dark:shadow-[0px_44px_110px_rgba(0,0,0,0.62)]"
+      containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
     >
-      <div className="relative">
+      <div className="relative max-h-[calc(100vh-3rem)] overflow-hidden">
         <div className="pointer-events-none absolute -top-24 -right-20 size-56 rounded-full bg-zaki-brand opacity-10 dark:opacity-20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-20 size-56 rounded-full bg-zaki-accent opacity-10 dark:opacity-20 blur-3xl" />
-        <div className="relative flex items-center justify-between px-6 py-5 border-b border-zaki-subtle dark:border-[#2e241b] bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] dark:bg-[linear-gradient(140deg,#21170f_0%,#17110d_58%,#120e0b_100%)]">
+        <div className="relative flex items-center justify-between border-b border-zaki-subtle bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] px-5 py-5 dark:border-[#2e241b] dark:bg-[linear-gradient(140deg,#21170f_0%,#17110d_58%,#120e0b_100%)] sm:px-6">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-full border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1a140f] flex items-center justify-center text-zaki-brand text-sm font-semibold shadow-[0px_6px_18px_rgba(15,15,15,0.08)] dark:shadow-none">
               S
@@ -134,7 +135,7 @@ export function SettingsModal({
             <X className="size-4" />
           </button>
         </div>
-        <div className="relative max-h-[70vh] overflow-y-auto px-6 py-5 space-y-6">
+        <div className="relative max-h-[calc(100vh-10rem)] overflow-y-auto px-5 py-5 space-y-6 sm:px-6">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-[#bca992]">
               {t("settingsModal.sections.profile")}
