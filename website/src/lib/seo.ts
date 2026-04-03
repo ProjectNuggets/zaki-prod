@@ -186,8 +186,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/zaki-bot/" || route === "/ar/zaki-bot/") {
     const description =
       locale === "ar"
-        ? "زكي هو البيتا العامة لمشغّل ذكاء شخصي قابل للتدريب: ذكاء مستمر بذاكرة لكل مستخدم ومراحل عمل مرئية، ومحدود بخمس رسائل مجانية كل 24 ساعة."
-        : "ZAKI is the public beta of a trainable Personal AI Operator: persistent intelligence with per-user memory, visible work phases, and 5 free messages every 24 hours.";
+        ? "زكي هو البيتا العامة لذكاء مستمر بذاكرة لكل مستخدم ومراحل عمل مرئية، مع 5 رسائل مجانية يوميًا أثناء البيتا."
+        : "ZAKI is the public beta for persistent AI with per-user memory, visible work phases, and 5 free messages per day during beta.";
     return {
       title:
         locale === "ar"
@@ -486,7 +486,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
         featureList: [
           locale === "ar" ? "Spaces متاحة الآن" : "Spaces are live now",
           locale === "ar" ? "زكي بيتا عامة تجريبية" : "ZAKI experimental public beta",
-          locale === "ar" ? "5 رسائل مجانية كل 24 ساعة" : "5 free messages every 24 hours",
+          locale === "ar" ? "5 رسائل مجانية يوميًا" : "5 free messages per day",
           locale === "ar" ? "ذاكرة وتحكم أوضح" : "Clearer memory and control",
         ],
       },

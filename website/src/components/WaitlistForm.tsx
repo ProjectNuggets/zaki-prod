@@ -116,7 +116,7 @@ export function WaitlistForm({ locale, source = "website_bot", variant = "light"
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <p className={`text-sm leading-6 ${mutedClasses}`}>
           <span className={`font-mono-ui text-[11px] uppercase tracking-[0.2em] ${accentClasses}`}>
-            {isArabic ? "5 رسائل / 24 ساعة" : "5 messages / 24h"}
+            {isArabic ? "5 رسائل مجانية / يوم" : "5 free messages / day"}
           </span>
           <span className="mt-1.5 block text-xs leading-5">
             {isArabic

@@ -4,27 +4,6 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Reveal } from "./Reveal";
 import { HeroParallaxImage } from "./HeroParallaxImage";
-import { RotatingPhrase } from "./RotatingPhrase";
-
-const ASK_AI_PROMPT = [
-  "Give me a concise, factual overview of ZAKI and Spaces using their public website.",
-  "",
-  "Explain:",
-  "1. What ZAKI is",
-  "2. What Spaces are",
-  "3. How ZAKI and Spaces differ",
-  "4. How they work together",
-  "5. How ZAKI compares to OpenClaw where publicly documented",
-  "",
-  "Use these pages as the primary references:",
-  "https://www.chatzaki.com/",
-  "https://www.chatzaki.com/zaki-vs-spaces/",
-  "https://www.chatzaki.com/how-to/how-zaki-and-spaces-work/",
-  "https://www.chatzaki.com/zaki-bot/",
-  "https://www.chatzaki.com/zaki-vs-openclaw/",
-  "",
-  "Keep the answer structured, concise, and note any uncertainty.",
-].join("\n");
 
 export function Hero({
   locale,
@@ -34,13 +13,9 @@ export function Hero({
   t: WebsiteContent;
 }) {
   const isArabic = locale === "ar";
-  const tryZakiHref = `https://app.chatzaki.com/?auth=login&source=${
+  const tryZakiHref = `https://app.chatzaki.com/?auth=signup&source=${
     isArabic ? "website_home_hero_ar" : "website_home_hero"
   }`;
-  const askAiHref = `https://chatgpt.com/?q=${encodeURIComponent(ASK_AI_PROMPT)}`;
-  const rotatingPhrases = isArabic
-    ? ["يتذكرك", "يتابعك", "يبقى معك"]
-    : ["remembers.", "follows through.", "stays useful."];
   const LinkArrow = isArabic ? ArrowUpLeft : ArrowUpRight;
 
   return (
@@ -51,7 +26,7 @@ export function Hero({
           <div className="mb-4 flex items-center gap-3">
             <img src="/assets/zaki-logo.png" alt="ZAKI" className="size-10 rounded-[10px]" />
             <Badge tone="chat" pulse>
-              {isArabic ? "رسائل مجانية يومية في البيتا المفتوحة" : "Daily free msgs in open BETA"}
+              {isArabic ? "5 رسائل مجانية يوميًا في البيتا العامة" : "5 free messages/day in public beta"}
             </Badge>
           </div>
 
@@ -62,24 +37,16 @@ export function Hero({
                   معظم الذكاء
                   <br />
                   الاصطناعي ينساك.
-                  <br className="hidden md:block" />
-                  زكي{" "}
-                  <RotatingPhrase
-                    phrases={rotatingPhrases}
-                    className="text-chat-accent"
-                  />
+                  <br />
+                  <span className="text-chat-accent">زكي لا يفعل.</span>
                 </>
               ) : (
                 <>
                   Most AI
                   <br />
                   forgets you.
-                  <br className="hidden md:block" />
-                  ZAKI{" "}
-                  <RotatingPhrase
-                    phrases={rotatingPhrases}
-                    className="text-chat-accent"
-                  />
+                  <br />
+                  <span className="text-chat-accent">ZAKI doesn't.</span>
                 </>
               )
             }
@@ -87,30 +54,28 @@ export function Hero({
 
           <p className="mt-6 max-w-[52ch] whitespace-pre-line text-sm leading-7 text-chat-muted md:text-base md:leading-8">
             {isArabic
-              ? "Spaces هي مساحات العمل الذكية للإنتاجية اليومية المنظمة.\nوهي متاحة الآن. زكي هو البيتا العامة للخطوة التالية: ذكاء شخصي مستمر بذاكرة متصلة ومراحل عمل واضحة."
-              : "Spaces are the structured AI workspaces for daily productivity, live now.\nZAKI is the public beta for what comes next: persistent personal intelligence with memory continuity and visible work phases."}
+              ? "زكي هو ذكاء مستمر بذاكرة واستمرارية. يحتفظ بالخيط معك بدل أن يبدأ من الصفر كل جلسة.\nاستخدم Spaces عندما يحتاج العمل إلى تعليماته الخاصة وملفاته وسياقه النظيف."
+              : "ZAKI is persistent AI with memory and continuity. It keeps the thread with you instead of starting over every session.\nUse Spaces when the work needs its own instructions, documents, and clean context."}
           </p>
 
-          <div className="mt-7 flex items-center gap-5">
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             <Button asChild>
               <a href={tryZakiHref}>
-                {isArabic ? "جرّب زكي" : "Try ZAKI"}
+                {isArabic ? "جرّب زكي مجانًا" : "Try ZAKI free"}
               </a>
             </Button>
-            <a href={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent">
-              {isArabic ? "ما هو زكي؟" : "What is ZAKI?"}
-              <LinkArrow className="size-4" />
-            </a>
-            <a
-              href={askAiHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-medium text-chat-text transition-colors hover:text-chat-accent"
-            >
-              {isArabic ? "اسأل" : "Ask"}
-              <span className="inline-flex h-5 min-w-8 items-center justify-center rounded-full border border-line-strong bg-white px-2 text-[10px] font-semibold text-chat-muted">
-                GPT
-              </span>
+            <Button asChild variant="secondary">
+              <a href="/zaki-vs-spaces/">
+                {isArabic ? "تعرّف على الفرق" : "See ZAKI vs Spaces"}
+              </a>
+            </Button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-chat-muted">
+            <span>{isArabic ? "زكي: 5 رسائل مجانية يوميًا" : "ZAKI: 5 free messages per day"}</span>
+            <span className="hidden size-1 rounded-full bg-chat-muted/40 md:inline-flex" />
+            <a href="https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_home_hero_spaces" className="inline-flex items-center gap-2 font-medium text-chat-text transition-colors hover:text-chat-accent">
+              {isArabic ? "ابدأ بـ Spaces مقابل 13 دولارًا/شهر" : "Start with Spaces for $13/month"}
               <LinkArrow className="size-4" />
             </a>
           </div>

@@ -57,9 +57,9 @@ export const content = {
           title: "ZAKI Public Beta",
           badge: "Open beta",
           description:
-            "An experimental Personal AI Operator with persistence, memory continuity, and visible work phases. The first public step beyond ordinary chat.",
+            "Persistent AI with memory continuity and visible work phases. The first public step beyond ordinary stateless chat.",
           bullets: [
-            "5 free beta messages for experimentation",
+            "5 free messages per day during beta",
             "Experimental, limited, and intentionally early",
             "Persistent memory across sessions",
           ],
@@ -85,10 +85,10 @@ export const content = {
     beta: {
       heading: "Public Beta: What to expect",
       warning:
-        "ZAKI is experimental by design. It is our public test of persistent personal intelligence: memory continuity, visible work phases, and per-user context that does not reset every time you start over.",
+        "ZAKI is experimental by design. It is the public beta for persistent AI with memory and continuity, not a finished autonomous product.",
       bullets: [
-        "Public beta is open now with 5 messages every 24 hours",
-        "Free during beta, limited by design, and intentionally early",
+        "Public beta is open now with 5 free messages per day",
+        "Free during beta. Spaces stays the live paid workspace at $13/month",
         "This is where we test the next product shape in public",
         "Real usage here shapes the later premium product",
       ],
@@ -111,12 +111,12 @@ export const content = {
     botProduct: {
       heading: "Why ZAKI matters",
       intro:
-        "An OpenClaw-inspired SaaS agent with persistent memory, visible work phases, and a more controlled product shape users can actually trust and train over time.",
+        "Persistent AI with memory and continuity. ZAKI keeps your thread alive across sessions so you do not have to restate yourself every time.",
       bullets: [
-        "Persistent thread and memory continuity",
+        "Persistent thread with memory and recall",
         "Visible process phases while it works",
-        "A trainable operator layer built for daily working context",
-        "Free and limited during public beta; premium subscriptions come later",
+        "Built for an ongoing relationship, not one-off prompts",
+        "Public beta with 5 free messages per day",
       ],
       bridgeLine:
         "Most AI still resets the relationship every time you start over. ZAKI is testing what happens when context carries forward instead — not just from prompt to prompt, but across time, channels, and recurring work.",
@@ -178,12 +178,12 @@ export const content = {
     geo: {
       definitionHeading: "What is ZAKI, exactly?",
       definitionText:
-        "ZAKI is the persistent agent. Spaces are the live paid workspaces for organized daily productivity. ZAKI is also the experimental public beta for persistent personal intelligence — the long-thread relationship behind the work.",
+        "ZAKI is the persistent AI layer. Spaces are the live paid workspaces for structured daily execution. Use ZAKI for continuity. Use Spaces for organized work.",
       statsHeading: "Why people choose ZAKI",
       statsSource: "The product ladder behind the brand.",
       stats: [
         "Spaces are live now for organized daily use",
-        "Public beta is now open with 5 free experimental messages",
+        "Public beta is now open with 5 free messages per day",
         "Memory and personalization stay under clearer user control",
         "Persistence and runtime continuity are built in"
       ],
@@ -463,9 +463,9 @@ export const content = {
       note: "ZAKI goes further, but Spaces already cover the daily-use layer.",
     },
     pricing: {
-      heading: "Use Spaces today. Explore ZAKI now.",
+      heading: "Start with Spaces. Try ZAKI free.",
       subheading:
-        "Spaces are the paid workspaces you can use right now. ZAKI is the public beta for persistent personal intelligence — free during beta with 5 messages every 24 hours. Subscriptions start after we learn from this phase.",
+        "Spaces is the live paid workspace at $13/month. ZAKI is the public beta for persistent AI with memory and continuity, with 5 free messages per day during beta.",
       interval: {
         monthly: "Monthly",
         yearly: "Yearly",
@@ -515,9 +515,9 @@ export const content = {
         heading: "ZAKI Public Beta",
         badge: "Open beta",
         description:
-          "ZAKI keeps context between sessions, shows its work phases, and maintains per-user memory. The beta is intentionally limited to 5 messages every 24 hours so users can test the direction without mistaking it for the finished product.",
+          "ZAKI keeps context between sessions, shows its work phases, and maintains per-user memory. The beta is intentionally limited to 5 free messages per day so users can test the direction without mistaking it for the finished product.",
         bullets: [
-          "5 messages every 24 hours — resets daily",
+          "5 free messages per day",
           "Persistent memory that carries across sessions",
           "Visible work phases — you see what ZAKI is doing",
           "Free now. Paid subscriptions start after beta.",
@@ -546,12 +546,12 @@ export const content = {
         {
           question: "What is ZAKI?",
           answer:
-            "ZAKI is the persistent agent and the long-term product direction. Spaces are the live paid workspaces for organized daily productivity. ZAKI is also the public beta for persistent personal intelligence — the experimental personal operator we are building toward. It works across languages natively.",
+            "ZAKI is the persistent AI layer. It remembers useful context and keeps an ongoing thread with you over time. Spaces are the live paid workspaces for structured daily execution, and ZAKI is the public beta for the continuity layer behind that work.",
         },
         {
           question: "What is the difference between ZAKI and Spaces?",
           answer:
-            "ZAKI is the persistent agent layer focused on continuity, memory, and a long-running relationship. Spaces are the structured execution surfaces you can subscribe to now for daily work. ZAKI helps decide what to do. Spaces help you do it cleanly.",
+            "ZAKI is for continuity, memory, and recall across time. Spaces are for structured execution inside a dedicated workspace. ZAKI helps you keep the long thread. Spaces help you do the focused work cleanly.",
         },
         {
           question: "Is Spaces the same as ZAKI Chat?",
@@ -561,12 +561,12 @@ export const content = {
         {
           question: "Why are there both ZAKI and Spaces?",
           answer:
-            "Because planning and continuity are different from focused execution. ZAKI handles the long-thread relationship and continuity layer. Spaces handle dedicated task execution, drafting, research, and organized project work.",
+            "Because continuity and execution are different jobs. ZAKI handles the long-thread relationship and memory layer. Spaces handle dedicated task execution, drafting, research, and organized project work.",
         },
         {
           question: "When should I use ZAKI instead of Spaces?",
           answer:
-            "Use ZAKI when you want continuity, planning, memory, and an ongoing thread that carries across time. Use Spaces when the work needs a dedicated place: drafting, translation, research, execution, or project-by-project focus.",
+            "Use ZAKI when you want continuity, planning, memory, and an ongoing thread that carries across time. Use Spaces when the work needs its own instructions, documents, and shared project context.",
         },
         {
           question: "Is the ZAKI beta live?",
@@ -675,9 +675,9 @@ export const content = {
           title: "بيتا زكي العامة",
           badge: "بيتا مفتوحة",
           description:
-            "مشغّل ذكاء شخصي تجريبي باستمرارية وذاكرة ومراحل عمل مرئية. أول خطوة علنية تتجاوز شكل الدردشة التقليدي.",
+            "ذكاء مستمر تجريبي بذاكرة ومراحل عمل مرئية. أول خطوة علنية تتجاوز شكل الدردشة عديمة الذاكرة.",
           bullets: [
-            "5 رسائل بيتا مجانية للتجربة",
+            "5 رسائل مجانية يوميًا أثناء البيتا",
             "تجريبي ومحدود ومبكر عن قصد",
             "ذاكرة مستمرة عبر الجلسات",
           ],
@@ -703,10 +703,10 @@ export const content = {
     beta: {
       heading: "البيتا العامة: ماذا تتوقع؟",
       warning:
-        "زكي تجريبي بالتصميم. الذاكرة المستمرة، والعملية المرئية، والاستمرارية لكل مستخدم هي مشاكل صعبة. لذلك نطلقه علنيًا ونتعلم أثناء البناء.",
+        "زكي تجريبي بالتصميم. إنه البيتا العامة لذكاء مستمر بذاكرة واستمرارية، وليس منتجًا ذاتي التشغيل مكتملًا.",
       bullets: [
-        "البيتا العامة مفتوحة الآن، والأماكن محدودة",
-        "5 رسائل مجانية يوميًا للتجربة المبكرة",
+        "البيتا العامة مفتوحة الآن مع 5 رسائل مجانية يوميًا",
+        "زكي مجاني في البيتا، بينما تبقى Spaces طبقة العمل المدفوعة مقابل 13 دولارًا شهريًا",
         "هذا ليس المنتج النهائي، بل أرض الاختبار",
         "ملاحظاتك تشكّل النسخة المميزة القادمة مباشرة",
       ],
@@ -729,12 +729,12 @@ export const content = {
     botProduct: {
       heading: "لماذا يهم زكي؟",
       intro:
-        "وكيل SaaS مستوحى من OpenClaw بذاكرة مستمرة ومراحل عمل مرئية، لكن بصيغة أكثر انضباطًا يمكن للمستخدم العادي أن يثق بها ويُدرّبها مع الوقت.",
+        "زكي هو AI مستمر بذاكرة واستمرارية. يحافظ على الخيط معك بين الجلسات حتى لا تضطر إلى إعادة شرح نفسك كل مرة.",
       bullets: [
-        "خيط ثابت واستمرارية في الذاكرة",
+        "خيط مستمر مع ذاكرة واسترجاع",
         "مراحل عمل مرئية أثناء التنفيذ",
-        "طبقة مشغّل قابلة للتدريب لسياق العمل اليومي",
-        "مجاني ومحدود في البيتا؛ والاشتراكات تأتي لاحقًا",
+        "مبني لعلاقة مستمرة لا لطلبات منفصلة فقط",
+        "البيتا العامة تتضمن 5 رسائل مجانية يوميًا",
       ],
       bridgeLine:
         "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت، لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
@@ -796,12 +796,12 @@ export const content = {
     geo: {
       definitionHeading: "ما هو زكي بالضبط؟",
       definitionText:
-        "زكي هو الوكيل المستمر. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظّمة. وزكي هو أيضًا البيتا العامة لذكاء شخصي مستمر، أي العلاقة طويلة الخيط خلف العمل.",
+        "زكي هو طبقة الذكاء المستمر. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للتنفيذ اليومي المنظّم. استخدم زكي للاستمرارية، واستخدم Spaces للعمل المنظّم.",
       statsHeading: "لماذا يختار الناس زكي؟",
       statsSource: "السلّم الذي يقف خلف العلامة.",
       stats: [
         "Spaces متاحة الآن للاستخدام اليومي المنظّم",
-        "البيتا العامة مفتوحة الآن مع 5 رسائل مجانية للتجربة",
+        "البيتا العامة مفتوحة الآن مع 5 رسائل مجانية يوميًا",
         "الذاكرة والتخصيص تحت تحكم أوضح للمستخدم",
         "الاستمرارية والانضباط التشغيلي مدمجان في البنية"
       ],
@@ -1081,9 +1081,9 @@ export const content = {
       note: "زكي يذهب أبعد من ذلك، لكن Spaces تغطي طبقة الاستخدام اليومي الآن.",
     },
     pricing: {
-      heading: "استخدم Spaces اليوم. جرّب زكي الآن.",
+      heading: "ابدأ بـ Spaces. وجرّب زكي مجانًا.",
       subheading:
-        "Spaces هي مساحات العمل المدفوعة المتاحة الآن. وزكي هو البيتا العامة لذكاء شخصي مستمر، مجاني أثناء البيتا مع 5 رسائل كل 24 ساعة. تبدأ الاشتراكات بعد أن نتعلم من هذه المرحلة.",
+        "Spaces هي طبقة العمل المدفوعة المتاحة الآن مقابل 13 دولارًا شهريًا. وزكي هو البيتا العامة لذكاء مستمر بذاكرة واستمرارية، مع 5 رسائل مجانية يوميًا أثناء البيتا.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
@@ -1133,9 +1133,9 @@ export const content = {
         heading: "بيتا زكي العامة",
         badge: "بيتا مفتوحة",
         description:
-          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ 5 رسائل كل 24 ساعة حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
+          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ 5 رسائل مجانية يوميًا حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
         bullets: [
-          "5 رسائل كل 24 ساعة تتجدد يوميًا",
+          "5 رسائل مجانية يوميًا",
           "ذاكرة مستمرة تنتقل بين الجلسات",
           "مراحل عمل مرئية تشاهد فيها ما يفعله زكي",
           "مجاني الآن. الاشتراكات تبدأ بعد البيتا.",
@@ -1164,12 +1164,12 @@ export const content = {
         {
           question: "ما هو زكي؟",
           answer:
-            "زكي هو الوكيل المستمر والاتجاه الطويل للمنتج. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للإنتاجية اليومية المنظمة. أما زكي نفسه فهو البيتا العامة للذكاء الشخصي المستمر، وهو الاتجاه التجريبي الذي نبنيه علنًا. وكلاهما يدعم العربية والإنجليزية طبيعيًا.",
+            "زكي هو طبقة الذكاء المستمر. يتذكر السياق المفيد ويحافظ على خيط مستمر معك عبر الوقت. أما Spaces فهي مساحات العمل المدفوعة المتاحة الآن للتنفيذ اليومي المنظّم، وزكي هو البيتا العامة لطبقة الاستمرارية التي تقف خلف ذلك العمل.",
         },
         {
           question: "ما الفرق بين زكي وSpaces؟",
           answer:
-            "زكي هو طبقة الوكيل المستمر التي تركز على الاستمرارية والذاكرة والعلاقة طويلة المدى. أما Spaces فهي مساحات التنفيذ المنظمة التي يمكن الاشتراك بها الآن للاستخدام اليومي. زكي يساعدك على تقرير ما يجب فعله، وSpaces تساعدك على إنجازه بوضوح.",
+            "زكي للاستمرارية والذاكرة والاسترجاع عبر الوقت. أما Spaces فللتنفيذ المنظّم داخل مساحة عمل مخصصة. زكي يحافظ على الخيط الطويل، وSpaces تساعدك على إنجاز العمل بوضوح.",
         },
         {
           question: "هل Spaces هي نفسها ZAKI Chat؟",
@@ -1179,12 +1179,12 @@ export const content = {
         {
           question: "لماذا يوجد زكي وSpaces معًا؟",
           answer:
-            "لأن التخطيط والاستمرارية يختلفان عن التنفيذ المركز. زكي يعتني بطبقة العلاقة والاستمرارية، بينما Spaces تعتني بالتنفيذ المنظم للمهمات والبحث والكتابة والعمل بحسب كل مشروع.",
+            "لأن الاستمرارية والتنفيذ المنظّم وظيفتان مختلفتان. زكي يعتني بطبقة العلاقة والذاكرة، بينما Spaces تعتني بالتنفيذ المنظّم للمهمات والبحث والكتابة والعمل بحسب كل مشروع.",
         },
         {
           question: "متى أستخدم زكي بدلًا من Spaces؟",
           answer:
-            "استخدم زكي عندما تحتاج إلى الاستمرارية والتخطيط والذاكرة وخيط ممتد عبر الوقت. واستخدم Spaces عندما يحتاج العمل إلى مكان مخصص: كتابة، أو ترجمة، أو بحث، أو تنفيذ، أو تركيز بحسب كل مشروع.",
+            "استخدم زكي عندما تحتاج إلى الاستمرارية والتخطيط والذاكرة وخيط ممتد عبر الوقت. واستخدم Spaces عندما يحتاج العمل إلى تعليماته وملفاته وسياقه المشترك داخل مشروع واضح.",
         },
         {
           question: "هل بيتا زكي متاحة الآن؟",

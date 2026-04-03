@@ -120,14 +120,14 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
       : "Organized Arabic-English spaces with cleaner context for each project",
   ];
   const chatStats = [
-    { value: isArabic ? "غير محدود" : "Unlimited", label: isArabic ? "دردشة" : "Chat" },
+    { value: "$13", label: isArabic ? "شهريًا" : "Per month" },
     { value: isArabic ? "مباشر" : "Live", label: isArabic ? "الحالة" : "State" },
-    { value: isArabic ? "مدفوع" : "Paid", label: isArabic ? "النموذج" : "Model" },
+    { value: isArabic ? "سياق مشترك" : "Shared context", label: isArabic ? "داخل المساحة" : "Inside each space" },
   ];
   const betaStats = [
-    { value: "5", label: isArabic ? "رسائل / يوم" : "Msgs / day" },
-    { value: isArabic ? "مجاني" : "Free", label: isArabic ? "أثناء البيتا" : "During beta" },
-    { value: isArabic ? "تجريبي" : "Experimental", label: isArabic ? "الحالة" : "State" },
+    { value: "5", label: isArabic ? "رسائل مجانية / يوم" : "Free msgs / day" },
+    { value: isArabic ? "بيتا عامة" : "Public beta", label: isArabic ? "الحالة" : "State" },
+    { value: isArabic ? "استمرارية" : "Continuity", label: isArabic ? "الطبقة" : "Layer" },
   ];
   const cardClassName =
     "relative flex-1 overflow-hidden rounded-card border bg-chat-surface p-6 shadow-[0_2px_4px_rgba(0,0,0,0.02),0_16px_48px_rgba(17,10,6,0.06)] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(0,0,0,0.03),0_24px_64px_rgba(17,10,6,0.10)] md:p-8";
@@ -174,8 +174,8 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
 
                 <p className="mt-4 text-[14px] leading-[1.75] text-chat-muted">
                   {isArabic
-                    ? "للعمل اليومي، والكتابة الثنائية اللغة، والتنفيذ داخل مساحات واضحة لكل مشروع. هذا هو المنتج الذي قد يظهر في التطبيق باسم ZAKI Chat، لكنه يُشرح هنا باسمه الأوضح: Spaces."
-                    : "For everyday work, bilingual writing, and execution inside organized workspaces for each project. This is the product the app may still call ZAKI Chat, but on the website we explain it more clearly as Spaces."}
+                    ? "للعمل اليومي المنظّم. كل مساحة يمكن أن تحمل تعليماتها وملفاتها الخاصة، والخيوط داخلها تشترك في ذلك السياق. هذا هو المنتج المدفوع المباشر مقابل 13 دولارًا شهريًا، حتى لو ظهر في التطبيق باسم ZAKI Chat."
+                    : "For structured daily work. Each Space can hold its own instructions and documents, and threads inside that Space share the same context. This is the live paid product at $13/month, even if the app may still call it ZAKI Chat."}
                 </p>
 
                 <PricingStatStrip stats={chatStats} />
@@ -254,8 +254,8 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
 
                 <p className="mt-4 text-[14px] leading-[1.75] text-chat-muted">
                   {isArabic
-                    ? "زكي هو البيتا العامة لذكاء شخصي مستمر. يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويمنحك 5 رسائل كل 24 ساعة لتختبر الاتجاه قبل أن ينضج كمنتج اشتراك كامل."
-                    : "ZAKI is the public beta for persistent personal intelligence. It keeps context between sessions, shows its work phases, and gives you 5 messages every 24 hours to test the direction before it becomes a full subscription product."}
+                    ? "زكي هو البيتا العامة لذكاء مستمر بذاكرة واستمرارية. يحتفظ بالخيط معك بين الجلسات ويُظهر مراحل عمله. التسويق العام هنا بسيط: 5 رسائل مجانية يوميًا لتجربة الاتجاه قبل أن ينضج المنتج أكثر."
+                    : "ZAKI is the public beta for persistent AI with memory and continuity. It keeps the thread with you between sessions and shows its work phases. The public offer is simple: 5 free messages per day to test the direction before the product matures further."}
                 </p>
 
                 <PricingStatStrip stats={betaStats} />
@@ -275,7 +275,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                 <div className="mt-auto pt-6">
                   <Button asChild className="w-full text-[13px]">
                     <a href="/zaki-bot/#waitlist">
-                      {isArabic ? "انضم إلى البيتا" : "Join the Beta"}
+                      {isArabic ? "جرّب زكي مجانًا" : "Try ZAKI free"}
                     </a>
                   </Button>
                 </div>

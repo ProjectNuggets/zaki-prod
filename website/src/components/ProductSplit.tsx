@@ -4,6 +4,35 @@ import { Reveal } from "./Reveal";
 
 export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent }) {
   const isArabic = locale === "ar";
+  const quickMap = isArabic
+    ? [
+        {
+          label: "ZAKI",
+          body: "ذكاء مستمر بذاكرة واستمرارية عندما تريد AI يتذكرك.",
+        },
+        {
+          label: "Spaces",
+          body: "مساحات عمل منظّمة. كل مساحة يمكن أن تحمل تعليماتها وملفاتها الخاصة.",
+        },
+        {
+          label: "معًا",
+          body: "ابدأ مع زكي عندما يكون التفكير ما زال مفتوحًا، ثم انتقل إلى Spaces عندما يبدأ التنفيذ.",
+        },
+      ]
+    : [
+        {
+          label: "ZAKI",
+          body: "Persistent AI with memory and continuity when you want AI that remembers you.",
+        },
+        {
+          label: "Spaces",
+          body: "Structured workspaces. Each Space can carry its own instructions and documents.",
+        },
+        {
+          label: "Together",
+          body: "Start with ZAKI while the thinking is still open, then move into Spaces when the work turns into execution.",
+        },
+      ];
 
   return (
     <section className="px-4 py-14 md:px-8 md:py-24">
@@ -11,13 +40,34 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
         <Reveal>
           <div className="mb-10 max-w-[48ch]">
             <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-chat-accent">
-              {isArabic ? "سلّم المنتج" : "Product ladder"}
+              {isArabic ? "زكي مقابل Spaces" : "ZAKI vs Spaces"}
             </p>
             <h2 className="font-display mt-4 text-[28px] font-extrabold leading-[1.08] tracking-[-0.04em] text-chat-text md:text-[44px]">
               {isArabic
-                ? "منتج عملي اليوم. وبيتا عامة لذكاء مستمر تتشكل أمامك."
-                : "A practical product now. A public beta for persistent intelligence taking shape in the open."}
+                ? "Spaces للعمل المنظّم. وزكي للاستمرارية الشخصية."
+                : "Spaces for structured work. ZAKI for personal continuity."}
             </h2>
+            <p className="mt-4 text-[15px] leading-[1.8] text-chat-muted">
+              {isArabic
+                ? "الفرق بسيط: استخدم زكي عندما تريد AI لا يبدأ من الصفر كل مرة. استخدم Spaces عندما يحتاج المشروع إلى تعليماته وملفاته وخيوطه داخل سياق واحد."
+                : "The split is simple: use ZAKI when you want AI that does not reset every time. Use Spaces when a project needs its own instructions, documents, and threads inside one shared context."}
+            </p>
+          </div>
+        </Reveal>
+
+        <Reveal delay={40}>
+          <div className="mb-6 grid gap-3 md:grid-cols-3">
+            {quickMap.map((item) => (
+              <div
+                key={item.label}
+                className="rounded-[18px] border border-line-strong bg-chat-bg/60 px-4 py-4 text-sm leading-7 text-chat-text"
+              >
+                <p className="font-mono-ui text-[10px] uppercase tracking-[0.24em] text-chat-accent">
+                  {item.label}
+                </p>
+                <p className="mt-2 text-[14px] leading-[1.7] text-chat-muted">{item.body}</p>
+              </div>
+            ))}
           </div>
         </Reveal>
 
@@ -33,8 +83,8 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
               </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-chat-muted">
                 {isArabic
-                  ? "مساحات عمل منظمة يمكنك استخدامها الآن. كل مشروع يبقى في سياقه، والعمل اليومي لا يضيع داخل خيط عام. هذا هو المنتج الذي قد يظهر في التطبيق حاليًا باسم ZAKI Chat."
-                  : "Structured AI workspaces you can use right now. Projects stay separated, context stays clean, and daily work does not dissolve into generic chat threads. This is the layer the current app may still call ZAKI Chat."}
+                  ? "مساحات عمل منظّمة يمكنك استخدامها الآن. كل مساحة يمكن أن تحمل تعليماتها وملفاتها الخاصة، والخيوط داخلها تشترك في ذلك السياق. هذا هو المنتج المدفوع المباشر، وقد يظهر في التطبيق باسم ZAKI Chat."
+                  : "Structured AI workspaces you can use right now. Each Space can hold its own instructions and documents, and threads inside that Space share the same context. This is the live paid product, even if the app may still call it ZAKI Chat."}
               </p>
               <div className="mt-auto flex items-baseline justify-between pt-8">
                 <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-chat-text">
@@ -42,7 +92,7 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                 </p>
                 <Button asChild variant="secondary" className="text-[13px]">
                   <a href="https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_product_split">
-                    {isArabic ? "ابدأ الآن" : "Start now"}
+                    {isArabic ? "ابدأ بـ Spaces" : "Start with Spaces"}
                   </a>
                 </Button>
               </div>
@@ -63,16 +113,21 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                 </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-chat-muted">
                 {isArabic
-                   ? "معظم الذكاء الاصطناعي يبدأ من جديد كل مرة. زكي يختبر شكلًا آخر: استمرارية، وذاكرة، وعلاقة تمتد مع الوقت. وعندما يتحول العمل إلى كتابة أو بحث أو تنفيذ منظم، تنتقل إلى Spaces."
-                   : "Most AI resets with every session. ZAKI explores what happens when it does not: continuity, memory, and a long-running relationship. When the work needs writing, research, or organized execution, you move into Spaces."}
+                   ? "زكي هو طبقة الذكاء المستمر: ذاكرة واستمرارية وعلاقة لا تعود للصفر كل جلسة. استخدمه عندما تريد AI يتذكرك، ثم انتقل إلى Spaces عندما يحتاج العمل إلى تنفيذ منظّم."
+                   : "ZAKI is the continuity layer: memory, recall, and a relationship that does not reset every session. Use it when you want AI that remembers you, then move into Spaces when the work needs structure."}
               </p>
                 <div className="mt-auto flex items-baseline justify-between pt-8">
-                  <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-chat-accent">
-                    {isArabic ? "مجاني" : "Free"}
-                  </p>
+                  <div>
+                    <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-chat-accent">
+                      {isArabic ? "5 مجانًا" : "5 free"}
+                    </p>
+                    <p className="font-mono-ui text-[10px] uppercase tracking-[0.16em] text-chat-muted">
+                      {isArabic ? "رسائل / يوم" : "msgs / day"}
+                    </p>
+                  </div>
                   <Button asChild className="text-[13px]">
                     <a href={isArabic ? "/ar/zaki-bot/#waitlist" : "/zaki-bot/#waitlist"}>
-                      {isArabic ? "جرّب الآن" : "Try it now"}
+                      {isArabic ? "جرّب زكي" : "Try ZAKI"}
                     </a>
                   </Button>
                 </div>

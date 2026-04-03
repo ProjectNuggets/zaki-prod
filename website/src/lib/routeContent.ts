@@ -168,10 +168,10 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     badge: "Product model",
     title: "ZAKI vs Spaces",
     intro:
-      "Short answer: use ZAKI when you want continuity, planning, memory, and a long-running AI relationship. Use Spaces when you want focused execution in a clean, dedicated work context. Together, they form the real product model behind ZAKI.",
+      "Short answer: ZAKI is for continuity. Spaces are for structured work. Use ZAKI when you want AI that remembers you, and use Spaces when the job needs its own instructions, documents, and clean project context.",
     note: "Spaces are what the current website and app may still refer to as ZAKI Chat.",
     definition:
-      "ZAKI is the persistent agent layer: the part that remembers, plans, and keeps a long-running thread with you. Spaces are the structured work surfaces where writing, research, translation, planning, and execution stay organized. ZAKI helps you decide what to do. Spaces help you do it cleanly.",
+      "ZAKI is the persistent AI layer: the part that remembers, recalls, and keeps a long-running thread with you. Spaces are the structured work surfaces where each project can keep its own instructions, documents, threads, and outputs together. ZAKI helps you hold the thread. Spaces help you do the work cleanly.",
     table: {
       headers: ["Use case", "ZAKI", "Spaces"],
       rows: [
@@ -234,7 +234,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       ],
     },
     quote:
-      "ZAKI helps you think, plan, and stay continuous. Spaces help you do focused work.",
+      "Use Spaces to organize work. Use ZAKI when you want AI that remembers.",
     sections: [
       {
         title: "Use ZAKI when",
@@ -257,7 +257,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       {
         title: "How they work together",
         body:
-          "Start with ZAKI when the job is still fuzzy: planning, deciding, framing, and keeping the long-running thread alive. Then move into a Space when the work needs structure: writing, research, task execution, translation, and project-by-project focus. Return to ZAKI when the relationship-level context matters again. That is the model: continuity with ZAKI, execution in Spaces.",
+          "Start with ZAKI when the job is still fuzzy: planning, deciding, framing, and keeping the long-running thread alive. Then move into a Space when the work needs structure: writing, research, task execution, translation, and project-by-project focus. Return to ZAKI when relationship-level continuity matters again. That is the model: continuity with ZAKI, execution in Spaces.",
       },
       {
         title: "Real examples",
@@ -272,9 +272,9 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     disclaimer:
       "This is a product-clarity page, not a rename of the app overnight. Spaces is the clearer public name for what the current product may still call ZAKI Chat while the website and app stay operationally aligned.",
     links: [
+      { label: "Try ZAKI free", href: "https://app.chatzaki.com/?auth=signup&source=website_zaki_vs_spaces" },
       { label: "See ZAKI", href: "/zaki-bot/" },
-      { label: "Compare Spaces vs ChatGPT", href: "/vs-chatgpt/" },
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start with Spaces", href: "https://app.chatzaki.com/?auth=signup" },
     ],
     seo: {
       title: "ZAKI vs Spaces: When to Think with ZAKI and When to Work in Spaces",
@@ -630,7 +630,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     badge: "How To",
     title: "How ZAKI and Spaces Work Together",
     intro:
-      "Short answer: think with ZAKI, execute in Spaces. This page exists to show the workflow clearly so users understand why ZAKI keeps the long-running thread while Spaces handle the focused work.",
+      "Short answer: think with ZAKI, execute in Spaces. ZAKI keeps the long-running thread. Spaces keep each project organized with its own context.",
     steps: [
       {
         title: "Start with ZAKI to frame the task.",
@@ -663,8 +663,8 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "A clear split between relationship-level thinking and execution: ZAKI helps define goals, priorities, and next steps, then points to a Space where the real drafting, research, and task work can stay organized.",
     links: [
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
-      { label: "See ZAKI", href: "/zaki-bot/" },
+      { label: "Try ZAKI free", href: "https://app.chatzaki.com/?auth=signup&source=website_how_zaki_and_spaces_work" },
+      { label: "Start with Spaces", href: "https://app.chatzaki.com/?auth=signup" },
       { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
     ],
     seo: {

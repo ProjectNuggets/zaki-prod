@@ -13,10 +13,10 @@ export function BotPage({ locale }: { locale: Locale }) {
   const t = getContent(locale);
   const isArabic = locale === "ar";
   const runtimeFacts = [
-    { label: isArabic ? "الكمية" : "Quota", value: isArabic ? "5 رسائل / 24 ساعة" : "5 msgs / 24h" },
+    { label: isArabic ? "المجاني" : "Free beta", value: isArabic ? "5 رسائل / يوم" : "5 msgs / day" },
     { label: isArabic ? "الحالة" : "State", value: isArabic ? "بيتا عامة" : "Public beta" },
-    { label: isArabic ? "الفوترة" : "Billing", value: isArabic ? "الاشتراكات لاحقًا" : "Subscriptions later" },
-    { label: "Runtime", value: "Nullalis" },
+    { label: isArabic ? "الأنسب لـ" : "Best for", value: isArabic ? "الخيط المستمر" : "Ongoing threads" },
+    { label: isArabic ? "مع من يعمل" : "Works with", value: "Spaces" },
   ];
 
   return (
@@ -28,25 +28,30 @@ export function BotPage({ locale }: { locale: Locale }) {
         <div className="mx-auto grid max-w-[1240px] gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-start">
           <Reveal>
             <Badge tone="warning" pulse>{isArabic ? "بيتا عامة تجريبية" : "Experimental public beta"}</Badge>
-            <h1 className="font-display mt-6 max-w-[10ch] text-[40px] font-extrabold leading-[0.92] tracking-[-0.06em] text-bot-text md:text-[72px]">
-              {isArabic ? "مشغّل ذكاء شخصي." : "Personal AI Operator."}
+            <h1 className="font-display mt-6 max-w-[12ch] text-[40px] font-extrabold leading-[0.92] tracking-[-0.06em] text-bot-text md:text-[72px]">
+              {isArabic ? "معظم الذكاء الاصطناعي ينساك. زكي لا يفعل." : "Most AI forgets you. ZAKI doesn't."}
             </h1>
             <p className="mt-6 max-w-[58ch] text-sm leading-7 text-bot-muted md:text-base md:leading-8">
               {isArabic
-                ? "زكي هو البيتا العامة لذكاء شخصي مستمر. طبقة وكيل قابلة للتدريب، بسياق لا يُعاد ضبطه بين الجلسات، وذاكرة لكل مستخدم، ومراحل عمل مرئية. وعندما تحتاج إلى تنفيذ منظم، تنتقل إلى Spaces."
-                : "ZAKI is the public beta for persistent personal intelligence: a trainable agent layer with context that does not reset between sessions, per-user memory, and visible work phases. When the work needs structure and execution, you move into Spaces."}
+                ? "زكي هو AI مستمر بذاكرة واستمرارية. يحتفظ بالخيط معك بدل أن يبدأ من الصفر كل جلسة. وعندما يحتاج العمل إلى تعليماته وملفاته وسياقه الخاص، تنتقل إلى Spaces."
+                : "ZAKI is persistent AI with memory and continuity. It keeps the thread with you instead of starting over every session. When the work needs its own instructions, documents, and clean context, you move into Spaces."}
+            </p>
+            <p className="mt-4 text-sm leading-7 text-bot-muted">
+              {isArabic
+                ? "زكي مُعلن كبيتا عامة مع 5 رسائل مجانية يوميًا. Spaces تبقى طبقة العمل المدفوعة المتاحة الآن مقابل 13 دولارًا شهريًا."
+                : "Public marketing for ZAKI is 5 free messages per day during beta. Spaces remain the live paid workspace layer at $13/month."}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Button asChild>
-                <a href="#waitlist">{isArabic ? "انضم إلى البيتا" : "Join the beta"}</a>
+                <a href="https://app.chatzaki.com/?auth=signup&source=website_bot_page">{isArabic ? "جرّب زكي مجانًا" : "Try ZAKI free"}</a>
               </Button>
               <Button asChild variant="bot">
-                <a href="https://app.chatzaki.com/?auth=signup&source=website_bot_page">
-                  {isArabic ? "جرّب Spaces الآن" : "Try Spaces now"}
+                <a href="/zaki-vs-spaces/">
+                  {isArabic ? "تعرّف على الفرق" : "See ZAKI vs Spaces"}
                 </a>
               </Button>
-              <a href={isArabic ? "/ar/faq/" : "/faq/"} className="inline-flex items-center gap-2 text-sm font-medium text-bot-text transition-colors hover:text-bot-accent">
-                {isArabic ? "اقرأ الأسئلة" : "Read the FAQ"}
+              <a href="https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_bot_page_spaces" className="inline-flex items-center gap-2 text-sm font-medium text-bot-text transition-colors hover:text-bot-accent">
+                {isArabic ? "ابدأ بـ Spaces" : "Start with Spaces"}
                 <ArrowUpRight className="size-4" />
               </a>
             </div>
@@ -110,7 +115,7 @@ export function BotPage({ locale }: { locale: Locale }) {
               <ul className="mt-6 space-y-3 text-sm leading-7 text-bot-text">
                 {[
                   ...t.botProduct.bullets,
-                  isArabic ? "5 رسائل مجانية كل 24 ساعة" : "5 free messages every 24 hours",
+                  isArabic ? "5 رسائل مجانية يوميًا" : "5 free messages per day",
                 ].map((bullet) => (
                   <li key={bullet} className="rounded-pill border border-line-dark-strong bg-white/[0.03] px-4 py-3 transition-colors hover:bg-white/[0.06]">
                     {bullet}
@@ -151,8 +156,8 @@ export function BotPage({ locale }: { locale: Locale }) {
               </h2>
               <p className="mt-3 max-w-[44ch] text-sm leading-7 text-bot-muted">
                 {isArabic
-                  ? "البيتا تشمل 5 رسائل كل 24 ساعة مجانًا بينما نتعلّم ما ينجح. الاشتراكات المدفوعة تبدأ بعد هذه المرحلة."
-                  : "The beta includes 5 messages every 24 hours — free while we learn what works, limited enough to stay honest about what is still experimental. Paid subscriptions start after this phase."}
+                  ? "البيتا تشمل 5 رسائل مجانية يوميًا بينما نتعلّم ما ينجح. وإذا كنت تحتاج مساحة عمل منظّمة اليوم، فطبقة Spaces المدفوعة متاحة الآن."
+                  : "The beta includes 5 free messages per day while we learn what works. If you need a structured workspace today, the paid Spaces layer is already live."}
               </p>
 
               <div className="mt-5 flex-1">
