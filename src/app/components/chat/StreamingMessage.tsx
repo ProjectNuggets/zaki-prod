@@ -8,6 +8,9 @@ interface StreamingMessageProps {
   className?: string;
   thinkingLabel?: string;
   thinkingPillLabel?: string;
+  streamingBadgeLabel?: string;
+  streamingHelperText?: string;
+  streamingModeVariant?: "thinking" | "final_reply_reveal";
   botMode?: boolean;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
@@ -20,6 +23,9 @@ export function StreamingMessage({
   className,
   thinkingLabel,
   thinkingPillLabel,
+  streamingBadgeLabel,
+  streamingHelperText,
+  streamingModeVariant = "thinking",
   botMode = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -31,7 +37,15 @@ export function StreamingMessage({
   return (
     <div className={className}>
       {showThinking ? (
-        botMode ? (
+        botMode && streamingModeVariant === "final_reply_reveal" ? (
+          <StreamingBubble
+            content=""
+            isStreaming
+            badgeLabel={streamingBadgeLabel}
+            helperText={streamingHelperText}
+            streamingModeVariant={streamingModeVariant}
+          />
+        ) : botMode ? (
           <div className="hidden" aria-hidden />
         ) : (
           <ThinkingIndicator
@@ -40,7 +54,13 @@ export function StreamingMessage({
           />
         )
       ) : isStreaming ? (
-        <StreamingBubble content={content} isStreaming />
+        <StreamingBubble
+          content={content}
+          isStreaming
+          badgeLabel={streamingBadgeLabel}
+          helperText={streamingModeVariant === "final_reply_reveal" ? streamingHelperText : undefined}
+          streamingModeVariant={streamingModeVariant}
+        />
       ) : (
         <StreamingBubble
           content={content}

@@ -7,6 +7,7 @@ import type { MessageDocument } from "./types";
 export type MessageContentProps = {
   content: string;
   streaming?: boolean;
+  streamingVariant?: "standard" | "final_reply_reveal";
   role: "assistant" | "user";
   surface?: "chat" | "shared" | "bot";
   preserveUserFormatting?: boolean;
@@ -19,6 +20,7 @@ function emptyDocument(): MessageDocument {
 export function MessageContent({
   content,
   streaming = false,
+  streamingVariant = "standard",
   role,
   surface = "chat",
   preserveUserFormatting = false,
@@ -67,7 +69,10 @@ export function MessageContent({
       {document.blocks.map((block) => (
         <BlockRenderer key={block.id} block={block} />
       ))}
-      {streaming && isAssistant && content.trim() ? (
+      {streaming &&
+      isAssistant &&
+      streamingVariant !== "final_reply_reveal" &&
+      content.trim() ? (
         <div aria-hidden className="inline-flex h-5 items-end">
           <span className="inline-block h-4 w-px animate-pulse rounded-full bg-zaki-brand/70" />
         </div>

@@ -134,6 +134,41 @@ body {
   animation: messageGlow 1.4s ease-out;
 }
 
+@keyframes processEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes processSummarySwap {
+  from {
+    opacity: 0.7;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zaki-process-enter {
+  animation: processEnter 140ms ease-out;
+}
+
+.zaki-process-compact {
+  opacity: 0.92;
+  transform: translateY(-1px) scale(0.992);
+}
+
+.zaki-process-summary-swap {
+  animation: processSummarySwap 180ms ease-out;
+}
+
 /* Memory nugget float */
 @keyframes memoryFloat {
   0%, 100% {
@@ -202,6 +237,26 @@ body {
 
 .zaki-avatar-pulse {
   animation: gentlePulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zaki-process-enter,
+  .zaki-process-summary-swap,
+  .zaki-message-enter-user,
+  .zaki-message-enter-assistant,
+  .zaki-message-reveal::after,
+  .zaki-memory-float,
+  .zaki-thinking,
+  .zaki-dot,
+  .animate-ping-slow,
+  .zaki-avatar-pulse {
+    animation: none !important;
+  }
+
+  .zaki-process-compact {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Sparkle burst for new memories */
