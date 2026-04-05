@@ -2270,6 +2270,16 @@ export function ChatArea() {
           "";
         return tokenChunk ? { chunk: tokenChunk } : {};
       }
+      if (isZakiAgentSpace && payloadType === "token") {
+        const tokenChunk =
+          (typeof payload.delta === "string" && payload.delta) ||
+          (typeof payload.token === "string" && payload.token) ||
+          (typeof payload.text === "string" && payload.text) ||
+          (typeof payload.chunk === "string" && payload.chunk) ||
+          (typeof payload.content === "string" && payload.content) ||
+          "";
+        return tokenChunk ? { chunk: tokenChunk } : {};
+      }
       if (
         eventType === "done" ||
         payloadType === "done" ||
@@ -2378,6 +2388,17 @@ export function ChatArea() {
           502,
           typeof payload.code === "string" ? payload.code : "chat_error"
         );
+      }
+
+      if (isZakiAgentSpace) {
+        const explicitTextPayload =
+          payloadType === "textResponse" ||
+          payloadType === "textResponseChunk" ||
+          payloadType === "fullTextResponse" ||
+          payloadType === "text";
+        if (!explicitTextPayload) {
+          return {};
+        }
       }
 
       const chunk =
