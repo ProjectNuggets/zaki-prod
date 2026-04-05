@@ -4,6 +4,7 @@ export type BotStatusEvent = {
   id: string;
   text: string;
   timestamp: number;
+  fingerprint?: string | null;
   source?: "progress" | "status" | "fallback";
   phase?: string | null;
   state?: string | null;
@@ -12,6 +13,44 @@ export type BotStatusEvent = {
   iteration?: number | null;
   durationMs?: number | null;
   terminal?: "done" | "error" | null;
+};
+
+export type BotReasoningSummary = {
+  id: string;
+  text: string;
+  timestamp: number;
+  phase?: string | null;
+  tool?: string | null;
+  iteration?: number | null;
+};
+
+export type BotReplyStart = {
+  id: string;
+  timestamp: number;
+  streamKind?: string | null;
+  deliveryMode?: string | null;
+  live?: boolean | null;
+};
+
+export type ZakiUxPhase =
+  | "ack"
+  | "working"
+  | "tooling"
+  | "reply_ready"
+  | "revealing"
+  | "complete"
+  | "error";
+
+export type ZakiProcessSnapshot = {
+  phase: ZakiUxPhase;
+  summaryText: string | null;
+  latestStatusText: string | null;
+  latestStatusMeta: string | null;
+  latestToolName: string | null;
+  hasTools: boolean;
+  isCacheHit: boolean;
+  isReplyReplay: boolean;
+  replyRevealStarted: boolean;
 };
 
 interface BotStatusRailProps {
