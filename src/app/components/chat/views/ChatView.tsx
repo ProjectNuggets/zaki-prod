@@ -3,7 +3,12 @@ import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { SkeletonMessage } from "../../ui/skeleton";
 import type { BotToolCall } from "../BotToolCallBlock";
-import type { BotStatusEvent } from "../BotStatusRail";
+import type {
+  BotReasoningSummary,
+  BotReplyStart,
+  BotStatusEvent,
+  ZakiProcessSnapshot,
+} from "../BotStatusRail";
 import { BotProcessRail } from "../BotProcessRail";
 
 interface ChatViewProps {
@@ -12,8 +17,15 @@ interface ChatViewProps {
   isStreaming: boolean;
   streamingLabel?: string;
   streamingPillLabel?: string;
+  streamingBadgeLabel?: string;
+  streamingHelperText?: string;
+  streamingModeVariant?: "thinking" | "final_reply_reveal";
   botToolCalls?: BotToolCall[];
   botStatusEvents?: BotStatusEvent[];
+  botReasoningSummary?: BotReasoningSummary | null;
+  botReplyStart?: BotReplyStart | null;
+  botProcessSnapshot?: ZakiProcessSnapshot | null;
+  botProcessCompact?: boolean;
   showBotTimeline?: boolean;
   botMode?: boolean;
   streamingMode?: "thinking" | "researching" | "writing";
@@ -29,8 +41,15 @@ export function ChatView({
   isStreaming,
   streamingLabel,
   streamingPillLabel,
+  streamingBadgeLabel,
+  streamingHelperText,
+  streamingModeVariant = "thinking",
   botToolCalls = [],
   botStatusEvents = [],
+  botReasoningSummary = null,
+  botReplyStart = null,
+  botProcessSnapshot = null,
+  botProcessCompact = false,
   showBotTimeline = false,
   botMode = false,
   streamingMode = "thinking",
@@ -68,6 +87,9 @@ export function ChatView({
               isStreaming={isStreamingMessage}
               thinkingLabel={streamingLabel}
               thinkingPillLabel={streamingPillLabel}
+              streamingBadgeLabel={streamingBadgeLabel}
+              streamingHelperText={streamingHelperText}
+              streamingModeVariant={streamingModeVariant}
               botMode={botMode}
             />
           );
@@ -89,6 +111,10 @@ export function ChatView({
           stage={isStreaming ? streamingMode : "writing"}
           toolCalls={botToolCalls}
           statusEvents={botStatusEvents}
+          reasoningSummary={botReasoningSummary}
+          replyStart={botReplyStart}
+          snapshot={botProcessSnapshot}
+          compact={botProcessCompact}
         />
       ) : null}
     </div>
