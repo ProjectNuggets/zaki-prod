@@ -18,9 +18,14 @@ export function LogoArabicOrange({ className }: { className?: string }) {
   );
 }
 
-export function SideBarIcon() {
+export function SideBarIcon({ className }: { className?: string }) {
   return (
-    <svg className="size-5" fill="none" viewBox="0 0 20 20">
+    <svg
+      className={className || "size-5"}
+      fill="none"
+      preserveAspectRatio="xMidYMid meet"
+      viewBox="0 0 24 24"
+    >
       <path d={svgPaths.p2c70e300} fill="#B09472" />
     </svg>
   );
