@@ -362,7 +362,7 @@ export default function App() {
           <Sidebar />
         </div>
         
-        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 bg-[#FDF6EE] dark:bg-[#0f0b08]">
+        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 zaki-shell-surface">
           <div className="zaki-main-shell">
             <div className="zaki-main-panel">
               <div className="zaki-main-inner">

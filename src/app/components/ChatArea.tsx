@@ -4033,12 +4033,12 @@ export function ChatArea() {
                 </button>
                 {menuOpen && (
                   <div
-                    className="absolute right-0 top-full mt-2 w-40 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
+                    className="absolute right-0 top-full mt-2 w-52 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_14px_30px_rgba(15,15,15,0.12)] p-1"
                     role="menu"
                   >
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                      className="w-full flex items-center justify-between gap-3 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
                       role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
@@ -4046,10 +4046,12 @@ export function ChatArea() {
                       }}
                       aria-label={chatCopy.reviewMemoriesAria}
                     >
-                      <Brain className="size-4 text-zaki-muted" />
-                      {chatCopy.reviewMemories}
+                      <span className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                        <Brain className="size-4 shrink-0 text-zaki-muted" />
+                        <span className="truncate">{chatCopy.reviewMemories}</span>
+                      </span>
                       {memoryPendingCount + memoryConflictCount > 0 && (
-                        <span className="ml-auto bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
+                        <span className="shrink-0 bg-zaki-brand text-white text-xs px-2 py-0.5 rounded-full">
                           {memoryPendingCount + memoryConflictCount}
                         </span>
                       )}
@@ -4061,8 +4063,8 @@ export function ChatArea() {
                       onClick={handleExport}
                       aria-label={chatCopy.exportJsonAria}
                     >
-                      <Download className="size-4 text-zaki-muted" />
-                      {chatCopy.exportJson}
+                      <Download className="size-4 shrink-0 text-zaki-muted" />
+                      <span className="whitespace-nowrap">{chatCopy.exportJson}</span>
                     </button>
                   </div>
                 )}

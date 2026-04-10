@@ -1,21 +1,19 @@
 import svgPaths from "@/imports/svg-g3updgkf22";
 
-export function LogoArabicOrange() {
+export function LogoArabicOrange({ className }: { className?: string }) {
   return (
-    <div className="h-[32px] overflow-clip relative shrink-0 w-[46px]">
-      <div className="absolute contents inset-0">
-        <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 46 32">
-          <g>
-            <path d={svgPaths.p2adfc080} fill="#D24430" />
-            <path d={svgPaths.pc99e400} fill="#D24430" />
-            <path d={svgPaths.p36333a00} fill="#D24430" />
-            <path d={svgPaths.p387374d0} fill="#D24430" />
-            <path d={svgPaths.p34990b80} fill="#D24430" />
-            <path d={svgPaths.p22acf480} fill="#D24430" />
-            <path d={svgPaths.p1ae9a300} fill="#D24430" />
-          </g>
-        </svg>
-      </div>
+    <div className={className || "relative h-[32px] w-[46px] shrink-0"}>
+      <svg className="block size-full" fill="none" preserveAspectRatio="xMidYMid meet" viewBox="0 0 46 32">
+        <g>
+          <path d={svgPaths.p2adfc080} fill="#D24430" />
+          <path d={svgPaths.pc99e400} fill="#D24430" />
+          <path d={svgPaths.p36333a00} fill="#D24430" />
+          <path d={svgPaths.p387374d0} fill="#D24430" />
+          <path d={svgPaths.p34990b80} fill="#D24430" />
+          <path d={svgPaths.p22acf480} fill="#D24430" />
+          <path d={svgPaths.p1ae9a300} fill="#D24430" />
+        </g>
+      </svg>
     </div>
   );
 }

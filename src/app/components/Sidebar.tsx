@@ -301,21 +301,6 @@ export function Sidebar() {
     window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
   }, [goToZakiBot]);
 
-  const resolveThreadTargetSpace = useCallback(() => {
-    if (
-      expandedSpace &&
-      expandedSpace !== "zaki" &&
-      spaces.some((space) => space.id === expandedSpace)
-    ) {
-      return expandedSpace;
-    }
-    return (
-      spaces.find((space) => !space.fixed)?.id ??
-      spaces.find((space) => space.id !== "zaki")?.id ??
-      null
-    );
-  }, [expandedSpace, spaces]);
-
   useEffect(() => {
     setDisplayName(
       user?.fullName?.trim() ||
@@ -948,17 +933,6 @@ export function Sidebar() {
     [goToSpace]
   );
 
-  const handleQuickCreateThread = useCallback(() => {
-    const targetSpaceId = resolveThreadTargetSpace();
-    if (!targetSpaceId) {
-      openCreateSpaceFlow();
-      toast.error("Create a space first to start a chat.");
-      return;
-    }
-    setExpandedSpace(targetSpaceId);
-    createThreadInSpace(targetSpaceId);
-  }, [createThreadInSpace, openCreateSpaceFlow, resolveThreadTargetSpace]);
-
   const toggleSpace = (spaceId: string) => {
     setExpandedSpace((prev) => (prev === spaceId ? null : spaceId));
   };
@@ -1151,7 +1125,7 @@ export function Sidebar() {
       role="navigation"
       aria-label="Main navigation"
       className={cn(
-        "zaki-sidebar h-full flex flex-col bg-[#FDF6EE] dark:bg-[#0f0b08] border-r-0 shrink-0 transition-[width,padding] duration-300",
+        "zaki-sidebar h-full flex flex-col border-r-0 shrink-0 transition-[width,padding] duration-300",
         collapsed ? "w-[72px] py-4 px-2" : "w-[272px] py-5 px-3.5"
       )}
     >
@@ -1160,10 +1134,11 @@ export function Sidebar() {
           <div className="flex flex-col items-center gap-4">
             <button
               type="button"
-              className="size-9 rounded-zaki-md bg-zaki-selected border border-zaki flex items-center justify-center"
+              className="size-10 rounded-zaki-md bg-zaki-selected border border-zaki flex items-center justify-center"
               onClick={openHomeView}
+              aria-label="Open home"
             >
-              <LogoArabicOrange />
+              <LogoArabicOrange className="h-6 w-8 shrink-0" />
             </button>
             <button
               className="size-9 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
@@ -1177,7 +1152,7 @@ export function Sidebar() {
             </button>
           </div>
 
-          <div className="mt-6 flex flex-col items-center gap-2">
+          <div className="mt-6 flex flex-col items-center gap-2.5">
             <button
               className={cn(
                 "size-9 rounded-zaki-md text-zaki-brand flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
@@ -1204,19 +1179,6 @@ export function Sidebar() {
               aria-label={ZAKI_BOT_LABEL}
             >
               <CenterLogo className="size-4 text-zaki-brand" />
-            </button>
-          </div>
-
-          <div className="mt-6 flex flex-col items-center gap-2">
-            <button
-              className="size-9 rounded-zaki-md flex items-center justify-center transition-colors bg-zaki-elevated hover:bg-zaki-active focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-              onClick={handleQuickCreateThread}
-              onMouseUp={blurButtonOnPointerClick}
-              type="button"
-              title={t("sidebar.actions.newChat")}
-              aria-label={t("sidebar.actions.newChat")}
-            >
-              <AddIcon color="#88735A" />
             </button>
           </div>
 
@@ -1339,7 +1301,7 @@ export function Sidebar() {
       <div className="h-px bg-zaki-sunken w-full mb-5" />
 
       {/* Space Section */}
-      <div className="flex-1 overflow-y-auto bg-[#FDF6EE] dark:bg-[#0f0b08] zaki-scrollbar-fade">
+      <div className="flex-1 overflow-y-auto zaki-scrollbar-fade">
         <div className={cn("text-zaki-muted text-xs font-medium mb-2", isRtl ? "pr-1.5 text-right" : "pl-1.5")}>{t("sidebar.section.space")}</div>
         {spacesLoading && (
           <div className="mb-3">
