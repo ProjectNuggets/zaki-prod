@@ -139,7 +139,6 @@ export function Sidebar() {
   const [displayName, setDisplayName] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const isDark = resolvedTheme() === "dark";
-  const [lastSynced, setLastSynced] = useState<Date>(new Date());
   const [spaceSearchQuery, setSpaceSearchQuery] = useState("");
   const [removingDocumentKey, setRemovingDocumentKey] = useState<string | null>(null);
   const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
@@ -227,19 +226,6 @@ export function Sidebar() {
     return space.threads.some((thread) => thread.id === activeItem);
   };
   
-  // Format relative time for "Last synced" badge
-  const formatRelativeTime = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return sidebarCopy.justNow;
-    if (diffMins === 1) return sidebarCopy.oneMinuteAgo;
-    if (diffMins < 60) return sidebarCopy.minutesAgo(diffMins);
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return sidebarCopy.oneHourAgo;
-    if (diffHours < 24) return sidebarCopy.hoursAgo(diffHours);
-    return sidebarCopy.today;
-  };
   const spaceIconMap: Record<string, typeof Folder> = {
     folder: Folder,
     briefcase: Briefcase,
@@ -361,7 +347,6 @@ export function Sidebar() {
       return;
     }
     setSpaces(spacesData as SidebarSpace[]);
-    setLastSynced(new Date());
     setSpacesError("");
     if (stored === "none") {
       setExpandedSpace(null);
@@ -388,13 +373,6 @@ export function Sidebar() {
     setSpacesError("Unable to load workspaces. Check your session.");
   }, [spacesQueryError]);
   
-  // Force re-render every minute to update "Last synced" display
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 60000);
-    return () => clearInterval(interval);
-  }, []);
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -1201,7 +1179,7 @@ export function Sidebar() {
       ) : (
         <>
       {/* Header */}
-      <div className="flex justify-between items-start mb-5">
+      <div className="flex items-center justify-between gap-3 mb-4 pr-1">
         <button
           type="button"
           onClick={openHomeView}
@@ -1209,7 +1187,7 @@ export function Sidebar() {
           <LogoArabicOrange />
         </button>
         <button
-          className="size-9 rounded-lg border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+          className="size-10 shrink-0 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
           onClick={() => setCollapsed(true)}
           type="button"
           aria-label="Collapse sidebar"
@@ -1236,12 +1214,6 @@ export function Sidebar() {
         />
       </div>
       
-      {/* Last synced badge — trust signal */}
-      <div className={cn("flex items-center gap-1.5 text-2xs text-zaki-muted mb-4", isRtl ? "pr-1 justify-end" : "pl-1")}>
-        <span className="inline-block size-1.5 rounded-full bg-zaki-accent animate-pulse" />
-        <span>{t("sidebar.synced", { time: formatRelativeTime(lastSynced) })}</span>
-      </div>
-
       {/* Actions */}
       <div className="flex flex-col gap-1 mb-5">
         <button
