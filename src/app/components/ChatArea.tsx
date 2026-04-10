@@ -303,7 +303,7 @@ function extractVisibleAgentChunk(payload: Record<string, unknown>) {
   return typeof direct === "string" && direct.trim() ? direct.trim() : null;
 }
 
-function inferStreamingModeFromContext(rawValue: string): "thinking" | "researching" | "writing" {
+export function inferStreamingModeFromContext(rawValue: string): "thinking" | "researching" | "writing" {
   const normalized = String(rawValue || "").trim().toLowerCase();
   if (!normalized) return "thinking";
   if (
@@ -388,13 +388,57 @@ function formatProcessDuration(durationMs?: number | null) {
   return `${durationMs}ms`;
 }
 
-function buildLatestStatusMeta(event: BotStatusEvent | null | undefined) {
-  if (!event) return null;
-  const parts = [
-    humanizeProcessToken(event.phase),
+type TaskProgressContext = {
+  isTaskProgress: boolean;
+  taskId: string | null;
+  taskState: string | null;
+};
+
+function extractTaskProgressContext(progress: {
+  phase?: string | null;
+  state?: string | null;
+  label?: string | null;
+  text?: string | null;
+}): TaskProgressContext {
+  const phase = normalizeProgressText(progress.phase).toLowerCase();
+  const label = normalizeProgressText(progress.label || progress.text);
+  const directMatch = label.match(/^task\s+([a-z0-9_-]+)\s*:\s*(.+)$/i);
+  const fallbackIdMatch = label.match(/\b(task_[a-z0-9_-]+)\b/i);
+  const isTaskProgress = phase === "task" || Boolean(directMatch || fallbackIdMatch);
+  if (!isTaskProgress) {
+    return {
+      isTaskProgress: false,
+      taskId: null,
+      taskState: null,
+    };
+  }
+  const taskId = (directMatch?.[1] || fallbackIdMatch?.[1] || "").trim() || null;
+  const taskState = normalizeProgressText(directMatch?.[2] || progress.state) || null;
+  return {
+    isTaskProgress: true,
+    taskId,
+    taskState,
+  };
+}
+
+function buildProcessMetaParts(event: {
+  phase?: string | null;
+  tool?: string | null;
+  taskId?: string | null;
+  durationMs?: number | null;
+}) {
+  const taskContext = extractTaskProgressContext(event);
+  return [
+    taskContext.isTaskProgress ? "Task" : humanizeProcessToken(event.phase),
+    taskContext.taskId || normalizeProgressText(event.taskId) || "",
     event.tool ? `Tool: ${event.tool}` : "",
     formatProcessDuration(event.durationMs),
   ].filter(Boolean);
+}
+
+export function buildLatestStatusMeta(event: BotStatusEvent | null | undefined) {
+  if (!event) return null;
+  const parts = buildProcessMetaParts(event);
   return parts.length > 0 ? parts.join(" • ") : null;
 }
 
@@ -519,7 +563,7 @@ function extractReplyStartPayload(payload: Record<string, unknown>) {
   };
 }
 
-function extractProgressPayload(payload: Record<string, unknown>) {
+export function extractProgressPayload(payload: Record<string, unknown>) {
   const source =
     (payload.content && typeof payload.content === "object"
       ? (payload.content as Record<string, unknown>)
@@ -574,8 +618,36 @@ function extractProgressPayload(payload: Record<string, unknown>) {
 
   const fallbackText = extractVisibleAgentChunk(source);
   const text = label || fallbackText;
+  const taskContext = extractTaskProgressContext({ phase, state, label, text });
   if (!text && !phase && !state && !tool) return null;
-  return { phase, state, label, tool, iteration, durationMs, text: text || null };
+  return {
+    phase,
+    state,
+    label,
+    tool,
+    taskId: taskContext.taskId,
+    iteration,
+    durationMs,
+    text: text || null,
+  };
+}
+
+export function inferStreamingModeFromProgress(progress: {
+  text?: string | null;
+  phase?: string | null;
+  state?: string | null;
+  label?: string | null;
+  tool?: string | null;
+}) {
+  const taskContext = extractTaskProgressContext(progress);
+  if (taskContext.isTaskProgress) {
+    return "researching" as const;
+  }
+  return inferStreamingModeFromContext(
+    [progress.phase, progress.state, progress.text, progress.tool]
+      .filter(Boolean)
+      .join(" ")
+  );
 }
 
 function extractToolCallPayload(payload: Record<string, unknown>) {
@@ -976,7 +1048,12 @@ export function ChatArea() {
       .find((toolCall) => !toolCall.result);
     const latestResolvedTool = zakiBotToolCalls[zakiBotToolCalls.length - 1] ?? null;
     const latestToolName =
-      latestRunningTool?.name || latestResolvedTool?.name || zakiBotReasoningSummary?.tool || latestStatusEvent?.tool || null;
+      latestRunningTool?.name ||
+      latestResolvedTool?.name ||
+      zakiBotReasoningSummary?.tool ||
+      latestStatusEvent?.tool ||
+      latestStatusEvent?.taskId ||
+      null;
     const hasTools = zakiBotToolCalls.length > 0;
     const isCacheHit =
       isCacheLikeText(summaryText) ||
@@ -1711,11 +1788,7 @@ export function ChatArea() {
       if (!isZakiBotActiveSpace) return;
       const progress = extractProgressPayload(payload);
       if (!progress) return;
-      const mode = inferStreamingModeFromContext(
-        [progress.phase, progress.state, progress.text, progress.tool]
-          .filter(Boolean)
-          .join(" ")
-      );
+      const mode = inferStreamingModeFromProgress(progress);
       setZakiBotProgressTerminalReason(null);
       setStreamingIndicatorMode(mode);
       if (progress.tool) {
@@ -1746,6 +1819,7 @@ export function ChatArea() {
             ...currentLast,
             text,
             timestamp: Date.now(),
+            taskId: progress.taskId,
             durationMs: progress.durationMs,
             iteration: progress.iteration,
             terminal,
@@ -1767,6 +1841,7 @@ export function ChatArea() {
             state: progress.state,
             label: progress.label,
             tool: progress.tool,
+            taskId: progress.taskId,
             iteration: progress.iteration,
             durationMs: progress.durationMs,
             terminal,

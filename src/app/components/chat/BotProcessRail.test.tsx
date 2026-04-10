@@ -367,4 +367,41 @@ describe("BotProcessRail", () => {
     expect(screen.getByText("Reusing a cached answer")).toBeInTheDocument();
     expect(screen.getByText("Reused")).toBeInTheDocument();
   });
+
+  it("renders task progress metadata without collapsing it into generic thinking", () => {
+    render(
+      <BotProcessRail
+        isStreaming
+        stage="researching"
+        snapshot={{
+          phase: "working",
+          summaryText: null,
+          latestStatusText: "Task task_00000000001: running",
+          latestStatusMeta: "Task • task_00000000001 • 840ms",
+          latestToolName: "task_00000000001",
+          hasTools: false,
+          isCacheHit: false,
+          isReplyReplay: false,
+          replyRevealStarted: false,
+        }}
+        statusEvents={[
+          {
+            id: "status-1",
+            text: "Task task_00000000001: running",
+            timestamp: Date.now(),
+            phase: "task",
+            state: "update",
+            taskId: "task_00000000001",
+            durationMs: 840,
+          },
+        ]}
+        toolCalls={[]}
+      />
+    );
+
+    expect(screen.getByText("Task task_00000000001: running")).toBeInTheDocument();
+    expect(screen.getByText("Task • task_00000000001 • 840ms")).toBeInTheDocument();
+    expect(screen.getAllByText("Researching").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Thinking")).not.toBeNull();
+  });
 });

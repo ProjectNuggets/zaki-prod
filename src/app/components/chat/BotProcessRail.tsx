@@ -149,8 +149,11 @@ function dedupeEvents(events: BotStatusEvent[]) {
 function buildHeadlineMeta(event: BotStatusEvent | null, fallbackMeta?: string | null) {
   if (fallbackMeta) return fallbackMeta;
   if (!event) return null;
+  const isTaskEvent =
+    normalizeText(event.phase).toLowerCase() === "task" || Boolean(normalizeText(event.taskId));
   const parts = [
-    humanizeToken(event.phase),
+    isTaskEvent ? "Task" : humanizeToken(event.phase),
+    normalizeText(event.taskId),
     event.tool ? `Tool: ${event.tool}` : "",
     typeof event.durationMs === "number" ? formatDuration(event.durationMs) : null,
   ].filter(Boolean);

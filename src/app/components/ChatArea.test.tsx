@@ -8,7 +8,12 @@ import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ChatArea } from "./ChatArea";
+import {
+  ChatArea,
+  buildLatestStatusMeta,
+  extractProgressPayload,
+  inferStreamingModeFromProgress,
+} from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
 import {
@@ -293,5 +298,32 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
+  });
+
+  it("parses task progress events as structured live execution", () => {
+    const progress = extractProgressPayload({
+      type: "progress",
+      phase: "task",
+      state: "update",
+      label: "Task task_00000000001: running",
+      duration_ms: 840,
+    });
+
+    expect(progress).not.toBeNull();
+    expect(progress?.taskId).toBe("task_00000000001");
+    expect(progress?.text).toBe("Task task_00000000001: running");
+    expect(inferStreamingModeFromProgress(progress || {})).toBe("researching");
+    expect(
+      buildLatestStatusMeta({
+        id: "status-1",
+        text: progress?.text || "",
+        timestamp: Date.now(),
+        phase: progress?.phase,
+        state: progress?.state,
+        label: progress?.label,
+        taskId: progress?.taskId,
+        durationMs: progress?.durationMs,
+      })
+    ).toBe("Task • task_00000000001 • 840ms");
   });
 });

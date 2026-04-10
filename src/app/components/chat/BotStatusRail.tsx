@@ -10,6 +10,7 @@ export type BotStatusEvent = {
   state?: string | null;
   label?: string | null;
   tool?: string | null;
+  taskId?: string | null;
   iteration?: number | null;
   durationMs?: number | null;
   terminal?: "done" | "error" | null;
