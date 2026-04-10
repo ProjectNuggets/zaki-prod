@@ -33,6 +33,22 @@ export type BotReplyStart = {
   live?: boolean | null;
 };
 
+export type ZakiTranscriptEntryKind =
+  | "narration"
+  | "task"
+  | "tool"
+  | "status"
+  | "transition";
+
+export type ZakiTranscriptEntry = {
+  id: string;
+  kind: ZakiTranscriptEntryKind;
+  text: string;
+  timestamp: number;
+  meta?: string | null;
+  state?: "active" | "done" | "error" | null;
+};
+
 export type ZakiUxPhase =
   | "ack"
   | "working"
@@ -48,6 +64,11 @@ export type ZakiProcessSnapshot = {
   latestStatusText: string | null;
   latestStatusMeta: string | null;
   latestToolName: string | null;
+  currentActionText?: string | null;
+  currentActionMeta?: string | null;
+  currentActionKind?: ZakiTranscriptEntryKind | null;
+  transcriptEntries?: ZakiTranscriptEntry[];
+  workStartedAt?: number | null;
   hasTools: boolean;
   isCacheHit: boolean;
   isReplyReplay: boolean;

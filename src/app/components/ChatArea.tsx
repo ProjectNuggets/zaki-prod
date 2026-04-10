@@ -42,6 +42,7 @@ import type {
   BotReplyStart,
   BotStatusEvent,
   ZakiProcessSnapshot,
+  ZakiTranscriptEntryKind,
 } from "./chat/BotStatusRail";
 
 import { useNavigationStore, useAuthStore } from "@/stores";
@@ -659,6 +660,452 @@ export function inferStreamingModeFromProgress(progress: {
   );
 }
 
+type ZakiProgressTerminalReason = "done" | "error" | "abort" | "stream_end" | null;
+
+type ZakiTranscriptSeed = {
+  id: string;
+  kind: ZakiTranscriptEntryKind;
+  text: string;
+  timestamp: number;
+  meta?: string | null;
+  state?: "active" | "done" | "error" | null;
+};
+
+type BuildZakiProcessSnapshotInput = {
+  statusEvents: BotStatusEvent[];
+  reasoningSummary: BotReasoningSummary | null;
+  replyStart: BotReplyStart | null;
+  toolCalls: BotToolCall[];
+  latestAssistantMessageContent: string;
+  progressTerminalReason: ZakiProgressTerminalReason;
+};
+
+function normalizeNarrativeKey(rawValue: string | null | undefined) {
+  return normalizeProgressText(rawValue)
+    .toLowerCase()
+    .replace(/\biteration\s+\d+\b/g, "")
+    .replace(/[.,!?;:()[\]{}"']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toSentenceCase(rawValue: string | null | undefined) {
+  const text = normalizeProgressText(rawValue);
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatTranscriptDuration(durationMs?: number | null) {
+  return formatProcessDuration(durationMs) || null;
+}
+
+function buildTranscriptMeta(options: {
+  durationMs?: number | null;
+  phase?: string | null;
+  state?: "active" | "done" | "error" | null;
+}) {
+  const parts = [
+    options.state === "done"
+      ? "Completed"
+      : options.state === "error"
+        ? "Failed"
+        : options.phase
+          ? humanizeProcessToken(options.phase)
+          : "",
+    formatTranscriptDuration(options.durationMs),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" • ") : null;
+}
+
+function deriveNarrativeText(event: {
+  text?: string | null;
+  phase?: string | null;
+  state?: string | null;
+  source?: BotStatusEvent["source"];
+  tool?: string | null;
+  taskId?: string | null;
+  terminal?: BotStatusEvent["terminal"];
+}) {
+  const normalizedText = normalizeProgressText(event.text);
+  const normalized = normalizedText.toLowerCase();
+  const taskContext = extractTaskProgressContext(event);
+  const toolName = normalizeProgressText(event.tool) || null;
+
+  if (event.source === "summary" && normalizedText) {
+    return toSentenceCase(normalizedText);
+  }
+  if (event.terminal === "error") {
+    if (taskContext.taskId) return `Task ${taskContext.taskId} failed`;
+    if (toolName) return `${toolName} failed`;
+    return toSentenceCase(normalizedText || "Something interrupted the reply");
+  }
+  if (event.terminal === "done") {
+    if (taskContext.taskId) return `Completed task ${taskContext.taskId}`;
+    if (toolName) return `Finished ${toolName}`;
+  }
+  if (taskContext.isTaskProgress) {
+    return taskContext.taskId ? `Running task ${taskContext.taskId}` : "Running task";
+  }
+  if (
+    normalized.includes("cached response") ||
+    normalized.includes("cache hit") ||
+    normalized.includes("cached answer")
+  ) {
+    return "Reusing a cached answer";
+  }
+  if (
+    normalized.includes("preparing final reply") ||
+    normalized.includes("finalizing reply") ||
+    normalized.includes("final reply")
+  ) {
+    return "Preparing the final reply";
+  }
+  if (toolName && (!normalized || normalized === toolName.toLowerCase() || normalized === "running tools")) {
+    return `Using ${toolName}`;
+  }
+
+  switch (normalized) {
+    case "":
+      return null;
+    case "processing request":
+      return "Getting started";
+    case "preparing model request":
+      return "Checking context and shaping the answer";
+    case "trimming context":
+      return "Trimming context to keep the request focused";
+    case "thinking":
+      return "Thinking through the request";
+    case "checking context and memory":
+      return "Checking context and memory";
+    case "thinking through the request":
+      return "Thinking through the request";
+    case "gathering context":
+      return "Checking context and shaping the answer";
+    case "retrieving memory":
+      return "Checking memory and recent context";
+    case "running tools":
+      return toolName ? `Using ${toolName}` : "Using tools to gather what I need";
+    case "reflecting on tool results":
+      return "Reviewing tool results";
+    case "compose":
+    case "draft":
+    case "writing":
+      return "Drafting the answer";
+    default:
+      if (normalized.startsWith("using ") && toolName) {
+        return `Using ${toolName}`;
+      }
+      return toSentenceCase(normalizedText);
+  }
+}
+
+function buildTranscriptEntryFromStatusEvent(event: BotStatusEvent): ZakiTranscriptSeed | null {
+  const text = deriveNarrativeText(event);
+  if (!text) return null;
+  const taskContext = extractTaskProgressContext(event);
+  const kind: ZakiTranscriptEntryKind =
+    event.source === "summary"
+      ? "narration"
+      : taskContext.isTaskProgress
+        ? "task"
+        : event.tool
+          ? "tool"
+          : event.source === "fallback"
+            ? "transition"
+            : "status";
+  return {
+    id: event.id,
+    kind,
+    text,
+    timestamp: event.timestamp,
+    meta: buildTranscriptMeta({
+      durationMs: event.durationMs,
+      phase:
+        kind === "tool"
+          ? "tool"
+          : taskContext.isTaskProgress
+            ? "task"
+            : event.phase,
+      state:
+        event.terminal === "error"
+          ? "error"
+          : event.terminal === "done"
+            ? "done"
+            : "active",
+    }),
+    state:
+      event.terminal === "error"
+        ? "error"
+        : event.terminal === "done"
+          ? "done"
+          : "active",
+  };
+}
+
+function buildTranscriptEntriesFromToolCall(toolCall: BotToolCall): ZakiTranscriptSeed[] {
+  const activeState: ZakiTranscriptSeed = {
+    id: `${toolCall.id}:start`,
+    kind: "tool",
+    text: `Using ${toolCall.name}`,
+    timestamp: toolCall.startedAt || toolCall.timestamp,
+    meta: buildTranscriptMeta({
+      phase: "tool",
+      state: toolCall.result ? (toolCall.result.ok ? "done" : "error") : "active",
+      durationMs: toolCall.durationMs,
+    }),
+    state: toolCall.result ? (toolCall.result.ok ? "done" : "error") : "active",
+  };
+
+  if (!toolCall.result) return [activeState];
+
+  return [
+    activeState,
+    {
+      id: `${toolCall.id}:result`,
+      kind: "tool",
+      text: toolCall.result.ok ? `Finished ${toolCall.name}` : `${toolCall.name} failed`,
+      timestamp: toolCall.finishedAt || toolCall.timestamp,
+      meta: buildTranscriptMeta({
+        phase: "tool",
+        state: toolCall.result.ok ? "done" : "error",
+        durationMs:
+          toolCall.durationMs ??
+          (typeof toolCall.finishedAt === "number"
+            ? Math.max(0, toolCall.finishedAt - toolCall.startedAt)
+            : null),
+      }),
+      state: toolCall.result.ok ? "done" : "error",
+    },
+  ];
+}
+
+function dedupeTranscriptEntries(entries: ZakiTranscriptSeed[]) {
+  const sorted = [...entries].sort((left, right) => {
+    if (left.timestamp !== right.timestamp) return left.timestamp - right.timestamp;
+    return left.id.localeCompare(right.id);
+  });
+
+  return sorted.reduce<ZakiTranscriptSeed[]>((acc, entry) => {
+    const key = [
+      entry.kind,
+      normalizeNarrativeKey(entry.text),
+      normalizeNarrativeKey(entry.meta),
+    ].join("|");
+    const last = acc[acc.length - 1];
+    if (
+      last &&
+      [
+        last.kind,
+        normalizeNarrativeKey(last.text),
+        normalizeNarrativeKey(last.meta),
+      ].join("|") === key
+    ) {
+      acc[acc.length - 1] = entry;
+      return acc;
+    }
+    acc.push(entry);
+    return acc;
+  }, []);
+}
+
+function buildZakiTranscriptEntries(input: {
+  statusEvents: BotStatusEvent[];
+  replyStart: BotReplyStart | null;
+  toolCalls: BotToolCall[];
+}) {
+  const seeds: ZakiTranscriptSeed[] = [];
+  input.statusEvents.forEach((event) => {
+    const next = buildTranscriptEntryFromStatusEvent(event);
+    if (next) seeds.push(next);
+  });
+  input.toolCalls.forEach((toolCall) => {
+    seeds.push(...buildTranscriptEntriesFromToolCall(toolCall));
+  });
+  if (input.replyStart) {
+    seeds.push({
+      id: `${input.replyStart.id}:reply`,
+      kind: "transition",
+      text: "Preparing the final reply",
+      timestamp: input.replyStart.timestamp,
+      meta: "Transition",
+      state: "active",
+    });
+  }
+
+  return dedupeTranscriptEntries(seeds).slice(-8);
+}
+
+function buildCurrentAction(input: {
+  phase: ZakiProcessSnapshot["phase"];
+  reasoningSummary: BotReasoningSummary | null;
+  replyStart: BotReplyStart | null;
+  latestTaskEvent: BotStatusEvent | null;
+  activeToolCall: BotToolCall | null;
+  latestStatusEvent: BotStatusEvent | null;
+  isCacheHit: boolean;
+}) {
+  if (input.phase === "error") {
+    const latestError =
+      [input.latestStatusEvent, input.latestTaskEvent]
+        .filter(Boolean)
+        .find((event) => event?.terminal === "error") ?? null;
+    return {
+      kind: "status" as const,
+      text: deriveNarrativeText(latestError || { text: "Something interrupted the reply." }) || "Something interrupted the reply.",
+      meta: latestError ? buildLatestStatusMeta(latestError) : null,
+    };
+  }
+  if (input.isCacheHit) {
+    return {
+      kind: "transition" as const,
+      text: "Reusing a cached answer",
+      meta: null,
+    };
+  }
+  if (input.replyStart || input.phase === "reply_ready" || input.phase === "revealing" || input.phase === "complete") {
+    return {
+      kind: "transition" as const,
+      text: "Preparing the final reply",
+      meta: null,
+    };
+  }
+  if (input.reasoningSummary) {
+    return {
+      kind: "narration" as const,
+      text: toSentenceCase(input.reasoningSummary.text),
+      meta: input.reasoningSummary.phase ? humanizeProcessToken(input.reasoningSummary.phase) : null,
+    };
+  }
+  if (input.latestTaskEvent) {
+    return {
+      kind: "task" as const,
+      text: deriveNarrativeText(input.latestTaskEvent) || "Running task",
+      meta: buildLatestStatusMeta(input.latestTaskEvent),
+    };
+  }
+  if (input.activeToolCall) {
+    return {
+      kind: "tool" as const,
+      text: `Using ${input.activeToolCall.name}`,
+      meta: buildTranscriptMeta({
+        phase: "tool",
+        state: "active",
+      }),
+    };
+  }
+  if (input.latestStatusEvent) {
+    return {
+      kind: "status" as const,
+      text: deriveNarrativeText(input.latestStatusEvent) || "Getting started",
+      meta: buildLatestStatusMeta(input.latestStatusEvent),
+    };
+  }
+  return {
+    kind: "transition" as const,
+    text: "Getting started",
+    meta: null,
+  };
+}
+
+export function buildZakiProcessSnapshot(input: BuildZakiProcessSnapshotInput): ZakiProcessSnapshot {
+  const latestStatusEvent = input.statusEvents[input.statusEvents.length - 1] ?? null;
+  const latestStatusText = latestStatusEvent?.text || null;
+  const latestStatusMeta = buildLatestStatusMeta(latestStatusEvent);
+  const latestRunningTool = [...input.toolCalls]
+    .reverse()
+    .find((toolCall) => !toolCall.result) ?? null;
+  const latestResolvedTool = input.toolCalls[input.toolCalls.length - 1] ?? null;
+  const latestToolName =
+    latestRunningTool?.name ||
+    latestResolvedTool?.name ||
+    input.reasoningSummary?.tool ||
+    latestStatusEvent?.tool ||
+    latestStatusEvent?.taskId ||
+    null;
+  const hasTools = input.toolCalls.length > 0;
+  const hasTaskProgress = input.statusEvents.some((event) => isTaskProgressEvent(event));
+  const isCacheHit =
+    isCacheLikeText(input.reasoningSummary?.text) ||
+    isCacheLikeText(latestStatusText);
+  const isReplyReplay =
+    input.replyStart?.streamKind === "final_reply" &&
+    input.replyStart?.deliveryMode === "buffered_replay" &&
+    input.replyStart?.live === false;
+  const replyRevealStarted =
+    Boolean(isReplyReplay) && input.latestAssistantMessageContent.trim().length > 0;
+
+  let phase: ZakiProcessSnapshot["phase"] = "ack";
+  if (input.progressTerminalReason === "error") {
+    phase = "error";
+  } else if (isReplyReplay && replyRevealStarted) {
+    phase = "revealing";
+  } else if (isReplyReplay) {
+    phase = "reply_ready";
+  } else if (input.progressTerminalReason === "done" || input.progressTerminalReason === "stream_end") {
+    phase = "complete";
+  } else if (
+    hasTaskProgress ||
+    (hasTools && (latestRunningTool || input.reasoningSummary?.tool || latestStatusEvent?.tool))
+  ) {
+    phase = "tooling";
+  } else if (input.reasoningSummary?.text || latestStatusText) {
+    phase =
+      latestStatusText === "Processing request" &&
+      !input.reasoningSummary?.text &&
+      input.statusEvents.length === 1
+        ? "ack"
+        : "working";
+  }
+
+  const transcriptEntries = buildZakiTranscriptEntries({
+    statusEvents: input.statusEvents,
+    replyStart: isReplyReplay ? input.replyStart : null,
+    toolCalls: input.toolCalls,
+  });
+  const latestTaskEvent =
+    [...input.statusEvents]
+      .reverse()
+      .find((event) => isTaskProgressEvent(event) && event.terminal !== "done" && event.terminal !== "error") ?? null;
+  const currentAction = buildCurrentAction({
+    phase,
+    reasoningSummary: input.reasoningSummary,
+    replyStart: isReplyReplay ? input.replyStart : null,
+    latestTaskEvent,
+    activeToolCall: latestRunningTool,
+    latestStatusEvent,
+    isCacheHit,
+  });
+  const filteredTranscriptEntries = transcriptEntries.filter(
+    (entry) => normalizeNarrativeKey(entry.text) !== normalizeNarrativeKey(currentAction.text)
+  );
+
+  const workStartedAtCandidates = [
+    ...input.statusEvents.map((event) => event.timestamp),
+    ...input.toolCalls.map((toolCall) => toolCall.startedAt || toolCall.timestamp),
+    input.reasoningSummary?.timestamp,
+    input.replyStart?.timestamp,
+  ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const workStartedAt =
+    workStartedAtCandidates.length > 0 ? Math.min(...workStartedAtCandidates) : null;
+
+  return {
+    phase,
+    summaryText: input.reasoningSummary?.text || null,
+    latestStatusText,
+    latestStatusMeta,
+    latestToolName,
+    currentActionText: currentAction.text,
+    currentActionMeta: currentAction.meta,
+    currentActionKind: currentAction.kind,
+    transcriptEntries: filteredTranscriptEntries,
+    workStartedAt,
+    hasTools,
+    isCacheHit,
+    isReplyReplay: Boolean(isReplyReplay),
+    replyRevealStarted,
+  };
+}
+
 function extractToolCallPayload(payload: Record<string, unknown>) {
   const source =
     (payload.content && typeof payload.content === "object"
@@ -1047,68 +1494,14 @@ export function ChatArea() {
     return String(latestAssistant?.content || "");
   }, [messages]);
   const zakiBotProcessSnapshot = useMemo<ZakiProcessSnapshot>(() => {
-    const latestStatusEvent =
-      zakiBotStatusEvents[zakiBotStatusEvents.length - 1] ?? null;
-    const summaryText = zakiBotReasoningSummary?.text || null;
-    const latestStatusText = latestStatusEvent?.text || null;
-    const latestStatusMeta = buildLatestStatusMeta(latestStatusEvent);
-    const latestRunningTool = [...zakiBotToolCalls]
-      .reverse()
-      .find((toolCall) => !toolCall.result);
-    const latestResolvedTool = zakiBotToolCalls[zakiBotToolCalls.length - 1] ?? null;
-    const latestToolName =
-      latestRunningTool?.name ||
-      latestResolvedTool?.name ||
-      zakiBotReasoningSummary?.tool ||
-      latestStatusEvent?.tool ||
-      latestStatusEvent?.taskId ||
-      null;
-    const hasTools = zakiBotToolCalls.length > 0;
-    const hasTaskProgress = isTaskProgressEvent(latestStatusEvent || {});
-    const isCacheHit =
-      isCacheLikeText(summaryText) ||
-      isCacheLikeText(latestStatusText);
-    const isReplyReplay =
-      zakiBotReplyStart?.streamKind === "final_reply" &&
-      zakiBotReplyStart?.deliveryMode === "buffered_replay" &&
-      zakiBotReplyStart?.live === false;
-    const replyRevealStarted =
-      Boolean(isReplyReplay) && latestAssistantMessageContent.trim().length > 0;
-
-    let phase: ZakiProcessSnapshot["phase"] = "ack";
-    if (zakiBotProgressTerminalReason === "error") {
-      phase = "error";
-    } else if (isReplyReplay && replyRevealStarted) {
-      phase = "revealing";
-    } else if (isReplyReplay) {
-      phase = "reply_ready";
-    } else if (zakiBotProgressTerminalReason === "done" || zakiBotProgressTerminalReason === "stream_end") {
-      phase = "complete";
-    } else if (
-      (hasTools && (latestRunningTool || zakiBotReasoningSummary?.tool || latestStatusEvent?.tool)) ||
-      hasTaskProgress
-    ) {
-      phase = "tooling";
-    } else if (summaryText || latestStatusText) {
-      phase =
-        latestStatusText === "Processing request" &&
-        !summaryText &&
-        zakiBotStatusEvents.length === 1
-          ? "ack"
-          : "working";
-    }
-
-    return {
-      phase,
-      summaryText,
-      latestStatusText,
-      latestStatusMeta,
-      latestToolName,
-      hasTools,
-      isCacheHit,
-      isReplyReplay: Boolean(isReplyReplay),
-      replyRevealStarted,
-    };
+    return buildZakiProcessSnapshot({
+      statusEvents: zakiBotStatusEvents,
+      reasoningSummary: zakiBotReasoningSummary,
+      replyStart: zakiBotReplyStart,
+      toolCalls: zakiBotToolCalls,
+      latestAssistantMessageContent,
+      progressTerminalReason: zakiBotProgressTerminalReason,
+    });
   }, [
     latestAssistantMessageContent,
     zakiBotProgressTerminalReason,

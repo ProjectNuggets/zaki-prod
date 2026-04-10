@@ -66,6 +66,10 @@ export function ChatView({
     latestMessage?.role === "assistant" &&
     !String(latestMessage?.content || "").trim() &&
     streamingModeVariant !== "final_reply_reveal";
+  const showDetachedBotProcessRail =
+    showBotTimeline &&
+    !inlineBotProcessRail &&
+    botProcessCompact;
 
   if (isHistoryLoading) {
     return (
@@ -129,7 +133,7 @@ export function ChatView({
           />
         );
       })}
-      {showBotTimeline && !inlineBotProcessRail ? (
+      {showDetachedBotProcessRail ? (
         <BotProcessRail
           isStreaming={isStreaming}
           stage={isStreaming ? streamingMode : "writing"}

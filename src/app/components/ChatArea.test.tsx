@@ -10,6 +10,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   ChatArea,
+  buildZakiProcessSnapshot,
   buildLatestStatusMeta,
   extractProgressPayload,
   inferStreamingModeFromProgress,
@@ -325,5 +326,89 @@ describe("ChatArea Component", () => {
         durationMs: progress?.durationMs,
       })
     ).toBe("Task • task_00000000001 • 840ms");
+  });
+
+  it("builds transcript-first current action from a reasoning summary", () => {
+    const snapshot = buildZakiProcessSnapshot({
+      statusEvents: [
+        {
+          id: "status-1",
+          text: "Preparing model request",
+          timestamp: Date.now() - 900,
+          phase: "thinking",
+        },
+      ],
+      reasoningSummary: {
+        id: "summary-1",
+        text: "Checking context and memory",
+        timestamp: Date.now() - 1000,
+        phase: "thinking",
+      },
+      replyStart: null,
+      toolCalls: [],
+      latestAssistantMessageContent: "",
+      progressTerminalReason: null,
+    });
+
+    expect(snapshot.currentActionText).toBe("Checking context and memory");
+    expect(snapshot.transcriptEntries.map((entry) => entry.text)).toContain(
+      "Checking context and shaping the answer"
+    );
+  });
+
+  it("prioritizes active tool work over generic status when no summary exists", () => {
+    const snapshot = buildZakiProcessSnapshot({
+      statusEvents: [
+        {
+          id: "status-1",
+          text: "Running tools",
+          timestamp: Date.now() - 900,
+          phase: "tools",
+          tool: "web_search",
+        },
+      ],
+      reasoningSummary: null,
+      replyStart: null,
+      toolCalls: [
+        {
+          id: "tool-1",
+          name: "web_search",
+          arguments: { q: "latest news" },
+          timestamp: Date.now() - 900,
+          startedAt: Date.now() - 900,
+        },
+      ],
+      latestAssistantMessageContent: "",
+      progressTerminalReason: null,
+    });
+
+    expect(snapshot.currentActionText).toBe("Using web_search");
+    expect(snapshot.transcriptEntries).toHaveLength(0);
+  });
+
+  it("turns reply_start into a final-reply transition state", () => {
+    const snapshot = buildZakiProcessSnapshot({
+      statusEvents: [],
+      reasoningSummary: {
+        id: "summary-1",
+        text: "Preparing the final answer",
+        timestamp: Date.now() - 1000,
+        phase: "compose",
+      },
+      replyStart: {
+        id: "reply-1",
+        timestamp: Date.now() - 800,
+        streamKind: "final_reply",
+        deliveryMode: "buffered_replay",
+        live: false,
+      },
+      toolCalls: [],
+      latestAssistantMessageContent: "",
+      progressTerminalReason: null,
+    });
+
+    expect(snapshot.phase).toBe("reply_ready");
+    expect(snapshot.currentActionText).toBe("Preparing the final reply");
+    expect(snapshot.transcriptEntries).toHaveLength(0);
   });
 });
