@@ -36,6 +36,17 @@ function formatDuration(durationMs?: number) {
   return `${durationMs}ms`;
 }
 
+function formatElapsedDuration(durationMs: number) {
+  const safeDuration = Math.max(0, Math.trunc(durationMs));
+  const totalSeconds = Math.floor(safeDuration / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${Math.max(1, totalSeconds)}s`;
+}
+
 function compactJsonPreview(value: unknown, max = 140) {
   let raw = "";
   try {
@@ -160,6 +171,25 @@ function buildHeadlineMeta(event: BotStatusEvent | null, fallbackMeta?: string |
   return parts.join(" • ") || null;
 }
 
+function isTaskEvent(event: BotStatusEvent | null | undefined, snapshot?: ZakiProcessSnapshot | null) {
+  if (normalizeText(event?.phase).toLowerCase() === "task" || Boolean(normalizeText(event?.taskId))) {
+    return true;
+  }
+  const meta = normalizeText(snapshot?.latestStatusMeta).toLowerCase();
+  return meta.startsWith("task");
+}
+
+function buildNarrativeBadge(event: BotStatusEvent) {
+  if (event.source === "summary") return "Narrating";
+  if (normalizeText(event.phase).toLowerCase() === "task" || normalizeText(event.taskId)) {
+    return "Task";
+  }
+  if (event.tool) return "Tool";
+  if (event.source === "status") return "Status";
+  if (event.source === "fallback") return "Starting";
+  return "Update";
+}
+
 function isMeaningfulArgsPreview(preview: string) {
   const normalized = preview.trim();
   return Boolean(normalized && normalized !== "{}" && normalized !== "[]");
@@ -207,6 +237,7 @@ export function BotProcessRail({
 }: BotProcessRailProps) {
   const [activeSummaryText, setActiveSummaryText] = useState<string | null>(null);
   const [pendingSummaryText, setPendingSummaryText] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const summaryTimerRef = useRef<number | null>(null);
   const lastSummarySwapRef = useRef(0);
   const lastPhaseRef = useRef<ZakiUxPhase | null>(null);
@@ -219,9 +250,30 @@ export function BotProcessRail({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isStreaming) return;
+    setClockNow(Date.now());
+    const timer = window.setInterval(() => {
+      setClockNow(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isStreaming]);
+
   const dedupedEvents = useMemo(() => dedupeEvents(statusEvents), [statusEvents]);
   const visibleEvents = dedupedEvents.slice(-6);
   const latestEvent = visibleEvents[visibleEvents.length - 1] ?? null;
+  const workStartedAt = useMemo(() => {
+    const candidates = [
+      ...statusEvents.map((event) => event.timestamp),
+      ...toolCalls.map((toolCall) => toolCall.startedAt || toolCall.timestamp),
+      reasoningSummary?.timestamp,
+      replyStart?.timestamp,
+    ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    if (candidates.length === 0) return null;
+    return Math.min(...candidates);
+  }, [replyStart?.timestamp, reasoningSummary?.timestamp, statusEvents, toolCalls]);
+  const workingElapsedLabel =
+    workStartedAt != null ? formatElapsedDuration(Math.max(0, clockNow - workStartedAt)) : null;
   const summaryCandidate = normalizeText(snapshot?.summaryText || reasoningSummary?.text || "");
   const replyRevealActive =
     Boolean(snapshot?.isReplyReplay) ||
@@ -332,8 +384,9 @@ export function BotProcessRail({
   const orderedTools = summarizeToolCalls(toolCalls);
   const latestStatusText = snapshot?.latestStatusText || latestEvent?.text || null;
   const latestStatusMeta = snapshot?.latestStatusMeta || buildHeadlineMeta(latestEvent);
+  const taskActive = isTaskEvent(latestEvent, snapshot);
   const summaryText = activeSummaryText || summaryCandidate || null;
-  const recentEventCap = toolCalls.length > 0 ? 2 : 3;
+  const recentEventCap = toolCalls.length > 0 ? 4 : 5;
   const previousEvents = latestEvent
     ? visibleEvents.filter((event) => event.id !== latestEvent.id).slice(-recentEventCap)
     : visibleEvents.slice(-recentEventCap);
@@ -380,6 +433,9 @@ export function BotProcessRail({
   } else if (summaryText) {
     headlineLabel = "What I'm doing";
     headlineBody = summaryText;
+  } else if (taskActive) {
+    headlineLabel = "Running task";
+    headlineBody = latestStatusText || "Executing task update";
   } else if (phase === "tooling") {
     headlineLabel = "Using tools";
     headlineBody = latestStatusText || "Running tools";
@@ -434,9 +490,16 @@ export function BotProcessRail({
 
   return (
     <section className="zaki-process-enter max-w-[92%] rounded-2xl border border-[#e8d4bc] bg-[linear-gradient(140deg,#fff9f0_0%,#fff3e2_100%)] px-4 py-3 shadow-[0px_10px_24px_rgba(52,36,24,0.10)] transition-[opacity,transform] duration-150 ease-out dark:border-[#34271d] dark:bg-[linear-gradient(160deg,#17120e_0%,#211812_100%)] dark:shadow-[0px_18px_36px_rgba(0,0,0,0.34)]">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8f6c4b] dark:text-[#d0b79b]">
-          Live process
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8f6c4b] dark:text-[#d0b79b]">
+            Live process
+          </div>
+          {workingElapsedLabel ? (
+            <div className="mt-1 text-sm font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+              {isStreaming ? `Working for ${workingElapsedLabel}` : `Worked for ${workingElapsedLabel}`}
+            </div>
+          ) : null}
         </div>
         {phase !== "ack" ? (
           <div className="rounded-full border border-[#dcc0a1] bg-white/80 px-2.5 py-0.5 text-[10px] font-semibold text-[#7c5b3e] dark:border-[#413126] dark:bg-[#1a1410] dark:text-[#ddc7af]">
@@ -518,31 +581,36 @@ export function BotProcessRail({
       {previousEvents.length > 0 ? (
         <div className="mt-3">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:text-zaki-dark-muted">
-            Recent
+            Narrative
           </div>
           <div className="space-y-1.5">
             {previousEvents.map((event) => (
               <div
                 key={event.id}
-                className="flex items-center gap-2 rounded-lg border border-[#ecdac5] bg-white/60 px-2.5 py-1.5 text-xs text-zaki-secondary dark:border-[#36291f] dark:bg-[#1a1410]/82 dark:text-zaki-dark-subtle"
+                className="rounded-lg border border-[#ecdac5] bg-white/60 px-2.5 py-2 text-xs text-zaki-secondary dark:border-[#36291f] dark:bg-[#1a1410]/82 dark:text-zaki-dark-subtle"
               >
-                <span
-                  className={[
-                    "inline-block size-1.5 rounded-full",
-                    isErrorEvent(event)
-                      ? "bg-rose-500"
-                      : isDoneEvent(event) || isCacheEvent(event)
-                        ? "bg-emerald-500"
-                        : "bg-zaki-brand/55",
-                  ].join(" ")}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate leading-5">{event.text}</span>
-                {event.phase ? (
+                <div className="mb-1 flex items-center gap-2">
+                  <span
+                    className={[
+                      "inline-block size-1.5 rounded-full",
+                      isErrorEvent(event)
+                        ? "bg-rose-500"
+                        : isDoneEvent(event) || isCacheEvent(event)
+                          ? "bg-emerald-500"
+                          : "bg-zaki-brand/55",
+                    ].join(" ")}
+                    aria-hidden
+                  />
                   <span className="rounded-full border border-zaki-subtle bg-white/65 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zaki-muted dark:border-[#3a2d22] dark:bg-[#140f0c] dark:text-zaki-dark-muted">
-                    {humanizeToken(event.phase)}
+                    {buildNarrativeBadge(event)}
                   </span>
-                ) : null}
+                  {event.phase ? (
+                    <span className="rounded-full border border-zaki-subtle bg-white/65 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zaki-muted dark:border-[#3a2d22] dark:bg-[#140f0c] dark:text-zaki-dark-muted">
+                      {humanizeToken(event.phase)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="leading-5">{event.text}</div>
               </div>
             ))}
           </div>

@@ -58,6 +58,15 @@ export function ChatView({
   onRegenerateMessage,
   onThumbsUpMessage,
 }: ChatViewProps) {
+  const latestMessage = messages[messages.length - 1] ?? null;
+  const inlineBotProcessRail =
+    showBotTimeline &&
+    botMode &&
+    isStreaming &&
+    latestMessage?.role === "assistant" &&
+    !String(latestMessage?.content || "").trim() &&
+    streamingModeVariant !== "final_reply_reveal";
+
   if (isHistoryLoading) {
     return (
       <div className="zaki-chat-thread max-w-3xl mx-auto pt-16 pb-6 px-4 flex flex-col gap-6">
@@ -80,6 +89,21 @@ export function ChatView({
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
 
         if (isStreamingMessage) {
+          if (inlineBotProcessRail) {
+            return (
+              <BotProcessRail
+                key={msg.id}
+                isStreaming={isStreaming}
+                stage={isStreaming ? streamingMode : "writing"}
+                toolCalls={botToolCalls}
+                statusEvents={botStatusEvents}
+                reasoningSummary={botReasoningSummary}
+                replyStart={botReplyStart}
+                snapshot={botProcessSnapshot}
+                compact={false}
+              />
+            );
+          }
           return (
             <StreamingMessage
               key={msg.id}
@@ -105,7 +129,7 @@ export function ChatView({
           />
         );
       })}
-      {showBotTimeline ? (
+      {showBotTimeline && !inlineBotProcessRail ? (
         <BotProcessRail
           isStreaming={isStreaming}
           stage={isStreaming ? streamingMode : "writing"}

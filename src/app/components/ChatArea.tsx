@@ -442,6 +442,15 @@ export function buildLatestStatusMeta(event: BotStatusEvent | null | undefined) 
   return parts.length > 0 ? parts.join(" • ") : null;
 }
 
+function isTaskProgressEvent(event: {
+  phase?: string | null;
+  taskId?: string | null;
+  text?: string | null;
+  label?: string | null;
+}) {
+  return extractTaskProgressContext(event).isTaskProgress || Boolean(normalizeProgressText(event.taskId));
+}
+
 function buildProgressEventText(progress: {
   text?: string | null;
   phase?: string | null;
@@ -1055,6 +1064,7 @@ export function ChatArea() {
       latestStatusEvent?.taskId ||
       null;
     const hasTools = zakiBotToolCalls.length > 0;
+    const hasTaskProgress = isTaskProgressEvent(latestStatusEvent || {});
     const isCacheHit =
       isCacheLikeText(summaryText) ||
       isCacheLikeText(latestStatusText);
@@ -1074,7 +1084,10 @@ export function ChatArea() {
       phase = "reply_ready";
     } else if (zakiBotProgressTerminalReason === "done" || zakiBotProgressTerminalReason === "stream_end") {
       phase = "complete";
-    } else if (hasTools && (latestRunningTool || zakiBotReasoningSummary?.tool || latestStatusEvent?.tool)) {
+    } else if (
+      (hasTools && (latestRunningTool || zakiBotReasoningSummary?.tool || latestStatusEvent?.tool)) ||
+      hasTaskProgress
+    ) {
       phase = "tooling";
     } else if (summaryText || latestStatusText) {
       phase =
@@ -1871,6 +1884,45 @@ export function ChatArea() {
         phase: summary.phase,
         tool: summary.tool,
         iteration: summary.iteration,
+      });
+      setZakiBotStatusEvents((prev) => {
+        const fingerprint = [
+          "summary",
+          normalizeProgressText(summary.text).toLowerCase(),
+          normalizeProgressText(summary.phase).toLowerCase(),
+          normalizeProgressText(summary.tool).toLowerCase(),
+        ].join("|");
+        const last = prev[prev.length - 1];
+        if (last?.fingerprint === fingerprint) {
+          if (last.iteration === summary.iteration) {
+            return prev;
+          }
+          const next = [...prev];
+          next[next.length - 1] = {
+            ...last,
+            text: summary.text,
+            timestamp: Date.now(),
+            phase: summary.phase,
+            tool: summary.tool,
+            iteration: summary.iteration,
+            source: "summary",
+          };
+          return next;
+        }
+        const next = [
+          ...prev,
+          {
+            id: `summary-status-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text: summary.text,
+            timestamp: Date.now(),
+            fingerprint,
+            source: "summary",
+            phase: summary.phase,
+            tool: summary.tool,
+            iteration: summary.iteration,
+          } satisfies BotStatusEvent,
+        ];
+        return next.slice(-16);
       });
     },
     [isZakiBotActiveSpace]

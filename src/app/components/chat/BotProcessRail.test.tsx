@@ -374,7 +374,7 @@ describe("BotProcessRail", () => {
         isStreaming
         stage="researching"
         snapshot={{
-          phase: "working",
+          phase: "tooling",
           summaryText: null,
           latestStatusText: "Task task_00000000001: running",
           latestStatusMeta: "Task • task_00000000001 • 840ms",
@@ -399,6 +399,7 @@ describe("BotProcessRail", () => {
       />
     );
 
+    expect(screen.getByText("Running task")).toBeInTheDocument();
     expect(screen.getByText("Task task_00000000001: running")).toBeInTheDocument();
     expect(screen.getByText("Task • task_00000000001 • 840ms")).toBeInTheDocument();
     expect(screen.getAllByText("Researching").length).toBeGreaterThan(0);

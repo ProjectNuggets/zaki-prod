@@ -5,7 +5,7 @@ export type BotStatusEvent = {
   text: string;
   timestamp: number;
   fingerprint?: string | null;
-  source?: "progress" | "status" | "fallback";
+  source?: "progress" | "status" | "fallback" | "summary";
   phase?: string | null;
   state?: string | null;
   label?: string | null;
