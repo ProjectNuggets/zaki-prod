@@ -6,6 +6,7 @@ import {
   NullalisWorklog,
   TaskChecklist,
   UsageCostFooter,
+  composeNullalisWorklog,
 } from "./NullalisRuntimeWidgets";
 
 describe("NullalisRuntimeWidgets", () => {
@@ -71,6 +72,101 @@ describe("NullalisRuntimeWidgets", () => {
     expect(screen.getByText("Checking context and memory")).toBeInTheDocument();
     expect(screen.getByText("Using bash")).toBeInTheDocument();
     expect(screen.getByText("src/app/components/ChatArea.tsx")).toBeInTheDocument();
+    expect(screen.queryByText("thinking")).not.toBeInTheDocument();
+    expect(screen.queryByText("tool_done")).not.toBeInTheDocument();
+  });
+
+  it("composes raw nullalis events into a meaningful work journal", () => {
+    const viewModel = composeNullalisWorklog({
+      isStreaming: true,
+      frame: null,
+      entryCount: 7,
+      entries: [
+        {
+          id: "start",
+          kind: "narration",
+          intent: "thinking",
+          text: "Starting the request",
+          timestamp: 1,
+          importance: 20,
+          source: "fallback",
+        },
+        {
+          id: "processing",
+          kind: "status",
+          intent: "status",
+          text: "Processing request",
+          timestamp: 2,
+          importance: 20,
+          source: "progress",
+        },
+        {
+          id: "context",
+          kind: "narration",
+          intent: "context",
+          text: "Checking context and memory",
+          timestamp: 3,
+          importance: 70,
+          source: "reasoning_summary",
+        },
+        {
+          id: "model",
+          kind: "narration",
+          intent: "model",
+          text: "Preparing the model request",
+          timestamp: 4,
+          importance: 25,
+          source: "progress",
+        },
+        {
+          id: "thinking",
+          kind: "narration",
+          intent: "thinking",
+          text: "Thinking through the request",
+          timestamp: 5,
+          importance: 55,
+          source: "reasoning_summary",
+        },
+      ],
+    });
+
+    expect(viewModel.currentAction?.text).toBe("Thinking through the request");
+    expect(viewModel.visibleEntries.map((entry) => entry.text)).toEqual([
+      "Checking context and memory",
+    ]);
+    expect(viewModel.visibleEntries.map((entry) => entry.text)).not.toContain(
+      "Processing request"
+    );
+    expect(viewModel.visibleEntries.map((entry) => entry.text)).not.toContain(
+      "Preparing the model request"
+    );
+  });
+
+  it("keeps tool file evidence when composing worklog entries", () => {
+    const viewModel = composeNullalisWorklog({
+      isStreaming: true,
+      frame: null,
+      entryCount: 2,
+      entries: [
+        {
+          id: "tool",
+          kind: "tool",
+          intent: "file",
+          text: "bash completed · 120ms",
+          timestamp: 1,
+          importance: 88,
+          tool: "bash",
+          durationMs: 120,
+          files: ["src/app/components/ChatArea.tsx"],
+          status: "done",
+          resultState: "done",
+          source: "tool",
+        },
+      ],
+    });
+
+    expect(viewModel.currentAction?.text).toBe("bash completed · 120ms");
+    expect(viewModel.currentAction?.metaText).toBe("src/app/components/ChatArea.tsx");
   });
 
   it("renders a compact worklog handoff", () => {

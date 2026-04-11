@@ -105,17 +105,36 @@ export type NullalisTranscriptEntryKind =
   | "status"
   | "transition";
 
+export type NullalisTranscriptIntent =
+  | "memory"
+  | "context"
+  | "thinking"
+  | "planning"
+  | "model"
+  | "tool"
+  | "file"
+  | "test"
+  | "git"
+  | "approval"
+  | "final"
+  | "status";
+
 export type NullalisTranscriptEntry = {
   id: string;
   kind: NullalisTranscriptEntryKind;
+  intent?: NullalisTranscriptIntent;
   text: string;
   timestamp: number;
+  importance?: number;
   phase?: string | null;
   tool?: string | null;
   taskId?: string | null;
   durationMs?: number | null;
   status?: string | null;
   files?: string[];
+  command?: string | null;
+  resultState?: "running" | "done" | "failed" | "queued" | "blocked" | null;
+  groupKey?: string | null;
   source?: "reasoning_summary" | "progress" | "tool" | "task" | "approval" | "done" | "fallback";
 };
 

@@ -18,6 +18,7 @@ import type {
   NullalisTaskStatus,
   NullalisTranscriptEntry,
   NullalisTranscriptEntryKind,
+  NullalisTranscriptIntent,
   ZakiUsageSummary,
 } from "./BotStatusRail";
 
@@ -127,6 +128,231 @@ function transcriptToneClass(kind: NullalisTranscriptEntryKind, status?: string 
   return "bg-zaki-brand/75";
 }
 
+type NullalisWorklogDisplayEntry = NullalisTranscriptEntry & {
+  metaText?: string | null;
+};
+
+export type NullalisWorklogViewModel = {
+  currentAction: NullalisWorklogDisplayEntry | null;
+  visibleEntries: NullalisWorklogDisplayEntry[];
+  hiddenCount: number;
+  workStartedAt: number | null;
+  compactSummary: string | null;
+};
+
+function normalizeWorklogText(value: string | null | undefined) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/[.]+$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function inferIntent(entry: NullalisTranscriptEntry): NullalisTranscriptIntent {
+  if (entry.intent) return entry.intent;
+  const haystack = [
+    entry.text,
+    entry.phase,
+    entry.tool,
+    entry.command,
+    ...(entry.files ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (haystack.includes("memory")) return "memory";
+  if (haystack.includes("context") || haystack.includes("prompt")) return "context";
+  if (haystack.includes("plan") || haystack.includes("step")) return "planning";
+  if (haystack.includes("model")) return "model";
+  if (haystack.includes("test") || haystack.includes("jest") || haystack.includes("vitest")) {
+    return "test";
+  }
+  if (haystack.includes("git ") || haystack.includes("commit") || haystack.includes("push")) {
+    return "git";
+  }
+  if (entry.files?.length) return "file";
+  if (entry.tool) return "tool";
+  if (entry.kind === "approval") return "approval";
+  if (entry.kind === "transition") return "final";
+  return "status";
+}
+
+function isLowValueEntry(entry: NullalisTranscriptEntry) {
+  if (entry.source === "reasoning_summary") return false;
+  if (entry.kind === "tool" || entry.kind === "task" || entry.kind === "approval") return false;
+  if (entry.files?.length || entry.command) return false;
+  const text = normalizeWorklogText(entry.text);
+  return (
+    text === "starting the request" ||
+    text === "processing request" ||
+    text === "preparing the model request" ||
+    text === "reading the model response" ||
+    text === "response ready" ||
+    text === "finalized the response"
+  );
+}
+
+function getEntryImportance(entry: NullalisTranscriptEntry) {
+  if (typeof entry.importance === "number" && Number.isFinite(entry.importance)) {
+    return entry.importance;
+  }
+  if (entry.source === "reasoning_summary") return 90;
+  if (entry.kind === "approval") return 95;
+  if (entry.kind === "tool") return entry.files?.length || entry.command ? 88 : 78;
+  if (entry.kind === "task") return 76;
+  if (entry.kind === "transition") return 65;
+  const intent = inferIntent(entry);
+  if (intent === "memory" || intent === "context") return 70;
+  if (intent === "model") return 35;
+  return 55;
+}
+
+function entrySemanticKey(entry: NullalisTranscriptEntry) {
+  return (
+    entry.groupKey ||
+    [
+      inferIntent(entry),
+      entry.kind,
+      normalizeWorklogText(entry.text),
+      normalizeWorklogText(entry.tool),
+      normalizeWorklogText(entry.taskId),
+    ].join("|")
+  );
+}
+
+function composeEntryMeta(entry: NullalisTranscriptEntry) {
+  if (entry.files?.length) return entry.files.join(", ");
+  if (entry.command) return entry.command;
+  const duration = formatDuration(entry.durationMs);
+  if (entry.kind === "tool" && duration) return duration;
+  if (entry.kind === "approval" && entry.status) return `Risk: ${entry.status}`;
+  if (entry.kind === "task" && entry.status && entry.resultState !== "running") {
+    return entry.status;
+  }
+  return null;
+}
+
+function frameFallbackEntry(frame: NullalisNarrationFrame | null): NullalisWorklogDisplayEntry | null {
+  if (!frame) return null;
+  return {
+    id: frame.id,
+    kind: frame.phase === "tool_start" || frame.phase === "tool_done" ? "tool" : "narration",
+    intent: frame.phase === "tool_start" || frame.phase === "tool_done" ? "tool" : "thinking",
+    text: currentActionFromFrame(frame) || "Working through the request",
+    timestamp: frame.timestamp,
+    importance: 45,
+    phase: frame.phase,
+    tool: frame.tool,
+    durationMs: frame.durationMs,
+    resultState: frame.phase === "tool_done" ? "done" : frame.phase === "tool_start" ? "running" : null,
+    groupKey: `frame:${frame.phase}:${frame.tool ?? frame.label}`,
+    source: "fallback",
+    metaText:
+      frame.phase === "tool_done" && frame.durationMs != null
+        ? formatDuration(frame.durationMs)
+        : null,
+  };
+}
+
+export function composeNullalisWorklog({
+  entries,
+  entryCount,
+  frame,
+  isStreaming,
+}: {
+  entries: NullalisTranscriptEntry[];
+  entryCount?: number;
+  frame: NullalisNarrationFrame | null;
+  isStreaming: boolean;
+}): NullalisWorklogViewModel {
+  const sorted = [...entries]
+    .filter((entry) => entry.text.trim())
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const deduped: NullalisTranscriptEntry[] = [];
+  const lastByKey = new Map<string, NullalisTranscriptEntry>();
+
+  for (const entry of sorted) {
+    const key = entrySemanticKey(entry);
+    const previous = lastByKey.get(key);
+    if (
+      previous &&
+      previous.resultState === entry.resultState &&
+      normalizeWorklogText(previous.text) === normalizeWorklogText(entry.text)
+    ) {
+      continue;
+    }
+    if (previous && entry.kind !== "task" && entry.kind !== "tool") {
+      const previousIndex = deduped.findIndex((candidate) => candidate.id === previous.id);
+      if (previousIndex >= 0 && getEntryImportance(entry) >= getEntryImportance(previous)) {
+        deduped.splice(previousIndex, 1);
+      }
+    }
+    deduped.push(entry);
+    lastByKey.set(key, entry);
+  }
+
+  const highSignalCount = deduped.filter((entry) => !isLowValueEntry(entry)).length;
+  const filtered =
+    highSignalCount > 0
+      ? deduped.filter((entry) => !isLowValueEntry(entry) || getEntryImportance(entry) >= 70)
+      : deduped;
+  const fallback = filtered.length === 0 ? frameFallbackEntry(frame) : null;
+  const displayEntries = (fallback ? [fallback, ...filtered] : filtered).map((entry) => ({
+    ...entry,
+    intent: inferIntent(entry),
+    metaText: composeEntryMeta(entry),
+  }));
+  const meaningfulEntries = displayEntries.slice(-8);
+  const latestMeaningful =
+    [...meaningfulEntries]
+      .reverse()
+      .find((entry) => getEntryImportance(entry) >= 40 && normalizeWorklogText(entry.text)) ??
+    meaningfulEntries[meaningfulEntries.length - 1] ??
+    frameFallbackEntry(frame);
+  const streamingFallbackAction: NullalisWorklogDisplayEntry | null = isStreaming
+    ? {
+        id: "nullalis-working-fallback",
+        kind: "narration",
+        intent: "thinking",
+        text: "Working through the request",
+        timestamp: Date.now(),
+        importance: 30,
+        source: "fallback",
+        metaText: null,
+      }
+    : null;
+  const currentAction: NullalisWorklogDisplayEntry | null = latestMeaningful
+    ? {
+        ...latestMeaningful,
+        text:
+          normalizeWorklogText(latestMeaningful.text) === "still working on the reply"
+            ? "Working through the request"
+            : latestMeaningful.text,
+        metaText: composeEntryMeta(latestMeaningful),
+      }
+    : streamingFallbackAction;
+  const currentKey = currentAction ? entrySemanticKey(currentAction) : null;
+  const visibleEntries = meaningfulEntries.filter((entry) => {
+    if (!currentKey) return true;
+    return entry.id !== currentAction?.id && entrySemanticKey(entry) !== currentKey;
+  });
+  const count = Math.max(entryCount ?? entries.length, displayEntries.length);
+  const firstTimestamp =
+    displayEntries.reduce<number | null>(
+      (earliest, entry) =>
+        earliest == null || entry.timestamp < earliest ? entry.timestamp : earliest,
+      frame?.timestamp ?? null
+    ) ?? null;
+
+  return {
+    currentAction,
+    visibleEntries,
+    hiddenCount: Math.max(0, count - meaningfulEntries.length),
+    workStartedAt: firstTimestamp,
+    compactSummary: `${count} ${count === 1 ? "step" : "steps"}`,
+  };
+}
+
 function currentActionFromFrame(frame: NullalisNarrationFrame | null) {
   if (!frame) return null;
   return formatNarrationText(frame);
@@ -154,25 +380,25 @@ export function NullalisWorklog({
     return () => window.clearInterval(timer);
   }, [isStreaming]);
 
-  const visibleEntries = useMemo(
-    () => entries.filter((entry) => entry.text.trim()).slice(-8),
-    [entries]
+  const worklog = useMemo(
+    () =>
+      composeNullalisWorklog({
+        entries,
+        entryCount,
+        frame,
+        isStreaming,
+      }),
+    [entries, entryCount, frame, isStreaming]
   );
-  const latestEntry = visibleEntries[visibleEntries.length - 1] ?? null;
-  const currentAction = latestEntry?.text || currentActionFromFrame(frame) || (isStreaming ? "Starting the work" : null);
-  const currentEntryId = latestEntry?.id ?? null;
-  const feedEntries = visibleEntries.filter((entry) => entry.id !== currentEntryId);
-  const totalCount = Math.max(entryCount ?? visibleEntries.length, visibleEntries.length);
-  const firstTimestamp =
-    visibleEntries.reduce<number | null>(
-      (earliest, entry) =>
-        earliest == null || entry.timestamp < earliest ? entry.timestamp : earliest,
-      frame?.timestamp ?? null
-    ) ?? null;
   const elapsedLabel =
-    firstTimestamp != null ? formatElapsedDuration(clockNow - firstTimestamp) : null;
+    worklog.workStartedAt != null ? formatElapsedDuration(clockNow - worklog.workStartedAt) : null;
+  const currentAction = worklog.currentAction;
+  const feedEntries = worklog.visibleEntries;
+  const totalCount = Math.max(entryCount ?? entries.length, entries.length, 1);
+  const compactSummary =
+    worklog.compactSummary ?? `${totalCount} ${totalCount === 1 ? "step" : "steps"}`;
 
-  if (!currentAction && visibleEntries.length === 0) return null;
+  if (!currentAction && feedEntries.length === 0) return null;
 
   if (compact) {
     return (
@@ -181,20 +407,20 @@ export function NullalisWorklog({
           <span
             className={cn(
               "inline-block size-2 rounded-full",
-              transcriptToneClass(latestEntry?.kind ?? "transition", latestEntry?.status),
+              transcriptToneClass(currentAction?.kind ?? "transition", currentAction?.status),
               isStreaming && "animate-pulse"
             )}
             aria-hidden
           />
           <span>
             {elapsedLabel
-              ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel} · ${totalCount} ${totalCount === 1 ? "step" : "steps"}`
-              : `${totalCount} ${totalCount === 1 ? "step" : "steps"}`}
+              ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel} · ${compactSummary}`
+              : compactSummary}
           </span>
         </div>
         {currentAction ? (
           <div className="mt-1 truncate text-xs text-zaki-muted dark:text-zaki-dark-muted">
-            {currentAction}
+            {currentAction.text}
           </div>
         ) : null}
       </section>
@@ -213,24 +439,18 @@ export function NullalisWorklog({
         <span
           className={cn(
             "mt-2 inline-block size-2 rounded-full",
-            transcriptToneClass(latestEntry?.kind ?? "narration", latestEntry?.status),
+            transcriptToneClass(currentAction?.kind ?? "narration", currentAction?.status),
             isStreaming && "animate-pulse"
           )}
           aria-hidden
         />
         <div className="min-w-0">
           <div className="text-[22px] font-medium leading-8 tracking-[-0.01em] text-zaki-primary dark:text-zaki-dark-primary">
-            {currentAction}
+            {currentAction?.text}
           </div>
-          {latestEntry?.files?.length ? (
+          {currentAction?.metaText ? (
             <div className="mt-1 truncate text-[13px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-              {latestEntry.files.join(", ")}
-            </div>
-          ) : latestEntry?.tool || latestEntry?.phase || latestEntry?.durationMs ? (
-            <div className="mt-1 text-[13px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-              {[latestEntry.tool, latestEntry.phase, formatDuration(latestEntry.durationMs)]
-                .filter(Boolean)
-                .join(" · ")}
+              {currentAction.metaText}
             </div>
           ) : null}
         </div>
@@ -251,15 +471,9 @@ export function NullalisWorklog({
                 <div className="text-[16px] leading-7 text-zaki-primary/95 dark:text-zaki-dark-primary/95">
                   {entry.text}
                 </div>
-                {entry.files?.length ? (
+                {entry.metaText ? (
                   <div className="mt-0.5 truncate text-[12px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                    {entry.files.join(", ")}
-                  </div>
-                ) : entry.tool || entry.phase || entry.durationMs ? (
-                  <div className="mt-0.5 text-[12px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                    {[entry.tool, entry.phase, formatDuration(entry.durationMs)]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {entry.metaText}
                   </div>
                 ) : null}
               </div>

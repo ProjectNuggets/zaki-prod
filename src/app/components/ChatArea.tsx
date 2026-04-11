@@ -1394,6 +1394,79 @@ function extractNullalisFiles(payload: Record<string, unknown>) {
   return Array.from(new Set(candidates)).slice(0, 4);
 }
 
+function extractNullalisCommand(payload: Record<string, unknown>) {
+  const command =
+    (typeof payload.command === "string" && payload.command.trim()) ||
+    (typeof payload.cmd === "string" && payload.cmd.trim()) ||
+    "";
+  if (command) return command;
+  const preview =
+    (typeof payload.output_preview === "string" && payload.output_preview) ||
+    (typeof payload.outputPreview === "string" && payload.outputPreview) ||
+    "";
+  const firstLine = preview.split(/\r?\n/).find((line) => line.trim());
+  if (!firstLine) return null;
+  const trimmed = firstLine.trim();
+  if (trimmed.startsWith("$ ")) return trimmed.slice(2).trim() || null;
+  return null;
+}
+
+function inferNullalisIntent(input: {
+  text?: string | null;
+  phase?: string | null;
+  tool?: string | null;
+  files?: string[];
+  command?: string | null;
+}): NullalisTranscriptEntry["intent"] {
+  const haystack = [input.text, input.phase, input.tool, input.command, ...(input.files ?? [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (haystack.includes("memory")) return "memory";
+  if (haystack.includes("context") || haystack.includes("prompt")) return "context";
+  if (haystack.includes("plan") || haystack.includes("step")) return "planning";
+  if (haystack.includes("approval")) return "approval";
+  if (haystack.includes("final") || haystack.includes("response ready")) return "final";
+  if (haystack.includes("model")) return "model";
+  if (haystack.includes("test") || haystack.includes("jest") || haystack.includes("vitest")) {
+    return "test";
+  }
+  if (haystack.includes("git ") || haystack.includes("commit") || haystack.includes("push")) {
+    return "git";
+  }
+  if (input.files?.length) return "file";
+  if (input.tool) return "tool";
+  if (haystack.includes("thinking")) return "thinking";
+  return "status";
+}
+
+function nullalisImportance(input: {
+  source?: NullalisTranscriptEntry["source"];
+  kind: NullalisTranscriptEntry["kind"];
+  text?: string | null;
+  intent?: NullalisTranscriptEntry["intent"];
+  files?: string[];
+  command?: string | null;
+  durationMs?: number | null;
+}) {
+  const text = normalizeProgressText(input.text).toLowerCase();
+  if (input.source === "reasoning_summary") return 90;
+  if (input.kind === "approval") return 95;
+  if (input.kind === "tool") return input.files?.length || input.command ? 88 : 78;
+  if (input.kind === "task") return 76;
+  if (input.kind === "transition") return 65;
+  if (input.intent === "memory" || input.intent === "context") return 70;
+  if (
+    text === "processing request" ||
+    text === "preparing the model request" ||
+    text === "reading the model response"
+  ) {
+    return 25;
+  }
+  if (input.intent === "model") return 35;
+  return 55;
+}
+
 function nullalisEntryId(prefix: string, now: number) {
   return `nullalis-${prefix}-${now}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -1409,13 +1482,21 @@ export function extractNullalisTranscriptEntry(
   if (type === "reasoning_summary") {
     const summary = extractReasoningSummaryPayload(payload);
     if (!summary) return null;
+    const intent = inferNullalisIntent({
+      text: summary.text,
+      phase: summary.phase,
+      tool: summary.tool,
+    });
     return {
       id: nullalisEntryId("summary", now),
       kind: "narration",
+      intent,
       text: summary.text,
       timestamp: now,
+      importance: 90,
       phase: summary.phase,
       tool: summary.tool,
+      groupKey: `summary:${normalizeProgressText(summary.text).toLowerCase()}`,
       source: "reasoning_summary",
     };
   }
@@ -1434,22 +1515,48 @@ export function extractNullalisTranscriptEntry(
     } else if (frame.phase === "plan_step" && frame.stepIndex != null && frame.stepTotal != null) {
       text = `Step ${frame.stepIndex}/${frame.stepTotal}: ${label}`;
     }
+    const files = extractNullalisFiles(payload);
+    const command = extractNullalisCommand(payload);
+    const intent = inferNullalisIntent({
+      text,
+      phase: frame.phase,
+      tool: frame.tool,
+      files,
+      command,
+    });
+    const kind =
+      frame.phase === "tool_start" || frame.phase === "tool_done"
+        ? "tool"
+        : frame.phase === "plan_step"
+          ? "task"
+          : frame.phase === "error_recovery"
+            ? "status"
+            : "narration";
     return {
       id: frame.id.replace("nullalis-narration", "nullalis-transcript"),
-      kind:
-        frame.phase === "tool_start" || frame.phase === "tool_done"
-          ? "tool"
-          : frame.phase === "plan_step"
-            ? "task"
-            : frame.phase === "error_recovery"
-              ? "status"
-              : "narration",
+      kind,
+      intent,
       text,
       timestamp: frame.timestamp,
+      importance: nullalisImportance({
+        source: "progress",
+        kind,
+        text,
+        intent,
+        files,
+        command,
+        durationMs: frame.durationMs,
+      }),
       phase: frame.phase,
       tool: frame.tool,
       durationMs: frame.durationMs,
-      files: extractNullalisFiles(payload),
+      files,
+      command,
+      resultState: frame.phase === "tool_done" ? "done" : frame.phase === "tool_start" ? "running" : null,
+      groupKey:
+        frame.tool && (frame.phase === "tool_start" || frame.phase === "tool_done")
+          ? `tool:${frame.tool}`
+          : `${intent}:${normalizeProgressText(text).toLowerCase()}`,
       source: "progress",
     };
   }
@@ -1463,16 +1570,32 @@ export function extractNullalisTranscriptEntry(
       (typeof payload.status === "string" && payload.status.trim()) ||
       "";
     if (!text) return null;
+    const intent = inferNullalisIntent({
+      text,
+      phase: progress?.phase,
+      tool: progress?.tool,
+    });
+    const normalizedText = normalizeNullalisTranscriptLabel(text, progress?.phase);
     return {
       id: nullalisEntryId("status", now),
       kind: "status",
-      text: normalizeNullalisTranscriptLabel(text, progress?.phase),
+      intent,
+      text: normalizedText,
       timestamp: now,
+      importance: nullalisImportance({
+        source: "progress",
+        kind: "status",
+        text: normalizedText,
+        intent,
+        durationMs: progress?.durationMs,
+      }),
       phase: progress?.phase ?? null,
       tool: progress?.tool ?? null,
       taskId: progress?.taskId ?? null,
       durationMs: progress?.durationMs ?? null,
       status: progress?.state ?? null,
+      resultState: progress?.state === "done" ? "done" : progress?.state === "error" ? "failed" : null,
+      groupKey: `${intent}:${normalizeProgressText(normalizedText).toLowerCase()}`,
       source: "progress",
     };
   }
@@ -1482,14 +1605,29 @@ export function extractNullalisTranscriptEntry(
       (typeof payload.tool === "string" && payload.tool.trim()) ||
       (typeof payload.name === "string" && payload.name.trim()) ||
       "tool";
+    const files = extractNullalisFiles(payload);
+    const command = extractNullalisCommand(payload);
+    const intent = inferNullalisIntent({ text: `Using ${tool}`, tool, files, command });
     return {
       id: nullalisEntryId("tool-start", now),
       kind: "tool",
+      intent,
       text: `Using ${tool}`,
       timestamp: now,
+      importance: nullalisImportance({
+        source: "tool",
+        kind: "tool",
+        text: `Using ${tool}`,
+        intent,
+        files,
+        command,
+      }),
       phase: "tool_start",
       tool,
-      files: extractNullalisFiles(payload),
+      files,
+      command,
+      resultState: "running",
+      groupKey: `tool:${tool}`,
       source: "tool",
     };
   }
@@ -1498,16 +1636,33 @@ export function extractNullalisTranscriptEntry(
     const toolResult = extractToolResultPayload(payload);
     const tool = toolResult.name || "tool";
     const duration = toolResult.durationMs != null ? ` · ${Math.round(toolResult.durationMs)}ms` : "";
+    const files = extractNullalisFiles(payload);
+    const command = extractNullalisCommand(payload);
+    const text = toolResult.ok ? `${tool} completed${duration}` : `${tool} failed`;
+    const intent = inferNullalisIntent({ text, tool, files, command });
     return {
       id: nullalisEntryId("tool-result", now),
       kind: "tool",
-      text: toolResult.ok ? `${tool} completed${duration}` : `${tool} failed`,
+      intent,
+      text,
       timestamp: now,
+      importance: nullalisImportance({
+        source: "tool",
+        kind: "tool",
+        text,
+        intent,
+        files,
+        command,
+        durationMs: toolResult.durationMs,
+      }),
       phase: "tool_done",
       tool,
       durationMs: toolResult.durationMs,
       status: toolResult.ok ? "done" : "failed",
-      files: extractNullalisFiles(payload),
+      files,
+      command,
+      resultState: toolResult.ok ? "done" : "failed",
+      groupKey: `tool:${tool}`,
       source: "tool",
     };
   }
@@ -1524,14 +1679,36 @@ export function extractNullalisTranscriptEntry(
           : task.status === "queued"
             ? "Queued"
             : task.status.charAt(0).toUpperCase() + task.status.slice(1);
+    const text = `${statusCopy} task: ${taskName}`;
+    const intent = inferNullalisIntent({ text, phase: "task_update" });
     return {
       id: nullalisEntryId(`task-${task.taskId}`, now),
       kind: "task",
-      text: `${statusCopy} task: ${taskName}`,
+      intent,
+      text,
       timestamp: task.updatedAt,
+      importance: nullalisImportance({
+        source: "task",
+        kind: "task",
+        text,
+        intent,
+      }),
       phase: "task_update",
       taskId: task.taskId,
       status: task.status,
+      resultState:
+        task.status === "done" || task.status === "succeeded"
+          ? "done"
+          : task.status === "failed"
+            ? "failed"
+            : task.status === "blocked"
+              ? "blocked"
+              : task.status === "queued"
+                ? "queued"
+                : task.status === "running"
+                  ? "running"
+                  : null,
+      groupKey: `task:${task.taskId}`,
       source: "task",
     };
   }
@@ -1541,11 +1718,15 @@ export function extractNullalisTranscriptEntry(
     return {
       id: nullalisEntryId("approval", now),
       kind: "approval",
+      intent: "approval",
       text: `Approval required for ${approval.tool}`,
       timestamp: approval.timestamp,
+      importance: 95,
       phase: "approval_required",
       tool: approval.tool,
       status: approval.riskLevel,
+      resultState: "blocked",
+      groupKey: `approval:${approval.tool}`,
       source: "approval",
     };
   }
@@ -1554,10 +1735,14 @@ export function extractNullalisTranscriptEntry(
     return {
       id: nullalisEntryId("done", now),
       kind: "transition",
+      intent: "final",
       text: "Finalized the response",
       timestamp: now,
+      importance: 65,
       phase: "done",
       status: "done",
+      resultState: "done",
+      groupKey: "done",
       source: "done",
     };
   }
@@ -4602,9 +4787,13 @@ export function ChatArea() {
           {
             id: `nullalis-start-entry-${now}`,
             kind: "narration",
+            intent: "thinking",
             text: "Starting the request",
             timestamp: now,
+            importance: 20,
             phase: "thinking",
+            resultState: "running",
+            groupKey: "fallback:start",
             source: "fallback",
           },
         ]);
