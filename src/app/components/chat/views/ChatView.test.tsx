@@ -138,7 +138,7 @@ describe("ChatView", () => {
       />
     );
 
-    expect(screen.getByText("Analyzing request")).toBeInTheDocument();
+    expect(screen.getAllByText("Analyzing request").length).toBeGreaterThan(0);
     expect(screen.getByText(/Working for|Worked for/)).toBeInTheDocument();
   });
 });

@@ -509,6 +509,30 @@ describe("ChatArea Component", () => {
     });
   });
 
+  it("keeps nullalis progress group metadata and heartbeat flags", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "progress",
+        {
+          type: "progress",
+          phase: "thinking",
+          label: "Still working on the reply",
+          tool_use_id: "call_1",
+          task_id: "task_1",
+          group_id: "group_1",
+          heartbeat: true,
+        },
+        111
+      )
+    ).toMatchObject({
+      kind: "narration",
+      toolUseId: "call_1",
+      taskId: "task_1",
+      heartbeat: true,
+      groupKey: "tool-use:call_1",
+    });
+  });
+
   it("normalizes nullalis status responses into worklog entries", () => {
     expect(
       extractNullalisTranscriptEntry(
@@ -555,9 +579,12 @@ describe("ChatArea Component", () => {
         "tool_result",
         {
           tool: "bash",
+          tool_use_id: "call_1",
           success: true,
           duration_ms: 120,
+          command: "npm run typecheck",
           output_preview: "edited src/app/components/ChatArea.tsx",
+          result_summary: "completed",
         },
         333
       )
@@ -565,9 +592,14 @@ describe("ChatArea Component", () => {
       kind: "tool",
       text: "bash completed · 120ms",
       tool: "bash",
+      toolUseId: "call_1",
       durationMs: 120,
       status: "done",
+      command: "npm run typecheck",
       files: ["src/app/components/ChatArea.tsx"],
+      outputPreview: "edited src/app/components/ChatArea.tsx",
+      resultSummary: "completed",
+      groupKey: "tool-use:call_1",
     });
   });
 

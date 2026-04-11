@@ -651,6 +651,18 @@ export function extractProgressPayload(payload: Record<string, unknown>) {
     (typeof source.toolName === "string" && source.toolName) ||
     (typeof payload.tool === "string" && payload.tool) ||
     undefined;
+  const toolUseIdRaw =
+    (typeof source.tool_use_id === "string" && source.tool_use_id) ||
+    (typeof source.toolUseId === "string" && source.toolUseId) ||
+    (typeof payload.tool_use_id === "string" && payload.tool_use_id) ||
+    (typeof payload.toolUseId === "string" && payload.toolUseId) ||
+    undefined;
+  const groupIdRaw =
+    (typeof source.group_id === "string" && source.group_id) ||
+    (typeof source.groupId === "string" && source.groupId) ||
+    (typeof payload.group_id === "string" && payload.group_id) ||
+    (typeof payload.groupId === "string" && payload.groupId) ||
+    undefined;
   const iterationRaw =
     typeof source.iteration === "number"
       ? source.iteration
@@ -690,6 +702,11 @@ export function extractProgressPayload(payload: Record<string, unknown>) {
     state,
     label,
     tool,
+    toolUseId: String(toolUseIdRaw || "").trim() || null,
+    groupId: String(groupIdRaw || "").trim() || null,
+    heartbeat: source.heartbeat === true || payload.heartbeat === true,
+    command: extractNullalisCommand(source),
+    files: extractNullalisFiles(source),
     taskId: taskContext.taskId,
     iteration,
     durationMs,
@@ -1517,6 +1534,19 @@ export function extractNullalisTranscriptEntry(
     }
     const files = extractNullalisFiles(payload);
     const command = extractNullalisCommand(payload);
+    const toolUseId =
+      (typeof payload.tool_use_id === "string" && payload.tool_use_id.trim()) ||
+      (typeof payload.toolUseId === "string" && payload.toolUseId.trim()) ||
+      null;
+    const taskId =
+      (typeof payload.task_id === "string" && payload.task_id.trim()) ||
+      (typeof payload.taskId === "string" && payload.taskId.trim()) ||
+      null;
+    const groupId =
+      (typeof payload.group_id === "string" && payload.group_id.trim()) ||
+      (typeof payload.groupId === "string" && payload.groupId.trim()) ||
+      null;
+    const heartbeat = payload.heartbeat === true;
     const intent = inferNullalisIntent({
       text,
       phase: frame.phase,
@@ -1549,14 +1579,23 @@ export function extractNullalisTranscriptEntry(
       }),
       phase: frame.phase,
       tool: frame.tool,
+      toolUseId,
+      taskId,
       durationMs: frame.durationMs,
       files,
       command,
+      heartbeat,
       resultState: frame.phase === "tool_done" ? "done" : frame.phase === "tool_start" ? "running" : null,
       groupKey:
-        frame.tool && (frame.phase === "tool_start" || frame.phase === "tool_done")
-          ? `tool:${frame.tool}`
-          : `${intent}:${normalizeProgressText(text).toLowerCase()}`,
+        toolUseId
+          ? `tool-use:${toolUseId}`
+          : taskId
+            ? `task:${taskId}`
+            : groupId
+              ? `group:${groupId}`
+              : frame.tool && (frame.phase === "tool_start" || frame.phase === "tool_done")
+                ? `tool:${frame.tool}`
+                : `${intent}:${normalizeProgressText(text).toLowerCase()}`,
       source: "progress",
     };
   }
@@ -1591,11 +1630,21 @@ export function extractNullalisTranscriptEntry(
       }),
       phase: progress?.phase ?? null,
       tool: progress?.tool ?? null,
+      toolUseId: progress?.toolUseId ?? null,
       taskId: progress?.taskId ?? null,
       durationMs: progress?.durationMs ?? null,
       status: progress?.state ?? null,
+      files: progress?.files ?? [],
+      command: progress?.command ?? null,
+      heartbeat: progress?.heartbeat === true,
       resultState: progress?.state === "done" ? "done" : progress?.state === "error" ? "failed" : null,
-      groupKey: `${intent}:${normalizeProgressText(normalizedText).toLowerCase()}`,
+      groupKey: progress?.toolUseId
+        ? `tool-use:${progress.toolUseId}`
+        : progress?.taskId
+          ? `task:${progress.taskId}`
+          : progress?.groupId
+            ? `group:${progress.groupId}`
+            : `${intent}:${normalizeProgressText(normalizedText).toLowerCase()}`,
       source: "progress",
     };
   }
@@ -1607,27 +1656,42 @@ export function extractNullalisTranscriptEntry(
       "tool";
     const files = extractNullalisFiles(payload);
     const command = extractNullalisCommand(payload);
+    const toolUseId =
+      (typeof payload.tool_use_id === "string" && payload.tool_use_id.trim()) ||
+      (typeof payload.toolUseId === "string" && payload.toolUseId.trim()) ||
+      null;
+    const inputPreview =
+      (typeof payload.input_preview === "string" && payload.input_preview.trim()) ||
+      (typeof payload.inputPreview === "string" && payload.inputPreview.trim()) ||
+      null;
+    const activityLabel =
+      (typeof payload.activity_label === "string" && payload.activity_label.trim()) ||
+      (typeof payload.activityLabel === "string" && payload.activityLabel.trim()) ||
+      null;
     const intent = inferNullalisIntent({ text: `Using ${tool}`, tool, files, command });
     return {
       id: nullalisEntryId("tool-start", now),
       kind: "tool",
       intent,
-      text: `Using ${tool}`,
+      text: activityLabel || `Using ${tool}`,
       timestamp: now,
       importance: nullalisImportance({
         source: "tool",
         kind: "tool",
-        text: `Using ${tool}`,
+        text: activityLabel || `Using ${tool}`,
         intent,
         files,
         command,
       }),
       phase: "tool_start",
       tool,
+      toolUseId,
       files,
       command,
+      inputPreview,
+      activityLabel,
       resultState: "running",
-      groupKey: `tool:${tool}`,
+      groupKey: toolUseId ? `tool-use:${toolUseId}` : `tool:${tool}`,
       source: "tool",
     };
   }
@@ -1638,6 +1702,22 @@ export function extractNullalisTranscriptEntry(
     const duration = toolResult.durationMs != null ? ` · ${Math.round(toolResult.durationMs)}ms` : "";
     const files = extractNullalisFiles(payload);
     const command = extractNullalisCommand(payload);
+    const toolUseId =
+      (typeof payload.tool_use_id === "string" && payload.tool_use_id.trim()) ||
+      (typeof payload.toolUseId === "string" && payload.toolUseId.trim()) ||
+      null;
+    const outputPreview =
+      (typeof payload.output_preview === "string" && payload.output_preview.trim()) ||
+      (typeof payload.outputPreview === "string" && payload.outputPreview.trim()) ||
+      (typeof toolResult.result === "string" && toolResult.result.trim()) ||
+      null;
+    const resultSummary =
+      (typeof payload.result_summary === "string" && payload.result_summary.trim()) ||
+      (typeof payload.resultSummary === "string" && payload.resultSummary.trim()) ||
+      null;
+    const outputTruncated =
+      payload.output_truncated === true || payload.outputTruncated === true;
+    const exitCode = numericValue(payload.exit_code ?? payload.exitCode);
     const text = toolResult.ok ? `${tool} completed${duration}` : `${tool} failed`;
     const intent = inferNullalisIntent({ text, tool, files, command });
     return {
@@ -1657,12 +1737,17 @@ export function extractNullalisTranscriptEntry(
       }),
       phase: "tool_done",
       tool,
+      toolUseId,
       durationMs: toolResult.durationMs,
       status: toolResult.ok ? "done" : "failed",
       files,
       command,
+      outputPreview,
+      outputTruncated,
+      resultSummary,
+      exitCode,
       resultState: toolResult.ok ? "done" : "failed",
-      groupKey: `tool:${tool}`,
+      groupKey: toolUseId ? `tool-use:${toolUseId}` : `tool:${tool}`,
       source: "tool",
     };
   }

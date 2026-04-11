@@ -45,10 +45,14 @@ describe("NullalisRuntimeWidgets", () => {
           {
             id: "e2",
             kind: "tool",
-            text: "Using bash",
+            text: "Running command",
             timestamp: Date.now() - 1000,
             phase: "tool_start",
             tool: "bash",
+            toolUseId: "call_1",
+            command: "npm run typecheck",
+            inputPreview: "{\"command\":\"npm run typecheck\"}",
+            resultState: "running",
             source: "tool",
           },
           {
@@ -58,9 +62,13 @@ describe("NullalisRuntimeWidgets", () => {
             timestamp: Date.now(),
             phase: "tool_done",
             tool: "bash",
+            toolUseId: "call_1",
             durationMs: 120,
+            command: "npm run typecheck",
+            outputPreview: "$ npm run typecheck\nok",
             files: ["src/app/components/ChatArea.tsx"],
             status: "done",
+            resultState: "done",
             source: "tool",
           },
         ]}
@@ -70,10 +78,79 @@ describe("NullalisRuntimeWidgets", () => {
     expect(screen.getByText(/Working for/)).toBeInTheDocument();
     expect(screen.getByText("bash completed · 120ms")).toBeInTheDocument();
     expect(screen.getByText("Checking context and memory")).toBeInTheDocument();
-    expect(screen.getByText("Using bash")).toBeInTheDocument();
-    expect(screen.getByText("src/app/components/ChatArea.tsx")).toBeInTheDocument();
+    expect(screen.getByText("Ran command")).toBeInTheDocument();
+    expect(screen.getAllByText("npm run typecheck").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("src/app/components/ChatArea.tsx").length).toBeGreaterThan(0);
     expect(screen.queryByText("thinking")).not.toBeInTheDocument();
     expect(screen.queryByText("tool_done")).not.toBeInTheDocument();
+  });
+
+  it("groups tool start and result by tool_use_id into one expandable worklog row", () => {
+    const viewModel = composeNullalisWorklog({
+      isStreaming: true,
+      frame: null,
+      entryCount: 2,
+      entries: [
+        {
+          id: "start",
+          kind: "tool",
+          intent: "tool",
+          text: "Running command",
+          timestamp: 1,
+          tool: "bash",
+          toolUseId: "call_1",
+          command: "git status --short",
+          resultState: "running",
+          source: "tool",
+        },
+        {
+          id: "done",
+          kind: "tool",
+          intent: "tool",
+          text: "bash completed · 22ms",
+          timestamp: 2,
+          tool: "bash",
+          toolUseId: "call_1",
+          command: "git status --short",
+          durationMs: 22,
+          resultState: "done",
+          source: "tool",
+        },
+      ],
+    });
+
+    expect(viewModel.groups).toHaveLength(1);
+    expect(viewModel.groups[0]?.title).toBe("Ran command");
+    expect(viewModel.groups[0]?.details).toContain("git status --short");
+  });
+
+  it("does not let heartbeat progress override the current action", () => {
+    const viewModel = composeNullalisWorklog({
+      isStreaming: true,
+      frame: null,
+      entryCount: 2,
+      entries: [
+        {
+          id: "summary",
+          kind: "narration",
+          intent: "memory",
+          text: "Comparing saved memories",
+          timestamp: 1,
+          source: "reasoning_summary",
+        },
+        {
+          id: "heartbeat",
+          kind: "narration",
+          intent: "thinking",
+          text: "Still working on the reply",
+          timestamp: 2,
+          heartbeat: true,
+          source: "progress",
+        },
+      ],
+    });
+
+    expect(viewModel.currentAction?.text).toBe("Comparing saved memories");
   });
 
   it("composes raw nullalis events into a meaningful work journal", () => {
@@ -191,7 +268,7 @@ describe("NullalisRuntimeWidgets", () => {
 
     expect(screen.getByText(/Worked for/)).toBeInTheDocument();
     expect(screen.getByText(/7 steps/)).toBeInTheDocument();
-    expect(screen.getByText("Finalized the response")).toBeInTheDocument();
+    expect(screen.getAllByText("Finalized the response").length).toBeGreaterThan(0);
   });
 
   it("renders task checklist statuses and running progress", () => {
