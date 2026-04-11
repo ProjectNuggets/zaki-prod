@@ -5,11 +5,22 @@ import { SkeletonMessage } from "../../ui/skeleton";
 import type { BotToolCall } from "../BotToolCallBlock";
 import type {
   BotReasoningSummary,
+  NullalisApprovalRequest,
+  NullalisNarrationFrame,
+  NullalisTaskItem,
+  NullalisTranscriptEntry,
   BotReplyStart,
   BotStatusEvent,
+  ZakiUsageSummary,
   ZakiProcessSnapshot,
 } from "../BotStatusRail";
 import { BotProcessRail } from "../BotProcessRail";
+import {
+  ApprovalRequiredCard,
+  NullalisWorklog,
+  TaskChecklist,
+  UsageCostFooter,
+} from "../NullalisRuntimeWidgets";
 
 interface ChatViewProps {
   messages: Message[];
@@ -27,6 +38,13 @@ interface ChatViewProps {
   botProcessSnapshot?: ZakiProcessSnapshot | null;
   botProcessCompact?: boolean;
   showBotTimeline?: boolean;
+  nullalisMode?: boolean;
+  nullalisNarrationFrame?: NullalisNarrationFrame | null;
+  nullalisTranscriptEntries?: NullalisTranscriptEntry[];
+  nullalisTranscriptEntryCount?: number;
+  nullalisTaskItems?: NullalisTaskItem[];
+  nullalisApprovalRequest?: NullalisApprovalRequest | null;
+  zakiUsageSummary?: ZakiUsageSummary | null;
   botMode?: boolean;
   streamingMode?: "thinking" | "researching" | "writing";
   firstMessageTransition: boolean;
@@ -51,6 +69,13 @@ export function ChatView({
   botProcessSnapshot = null,
   botProcessCompact = false,
   showBotTimeline = false,
+  nullalisMode = false,
+  nullalisNarrationFrame = null,
+  nullalisTranscriptEntries = [],
+  nullalisTranscriptEntryCount = 0,
+  nullalisTaskItems = [],
+  nullalisApprovalRequest = null,
+  zakiUsageSummary = null,
   botMode = false,
   streamingMode = "thinking",
   firstMessageTransition,
@@ -62,6 +87,7 @@ export function ChatView({
   const inlineBotProcessRail =
     showBotTimeline &&
     botMode &&
+    !nullalisMode &&
     isStreaming &&
     latestMessage?.role === "assistant" &&
     !String(latestMessage?.content || "").trim() &&
@@ -70,6 +96,33 @@ export function ChatView({
     showBotTimeline &&
     !inlineBotProcessRail &&
     botProcessCompact;
+  const hasNullalisArtifacts =
+    nullalisMode &&
+    botMode &&
+    (nullalisTranscriptEntries.length > 0 ||
+      Boolean(nullalisNarrationFrame) ||
+      nullalisTaskItems.length > 0 ||
+      Boolean(nullalisApprovalRequest) ||
+      zakiUsageSummary?.usageTokens != null ||
+      zakiUsageSummary?.costUsd != null);
+
+  const renderNullalisArtifacts = (options?: { compact?: boolean }) => {
+    if (!hasNullalisArtifacts) return null;
+    return (
+      <div className="flex flex-col items-start gap-1.5">
+        <NullalisWorklog
+          entries={nullalisTranscriptEntries}
+          entryCount={nullalisTranscriptEntryCount}
+          frame={nullalisNarrationFrame}
+          isStreaming={isStreaming}
+          compact={options?.compact}
+        />
+        <TaskChecklist tasks={nullalisTaskItems} />
+        <ApprovalRequiredCard request={nullalisApprovalRequest} />
+        <UsageCostFooter usage={zakiUsageSummary} />
+      </div>
+    );
+  };
 
   if (isHistoryLoading) {
     return (
@@ -93,6 +146,14 @@ export function ChatView({
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
 
         if (isStreamingMessage) {
+          if (
+            nullalisMode &&
+            botMode &&
+            !String(msg.content || "").trim() &&
+            streamingModeVariant !== "final_reply_reveal"
+          ) {
+            return <div key={msg.id}>{renderNullalisArtifacts({ compact: false })}</div>;
+          }
           if (inlineBotProcessRail) {
             return (
               <BotProcessRail
@@ -109,28 +170,34 @@ export function ChatView({
             );
           }
           return (
-            <StreamingMessage
-              key={msg.id}
-              content={msg.content}
-              isStreaming={isStreamingMessage}
-              thinkingLabel={streamingLabel}
-              thinkingPillLabel={streamingPillLabel}
-              streamingBadgeLabel={streamingBadgeLabel}
-              streamingHelperText={streamingHelperText}
-              streamingModeVariant={streamingModeVariant}
-              botMode={botMode}
-            />
+            <div key={msg.id}>
+              <StreamingMessage
+                content={msg.content}
+                isStreaming={isStreamingMessage}
+                thinkingLabel={streamingLabel}
+                thinkingPillLabel={streamingPillLabel}
+                streamingBadgeLabel={streamingBadgeLabel}
+                streamingHelperText={streamingHelperText}
+                streamingModeVariant={streamingModeVariant}
+                botMode={botMode}
+              />
+              {renderNullalisArtifacts({ compact: true })}
+            </div>
           );
         }
 
         return (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            onCopy={onCopyMessage}
-            onRegenerate={onRegenerateMessage}
-            onThumbsUp={onThumbsUpMessage}
-          />
+          <div key={msg.id}>
+            <MessageBubble
+              message={msg}
+              onCopy={onCopyMessage}
+              onRegenerate={onRegenerateMessage}
+              onThumbsUp={onThumbsUpMessage}
+            />
+            {isLast && msg.role === "assistant"
+              ? renderNullalisArtifacts({ compact: true })
+              : null}
+          </div>
         );
       })}
       {showDetachedBotProcessRail ? (

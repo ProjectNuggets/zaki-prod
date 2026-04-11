@@ -75,6 +75,81 @@ export type ZakiProcessSnapshot = {
   replyRevealStarted: boolean;
 };
 
+export type NullalisNarrationPhase =
+  | "thinking"
+  | "tool_start"
+  | "tool_done"
+  | "waiting"
+  | "plan_step"
+  | "error_recovery"
+  | "listening"
+  | "speaking";
+
+export type NullalisNarrationFrame = {
+  id: string;
+  phase: NullalisNarrationPhase;
+  label: string;
+  tool?: string | null;
+  iteration?: number | null;
+  durationMs?: number | null;
+  stepIndex?: number | null;
+  stepTotal?: number | null;
+  timestamp: number;
+};
+
+export type NullalisTranscriptEntryKind =
+  | "narration"
+  | "task"
+  | "tool"
+  | "approval"
+  | "status"
+  | "transition";
+
+export type NullalisTranscriptEntry = {
+  id: string;
+  kind: NullalisTranscriptEntryKind;
+  text: string;
+  timestamp: number;
+  phase?: string | null;
+  tool?: string | null;
+  taskId?: string | null;
+  durationMs?: number | null;
+  status?: string | null;
+  files?: string[];
+  source?: "reasoning_summary" | "progress" | "tool" | "task" | "approval" | "done" | "fallback";
+};
+
+export type NullalisTaskStatus =
+  | "queued"
+  | "running"
+  | "done"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "blocked"
+  | "deferred";
+
+export type NullalisTaskItem = {
+  taskId: string;
+  status: NullalisTaskStatus;
+  description: string;
+  progressPct?: number | null;
+  updatedAt: number;
+};
+
+export type NullalisApprovalRequest = {
+  id: string;
+  tool: string;
+  reason: string;
+  riskLevel: string;
+  timestamp: number;
+};
+
+export type ZakiUsageSummary = {
+  usageTokens?: number | null;
+  costUsd?: number | null;
+};
+
 interface BotStatusRailProps {
   events: BotStatusEvent[];
   isStreaming?: boolean;

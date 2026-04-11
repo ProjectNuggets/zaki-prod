@@ -11,6 +11,13 @@ export { TypingText } from "./TypingText";
 export { ChatHeader } from "./ChatHeader";
 export { MessageComposer } from "./MessageComposer";
 export { StreamingMessage } from "./StreamingMessage";
+export {
+  ApprovalRequiredCard,
+  NarrationStatusLine,
+  NullalisWorklog,
+  TaskChecklist,
+  UsageCostFooter,
+} from "./NullalisRuntimeWidgets";
 
 // Memory components (P0 Fix)
 export { MemoryToast } from "../memory/MemoryToast";

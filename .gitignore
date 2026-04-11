@@ -1,5 +1,6 @@
 node_modules
 .env.local
+.env.development.local
 website/.env.local
 playwright-report/
 test-results/

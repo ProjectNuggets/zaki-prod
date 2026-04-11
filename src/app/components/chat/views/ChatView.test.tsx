@@ -103,4 +103,42 @@ describe("ChatView", () => {
 
     expect(screen.queryByText(/Working for|Worked for/)).not.toBeInTheDocument();
   });
+
+  it("renders nullalis narration inline instead of the old process rail", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Do it." },
+          { id: "assistant-1", role: "assistant", content: "" },
+        ]}
+        isHistoryLoading={false}
+        isStreaming
+        showBotTimeline
+        botMode
+        nullalisMode
+        nullalisNarrationFrame={{
+          id: "n1",
+          phase: "thinking",
+          label: "Analyzing request...",
+          timestamp: Date.now(),
+        }}
+        nullalisTranscriptEntries={[
+          {
+            id: "e1",
+            kind: "narration",
+            text: "Analyzing request",
+            timestamp: Date.now(),
+            phase: "thinking",
+            source: "progress",
+          },
+        ]}
+        nullalisTranscriptEntryCount={1}
+        streamingMode="thinking"
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByText("Analyzing request")).toBeInTheDocument();
+    expect(screen.getByText(/Working for|Worked for/)).toBeInTheDocument();
+  });
 });

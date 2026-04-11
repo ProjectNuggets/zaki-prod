@@ -13,6 +13,11 @@ import {
   buildZakiProcessSnapshot,
   buildLatestStatusMeta,
   extractProgressPayload,
+  extractNullalisNarrationFrame,
+  extractNullalisReasoningNarrationFrame,
+  extractNullalisTranscriptEntry,
+  extractNullalisTaskItem,
+  extractNullalisUsageSummary,
   inferStreamingModeFromProgress,
 } from "./ChatArea";
 import { useNavigationStore, useAuthStore } from "@/stores";
@@ -57,6 +62,13 @@ jest.mock("@/lib/api", () => ({
     },
     data: { activities: [] },
   })),
+}));
+
+jest.mock("@/lib/nullalisEnv", () => ({
+  buildNullalisStreamUrl: () => "/api/v1/chat/stream",
+  getNullalisToken: () => "dev-token",
+  getNullalisUserId: () => "1",
+  isNullalisModeEnabled: () => false,
 }));
 
 jest.mock("@/stores", () => ({
@@ -410,5 +422,193 @@ describe("ChatArea Component", () => {
     expect(snapshot.phase).toBe("reply_ready");
     expect(snapshot.currentActionText).toBe("Preparing the final reply");
     expect(snapshot.transcriptEntries).toHaveLength(0);
+  });
+
+  it("maps nullalis narration progress into a narration frame", () => {
+    const frame = extractNullalisNarrationFrame(
+      {
+        type: "progress",
+        phase: "tool_start",
+        label: "Running bash...",
+        tool: "bash",
+      },
+      123
+    );
+
+    expect(frame).toMatchObject({
+      phase: "tool_start",
+      label: "Running bash...",
+      tool: "bash",
+      timestamp: 123,
+    });
+  });
+
+  it("maps nullalis task updates into checklist items", () => {
+    expect(
+      extractNullalisTaskItem(
+        {
+          task_id: "t1",
+          status: "succeeded",
+          description: "Build component",
+          progress_pct: 100,
+        },
+        456
+      )
+    ).toMatchObject({
+      taskId: "t1",
+      status: "succeeded",
+      description: "Build component",
+      progressPct: 100,
+      updatedAt: 456,
+    });
+  });
+
+  it("captures nullalis usage and cost from done events", () => {
+    expect(
+      extractNullalisUsageSummary({
+        usage_tokens: 1500,
+        cost_usd: 0.003,
+      })
+    ).toEqual({ usageTokens: 1500, costUsd: 0.003 });
+  });
+
+  it("maps nullalis reasoning summaries into visible narration frames", () => {
+    expect(
+      extractNullalisReasoningNarrationFrame(
+        {
+          type: "reasoning_summary",
+          summary: "Comparing saved memories",
+          phase: "thinking",
+        },
+        789
+      )
+    ).toMatchObject({
+      phase: "thinking",
+      label: "Comparing saved memories",
+      timestamp: 789,
+    });
+  });
+
+  it("normalizes nullalis progress into worklog entries", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "progress",
+        {
+          type: "progress",
+          phase: "thinking",
+          label: "Retrieving memory",
+        },
+        111
+      )
+    ).toMatchObject({
+      kind: "narration",
+      text: "Searching saved memory",
+      phase: "thinking",
+      source: "progress",
+      timestamp: 111,
+    });
+  });
+
+  it("normalizes nullalis status responses into worklog entries", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "status",
+        {
+          type: "statusResponse",
+          label: "Gathering context",
+          phase: "thinking",
+        },
+        112
+      )
+    ).toMatchObject({
+      kind: "status",
+      text: "Checking context and memory",
+      phase: "thinking",
+      source: "progress",
+      timestamp: 112,
+    });
+  });
+
+  it("keeps reasoning summaries verbatim in worklog entries", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "reasoning_summary",
+        {
+          type: "reasoning_summary",
+          summary: "Comparing saved memories",
+          phase: "thinking",
+        },
+        222
+      )
+    ).toMatchObject({
+      kind: "narration",
+      text: "Comparing saved memories",
+      phase: "thinking",
+      source: "reasoning_summary",
+      timestamp: 222,
+    });
+  });
+
+  it("normalizes nullalis tool events into worklog entries with files", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "tool_result",
+        {
+          tool: "bash",
+          success: true,
+          duration_ms: 120,
+          output_preview: "edited src/app/components/ChatArea.tsx",
+        },
+        333
+      )
+    ).toMatchObject({
+      kind: "tool",
+      text: "bash completed · 120ms",
+      tool: "bash",
+      durationMs: 120,
+      status: "done",
+      files: ["src/app/components/ChatArea.tsx"],
+    });
+  });
+
+  it("normalizes nullalis task, approval, and done events into worklog entries", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "task_update",
+        {
+          task_id: "t1",
+          status: "running",
+          description: "Build component",
+        },
+        444
+      )
+    ).toMatchObject({
+      kind: "task",
+      text: "Running task: Build component",
+      taskId: "t1",
+      status: "running",
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "approval_required",
+        {
+          tool: "write_file",
+          risk_level: "high",
+        },
+        555
+      )
+    ).toMatchObject({
+      kind: "approval",
+      text: "Approval required for write_file",
+      tool: "write_file",
+      status: "high",
+    });
+
+    expect(extractNullalisTranscriptEntry("done", {}, 666)).toMatchObject({
+      kind: "transition",
+      text: "Finalized the response",
+      status: "done",
+    });
   });
 });

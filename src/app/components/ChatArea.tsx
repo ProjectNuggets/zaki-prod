@@ -29,6 +29,12 @@ import {
   type ResponseFormattingConfig,
 } from "@/lib/responseFormatting";
 import {
+  buildNullalisStreamUrl,
+  getNullalisToken,
+  getNullalisUserId,
+  isNullalisModeEnabled,
+} from "@/lib/nullalisEnv";
+import {
   SpacesView,
   ZakiHomeView,
   ChatView,
@@ -39,8 +45,15 @@ import {
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type {
   BotReasoningSummary,
+  NullalisApprovalRequest,
+  NullalisNarrationFrame,
+  NullalisNarrationPhase,
+  NullalisTaskItem,
+  NullalisTaskStatus,
+  NullalisTranscriptEntry,
   BotReplyStart,
   BotStatusEvent,
+  ZakiUsageSummary,
   ZakiProcessSnapshot,
   ZakiTranscriptEntryKind,
 } from "./chat/BotStatusRail";
@@ -84,6 +97,42 @@ class ChatRequestError extends Error {
 }
 
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
+const NULLALIS_NARRATION_PHASES = new Set<NullalisNarrationPhase>([
+  "thinking",
+  "tool_start",
+  "tool_done",
+  "waiting",
+  "plan_step",
+  "error_recovery",
+  "listening",
+  "speaking",
+]);
+
+function isNullalisNarrationPhase(value: unknown): value is NullalisNarrationPhase {
+  return (
+    typeof value === "string" &&
+    NULLALIS_NARRATION_PHASES.has(value.trim().toLowerCase() as NullalisNarrationPhase)
+  );
+}
+
+function numericValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function buildNullalisSessionKey(threadSlug: string, userId: string) {
+  const safeThread = String(threadSlug || "main").trim() || "main";
+  const safeUser = String(userId || "1").trim() || "1";
+  if (safeThread === ZAKI_BOT_THREAD_ID || safeThread === "main") {
+    return `agent:zaki-bot:user:${safeUser}:main`;
+  }
+  return `agent:zaki-bot:user:${safeUser}:thread:${safeThread}`;
+}
+
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return true;
@@ -509,6 +558,12 @@ function extractReasoningSummaryPayload(payload: Record<string, unknown>) {
   const summaryRaw =
     (typeof source.summary === "string" && source.summary) ||
     (typeof payload.summary === "string" && payload.summary) ||
+    (typeof source.text === "string" && source.text) ||
+    (typeof payload.text === "string" && payload.text) ||
+    (typeof source.label === "string" && source.label) ||
+    (typeof payload.label === "string" && payload.label) ||
+    (typeof source.message === "string" && source.message) ||
+    (typeof payload.message === "string" && payload.message) ||
     "";
   const phaseRaw =
     (typeof source.phase === "string" && source.phase) ||
@@ -1140,13 +1195,385 @@ function extractToolResultPayload(payload: Record<string, unknown>) {
     (typeof payload.requestId === "string" && payload.requestId) ||
     (typeof payload.request_id === "string" && payload.request_id) ||
     undefined;
-  const okRaw = source.ok;
+  const name =
+    (typeof source.name === "string" && source.name) ||
+    (typeof source.toolName === "string" && source.toolName) ||
+    (typeof source.tool === "string" && source.tool) ||
+    undefined;
+  const okRaw = source.ok ?? source.success;
   const ok =
     okRaw === true ||
     (okRaw !== false && typeof source.error !== "string");
   const error = typeof source.error === "string" ? source.error : undefined;
-  const result = source.result;
-  return { requestId, ok, error, result };
+  const result =
+    source.result ??
+    source.output_preview ??
+    source.outputPreview ??
+    source.output ??
+    undefined;
+  const durationMs = numericValue(source.duration_ms ?? source.durationMs);
+  return { requestId, name, ok, error, result, durationMs };
+}
+
+export function extractNullalisNarrationFrame(
+  payload: Record<string, unknown>,
+  now = Date.now()
+): NullalisNarrationFrame | null {
+  if (!isNullalisNarrationPhase(payload.phase)) return null;
+  const phase = payload.phase.trim().toLowerCase() as NullalisNarrationPhase;
+  const stepIndex =
+    numericValue(payload.step_index ?? payload.stepIndex) ??
+    numericValue(payload.index);
+  const stepTotal =
+    numericValue(payload.step_total ?? payload.stepTotal ?? payload.total);
+  const durationMs = numericValue(payload.duration_ms ?? payload.durationMs);
+  return {
+    id: `nullalis-narration-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    phase,
+    label:
+      (typeof payload.label === "string" && payload.label.trim()) ||
+      (typeof payload.status === "string" && payload.status.trim()) ||
+      (typeof payload.message === "string" && payload.message.trim()) ||
+      (phase === "thinking" ? "Thinking..." : phase.replace(/_/g, " ")),
+    tool: typeof payload.tool === "string" ? payload.tool : null,
+    iteration: numericValue(payload.iteration),
+    durationMs,
+    stepIndex,
+    stepTotal,
+    timestamp: now,
+  };
+}
+
+export function extractNullalisTaskItem(
+  payload: Record<string, unknown>,
+  now = Date.now()
+): NullalisTaskItem | null {
+  const taskId =
+    (typeof payload.task_id === "string" && payload.task_id.trim()) ||
+    (typeof payload.taskId === "string" && payload.taskId.trim()) ||
+    "";
+  if (!taskId) return null;
+  const rawStatus = String(payload.status || payload.state || "queued")
+    .trim()
+    .toLowerCase();
+  const status: NullalisTaskStatus =
+    rawStatus === "succeeded"
+      ? "succeeded"
+      : rawStatus === "done" ||
+          rawStatus === "running" ||
+          rawStatus === "queued" ||
+          rawStatus === "failed" ||
+          rawStatus === "cancelled" ||
+          rawStatus === "blocked" ||
+          rawStatus === "deferred"
+        ? rawStatus
+        : "queued";
+  return {
+    taskId,
+    status,
+    description:
+      (typeof payload.description === "string" && payload.description.trim()) ||
+      (typeof payload.label === "string" && payload.label.trim()) ||
+      taskId,
+    progressPct: numericValue(payload.progress_pct ?? payload.progressPct),
+    updatedAt: now,
+  };
+}
+
+function extractNullalisApprovalRequest(
+  payload: Record<string, unknown>,
+  now = Date.now()
+): NullalisApprovalRequest {
+  return {
+    id: `approval-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    tool:
+      (typeof payload.tool === "string" && payload.tool.trim()) ||
+      (typeof payload.tool_name === "string" && payload.tool_name.trim()) ||
+      "tool",
+    reason:
+      (typeof payload.reason === "string" && payload.reason.trim()) ||
+      "Mutating operation requires approval.",
+    riskLevel:
+      (typeof payload.risk_level === "string" && payload.risk_level.trim()) ||
+      (typeof payload.riskLevel === "string" && payload.riskLevel.trim()) ||
+      "unknown",
+    timestamp: now,
+  };
+}
+
+export function extractNullalisUsageSummary(
+  payload: Record<string, unknown>
+): ZakiUsageSummary | null {
+  const usageTokens = numericValue(payload.usage_tokens ?? payload.usageTokens);
+  const costUsd = numericValue(payload.cost_usd ?? payload.costUsd);
+  if (usageTokens == null && costUsd == null) return null;
+  return { usageTokens, costUsd };
+}
+
+export function extractNullalisReasoningNarrationFrame(
+  payload: Record<string, unknown>,
+  now = Date.now()
+): NullalisNarrationFrame | null {
+  const summary = extractReasoningSummaryPayload(payload);
+  if (!summary) return null;
+  const phase = isNullalisNarrationPhase(summary.phase)
+    ? (summary.phase.trim().toLowerCase() as NullalisNarrationPhase)
+    : "thinking";
+  return {
+    id: `nullalis-summary-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    phase,
+    label: summary.text,
+    tool: summary.tool,
+    iteration: summary.iteration,
+    durationMs: null,
+    stepIndex: null,
+    stepTotal: null,
+    timestamp: now,
+  };
+}
+
+function normalizeNullalisTranscriptLabel(label: string | null | undefined, phase?: string | null) {
+  const raw = normalizeProgressText(label).replace(/\.+$/, "");
+  const key = raw.toLowerCase();
+  const mapped: Record<string, string> = {
+    "analyzing request": "Analyzing the request",
+    "gathering context": "Checking context and memory",
+    "checking context and memory": "Checking context and memory",
+    "retrieving memory": "Searching saved memory",
+    "trimming context": "Trimming context to keep the request focused",
+    "thinking": "Thinking through the request",
+    "thinking through the request": "Thinking through the request",
+    "preparing model request": "Preparing the model request",
+    "model response received": "Reading the model response",
+    "processing model response": "Processing the model response",
+    "preparing final reply": "Preparing the final reply",
+    "preparing the final answer": "Preparing the final answer",
+    "finalizing reply": "Finalizing the response",
+    "finishing the response": "Finishing the response",
+    "response ready": "Response ready",
+  };
+  if (mapped[key]) return mapped[key];
+  if (raw) return raw;
+  if (phase === "waiting") return "Waiting for provider";
+  if (phase === "error_recovery") return "Retrying after a transient issue";
+  if (phase === "speaking") return "Preparing the spoken response";
+  if (phase === "listening") return "Listening for input";
+  return "Processing request";
+}
+
+function extractNullalisFiles(payload: Record<string, unknown>) {
+  const candidates: string[] = [];
+  const appendArray = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    for (const item of value) {
+      if (typeof item === "string" && item.trim()) {
+        candidates.push(item.trim());
+      }
+    }
+  };
+  appendArray(payload.files);
+  appendArray(payload.file_paths);
+  appendArray(payload.filePaths);
+  appendArray(payload.paths);
+
+  const preview =
+    (typeof payload.output_preview === "string" && payload.output_preview) ||
+    (typeof payload.outputPreview === "string" && payload.outputPreview) ||
+    (typeof payload.result === "string" && payload.result) ||
+    (typeof payload.output === "string" && payload.output) ||
+    "";
+  const filePattern =
+    /(?:^|[\s"'`])((?:\.{1,2}\/|\/|[A-Za-z0-9_.-]+\/)[A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})(?=$|[\s"'`,:;)])/g;
+  for (const match of preview.matchAll(filePattern)) {
+    const filePath = String(match[1] || "").trim();
+    if (filePath && !filePath.includes("://")) {
+      candidates.push(filePath);
+    }
+  }
+
+  return Array.from(new Set(candidates)).slice(0, 4);
+}
+
+function nullalisEntryId(prefix: string, now: number) {
+  return `nullalis-${prefix}-${now}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function extractNullalisTranscriptEntry(
+  eventType: string | null | undefined,
+  payload: Record<string, unknown>,
+  now = Date.now()
+): NullalisTranscriptEntry | null {
+  const payloadType = typeof payload.type === "string" ? payload.type : null;
+  const type = (eventType || payloadType || "").trim().toLowerCase();
+
+  if (type === "reasoning_summary") {
+    const summary = extractReasoningSummaryPayload(payload);
+    if (!summary) return null;
+    return {
+      id: nullalisEntryId("summary", now),
+      kind: "narration",
+      text: summary.text,
+      timestamp: now,
+      phase: summary.phase,
+      tool: summary.tool,
+      source: "reasoning_summary",
+    };
+  }
+
+  if (type === "progress") {
+    const frame = extractNullalisNarrationFrame(payload, now);
+    if (!frame) return null;
+    const tool = String(frame.tool || "").trim();
+    const label = normalizeNullalisTranscriptLabel(frame.label, frame.phase);
+    let text = label;
+    if (frame.phase === "tool_start") {
+      text = tool ? `Using ${tool}` : label || "Using a tool";
+    } else if (frame.phase === "tool_done") {
+      const duration = frame.durationMs != null ? ` · ${Math.round(frame.durationMs)}ms` : "";
+      text = tool ? `${tool} completed${duration}` : label || `Tool completed${duration}`;
+    } else if (frame.phase === "plan_step" && frame.stepIndex != null && frame.stepTotal != null) {
+      text = `Step ${frame.stepIndex}/${frame.stepTotal}: ${label}`;
+    }
+    return {
+      id: frame.id.replace("nullalis-narration", "nullalis-transcript"),
+      kind:
+        frame.phase === "tool_start" || frame.phase === "tool_done"
+          ? "tool"
+          : frame.phase === "plan_step"
+            ? "task"
+            : frame.phase === "error_recovery"
+              ? "status"
+              : "narration",
+      text,
+      timestamp: frame.timestamp,
+      phase: frame.phase,
+      tool: frame.tool,
+      durationMs: frame.durationMs,
+      files: extractNullalisFiles(payload),
+      source: "progress",
+    };
+  }
+
+  if (type === "status" || type === "statusresponse") {
+    const progress = extractProgressPayload(payload);
+    const text =
+      progress?.text ||
+      (typeof payload.label === "string" && payload.label.trim()) ||
+      (typeof payload.message === "string" && payload.message.trim()) ||
+      (typeof payload.status === "string" && payload.status.trim()) ||
+      "";
+    if (!text) return null;
+    return {
+      id: nullalisEntryId("status", now),
+      kind: "status",
+      text: normalizeNullalisTranscriptLabel(text, progress?.phase),
+      timestamp: now,
+      phase: progress?.phase ?? null,
+      tool: progress?.tool ?? null,
+      taskId: progress?.taskId ?? null,
+      durationMs: progress?.durationMs ?? null,
+      status: progress?.state ?? null,
+      source: "progress",
+    };
+  }
+
+  if (type === "tool_start") {
+    const tool =
+      (typeof payload.tool === "string" && payload.tool.trim()) ||
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      "tool";
+    return {
+      id: nullalisEntryId("tool-start", now),
+      kind: "tool",
+      text: `Using ${tool}`,
+      timestamp: now,
+      phase: "tool_start",
+      tool,
+      files: extractNullalisFiles(payload),
+      source: "tool",
+    };
+  }
+
+  if (type === "tool_result") {
+    const toolResult = extractToolResultPayload(payload);
+    const tool = toolResult.name || "tool";
+    const duration = toolResult.durationMs != null ? ` · ${Math.round(toolResult.durationMs)}ms` : "";
+    return {
+      id: nullalisEntryId("tool-result", now),
+      kind: "tool",
+      text: toolResult.ok ? `${tool} completed${duration}` : `${tool} failed`,
+      timestamp: now,
+      phase: "tool_done",
+      tool,
+      durationMs: toolResult.durationMs,
+      status: toolResult.ok ? "done" : "failed",
+      files: extractNullalisFiles(payload),
+      source: "tool",
+    };
+  }
+
+  if (type === "task_update") {
+    const task = extractNullalisTaskItem(payload, now);
+    if (!task) return null;
+    const taskName = task.description || task.taskId;
+    const statusCopy =
+      task.status === "running"
+        ? "Running"
+        : task.status === "done" || task.status === "succeeded"
+          ? "Completed"
+          : task.status === "queued"
+            ? "Queued"
+            : task.status.charAt(0).toUpperCase() + task.status.slice(1);
+    return {
+      id: nullalisEntryId(`task-${task.taskId}`, now),
+      kind: "task",
+      text: `${statusCopy} task: ${taskName}`,
+      timestamp: task.updatedAt,
+      phase: "task_update",
+      taskId: task.taskId,
+      status: task.status,
+      source: "task",
+    };
+  }
+
+  if (type === "approval_required") {
+    const approval = extractNullalisApprovalRequest(payload, now);
+    return {
+      id: nullalisEntryId("approval", now),
+      kind: "approval",
+      text: `Approval required for ${approval.tool}`,
+      timestamp: approval.timestamp,
+      phase: "approval_required",
+      tool: approval.tool,
+      status: approval.riskLevel,
+      source: "approval",
+    };
+  }
+
+  if (type === "done") {
+    return {
+      id: nullalisEntryId("done", now),
+      kind: "transition",
+      text: "Finalized the response",
+      timestamp: now,
+      phase: "done",
+      status: "done",
+      source: "done",
+    };
+  }
+
+  return null;
+}
+
+function buildNullalisTranscriptFingerprint(entry: NullalisTranscriptEntry) {
+  return [
+    entry.kind,
+    normalizeNarrativeKey(entry.text),
+    normalizeProgressText(entry.phase).toLowerCase(),
+    normalizeProgressText(entry.tool).toLowerCase(),
+    normalizeProgressText(entry.taskId).toLowerCase(),
+    normalizeProgressText(entry.status).toLowerCase(),
+  ].join("|");
 }
 
 export function ChatArea() {
@@ -1238,6 +1665,16 @@ export function ChatArea() {
   const [zakiBotProgressTerminalReason, setZakiBotProgressTerminalReason] = useState<
     "done" | "error" | "abort" | "stream_end" | null
   >(null);
+  const [nullalisNarrationFrame, setNullalisNarrationFrame] =
+    useState<NullalisNarrationFrame | null>(null);
+  const [nullalisTranscriptEntries, setNullalisTranscriptEntries] = useState<
+    NullalisTranscriptEntry[]
+  >([]);
+  const [nullalisTranscriptEntryCount, setNullalisTranscriptEntryCount] = useState(0);
+  const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
+  const [nullalisApprovalRequest, setNullalisApprovalRequest] =
+    useState<NullalisApprovalRequest | null>(null);
+  const [zakiUsageSummary, setZakiUsageSummary] = useState<ZakiUsageSummary | null>(null);
   const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
     unlimited: boolean;
@@ -1976,7 +2413,7 @@ export function ChatArea() {
     []
   );
 
-  const clearZakiBotProgressVisuals = useCallback(() => {
+  const clearZakiBotProgressVisuals = useCallback((options?: { preserveNullalisArtifacts?: boolean }) => {
     if (zakiBotProcessClearTimerRef.current) {
       window.clearTimeout(zakiBotProcessClearTimerRef.current);
       zakiBotProcessClearTimerRef.current = null;
@@ -1991,6 +2428,14 @@ export function ChatArea() {
     setZakiBotReplyStart(null);
     setZakiBotProcessCompact(false);
     setZakiBotProgressTerminalReason(null);
+    setNullalisNarrationFrame(null);
+    if (!options?.preserveNullalisArtifacts) {
+      setNullalisTranscriptEntries([]);
+      setNullalisTranscriptEntryCount(0);
+      setNullalisTaskItems([]);
+      setNullalisApprovalRequest(null);
+      setZakiUsageSummary(null);
+    }
   }, []);
 
   const finalizeZakiBotProgress = useCallback(
@@ -2003,6 +2448,8 @@ export function ChatArea() {
       setZakiBotProgressTerminalReason(reason);
       if (reason === "done") {
         setStreamingIndicatorMode("writing");
+        setNullalisNarrationFrame(null);
+        setNullalisApprovalRequest(null);
       }
     },
     [clearZakiBotProgressVisuals, isZakiBotActiveSpace]
@@ -2049,14 +2496,41 @@ export function ChatArea() {
   const applyZakiBotToolResult = useCallback(
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
-      const { requestId, ok, error, result } = extractToolResultPayload(payload);
+      const { requestId, name, ok, error, result, durationMs: explicitDurationMs } =
+        extractToolResultPayload(payload);
       setZakiBotProgressTerminalReason(null);
       setZakiBotToolCalls((prev) => {
-        if (!prev.length) return prev;
+        if (!prev.length) {
+          const now = Date.now();
+          const startedAt =
+            explicitDurationMs != null ? Math.max(0, now - explicitDurationMs) : now;
+          return [
+            {
+              id: `tool-${now}-${Math.random().toString(36).slice(2, 8)}`,
+              requestId,
+              name: name || "unknown_tool",
+              arguments: {},
+              timestamp: startedAt,
+              startedAt,
+              finishedAt: now,
+              durationMs: explicitDurationMs ?? 0,
+              result: { ok, error, result },
+            },
+          ];
+        }
         const next = [...prev];
         let targetIndex = -1;
         if (requestId) {
           targetIndex = next.findIndex((call) => call.requestId === requestId);
+        }
+        if (targetIndex < 0 && name) {
+          const normalizedName = name.trim().toLowerCase();
+          targetIndex = [...next]
+            .reverse()
+            .findIndex((call) => String(call.name || "").trim().toLowerCase() === normalizedName);
+          if (targetIndex >= 0) {
+            targetIndex = next.length - 1 - targetIndex;
+          }
         }
         if (targetIndex < 0) {
           targetIndex = [...next]
@@ -2071,9 +2545,10 @@ export function ChatArea() {
         if (!existingCall) return prev;
         const finishedAt =
           typeof existingCall.finishedAt === "number" ? existingCall.finishedAt : Date.now();
-        const durationMs = Math.max(0, finishedAt - existingCall.startedAt);
+        const durationMs = explicitDurationMs ?? Math.max(0, finishedAt - existingCall.startedAt);
         next[targetIndex] = {
           ...existingCall,
+          ...(name ? { name } : {}),
           finishedAt,
           durationMs,
           result: { ok, error, result },
@@ -2259,6 +2734,103 @@ export function ChatArea() {
     [isZakiBotActiveSpace, upsertZakiBotProgressTool]
   );
 
+  const pushNullalisTranscriptEntry = useCallback(
+    (entry: NullalisTranscriptEntry | null) => {
+      if (!isZakiBotActiveSpace || !entry) return;
+      const fingerprint = buildNullalisTranscriptFingerprint(entry);
+      let didAdd = false;
+      setNullalisTranscriptEntries((prev) => {
+        const last = prev[prev.length - 1];
+        if (last && buildNullalisTranscriptFingerprint(last) === fingerprint) {
+          return prev;
+        }
+        const recentDuplicate = [...prev]
+          .slice(-4)
+          .some(
+            (candidate) =>
+              buildNullalisTranscriptFingerprint(candidate) === fingerprint &&
+              Math.abs(entry.timestamp - candidate.timestamp) < 5000
+          );
+        if (recentDuplicate) return prev;
+        didAdd = true;
+        return [...prev, entry].slice(-8);
+      });
+      if (didAdd) {
+        setNullalisTranscriptEntryCount((prev) => prev + 1);
+      }
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const pushNullalisNarrationFrame = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const frame = extractNullalisNarrationFrame(payload);
+      if (!frame) return;
+      setZakiBotProgressTerminalReason(null);
+      setStreamingIndicatorMode(
+        frame.phase === "tool_start" || frame.phase === "tool_done"
+          ? "researching"
+          : frame.phase === "speaking"
+            ? "writing"
+            : "thinking"
+      );
+      setNullalisNarrationFrame(frame);
+      pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("progress", payload, frame.timestamp));
+      if (frame.tool && frame.phase === "tool_start") {
+        upsertZakiBotToolCall({
+          type: "toolCallInvocation",
+          tool: frame.tool,
+          name: frame.tool,
+        });
+      }
+      if (frame.tool && frame.phase === "tool_done") {
+        upsertZakiBotProgressTool(frame.tool, "done", frame.label, frame.durationMs ?? null);
+      }
+    },
+    [
+      isZakiBotActiveSpace,
+      pushNullalisTranscriptEntry,
+      upsertZakiBotProgressTool,
+      upsertZakiBotToolCall,
+    ]
+  );
+
+  const upsertNullalisTaskItem = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const taskItem = extractNullalisTaskItem(payload);
+      if (!taskItem) return;
+      setZakiBotProgressTerminalReason(null);
+      setStreamingIndicatorMode(taskItem.status === "running" ? "researching" : "thinking");
+      setNullalisTaskItems((prev) => {
+        const existingIndex = prev.findIndex((item) => item.taskId === taskItem.taskId);
+        if (existingIndex < 0) return [...prev, taskItem].slice(-8);
+        const next = [...prev];
+        next[existingIndex] = { ...next[existingIndex], ...taskItem };
+        return next.slice(-8);
+      });
+      pushNullalisTranscriptEntry(
+        extractNullalisTranscriptEntry("task_update", payload, taskItem.updatedAt)
+      );
+      setNullalisNarrationFrame({
+        id: `nullalis-task-${taskItem.taskId}-${taskItem.updatedAt}`,
+        phase: "plan_step",
+        label:
+          taskItem.status === "running"
+            ? `Running ${taskItem.description || taskItem.taskId}`
+            : `${taskItem.description || taskItem.taskId} ${taskItem.status}`,
+        tool: null,
+        iteration: null,
+        durationMs: null,
+        stepIndex: null,
+        stepTotal: null,
+        timestamp: taskItem.updatedAt,
+      });
+    },
+    [isZakiBotActiveSpace, pushNullalisTranscriptEntry]
+  );
+
   const updateZakiBotReasoningSummary = useCallback(
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
@@ -2319,6 +2891,20 @@ export function ChatArea() {
       });
     },
     [isZakiBotActiveSpace]
+  );
+
+  const updateNullalisReasoningSummary = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      updateZakiBotReasoningSummary(payload);
+      const frame = extractNullalisReasoningNarrationFrame(payload);
+      if (!frame) return;
+      setNullalisNarrationFrame(frame);
+      pushNullalisTranscriptEntry(
+        extractNullalisTranscriptEntry("reasoning_summary", payload, frame.timestamp)
+      );
+    },
+    [isZakiBotActiveSpace, pushNullalisTranscriptEntry, updateZakiBotReasoningSummary]
   );
 
   const markZakiBotReplyStart = useCallback(
@@ -2673,10 +3259,20 @@ export function ChatArea() {
       responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
     const isZakiAgentSpace =
       String(workspaceSlug || "").trim().toLowerCase() === ZAKI_BOT_SPACE_ID;
-    const requestPath = isZakiAgentSpace
+    const useNullalisDirect = isZakiAgentSpace && isNullalisModeEnabled();
+    const nullalisUserId = getNullalisUserId();
+    const requestPath = useNullalisDirect
+      ? "/api/v1/chat/stream"
+      : isZakiAgentSpace
       ? "/api/agent/chat/stream"
       : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
-    const requestBody = isZakiAgentSpace
+    const requestBody = useNullalisDirect
+      ? {
+          message,
+          session_key: buildNullalisSessionKey(threadSlug, nullalisUserId),
+          user_id: nullalisUserId,
+        }
+      : isZakiAgentSpace
       ? {
           message,
           threadId: threadSlug,
@@ -2690,11 +3286,22 @@ export function ChatArea() {
         };
 
     console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
-    const response = await apiRequest(requestPath, {
-      method: "POST",
-      body: JSON.stringify(requestBody),
-      signal,
-    });
+    const response = useNullalisDirect
+      ? await fetch(buildNullalisStreamUrl(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Token": getNullalisToken(),
+            "X-Zaki-User-Id": nullalisUserId,
+          },
+          body: JSON.stringify(requestBody),
+          signal,
+        })
+      : await apiRequest(requestPath, {
+          method: "POST",
+          body: JSON.stringify(requestBody),
+          signal,
+        });
 
     console.log(`[Chat] Response status: ${response.status}`);
     const agentBaseHeader = response.headers.get("x-zaki-agent-base");
@@ -2780,6 +3387,12 @@ export function ChatArea() {
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       const payloadType = typeof payload.type === "string" ? payload.type : "";
+      if (useNullalisDirect && isZakiAgentSpace && (eventType === "ready" || eventType === "reply_start")) {
+        if (eventType === "reply_start") {
+          markZakiBotReplyStart({ ...payload, type: "reply_start" });
+        }
+        return {};
+      }
       if (isZakiAgentSpace && eventType === "token") {
         const tokenChunk =
           (typeof payload.delta === "string" && payload.delta) ||
@@ -2806,10 +3419,25 @@ export function ChatArea() {
         payload.close === true ||
         payloadType === "finalizeResponseStream"
       ) {
+        if (useNullalisDirect && isZakiAgentSpace) {
+          const usageSummary = extractNullalisUsageSummary(payload);
+          if (usageSummary) {
+            setZakiUsageSummary(usageSummary);
+          }
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("done", payload));
+          setNullalisNarrationFrame(null);
+        }
         if (isZakiAgentSpace) {
           finalizeZakiBotProgress("done");
         }
-        return { done: true };
+        const finalChunk =
+          useNullalisDirect && isZakiAgentSpace
+            ? (typeof payload.message === "string" && payload.message) ||
+              (typeof payload.text === "string" && payload.text) ||
+              (typeof payload.content === "string" && payload.content) ||
+              ""
+            : "";
+        return finalChunk ? { done: true, chunk: finalChunk } : { done: true };
       }
       if (eventType === "error") {
         if (isZakiAgentSpace) {
@@ -2847,6 +3475,67 @@ export function ChatArea() {
         const agentUrl = resolveAgentUrl(payload);
         if (agentUrl) {
           return { agentUrl };
+        }
+      }
+      if (useNullalisDirect && isZakiAgentSpace) {
+        if (eventType === "progress" || payloadType === "progress") {
+          const frame = extractNullalisNarrationFrame(payload);
+          if (frame) {
+            pushNullalisNarrationFrame(payload);
+            return {};
+          }
+          pushZakiBotProgressEvent(payload, "progress");
+          return {};
+        }
+        if (eventType === "tool_start" || payloadType === "tool_start") {
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_start", payload));
+          upsertZakiBotToolCall({
+            ...payload,
+            type: "toolCallInvocation",
+            name: payload.name ?? payload.tool,
+            tool: payload.tool ?? payload.name,
+          });
+          return {};
+        }
+        if (eventType === "tool_result" || payloadType === "tool_result") {
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_result", payload));
+          applyZakiBotToolResult({ ...payload, type: "tool_result" });
+          return {};
+        }
+        if (eventType === "task_update" || payloadType === "task_update") {
+          upsertNullalisTaskItem(payload);
+          return {};
+        }
+        if (eventType === "approval_required" || payloadType === "approval_required") {
+          setNullalisApprovalRequest(extractNullalisApprovalRequest(payload));
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("approval_required", payload));
+          setNullalisNarrationFrame({
+            id: `nullalis-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            phase: "waiting",
+            label: "Waiting for tool approval...",
+            tool: typeof payload.tool === "string" ? payload.tool : null,
+            iteration: null,
+            durationMs: null,
+            stepIndex: null,
+            stepTotal: null,
+            timestamp: Date.now(),
+          });
+          return {};
+        }
+        if (eventType === "reasoning_summary" || payloadType === "reasoning_summary") {
+          updateNullalisReasoningSummary(payload);
+          return {};
+        }
+        if (
+          eventType === "status" ||
+          payloadType === "statusResponse" ||
+          payloadType === "status"
+        ) {
+          pushNullalisTranscriptEntry(
+            extractNullalisTranscriptEntry(eventType || payloadType, payload)
+          );
+          pushZakiBotProgressEvent(payload, "status");
+          return {};
         }
       }
       if (eventType === "progress" || payload?.type === "progress") {
@@ -3064,6 +3753,9 @@ export function ChatArea() {
         try {
           const payload = JSON.parse(payloadText) as Record<string, unknown>;
           const result = readPayloadChunk(payload, eventType);
+          if (result.chunk) {
+            appendChunk(result.chunk);
+          }
           if (result.done) {
             sawTerminalEvent = true;
             flushRenderedContent();
@@ -3080,9 +3772,6 @@ export function ChatArea() {
             }
             streamClosed = true;
             return;
-          }
-          if (result.chunk) {
-            appendChunk(result.chunk);
           }
           return;
         } catch {
@@ -3131,6 +3820,8 @@ export function ChatArea() {
     isZakiBotActiveSpace,
     isMemoryPipelineEnabled,
     markZakiBotReplyStart,
+    pushNullalisNarrationFrame,
+    pushNullalisTranscriptEntry,
     pushZakiBotProgressEvent,
     queryModeEnabled,
     responseFormattingConfig.disableResponseEnvelope,
@@ -3139,6 +3830,8 @@ export function ChatArea() {
     updateZakiBotReasoningSummary,
     updateAssistantContent,
     updateAssistantSources,
+    updateNullalisReasoningSummary,
+    upsertNullalisTaskItem,
     upsertZakiBotToolCall,
   ]);
 
@@ -3610,6 +4303,7 @@ export function ChatArea() {
   const ensureZakiBotProvisioned = useCallback(
     async (silent = false) => {
       if (!isZakiBotActiveSpace) return true;
+      if (isNullalisModeEnabled()) return true;
       if (!isAuthReady) return false;
       if (zakiBotProvisionedRef.current) return true;
       if (zakiBotProvisionPromiseRef.current) {
@@ -3651,6 +4345,7 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !isAuthReady) return;
+    if (isNullalisModeEnabled()) return;
     void ensureZakiBotProvisioned(true);
   }, [ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
@@ -3750,12 +4445,12 @@ export function ChatArea() {
               : 1200;
 
     if (clearDelayMs <= 0) {
-      clearZakiBotProgressVisuals();
+      clearZakiBotProgressVisuals({ preserveNullalisArtifacts: true });
       return;
     }
 
     zakiBotProcessClearTimerRef.current = window.setTimeout(() => {
-      clearZakiBotProgressVisuals();
+      clearZakiBotProgressVisuals({ preserveNullalisArtifacts: true });
     }, clearDelayMs);
 
     return () => {
@@ -3796,7 +4491,8 @@ export function ChatArea() {
     }
 
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
-    if (isZakiBotTarget) {
+    const useNullalisForTarget = isZakiBotTarget && isNullalisModeEnabled();
+    if (isZakiBotTarget && !useNullalisForTarget) {
       const provisioned = await ensureZakiBotProvisioned(false);
       if (!provisioned) return;
     }
@@ -3888,6 +4584,32 @@ export function ChatArea() {
     const agentRequested = webSearchArmed || manualAgentPrefix;
     if (isZakiBotTarget) {
       clearZakiBotProgressVisuals();
+      if (useNullalisForTarget) {
+        const now = Date.now();
+        const frame: NullalisNarrationFrame = {
+          id: `nullalis-start-${now}`,
+          phase: "thinking",
+          label: "Thinking...",
+          tool: null,
+          iteration: null,
+          durationMs: null,
+          stepIndex: null,
+          stepTotal: null,
+          timestamp: now,
+        };
+        setNullalisNarrationFrame(frame);
+        setNullalisTranscriptEntries([
+          {
+            id: `nullalis-start-entry-${now}`,
+            kind: "narration",
+            text: "Starting the request",
+            timestamp: now,
+            phase: "thinking",
+            source: "fallback",
+          },
+        ]);
+        setNullalisTranscriptEntryCount(1);
+      }
       setZakiBotStatusEvents([
         {
           id: `progress-${Date.now()}-ack`,
@@ -4117,6 +4839,11 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !activeThreadId || !isAuthReady) return;
+    if (isNullalisModeEnabled()) {
+      historyLoadedRef.current[activeThreadId] = true;
+      setIsBotHistoryLoading(false);
+      return;
+    }
     if (historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
       historyLoadedRef.current[activeThreadId] = true;
@@ -4449,6 +5176,15 @@ export function ChatArea() {
         botProcessSnapshot={isZakiBotActiveSpace ? zakiBotProcessSnapshot : null}
         botProcessCompact={isZakiBotActiveSpace ? zakiBotProcessCompact : false}
         showBotTimeline={isZakiBotActiveSpace}
+        nullalisMode={isZakiBotActiveSpace && isNullalisModeEnabled()}
+        nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
+        nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
+        nullalisTranscriptEntryCount={
+          isZakiBotActiveSpace ? nullalisTranscriptEntryCount : 0
+        }
+        nullalisTaskItems={isZakiBotActiveSpace ? nullalisTaskItems : []}
+        nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
+        zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
         botMode={isZakiBotActiveSpace}
         streamingMode={streamingIndicatorMode}
         firstMessageTransition={firstMessageTransition}
