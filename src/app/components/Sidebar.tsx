@@ -2,7 +2,7 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, MessageSquareText } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, MessageSquareText, Clock3, KeyRound, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,16 @@ import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitl
 import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
 import { SessionManagementSheet } from "./agent/SessionManagementSheet";
+import { CronManagementSheet } from "./agent/CronManagementSheet";
+import { SecretsVaultSheet } from "./agent/SecretsVaultSheet";
+import { DiagnosticsSheet } from "./agent/DiagnosticsSheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/app/components/ui/dropdown-menu";
 import { SettingsModal } from "./sidebar/SettingsModal";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
@@ -90,6 +100,9 @@ export function Sidebar() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [zakiSettingsOpen, setZakiSettingsOpen] = useState(false);
   const [zakiSessionsOpen, setZakiSessionsOpen] = useState(false);
+  const [zakiCronOpen, setZakiCronOpen] = useState(false);
+  const [zakiSecretsOpen, setZakiSecretsOpen] = useState(false);
+  const [zakiDiagnosticsOpen, setZakiDiagnosticsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryInitialTab, setMemoryInitialTab] = useState<
@@ -1253,34 +1266,45 @@ export function Sidebar() {
             </div>
             <span className="text-zaki-secondary text-sm font-medium flex-1">{ZAKI_BOT_LABEL}</span>
           </button>
-          <button
-            type="button"
-            className={cn(
-              "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-              isRtl ? "left-8" : "right-8"
-            )}
-            onClick={(event) => {
-              event.stopPropagation();
-              setZakiSessionsOpen(true);
-            }}
-            aria-label={`${ZAKI_BOT_LABEL} sessions`}
-          >
-            <MessageSquareText className="size-4 text-zaki-muted" />
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-              isRtl ? "left-1" : "right-1"
-            )}
-            onClick={(event) => {
-              event.stopPropagation();
-              setZakiSettingsOpen(true);
-            }}
-            aria-label={`${ZAKI_BOT_LABEL} settings`}
-          >
-            <Settings className="size-4 text-zaki-muted" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                  isRtl ? "left-1" : "right-1"
+                )}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`${ZAKI_BOT_LABEL} menu`}
+              >
+                <Settings className="size-4 text-zaki-muted" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={isRtl ? "start" : "end"} className="w-48">
+              <DropdownMenuItem onClick={() => setZakiSettingsOpen(true)}>
+                <Settings className="size-3.5" />
+                <span>Settings</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setZakiSessionsOpen(true)}>
+                <MessageSquareText className="size-3.5" />
+                <span>Sessions</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setZakiCronOpen(true)}>
+                <Clock3 className="size-3.5" />
+                <span>Scheduled Jobs</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setZakiSecretsOpen(true)}>
+                <KeyRound className="size-3.5" />
+                <span>Secrets Vault</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setZakiDiagnosticsOpen(true)}>
+                <Activity className="size-3.5" />
+                <span>Diagnostics</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
       </div>
@@ -1992,6 +2016,18 @@ export function Sidebar() {
       <SessionManagementSheet
         isOpen={zakiSessionsOpen}
         onClose={() => setZakiSessionsOpen(false)}
+      />
+      <CronManagementSheet
+        isOpen={zakiCronOpen}
+        onClose={() => setZakiCronOpen(false)}
+      />
+      <SecretsVaultSheet
+        isOpen={zakiSecretsOpen}
+        onClose={() => setZakiSecretsOpen(false)}
+      />
+      <DiagnosticsSheet
+        isOpen={zakiDiagnosticsOpen}
+        onClose={() => setZakiDiagnosticsOpen(false)}
       />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}
