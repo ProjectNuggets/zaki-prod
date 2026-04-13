@@ -2,7 +2,7 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ import { useEntitlements } from "@/queries";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
+import { SessionManagementSheet } from "./agent/SessionManagementSheet";
 import { SettingsModal } from "./sidebar/SettingsModal";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
@@ -88,6 +89,7 @@ export function Sidebar() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [zakiSettingsOpen, setZakiSettingsOpen] = useState(false);
+  const [zakiSessionsOpen, setZakiSessionsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryInitialTab, setMemoryInitialTab] = useState<
@@ -1255,6 +1257,20 @@ export function Sidebar() {
             type="button"
             className={cn(
               "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+              isRtl ? "left-8" : "right-8"
+            )}
+            onClick={(event) => {
+              event.stopPropagation();
+              setZakiSessionsOpen(true);
+            }}
+            aria-label={`${ZAKI_BOT_LABEL} sessions`}
+          >
+            <MessageSquareText className="size-4 text-zaki-muted" />
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 size-7 rounded-md p-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-zaki-hover transition focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
               isRtl ? "left-1" : "right-1"
             )}
             onClick={(event) => {
@@ -1972,6 +1988,10 @@ export function Sidebar() {
       <ZakiSettingsSheet
         isOpen={zakiSettingsOpen}
         onClose={() => setZakiSettingsOpen(false)}
+      />
+      <SessionManagementSheet
+        isOpen={zakiSessionsOpen}
+        onClose={() => setZakiSessionsOpen(false)}
       />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}
