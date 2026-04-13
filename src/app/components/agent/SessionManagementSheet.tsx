@@ -176,10 +176,28 @@ export function SessionManagementSheet({
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <button
-                        type="button"
-                        className="min-w-0 text-left"
-                        onClick={() => onSwitchSession?.(session.session_key)}
+                      <div
+                        className={cn(
+                          "min-w-0 text-left",
+                          onSwitchSession && !isActive && "cursor-pointer hover:opacity-80"
+                        )}
+                        role={onSwitchSession && !isActive ? "button" : undefined}
+                        tabIndex={onSwitchSession && !isActive ? 0 : undefined}
+                        onClick={
+                          onSwitchSession && !isActive
+                            ? () => onSwitchSession(session.session_key)
+                            : undefined
+                        }
+                        onKeyDown={
+                          onSwitchSession && !isActive
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  onSwitchSession(session.session_key);
+                                }
+                              }
+                            : undefined
+                        }
                       >
                         <div className="flex items-center gap-1.5">
                           <MessageSquare className="size-3.5 shrink-0 text-zinc-500" />
@@ -192,7 +210,7 @@ export function SessionManagementSheet({
                             </span>
                           )}
                         </div>
-                      </button>
+                      </div>
 
                       <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <button

@@ -1407,6 +1407,15 @@ export async function fetchAgentDiagnostics() {
 // ---------------------------------------------------------------------------
 // Session keys contain colons (agent:zaki-bot:user:42:thread:main) — do NOT
 // encodeURIComponent them because nullalis matches raw path segments.
+// Client-side validation mirrors the backend SESSION_KEY_SAFE_PATTERN.
+
+const SESSION_KEY_RE = /^[a-zA-Z0-9:_.\-]+$/;
+
+function assertSafeSessionKey(key: string): void {
+  if (!key || key.length > 255 || !SESSION_KEY_RE.test(key)) {
+    throw new Error(`Invalid session key: ${key.slice(0, 40)}`);
+  }
+}
 
 export type AgentSession = {
   session_key: string;
@@ -1440,6 +1449,7 @@ export async function listAgentSessions() {
 }
 
 export async function fetchAgentSession(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}`, {
     method: "GET",
   });
@@ -1448,6 +1458,7 @@ export async function fetchAgentSession(sessionKey: string) {
 }
 
 export async function deleteAgentSession(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}`, {
     method: "DELETE",
   });
@@ -1456,6 +1467,7 @@ export async function deleteAgentSession(sessionKey: string) {
 }
 
 export async function compactAgentSession(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/compact`, {
     method: "POST",
   });
@@ -1466,6 +1478,7 @@ export async function compactAgentSession(sessionKey: string) {
 }
 
 export async function fetchAgentSessionContext(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/context`, {
     method: "GET",
   });
@@ -1474,6 +1487,7 @@ export async function fetchAgentSessionContext(sessionKey: string) {
 }
 
 export async function exportAgentSession(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/export`, {
     method: "GET",
   });
@@ -1482,6 +1496,7 @@ export async function exportAgentSession(sessionKey: string) {
 }
 
 export async function fetchAgentSessionHistory(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/history`, {
     method: "GET",
   });
@@ -1493,6 +1508,7 @@ export async function approveAgentSession(
   sessionKey: string,
   payload: AgentSessionApprovalPayload
 ) {
+  assertSafeSessionKey(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/approve`, {
     method: "POST",
     body: JSON.stringify(payload),
