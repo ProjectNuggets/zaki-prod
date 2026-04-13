@@ -8917,7 +8917,7 @@ const makeSessionProxyHandler = (pathBuilder) => {
 };
 
 app.get(
-  "/v1/me/sessions",
+  "/api/agent/sessions",
   requireAgentContext,
   agentRouteLimiter,
   makeAgentUserProxyHandler(
@@ -8926,7 +8926,7 @@ app.get(
 );
 
 app.get(
-  "/v1/me/sessions/:sessionKey",
+  "/api/agent/sessions/:sessionKey",
   requireAgentContext,
   agentRouteLimiter,
   makeSessionProxyHandler(
@@ -8936,7 +8936,7 @@ app.get(
 );
 
 app.delete(
-  "/v1/me/sessions/:sessionKey",
+  "/api/agent/sessions/:sessionKey",
   requireAgentContext,
   agentRouteLimiter,
   makeSessionProxyHandler(
@@ -8946,7 +8946,7 @@ app.delete(
 );
 
 app.post(
-  "/v1/me/sessions/:sessionKey/compact",
+  "/api/agent/sessions/:sessionKey/compact",
   requireAgentContext,
   agentRouteLimiter,
   makeSessionProxyHandler(
@@ -8956,7 +8956,7 @@ app.post(
 );
 
 app.get(
-  "/v1/me/sessions/:sessionKey/context",
+  "/api/agent/sessions/:sessionKey/context",
   requireAgentContext,
   agentRouteLimiter,
   makeSessionProxyHandler(
@@ -8966,7 +8966,7 @@ app.get(
 );
 
 app.get(
-  "/v1/me/sessions/:sessionKey/export",
+  "/api/agent/sessions/:sessionKey/export",
   requireAgentContext,
   agentRouteLimiter,
   makeSessionProxyHandler(
@@ -8976,7 +8976,7 @@ app.get(
 );
 
 app.get(
-  "/v1/me/sessions/:sessionKey/history",
+  "/api/agent/sessions/:sessionKey/history",
   requireAgentContext,
   agentRouteLimiter,
   makeSessionProxyHandler(
@@ -8986,7 +8986,7 @@ app.get(
 );
 
 app.post(
-  "/v1/me/sessions/:sessionKey/approve",
+  "/api/agent/sessions/:sessionKey/approve",
   requireAgentContext,
   agentRouteLimiter,
   agentJson1mb,
