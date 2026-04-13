@@ -17,10 +17,12 @@ import type {
 import { BotProcessRail } from "../BotProcessRail";
 import {
   ApprovalRequiredCard,
+  ContextGauge,
   NullalisWorklog,
   TaskChecklist,
   UsageCostFooter,
 } from "../NullalisRuntimeWidgets";
+import type { ContextGaugeData } from "../NullalisRuntimeWidgets";
 
 interface ChatViewProps {
   messages: Message[];
@@ -44,6 +46,8 @@ interface ChatViewProps {
   nullalisTranscriptEntryCount?: number;
   nullalisTaskItems?: NullalisTaskItem[];
   nullalisApprovalRequest?: NullalisApprovalRequest | null;
+  onApprovalAction?: (requestId: string, approved: boolean) => void | Promise<void>;
+  contextGaugeData?: ContextGaugeData | null;
   zakiUsageSummary?: ZakiUsageSummary | null;
   botMode?: boolean;
   streamingMode?: "thinking" | "researching" | "writing";
@@ -75,6 +79,8 @@ export function ChatView({
   nullalisTranscriptEntryCount = 0,
   nullalisTaskItems = [],
   nullalisApprovalRequest = null,
+  onApprovalAction,
+  contextGaugeData = null,
   zakiUsageSummary = null,
   botMode = false,
   streamingMode = "thinking",
@@ -118,7 +124,12 @@ export function ChatView({
           compact={options?.compact}
         />
         <TaskChecklist tasks={nullalisTaskItems} />
-        <ApprovalRequiredCard request={nullalisApprovalRequest} />
+        <ApprovalRequiredCard
+          request={nullalisApprovalRequest}
+          onApprove={onApprovalAction ? (id) => onApprovalAction(id, true) : undefined}
+          onDeny={onApprovalAction ? (id) => onApprovalAction(id, false) : undefined}
+        />
+        <ContextGauge data={contextGaugeData} />
         <UsageCostFooter usage={zakiUsageSummary} />
       </div>
     );

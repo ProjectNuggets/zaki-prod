@@ -1401,3 +1401,102 @@ export async function fetchAgentDiagnostics() {
   }>(response);
   return { response, data };
 }
+
+// ---------------------------------------------------------------------------
+// Agent Session CRUD (Phase 3.5)
+// ---------------------------------------------------------------------------
+// Session keys contain colons (agent:zaki-bot:user:42:thread:main) — do NOT
+// encodeURIComponent them because nullalis matches raw path segments.
+
+export type AgentSession = {
+  session_key: string;
+  created_at?: string;
+  last_active?: string;
+  message_count?: number;
+  token_count?: number;
+  context_window_used?: number;
+  context_window_max?: number;
+};
+
+export type AgentSessionContext = {
+  session_key: string;
+  token_count: number;
+  context_window_max: number;
+  context_window_used_pct: number;
+  message_count: number;
+};
+
+export type AgentSessionApprovalPayload = {
+  approved: boolean;
+  approval_id?: string;
+  tool?: string;
+  reason?: string;
+};
+
+export async function listAgentSessions() {
+  const response = await backendAuthRequest("/api/agent/sessions", { method: "GET" });
+  const data = await parseApiJson<{ sessions: AgentSession[] }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentSession(sessionKey: string) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentSession>(response);
+  return { response, data };
+}
+
+export async function deleteAgentSession(sessionKey: string) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<{ ok: boolean }>(response);
+  return { response, data };
+}
+
+export async function compactAgentSession(sessionKey: string) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/compact`, {
+    method: "POST",
+  });
+  const data = await parseApiJson<{ ok: boolean; tokens_before?: number; tokens_after?: number }>(
+    response
+  );
+  return { response, data };
+}
+
+export async function fetchAgentSessionContext(sessionKey: string) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/context`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentSessionContext>(response);
+  return { response, data };
+}
+
+export async function exportAgentSession(sessionKey: string) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/export`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentSessionHistory(sessionKey: string) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/history`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
+  return { response, data };
+}
+
+export async function approveAgentSession(
+  sessionKey: string,
+  payload: AgentSessionApprovalPayload
+) {
+  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/approve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<{ ok: boolean }>(response);
+  return { response, data };
+}

@@ -13,7 +13,7 @@ import {
   Volume2,
   Wrench,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type {
   NullalisApprovalRequest,
@@ -787,10 +787,56 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
 
 export function ApprovalRequiredCard({
   request,
+  onApprove,
+  onDeny,
 }: {
   request: NullalisApprovalRequest | null;
+  onApprove?: (requestId: string) => void | Promise<void>;
+  onDeny?: (requestId: string) => void | Promise<void>;
 }) {
+  const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null);
+  const [decided, setDecided] = useState<"approved" | "denied" | null>(null);
+
+  const handleAction = useCallback(
+    async (action: "approve" | "deny") => {
+      if (!request || submitting || decided) return;
+      setSubmitting(action);
+      try {
+        const cb = action === "approve" ? onApprove : onDeny;
+        await cb?.(request.id);
+        setDecided(action === "approve" ? "approved" : "denied");
+      } catch {
+        setSubmitting(null);
+      }
+    },
+    [request, submitting, decided, onApprove, onDeny]
+  );
+
   if (!request) return null;
+
+  if (decided) {
+    return (
+      <div
+        className={cn(
+          "mt-2 max-w-[88%] rounded-zaki-lg border p-3 text-xs shadow-sm",
+          decided === "approved"
+            ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-500/40 dark:bg-emerald-950/35 dark:text-emerald-100"
+            : "border-red-300 bg-red-50 text-red-950 dark:border-red-500/40 dark:bg-red-950/35 dark:text-red-100"
+        )}
+      >
+        <div className="flex items-center gap-2">
+          {decided === "approved" ? (
+            <CheckCircle2 className="size-4 shrink-0" />
+          ) : (
+            <ShieldAlert className="size-4 shrink-0" />
+          )}
+          <span className="font-semibold">
+            {request.tool} — {decided === "approved" ? "Approved" : "Denied"}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-2 max-w-[88%] rounded-zaki-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-sm dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-100">
@@ -807,17 +853,39 @@ export function ApprovalRequiredCard({
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              disabled
-              className="rounded-full border border-amber-300 bg-white/70 px-3 py-1 text-[11px] font-medium opacity-70 dark:border-amber-500/40 dark:bg-amber-950/30"
+              disabled={!!submitting}
+              onClick={() => handleAction("approve")}
+              className={cn(
+                "rounded-full border border-emerald-400 bg-emerald-50 px-3 py-1 text-[11px] font-medium transition-colors",
+                "hover:bg-emerald-100 dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50",
+                submitting === "approve" && "opacity-70"
+              )}
             >
-              Approve (not wired)
+              {submitting === "approve" ? (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="size-3 animate-spin" /> Approving...
+                </span>
+              ) : (
+                "Approve"
+              )}
             </button>
             <button
               type="button"
-              disabled
-              className="rounded-full border border-amber-300 bg-white/70 px-3 py-1 text-[11px] font-medium opacity-70 dark:border-amber-500/40 dark:bg-amber-950/30"
+              disabled={!!submitting}
+              onClick={() => handleAction("deny")}
+              className={cn(
+                "rounded-full border border-red-300 bg-red-50 px-3 py-1 text-[11px] font-medium transition-colors",
+                "hover:bg-red-100 dark:border-red-500/50 dark:bg-red-950/40 dark:hover:bg-red-900/50",
+                submitting === "deny" && "opacity-70"
+              )}
             >
-              Deny (not wired)
+              {submitting === "deny" ? (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="size-3 animate-spin" /> Denying...
+                </span>
+              ) : (
+                "Deny"
+              )}
             </button>
           </div>
         </div>
@@ -842,6 +910,81 @@ export function UsageCostFooter({ usage }: { usage: ZakiUsageSummary | null }) {
   return (
     <div className="mt-1 max-w-[80%] text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
       {parts.join(" · ")}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Context Window Gauge
+// ---------------------------------------------------------------------------
+
+export type ContextGaugeData = {
+  tokenCount: number;
+  contextMax: number;
+  messageCount?: number;
+};
+
+export function ContextGauge({
+  data,
+  compact = false,
+}: {
+  data: ContextGaugeData | null;
+  compact?: boolean;
+}) {
+  if (!data || !data.contextMax || data.contextMax <= 0) return null;
+
+  const pct = Math.min(100, Math.max(0, (data.tokenCount / data.contextMax) * 100));
+  const pctLabel = pct.toFixed(0);
+  const tokenLabel = new Intl.NumberFormat("en-US").format(data.tokenCount);
+  const maxLabel = new Intl.NumberFormat("en-US").format(data.contextMax);
+
+  const barColor =
+    pct >= 90
+      ? "bg-red-500 dark:bg-red-400"
+      : pct >= 70
+        ? "bg-amber-500 dark:bg-amber-400"
+        : "bg-emerald-500 dark:bg-emerald-400";
+
+  const textColor =
+    pct >= 90
+      ? "text-red-700 dark:text-red-300"
+      : pct >= 70
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-zaki-muted dark:text-zaki-dark-muted";
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <div className="h-1 w-12 rounded-full bg-zinc-200 dark:bg-zinc-700">
+          <div
+            className={cn("h-full rounded-full transition-all", barColor)}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={textColor}>{pctLabel}%</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 max-w-[88%] text-[11px]">
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <span className="text-zaki-muted dark:text-zaki-dark-muted">Context</span>
+        <span className={textColor}>
+          {tokenLabel} / {maxLabel} ({pctLabel}%)
+        </span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-zinc-200 dark:bg-zinc-700">
+        <div
+          className={cn("h-full rounded-full transition-all", barColor)}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {typeof data.messageCount === "number" && (
+        <div className="mt-0.5 text-zaki-muted dark:text-zaki-dark-muted">
+          {data.messageCount} message{data.messageCount !== 1 ? "s" : ""} in session
+        </div>
+      )}
     </div>
   );
 }

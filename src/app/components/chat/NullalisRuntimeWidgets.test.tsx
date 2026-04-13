@@ -311,7 +311,9 @@ describe("NullalisRuntimeWidgets", () => {
     expect(screen.getByText("done")).toBeInTheDocument();
   });
 
-  it("renders approval cards with disabled controls", () => {
+  it("renders approval cards with interactive controls", () => {
+    const onApprove = jest.fn();
+    const onDeny = jest.fn();
     render(
       <ApprovalRequiredCard
         request={{
@@ -321,13 +323,15 @@ describe("NullalisRuntimeWidgets", () => {
           riskLevel: "high",
           timestamp: Date.now(),
         }}
+        onApprove={onApprove}
+        onDeny={onDeny}
       />
     );
 
     expect(screen.getByText("Approval required for write_file")).toBeInTheDocument();
     expect(screen.getByText("Risk: high")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Approve (not wired)" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Deny (not wired)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
   });
 
   it("formats usage and cost", () => {

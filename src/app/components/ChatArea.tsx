@@ -1944,6 +1944,11 @@ export function ChatArea() {
   const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
+  const [nullalisContextGauge, setNullalisContextGauge] = useState<{
+    tokenCount: number;
+    contextMax: number;
+    messageCount?: number;
+  } | null>(null);
   const [zakiUsageSummary, setZakiUsageSummary] = useState<ZakiUsageSummary | null>(null);
   const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
@@ -2708,6 +2713,24 @@ export function ChatArea() {
     }
   }, []);
 
+  const refreshContextGauge = useCallback(async () => {
+    try {
+      const userId = getNullalisUserId();
+      const sessionKey = buildNullalisSessionKey(activeThreadId || "main", userId);
+      const { fetchAgentSessionContext } = await import("@/lib/api");
+      const { data } = await fetchAgentSessionContext(sessionKey);
+      if (data && typeof data.token_count === "number") {
+        setNullalisContextGauge({
+          tokenCount: data.token_count,
+          contextMax: data.context_window_max,
+          messageCount: data.message_count,
+        });
+      }
+    } catch {
+      // non-critical — gauge just won't update
+    }
+  }, [activeThreadId]);
+
   const finalizeZakiBotProgress = useCallback(
     (reason: "done" | "error" | "abort" | "stream_end") => {
       if (!isZakiBotActiveSpace) return;
@@ -2720,9 +2743,10 @@ export function ChatArea() {
         setStreamingIndicatorMode("writing");
         setNullalisNarrationFrame(null);
         setNullalisApprovalRequest(null);
+        refreshContextGauge();
       }
     },
-    [clearZakiBotProgressVisuals, isZakiBotActiveSpace]
+    [clearZakiBotProgressVisuals, isZakiBotActiveSpace, refreshContextGauge]
   );
 
   const upsertZakiBotToolCall = useCallback(
@@ -3693,6 +3717,20 @@ export function ChatArea() {
           const usageSummary = extractNullalisUsageSummary(payload);
           if (usageSummary) {
             setZakiUsageSummary(usageSummary);
+          }
+          // Extract inline context data if nullalis sends it with done
+          if (
+            typeof payload.context_tokens === "number" &&
+            typeof payload.context_max === "number"
+          ) {
+            setNullalisContextGauge({
+              tokenCount: payload.context_tokens as number,
+              contextMax: payload.context_max as number,
+              messageCount:
+                typeof payload.message_count === "number"
+                  ? (payload.message_count as number)
+                  : undefined,
+            });
           }
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("done", payload));
           setNullalisNarrationFrame(null);
@@ -5021,6 +5059,27 @@ export function ChatArea() {
     toast.success("Thanks for the feedback");
   }, []);
 
+  const handleApprovalAction = useCallback(
+    async (requestId: string, approved: boolean) => {
+      const userId = getNullalisUserId();
+      const sessionKey = buildNullalisSessionKey(activeThreadId || "main", userId);
+      try {
+        const { approveAgentSession } = await import("@/lib/api");
+        await approveAgentSession(sessionKey, {
+          approved,
+          approval_id: requestId,
+          tool: nullalisApprovalRequest?.tool,
+          reason: approved ? undefined : "User denied from UI",
+        });
+      } catch (err) {
+        console.error("[approval]", err);
+        toast.error(approved ? "Failed to send approval" : "Failed to send denial");
+        throw err; // re-throw so the card stays in the loading state
+      }
+    },
+    [activeThreadId, nullalisApprovalRequest]
+  );
+
   const handleStartChat = useCallback(() => {
     const spaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
     if (!spaceId) {
@@ -5458,6 +5517,8 @@ export function ChatArea() {
         }
         nullalisTaskItems={isZakiBotActiveSpace ? nullalisTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
+        onApprovalAction={isZakiBotActiveSpace ? handleApprovalAction : undefined}
+        contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
         botMode={isZakiBotActiveSpace}
         streamingMode={streamingIndicatorMode}
