@@ -509,6 +509,10 @@ export function Sidebar() {
   useEffect(() => {
     const anyModalOpen =
       zakiSettingsOpen ||
+      zakiSessionsOpen ||
+      zakiCronOpen ||
+      zakiSecretsOpen ||
+      zakiDiagnosticsOpen ||
       memoryOpen ||
       spaceSettingsOpen ||
       Boolean(confirmDelete);
@@ -532,13 +536,29 @@ export function Sidebar() {
         setMemoryOpen(false);
         return;
       }
+      if (zakiDiagnosticsOpen) {
+        setZakiDiagnosticsOpen(false);
+        return;
+      }
+      if (zakiSecretsOpen) {
+        setZakiSecretsOpen(false);
+        return;
+      }
+      if (zakiCronOpen) {
+        setZakiCronOpen(false);
+        return;
+      }
+      if (zakiSessionsOpen) {
+        setZakiSessionsOpen(false);
+        return;
+      }
       if (zakiSettingsOpen) {
         setZakiSettingsOpen(false);
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [confirmDelete, memoryOpen, spaceSettingsOpen, zakiSettingsOpen]);
+  }, [confirmDelete, memoryOpen, spaceSettingsOpen, zakiSettingsOpen, zakiSessionsOpen, zakiCronOpen, zakiSecretsOpen, zakiDiagnosticsOpen]);
 
   useEffect(() => {
     if (!spaceSettingsTarget) return;

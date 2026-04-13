@@ -2742,7 +2742,11 @@ export function ChatArea() {
       if (reason === "done") {
         setStreamingIndicatorMode("writing");
         setNullalisNarrationFrame(null);
-        setNullalisApprovalRequest(null);
+        // NOTE: Do NOT clear nullalisApprovalRequest here — the approval card
+        // must persist until the user explicitly approves or denies. The card
+        // manages its own decided state internally. Clearing here would race
+        // with pending approvals since "done" fires when the SSE stream ends,
+        // which can happen while an approval is still waiting for user action.
         refreshContextGauge();
       }
     },
