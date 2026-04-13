@@ -39,7 +39,9 @@ import {
   isZakiBotSpaceId,
   ZAKI_BOT_LABEL,
   ZAKI_BOT_SPACE_ID,
+  ZAKI_BOT_THREAD_ID,
 } from "@/lib/zakiBot";
+import { getNullalisUserId, isNullalisModeEnabled } from "@/lib/nullalisEnv";
 
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
@@ -225,6 +227,18 @@ export function Sidebar() {
 
   // Focus trap refs for modals
   const deleteConfirmModalRef = useFocusTrap<HTMLDivElement>(!!confirmDelete);
+
+  const activeNullalisSessionKey = useMemo(() => {
+    if (!isNullalisModeEnabled()) return null;
+    const userId = getNullalisUserId();
+    const threadSlug = activeThreadId || "main";
+    const safeThread = String(threadSlug).trim() || "main";
+    const safeUser = String(userId || "1").trim() || "1";
+    if (safeThread === ZAKI_BOT_THREAD_ID || safeThread === "main") {
+      return `agent:zaki-bot:user:${safeUser}:main`;
+    }
+    return `agent:zaki-bot:user:${safeUser}:thread:${safeThread}`;
+  }, [activeThreadId]);
 
   const isActive = (item: string) => activeItem === item;
   const isCreateSpaceViewActive =
@@ -2036,6 +2050,7 @@ export function Sidebar() {
       <SessionManagementSheet
         isOpen={zakiSessionsOpen}
         onClose={() => setZakiSessionsOpen(false)}
+        activeSessionKey={activeNullalisSessionKey}
       />
       <CronManagementSheet
         isOpen={zakiCronOpen}

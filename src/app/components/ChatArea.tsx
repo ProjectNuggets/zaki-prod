@@ -5176,11 +5176,6 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !activeThreadId || !isAuthReady) return;
-    if (isNullalisModeEnabled()) {
-      historyLoadedRef.current[activeThreadId] = true;
-      setIsBotHistoryLoading(false);
-      return;
-    }
     if (historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
       historyLoadedRef.current[activeThreadId] = true;
@@ -5189,29 +5184,70 @@ export function ChatArea() {
 
     let cancelled = false;
     setIsBotHistoryLoading(true);
-    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, zakiBotHistoryMode)
-      .then(({ response, data }) => {
-        if (cancelled || !response.ok) return;
-        const history = Array.isArray(data.history)
-          ? data.history.map((entry, index) => {
-              const role: "assistant" | "user" =
-                entry.role === "assistant" ? "assistant" : "user";
-              return {
-                id: String(entry.id || `bot-history-${index}`),
-                role,
-                content: String(entry.content || ""),
-              };
-            })
-          : [];
-        setMessagesByThread((prev) => ({
-          ...prev,
-          [activeThreadId]: history,
-        }));
-        historyLoadedRef.current[activeThreadId] = true;
-      })
-      .finally(() => {
-        if (!cancelled) setIsBotHistoryLoading(false);
-      });
+
+    if (isNullalisModeEnabled()) {
+      // Nullalis mode: hydrate from session history API
+      const userId = getNullalisUserId();
+      const sessionKey = buildNullalisSessionKey(activeThreadId, userId);
+      void import("@/lib/api")
+        .then(({ fetchAgentSessionHistory }) =>
+          fetchAgentSessionHistory(sessionKey)
+        )
+        .then(({ data }) => {
+          if (cancelled) return;
+          const messages = Array.isArray(data?.messages)
+            ? data.messages
+                .filter(
+                  (m: Record<string, unknown>) =>
+                    m.role === "user" || m.role === "assistant"
+                )
+                .map((entry: Record<string, unknown>, index: number) => ({
+                  id: `nullalis-history-${index}`,
+                  role: entry.role as "user" | "assistant",
+                  content: String(entry.content || ""),
+                }))
+            : [];
+          if (messages.length > 0) {
+            setMessagesByThread((prev) => ({
+              ...prev,
+              [activeThreadId]: messages,
+            }));
+          }
+          historyLoadedRef.current[activeThreadId] = true;
+        })
+        .catch(() => {
+          // Session may not exist yet (first visit) — not an error
+          if (!cancelled) historyLoadedRef.current[activeThreadId] = true;
+        })
+        .finally(() => {
+          if (!cancelled) setIsBotHistoryLoading(false);
+        });
+    } else {
+      // Legacy BFF mode: hydrate from agent history endpoint
+      void fetchAgentHistory(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, zakiBotHistoryMode)
+        .then(({ response, data }) => {
+          if (cancelled || !response.ok) return;
+          const history = Array.isArray(data.history)
+            ? data.history.map((entry, index) => {
+                const role: "assistant" | "user" =
+                  entry.role === "assistant" ? "assistant" : "user";
+                return {
+                  id: String(entry.id || `bot-history-${index}`),
+                  role,
+                  content: String(entry.content || ""),
+                };
+              })
+            : [];
+          setMessagesByThread((prev) => ({
+            ...prev,
+            [activeThreadId]: history,
+          }));
+          historyLoadedRef.current[activeThreadId] = true;
+        })
+        .finally(() => {
+          if (!cancelled) setIsBotHistoryLoading(false);
+        });
+    }
 
     return () => {
       cancelled = true;
