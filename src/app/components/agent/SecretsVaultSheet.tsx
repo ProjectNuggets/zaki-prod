@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -13,6 +13,7 @@ import {
   getAgentSecret,
   putAgentSecret,
   deleteAgentSecret,
+  listAgentSecrets,
 } from "@/lib/api";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
 
@@ -29,10 +30,28 @@ type SecretEntry = {
 
 export function SecretsVaultSheet({ isOpen, onClose }: Props) {
   const [secrets, setSecrets] = useState<SecretEntry[]>([]);
+  const [loading, setLoading] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+
+  const loadSecrets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await listAgentSecrets();
+      const keys = data?.keys ?? [];
+      setSecrets(keys.map((key) => ({ key, revealed: false, value: null })));
+    } catch {
+      toast.error("Failed to load secrets");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) loadSecrets();
+  }, [isOpen, loadSecrets]);
 
   const handleReveal = useCallback(async (key: string) => {
     setActionInProgress(`reveal:${key}`);
@@ -95,12 +114,13 @@ export function SecretsVaultSheet({ isOpen, onClose }: Props) {
       setNewValue("");
       setShowCreate(false);
       toast.success(`Secret "${k}" saved`);
+      loadSecrets();
     } catch {
       toast.error("Failed to save secret");
     } finally {
       setActionInProgress(null);
     }
-  }, [newKey, newValue]);
+  }, [newKey, newValue, loadSecrets]);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -183,7 +203,11 @@ export function SecretsVaultSheet({ isOpen, onClose }: Props) {
             </div>
           )}
 
-          {secrets.length === 0 && !showCreate ? (
+          {loading && secrets.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="size-5 animate-spin text-zinc-400" />
+            </div>
+          ) : secrets.length === 0 && !showCreate ? (
             <p className="py-12 text-center text-sm text-zinc-500">
               No secrets stored.{" "}
               <button

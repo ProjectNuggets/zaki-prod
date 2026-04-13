@@ -8814,6 +8814,14 @@ app.delete(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
   )
 );
+app.get(
+  "/api/agent/secrets",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/secrets`
+  )
+);
 app.post(
   "/api/agent/channels/telegram/connect",
   requireAgentContext,

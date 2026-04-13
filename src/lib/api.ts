@@ -1266,6 +1266,14 @@ export async function deleteAgentSecret(key: string) {
   return { response, data };
 }
 
+export async function listAgentSecrets() {
+  const response = await backendAuthRequest("/api/agent/secrets", {
+    method: "GET",
+  });
+  const data = await parseApiJson<{ keys: string[] }>(response);
+  return { response, data };
+}
+
 export type ConnectAgentTelegramPayload = {
   bot_token?: string;
   webhook_url?: string;

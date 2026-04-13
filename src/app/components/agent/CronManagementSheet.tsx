@@ -4,6 +4,7 @@ import {
   Clock3,
   Loader2,
   Pause,
+  Pencil,
   Play,
   Plus,
   Trash2,
@@ -13,8 +14,6 @@ import { toast } from "sonner";
 import {
   listAgentCron,
   createAgentCron,
-  updateAgentCron,
-  deleteAgentCron,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
@@ -43,7 +42,7 @@ type CronJob = {
 };
 
 function formatUnixTs(secs: number | null | undefined) {
-  if (typeof secs !== "number" || secs <= 0) return "—";
+  if (typeof secs !== "number" || secs <= 0) return "\u2014";
   const d = new Date(secs * 1000);
   return d.toLocaleString(undefined, {
     month: "short",
@@ -66,21 +65,43 @@ function statusBadge(job: CronJob) {
   return { label: "pending", color: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" };
 }
 
+/** Fetch current jobs array from the API. */
+async function fetchCurrentJobs(): Promise<CronJob[]> {
+  const { data } = await listAgentCron();
+  const raw = (data as { jobs?: CronJob[] })?.jobs ?? (Array.isArray(data) ? data : []);
+  return raw as CronJob[];
+}
+
+/**
+ * All cron mutations use read-modify-write: fetch all jobs, mutate the array,
+ * POST the full array back. This is required because nullalis only has a bulk
+ * replace API (replaceJobsJson) — there is no per-job PATCH/DELETE endpoint.
+ */
+async function postFullJobsArray(jobs: CronJob[]) {
+  await createAgentCron(jobs as unknown as Record<string, unknown>);
+}
+
 export function CronManagementSheet({ isOpen, onClose }: Props) {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [newExpression, setNewExpression] = useState("0 */6 * * *");
   const [newPrompt, setNewPrompt] = useState("");
   const [newName, setNewName] = useState("");
 
+  const resetForm = useCallback(() => {
+    setNewExpression("0 */6 * * *");
+    setNewPrompt("");
+    setNewName("");
+    setEditingJobId(null);
+  }, []);
+
   const loadJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await listAgentCron();
-      const raw = (data as { jobs?: CronJob[] })?.jobs ?? (Array.isArray(data) ? data : []);
-      setJobs(raw as CronJob[]);
+      setJobs(await fetchCurrentJobs());
     } catch {
       toast.error("Failed to load cron jobs");
     } finally {
@@ -92,14 +113,24 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
     if (isOpen) loadJobs();
   }, [isOpen, loadJobs]);
 
+  const handleEdit = useCallback((job: CronJob) => {
+    setEditingJobId(job.id);
+    setNewExpression(job.expression);
+    setNewPrompt(job.prompt ?? "");
+    setNewName(job.name ?? "");
+    setShowForm(true);
+  }, []);
+
   const handleTogglePause = useCallback(
     async (job: CronJob) => {
       setActionInProgress(`toggle:${job.id}`);
       try {
-        await updateAgentCron(job.id, { paused: !job.paused });
-        setJobs((prev) =>
-          prev.map((j) => (j.id === job.id ? { ...j, paused: !j.paused } : j))
+        const current = await fetchCurrentJobs();
+        const updated = current.map((j) =>
+          j.id === job.id ? { ...j, paused: !j.paused } : j
         );
+        await postFullJobsArray(updated);
+        setJobs(updated);
         toast.success(job.paused ? "Job resumed" : "Job paused");
       } catch {
         toast.error("Failed to update job");
@@ -114,8 +145,10 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
     async (id: string) => {
       setActionInProgress(`delete:${id}`);
       try {
-        await deleteAgentCron(id);
-        setJobs((prev) => prev.filter((j) => j.id !== id));
+        const current = await fetchCurrentJobs();
+        const filtered = current.filter((j) => j.id !== id);
+        await postFullJobsArray(filtered);
+        setJobs(filtered);
         toast.success("Job deleted");
       } catch {
         toast.error("Failed to delete job");
@@ -126,33 +159,43 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
     []
   );
 
-  const handleCreate = useCallback(async () => {
+  const handleSave = useCallback(async () => {
     const expr = newExpression.trim();
     const prompt = newPrompt.trim();
     if (!expr || !prompt) {
       toast.error("Schedule and prompt are required");
       return;
     }
-    setActionInProgress("create");
+    setActionInProgress(editingJobId ? "update" : "create");
     try {
-      await createAgentCron({
-        expression: expr,
-        prompt,
-        name: newName.trim() || null,
-        job_type: "agent",
-      });
-      setNewExpression("0 */6 * * *");
-      setNewPrompt("");
-      setNewName("");
-      setShowCreate(false);
-      toast.success("Cron job created");
+      const current = await fetchCurrentJobs();
+      let updated: CronJob[];
+      if (editingJobId) {
+        updated = current.map((j) =>
+          j.id === editingJobId
+            ? { ...j, expression: expr, prompt, name: newName.trim() || null }
+            : j
+        );
+      } else {
+        const newJob = {
+          expression: expr,
+          prompt,
+          name: newName.trim() || null,
+          job_type: "agent",
+        };
+        updated = [...current, newJob as unknown as CronJob];
+      }
+      await postFullJobsArray(updated);
+      resetForm();
+      setShowForm(false);
+      toast.success(editingJobId ? "Cron job updated" : "Cron job created");
       loadJobs();
     } catch {
-      toast.error("Failed to create cron job");
+      toast.error(editingJobId ? "Failed to update cron job" : "Failed to create cron job");
     } finally {
       setActionInProgress(null);
     }
-  }, [newExpression, newPrompt, newName, loadJobs]);
+  }, [newExpression, newPrompt, newName, editingJobId, resetForm, loadJobs]);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -168,7 +211,15 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setShowCreate((v) => !v)}
+              onClick={() => {
+                if (showForm) {
+                  setShowForm(false);
+                  resetForm();
+                } else {
+                  resetForm();
+                  setShowForm(true);
+                }
+              }}
               className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               title="New job"
             >
@@ -185,9 +236,11 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
         </div>
 
         <div className="overflow-y-auto px-4 py-3" style={{ maxHeight: "calc(100vh - 60px)" }}>
-          {showCreate && (
+          {showForm && (
             <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-              <div className="mb-2 text-xs font-semibold">New Cron Job</div>
+              <div className="mb-2 text-xs font-semibold">
+                {editingJobId ? "Edit Cron Job" : "New Cron Job"}
+              </div>
               <div className="space-y-2">
                 <input
                   type="text"
@@ -204,7 +257,7 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
                   className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs font-mono dark:border-zinc-600 dark:bg-zinc-900"
                 />
                 <textarea
-                  placeholder="Agent prompt — what should ZAKI do?"
+                  placeholder="Agent prompt \u2014 what should ZAKI do?"
                   value={newPrompt}
                   onChange={(e) => setNewPrompt(e.target.value)}
                   rows={3}
@@ -213,21 +266,25 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={actionInProgress === "create"}
-                    onClick={handleCreate}
+                    disabled={actionInProgress === "create" || actionInProgress === "update"}
+                    onClick={handleSave}
                     className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
-                    {actionInProgress === "create" ? (
+                    {actionInProgress === "create" || actionInProgress === "update" ? (
                       <span className="flex items-center gap-1">
-                        <Loader2 className="size-3 animate-spin" /> Creating...
+                        <Loader2 className="size-3 animate-spin" />
+                        {editingJobId ? "Updating..." : "Creating..."}
                       </span>
                     ) : (
-                      "Create"
+                      editingJobId ? "Update" : "Create"
                     )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowCreate(false)}
+                    onClick={() => {
+                      setShowForm(false);
+                      resetForm();
+                    }}
                     className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-600"
                   >
                     Cancel
@@ -247,7 +304,10 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
               <button
                 type="button"
                 className="text-emerald-600 underline hover:text-emerald-700"
-                onClick={() => setShowCreate(true)}
+                onClick={() => {
+                  resetForm();
+                  setShowForm(true);
+                }}
               >
                 Create one
               </button>
@@ -274,6 +334,15 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          title="Edit"
+                          disabled={!!actionInProgress}
+                          onClick={() => handleEdit(job)}
+                          className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
                         <button
                           type="button"
                           title={job.paused ? "Resume" : "Pause"}
