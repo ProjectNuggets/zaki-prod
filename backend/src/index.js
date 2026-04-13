@@ -8889,6 +8889,114 @@ app.delete(
 );
 
 // =============================================================================
+// SESSION CRUD (Phase 3.5)
+// =============================================================================
+// Proxied to nullalis — session ownership enforced upstream (403 if not owned).
+// Session keys use colons (agent:zaki-bot:user:42:thread:main) — we can't use
+// encodeURIComponent because nullalis matches raw path segments without decoding
+// and colons would become %3A. Instead, validate the character set at the BFF
+// layer to prevent URL injection (?, #, %, CRLF) from Express-decoded params.
+
+const SESSION_KEY_SAFE_PATTERN = /^[a-zA-Z0-9:_.\-]+$/;
+
+function validateSessionKeyParam(req, res) {
+  const sessionKey = req.params.sessionKey;
+  if (!sessionKey || sessionKey.length > 255 || !SESSION_KEY_SAFE_PATTERN.test(sessionKey)) {
+    res.status(400).json({ error: "invalid_session_key" });
+    return null;
+  }
+  return sessionKey;
+}
+
+const makeSessionProxyHandler = (pathBuilder) => {
+  const inner = makeAgentUserProxyHandler(pathBuilder);
+  return async (req, res) => {
+    if (!validateSessionKeyParam(req, res)) return;
+    return inner(req, res);
+  };
+};
+
+app.get(
+  "/v1/me/sessions",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/sessions`
+  )
+);
+
+app.get(
+  "/v1/me/sessions/:sessionKey",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
+  )
+);
+
+app.delete(
+  "/v1/me/sessions/:sessionKey",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
+  )
+);
+
+app.post(
+  "/v1/me/sessions/:sessionKey/compact",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/compact`
+  )
+);
+
+app.get(
+  "/v1/me/sessions/:sessionKey/context",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/context`
+  )
+);
+
+app.get(
+  "/v1/me/sessions/:sessionKey/export",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/export`
+  )
+);
+
+app.get(
+  "/v1/me/sessions/:sessionKey/history",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/history`
+  )
+);
+
+app.post(
+  "/v1/me/sessions/:sessionKey/approve",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/approve`
+  )
+);
+
+// =============================================================================
 // CONVERSATION SUMMARIZATION (Memory)
 // =============================================================================
 
