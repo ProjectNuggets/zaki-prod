@@ -13,9 +13,14 @@ import {
   captureMemory,
   fetchMemoryActivity,
   fetchAgentHistory,
+  fetchAgentMe,
+  fetchAgentSessionContext,
+  fetchAgentSessionHistory,
+  approveAgentSession,
   fetchUsageQuota,
   getApiBase,
   provisionAgent,
+  uploadAgentAttachment,
   type MemoryActivity,
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
@@ -29,12 +34,6 @@ import {
   type ResponseFormattingConfig,
 } from "@/lib/responseFormatting";
 import {
-  buildNullalisStreamUrl,
-  getNullalisToken,
-  getNullalisUserId,
-  isNullalisModeEnabled,
-} from "@/lib/nullalisEnv";
-import {
   SpacesView,
   ZakiHomeView,
   ChatView,
@@ -42,6 +41,7 @@ import {
   CreateSpaceModal,
   EditInstructionsModal,
 } from "./chat";
+import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type {
   BotReasoningSummary,
@@ -124,9 +124,11 @@ function numericValue(value: unknown) {
   return null;
 }
 
-function buildNullalisSessionKey(threadSlug: string, userId: string) {
+/** Build a canonical nullalis session key from the agent user ID and thread slug. */
+function buildAgentSessionKey(threadSlug: string, agentUserId: string | null) {
   const safeThread = String(threadSlug || "main").trim() || "main";
-  const safeUser = String(userId || "1").trim() || "1";
+  const safeUser = String(agentUserId || "").trim();
+  if (!safeUser) return null; // not yet resolved
   if (safeThread === ZAKI_BOT_THREAD_ID || safeThread === "main") {
     return `agent:zaki-bot:user:${safeUser}:main`;
   }
@@ -1914,9 +1916,11 @@ export function ChatArea() {
     goToThread,
     clearThread,
   } = useNavigationStore();
+  const { sidebarMode } = useNavigationStore();
 
   // View states
   const showZakiHome = view === "home";
+  const showAbout = view === "about";
   const showSpacesView = view === "spaces";
   const showSpaceDetail = false;
 
@@ -1972,6 +1976,12 @@ export function ChatArea() {
   const [zakiBotProcessCompact, setZakiBotProcessCompact] = useState(false);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
+
+  // Canonical user ID for agent/nullalis routing (resolved from BFF).
+  // Seed from sessionStorage so context gauge / approval work on fast re-mount.
+  const [agentUserId, setAgentUserId] = useState<string | null>(
+    () => sessionStorage.getItem("zaki:agentUserId")
+  );
 
   // Memory state for the simplified normal-chat capture flow
   const [recentSavedMemories, setRecentSavedMemories] = useState<
@@ -2056,6 +2066,9 @@ export function ChatArea() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
+  const [createSpaceInitialValues, setCreateSpaceInitialValues] = useState<
+    { name?: string; description?: string; instructions?: string } | null
+  >(null);
   const [editInstructionsOpen, setEditInstructionsOpen] = useState(false);
   const [editInstructionsValue, setEditInstructionsValue] = useState("");
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -2126,6 +2139,7 @@ export function ChatArea() {
   const autoScrollRef = useRef(true);
   const prevMessageCount = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const botAttachmentPickRef = useRef(false);
   const scrollRafRef = useRef<number | null>(null);
   const spacesListRef = useRef<Space[]>([]);
   const autoTitleAttemptsRef = useRef<Record<string, number>>({});
@@ -2173,6 +2187,23 @@ export function ChatArea() {
       : null);
   const isMemoryPipelineEnabled = !isZakiBotActiveSpace;
   const showReady = (!activeThreadId || messages.length === 0) && !isZakiBotActiveSpace;
+
+  // Resolve the canonical agent user ID from the BFF on first load
+  useEffect(() => {
+    if (!isAuthReady || !isZakiBotActiveSpace) return;
+    let cancelled = false;
+    void fetchAgentMe()
+      .then(({ data }) => {
+        if (!cancelled && data?.userId) {
+          setAgentUserId(data.userId);
+          try { sessionStorage.setItem("zaki:agentUserId", data.userId); } catch {}
+        }
+      })
+      .catch(() => {
+        // non-critical — session key just won't resolve until next attempt
+      });
+    return () => { cancelled = true; };
+  }, [isAuthReady, isZakiBotActiveSpace]);
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
@@ -2346,13 +2377,15 @@ export function ChatArea() {
         return;
       }
       if (resolvedSpaceId === ZAKI_BOT_SPACE_ID) {
-        toast.error(chatCopy.botUploadUnavailable);
+        // Route to InputArea attachments (chat-level) instead of workspace grounding
+        botAttachmentPickRef.current = true;
+        fileInputRef.current?.click();
         return;
       }
       setFileUploadSpaceId(resolvedSpaceId);
       fileInputRef.current?.click();
     },
-    [activeWorkspaceSlug, chatCopy.botUploadUnavailable, isRtl, primarySpace?.id]
+    [activeWorkspaceSlug, isRtl, primarySpace?.id]
   );
 
   const handleWorkspaceFilesSelected = useCallback(
@@ -2715,21 +2748,20 @@ export function ChatArea() {
 
   const refreshContextGauge = useCallback(async () => {
     try {
-      const userId = getNullalisUserId();
-      const sessionKey = buildNullalisSessionKey(activeThreadId || "main", userId);
-      const { fetchAgentSessionContext } = await import("@/lib/api");
+      const sessionKey = buildAgentSessionKey(activeThreadId || "main", agentUserId);
+      if (!sessionKey) return; // agent user ID not yet resolved
       const { data } = await fetchAgentSessionContext(sessionKey);
       if (data && typeof data.token_count === "number") {
         setNullalisContextGauge({
           tokenCount: data.token_count,
-          contextMax: data.context_window_max,
+          contextMax: data.context_window_max ?? 0,
           messageCount: data.message_count,
         });
       }
     } catch {
       // non-critical — gauge just won't update
     }
-  }, [activeThreadId]);
+  }, [activeThreadId, agentUserId]);
 
   const finalizeZakiBotProgress = useCallback(
     (reason: "done" | "error" | "abort" | "stream_end") => {
@@ -3557,20 +3589,10 @@ export function ChatArea() {
       responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
     const isZakiAgentSpace =
       String(workspaceSlug || "").trim().toLowerCase() === ZAKI_BOT_SPACE_ID;
-    const useNullalisDirect = isZakiAgentSpace && isNullalisModeEnabled();
-    const nullalisUserId = getNullalisUserId();
-    const requestPath = useNullalisDirect
-      ? "/api/v1/chat/stream"
-      : isZakiAgentSpace
+    const requestPath = isZakiAgentSpace
       ? "/api/agent/chat/stream"
       : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
-    const requestBody = useNullalisDirect
-      ? {
-          message,
-          session_key: buildNullalisSessionKey(threadSlug, nullalisUserId),
-          user_id: nullalisUserId,
-        }
-      : isZakiAgentSpace
+    const requestBody = isZakiAgentSpace
       ? {
           message,
           threadId: threadSlug,
@@ -3584,22 +3606,11 @@ export function ChatArea() {
         };
 
     console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
-    const response = useNullalisDirect
-      ? await fetch(buildNullalisStreamUrl(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Internal-Token": getNullalisToken(),
-            "X-Zaki-User-Id": nullalisUserId,
-          },
-          body: JSON.stringify(requestBody),
-          signal,
-        })
-      : await apiRequest(requestPath, {
-          method: "POST",
-          body: JSON.stringify(requestBody),
-          signal,
-        });
+    const response = await apiRequest(requestPath, {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+      signal,
+    });
 
     console.log(`[Chat] Response status: ${response.status}`);
     const agentBaseHeader = response.headers.get("x-zaki-agent-base");
@@ -3685,7 +3696,7 @@ export function ChatArea() {
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       const payloadType = typeof payload.type === "string" ? payload.type : "";
-      if (useNullalisDirect && isZakiAgentSpace && (eventType === "ready" || eventType === "reply_start")) {
+      if (isZakiAgentSpace && (eventType === "ready" || eventType === "reply_start")) {
         if (eventType === "reply_start") {
           markZakiBotReplyStart({ ...payload, type: "reply_start" });
         }
@@ -3717,7 +3728,7 @@ export function ChatArea() {
         payload.close === true ||
         payloadType === "finalizeResponseStream"
       ) {
-        if (useNullalisDirect && isZakiAgentSpace) {
+        if (isZakiAgentSpace) {
           const usageSummary = extractNullalisUsageSummary(payload);
           if (usageSummary) {
             setZakiUsageSummary(usageSummary);
@@ -3743,7 +3754,7 @@ export function ChatArea() {
           finalizeZakiBotProgress("done");
         }
         const finalChunk =
-          useNullalisDirect && isZakiAgentSpace
+          isZakiAgentSpace
             ? (typeof payload.message === "string" && payload.message) ||
               (typeof payload.text === "string" && payload.text) ||
               (typeof payload.content === "string" && payload.content) ||
@@ -3789,7 +3800,7 @@ export function ChatArea() {
           return { agentUrl };
         }
       }
-      if (useNullalisDirect && isZakiAgentSpace) {
+      if (isZakiAgentSpace) {
         if (eventType === "progress" || payloadType === "progress") {
           const frame = extractNullalisNarrationFrame(payload);
           if (frame) {
@@ -3850,8 +3861,11 @@ export function ChatArea() {
           return {};
         }
       }
+      // Fallback handlers — use isZakiAgentSpace (frozen at call time) rather
+      // than isZakiBotActiveSpace (reactive) so a mid-stream space switch can't
+      // route events to the wrong state.
       if (eventType === "progress" || payload?.type === "progress") {
-        if (isZakiBotActiveSpace) {
+        if (isZakiAgentSpace) {
           pushZakiBotProgressEvent(payload, "progress");
         }
         return {};
@@ -3861,7 +3875,7 @@ export function ChatArea() {
         payload?.type === "statusResponse" ||
         payload?.type === "toolCallInvocation"
       ) {
-        if (isZakiBotActiveSpace) {
+        if (isZakiAgentSpace) {
           if (payload?.type === "toolCallInvocation") {
             upsertZakiBotToolCall(payload);
             return {};
@@ -3872,19 +3886,19 @@ export function ChatArea() {
         return {};
       }
       if (eventType === "reasoning_summary" || payload?.type === "reasoning_summary") {
-        if (isZakiBotActiveSpace) {
+        if (isZakiAgentSpace) {
           updateZakiBotReasoningSummary(payload);
         }
         return {};
       }
       if (eventType === "reply_start" || payload?.type === "reply_start") {
-        if (isZakiBotActiveSpace) {
+        if (isZakiAgentSpace) {
           markZakiBotReplyStart(payload);
         }
         return {};
       }
       if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
-        if (isZakiBotActiveSpace) {
+        if (isZakiAgentSpace) {
           applyZakiBotToolResult(payload);
         }
         return {};
@@ -4615,7 +4629,6 @@ export function ChatArea() {
   const ensureZakiBotProvisioned = useCallback(
     async (silent = false) => {
       if (!isZakiBotActiveSpace) return true;
-      if (isNullalisModeEnabled()) return true;
       if (!isAuthReady) return false;
       if (zakiBotProvisionedRef.current) return true;
       if (zakiBotProvisionPromiseRef.current) {
@@ -4625,7 +4638,7 @@ export function ChatArea() {
       const pending = (async () => {
         const { response, data } = await provisionAgent({
           spaceId: ZAKI_BOT_SPACE_ID,
-          threadId: ZAKI_BOT_THREAD_ID,
+          threadId: activeThreadId || ZAKI_BOT_THREAD_ID,
         });
         if (!response.ok) {
           const message = String(
@@ -4657,7 +4670,6 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !isAuthReady) return;
-    if (isNullalisModeEnabled()) return;
     void ensureZakiBotProvisioned(true);
   }, [ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
@@ -4782,11 +4794,7 @@ export function ChatArea() {
     zakiBotToolCalls,
   ]);
 
-  useEffect(() => {
-    if (!isZakiBotActiveSpace) return;
-    if (activeThreadId === ZAKI_BOT_THREAD_ID) return;
-    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`, { replace: true });
-  }, [activeThreadId, isZakiBotActiveSpace, navigate]);
+  // Multi-session: allow any threadId in the agent space (no longer force "main")
 
   // Handle send message
   const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
@@ -4803,12 +4811,13 @@ export function ChatArea() {
     }
 
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
-    const useNullalisForTarget = isZakiBotTarget && isNullalisModeEnabled();
-    if (isZakiBotTarget && !useNullalisForTarget) {
+    if (isZakiBotTarget) {
       const provisioned = await ensureZakiBotProvisioned(false);
       if (!provisioned) return;
     }
-    let threadId = isZakiBotTarget ? ZAKI_BOT_THREAD_ID : activeThreadId;
+    // For ZAKI bot without an activeThreadId, generate a new thread slug.
+    // The nullalis backend creates the session on first message.
+    let threadId = activeThreadId || (isZakiBotTarget ? `thread-${Date.now()}` : null);
     if (!threadId) {
       try {
         const response = await apiRequest(`/workspace/${resolvedWorkspaceSlug}/thread/new`, {
@@ -4896,7 +4905,7 @@ export function ChatArea() {
     const agentRequested = webSearchArmed || manualAgentPrefix;
     if (isZakiBotTarget) {
       clearZakiBotProgressVisuals();
-      if (useNullalisForTarget) {
+      {
         const now = Date.now();
         const frame: NullalisNarrationFrame = {
           id: `nullalis-start-${now}`,
@@ -4944,18 +4953,68 @@ export function ChatArea() {
     const searchAgentInstruction = normalizedText
       ? `@agent search the web for ${normalizedText}`.trim()
       : "@agent search the web";
-    const attachmentLabel =
-      files.length > 0 ? `[Attachments: ${files.map((file) => file.name).join(", ")}]` : "";
+    // File delivery strategy (matches SOTA agents like Claude Code):
+    //   Images    → inline [IMAGE:data:...] base64 marker for multimodal LLM
+    //   Documents → uploaded to agent workspace at attachments/<safe_name>.
+    //               The agent reads them via the file_read tool, which runs
+    //               server-side extraction (pdftotext, pandoc, libreoffice).
+    //               This supports PDF, DOCX, XLSX, PPTX, ODT, RTF, EPUB, HTML,
+    //               and any plain-text format.
+    const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB — matches nullalis multimodal limit
+    const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB — matches nullalis attachment limit
+    let attachmentMarkers = "";
+    if (files.length > 0) {
+      const parts: string[] = [];
+      for (const file of files) {
+        try {
+          if (file.type.startsWith("image/")) {
+            if (file.size > MAX_IMAGE_BYTES) {
+              toast.error(`${file.name} is too large (max 20 MB)`);
+              continue;
+            }
+            // Convert image to base64 data URI for nullalis multimodal pipeline
+            const buf = await file.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let binary = "";
+            bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+            const b64 = btoa(binary);
+            parts.push(`[IMAGE:data:${file.type};base64,${b64}]`);
+          } else {
+            if (file.size > MAX_UPLOAD_BYTES) {
+              toast.error(`${file.name} is too large (max 20 MB)`);
+              continue;
+            }
+            // Upload to agent workspace; agent reads via file_read tool.
+            try {
+              const { data } = await uploadAgentAttachment(file);
+              const uploadedPath = data?.path ?? `attachments/${file.name}`;
+              parts.push(
+                `[User uploaded file: ${uploadedPath}]\n` +
+                `Use the file_read tool with path="${uploadedPath}" to read its contents. ` +
+                `Server will auto-extract text from PDF/DOCX/XLSX/PPTX/ODT/RTF/EPUB and plain-text formats.`
+              );
+            } catch (uploadErr) {
+              const msg = uploadErr instanceof Error ? uploadErr.message : "upload failed";
+              toast.error(`Failed to upload ${file.name}: ${msg}`);
+              parts.push(`[Attachment failed to upload: ${file.name}]`);
+            }
+          }
+        } catch {
+          parts.push(`[Attachment: ${file.name} (read error)]`);
+        }
+      }
+      attachmentMarkers = parts.join("\n\n");
+    }
     const sendText = agentRequested
       ? manualAgentPrefix
-        ? files.length > 0
-          ? `@agent ${attachmentLabel}\n\n${normalizedText || trimmed}`.trim()
+        ? attachmentMarkers
+          ? `@agent ${attachmentMarkers}\n\n${normalizedText || trimmed}`.trim()
           : `@agent ${normalizedText || trimmed}`.trim()
-        : files.length > 0
-          ? `${searchAgentInstruction}\n\n${attachmentLabel}`.trim()
+        : attachmentMarkers
+          ? `${searchAgentInstruction}\n\n${attachmentMarkers}`.trim()
           : searchAgentInstruction
-      : files.length > 0
-        ? `${attachmentLabel}\n\n${trimmed}`
+      : attachmentMarkers
+        ? `${attachmentMarkers}\n\n${trimmed}`
         : trimmed;
 
     try {
@@ -5065,10 +5124,12 @@ export function ChatArea() {
 
   const handleApprovalAction = useCallback(
     async (requestId: string, approved: boolean) => {
-      const userId = getNullalisUserId();
-      const sessionKey = buildNullalisSessionKey(activeThreadId || "main", userId);
+      const sessionKey = buildAgentSessionKey(activeThreadId || "main", agentUserId);
+      if (!sessionKey) {
+        toast.error("Agent user ID not yet resolved — try again in a moment");
+        return;
+      }
       try {
-        const { approveAgentSession } = await import("@/lib/api");
         await approveAgentSession(sessionKey, {
           approved,
           approval_id: requestId,
@@ -5081,7 +5142,7 @@ export function ChatArea() {
         throw err; // re-throw so the card stays in the loading state
       }
     },
-    [activeThreadId, nullalisApprovalRequest]
+    [activeThreadId, agentUserId, nullalisApprovalRequest]
   );
 
   const handleStartChat = useCallback(() => {
@@ -5175,84 +5236,80 @@ export function ChatArea() {
   }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
 
   useEffect(() => {
-    if (!isZakiBotActiveSpace || !activeThreadId || !isAuthReady) return;
-    if (historyLoadedRef.current[activeThreadId]) return;
+    if (!isZakiBotActiveSpace || !activeThreadId || !isAuthReady) {
+      setIsBotHistoryLoading(false);
+      return;
+    }
+    // Wait for agentUserId to resolve before loading session history
+    if (!agentUserId) return;
+    if (historyLoadedRef.current[activeThreadId]) {
+      setIsBotHistoryLoading(false);
+      return;
+    }
     if (messagesByThread[activeThreadId]?.length) {
       historyLoadedRef.current[activeThreadId] = true;
+      setIsBotHistoryLoading(false);
       return;
     }
 
     let cancelled = false;
     setIsBotHistoryLoading(true);
 
-    if (isNullalisModeEnabled()) {
-      // Nullalis mode: hydrate from session history API
-      const userId = getNullalisUserId();
-      const sessionKey = buildNullalisSessionKey(activeThreadId, userId);
-      void import("@/lib/api")
-        .then(({ fetchAgentSessionHistory }) =>
-          fetchAgentSessionHistory(sessionKey)
-        )
-        .then(({ data }) => {
-          if (cancelled) return;
-          const messages = Array.isArray(data?.messages)
-            ? data.messages
-                .filter(
-                  (m: Record<string, unknown>) =>
-                    m.role === "user" || m.role === "assistant"
-                )
-                .map((entry: Record<string, unknown>, index: number) => ({
-                  id: `nullalis-history-${index}`,
-                  role: entry.role as "user" | "assistant",
-                  content: String(entry.content || ""),
-                }))
-            : [];
-          if (messages.length > 0) {
-            setMessagesByThread((prev) => ({
-              ...prev,
-              [activeThreadId]: messages,
-            }));
-          }
-          historyLoadedRef.current[activeThreadId] = true;
-        })
-        .catch(() => {
-          // Session may not exist yet (first visit) — not an error
-          if (!cancelled) historyLoadedRef.current[activeThreadId] = true;
-        })
-        .finally(() => {
-          if (!cancelled) setIsBotHistoryLoading(false);
-        });
-    } else {
-      // Legacy BFF mode: hydrate from agent history endpoint
-      void fetchAgentHistory(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, zakiBotHistoryMode)
-        .then(({ response, data }) => {
-          if (cancelled || !response.ok) return;
-          const history = Array.isArray(data.history)
-            ? data.history.map((entry, index) => {
-                const role: "assistant" | "user" =
-                  entry.role === "assistant" ? "assistant" : "user";
-                return {
-                  id: String(entry.id || `bot-history-${index}`),
-                  role,
-                  content: String(entry.content || ""),
-                };
-              })
-            : [];
-          setMessagesByThread((prev) => ({
-            ...prev,
-            [activeThreadId]: history,
-          }));
-          historyLoadedRef.current[activeThreadId] = true;
-        })
-        .finally(() => {
-          if (!cancelled) setIsBotHistoryLoading(false);
-        });
+    // Use session-specific history endpoint (nullalis runtime history)
+    const sessionKey = buildAgentSessionKey(activeThreadId, agentUserId);
+    if (!sessionKey) {
+      setIsBotHistoryLoading(false);
+      return;
     }
+
+    void fetchAgentSessionHistory(sessionKey)
+      .then(({ response, data }) => {
+        if (cancelled) return;
+        if (!response.ok) {
+          // Session history failed, fall back to app-level history
+          return fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, zakiBotHistoryMode)
+            .then(({ response: r2, data: d2 }) => {
+              if (cancelled || !r2.ok) return;
+              const history = Array.isArray(d2.history)
+                ? d2.history.map((entry: Record<string, unknown>, index: number) => ({
+                    id: String(entry.id || `bot-history-${index}`),
+                    role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
+                    content: String(entry.content || ""),
+                  }))
+                : [];
+              setMessagesByThread((prev) => ({
+                ...prev,
+                [activeThreadId]: history,
+              }));
+              historyLoadedRef.current[activeThreadId] = true;
+            });
+        }
+        // Session history returns { messages: [...] }
+        const messages = data?.messages ?? [];
+        const history = Array.isArray(messages)
+          ? messages.map((entry: Record<string, unknown>, index: number) => ({
+              id: String(entry.id || `bot-session-${index}`),
+              role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
+              content: String(entry.content || ""),
+            }))
+          : [];
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [activeThreadId]: history,
+        }));
+        historyLoadedRef.current[activeThreadId] = true;
+      })
+      .catch(() => {
+        // Ensure loading clears on error
+      })
+      .finally(() => {
+        if (!cancelled) setIsBotHistoryLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, isAuthReady, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
+  }, [activeThreadId, agentUserId, isAuthReady, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
 
   // First message transition effect
   useEffect(() => {
@@ -5383,6 +5440,17 @@ export function ChatArea() {
     };
 
     const handleOpenCreateSpace = () => {
+      setCreateSpaceInitialValues(null);
+      setCreateSpaceOpen(true);
+    };
+
+    const handleCreateSpaceFromTemplate = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        name?: string;
+        description?: string;
+        instructions?: string;
+      }>).detail;
+      setCreateSpaceInitialValues(detail ?? null);
       setCreateSpaceOpen(true);
     };
 
@@ -5423,6 +5491,7 @@ export function ChatArea() {
     window.addEventListener("zaki:spaces-data", handleSpacesData);
     window.addEventListener("zaki:rename-thread", handleRenameThread);
     window.addEventListener("zaki:open-create-space", handleOpenCreateSpace);
+    window.addEventListener("zaki:create-space-from-template", handleCreateSpaceFromTemplate);
     window.addEventListener("zaki:view-space", handleViewSpace);
     window.addEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
     window.addEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
@@ -5435,6 +5504,7 @@ export function ChatArea() {
       window.removeEventListener("zaki:spaces-data", handleSpacesData);
       window.removeEventListener("zaki:rename-thread", handleRenameThread);
       window.removeEventListener("zaki:open-create-space", handleOpenCreateSpace);
+      window.removeEventListener("zaki:create-space-from-template", handleCreateSpaceFromTemplate);
       window.removeEventListener("zaki:view-space", handleViewSpace);
       window.removeEventListener("zaki:edit-space-instructions", handleEditSpaceInstructions);
       window.removeEventListener("zaki:upload-space-files", handleUploadSpaceFiles);
@@ -5474,7 +5544,27 @@ export function ChatArea() {
       );
     }
 
+    if (showAbout) {
+      return (
+        <ZakiHomeView
+          primarySpace={primarySpace}
+          onSendExample={(example) => handleSend(example, [])}
+          onGoToThread={goToThread}
+          onDeleteThread={(threadId, spaceId) => {
+            window.dispatchEvent(new CustomEvent("zaki:delete-thread", { detail: { id: threadId, spaceId } }));
+          }}
+        />
+      );
+    }
+
     if (showZakiHome) {
+      if (sidebarMode === "zaki") {
+        return (
+          <ZakiDashboard
+            onSendExample={(example) => handleSend(example, [])}
+          />
+        );
+      }
       return (
         <ZakiHomeView
           primarySpace={primarySpace}
@@ -5549,7 +5639,7 @@ export function ChatArea() {
         botProcessSnapshot={isZakiBotActiveSpace ? zakiBotProcessSnapshot : null}
         botProcessCompact={isZakiBotActiveSpace ? zakiBotProcessCompact : false}
         showBotTimeline={isZakiBotActiveSpace}
-        nullalisMode={isZakiBotActiveSpace && isNullalisModeEnabled()}
+        nullalisMode={isZakiBotActiveSpace}
         nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
         nullalisTranscriptEntryCount={
@@ -5609,7 +5699,8 @@ export function ChatArea() {
             return;
           }
           if (targetSpaceId === ZAKI_BOT_SPACE_ID) {
-            toast.error(chatCopy.botUploadUnavailable);
+            // Route to InputArea attachments (chat-level) instead of workspace grounding
+            setAttachments((prev) => [...prev, ...files]);
             return;
           }
           handleWorkspaceFilesSelected(targetSpaceId, files);
@@ -5759,7 +5850,7 @@ export function ChatArea() {
           )}
 
           {/* Input Area */}
-          {!showZakiHome && !showSpacesView && !showSpaceDetail && (
+          {!showAbout && !showSpacesView && !showSpaceDetail && (
             <div
               ref={inputWrapRef}
               className="zaki-input-float relative z-20"
@@ -5817,6 +5908,14 @@ export function ChatArea() {
             accept={Object.values(acceptedWorkspaceTypes).flat().join(",")}
             onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
+              if (botAttachmentPickRef.current) {
+                botAttachmentPickRef.current = false;
+                if (files.length) {
+                  setAttachments((prev) => [...prev, ...files]);
+                }
+                event.target.value = "";
+                return;
+              }
               const targetSpaceId = fileUploadSpaceId;
               setFileUploadSpaceId(null);
               event.target.value = "";
@@ -5857,11 +5956,16 @@ export function ChatArea() {
 
       <CreateSpaceModal
         isOpen={createSpaceOpen}
-        onClose={() => setCreateSpaceOpen(false)}
+        initialValues={createSpaceInitialValues}
+        onClose={() => {
+          setCreateSpaceOpen(false);
+          setCreateSpaceInitialValues(null);
+        }}
         onCreate={(data) => {
           window.dispatchEvent(
             new CustomEvent("zaki:create-space", { detail: data })
           );
+          setCreateSpaceInitialValues(null);
         }}
       />
 

@@ -1274,6 +1274,62 @@ export async function listAgentSecrets() {
   return { response, data };
 }
 
+// ── Attachments: upload docs to the agent's workspace ──────────────
+
+export type UploadAgentAttachmentResponse = {
+  path: string; // e.g. "attachments/AddGrowth_LTS.pdf"
+  bytes: number;
+};
+
+/**
+ * Upload a file to the user's agent workspace. The agent can then read it
+ * via the file_read tool using the returned relative path.
+ *
+ * Supported formats (extraction handled server-side in file_read):
+ *   PDF  (pdftotext), DOCX/DOC/ODT/RTF/EPUB/PPTX/PPT/HTML (pandoc),
+ *   XLSX/XLS/ODS (libreoffice → CSV), plus any plain-text file type.
+ */
+export async function uploadAgentAttachment(file: File) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  const content_b64 = btoa(binary);
+  // Sanitize filename to the set the backend accepts: letters, digits,
+  // dot, dash, underscore, space. Collapse anything else to underscore.
+  const safe_name = file.name.replace(/[^A-Za-z0-9._\- ]/g, "_").slice(0, 200);
+  const response = await backendAuthRequest("/api/agent/attachments", {
+    method: "POST",
+    body: JSON.stringify({ filename: safe_name, content_b64 }),
+  });
+  const data = await parseApiJson<UploadAgentAttachmentResponse>(response);
+  return { response, data };
+}
+
+// ── Voice: STT and TTS ──────────────────────────────────────────────
+
+export async function transcribeAudio(audioBase64: string, format = "webm") {
+  const response = await backendAuthRequest("/api/agent/voice/transcribe", {
+    method: "POST",
+    body: JSON.stringify({ audio: audioBase64, format }),
+  });
+  const data = await parseApiJson<{ text: string }>(response);
+  return { response, data };
+}
+
+export async function synthesizeSpeech(
+  text: string,
+  voice = "alloy",
+  format = "mp3"
+) {
+  const response = await backendAuthRequest("/api/agent/voice/synthesize", {
+    method: "POST",
+    body: JSON.stringify({ text, voice, format }),
+  });
+  const data = await parseApiJson<{ audio: string; format: string }>(response);
+  return { response, data };
+}
+
 export type ConnectAgentTelegramPayload = {
   bot_token?: string;
   webhook_url?: string;
@@ -1302,6 +1358,12 @@ export async function disconnectAgentTelegram() {
   return { response, data };
 }
 
+export async function fetchAgentMe() {
+  const response = await backendAuthRequest("/api/agent/me", { method: "GET" });
+  const data = await parseApiJson<{ userId: string }>(response);
+  return { response, data };
+}
+
 export async function fetchAgentHeartbeat() {
   const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
   const data = await parseApiJson<AgentHeartbeatState>(response);
@@ -1323,7 +1385,7 @@ export async function listAgentCron() {
   return { response, data };
 }
 
-export async function createAgentCron(payload: Record<string, unknown>) {
+export async function createAgentCron(payload: Record<string, unknown> | unknown[]) {
   const response = await backendAuthRequest("/api/agent/cron", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -1427,12 +1489,14 @@ function assertSafeSessionKey(key: string): void {
 
 export type AgentSession = {
   session_key: string;
-  created_at?: string;
-  last_active?: string;
+  title?: string;
+  created_at?: string | number;
+  last_active?: string | number;
   message_count?: number;
   token_count?: number;
   context_window_used?: number;
   context_window_max?: number;
+  live?: boolean;
 };
 
 export type AgentSessionContext = {
@@ -1458,7 +1522,8 @@ export async function listAgentSessions() {
 
 export async function fetchAgentSession(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "GET",
   });
   const data = await parseApiJson<AgentSession>(response);
@@ -1467,7 +1532,8 @@ export async function fetchAgentSession(sessionKey: string) {
 
 export async function deleteAgentSession(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "DELETE",
   });
   const data = await parseApiJson<{ ok: boolean }>(response);
@@ -1476,7 +1542,8 @@ export async function deleteAgentSession(sessionKey: string) {
 
 export async function compactAgentSession(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/compact`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/compact`, {
     method: "POST",
   });
   const data = await parseApiJson<{ ok: boolean; tokens_before?: number; tokens_after?: number }>(
@@ -1487,7 +1554,8 @@ export async function compactAgentSession(sessionKey: string) {
 
 export async function fetchAgentSessionContext(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/context`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/context`, {
     method: "GET",
   });
   const data = await parseApiJson<AgentSessionContext>(response);
@@ -1496,7 +1564,8 @@ export async function fetchAgentSessionContext(sessionKey: string) {
 
 export async function exportAgentSession(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/export`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/export`, {
     method: "GET",
   });
   const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
@@ -1505,7 +1574,8 @@ export async function exportAgentSession(sessionKey: string) {
 
 export async function fetchAgentSessionHistory(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/history`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/history`, {
     method: "GET",
   });
   const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
@@ -1517,7 +1587,8 @@ export async function approveAgentSession(
   payload: AgentSessionApprovalPayload
 ) {
   assertSafeSessionKey(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${sessionKey}/approve`, {
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/approve`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

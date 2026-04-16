@@ -8855,6 +8855,20 @@ app.get(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/secrets`
   )
 );
+// ── Attachments: upload a file into the user's agent workspace ──────
+// POST /api/agent/attachments
+// Body: { filename: "AddGrowth.pdf", content_b64: "<base64>" }
+// Returns: { path: "attachments/AddGrowth.pdf", bytes: <n> }
+// The agent then reads it with the file_read tool using the returned path.
+app.post(
+  "/api/agent/attachments",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson30mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/attachments`
+  )
+);
 // ── Voice: STT and TTS ──────────────────────────────────────────────
 app.post(
   "/api/agent/voice/transcribe",
