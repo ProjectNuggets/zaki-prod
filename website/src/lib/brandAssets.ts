@@ -47,13 +47,13 @@ export const brandAssets = {
   chat: [
     {
       src: "/slides/2.png",
-      alt: "ZAKI Chat workspace with organized spaces",
+      alt: "Spaces workspace with organized projects",
       role: "chat" as const,
       localeSafe: true,
     },
     {
       src: "/slides/4.png",
-      alt: "ZAKI Chat feature detail view",
+      alt: "Spaces feature detail view",
       role: "chat" as const,
       localeSafe: true,
     },

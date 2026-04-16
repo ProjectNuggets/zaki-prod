@@ -1,49 +1,112 @@
-import { ArrowUpRight } from "lucide-react";
-import { Link } from "react-router-dom";
-import { Reveal } from "./Reveal";
-import type { Locale, WebsiteContent } from "../lib/content";
+import type { Locale } from "../lib/content";
+import { ShimmerButton } from "./ui/shimmer-button";
+import { useEffect, useRef, useState } from "react";
 
-export function ClosingCta({ locale, t, source }: { locale: Locale; t: WebsiteContent; source: string }) {
+export function ClosingCta({ locale }: { locale: Locale }) {
   const isArabic = locale === "ar";
-  const authMode = "signup";
-  const isHome = source === "website_home_cta";
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   return (
-    <section className="relative z-10 px-4 py-16 md:px-8 md:py-24">
-      <div className="mx-auto max-w-[1240px] text-center">
-        <Reveal>
-          <h2 className="font-display mx-auto max-w-[18ch] text-[32px] font-extrabold leading-[0.96] tracking-[-0.05em] text-chat-text md:text-[56px]">
-            {t.cta.heading}
-          </h2>
-        </Reveal>
-        <Reveal delay={60}>
-          <p className="mx-auto mt-6 max-w-[48ch] whitespace-pre-line text-base leading-8 text-chat-muted">
-            {t.cta.subheading}
-          </p>
-        </Reveal>
-        <Reveal delay={120}>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href={`https://app.chatzaki.com/?auth=${authMode}&source=${source}`}
-              className="inline-flex min-h-12 items-center gap-2 rounded-full bg-chat-accent px-6 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(201,57,42,0.3)] transition hover:-translate-y-0.5 hover:bg-chat-accent-hover"
-            >
-              {isHome ? (isArabic ? "جرّب زكي مجانًا" : "Try ZAKI free") : t.cta.secondary}
-              <ArrowUpRight className="size-4" />
-            </a>
-            <Link
-              to={isHome ? "/zaki-vs-spaces/" : isArabic ? "/ar/contact/" : "/contact/"}
-              className="inline-flex min-h-12 items-center gap-2 rounded-full border border-line-strong bg-white/80 px-6 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
-            >
-              {isHome ? (isArabic ? "تعرّف على الفرق" : "Learn the difference") : t.cta.primary}
-              <ArrowUpRight className="size-4" />
-            </Link>
-          </div>
-        </Reveal>
-        <Reveal delay={160}>
-          <p className="font-mono-ui mt-8 text-xs uppercase tracking-[0.24em] text-chat-accent">
-            {t.cta.hoverLine}
-          </p>
-        </Reveal>
+    <section className="px-5 md:px-8">
+      <div
+        ref={ref}
+        className="relative mx-auto flex min-h-[480px] max-w-5xl flex-col items-center justify-center overflow-hidden py-24"
+      >
+        {/* Logo with glow */}
+        <div
+          className="relative mb-10 transition-all duration-[800ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            opacity: visible ? 1 : 0,
+            transform: visible ? "scale(1)" : "scale(0.8)",
+          }}
+        >
+          {/* Glow behind logo */}
+          <div
+            className="absolute inset-0 -m-8 rounded-full blur-[60px] transition-all duration-[800ms]"
+            style={{
+              background: "radial-gradient(circle, var(--zk-accent-muted) 0%, var(--zk-accent-glow) 60%, transparent 80%)",
+              opacity: visible ? 1 : 0,
+            }}
+          />
+          <img
+            src="/assets/zaki-logo.png"
+            alt="ZAKI"
+            className="relative size-20 rounded-2xl md:size-24"
+          />
+        </div>
+
+        {/* Headline */}
+        <h2
+          className="font-display text-center text-3xl font-extrabold leading-tight tracking-[-0.03em] text-zk-text transition-all duration-[800ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:text-5xl"
+          style={{
+            transitionDelay: "300ms",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(20px)",
+          }}
+        >
+          {isArabic ? (
+            <>
+              وكيلك.
+              <br />
+              ذاكرتك.
+              <br />
+              <span className="text-zk-accent">قواعدك.</span>
+            </>
+          ) : (
+            <>
+              Your agent.
+              <br />
+              Your memory.
+              <br />
+              <span className="text-zk-accent">Your rules.</span>
+            </>
+          )}
+        </h2>
+
+        {/* CTA */}
+        <div
+          className="mt-8 transition-all duration-[800ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            transitionDelay: "500ms",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(12px)",
+          }}
+        >
+          <a href="https://app.chatzaki.com/?auth=signup&source=website_home_cta">
+            <ShimmerButton>
+              {isArabic ? "قابل وكيلك" : "Meet your agent"}
+            </ShimmerButton>
+          </a>
+        </div>
+
+        {/* Ambient red glow — centered behind content */}
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/3 -z-10 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-[1000ms]"
+          style={{
+            width: "clamp(300px, 50vw, 600px)",
+            height: "clamp(200px, 30vw, 400px)",
+            background: "radial-gradient(ellipse 70% 60% at 50% 50%, var(--zk-accent-glow), transparent)",
+            filter: "blur(40px)",
+            opacity: visible ? 1 : 0,
+          }}
+        />
       </div>
     </section>
   );

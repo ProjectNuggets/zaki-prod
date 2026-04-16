@@ -17,7 +17,7 @@ export function FaqPage({ locale }: { locale: Locale }) {
             <h1 className="font-display mt-6 text-[40px] font-extrabold leading-[0.96] tracking-[-0.06em] md:text-[72px]">
               {isArabic ? "أسئلة المنتج، بإجابات مباشرة." : "Product questions, answered directly."}
             </h1>
-            <p className="mt-6 max-w-[60ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+            <p className="mt-6 max-w-[60ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {isArabic
                 ? "تشرح هذه الصفحة الفرق بين زكي وSpaces، وما الذي تتضمنه البيتا العامة، وما الذي لا تعد به بعد، ومتى تبدأ الاشتراكات."
                 : "This page explains the difference between ZAKI and Spaces, what the public beta includes, what it does not promise yet, and when subscriptions begin."}
@@ -32,6 +32,26 @@ export function FaqPage({ locale }: { locale: Locale }) {
                 </AccordionItem>
               ))}
             </Accordion>
+          </Reveal>
+
+          {/* Still have questions? */}
+          <Reveal delay={120}>
+            <div className="mt-12 rounded-xl border border-zk-border bg-zk-surface p-6 text-center md:p-8">
+              <p className="text-base font-semibold text-zk-text">
+                {isArabic ? "لا تزال لديك أسئلة؟" : "Still have questions?"}
+              </p>
+              <p className="mt-2 text-sm text-zk-text-secondary">
+                {isArabic
+                  ? "تواصل معنا مباشرة وسنرد في أقرب وقت."
+                  : "Reach out directly and we'll get back to you."}
+              </p>
+              <a
+                href={isArabic ? "/ar/contact/" : "/contact/"}
+                className="mt-4 inline-flex items-center rounded-full bg-zk-accent px-5 py-2 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-zk-accent-hover"
+              >
+                {isArabic ? "تواصل معنا" : "Contact us"}
+              </a>
+            </div>
           </Reveal>
         </div>
       </section>

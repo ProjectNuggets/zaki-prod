@@ -20,7 +20,7 @@ export function ContactPage({ locale }: { locale: Locale }) {
             <h1 className="font-display mt-6 text-[40px] font-extrabold leading-[0.94] tracking-[-0.06em] md:text-[72px]">
               {content.title}
             </h1>
-            <p className="mt-6 max-w-[60ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+            <p className="mt-6 max-w-[60ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {content.intro}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
@@ -46,7 +46,7 @@ export function ContactPage({ locale }: { locale: Locale }) {
                 <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[32px]">
                   {card.title}
                 </h2>
-                <p className="mt-4 text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+                <p className="mt-4 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                   {card.body}
                 </p>
               </Card>
@@ -60,10 +60,10 @@ export function ContactPage({ locale }: { locale: Locale }) {
           <Reveal delay={100}>
             <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="font-mono-ui text-[11px] uppercase tracking-[0.2em] text-[var(--chat-accent)]">
+                <p className="font-mono-ui text-[11px] uppercase tracking-[0.2em] text-zk-accent">
                   {isArabic ? "استجابة مباشرة" : "Direct response"}
                 </p>
-                <p className="mt-3 text-sm leading-7 text-[var(--chat-muted)]">
+                <p className="mt-3 text-sm leading-7 text-zk-text-secondary">
                   {isArabic
                     ? "للطلبات الحساسة، أرسل بريد الحساب والطابع الزمني وملخصًا واضحًا للمشكلة."
                     : "For sensitive requests, include the account email, timestamp, and a clear summary of the issue."}
@@ -71,7 +71,7 @@ export function ContactPage({ locale }: { locale: Locale }) {
               </div>
               <a
                 href="mailto:support@chatzaki.com"
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--line-light)] bg-white/88 px-4 text-sm font-medium text-[var(--chat-text)] transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-medium text-zk-text transition hover:-translate-y-0.5 hover:border-zk-border-strong"
               >
                 support@chatzaki.com
                 <ArrowUpRight className="size-4" />

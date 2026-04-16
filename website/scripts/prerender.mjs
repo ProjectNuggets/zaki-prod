@@ -53,7 +53,7 @@ function buildSeoBlock({ seo, structuredData }) {
       name="robots"
       content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
     />
-    <meta name="theme-color" content="#fcfcfd" />
+    <meta name="theme-color" content="#0c0a09" />
     <link rel="canonical" href="${escapeHtml(seo.canonical)}" />
     ${Object.entries(seo.alternates)
       .map(([hreflang, href]) => `<link rel="alternate" hreflang="${hreflang}" href="${href}" />`)

@@ -14,7 +14,7 @@ import {
 export const SITE_URL = "https://chatzaki.com";
 export const APP_URL = "https://app.chatzaki.com";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
-export const SEO_UPDATED_AT = "2026-03-16T00:00:00Z";
+export const SEO_UPDATED_AT = "2026-04-14T00:00:00Z";
 
 export type RouteSeo = {
   title: string;
@@ -99,6 +99,19 @@ function buildWebPageSchema(name: string, url: string, locale: Locale, descripti
     url,
     inLanguage: locale,
     description,
+  };
+}
+
+function buildBreadcrumbSchema(crumbs: { name: string; url: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: crumbs.map((c, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: c.name,
+      item: c.url,
+    })),
   };
 }
 
@@ -257,7 +270,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
     return {
       title:
         locale === "ar"
-          ? "لماذا زكي | ZAKI — ذكاء عربي أولًا"
+          ? "لماذا زكي | ZAKI · ذكاء عربي أولًا"
           : "Why ZAKI | Arabic-First AI with Product Discipline",
       description,
       canonical,
@@ -348,6 +361,10 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ...buildCommonSchema("en", content.seo.description),
         buildWebPageSchema(content.title, canonical, "en", content.seo.description),
         buildComparisonSchema(comparisonKey, canonical),
+        buildBreadcrumbSchema([
+          { name: "Home", url: SITE_URL },
+          { name: content.title, url: canonical },
+        ]),
       ],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -372,6 +389,11 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ...buildCommonSchema("en", content.seo.description),
         buildWebPageSchema(content.title, canonical, "en", content.seo.description),
         buildHowToSchema(slug, canonical),
+        buildBreadcrumbSchema([
+          { name: "Home", url: SITE_URL },
+          { name: "How To", url: `${SITE_URL}/how-to/` },
+          { name: content.title, url: canonical },
+        ]),
       ],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -437,8 +459,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
 
   const description =
     locale === "ar"
-      ? "زكي يجمع بين Spaces كمساحات عمل منظّمة للإنتاجية اليومية وبين زكي كبيتا عامة لذكاء شخصي مستمر وقابل للتدريب."
-      : "ZAKI combines Spaces as structured workspaces for daily productivity with ZAKI as a public beta for trainable persistent intelligence.";
+      ? "زكي هو وكيل ذكاء شخصي بذاكرة مستمرة، أتمتة مجدولة، وثلاثة أوضاع تختار النموذج المناسب لمهمتك تلقائيًا. ابدأ مجانًا."
+      : "ZAKI is a personal AI agent with persistent memory, scheduled automation, and three modes that route to the right model for every task. Start free.";
 
   return {
     title:

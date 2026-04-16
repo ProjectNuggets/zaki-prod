@@ -61,7 +61,7 @@ export function HeroParallaxImage() {
 
   return (
     <div
-      className="relative w-full aspect-square min-h-[280px] overflow-hidden rounded-card border border-line-strong shadow-[0_20px_60px_rgba(17,10,6,0.10)]"
+      className="relative w-full aspect-square min-h-[280px] overflow-hidden rounded-2xl border border-zk-border-strong shadow-[0_20px_60px_rgba(17,10,6,0.10)]"
       onPointerMove={handlePointerMove}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
@@ -78,7 +78,7 @@ export function HeroParallaxImage() {
           <img
             key={src}
             src={src}
-            alt={`ZAKI AI product experience — view ${i + 1}`}
+            alt={`ZAKI AI product experience, view ${i + 1}`}
             loading={i === 0 ? "eager" : "lazy"}
             className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out"
             style={{ opacity: i === activeIndex ? 1 : 0 }}

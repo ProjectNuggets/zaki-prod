@@ -250,10 +250,10 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
             <h1 className="font-display mt-6 max-w-[14ch] text-[40px] font-extrabold leading-[0.94] tracking-[-0.06em] md:text-[72px]">
               {content.title}
             </h1>
-            <p className="mt-6 max-w-[68ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+            <p className="mt-6 max-w-[68ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {content.intro}
             </p>
-            <p className="font-mono-ui mt-5 text-xs uppercase tracking-[0.18em] text-[var(--chat-accent)]">
+            <p className="font-mono-ui mt-5 text-xs uppercase tracking-[0.18em] text-zk-accent">
               {content.subnote}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -273,12 +273,12 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
           <Reveal>
             <Card
               id="scope-note"
-              className="scroll-mt-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,244,236,0.9))]"
+              className="scroll-mt-24 bg-zk-bg-raised"
             >
-              <p className="font-mono-ui text-[11px] uppercase tracking-[0.18em] text-[var(--chat-accent)]">
+              <p className="font-mono-ui text-[11px] uppercase tracking-[0.18em] text-zk-accent">
                 {content.scopeTitle}
               </p>
-              <p className="mt-4 text-sm leading-7 text-[var(--chat-text)] md:text-base md:leading-8">
+              <p className="mt-4 text-sm leading-7 text-zk-text md:text-base md:leading-8">
                 {content.scopeSummary}
               </p>
             </Card>
@@ -288,10 +288,10 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
             <Card id="assistant-preview" className="scroll-mt-24 overflow-hidden">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="max-w-[64ch]">
-                  <p className="font-mono-ui text-[11px] uppercase tracking-[0.18em] text-[var(--chat-accent)]">
+                  <p className="font-mono-ui text-[11px] uppercase tracking-[0.18em] text-zk-accent">
                     {content.embed.title}
                   </p>
-                  <p className="mt-3 text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+                  <p className="mt-3 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                     {content.embed.intro}
                   </p>
                 </div>
@@ -300,7 +300,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                     href={content.embed.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-white/88 px-4 text-sm font-medium text-chat-text transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface px-4 text-sm font-medium text-zk-text transition hover:-translate-y-0.5 hover:border-zk-border-strong"
                   >
                     {content.embed.openExternalLabel}
                     <ArrowUpRight className="size-4" />
@@ -310,7 +310,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
 
               {content.embed.url ? (
                 <div className="mt-6">
-                  <div className="overflow-hidden rounded-[24px] border border-[var(--line-light)] bg-white">
+                  <div className="overflow-hidden rounded-[24px] border border-zk-border bg-zk-bg">
                     <iframe
                       src={content.embed.url}
                       title={locale === "ar" ? "مساعد زكي للتوحّد" : "ZAKI autism guidance assistant"}
@@ -321,7 +321,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                   </div>
                 </div>
               ) : (
-                <div className="mt-6 rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[#fbf7f1] px-6 py-10 text-sm leading-7 text-[var(--chat-muted)] md:px-8">
+                <div className="mt-6 rounded-[24px] border border-dashed border-zk-border-strong bg-zk-surface px-6 py-10 text-sm leading-7 text-zk-text-secondary md:px-8">
                   {content.embed.fallback}
                 </div>
               )}
@@ -342,11 +342,11 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                       : ""
                   }
                 >
-                  <item.icon className="size-6 text-[var(--chat-accent)]" />
+                  <item.icon className="size-6 text-zk-accent" />
                   <h2 className="font-display mt-4 text-[24px] font-extrabold tracking-[-0.04em] md:text-[30px]">
                     {item.title}
                   </h2>
-                  <p className="mt-3 text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+                  <p className="mt-3 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                     {item.body}
                   </p>
                 </Card>
@@ -355,9 +355,9 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
           </Reveal>
 
           <Reveal delay={120}>
-            <Card className="border border-[rgba(210,68,48,0.18)] bg-[rgba(210,68,48,0.06)]">
+            <Card className="border border-zk-accent/18 bg-zk-accent/6">
               <div className="flex items-center gap-3">
-                <ShieldAlert className="size-5 text-[var(--chat-accent)]" />
+                <ShieldAlert className="size-5 text-zk-accent" />
                 <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[30px]">
                   {content.boundariesTitle}
                 </h2>
@@ -366,7 +366,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                 {content.boundaries.map((item) => (
                   <li
                     key={item}
-                    className="rounded-[18px] border border-[rgba(210,68,48,0.12)] bg-white/70 px-4 py-4 text-sm leading-7 text-[#5f4f43]"
+                    className="rounded-[18px] border border-zk-accent/12 bg-zk-surface px-4 py-4 text-sm leading-7 text-zk-text"
                   >
                     {item}
                   </li>
@@ -385,10 +385,10 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                   {content.workflow.map((step) => (
                     <li
                       key={step.title}
-                      className="rounded-[20px] border border-[var(--line-light)] bg-[rgba(255,255,255,0.72)] px-5 py-5"
+                      className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-5"
                     >
-                      <p className="text-sm font-semibold text-[var(--chat-text)]">{step.title}</p>
-                      <p className="mt-2 text-sm leading-7 text-[var(--chat-muted)]">{step.body}</p>
+                      <p className="text-sm font-semibold text-zk-text">{step.title}</p>
+                      <p className="mt-2 text-sm leading-7 text-zk-text-secondary">{step.body}</p>
                     </li>
                   ))}
                 </ol>
@@ -401,7 +401,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                   <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[30px]">
                     {content.thesisTitle}
                   </h2>
-                  <p className="mt-4 text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+                  <p className="mt-4 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                     {content.thesis}
                   </p>
                 </Card>
@@ -410,7 +410,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
               <Reveal delay={210}>
                 <Card className="h-full">
                   <div className="flex items-center gap-3">
-                    <FlaskConical className="size-5 text-[var(--chat-accent)]" />
+                    <FlaskConical className="size-5 text-zk-accent" />
                     <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[30px]">
                       {content.expertTitle}
                     </h2>
@@ -419,7 +419,7 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
                     {content.expertReview.map((item) => (
                       <li
                         key={item}
-                        className="rounded-[18px] border border-[var(--line-light)] bg-[rgba(255,255,255,0.66)] px-4 py-4 text-sm leading-7 text-[var(--chat-text)]"
+                        className="rounded-[18px] border border-zk-border bg-zk-surface px-4 py-4 text-sm leading-7 text-zk-text"
                       >
                         {item}
                       </li>
@@ -431,11 +431,11 @@ export function AutismGuidancePage({ locale }: { locale: Locale }) {
           </div>
 
           <Reveal delay={240}>
-            <Card className="bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,244,236,0.9))]">
+            <Card className="bg-zk-bg-raised">
               <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[30px]">
                 {content.closingTitle}
               </h2>
-              <p className="mt-4 max-w-[72ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+              <p className="mt-4 max-w-[72ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                 {content.closingBody}
               </p>
             </Card>

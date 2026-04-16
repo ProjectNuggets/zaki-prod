@@ -11,7 +11,7 @@ export function AccordionItem({
   return (
     <AccordionPrimitive.Item
       className={cn(
-        "overflow-hidden rounded-[22px] border border-line-strong bg-chat-surface px-5 transition-colors hover:bg-chat-surface-raised dark:border-line-dark-strong dark:bg-white/[0.03] dark:hover:bg-white/[0.06]",
+        "overflow-hidden rounded-xl border border-zk-border bg-zk-surface px-5 transition-colors hover:border-zk-border-strong",
         className
       )}
       {...props}
@@ -28,13 +28,13 @@ export function AccordionTrigger({
     <AccordionPrimitive.Header>
       <AccordionPrimitive.Trigger
         className={cn(
-          "group flex w-full items-center justify-between gap-4 py-5 text-left text-[15px] font-medium leading-7 text-current transition-colors",
+          "group flex w-full items-center justify-between gap-4 py-5 text-left text-[15px] font-medium leading-7 text-zk-text transition-colors",
           className
         )}
         {...props}
       >
         <span>{children}</span>
-        <ChevronDown className="size-4 shrink-0 text-chat-muted transition-transform duration-300 group-data-[state=open]:rotate-180 dark:text-bot-muted" />
+        <ChevronDown className="size-4 shrink-0 text-zk-text-tertiary transition-transform duration-300 group-data-[state=open]:rotate-180 group-data-[state=open]:text-zk-accent" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   );
@@ -48,7 +48,7 @@ export function AccordionContent({
   return (
     <AccordionPrimitive.Content
       className={cn(
-        "overflow-hidden text-sm leading-7 text-chat-muted data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down dark:text-bot-muted",
+        "overflow-hidden text-sm leading-7 text-zk-text-secondary data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
         className
       )}
       {...props}

@@ -17,9 +17,8 @@ type WaitlistUiState =
   | { kind: "success"; duplicate: true; text: string }
   | { kind: "error"; text: string };
 
-export function WaitlistForm({ locale, source = "website_bot", variant = "light" }: { locale: Locale; source?: string; variant?: "light" | "dark" }) {
+export function WaitlistForm({ locale, source = "website_bot" }: { locale: Locale; source?: string }) {
   const isArabic = locale === "ar";
-  const isDark = variant === "dark";
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState(roles[locale][0]);
@@ -57,13 +56,11 @@ export function WaitlistForm({ locale, source = "website_bot", variant = "light"
     });
   }
 
-  const selectClasses = isDark
-    ? "min-h-12 rounded-pill border border-line-dark-strong bg-white/[0.04] px-4 py-3 text-sm text-bot-text outline-none transition-[border-color,box-shadow] duration-200 focus:border-bot-accent focus:shadow-[0_0_0_3px_rgba(255,77,46,0.12)]"
-    : "min-h-12 rounded-pill border border-line-strong bg-chat-surface px-4 py-3 text-sm text-chat-text outline-none transition-[border-color,box-shadow] duration-200 focus:border-chat-accent focus:shadow-[0_0_0_3px_rgba(210,68,48,0.10)]";
+  const selectClasses = "min-h-12 rounded-full border border-zk-border-strong bg-zk-surface px-4 py-3 text-sm text-zk-text outline-none transition-[border-color,box-shadow] duration-200 focus:border-zk-accent focus:shadow-[0_0_0_3px_rgba(241,2,2,0.12)]";
 
-  const optionClasses = isDark ? "bg-[#1c1c1c] text-bot-text" : "bg-white text-chat-text";
-  const mutedClasses = isDark ? "text-bot-muted" : "text-chat-muted";
-  const accentClasses = isDark ? "text-bot-accent" : "text-chat-accent";
+  const optionClasses = "bg-zk-surface text-zk-text";
+  const mutedClasses = "text-zk-text-secondary";
+  const accentClasses = "text-zk-accent";
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
@@ -139,8 +136,8 @@ export function WaitlistForm({ locale, source = "website_bot", variant = "light"
           aria-live="polite"
           className={
             status.kind === "error"
-              ? "rounded-pill border border-[rgba(182,69,53,0.22)] bg-[rgba(182,69,53,0.06)] px-4 py-3 text-sm text-[#e05545] focus:outline-none"
-              : "rounded-pill border border-[rgba(38,103,74,0.20)] bg-[rgba(38,103,74,0.06)] px-4 py-3 text-sm text-[#3a9e6b] focus:outline-none"
+              ? "rounded-xl border border-[rgba(182,69,53,0.22)] bg-[rgba(182,69,53,0.06)] px-4 py-3 text-sm text-[#e05545] focus:outline-none"
+              : "rounded-xl border border-[rgba(38,103,74,0.20)] bg-[rgba(38,103,74,0.06)] px-4 py-3 text-sm text-[#3a9e6b] focus:outline-none"
           }
         >
           {status.text}

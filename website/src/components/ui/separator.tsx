@@ -5,7 +5,7 @@ export function Separator({ className, decorative = true }: { className?: string
   return (
     <SeparatorPrimitive.Root
       decorative={decorative}
-      className={cn("h-px w-full bg-[linear-gradient(90deg,transparent,rgba(0,0,0,0.14),transparent)] dark:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent)]", className)}
+      className={cn("h-px w-full bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent)]", className)}
     />
   );
 }

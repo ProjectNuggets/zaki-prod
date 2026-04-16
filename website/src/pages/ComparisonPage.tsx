@@ -18,11 +18,11 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
             <h1 className="font-display mt-6 max-w-[14ch] text-[40px] font-extrabold leading-[0.94] tracking-[-0.06em] md:text-[72px]">
               {content.title}
             </h1>
-            <p className="mt-6 max-w-[68ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+            <p className="mt-6 max-w-[68ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {content.intro}
             </p>
             {content.note ? (
-              <p className="font-mono-ui mt-5 text-xs uppercase tracking-[0.18em] text-[var(--chat-accent)]">
+              <p className="font-mono-ui mt-5 text-xs uppercase tracking-[0.18em] text-zk-accent">
                 {content.note}
               </p>
             ) : null}
@@ -33,15 +33,15 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
       <section className="px-4 py-4 md:px-8 md:py-8">
         <div className="mx-auto max-w-[1240px] space-y-6">
           <Reveal>
-            <Card className="bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,244,236,0.9))]">
-              <p className="text-sm leading-7 text-[var(--chat-text)] md:text-base md:leading-8">
+            <Card className="bg-zk-bg-raised">
+              <p className="text-sm leading-7 text-zk-text md:text-base md:leading-8">
                 {content.definition}
               </p>
             </Card>
           </Reveal>
 
           <Reveal delay={60}>
-            <div className="overflow-hidden rounded-[28px] border border-[var(--line-light)] bg-white shadow-[0_24px_60px_rgba(17,10,6,0.08)]">
+            <div className="overflow-hidden rounded-[28px] border border-zk-border bg-zk-surface shadow-[0_24px_60px_rgba(0,0,0,0.25)]">
               <div className="overflow-x-auto">
                 <table className="min-w-[820px] w-full border-separate border-spacing-0">
                   <thead>
@@ -49,7 +49,7 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
                       {content.table.headers.map((header) => (
                         <th
                           key={header}
-                          className="border-b border-[var(--line-light)] bg-[#f7efe6] px-5 py-4 text-left font-mono-ui text-[11px] uppercase tracking-[0.18em] text-[#7b6a57]"
+                          className="border-b border-zk-border bg-zk-bg-raised px-5 py-4 text-left font-mono-ui text-[11px] uppercase tracking-[0.18em] text-zk-text-tertiary"
                         >
                           {header}
                         </th>
@@ -59,13 +59,13 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
                   <tbody>
                     {content.table.rows.map((row) => (
                       <tr key={row.feature}>
-                        <td className="border-b border-[var(--line-light)] px-5 py-4 text-sm font-semibold text-[var(--chat-text)]">
+                        <td className="border-b border-zk-border px-5 py-4 text-sm font-semibold text-zk-text">
                           {row.feature}
                         </td>
                         {row.values.map((value) => (
                           <td
                             key={`${row.feature}-${value}`}
-                            className="border-b border-[var(--line-light)] px-5 py-4 text-sm leading-7 text-[var(--chat-muted)]"
+                            className="border-b border-zk-border px-5 py-4 text-sm leading-7 text-zk-text-secondary"
                           >
                             {value}
                           </td>
@@ -79,8 +79,8 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
           </Reveal>
 
           <Reveal delay={90}>
-            <Card className="border-l-[4px] border-l-[var(--chat-accent)] bg-[#fcf7f0]">
-              <p className="text-sm leading-7 text-[#4f473d] md:text-base md:leading-8">"{content.quote}"</p>
+            <Card className="border-l-[4px] border-l-zk-accent bg-zk-bg-raised">
+              <p className="text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">"{content.quote}"</p>
             </Card>
           </Reveal>
 
@@ -92,7 +92,7 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
                     {section.title}
                   </h2>
                   {section.body ? (
-                    <p className="mt-4 text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+                    <p className="mt-4 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                       {section.body}
                     </p>
                   ) : null}
@@ -101,7 +101,7 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
                       {section.items.map((item) => (
                         <li
                           key={item}
-                          className="rounded-[18px] border border-[var(--line-light)] bg-[rgba(255,255,255,0.66)] px-4 py-4 text-sm leading-7 text-[var(--chat-text)]"
+                          className="rounded-[18px] border border-zk-border bg-zk-surface px-4 py-4 text-sm leading-7 text-zk-text"
                         >
                           {item}
                         </li>
@@ -115,7 +115,7 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
 
           {content.disclaimer ? (
             <Reveal delay={120}>
-              <div className="rounded-[24px] border border-[rgba(210,68,48,0.18)] bg-[rgba(210,68,48,0.07)] px-5 py-5 text-sm leading-7 text-[#6f5347]">
+              <div className="rounded-[24px] border border-[rgba(241,2,2,0.2)] bg-[rgba(241,2,2,0.08)] px-5 py-5 text-sm leading-7 text-zk-text-secondary">
                 {content.disclaimer}
               </div>
             </Reveal>
@@ -127,7 +127,7 @@ export function ComparisonPage({ slug }: { slug: ComparisonSlug }) {
                 <a
                   key={link.label}
                   href={link.href}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--line-light)] bg-white/88 px-4 text-sm font-medium text-[var(--chat-text)] transition hover:-translate-y-0.5 hover:border-[#d7c6b5]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-medium text-zk-text transition hover:-translate-y-0.5 hover:border-zk-border-strong"
                 >
                   {link.label}
                   <ArrowUpRight className="size-4" />

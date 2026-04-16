@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Locale } from "../../lib/content";
 import { getLocaleSwitchPath } from "../../lib/routeRegistry";
 import { Menu, X } from "lucide-react";
@@ -11,12 +11,29 @@ export function NavBar({ locale }: { locale: Locale }) {
   const storyHref = isArabic ? "/ar/story/" : "/story/";
   const contactHref = isArabic ? "/ar/contact/" : "/contact/";
 
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  const handleLogoClick = useCallback((e: React.MouseEvent) => {
+    const homePath = isArabic ? "/ar/" : "/";
+    if (location.pathname === homePath || location.pathname === (isArabic ? "/ar" : "/")) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      e.preventDefault();
+      navigate(homePath);
+    }
+  }, [location.pathname, isArabic, navigate]);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.classList.toggle("nav-open", mobileOpen);
+    return () => document.body.classList.remove("nav-open");
+  }, [mobileOpen]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -37,20 +54,22 @@ export function NavBar({ locale }: { locale: Locale }) {
     <header
       className={`sticky top-0 z-40 transition-all duration-500 ${
         scrolled
-          ? "border-b border-line-strong/40 bg-white/70 backdrop-blur-xl dark:border-line-dark-strong/30 dark:bg-[#0d0b09]/70"
+          ? "border-b border-zk-border-strong bg-zk-bg/80 backdrop-blur-xl"
           : "border-b border-transparent bg-transparent"
       }`}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
-        {/* Logo — left */}
+        {/* Logo */}
         <Link
           to={isArabic ? "/ar/" : "/"}
+          onClick={handleLogoClick}
           className="inline-flex shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80"
         >
           <img src="/assets/zaki-logo.png" alt="ZAKI" className="size-7 rounded-[6px]" />
+          <span className="font-logo text-base tracking-wider text-zk-text">ZAKI</span>
         </Link>
 
-        {/* Desktop nav links — right-aligned */}
+        {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => (
             <Link
@@ -58,31 +77,31 @@ export function NavBar({ locale }: { locale: Locale }) {
               to={link.to}
               className={`relative px-3 py-1.5 text-[13px] font-medium tracking-wide transition-colors duration-200 ${
                 isActive(link.to)
-                  ? "text-chat-text dark:text-bot-text"
-                  : "text-chat-muted/70 hover:text-chat-text dark:text-bot-muted/70 dark:hover:text-bot-text"
+                  ? "text-zk-text"
+                  : "text-zk-text-secondary hover:text-zk-text"
               }`}
             >
               {link.label}
               {isActive(link.to) && (
-                <span className="absolute inset-x-3 -bottom-0.5 h-px bg-chat-accent dark:bg-bot-accent" />
+                <span className="absolute inset-x-3 -bottom-0.5 h-px bg-zk-accent" />
               )}
             </Link>
           ))}
 
-          <span className="mx-2 h-4 w-px bg-line-strong/30 dark:bg-line-dark-strong/30" />
+          <span className="mx-2 h-4 w-px bg-zk-border-strong" />
 
           <Link
             to={getLocaleSwitchPath(location.pathname, isArabic ? "en" : "ar")}
-            className="px-2 py-1 text-[12px] font-medium text-chat-muted/60 transition-colors hover:text-chat-text dark:text-bot-muted/60 dark:hover:text-bot-text"
+            className="px-2 py-1 text-[12px] font-medium text-zk-text-tertiary transition-colors hover:text-zk-text"
           >
             {isArabic ? "EN" : "عربي"}
           </Link>
 
           <a
             href="https://app.chatzaki.com/?auth=signup&source=website_nav"
-            className="ms-1 inline-flex items-center rounded-full bg-chat-accent px-4 py-1.5 text-[12px] font-semibold tracking-wide text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.28)] dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
+            className="ms-1 inline-flex items-center rounded-full bg-zk-accent px-4 py-1.5 text-[12px] font-semibold tracking-wide text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-zk-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.2),0_14px_40px_rgba(241,2,2,0.35)]"
           >
-            {isArabic ? "انضم الآن" : "Join now"}
+            {isArabic ? "ابدأ الآن" : "Get started"}
           </a>
         </nav>
 
@@ -90,13 +109,13 @@ export function NavBar({ locale }: { locale: Locale }) {
         <div className="flex items-center gap-2 md:hidden">
           <Link
             to={getLocaleSwitchPath(location.pathname, isArabic ? "en" : "ar")}
-            className="text-[12px] font-medium text-chat-muted/60 transition-colors hover:text-chat-text dark:text-bot-muted/60 dark:hover:text-bot-text"
+            className="text-[12px] font-medium text-zk-text-tertiary transition-colors hover:text-zk-text"
           >
             {isArabic ? "EN" : "عربي"}
           </Link>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="inline-flex size-9 items-center justify-center rounded-lg text-chat-text transition-colors hover:bg-chat-text/[0.05] dark:text-bot-text dark:hover:bg-bot-text/[0.05]"
+            className="inline-flex size-9 items-center justify-center rounded-lg text-zk-text transition-colors hover:bg-white/[0.05]"
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
           >
             {mobileOpen ? <X className="size-[18px]" /> : <Menu className="size-[18px]" />}
@@ -106,7 +125,7 @@ export function NavBar({ locale }: { locale: Locale }) {
 
       {/* Mobile menu */}
       <div
-        className={`overflow-hidden border-t border-line-strong/20 bg-white/90 backdrop-blur-xl transition-all duration-300 md:hidden dark:border-line-dark-strong/20 dark:bg-[#0d0b09]/90 ${
+        className={`overflow-hidden border-t border-zk-border bg-zk-bg/95 backdrop-blur-xl transition-all duration-300 md:hidden ${
           mobileOpen ? "max-h-80 opacity-100" : "max-h-0 opacity-0"
         }`}
       >
@@ -117,8 +136,8 @@ export function NavBar({ locale }: { locale: Locale }) {
               to={link.to}
               className={`rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors ${
                 isActive(link.to)
-                  ? "text-chat-text dark:text-bot-text"
-                  : "text-chat-muted/70 hover:text-chat-text dark:text-bot-muted/70 dark:hover:text-bot-text"
+                  ? "text-zk-text"
+                  : "text-zk-text-secondary hover:text-zk-text"
               }`}
             >
               {link.label}
@@ -126,9 +145,9 @@ export function NavBar({ locale }: { locale: Locale }) {
           ))}
           <a
             href="https://app.chatzaki.com/?auth=signup&source=website_nav_mobile"
-            className="mt-2 flex items-center justify-center rounded-lg bg-chat-accent px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.28)] dark:bg-bot-accent dark:hover:bg-bot-accent-hover"
+            className="mt-2 flex items-center justify-center rounded-full bg-zk-accent px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-zk-accent-hover"
           >
-            {isArabic ? "انضم الآن" : "Join now"}
+            {isArabic ? "ابدأ الآن" : "Get started"}
           </a>
         </nav>
       </div>
