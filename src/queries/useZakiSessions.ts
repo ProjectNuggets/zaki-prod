@@ -61,9 +61,23 @@ export function useZakiSessions(enabled = true) {
         }
         const raw = data?.sessions ?? [];
 
+        // Filter out stub sessions that weren't created through the UI
+        // (backend dev/test artifacts like task:N, req-N, codex-worklog-* with no messages)
+        const visible = raw.filter((session) => {
+          const slug = extractThreadSlug(session.session_key);
+          // Always show "main" session (default entry)
+          if (slug === "main") return true;
+          const hasMessages = (session.message_count ?? 0) > 0;
+          // Hide empty task/req artifacts regardless of age
+          if (/^task:/.test(slug)) return hasMessages;
+          if (/^req-/.test(slug)) return hasMessages;
+          // Everything else must have at least one message to show up
+          return hasMessages;
+        });
+
         // Deduplicate by canonical key, preferring live sessions then higher message count
         const byKey = new Map<string, AgentSession>();
-        for (const session of raw) {
+        for (const session of visible) {
           const canonical = canonicalSessionKey(session.session_key);
           const existing = byKey.get(canonical);
           if (!existing) {
