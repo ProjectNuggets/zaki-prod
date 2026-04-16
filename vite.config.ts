@@ -17,12 +17,6 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: {
-      // Local staging only: nullalis gateway used by VITE_NULLALIS_MODE=true.
-      '/api/v1': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-    },
+    // Proxy removed — all nullalis traffic now flows through the BFF.
   },
 })
