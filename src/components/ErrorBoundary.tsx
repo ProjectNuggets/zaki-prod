@@ -1,4 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { isDevRuntime } from '@/lib/runtimeEnv';
+
+const IS_DEVELOPMENT = isDevRuntime();
 
 interface Props {
   children: ReactNode;
@@ -92,7 +95,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
 
             {/* Error details (only in development) */}
-            {import.meta.env.DEV && this.state.error && (
+            {IS_DEVELOPMENT && this.state.error && (
               <details className="mb-6 text-left bg-[#0c0a09] border border-[#2a2420] rounded-lg p-4">
                 <summary className="text-sm font-medium text-zaki-brand cursor-pointer mb-2">
                   Error Details

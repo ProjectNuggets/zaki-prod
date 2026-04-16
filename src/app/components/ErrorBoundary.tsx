@@ -1,8 +1,10 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { buildApiUrl } from '@/lib/api';
+import { isDevRuntime, isProdRuntime } from '@/lib/runtimeEnv';
 
-const IS_PRODUCTION = import.meta.env.PROD;
+const IS_PRODUCTION = isProdRuntime();
+const IS_DEVELOPMENT = isDevRuntime();
 
 interface Props {
   children: ReactNode;
@@ -89,7 +91,7 @@ export class ErrorBoundary extends Component<Props, State> {
               We encountered an unexpected error. Don't worry, your data is safe.
             </p>
 
-            {import.meta.env.DEV && this.state.error && (
+            {IS_DEVELOPMENT && this.state.error && (
               <div className="mb-6 p-4 bg-gray-50 rounded-zaki-xl text-left overflow-hidden">
                 <p className="text-xs font-mono text-red-600 mb-2">
                   {this.state.error.message}

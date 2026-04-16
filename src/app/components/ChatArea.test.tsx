@@ -25,6 +25,7 @@ import { useMessages } from "@/queries/useThreads";
 import {
   apiRequest,
   fetchAgentHistory,
+  fetchAgentMe,
   fetchMemoryActivity,
   provisionAgent,
 } from "@/lib/api";
@@ -53,6 +54,14 @@ jest.mock("@/lib/api", () => ({
       json: async () => ({ history: [] }),
     },
     data: { history: [] },
+  })),
+  fetchAgentMe: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ userId: null }),
+    },
+    data: { userId: null },
   })),
   fetchMemoryActivity: jest.fn(async () => ({
     response: {
@@ -138,6 +147,7 @@ describe("ChatArea Component", () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockClear();
     (fetchAgentHistory as jest.Mock).mockClear();
+    (fetchAgentMe as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
     (provisionAgent as jest.Mock).mockClear();
     window.sessionStorage.clear();
