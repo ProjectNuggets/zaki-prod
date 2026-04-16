@@ -209,6 +209,11 @@ const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
 const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
 const NULLCLAW_INTERNAL_TOKEN = (process.env.NULLCLAW_INTERNAL_TOKEN || "").trim();
+const NULLCLAW_DEV_USER_ID = (process.env.NULLCLAW_DEV_USER_ID || "").trim();
+if (isProduction && NULLCLAW_DEV_USER_ID) {
+  console.error("FATAL: NULLCLAW_DEV_USER_ID must not be set in production — it bypasses all agent authentication.");
+  process.exit(1);
+}
 const ZAKI_AGENT_WEBHOOK_BASE_URL = (
   process.env.ZAKI_AGENT_WEBHOOK_BASE_URL || ""
 ).trim().replace(/\/+$/, "");
@@ -292,7 +297,7 @@ const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
     .trim() !== "false";
 const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
-  Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 45_000)
+  Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 300_000)
 );
 const APP_CHAT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, APP_CHAT_SURFACE);
 const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
@@ -8312,6 +8317,18 @@ async function requireBotBffContext(req, res, next) {
     return;
   }
 
+  // Dev mode: skip auth (mirrors requireAgentContext dev bypass)
+  if (NULLCLAW_DEV_USER_ID) {
+    req.botBffContext = {
+      email: "dev@localhost",
+      sessionUser: { username: "dev@localhost" },
+      zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) },
+      userId: NULLCLAW_DEV_USER_ID,
+    };
+    next();
+    return;
+  }
+
   const requestId = getOrCreateRequestId(req);
   const authHeader = req.headers.authorization;
   if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
@@ -8372,6 +8389,15 @@ async function requireBotBffContext(req, res, next) {
 async function requireAgentContext(req, res, next) {
   const existingUserId = String(req.agentUserId || "").trim();
   if (existingUserId) {
+    next();
+    return;
+  }
+
+  // Dev mode: skip auth and use a configured user ID for local development.
+  // NEVER set NULLCLAW_DEV_USER_ID in production — it bypasses all authentication.
+  if (NULLCLAW_DEV_USER_ID) {
+    req.agentUserId = NULLCLAW_DEV_USER_ID;
+    req.agentAuthResult = { zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) } };
     next();
     return;
   }
@@ -8747,6 +8773,7 @@ const botBffHandlers = createBotBffHandlers({
   createIdempotencyKey: getOrCreateIdempotencyKey,
 });
 
+const agentJson30mb = express.json({ limit: "30mb" });
 const agentJson10mb = express.json({ limit: "10mb" });
 const agentJson1mb = express.json({ limit: "1mb" });
 
@@ -8759,7 +8786,7 @@ app.post(
   "/api/agent/chat/stream",
   requireAgentContext,
   agentRouteLimiter,
-  agentJson10mb,
+  agentJson30mb,
   agentChatStreamHandler
 );
 
@@ -8770,6 +8797,12 @@ app.post(
   agentJson1mb,
   agentProvisionHandler
 );
+// Lightweight endpoint returning the caller's canonical agent user ID.
+// The frontend uses this to build session keys without hardcoding user IDs.
+app.get("/api/agent/me", requireAgentContext, agentRouteLimiter, (req, res) => {
+  res.json({ userId: String(req.agentUserId) });
+});
+
 app.get(
   "/api/agent/onboarding",
   requireAgentContext,
@@ -8820,6 +8853,25 @@ app.get(
   agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/secrets`
+  )
+);
+// ── Voice: STT and TTS ──────────────────────────────────────────────
+app.post(
+  "/api/agent/voice/transcribe",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson30mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/voice/transcribe`
+  )
+);
+app.post(
+  "/api/agent/voice/synthesize",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/voice/synthesize`
   )
 );
 app.post(
