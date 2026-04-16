@@ -4872,13 +4872,14 @@ export function ChatArea() {
       }
     }
 
-    const attachmentsForMessage = files
-      .filter((file) => file.type.startsWith("image/"))
-      .map((file) => ({
-        name: file.name,
-        type: file.type,
-        url: URL.createObjectURL(file),
-      }));
+    // Show all attachments (images AND documents) in the user's message so
+    // they can see what they sent. MessageBubble renders images as thumbnails
+    // and non-images as file pills.
+    const attachmentsForMessage = files.map((file) => ({
+      name: file.name,
+      type: file.type,
+      url: URL.createObjectURL(file),
+    }));
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now()}`;
 
@@ -4953,51 +4954,49 @@ export function ChatArea() {
     const searchAgentInstruction = normalizedText
       ? `@agent search the web for ${normalizedText}`.trim()
       : "@agent search the web";
-    // File delivery strategy (matches SOTA agents like Claude Code):
-    //   Images    → inline [IMAGE:data:...] base64 marker for multimodal LLM
-    //   Documents → uploaded to agent workspace at attachments/<safe_name>.
-    //               The agent reads them via the file_read tool, which runs
-    //               server-side extraction (pdftotext, pandoc, libreoffice).
-    //               This supports PDF, DOCX, XLSX, PPTX, ODT, RTF, EPUB, HTML,
-    //               and any plain-text format.
-    const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB — matches nullalis multimodal limit
-    const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB — matches nullalis attachment limit
+    // Unified file delivery (matches SOTA agents like Claude Code):
+    //   All files (images + documents) are uploaded to the user's agent
+    //   workspace at attachments/<safe_name>. The message only carries a
+    //   short marker with the path — NOT inlined bytes. This keeps payload
+    //   size bounded (tens of bytes per file) and avoids the BFF 8000-char
+    //   message cap. Server-side:
+    //     - Images     → multimodal pipeline reads the file, base64-encodes
+    //                    for the provider. Triggered by [IMAGE:<path>] marker.
+    //     - Documents  → agent calls file_read, which runs pdftotext /
+    //                    pandoc / libreoffice extraction as needed.
+    const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB — matches nullalis cap
     let attachmentMarkers = "";
     if (files.length > 0) {
       const parts: string[] = [];
       for (const file of files) {
         try {
+          if (file.size > MAX_UPLOAD_BYTES) {
+            toast.error(`${file.name} is too large (max 20 MB)`);
+            continue;
+          }
+          // Upload to agent workspace (images and documents — same endpoint).
+          let uploadedPath: string;
+          try {
+            const { data } = await uploadAgentAttachment(file);
+            uploadedPath = data?.path ?? `attachments/${file.name}`;
+          } catch (uploadErr) {
+            const msg = uploadErr instanceof Error ? uploadErr.message : "upload failed";
+            toast.error(`Failed to upload ${file.name}: ${msg}`);
+            parts.push(`[Attachment failed to upload: ${file.name}]`);
+            continue;
+          }
+
           if (file.type.startsWith("image/")) {
-            if (file.size > MAX_IMAGE_BYTES) {
-              toast.error(`${file.name} is too large (max 20 MB)`);
-              continue;
-            }
-            // Convert image to base64 data URI for nullalis multimodal pipeline
-            const buf = await file.arrayBuffer();
-            const bytes = new Uint8Array(buf);
-            let binary = "";
-            bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-            const b64 = btoa(binary);
-            parts.push(`[IMAGE:data:${file.type};base64,${b64}]`);
+            // Multimodal marker — nullalis reads the file, encodes, and
+            // passes to the vision-capable provider.
+            parts.push(`[IMAGE:${uploadedPath}]`);
           } else {
-            if (file.size > MAX_UPLOAD_BYTES) {
-              toast.error(`${file.name} is too large (max 20 MB)`);
-              continue;
-            }
-            // Upload to agent workspace; agent reads via file_read tool.
-            try {
-              const { data } = await uploadAgentAttachment(file);
-              const uploadedPath = data?.path ?? `attachments/${file.name}`;
-              parts.push(
-                `[User uploaded file: ${uploadedPath}]\n` +
-                `Use the file_read tool with path="${uploadedPath}" to read its contents. ` +
-                `Server will auto-extract text from PDF/DOCX/XLSX/PPTX/ODT/RTF/EPUB and plain-text formats.`
-              );
-            } catch (uploadErr) {
-              const msg = uploadErr instanceof Error ? uploadErr.message : "upload failed";
-              toast.error(`Failed to upload ${file.name}: ${msg}`);
-              parts.push(`[Attachment failed to upload: ${file.name}]`);
-            }
+            // Agent-readable document — instruct the agent to read via tool.
+            parts.push(
+              `[User uploaded file: ${uploadedPath}]\n` +
+              `Use the file_read tool with path="${uploadedPath}" to read its contents. ` +
+              `Server will auto-extract text from PDF/DOCX/XLSX/PPTX/ODT/RTF/EPUB and plain-text formats.`
+            );
           }
         } catch {
           parts.push(`[Attachment: ${file.name} (read error)]`);
