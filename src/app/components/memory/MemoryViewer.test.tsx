@@ -118,7 +118,7 @@ describe("MemoryViewer", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("No memories yet")).toBeInTheDocument();
+      expect(screen.getAllByText("No memories yet").length).toBeGreaterThan(0);
     });
 
     rerender(<MemoryViewer userId="tester@example.com" initialTab="conflicts" />);

@@ -11,7 +11,7 @@ export const content = {
     hero: {
       title: "Spaces for work. ZAKI for continuity.",
       subtitle:
-        "Spaces give you structured productivity today. ZAKI is the public beta for persistent personal intelligence — memory continuity, visible work phases, and context that carries forward.",
+        "Spaces give you structured productivity today. ZAKI is the public beta for persistent personal intelligence: memory continuity, visible work phases, and context that carries forward.",
       betaLine:
         "ZAKI beta is now open. Early access includes 5 free messages per day for experimentation.",
       hint: "Spaces are live. ZAKI beta is open.",
@@ -119,7 +119,7 @@ export const content = {
         "Public beta with 5 free messages per day",
       ],
       bridgeLine:
-        "Most AI still resets the relationship every time you start over. ZAKI is testing what happens when context carries forward instead — not just from prompt to prompt, but across time, channels, and recurring work.",
+        "Most AI still resets the relationship every time you start over. ZAKI is testing what happens when context carries forward instead: not just from prompt to prompt, but across time, channels, and recurring work.",
     },
     nullalis: {
       heading: "Powered by Nullalis",
@@ -204,7 +204,7 @@ export const content = {
         },
         {
           name: "Translate between Arabic and English naturally",
-          text: "Paste any Arabic dialect or English text and get a natural translation that preserves meaning, tone, and context — not word-by-word output.",
+          text: "Paste any Arabic dialect or English text and get a natural translation that preserves meaning, tone, and context. Not word-by-word output.",
           link: "/how-to/translate-dialects-arabic-english/",
         },
         {
@@ -519,7 +519,7 @@ export const content = {
         bullets: [
           "5 free messages per day",
           "Persistent memory that carries across sessions",
-          "Visible work phases — you see what ZAKI is doing",
+          "Visible work phases so you see what ZAKI is doing",
           "Free now. Paid subscriptions start after beta.",
         ],
         cta: "Join the Beta",
@@ -554,9 +554,9 @@ export const content = {
             "ZAKI is for continuity, memory, and recall across time. Spaces are for structured execution inside a dedicated workspace. ZAKI helps you keep the long thread. Spaces help you do the focused work cleanly.",
         },
         {
-          question: "Is Spaces the same as ZAKI Chat?",
+          question: "What are Spaces?",
           answer:
-            "Yes. Spaces is the clearer public name for what the current website and app may still refer to as ZAKI Chat. The product remains the same during this transition.",
+            "Spaces are structured AI workspaces where each project can hold its own instructions, documents, and threads. They keep your work organized and your context clean.",
         },
         {
           question: "Why are there both ZAKI and Spaces?",
@@ -571,7 +571,7 @@ export const content = {
         {
           question: "Is the ZAKI beta live?",
           answer:
-            "Yes. The public beta is open now with 5 free messages per day. It is not the final premium product — it is the first public experimental release.",
+            "Yes. The public beta is open now with 5 free messages per day. It is not the final premium product. It is the first public experimental release.",
         },
         {
           question: "Why is ZAKI experimental?",
@@ -1172,9 +1172,9 @@ export const content = {
             "زكي للاستمرارية والذاكرة والاسترجاع عبر الوقت. أما Spaces فللتنفيذ المنظّم داخل مساحة عمل مخصصة. زكي يحافظ على الخيط الطويل، وSpaces تساعدك على إنجاز العمل بوضوح.",
         },
         {
-          question: "هل Spaces هي نفسها ZAKI Chat؟",
+          question: "ما هي Spaces؟",
           answer:
-            "نعم. Spaces هو الاسم العام الأوضح لما قد يشير إليه الموقع أو التطبيق الحالي باسم ZAKI Chat. المنتج نفسه لا يتغير أثناء هذا الانتقال.",
+            "Spaces هي مساحات عمل ذكية منظّمة، حيث يمكن لكل مشروع أن يحمل تعليماته وملفاته وخيوطه الخاصة. تساعدك على تنظيم عملك والحفاظ على سياق واضح.",
         },
         {
           question: "لماذا يوجد زكي وSpaces معًا؟",

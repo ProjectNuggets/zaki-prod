@@ -9,13 +9,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-chat-accent text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(210,68,48,0.25)] hover:-translate-y-0.5 hover:bg-chat-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(210,68,48,0.32)] active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.1),0_8px_24px_rgba(210,68,48,0.20)]",
+          "bg-zk-accent text-white shadow-[0_1px_2px_rgba(0,0,0,0.1),0_12px_36px_rgba(241,2,2,0.25)] hover:-translate-y-0.5 hover:bg-zk-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.12),0_18px_50px_rgba(241,2,2,0.32)] active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.1),0_8px_24px_rgba(241,2,2,0.20)]",
         secondary:
-          "border border-line-strong bg-white text-chat-text shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:border-chat-accent/20 hover:shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(17,10,6,0.06)] active:translate-y-0",
+          "border border-zk-border-strong bg-white/[0.04] text-zk-text shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:border-zk-accent/20 hover:shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(17,10,6,0.06)] active:translate-y-0",
         ghost:
-          "text-chat-text hover:bg-black/5 dark:text-bot-text dark:hover:bg-white/5",
+          "text-zk-text hover:bg-white/5",
         bot:
-          "border border-line-dark-strong bg-white/[0.04] text-bot-text hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08] hover:shadow-[0_8px_28px_rgba(255,77,46,0.10)] active:translate-y-0",
+          "border border-zk-border-strong bg-white/[0.04] text-zk-text hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08] hover:shadow-[0_8px_28px_rgba(241,2,2,0.10)] active:translate-y-0",
       },
     },
     defaultVariants: {

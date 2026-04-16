@@ -4,3 +4,6 @@ node_modules
 website/.env.local
 playwright-report/
 test-results/
+.next/
+.claude/
+.planning/

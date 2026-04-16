@@ -328,7 +328,9 @@ describe("NullalisRuntimeWidgets", () => {
       />
     );
 
-    expect(screen.getByText("Approval required for write_file")).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === "Approval required for write_file")
+    ).toBeInTheDocument();
     expect(screen.getByText("Risk: high")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();

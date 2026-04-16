@@ -18,7 +18,7 @@ export function LegalPage({ locale, slug }: { locale: Locale; slug: LegalSlug })
             <h1 className="font-display mt-6 text-[40px] font-extrabold leading-[0.94] tracking-[-0.06em] md:text-[72px]">
               {content.title}
             </h1>
-            <p className="mt-6 max-w-[68ch] text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+            <p className="mt-6 max-w-[68ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {content.intro}
             </p>
           </Reveal>
@@ -33,9 +33,9 @@ export function LegalPage({ locale, slug }: { locale: Locale; slug: LegalSlug })
                 <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[28px]">
                   {section.title}
                 </h2>
-                <p className="mt-4 text-sm leading-7 text-[var(--chat-muted)] md:text-base md:leading-8">
+                <p className="mt-4 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                   {section.body.includes("@") ? (
-                    <a href={`mailto:${section.body}`} className="text-[var(--chat-text)] underline decoration-[rgba(210,68,48,0.35)] underline-offset-4">
+                    <a href={`mailto:${section.body}`} className="text-zk-text underline decoration-zk-accent/35 underline-offset-4">
                       {section.body}
                     </a>
                   ) : (
@@ -47,7 +47,7 @@ export function LegalPage({ locale, slug }: { locale: Locale; slug: LegalSlug })
                     {section.items.map((item) => (
                       <li
                         key={item}
-                        className="rounded-[18px] border border-[var(--line-light)] bg-[rgba(255,255,255,0.66)] px-4 py-4 text-sm leading-7 text-[var(--chat-text)]"
+                        className="rounded-[18px] border border-zk-border bg-zk-surface px-4 py-4 text-sm leading-7 text-zk-text"
                       >
                         {item}
                       </li>

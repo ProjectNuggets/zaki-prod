@@ -89,7 +89,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       "Short answer: choose ChatGPT if you want the broadest frontier AI in the mainstream market. Choose Spaces if you want a more disciplined Arabic-English workspace for real daily work. This page exists to make that tradeoff explicit before product labels or model hype get in the way.",
     note: "This page compares Spaces today. ZAKI itself is the public beta for persistent personal intelligence.",
     definition:
-      "Spaces are the live paid workspace layer in the ZAKI product ladder, and the current app may still call them ZAKI Chat during the transition. ChatGPT is the mainstream general-purpose benchmark for AI chat. The real decision here is not who wins the raw-model race. It is whether you need a broad general assistant or a more structured bilingual workspace that keeps daily work cleaner.",
+      "Spaces are the live paid workspace layer in the ZAKI product ladder. ChatGPT is the mainstream general-purpose benchmark for AI chat. The real decision here is not who wins the raw-model race. It is whether you need a broad general assistant or a more structured bilingual workspace that keeps daily work cleaner.",
     table: {
       headers: ["Feature", "Spaces", "ChatGPT"],
       rows: [
@@ -158,10 +158,10 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     seo: {
       title: "Spaces vs ChatGPT for Arabic Speakers",
       description:
-        "Choose ChatGPT for the broadest frontier AI. Choose Spaces for a more structured Arabic-English workspace for daily work. This page compares the live Spaces product, which the app may still call ZAKI Chat.",
+        "Choose ChatGPT for the broadest frontier AI. Choose Spaces for a more structured Arabic-English workspace for daily work.",
       imageAlt: "Spaces versus ChatGPT comparison page",
       keywords:
-        "Spaces vs ChatGPT, ZAKI Chat vs ChatGPT, Arabic AI comparison, bilingual AI workspace, ChatGPT",
+        "Spaces vs ChatGPT, Arabic AI comparison, bilingual AI workspace, ChatGPT",
     },
   },
   "zaki-vs-spaces": {
@@ -169,7 +169,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     title: "ZAKI vs Spaces",
     intro:
       "Short answer: ZAKI is for continuity. Spaces are for structured work. Use ZAKI when you want AI that remembers you, and use Spaces when the job needs its own instructions, documents, and clean project context.",
-    note: "Spaces are what the current website and app may still refer to as ZAKI Chat.",
+    note: "Spaces are the structured work surfaces inside the ZAKI product.",
     definition:
       "ZAKI is the persistent AI layer: the part that remembers, recalls, and keeps a long-running thread with you. Spaces are the structured work surfaces where each project can keep its own instructions, documents, threads, and outputs together. ZAKI helps you hold the thread. Spaces help you do the work cleanly.",
     table: {
@@ -270,7 +270,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       },
     ],
     disclaimer:
-      "This is a product-clarity page, not a rename of the app overnight. Spaces is the clearer public name for what the current product may still call ZAKI Chat while the website and app stay operationally aligned.",
+      "This is a product-clarity page. Spaces is the public name for the structured workspace layer of ZAKI.",
     links: [
       { label: "Try ZAKI free", href: "https://app.chatzaki.com/?auth=signup&source=website_zaki_vs_spaces" },
       { label: "See ZAKI", href: "/zaki-bot/" },

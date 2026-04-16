@@ -35,10 +35,10 @@ function canonicalSessionKey(key: string): string {
 function extractThreadSlug(key: string): string {
   // Match :thread:<slug> pattern (everything after :thread:)
   const threadMatch = key.match(/:thread:(.+)$/);
-  if (threadMatch) return threadMatch[1];
+  if (threadMatch?.[1]) return threadMatch[1];
   // Match :task:<id> pattern
   const taskMatch = key.match(/:task:(.+)$/);
-  if (taskMatch) return `task:${taskMatch[1]}`;
+  if (taskMatch?.[1]) return `task:${taskMatch[1]}`;
   // Match :main suffix
   if (key.endsWith(":main")) return "main";
   // Fallback: last segment

@@ -1,4 +1,5 @@
 import type { ProductTelemetrySource } from "./productTelemetry";
+import { getConfiguredApiBase, getConfiguredLegacyApiBase } from "./runtimeEnv";
 const TOKEN_KEY = "zaki.auth.token";
 
 export type MemoryCaptureResponse = {
@@ -68,13 +69,11 @@ type ApiRequestOptions = RequestInit & {
 };
 
 export function getApiBase() {
-  const backendBase = (import.meta as { env?: Record<string, string> }).env
-    ?.VITE_ZAKI_BACKEND_URL;
+  const backendBase = getConfiguredApiBase();
   if (backendBase && backendBase.trim()) {
     return backendBase.replace(/\/+$/, "");
   }
-  const envBase = (import.meta as { env?: Record<string, string> }).env
-    ?.VITE_API_BASE_URL;
+  const envBase = getConfiguredLegacyApiBase();
   if (envBase && envBase.trim()) {
     return envBase.replace(/\/+$/, "");
   }
@@ -85,8 +84,7 @@ export function getApiBase() {
 }
 
 export function getBackendBase() {
-  const envBase = (import.meta as { env?: Record<string, string> }).env
-    ?.VITE_ZAKI_BACKEND_URL;
+  const envBase = getConfiguredApiBase();
   if (envBase && envBase.trim()) {
     return envBase.replace(/\/+$/, "");
   }
