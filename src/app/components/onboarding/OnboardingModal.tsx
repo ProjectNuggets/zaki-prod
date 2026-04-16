@@ -732,7 +732,7 @@ export function OnboardingModal({
         isOpen={isOpen}
         onClose={onDismiss}
         ariaLabelledBy={titleId}
-        className="pointer-events-auto w-full max-w-[420px] overflow-hidden rounded-[28px] border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#120e0b] shadow-[0px_24px_60px_rgba(15,15,15,0.16)] dark:shadow-[0px_30px_72px_rgba(0,0,0,0.46)]"
+        className="pointer-events-auto w-full max-w-[420px] overflow-hidden rounded-zaki-2xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl font-body dark:bg-[#141210] dark:border-[rgba(240,236,230,0.12)]"
         containerClassName="z-[70] items-end justify-end p-4 sm:p-6 pointer-events-none"
         backdropClassName="bg-transparent pointer-events-none"
         closeOnBackdrop={false}
@@ -741,18 +741,28 @@ export function OnboardingModal({
         <div className="relative">
           <div className="pointer-events-none absolute -top-20 -right-16 size-56 rounded-full bg-zaki-brand opacity-10 dark:opacity-20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-zaki-accent opacity-10 dark:opacity-20 blur-3xl" />
-          <div className="relative border-b border-zaki-subtle dark:border-[#2e241b] bg-[linear-gradient(135deg,#fff7ee_0%,#f6ecdf_65%,#efe5d8_100%)] dark:bg-[linear-gradient(140deg,#21170f_0%,#18120d_58%,#120e0b_100%)] px-6 py-5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-[#1a140f] border border-zaki-subtle dark:border-[#2e241b] px-3 py-1 text-2xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-[#c9b8a4]">
-              <Sparkles className="size-3.5 text-zaki-brand" />
-              {t("onboarding.eyebrow")}
+          <div className="relative border-b border-zaki dark:border-[rgba(240,236,230,0.08)] px-6 py-5">
+            <div className="flex items-start justify-between gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-zaki-hover text-xs text-zaki-muted px-2.5 py-1 font-medium tracking-wide uppercase">
+                <Sparkles className="size-3.5 text-zaki-brand" />
+                {t("onboarding.eyebrow")}
+              </span>
+              <button
+                type="button"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+                onClick={onDismiss}
+                aria-label={t("onboarding.skip")}
+              >
+                <X className="size-4" />
+              </button>
             </div>
-            <h2 id={titleId} className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
+            <h2 id={titleId} className="mt-3 font-display text-2xl font-bold tracking-tight text-zaki-primary">
               {t("onboarding.title", { userName })}
             </h2>
-            <p className="mt-1 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+            <p className="mt-1 text-sm leading-[1.6] text-zaki-secondary">
               {t("onboarding.subtitle")}
             </p>
-            <p className="mt-2 text-xs text-zaki-muted dark:text-[#c9b8a4]">
+            <p className="mt-2 text-xs text-zaki-muted">
               {t("onboarding.softHint")}
             </p>
           </div>
@@ -765,33 +775,31 @@ export function OnboardingModal({
                   className={cn(
                     "h-1.5 flex-1 rounded-full transition-colors",
                     index <= mobileStepIndex
-                      ? "bg-zaki-brand dark:bg-[#e56a54]"
-                      : "bg-zaki-sunken dark:bg-[#2b2119]"
+                      ? "bg-zaki-brand"
+                      : "bg-zaki-hover"
                   )}
                 />
               ))}
             </div>
 
-            <div className="rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-zaki-base dark:bg-[#16110d] px-4 py-4 shadow-[0px_10px_22px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.3)]">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1d1611] p-2">
-                  <Icon className="size-5 text-zaki-brand" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
-                    {currentMobileStep.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
-                    {currentMobileStep.body}
-                  </p>
-                </div>
+            <div className="rounded-zaki-md bg-zaki-hover border border-zaki p-3 flex items-start gap-3 dark:border-[rgba(240,236,230,0.08)]">
+              <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
+                <Icon className="size-4" />
+              </span>
+              <div>
+                <h3 className="font-display text-lg font-bold tracking-tight text-zaki-primary">
+                  {currentMobileStep.title}
+                </h3>
+                <p className="mt-1 text-sm leading-[1.6] text-zaki-secondary">
+                  {currentMobileStep.body}
+                </p>
               </div>
             </div>
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
-                className="zaki-btn-sm zaki-btn-ghost"
+                className="text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover rounded-full px-4 py-2 text-sm font-medium transition-colors"
                 onClick={onDismiss}
               >
                 {t("onboarding.skip")}
@@ -800,7 +808,7 @@ export function OnboardingModal({
                 {mobileStepIndex > 0 && (
                   <button
                     type="button"
-                    className="zaki-btn-sm zaki-btn-secondary"
+                    className="text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover rounded-full px-4 py-2 text-sm font-medium transition-colors"
                     onClick={() => setMobileStepIndex((value) => value - 1)}
                   >
                     {t("onboarding.back")}
@@ -808,7 +816,7 @@ export function OnboardingModal({
                 )}
                 <button
                   type="button"
-                  className="zaki-btn-sm zaki-btn-primary"
+                  className="inline-flex items-center bg-zaki-brand text-white rounded-full px-5 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover"
                   onClick={() => {
                     currentMobileStep.onAction();
                     if (isLastMobileStep) {
@@ -832,32 +840,32 @@ export function OnboardingModal({
     return (
       <div
         className={cn(
-          "fixed bottom-4 z-[90] w-[min(292px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] border border-[#ead8c0] bg-[#fffaf6]/96 shadow-[0px_18px_42px_rgba(52,36,24,0.14)] backdrop-blur dark:border-[#3a2b1f] dark:bg-[#120e0b]/94",
+          "fixed bottom-4 z-[90] w-[min(292px,calc(100vw-1.5rem))] overflow-hidden rounded-zaki-xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl backdrop-blur font-body dark:bg-[#141210] dark:border-[rgba(240,236,230,0.12)]",
           isRtl ? "left-4" : "right-4"
         )}
       >
-        <div className="pointer-events-none absolute -top-10 right-4 size-24 rounded-full bg-[#f4c59d]/40 blur-2xl dark:bg-[#5b3f25]/35" />
-        <div className="pointer-events-none absolute -bottom-8 left-3 size-16 rounded-full bg-[#f08f6a]/25 blur-2xl dark:bg-[#6f3b28]/30" />
-        <div className="relative border-b border-[#efe0cc] px-3.5 py-3 dark:border-[#2e241b]">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#ebdcc9] bg-[#fffdf9] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7350] dark:border-[#2e241b] dark:bg-[#17120e] dark:text-[#c9b8a4]">
+        <div className="pointer-events-none absolute -top-10 right-4 size-24 rounded-full bg-zaki-brand/10 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-8 left-3 size-16 rounded-full bg-zaki-accent/10 blur-2xl" />
+        <div className="relative border-b border-zaki px-3.5 py-3 dark:border-[rgba(240,236,230,0.08)]">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-zaki-hover px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
             <Sparkles className="size-3 text-zaki-brand" />
             {t("onboarding.guided.completeBadge")}
           </div>
-          <div className="mt-2 text-sm font-semibold text-[#4c3828] dark:text-[#efe6d9]">
+          <div className="mt-2 font-display text-sm font-bold tracking-tight text-zaki-primary">
             {t("onboarding.guided.completeTitle", { userName })}
           </div>
-          <p className="mt-1.5 text-xs leading-5 text-[#6b5240] dark:text-[#c9b8a4]">
+          <p className="mt-1.5 text-xs leading-[1.6] text-zaki-secondary">
             {t("onboarding.guided.completeBody")}
           </p>
-          <div className="mt-2 inline-flex items-center rounded-full border border-[#eddcca] bg-[#fffdf9] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[#b08866] dark:border-[#2e241b] dark:bg-[#17120e] dark:text-[#c0a58b]">
+          <div className="mt-2 inline-flex items-center rounded-full bg-zaki-hover px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-zaki-muted">
             {t("onboarding.guided.optionalCloseout")}
           </div>
         </div>
         <div className="relative flex items-center justify-end gap-2 px-3.5 py-3">
-          <button type="button" className="zaki-btn-sm zaki-btn-ghost px-3" onClick={onDismiss}>
+          <button type="button" className="text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover rounded-full px-3 py-1.5 text-xs font-medium transition-colors" onClick={onDismiss}>
             {t("onboarding.guided.close")}
           </button>
-          <button type="button" className="zaki-btn-sm zaki-btn-primary px-3" onClick={startChatting}>
+          <button type="button" className="inline-flex items-center bg-zaki-brand text-white rounded-full px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover" onClick={startChatting}>
             {t("onboarding.guided.startChatting")}
           </button>
         </div>
@@ -894,7 +902,7 @@ export function OnboardingModal({
           {spotlightRects.map((rect, index) => (
             <div
               key={`${rect.left}-${rect.top}-${index}`}
-              className="fixed z-[81] pointer-events-none rounded-xl border-[3px] border-[#f29a4a] shadow-[0_0_0_2px_rgba(255,252,247,0.96),0_0_20px_rgba(242,154,74,0.34),0_0_0_9999px_rgba(24,18,14,0.30)]"
+              className="fixed z-[81] pointer-events-none rounded-xl border-[3px] border-zaki-brand shadow-[0_0_0_2px_rgba(255,252,247,0.96),0_0_20px_rgba(241,2,2,0.34),0_0_0_9999px_rgba(24,18,14,0.30)]"
               style={{
                 top: rect.top,
                 left: rect.left,
@@ -905,22 +913,22 @@ export function OnboardingModal({
             />
           ))}
           <div
-            className="fixed z-[82] pointer-events-auto rounded-2xl border border-[#ead8c0] bg-[#fffaf4] px-3.5 py-3 shadow-[0px_18px_36px_rgba(53,36,24,0.16)] dark:border-[#6e5232] dark:bg-[#17120e]"
+            className="fixed z-[82] pointer-events-auto rounded-zaki-xl border border-zaki-strong bg-zaki-raised px-3.5 py-3 shadow-zaki-xl font-body dark:bg-[#141210] dark:border-[rgba(240,236,230,0.12)]"
             style={popupStyle}
             role="dialog"
             aria-label={t("onboarding.guided.hintAria")}
           >
-            <div className="text-2xs font-semibold uppercase tracking-[0.14em] text-[#9a7350] dark:text-[#c8b093]">
+            <div className="text-2xs font-semibold uppercase tracking-[0.14em] text-zaki-muted">
               {coachmarkLabel}
             </div>
-            <div className="mt-1.5 text-xs leading-5 text-[#4c3828] dark:text-[#efe6d9]">
+            <div className="mt-1.5 text-xs leading-[1.6] text-zaki-primary">
               {coachmarkText}
             </div>
             {showCoachmarkNextButton ? (
               <div className="mt-2 flex justify-end">
                 <button
                   type="button"
-                  className="zaki-btn-sm zaki-btn-primary disabled:opacity-60"
+                  className="inline-flex items-center bg-zaki-brand text-white rounded-full px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0"
                   onClick={goToNextGuidedTask}
                   disabled={!atLastTask ? !canAdvanceCurrent : !canAdvanceAtLastTask}
                 >
@@ -936,38 +944,38 @@ export function OnboardingModal({
 
       <div
         className={cn(
-          "fixed bottom-4 z-[90] w-[min(286px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] border border-[#ead8c0] bg-[#fffaf6]/96 shadow-[0px_18px_42px_rgba(52,36,24,0.14)] backdrop-blur dark:border-[#3a2b1f] dark:bg-[#120e0b]/94",
+          "fixed bottom-4 z-[90] w-[min(286px,calc(100vw-1.5rem))] overflow-hidden rounded-zaki-xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl backdrop-blur font-body dark:bg-[#141210] dark:border-[rgba(240,236,230,0.12)]",
           isRtl ? "left-4" : "right-4"
         )}
       >
-        <div className="border-b border-[#efe0cc] px-3.5 py-3 dark:border-[#2e241b]">
+        <div className="border-b border-zaki px-3.5 py-3 dark:border-[rgba(240,236,230,0.08)]">
           <div className="flex items-start justify-between gap-2.5">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-[#ebdcc9] bg-[#fffdf9] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7350] dark:border-[#2e241b] dark:bg-[#17120e] dark:text-[#c9b8a4]">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-zaki-hover px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
               <GuidedIcon className="size-3 text-zaki-brand" />
               {currentGuidedStep.title}
             </div>
             <button
               type="button"
               onClick={onDismiss}
-              className="inline-flex size-7 items-center justify-center rounded-lg text-[#9a7350] hover:bg-[#f6ede1] dark:hover:bg-[#1d1611]"
+              className="inline-flex size-7 items-center justify-center rounded-full text-zaki-muted hover:bg-zaki-hover hover:text-zaki-primary transition-colors"
               aria-label={t("onboarding.guided.hideTutorial")}
             >
               <X className="size-3.5" />
             </button>
           </div>
           <div className="mt-2.5">
-            <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-[#9f7a58] dark:text-[#c9b8a4]">
+            <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-zaki-muted">
               <span>{t("onboarding.guided.stepSummary", { current: currentStepNumber, total: guidedSteps.length })}</span>
               <span>{t("onboarding.guided.progressComplete", { progress })}</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#f0e2d4] dark:bg-[#241a13]">
-              <div className="h-full bg-[#d76946] transition-[width] duration-300" style={{ width: `${Math.max(6, progress)}%` }} />
+            <div className="h-1.5 overflow-hidden rounded-full bg-zaki-hover">
+              <div className="h-full bg-zaki-brand transition-[width] duration-300" style={{ width: `${Math.max(6, progress)}%` }} />
             </div>
           </div>
         </div>
         {coachmarkVisible ? (
           <div className="px-3.5 py-2.5">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9f7a58] dark:text-[#c9b8a4]">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-zaki-muted">
               {t("onboarding.guided.taskSummary", {
                 current: currentTaskNumber,
                 total: currentGuidedStep.tasks.length,
@@ -976,31 +984,31 @@ export function OnboardingModal({
           </div>
         ) : (
           <div className="px-3.5 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7350] dark:text-[#c9b8a4]">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
               {coachmarkLabel}
             </div>
-            <div className="mt-1.5 text-xs leading-5 text-[#4c3828] dark:text-[#efe6d9]">
+            <div className="mt-1.5 text-xs leading-[1.6] text-zaki-primary">
               {coachmarkText}
             </div>
           </div>
         )}
-        <div className="flex items-center justify-between gap-2 border-t border-[#efe0cc] px-3.5 py-3 dark:border-[#2e241b]">
+        <div className="flex items-center justify-between gap-2 border-t border-zaki px-3.5 py-3 dark:border-[rgba(240,236,230,0.08)]">
           <button
             type="button"
-            className="zaki-btn-sm zaki-btn-ghost min-w-[76px] justify-center px-3 disabled:cursor-not-allowed disabled:opacity-45"
+            className="min-w-[76px] text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
             onClick={goToPrevGuidedTask}
             disabled={guidedStepIndex === 0 && currentGuidedTaskIndex === 0}
           >
             {t("onboarding.guided.back")}
           </button>
           {coachmarkVisible && (showCoachmarkNextButton || isActionRequiredState) ? (
-            <div className="min-w-[76px] text-right text-[10px] font-medium uppercase tracking-[0.14em] text-[#b29373] dark:text-[#a48f79]">
+            <div className="min-w-[76px] text-right text-[10px] font-medium uppercase tracking-[0.14em] text-zaki-muted">
               {t("onboarding.guided.followHint")}
             </div>
           ) : (
             <button
               type="button"
-              className="zaki-btn-sm zaki-btn-primary min-w-[76px] justify-center px-3 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center min-w-[76px] bg-zaki-brand text-white rounded-full px-3 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0 disabled:cursor-not-allowed"
               onClick={goToNextGuidedTask}
               disabled={!atLastTask ? !canAdvanceCurrent : !canAdvanceAtLastTask}
             >

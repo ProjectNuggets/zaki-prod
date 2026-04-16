@@ -55,12 +55,12 @@
 .zaki-btn-primary {
   background: linear-gradient(135deg, var(--zaki-brand) 0%, var(--zaki-primary-800) 100%);
   color: #ffffff;
-  box-shadow: 0 10px 24px rgba(210, 68, 48, 0.22);
+  box-shadow: 0 10px 24px rgba(241, 2, 2, 0.22);
 }
 
 .zaki-btn-primary:hover {
   background: linear-gradient(135deg, var(--zaki-brand-hover) 0%, var(--zaki-primary-900) 100%);
-  box-shadow: 0 12px 28px rgba(210, 68, 48, 0.28);
+  box-shadow: 0 12px 28px rgba(241, 2, 2, 0.28);
 }
 
 .zaki-btn-primary:disabled {
@@ -72,7 +72,7 @@
 .zaki-btn-danger {
   background: var(--zaki-brand);
   color: #ffffff;
-  border: 1px solid rgba(210, 68, 48, 0.32);
+  border: 1px solid rgba(241, 2, 2, 0.32);
 }
 
 .zaki-btn-danger:hover {
@@ -136,7 +136,7 @@
 
 .zaki-modal-backdrop {
   background:
-    radial-gradient(circle at 15% 15%, rgba(210, 68, 48, 0.2), transparent 42%),
+    radial-gradient(circle at 15% 15%, rgba(241, 2, 2, 0.2), transparent 42%),
     radial-gradient(circle at 85% 85%, rgba(33, 145, 113, 0.18), transparent 38%),
     rgba(15, 15, 15, 0.44);
   backdrop-filter: blur(6px);
@@ -184,7 +184,7 @@
 
 .dark .zaki-main-panel,
 .dark .zaki-main-inner {
-  background: #0f0b08;
+  background: #0c0a09;
   border-color: #2b2119;
   box-shadow: none;
 }
@@ -252,9 +252,9 @@ select:focus:not(:focus-visible) {
   --zaki-pattern-end: #3a2f25;
   --zaki-pattern-glow-1: rgba(90, 74, 58, 0.45);
   --zaki-pattern-glow-2: rgba(120, 95, 70, 0.18);
-  --zaki-shell-surface: #0f0b08;
-  --zaki-bg: #0f0b08;
-  --zaki-panel: #0f0b08;
+  --zaki-shell-surface: #0c0a09;
+  --zaki-bg: #0c0a09;
+  --zaki-panel: #0c0a09;
   --zaki-panel-border: rgba(255, 255, 255, 0.08);
   --zaki-card: #21180f;
   --zaki-card-border: rgba(255, 255, 255, 0.1);
@@ -339,7 +339,7 @@ select:focus:not(:focus-visible) {
 }
 
 .dark .zaki-app .bg-\[\#fff3f0\] {
-  background-color: rgba(210, 68, 48, 0.18);
+  background-color: rgba(241, 2, 2, 0.18);
 }
 
 .dark .zaki-app .bg-\[\#e9dfd2\] {
@@ -383,7 +383,7 @@ select:focus:not(:focus-visible) {
 }
 
 .dark .zaki-app .border-\[\#f6d5ce\] {
-  border-color: rgba(210, 68, 48, 0.4);
+  border-color: rgba(241, 2, 2, 0.4);
 }
 
 .dark .zaki-app .text-\[\#1f1a14\] {

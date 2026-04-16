@@ -3,6 +3,7 @@ import { Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText
 import { InputArea } from "../../InputArea";
 import { useTranslation } from "react-i18next";
 import type { PinnedFileStatus, Space } from "@/types";
+import { MetaLabel, EmptyState } from "@/app/components/ui/zaki";
 
 interface SpaceDetailViewProps {
   spaceDetail: Space;
@@ -196,9 +197,7 @@ export function SpaceDetailView({
         <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">
-                {t("spaceDetailView.projectFiles.title")}
-              </div>
+              <MetaLabel>{t("spaceDetailView.projectFiles.title")}</MetaLabel>
               <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"}`}>
                 {spaceDetail.fixed
                   ? t("spaceDetailView.projectFiles.fixed")
@@ -243,9 +242,11 @@ export function SpaceDetailView({
                   );
                 })
               ) : (
-                <div className="rounded-zaki-md border border-dashed border-zaki-subtle px-3 py-3 text-sm text-zaki-muted">
-                  {t("spaceDetailView.projectFiles.empty")}
-                </div>
+                <EmptyState
+                  icon={<FileText className="size-4" />}
+                  title={t("spaceDetailView.projectFiles.empty")}
+                  compact
+                />
               )}
             </div>
           )}
@@ -253,9 +254,7 @@ export function SpaceDetailView({
         <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">
-                {t("spaceDetailView.instructions.title")}
-              </div>
+              <MetaLabel>{t("spaceDetailView.instructions.title")}</MetaLabel>
               <div className={`text-sm mt-1 ${spaceDetail.fixed ? "text-zaki-disabled" : "text-zaki-primary"} line-clamp-2`}>
                 {spaceDetail.fixed
                   ? t("spaceDetailView.instructions.fixed")
@@ -278,9 +277,7 @@ export function SpaceDetailView({
 
       <div className="mt-6 rounded-zaki-xl border border-zaki bg-zaki-raised p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-xs text-zaki-muted font-semibold uppercase tracking-wider">
-            {t("spaceDetailView.threads.title")}
-          </div>
+          <MetaLabel>{t("spaceDetailView.threads.title")}</MetaLabel>
           <div className="text-2xs text-zaki-muted">
             {t("spaceDetailView.threads.total", { count: (spaceDetail.threads ?? []).length })}
           </div>
@@ -321,9 +318,11 @@ export function SpaceDetailView({
             </div>
           ))}
           {(!spaceDetail.threads || spaceDetail.threads.length === 0) && (
-            <div className="text-sm text-zaki-disabled py-4">
-              {t("spaceDetailView.threads.empty")}
-            </div>
+            <EmptyState
+              icon={<BookOpen className="size-4" />}
+              title={t("spaceDetailView.threads.empty")}
+              compact
+            />
           )}
         </div>
       </div>

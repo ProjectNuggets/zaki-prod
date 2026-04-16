@@ -140,7 +140,7 @@ export function HelpPage() {
       lang={locale}
     >
       <div className="mx-auto w-full max-w-5xl space-y-5">
-        <div className="rounded-[26px] border border-zaki-subtle bg-[linear-gradient(145deg,#fffdf9_0%,#fff7ed_62%,#f5e8d8_100%)] px-6 py-6 shadow-[0px_24px_56px_rgba(15,15,15,0.08)] dark:border-[#2a2018] dark:bg-[linear-gradient(150deg,#1a140f_0%,#130f0c_58%,#0f0b08_100%)]">
+        <div className="rounded-[26px] border border-zaki-subtle bg-[linear-gradient(145deg,#fffdf9_0%,#fff7ed_62%,#f5e8d8_100%)] px-6 py-6 shadow-[0px_24px_56px_rgba(15,15,15,0.08)] dark:border-[#2a2018] dark:bg-[linear-gradient(150deg,#1a140f_0%,#130f0c_58%,#0c0a09_100%)]">
           <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:border-[#2a2018] dark:bg-[#1d1712] dark:text-zaki-dark-muted">
             <LifeBuoy className="size-3.5" />
             {copy.badge}

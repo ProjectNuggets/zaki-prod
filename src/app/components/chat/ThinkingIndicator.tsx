@@ -21,7 +21,7 @@ export function ThinkingIndicator({
       {/* Pulsing Avatar */}
       <div className="size-8 shrink-0 flex items-center justify-center">
         <div className="zaki-avatar-pulse relative">
-          <div className="absolute inset-0 rounded-full bg-zaki-brand/20 animate-ping-slow" />
+          <div className="absolute inset-0 rounded-full bg-zaki-brand-10 animate-ping-slow" />
           <div className="relative scale-75">
             <CenterLogo />
           </div>
@@ -32,7 +32,7 @@ export function ThinkingIndicator({
       <div className="rounded-zaki-lg px-4 py-3 text-sm bg-transparent">
         <div className="flex items-center gap-3">
           {pillLabel ? (
-            <span className="inline-flex items-center rounded-full border border-[#ead7c1] bg-[#fff7ee] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9a7350] shadow-[0px_6px_14px_rgba(52,36,24,0.08)] animate-pulse dark:border-[#3a2b1f] dark:bg-[#17120e] dark:text-[#d0b79b]">
+            <span className="inline-flex items-center rounded-full border border-zaki bg-zaki-raised px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zaki-secondary shadow-sm animate-pulse dark:border-[rgba(240,236,230,0.08)] dark:bg-[#1a1714]">
               {pillLabel}
             </span>
           ) : (

@@ -604,7 +604,7 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <ProductField label="Assistant mode">
                   <select
-                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#141210] dark:text-zaki-dark-primary"
                     value={settingsDraft.assistant_mode}
                     onChange={(event) =>
                       setSettingsDraft((current) => ({
@@ -620,7 +620,7 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                 </ProductField>
                 <ProductField label="Group activation">
                   <select
-                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#141210] dark:text-zaki-dark-primary"
                     value={settingsDraft.group_activation}
                     onChange={(event) =>
                       setSettingsDraft((current) => ({
@@ -638,7 +638,7 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
                     type="number"
                     min={5}
                     max={180}
-                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                    className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#141210] dark:text-zaki-dark-primary"
                     value={settingsDraft.session_timeout_minutes}
                     onChange={(event) =>
                       setSettingsDraft((current) => ({
@@ -765,7 +765,7 @@ export function ZakiBotControlPanel({ isOpen, onClose }: Props) {
 
                   <div className="mt-4 grid gap-3">
                     <input
-                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                      className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#141210] dark:text-zaki-dark-primary"
                       placeholder="Telegram bot token"
                       value={telegramToken}
                       onChange={(event) => setTelegramToken(event.target.value)}

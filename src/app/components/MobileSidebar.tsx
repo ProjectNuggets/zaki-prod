@@ -1,6 +1,6 @@
 /**
  * MobileSidebar - Sheet-based sidebar for mobile devices
- * 
+ *
  * Wraps the Sidebar component in a slide-out drawer on mobile.
  * Hidden on desktop where the regular Sidebar is visible.
  */
@@ -25,12 +25,12 @@ export function MobileSidebar() {
   // Close mobile sidebar when navigation occurs
   useEffect(() => {
     const handleNavigation = () => setMobileSidebarOpen(false);
-    
+
     // Listen for various navigation events from Sidebar
     window.addEventListener("zaki:clear-thread", handleNavigation);
     window.addEventListener("zaki:view-zaki-home", handleNavigation);
     window.addEventListener("zaki:view-spaces", handleNavigation);
-    
+
     return () => {
       window.removeEventListener("zaki:clear-thread", handleNavigation);
       window.removeEventListener("zaki:view-zaki-home", handleNavigation);
@@ -44,7 +44,7 @@ export function MobileSidebar() {
         {/* Overlay */}
         <SheetPrimitive.Overlay
           className={cn(
-            "fixed inset-0 z-50 bg-black/50",
+            "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
           )}
@@ -52,8 +52,9 @@ export function MobileSidebar() {
         {/* Content - no default close button */}
         <SheetPrimitive.Content
           className={cn(
-            "fixed inset-y-0 left-0 z-50 h-full w-[280px] sm:w-[300px]",
-            "bg-white dark:bg-[#0f0b08] shadow-lg",
+            "fixed inset-y-0 left-0 z-50 h-full w-[280px] max-w-[85vw]",
+            "bg-zaki-raised border-r border-zaki shadow-zaki-xl font-body",
+            "dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
             "data-[state=closed]:duration-300 data-[state=open]:duration-300"

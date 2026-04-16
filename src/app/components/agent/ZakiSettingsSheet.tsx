@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, Bot, Link2, Sparkles, Volume2, X } from "lucide-react";
+import { Activity, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   connectBotTelegram,
@@ -19,7 +19,7 @@ import {
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
+import { MetaLabel, SectionHeader, SheetShell } from "@/app/components/ui/zaki";
 
 type Props = {
   isOpen: boolean;
@@ -184,15 +184,15 @@ function getTelegramConnectedFromOnboarding(
 
 function getStatusTone(status: "ready" | "warning" | "error" | "neutral") {
   if (status === "ready") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200";
+    return "border-zaki-accent/30 bg-zaki-accent/10 text-zaki-primary dark:text-zaki-dark-primary";
   }
   if (status === "warning") {
-    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200";
+    return "border-zaki-strong bg-zaki-hover text-zaki-primary dark:text-zaki-dark-primary";
   }
   if (status === "error") {
-    return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200";
+    return "border-zaki-brand/30 bg-zaki-brand/10 text-zaki-primary dark:text-zaki-dark-primary";
   }
-  return "border-zaki-subtle bg-white text-zaki-secondary dark:border-[#2d2219] dark:bg-[#17110d] dark:text-zaki-dark-subtle";
+  return "border-zaki-subtle bg-zaki-raised text-zaki-secondary dark:bg-[#1a1714] dark:text-zaki-dark-subtle";
 }
 
 function formatCompletedAt(value?: number | null, fallback?: string) {
@@ -258,13 +258,13 @@ function CompactRow({
   return (
     <div
       className={cn(
-        "group rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 transition-colors dark:border-[#2b2119] dark:bg-[#17120f]",
-        disabled && "bg-[#fcf8f3] dark:bg-[#15110e]"
+        "group rounded-zaki-xl border border-zaki-strong bg-zaki-raised px-4 py-3 font-body transition-colors dark:bg-[#1a1714]",
+        disabled && "bg-zaki-hover/30 dark:bg-[#141210]"
       )}
     >
       <div className={cn("flex flex-col gap-3 sm:items-start sm:justify-between", isRtl ? "sm:flex-row-reverse" : "sm:flex-row")}>
         <div className={cn("min-w-0 flex-1", disabled && "opacity-75", isRtl && "text-right")}>
-          <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+          <div className="font-display text-sm font-bold text-zaki-primary dark:text-zaki-dark-primary">
             {title}
           </div>
           <div className="mt-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
@@ -278,7 +278,7 @@ function CompactRow({
         </div>
         {control ? <div className={cn("w-full shrink-0 sm:w-[240px]", disabled && "opacity-80")}>{control}</div> : null}
       </div>
-      {children ? <div className="mt-3 border-t border-[#e6d8c8] pt-3 dark:border-[#2b2119]">{children}</div> : null}
+      {children ? <div className="mt-3 border-t border-zaki pt-3">{children}</div> : null}
     </div>
   );
 }
@@ -295,25 +295,19 @@ function SectionBadge({
   isRtl?: boolean;
 }) {
   return (
-    <div className={cn("flex min-w-0 items-start gap-3", isRtl && "flex-row-reverse text-right")}>
-      <div className="mt-0.5 inline-flex size-9 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
-        <Icon className="size-4" />
-      </div>
-      <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
-        <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-          {title}
-        </div>
-        <div className="mt-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
-          {summary}
-        </div>
-      </div>
+    <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
+      <SectionHeader
+        icon={<Icon className="size-4" />}
+        title={title}
+        subtitle={summary}
+      />
     </div>
   );
 }
 
 function InlineFieldError({ text }: { text?: string }) {
   if (!text) return null;
-  return <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">{text}</p>;
+  return <p className="mt-2 text-xs text-zaki-brand">{text}</p>;
 }
 
 export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
@@ -833,62 +827,80 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
+  const footer = (
+    <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-start" : "justify-end")}>
+      {settingsDirty ? (
+        <span className={cn("rounded-full bg-zaki-brand/10 px-2.5 py-1 text-[11px] font-semibold text-zaki-brand", isRtl ? "ms-auto" : "me-auto")}>
+          {t("zakiSettingsSheet.footer.unsaved")}
+        </span>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rounded-full border border-zaki-strong px-4 py-2 text-sm font-medium text-zaki-primary transition-colors hover:bg-zaki-hover"
+          onClick={onClose}
+        >
+          {t("settingsModal.footer.cancel")}
+        </button>
+        <button
+          type="button"
+          className="rounded-full bg-zaki-brand px-4 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
+          onClick={() => {
+            void handleSaveAssistantSettings();
+          }}
+          disabled={savingSettings || operatorConfigRequired || agentUserUnavailable}
+        >
+          {savingSettings
+            ? t("zakiSettingsSheet.footer.saving")
+            : t("zakiSettingsSheet.footer.saveAssistant")}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side={isRtl ? "left" : "right"}
-        hideCloseButton
-        dir={isRtl ? "rtl" : "ltr"}
-        className="w-full max-w-[100vw] gap-0 border-l border-[#eadcca] bg-[#f6f1ea] p-0 text-zaki-primary sm:max-w-[720px] dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
-      >
-        <div className="relative flex h-full flex-col">
-          <div className="sticky top-0 z-20 border-b border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
-            <div className={cn("flex items-start justify-between gap-4", isRtl && "flex-row-reverse")}>
-              <div className={cn("min-w-0", isRtl && "text-right")}>
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c8] bg-white/88 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2d231b] dark:bg-[#1a140f] dark:text-zaki-dark-muted">
-                  <Sparkles className="size-3.5 text-zaki-brand" />
-                  {t("zakiSettingsSheet.badge")}
-                </div>
-                <SheetTitle className="mt-3 text-2xl font-semibold tracking-tight text-zaki-primary dark:text-zaki-dark-primary">
-                  {t("zakiSettingsSheet.title")}
-                </SheetTitle>
-                <SheetDescription className="mt-2 max-w-[46ch] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
-                  {t("zakiSettingsSheet.subtitle")}
-                </SheetDescription>
-              </div>
-              <button
-                type="button"
-                className="inline-flex size-10 items-center justify-center rounded-2xl border border-[#e6d8c8] bg-white/88 text-zaki-muted transition-colors hover:bg-[#f0e8de] hover:text-zaki-primary dark:border-[#2d231b] dark:bg-[#18120d] dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
-                onClick={onClose}
-                aria-label={t("zakiSettingsSheet.closeAria")}
-              >
-                <X className="size-4" />
-              </button>
+    <SheetShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("zakiSettingsSheet.title")}
+      subtitle={t("zakiSettingsSheet.subtitle")}
+      icon={<Settings className="size-4" />}
+      side={isRtl ? "left" : "right"}
+      width="lg"
+      className="w-full max-w-[100vw] sm:max-w-[720px] dark:text-zaki-dark-primary"
+      description={t("zakiSettingsSheet.closeAria")}
+      padded={false}
+      footer={footer}
+    >
+      <div dir={isRtl ? "rtl" : "ltr"} className="relative flex h-full flex-col">
+        <div className="px-5 pt-4">
+          <MetaLabel className="inline-flex rounded-full border border-zaki bg-zaki-hover px-3 py-1 text-zaki-secondary">
+            <Sparkles className="size-3.5 text-zaki-brand" />
+            {t("zakiSettingsSheet.badge")}
+          </MetaLabel>
+          {banner ? (
+            <div
+              className={cn(
+                "mt-4 rounded-zaki-xl border px-4 py-3 text-sm",
+                banner.tone === "success"
+                  ? "border-zaki-accent/30 bg-zaki-accent/10 text-zaki-primary dark:text-zaki-dark-primary"
+                  : "border-zaki-brand/30 bg-zaki-brand/10 text-zaki-primary dark:text-zaki-dark-primary"
+              )}
+            >
+              {banner.text}
             </div>
+          ) : null}
+        </div>
 
-            {banner ? (
-              <div
-                className={cn(
-                  "mt-4 rounded-2xl border px-4 py-3 text-sm",
-                  banner.tone === "success"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200"
-                    : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200"
-                )}
-              >
-                {banner.text}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="relative flex-1 overflow-y-auto px-5 py-5">
-            <Accordion
+        <div className="relative flex-1 px-5 py-5">
+          <Accordion
               type="single"
               collapsible
               value={openSection}
               onValueChange={(value) => setOpenSection((value as OpenSectionValue) || "")}
               className="space-y-0"
             >
-              <AccordionItem value="overview" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
+              <AccordionItem value="overview" className="border-b border-zaki px-0">
                 <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Bot}
@@ -907,9 +919,9 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                     </div>
 
                     {operatorConfigRequired ? (
-                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
-                        <p className="font-semibold">{t("zakiSettingsSheet.overview.operatorBlockingTitle")}</p>
-                        <p className="mt-1 text-xs leading-5">
+                      <div className="rounded-zaki-xl border border-zaki-brand/30 bg-zaki-brand/10 px-4 py-3 text-sm text-zaki-primary dark:text-zaki-dark-primary">
+                        <p className="font-display font-bold">{t("zakiSettingsSheet.overview.operatorBlockingTitle")}</p>
+                        <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
                           {t("zakiSettingsSheet.overview.operatorBlockingBody")}
                         </p>
                       </div>
@@ -951,7 +963,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem value="assistant" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
+              <AccordionItem value="assistant" className="border-b border-zaki px-0">
                 <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Volume2}
@@ -974,7 +986,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         <div>
                           <select
                             aria-label={t("zakiSettingsSheet.fields.responseStyle.title")}
-                            className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-body text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
                             value={settingsDraft.assistant_mode}
                             onChange={(event) =>
                               setSettingsDraft((current) => ({
@@ -1001,7 +1013,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         <div>
                           <select
                             aria-label={t("zakiSettingsSheet.fields.joinBehavior.title")}
-                            className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-body text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
                             value={settingsDraft.group_activation}
                             onChange={(event) =>
                               setSettingsDraft((current) => ({
@@ -1029,7 +1041,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       isRtl={isRtl}
                       control={
                         <div>
-                          <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
+                          <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 transition-colors hover:border-zaki-accent/40 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]">
                             <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
                               {t(
                                 settingsDraft.proactive_updates
@@ -1070,7 +1082,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       disabled={!telegramConnected}
                       control={
                         <div>
-                          <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
+                          <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 transition-colors hover:border-zaki-accent/40 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]">
                             <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
                               {t(
                                 settingsDraft.voice_replies
@@ -1110,7 +1122,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                             type="number"
                             min={5}
                             max={180}
-                            className="w-full rounded-zaki-md border border-zaki-strong bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:border-[#2a2018] dark:bg-[#14100d] dark:text-zaki-dark-primary"
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-body text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
                             value={settingsDraft.session_timeout_minutes}
                             onChange={(event) =>
                               setSettingsDraft((current) => ({
@@ -1127,7 +1139,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem value="telegram" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
+              <AccordionItem value="telegram" className="border-b border-zaki px-0">
                 <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Link2}
@@ -1145,15 +1157,15 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       isRtl={isRtl}
                     />
 
-                    <div className="rounded-2xl border border-[#e1d4c6] bg-white px-4 py-4 dark:border-[#2b2119] dark:bg-[#17120f]">
+                    <div className="rounded-zaki-xl border border-zaki-strong bg-zaki-raised px-4 py-4 dark:bg-[#1a1714]">
                       <div className="grid gap-3">
                         <label className="block">
-                          <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                          <MetaLabel className="mb-2 flex">
                             {t("zakiSettingsSheet.telegram.botTokenLabel")}
-                          </span>
+                          </MetaLabel>
                           <input
                             aria-label={t("zakiSettingsSheet.telegram.botTokenLabel")}
-                            className="w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
                             placeholder={
                               telegramConnected
                                 ? t("zakiSettingsSheet.telegram.botTokenMasked")
@@ -1174,12 +1186,12 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         />
 
                         <label className="block">
-                          <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
+                          <MetaLabel className="mb-2 flex">
                             {t("zakiSettingsSheet.telegram.allowFromLabel")}
-                          </span>
+                          </MetaLabel>
                           <textarea
                             aria-label={t("zakiSettingsSheet.telegram.allowFromLabel")}
-                            className="min-h-[96px] w-full rounded-2xl border border-[#ddd0c1] bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand dark:border-[#2b2119] dark:bg-[#120e0b] dark:text-zaki-dark-primary"
+                            className="min-h-[96px] w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
                             placeholder={t("zakiSettingsSheet.telegram.allowFromPlaceholder")}
                             value={telegramAllowFrom}
                             onChange={(event) => setTelegramAllowFrom(event.target.value)}
@@ -1194,7 +1206,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                           <button
                             type="button"
                             disabled={telegramBusy || agentUserUnavailable}
-                            className="zaki-btn-sm zaki-btn-primary disabled:opacity-60"
+                            className="rounded-full bg-zaki-brand px-4 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
                             onClick={() => {
                               void handleTelegramConnect();
                             }}
@@ -1208,7 +1220,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                           <button
                             type="button"
                             disabled={telegramBusy || !telegramConnected || agentUserUnavailable}
-                            className="zaki-btn-sm zaki-btn-secondary disabled:opacity-60"
+                            className="rounded-full border border-zaki-strong px-4 py-2 text-sm font-medium text-zaki-primary transition-colors hover:bg-zaki-hover disabled:opacity-60"
                             onClick={() => {
                               void handleTelegramDisconnect();
                             }}
@@ -1222,7 +1234,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem value="autonomy" className="border-b border-[#e6d8c8] px-0 dark:border-[#2b2119]">
+              <AccordionItem value="autonomy" className="border-b border-zaki px-0">
                 <AccordionTrigger className="py-5 no-underline hover:no-underline">
                   <SectionBadge
                     icon={Activity}
@@ -1263,7 +1275,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       isRtl={isRtl}
                       disabled={!telegramConnected}
                       control={
-                        <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-white px-3 py-2 dark:border-[#2a2018] dark:bg-[#14100d]">
+                        <label className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 transition-colors hover:border-zaki-accent/40 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]">
                           <span className="text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
                             {heartbeatEnabled
                               ? t("zakiSettingsSheet.status.enabled")
@@ -1286,41 +1298,14 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               </AccordionItem>
             </Accordion>
 
-            {!loading ? null : (
-              <div className="mt-4 rounded-2xl border border-[#e6d8c8] bg-white/70 px-4 py-3 text-sm text-zaki-secondary dark:border-[#2b2119] dark:bg-[#17110d] dark:text-zaki-dark-subtle">
-                {t("zakiSettingsSheet.loading.state")}
-              </div>
-            )}
-          </div>
-
-          <div className="sticky bottom-0 z-20 border-t border-[#e7d8c6] bg-[#f6f1ea]/96 px-5 py-4 backdrop-blur dark:border-[#2b2119] dark:bg-[#120e0b]/95">
-            <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-start" : "justify-end")}>
-              {settingsDirty ? (
-                <span className={cn("rounded-full border border-zaki-brand/20 bg-zaki-brand/10 px-2.5 py-1 text-[11px] font-semibold text-zaki-brand", isRtl ? "ms-auto" : "me-auto")}>
-                  {t("zakiSettingsSheet.footer.unsaved")}
-                </span>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="zaki-btn zaki-btn-secondary" onClick={onClose}>
-                  {t("settingsModal.footer.cancel")}
-                </button>
-                <button
-                  type="button"
-                  className="zaki-btn zaki-btn-primary disabled:opacity-60"
-                  onClick={() => {
-                    void handleSaveAssistantSettings();
-                  }}
-                  disabled={savingSettings || operatorConfigRequired || agentUserUnavailable}
-                >
-                  {savingSettings
-                    ? t("zakiSettingsSheet.footer.saving")
-                    : t("zakiSettingsSheet.footer.saveAssistant")}
-                </button>
-              </div>
+          {!loading ? null : (
+            <div className="mt-4 flex items-center gap-2 rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-secondary dark:bg-[#1a1714] dark:text-zaki-dark-subtle">
+              <span className="inline-block size-2 animate-pulse rounded-full bg-zaki-brand" />
+              {t("zakiSettingsSheet.loading.state")}
             </div>
-          </div>
+          )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </SheetShell>
   );
 }

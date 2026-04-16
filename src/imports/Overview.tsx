@@ -5,13 +5,13 @@ function Layer() {
     <div className="absolute contents inset-0" data-name="Layer 1">
       <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 46 32">
         <g id="Group">
-          <path d={svgPaths.p2adfc080} fill="var(--fill-0, #D24430)" id="Vector" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
-          <path d={svgPaths.pc99e400} fill="var(--fill-0, #D24430)" id="Vector_2" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
-          <path d={svgPaths.p36333a00} fill="var(--fill-0, #D24430)" id="Vector_3" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
-          <path d={svgPaths.p387374d0} fill="var(--fill-0, #D24430)" id="Vector_4" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
-          <path d={svgPaths.p34990b80} fill="var(--fill-0, #D24430)" id="Vector_5" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
-          <path d={svgPaths.p22acf480} fill="var(--fill-0, #D24430)" id="Vector_6" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
-          <path d={svgPaths.p1ae9a300} fill="var(--fill-0, #D24430)" id="Vector_7" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p2adfc080} fill="var(--fill-0, #f10202)" id="Vector" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.pc99e400} fill="var(--fill-0, #f10202)" id="Vector_2" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p36333a00} fill="var(--fill-0, #f10202)" id="Vector_3" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p387374d0} fill="var(--fill-0, #f10202)" id="Vector_4" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p34990b80} fill="var(--fill-0, #f10202)" id="Vector_5" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p22acf480} fill="var(--fill-0, #f10202)" id="Vector_6" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p1ae9a300} fill="var(--fill-0, #f10202)" id="Vector_7" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
         </g>
       </svg>
     </div>
@@ -103,7 +103,7 @@ function AddLine() {
     <div className="absolute left-1/2 size-[18px] top-1/2 translate-x-[-50%] translate-y-[-50%]" data-name="add-line">
       <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 18 18">
         <g id="add-line">
-          <path d={svgPaths.p90a02f0} fill="var(--fill-0, #D24430)" id="Vector" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
+          <path d={svgPaths.p90a02f0} fill="var(--fill-0, #f10202)" id="Vector" style={{ fill: "color(display-p3 0.8235 0.2667 0.1882)", fillOpacity: "1" }} />
         </g>
       </svg>
     </div>

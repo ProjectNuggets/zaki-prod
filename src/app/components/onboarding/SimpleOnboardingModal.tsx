@@ -90,26 +90,26 @@ export function SimpleOnboardingModal({
       isOpen={isOpen}
       onClose={handleClose}
       ariaLabel={t("onboarding.simple.title", { userName })}
-      className="w-full max-w-[560px] overflow-hidden rounded-[28px] border border-zaki-subtle bg-[linear-gradient(180deg,#fffdf9_0%,#f7f0e7_100%)] shadow-[0px_20px_60px_rgba(15,15,15,0.12)] dark:border-[#2d221a] dark:bg-[linear-gradient(180deg,#17120f_0%,#120e0b_100%)] dark:shadow-[0px_28px_60px_rgba(0,0,0,0.4)]"
+      className="w-full max-w-[560px] overflow-hidden rounded-zaki-2xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl font-body dark:bg-[#141210] dark:border-[rgba(240,236,230,0.12)]"
       containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
       backdropClassName="bg-[rgba(20,14,10,0.48)] backdrop-blur-[2px]"
     >
       <section dir={isRtl ? "rtl" : "ltr"} className="max-h-[calc(100vh-3rem)] overflow-y-auto">
-        <div className="flex items-start justify-between gap-4 border-b border-zaki-subtle/70 px-5 py-5 dark:border-[#2d221a] sm:px-6">
+        <div className="flex items-start justify-between gap-4 border-b border-zaki px-5 py-5 dark:border-[rgba(240,236,230,0.08)] sm:px-6">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
+            <span className="inline-flex items-center rounded-full bg-zaki-hover text-xs text-zaki-muted px-2.5 py-1 font-medium tracking-wide uppercase">
               {t("onboarding.simple.eyebrow")}
-            </p>
-            <h2 className="mt-2 text-[1.55rem] font-semibold leading-tight text-zaki-primary dark:text-zaki-dark-primary">
+            </span>
+            <h2 className="mt-3 font-display text-[1.55rem] font-bold leading-tight tracking-tight text-zaki-primary">
               {t("onboarding.simple.title", { userName })}
             </h2>
-            <p className="mt-2 max-w-[42ch] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+            <p className="mt-2 max-w-[42ch] text-sm leading-[1.6] text-zaki-secondary">
               {t("onboarding.simple.subtitle")}
             </p>
           </div>
           <button
             type="button"
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border border-zaki-subtle bg-white/75 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary dark:border-[#2d221a] dark:bg-[#17110d]/80 dark:text-zaki-dark-muted dark:hover:bg-[#211812] dark:hover:text-zaki-dark-primary"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
             onClick={handleClose}
             aria-label={t("onboarding.simple.dismissAria")}
           >
@@ -119,27 +119,27 @@ export function SimpleOnboardingModal({
 
         <div className="px-5 py-6 sm:px-6">
           <div className="flex items-center gap-3">
-            <span className="inline-flex size-11 items-center justify-center rounded-2xl border border-zaki-subtle bg-white/70 text-zaki-primary dark:border-[#2d221a] dark:bg-[#17110d]/75 dark:text-zaki-dark-primary">
+            <span className="inline-flex size-11 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
               <StepIcon className="size-5" />
             </span>
-            <div className="inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2d221a] dark:bg-[#17110d]/75 dark:text-zaki-dark-muted">
-              <span>{t("onboarding.simple.progress", { current: stepIndex + 1, total: steps.length })}</span>
-            </div>
+            <span className="inline-flex items-center rounded-full bg-zaki-hover text-xs text-zaki-muted px-2.5 py-1 font-medium tracking-wide uppercase">
+              {t("onboarding.simple.progress", { current: stepIndex + 1, total: steps.length })}
+            </span>
           </div>
 
           <div className="mt-5">
-            <h3 className="text-[1.28rem] font-semibold leading-tight text-zaki-primary dark:text-zaki-dark-primary">
+            <h3 className="font-display text-[1.28rem] font-bold leading-tight tracking-tight text-zaki-primary">
               {currentStep.title}
             </h3>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-7 text-zaki-secondary dark:text-zaki-dark-subtle">
+            <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.6] text-zaki-secondary">
               {currentStep.body}
             </p>
-            <div className="mt-5 rounded-[20px] border border-zaki-subtle bg-white/72 px-4 py-3.5 dark:border-[#2d221a] dark:bg-[#17110d]/72">
-              <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
-                <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-zaki-brand/10 text-zaki-brand dark:bg-[#4b241b] dark:text-[#ffb6a4]">
+            <div className="mt-5 rounded-zaki-md bg-zaki-hover border border-zaki p-3 flex items-start gap-3 dark:border-[rgba(240,236,230,0.08)]">
+              <div className={cn("flex items-start gap-3 w-full", isRtl && "flex-row-reverse")}>
+                <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
                   <Files className="size-4" />
                 </span>
-                <p className={cn("text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle", isRtl ? "text-right" : "text-left")}>
+                <p className={cn("text-sm leading-[1.6] text-zaki-secondary", isRtl ? "text-right" : "text-left")}>
                   {currentStep.note}
                 </p>
               </div>
@@ -147,12 +147,12 @@ export function SimpleOnboardingModal({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-zaki-subtle/70 px-5 py-5 dark:border-[#2d221a] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex flex-col gap-3 border-t border-zaki px-5 py-5 dark:border-[rgba(240,236,230,0.08)] sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
             {stepIndex > 0 ? (
               <button
                 type="button"
-                className="zaki-btn zaki-btn-secondary h-10 px-4"
+                className="text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover rounded-full px-4 py-2 text-sm font-medium transition-colors"
                 onClick={handleBack}
               >
                 {t("onboarding.simple.back")}
@@ -160,7 +160,7 @@ export function SimpleOnboardingModal({
             ) : null}
             <button
               type="button"
-              className="zaki-btn zaki-btn-secondary h-10 px-4"
+              className="text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover rounded-full px-4 py-2 text-sm font-medium transition-colors"
               onClick={handleSkip}
             >
               {t("onboarding.simple.skip")}
@@ -169,7 +169,7 @@ export function SimpleOnboardingModal({
 
           <button
             type="button"
-            className="zaki-btn zaki-btn-primary h-10 w-full px-4 sm:w-auto"
+            className="inline-flex items-center justify-center gap-2 bg-zaki-brand text-white rounded-full px-5 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover w-full sm:w-auto"
             onClick={handlePrimary}
           >
             <span>

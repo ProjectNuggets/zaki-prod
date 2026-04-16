@@ -40,6 +40,10 @@ export const router = createBrowserRouter([
         element: <ChatArea />, // Will show chat view
       },
       {
+        path: 'about',
+        element: <ChatArea />,
+      },
+      {
         path: 'reset',
         element: <ChatArea />,
       },

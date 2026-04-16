@@ -100,32 +100,33 @@ export function NarrationStatusLine({
   return (
     <div
       className={cn(
-        "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-sm",
-        "border-zaki-subtle bg-white/85 text-zaki-secondary dark:border-[#2f281f] dark:bg-[#16110d]/90 dark:text-zaki-dark-subtle",
-        frame.phase === "error_recovery" && "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/45 dark:bg-amber-950/40 dark:text-amber-200",
-        frame.phase === "tool_done" && "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/30 dark:text-emerald-200"
+        "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-all duration-200",
+        "border-zaki bg-zaki-raised text-zaki-secondary",
+        "dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]",
+        frame.phase === "error_recovery" && "border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200",
+        frame.phase === "tool_done" && "border-zaki-accent/30 bg-zaki-accent-10 text-zaki-accent dark:bg-zaki-accent-10"
       )}
       aria-live="polite"
     >
       <span
         className={cn(
-          "grid size-5 place-items-center rounded-full bg-zaki-primary/10 text-zaki-primary dark:bg-zaki-dark-primary/15 dark:text-zaki-dark-primary",
-          frame.phase === "error_recovery" && "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
-          frame.phase === "tool_done" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200",
+          "grid size-5 place-items-center rounded-full bg-zaki-brand-10 text-zaki-brand",
+          frame.phase === "error_recovery" && "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+          frame.phase === "tool_done" && "bg-zaki-accent-15 text-zaki-accent",
           isPulsePhase && "animate-pulse"
         )}
       >
         {narrationIcon(frame)}
       </span>
-      <span className="truncate font-medium">{formatNarrationText(frame)}</span>
+      <span className="truncate font-medium font-mono-ui">{formatNarrationText(frame)}</span>
     </div>
   );
 }
 
 function transcriptToneClass(kind: NullalisTranscriptEntryKind, status?: string | null) {
-  if (status === "failed" || status === "blocked" || status === "error") return "bg-rose-500";
-  if (status === "done" || status === "succeeded" || status === "complete") return "bg-emerald-500";
-  if (kind === "tool") return "bg-sky-500";
+  if (status === "failed" || status === "blocked" || status === "error") return "bg-zaki-brand";
+  if (status === "done" || status === "succeeded" || status === "complete") return "bg-zaki-accent";
+  if (kind === "tool") return "bg-zaki-accent";
   if (kind === "task") return "bg-amber-500";
   if (kind === "approval") return "bg-amber-600";
   if (kind === "transition") return "bg-zaki-brand";
@@ -543,17 +544,17 @@ function WorklogGroupRow({
   return (
     <details
       className={cn(
-        "group rounded-xl border border-transparent px-2 py-1.5 transition-colors",
-        "open:border-zaki-subtle/80 open:bg-white/55 dark:open:border-[#2f281f] dark:open:bg-[#18120e]/55"
+        "group rounded-zaki-xl border border-transparent px-2 py-1.5 transition-colors",
+        "open:border-zaki open:bg-zaki-raised dark:open:border-[rgba(240,236,230,0.08)] dark:open:bg-[#141210]"
       )}
     >
       <summary className="flex cursor-pointer list-none items-start gap-3 [&::-webkit-details-marker]:hidden">
         <span
           className={cn(
             "mt-1.5 grid size-5 shrink-0 place-items-center rounded-full text-zaki-muted dark:text-zaki-dark-muted",
-            isActive && "bg-zaki-brand/10 text-zaki-brand animate-pulse",
-            !isActive && group.resultState === "done" && "text-emerald-700 dark:text-emerald-300",
-            !isActive && group.resultState === "failed" && "text-rose-700 dark:text-rose-300"
+            isActive && "bg-zaki-brand-10 text-zaki-brand animate-pulse",
+            !isActive && group.resultState === "done" && "bg-zaki-accent-10 text-zaki-accent",
+            !isActive && group.resultState === "failed" && "bg-zaki-brand-10 text-zaki-brand"
           )}
           aria-hidden
         >
@@ -570,16 +571,16 @@ function WorklogGroupRow({
             />
           </div>
           {group.detailHint || group.metaText ? (
-            <div className="mt-0.5 truncate text-[12px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+            <div className="mt-0.5 truncate font-mono-ui text-[12px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
               {group.detailHint || group.metaText}
             </div>
           ) : null}
         </div>
       </summary>
       {group.details.length > 0 ? (
-        <div className="ml-8 mt-2 space-y-1 border-l border-zaki-subtle/70 pl-3 text-[12px] leading-5 text-zaki-muted dark:border-[#2f281f] dark:text-zaki-dark-muted">
+        <div className="ml-8 mt-2 space-y-1 border-l border-zaki pl-3 font-mono-ui text-[12px] leading-5 text-zaki-muted dark:border-[rgba(240,236,230,0.08)] dark:text-zaki-dark-muted">
           {group.details.map((detail) => (
-            <div key={detail} className="break-words font-mono">
+            <div key={detail} className="break-words">
               {detail}
             </div>
           ))}
@@ -634,7 +635,7 @@ export function NullalisWorklog({
 
   if (compact) {
     return (
-      <details className="zaki-process-compact group mt-2 max-w-[92%] rounded-2xl border border-[#e8d4bc] bg-white/72 px-3 py-2.5 text-zaki-primary shadow-[0px_10px_20px_rgba(52,36,24,0.08)] dark:border-[#34271d] dark:bg-[#18120e]/88 dark:text-zaki-dark-primary">
+      <details className="zaki-process-compact group mt-2 max-w-[92%] rounded-zaki-xl border border-zaki bg-zaki-raised px-3 py-2.5 text-zaki-primary shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:text-zaki-dark-primary">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium leading-6 [&::-webkit-details-marker]:hidden">
           <span
             className={cn(
@@ -673,8 +674,8 @@ export function NullalisWorklog({
         <summary
           className={cn(
             "inline-flex cursor-pointer list-none items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium leading-5 shadow-sm [&::-webkit-details-marker]:hidden",
-            "border-[#dfc6aa] bg-white/80 text-zaki-secondary dark:border-[#34271d] dark:bg-[#18120e]/88 dark:text-zaki-dark-subtle",
-            isStreaming && "shadow-[0_0_0_1px_rgba(212,96,74,0.14),0_0_24px_rgba(212,96,74,0.18)]"
+            "border-zaki bg-zaki-raised text-zaki-secondary dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:text-zaki-dark-subtle",
+            isStreaming && "shadow-[0_0_0_1px_var(--zaki-brand-10),0_0_24px_var(--zaki-brand-15)]"
           )}
         >
           <span
@@ -739,10 +740,10 @@ function taskStatusCopy(status: NullalisTaskStatus) {
 
 function taskStatusIcon(status: NullalisTaskStatus) {
   if (status === "done" || status === "succeeded") {
-    return <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-300" />;
+    return <CheckCircle2 className="size-3.5 text-zaki-accent" />;
   }
   if (status === "running") {
-    return <Loader2 className="size-3.5 animate-spin text-zaki-primary dark:text-zaki-dark-primary" />;
+    return <Loader2 className="size-3.5 animate-spin text-zaki-brand" />;
   }
   if (status === "failed" || status === "blocked" || status === "cancelled") {
     return <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-300" />;
@@ -757,7 +758,7 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
 
   return (
     <details
-      className="mt-2 max-w-[88%] rounded-zaki-lg border border-zaki-subtle bg-white/80 p-3 text-xs shadow-sm dark:border-[#2f281f] dark:bg-[#16110d]/85"
+      className="mt-2 max-w-[88%] rounded-zaki-xl border border-zaki bg-zaki-raised p-3 text-xs shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]"
       open={sortedTasks.some((task) => task.status === "running")}
     >
       <summary className="cursor-pointer select-none text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
@@ -775,7 +776,7 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
                 {Math.round(task.progressPct)}%
               </span>
             ) : null}
-            <span className="shrink-0 rounded-full bg-zaki-elevated px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zaki-muted dark:bg-[#211912] dark:text-zaki-dark-muted">
+            <span className="shrink-0 rounded-full bg-zaki-elevated px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zaki-muted dark:bg-[#1a1714] dark:text-zaki-dark-muted">
               {taskStatusCopy(task.status)}
             </span>
           </div>
@@ -818,10 +819,10 @@ export function ApprovalRequiredCard({
     return (
       <div
         className={cn(
-          "mt-2 max-w-[88%] rounded-zaki-lg border p-3 text-xs shadow-sm",
+          "mt-2 max-w-[88%] rounded-zaki-xl border p-3 text-xs shadow-sm",
           decided === "approved"
-            ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-500/40 dark:bg-emerald-950/35 dark:text-emerald-100"
-            : "border-red-300 bg-red-50 text-red-950 dark:border-red-500/40 dark:bg-red-950/35 dark:text-red-100"
+            ? "border-zaki-accent/40 bg-zaki-accent-10 text-zaki-accent"
+            : "border-zaki-brand/40 bg-zaki-brand-10 text-zaki-brand"
         )}
       >
         <div className="flex items-center gap-2">
@@ -830,8 +831,8 @@ export function ApprovalRequiredCard({
           ) : (
             <ShieldAlert className="size-4 shrink-0" />
           )}
-          <span className="font-semibold">
-            {request.tool} — {decided === "approved" ? "Approved" : "Denied"}
+          <span className="font-semibold font-mono-ui">
+            {request.tool} · {decided === "approved" ? "Approved" : "Denied"}
           </span>
         </div>
       </div>
@@ -839,11 +840,13 @@ export function ApprovalRequiredCard({
   }
 
   return (
-    <div className="mt-2 max-w-[88%] rounded-zaki-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-sm dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-100">
+    <div className="mt-2 max-w-[88%] rounded-zaki-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-sm dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-100">
       <div className="flex items-start gap-2">
         <ShieldAlert className="mt-0.5 size-4 shrink-0" />
         <div className="min-w-0">
-          <div className="font-semibold">Approval required for {request.tool}</div>
+          <div className="font-semibold">
+            Approval required for <span className="font-mono-ui">{request.tool}</span>
+          </div>
           <div className="mt-1 text-amber-900/80 dark:text-amber-100/80">
             {request.reason || "Nullalis requested approval before continuing."}
           </div>
@@ -856,8 +859,8 @@ export function ApprovalRequiredCard({
               disabled={!!submitting}
               onClick={() => handleAction("approve")}
               className={cn(
-                "rounded-full border border-emerald-400 bg-emerald-50 px-3 py-1 text-[11px] font-medium transition-colors",
-                "hover:bg-emerald-100 dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50",
+                "rounded-full border border-zaki-accent bg-zaki-accent px-3 py-1 text-[11px] font-semibold text-white transition-colors",
+                "hover:bg-zaki-accent-hover",
                 submitting === "approve" && "opacity-70"
               )}
             >
@@ -874,8 +877,8 @@ export function ApprovalRequiredCard({
               disabled={!!submitting}
               onClick={() => handleAction("deny")}
               className={cn(
-                "rounded-full border border-red-300 bg-red-50 px-3 py-1 text-[11px] font-medium transition-colors",
-                "hover:bg-red-100 dark:border-red-500/50 dark:bg-red-950/40 dark:hover:bg-red-900/50",
+                "rounded-full border border-zaki-brand bg-zaki-brand px-3 py-1 text-[11px] font-semibold text-white transition-colors",
+                "hover:bg-zaki-brand-hover",
                 submitting === "deny" && "opacity-70"
               )}
             >
@@ -908,7 +911,7 @@ export function UsageCostFooter({ usage }: { usage: ZakiUsageSummary | null }) {
   if (!parts.length) return null;
 
   return (
-    <div className="mt-1 max-w-[80%] text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
+    <div className="mt-1 inline-flex max-w-[80%] items-center rounded-full border border-zaki bg-zaki-raised px-2.5 py-0.5 font-mono-ui text-[11px] text-zaki-muted dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:text-zaki-dark-muted">
       {parts.join(" · ")}
     </div>
   );
@@ -940,22 +943,24 @@ export function ContextGauge({
 
   const barColor =
     pct >= 90
-      ? "bg-red-500 dark:bg-red-400"
+      ? "bg-zaki-brand"
       : pct >= 70
         ? "bg-amber-500 dark:bg-amber-400"
-        : "bg-emerald-500 dark:bg-emerald-400";
+        : "bg-zaki-accent";
 
   const textColor =
     pct >= 90
-      ? "text-red-700 dark:text-red-300"
+      ? "text-zaki-brand"
       : pct >= 70
         ? "text-amber-700 dark:text-amber-300"
         : "text-zaki-muted dark:text-zaki-dark-muted";
 
+  const trackColor = "bg-zaki-elevated dark:bg-[#1a1714]";
+
   if (compact) {
     return (
-      <div className="flex items-center gap-1.5 text-[11px]">
-        <div className="h-1 w-12 rounded-full bg-zinc-200 dark:bg-zinc-700">
+      <div className="flex items-center gap-1.5 font-mono-ui text-[11px]">
+        <div className={cn("h-1 w-12 rounded-full", trackColor)}>
           <div
             className={cn("h-full rounded-full transition-all", barColor)}
             style={{ width: `${pct}%` }}
@@ -970,11 +975,11 @@ export function ContextGauge({
     <div className="mt-1.5 max-w-[88%] text-[11px]">
       <div className="flex items-center justify-between gap-2 mb-0.5">
         <span className="text-zaki-muted dark:text-zaki-dark-muted">Context</span>
-        <span className={textColor}>
+        <span className={cn("font-mono-ui", textColor)}>
           {tokenLabel} / {maxLabel} ({pctLabel}%)
         </span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-zinc-200 dark:bg-zinc-700">
+      <div className={cn("h-1.5 w-full rounded-full", trackColor)}>
         <div
           className={cn("h-full rounded-full transition-all", barColor)}
           style={{ width: `${pct}%` }}

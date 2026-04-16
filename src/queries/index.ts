@@ -15,3 +15,4 @@ export {
   useResendPurchasedAccessCodeEmail,
   billingKeys,
 } from "./useBilling";
+export { useZakiSessions, zakiSessionKeys } from "./useZakiSessions";

@@ -62,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // Default error UI
       return (
-        <div className="min-h-screen bg-[#0f0b08] flex items-center justify-center p-6">
+        <div className="min-h-screen bg-[#0c0a09] flex items-center justify-center p-6">
           <div className="max-w-lg w-full bg-[#1a1410] border border-[#2a2420] rounded-zaki-lg p-8 text-center">
             {/* Icon */}
             <div className="mb-6">
@@ -93,7 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
             {/* Error details (only in development) */}
             {import.meta.env.DEV && this.state.error && (
-              <details className="mb-6 text-left bg-[#0f0b08] border border-[#2a2420] rounded-lg p-4">
+              <details className="mb-6 text-left bg-[#0c0a09] border border-[#2a2420] rounded-lg p-4">
                 <summary className="text-sm font-medium text-zaki-brand cursor-pointer mb-2">
                   Error Details
                 </summary>

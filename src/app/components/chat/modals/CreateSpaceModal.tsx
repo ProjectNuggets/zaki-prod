@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Info, X } from "lucide-react";
 import { ModalShell } from "@/app/components/ui/ModalShell";
 import { useTranslation } from "react-i18next";
@@ -13,18 +13,33 @@ interface CreateSpaceModalProps {
     instructions: string;
     pinnedFiles: PinnedFile[];
   }) => void;
+  initialValues?: {
+    name?: string;
+    description?: string;
+    instructions?: string;
+  } | null;
 }
 
 export function CreateSpaceModal({
   isOpen,
   onClose,
   onCreate,
+  initialValues,
 }: CreateSpaceModalProps) {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceInstructions, setSpaceInstructions] = useState("");
+
+  // Pre-fill from initialValues when modal opens
+  useEffect(() => {
+    if (isOpen && initialValues) {
+      setSpaceName(initialValues.name ?? "");
+      setSpaceDescription(initialValues.description ?? "");
+      setSpaceInstructions(initialValues.instructions ?? "");
+    }
+  }, [isOpen, initialValues]);
 
   if (!isOpen) return null;
 

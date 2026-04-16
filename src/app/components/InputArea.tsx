@@ -1,11 +1,12 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, GraduationCap, File as FileIcon, FileText, X, Zap, Check } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, ArrowUp, Sparkles, Paperclip, Search, GraduationCap, File as FileIcon, FileText, X, Zap, Check, Mic, Square } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/queries";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
+import { transcribeAudio } from "@/lib/api";
 import { toast } from "sonner";
 
 export function InputArea({
@@ -62,6 +63,68 @@ export function InputArea({
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
+
+  // ── Voice recording (STT) ──────────────────────────────────────────
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Prefer webm (Chrome/Edge), fall back to mp4 (Safari), then wav
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "audio/wav";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        // Stop all tracks to release the mic
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (blob.size === 0) return;
+        setIsTranscribing(true);
+        try {
+          const buf = await blob.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          let binary = "";
+          bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+          const b64 = btoa(binary);
+          const format = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "m4a" : "wav";
+          const result = await transcribeAudio(b64, format);
+          const transcribedText = result.data?.text?.trim();
+          if (transcribedText) {
+            setInputValue((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
+            textareaRef.current?.focus();
+          } else {
+            toast.info("No speech detected");
+          }
+        } catch {
+          toast.error("Voice transcription failed");
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, []);
 
   // Auto-focus textarea when response completes (isSending: true → false)
   useEffect(() => {
@@ -200,11 +263,11 @@ export function InputArea({
     >
       {/* Input Box */}
       <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir={isRtl ? "rtl" : "ltr"}>
-        <div className="rounded-[20px] border border-[#e5d3bd] dark:border-zaki-dark bg-[#efe2d3] dark:bg-zaki-dark-card shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
+        <div className="rounded-zaki-xl border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
               className={cn(
-                "w-full rounded-full bg-[#efe2d3] dark:bg-zaki-dark-card text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
+                "w-full rounded-full bg-zaki-raised text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
                 isRtl ? "justify-end text-right" : "justify-start text-left"
               )}
             >
@@ -237,13 +300,13 @@ export function InputArea({
                   <span className="text-zaki-secondary">
                     {activeViaAccessCode ? t("input.accessLabel") : t("input.upgradeLabel")}
                   </span>
-                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-zaki-elevated text-zaki-muted">
                     <Zap className="size-3" />
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-white text-zaki-muted">
+                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-zaki-elevated text-zaki-muted">
                     <Zap className="size-3" />
                   </span>
                   <span className="text-zaki-secondary">
@@ -279,18 +342,18 @@ export function InputArea({
           ) : null}
           <div
             className={cn(
-              "w-full rounded-[16px] border border-[#ead7c1] dark:border-zaki-dark bg-[#fffaf4] dark:bg-[#15110d] px-3 py-2.5 flex flex-col gap-2 relative",
+              "w-full rounded-[16px] border border-zaki-strong bg-zaki-raised font-body px-3 py-2.5 flex flex-col gap-2 relative dark:bg-[#141210]",
               showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
         {attachments.length > 0 && (
-          <div className="flex flex-col gap-2 px-2">
+          <div className="flex flex-col gap-2 px-1">
             <div className="flex flex-wrap gap-2">
               {previews.map((preview, index) =>
                 preview.url ? (
                   <div
                     key={`${preview.file.name}-${index}`}
-                    className="relative size-[56px] rounded-zaki-md bg-zaki-elevated border border-zaki overflow-hidden flex items-center justify-center"
+                    className="relative size-[56px] rounded-zaki-md bg-zaki-elevated border border-zaki-strong overflow-hidden flex items-center justify-center"
                   >
                     <img
                       src={preview.url}
@@ -300,7 +363,7 @@ export function InputArea({
                     <button
                       type="button"
                       className={cn(
-                        "absolute -top-1 size-5 rounded-full bg-white shadow border border-zaki flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent",
+                        "absolute -top-1 size-5 rounded-full bg-zaki-elevated shadow border border-zaki-strong flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent",
                         isRtl ? "-left-1" : "-right-1"
                       )}
                       onClick={() =>
@@ -313,21 +376,17 @@ export function InputArea({
                   </div>
                 ) : null
               )}
-            </div>
-            <div className="flex flex-col gap-2">
               {previews.map((preview, index) =>
                 preview.url ? null : (
                   <div
                     key={`${preview.file.name}-${index}`}
-                    className="flex items-center justify-between rounded-zaki-md border border-zaki bg-zaki-elevated px-3 py-2 text-xs text-zaki-secondary"
+                    className="inline-flex items-center gap-2 rounded-full border border-zaki-strong bg-zaki-elevated pl-3 pr-2 py-1 text-xs text-zaki-secondary"
                   >
-                    <div className="flex items-center gap-2">
-                      <FileIcon className="size-4 text-zaki-muted" />
-                      <span className="max-w-[220px] truncate">{preview.file.name}</span>
-                    </div>
+                    <FileIcon className="size-3.5 text-zaki-muted" />
+                    <span className="max-w-[200px] truncate">{preview.file.name}</span>
                     <button
                       type="button"
-                      className="text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:rounded"
+                      className="size-5 rounded-full flex items-center justify-center text-zaki-muted hover:bg-zaki-sunken hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -347,7 +406,7 @@ export function InputArea({
             ref={textareaRef}
             rows={1}
             className={cn(
-              "zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none zaki-scrollbar-fade",
+              "zaki-input-field flex-1 bg-transparent font-body text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 zaki-scrollbar-fade",
               isRtl ? "text-right" : "text-left"
             )}
             placeholder={placeholderSuggestions[placeholderIndex]}
@@ -375,7 +434,7 @@ export function InputArea({
             <div className="relative" ref={menuRef}>
             <button
               type="button"
-              className="size-9 bg-[#f6eee4] dark:bg-zaki-dark-elevated rounded-xl flex items-center justify-center hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              className="size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
               onClick={() =>
                 setMenuOpen((open) => {
                   const nextOpen = isOnboardingControlsLocked ? true : !open;
@@ -395,7 +454,7 @@ export function InputArea({
             {menuOpen && (
               <div
                 className={cn(
-                  "absolute bottom-10 w-56 rounded-zaki-lg border border-zaki-subtle bg-white shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30",
+                  "absolute bottom-10 w-56 rounded-zaki-lg border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30 dark:bg-[#1a1714]",
                   isRtl ? "right-0" : "left-0"
                 )}
                 role="menu"
@@ -453,7 +512,7 @@ export function InputArea({
                   <GraduationCap className="size-4 text-zaki-muted" />
                   <span className="flex-1 text-left rtl:text-right">{t("input.menu.studyLearn")}</span>
                   <span className={cn(
-                    "inline-flex shrink-0 items-center rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
                     isRtl ? "mr-auto" : "ml-auto"
                   )}>
                     {t("input.menu.comingSoonPill")}
@@ -475,7 +534,7 @@ export function InputArea({
                   <Sparkles className="size-4 text-zaki-muted" />
                   <span className="flex-1 text-left rtl:text-right">{t("input.menu.generateImage")}</span>
                   <span className={cn(
-                    "inline-flex shrink-0 items-center rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted",
+                    "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
                     isRtl ? "mr-auto" : "ml-auto"
                   )}>
                     {t("input.menu.comingSoonPill")}
@@ -494,10 +553,10 @@ export function InputArea({
             }}
             disabled={!canToggleWebSearch}
             className={cn(
-              "group relative size-11 sm:size-9 rounded-xl flex items-center justify-center border transition-colors",
+              "group relative size-9 rounded-full flex items-center justify-center border transition-colors",
               webSearchArmed
                 ? "bg-zaki-accent/10 border-zaki-accent/40 text-zaki-accent"
-                : "bg-[#f6eee4] border-[#ead7c1] text-zaki-muted hover:bg-zaki-hover dark:bg-zaki-dark-elevated dark:border-zaki-dark dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-hover",
+                : "bg-zaki-elevated border-zaki-strong text-zaki-muted hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover",
               !canToggleWebSearch && "opacity-60 cursor-not-allowed"
             )}
             aria-label={
@@ -513,7 +572,7 @@ export function InputArea({
             data-onboarding-id="chat-web-search-button"
           >
             <Search className="size-4" />
-            <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-zaki-subtle bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-zaki-dark dark:bg-zaki-dark-card dark:text-zaki-dark-muted">
+            <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               {webSearchArmed
                 ? t("input.webSearch.onPill")
                 : t("input.webSearch.offPill")}
@@ -535,11 +594,34 @@ export function InputArea({
             </span>
           ) : null}
           <span className="flex-1" />
+          {/* Mic button — STT voice input */}
+          {zakiBotMode && !isStopMode ? (
+            <button
+              type="button"
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={isTranscribing || isSending}
+              className={cn(
+                "zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
+                isRecording
+                  ? "bg-zaki-brand hover:bg-zaki-brand-hover border-zaki-brand/30"
+                  : "bg-zaki-elevated hover:bg-zaki-sunken border-zaki-strong"
+              )}
+              aria-label={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
+            >
+              {isTranscribing ? (
+                <span className="size-4 animate-spin rounded-full border-2 border-zaki-muted border-t-transparent" />
+              ) : isRecording ? (
+                <Square className="size-3.5 text-white" />
+              ) : (
+                <Mic className="size-4 text-zaki-muted" />
+              )}
+            </button>
+          ) : null}
           <button
             type={isStopMode ? "button" : "submit"}
             onClick={isStopMode ? onStop : undefined}
             disabled={isStopMode ? typeof onStop !== "function" : !canSend}
-            className="zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-xl flex items-center justify-center border border-zaki-brand/30 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+            className="zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-full flex items-center justify-center border border-zaki-brand/30 shadow-[0_2px_8px_rgba(241,2,2,0.15)] hover:shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-shadow disabled:opacity-60 disabled:shadow-none focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
             aria-label={isStopMode ? t("input.stopAria") : t("input.sendAria")}
           >
             {isStopMode ? (
@@ -574,7 +656,7 @@ export function InputArea({
                 ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300"
                 : quotaBadge.tone === "warning"
                   ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
-                  : "border-zaki-subtle bg-white text-zaki-muted dark:border-zaki-dark dark:bg-zaki-dark-elevated dark:text-zaki-dark-muted"
+                  : "border-zaki-strong bg-zaki-elevated text-zaki-muted"
             )}
           >
             {quotaBadge.label}

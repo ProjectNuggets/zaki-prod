@@ -297,11 +297,11 @@ export function SharedConversation() {
   // Viewing state
   return (
     <div
-      className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] text-zaki-primary dark:text-zaki-dark-primary"
+      className="min-h-screen bg-zaki-base dark:bg-[#0c0a09] text-zaki-primary dark:text-zaki-dark-primary"
       dir={isRtl ? "rtl" : "ltr"}
     >
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-zaki-base/95 dark:bg-[#0f0b08]/95 backdrop-blur-sm border-b border-zaki-subtle dark:border-zaki-dark">
+      <header className="sticky top-0 z-10 bg-zaki-base/95 dark:bg-[#0c0a09]/95 backdrop-blur-sm border-b border-zaki-subtle dark:border-zaki-dark">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <Link to="/" className="flex items-center gap-2 text-zaki-brand hover:text-zaki-brand transition-colors">

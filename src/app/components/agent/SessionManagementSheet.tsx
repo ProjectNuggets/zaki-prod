@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Clock3,
   Download,
@@ -6,18 +6,16 @@ import {
   MessageSquare,
   Shrink,
   Trash2,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  listAgentSessions,
   deleteAgentSession,
   compactAgentSession,
   exportAgentSession,
-  type AgentSession,
 } from "@/lib/api";
+import { useZakiSessions } from "@/queries/useZakiSessions";
 import { cn } from "@/lib/utils";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
+import { EmptyState, InlineConfirm, SheetShell } from "@/app/components/ui/zaki";
 
 type Props = {
   isOpen: boolean;
@@ -26,9 +24,9 @@ type Props = {
   onSwitchSession?: (sessionKey: string) => void;
 };
 
-function formatRelativeTime(dateStr?: string | null) {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
+function formatRelativeTime(value?: string | number | null) {
+  if (value == null) return "—";
+  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.floor(diffMs / 60_000);
@@ -55,25 +53,9 @@ export function SessionManagementSheet({
   activeSessionKey,
   onSwitchSession,
 }: Props) {
-  const [sessions, setSessions] = useState<AgentSession[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { data: sessions = [], isLoading: loading, refetch: loadSessions } = useZakiSessions(isOpen);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-
-  const loadSessions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await listAgentSessions();
-      setSessions(data?.sessions ?? []);
-    } catch {
-      toast.error("Failed to load sessions");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) loadSessions();
-  }, [isOpen, loadSessions]);
+  const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null);
 
   const handleDelete = useCallback(
     async (sessionKey: string) => {
@@ -84,7 +66,7 @@ export function SessionManagementSheet({
       setActionInProgress(`delete:${sessionKey}`);
       try {
         await deleteAgentSession(sessionKey);
-        setSessions((prev) => prev.filter((s) => s.session_key !== sessionKey));
+        loadSessions();
         toast.success("Session deleted");
       } catch {
         toast.error("Failed to delete session");
@@ -135,33 +117,26 @@ export function SessionManagementSheet({
     actionInProgress === `${action}:${key}`;
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-[380px] border-l border-zinc-200 bg-white p-0 dark:border-zinc-700 dark:bg-zinc-900 sm:w-[420px]"
-      >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
-          <SheetTitle className="text-sm font-semibold">Sessions</SheetTitle>
-          <SheetDescription className="sr-only">
-            Manage your agent sessions
-          </SheetDescription>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto px-4 py-3" style={{ maxHeight: "calc(100vh - 60px)" }}>
-          {loading && sessions.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="size-5 animate-spin text-zinc-400" />
-            </div>
-          ) : sessions.length === 0 ? (
-            <p className="py-12 text-center text-sm text-zinc-500">No sessions found</p>
-          ) : (
+    <SheetShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Sessions"
+      icon={<MessageSquare className="size-4" />}
+      description="Manage your agent sessions"
+      padded={false}
+    >
+      <div className="px-4 py-3">
+        {loading && sessions.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-5 animate-spin text-zaki-brand" />
+          </div>
+        ) : sessions.length === 0 ? (
+          <EmptyState
+            icon={<MessageSquare className="size-5" />}
+            title="No sessions found"
+            helper="Start a conversation to create one."
+          />
+        ) : (
             <div className="flex flex-col gap-2">
               {sessions.map((session) => {
                 const isActive = session.session_key === activeSessionKey;
@@ -169,10 +144,10 @@ export function SessionManagementSheet({
                   <div
                     key={session.session_key}
                     className={cn(
-                      "group relative rounded-lg border p-3 text-xs transition-colors",
+                      "group relative rounded-zaki-xl border p-3 text-xs transition-colors",
                       isActive
-                        ? "border-emerald-300 bg-emerald-50/50 dark:border-emerald-600/40 dark:bg-emerald-950/20"
-                        : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800/50 dark:hover:border-zinc-600"
+                        ? "border-zaki-accent/40 bg-zaki-accent/10"
+                        : "border-zaki-strong bg-zaki-elevated hover:border-zaki-accent/40 dark:bg-[#1a1714]"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -200,69 +175,82 @@ export function SessionManagementSheet({
                         }
                       >
                         <div className="flex items-center gap-1.5">
-                          <MessageSquare className="size-3.5 shrink-0 text-zinc-500" />
-                          <span className="font-medium truncate">
+                          <MessageSquare className="size-3.5 shrink-0 text-zaki-accent" />
+                          <span className="font-medium truncate text-zaki-primary">
                             {shortSessionLabel(session.session_key)}
                           </span>
                           {isActive && (
-                            <span className="ml-1 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                            <span className="ml-1 rounded-full bg-zaki-accent px-2 py-0.5 text-[10px] font-medium text-white">
                               active
                             </span>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button
-                          type="button"
-                          title="Compact session"
-                          disabled={!!actionInProgress}
-                          onClick={() => handleCompact(session.session_key)}
-                          className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                        >
-                          {isActioning("compact", session.session_key) ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <Shrink className="size-3.5" />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          title="Export session"
-                          disabled={!!actionInProgress}
-                          onClick={() => handleExport(session.session_key)}
-                          className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                        >
-                          {isActioning("export", session.session_key) ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <Download className="size-3.5" />
-                          )}
-                        </button>
-                        {!isActive && (
+                      {confirmingDeleteKey === session.session_key ? (
+                        <InlineConfirm
+                          label="Delete session?"
+                          disabled={isActioning("delete", session.session_key)}
+                          onConfirm={() => {
+                            handleDelete(session.session_key);
+                            setConfirmingDeleteKey(null);
+                          }}
+                          onCancel={() => setConfirmingDeleteKey(null)}
+                        />
+                      ) : (
+                        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                           <button
                             type="button"
-                            title="Delete session"
+                            title="Compact session"
                             disabled={!!actionInProgress}
-                            onClick={() => handleDelete(session.session_key)}
-                            className="rounded p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-950/40"
+                            onClick={() => handleCompact(session.session_key)}
+                            className="rounded-full p-1.5 text-zaki-secondary transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+                            aria-label="Compact session"
                           >
-                            {isActioning("delete", session.session_key) ? (
-                              <Loader2 className="size-3.5 animate-spin" />
+                            {isActioning("compact", session.session_key) ? (
+                              <Loader2 className="size-3.5 animate-spin text-zaki-brand" />
                             ) : (
-                              <Trash2 className="size-3.5" />
+                              <Shrink className="size-3.5" />
                             )}
                           </button>
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            title="Export session"
+                            disabled={!!actionInProgress}
+                            onClick={() => handleExport(session.session_key)}
+                            className="rounded-full p-1.5 text-zaki-secondary transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+                            aria-label="Export session"
+                          >
+                            {isActioning("export", session.session_key) ? (
+                              <Loader2 className="size-3.5 animate-spin text-zaki-brand" />
+                            ) : (
+                              <Download className="size-3.5" />
+                            )}
+                          </button>
+                          {!isActive && (
+                            <button
+                              type="button"
+                              title="Delete session"
+                              disabled={!!actionInProgress}
+                              onClick={() => setConfirmingDeleteKey(session.session_key)}
+                              className="rounded-full p-1.5 text-zaki-brand transition-colors hover:bg-zaki-brand/10"
+                              aria-label="Delete session"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="mt-1.5 flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <div className="mt-1.5 flex items-center gap-2 text-[11px] text-zaki-secondary">
                       {typeof session.message_count === "number" && (
-                        <span>{session.message_count} msgs</span>
+                        <span className="rounded-full bg-zaki-hover px-2 py-0.5 font-medium">
+                          {session.message_count} msgs
+                        </span>
                       )}
                       {typeof session.token_count === "number" && (
-                        <span>
+                        <span className="rounded-full bg-zaki-hover px-2 py-0.5 font-mono-ui font-medium">
                           {new Intl.NumberFormat("en-US").format(session.token_count)} tokens
                         </span>
                       )}
@@ -278,8 +266,7 @@ export function SessionManagementSheet({
               })}
             </div>
           )}
-        </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </SheetShell>
   );
 }

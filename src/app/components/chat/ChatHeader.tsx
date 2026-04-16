@@ -36,7 +36,7 @@ export function ChatHeader({
       <div className="flex items-center justify-between px-4 py-3 border-b border-zaki dark:border-zaki-dark bg-white/50 dark:bg-zaki-dark-card/50 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <CenterLogo className="size-6 text-zaki-brand" />
-          <h1 className="text-sm font-semibold text-zaki-primary dark:text-zaki-primary truncate max-w-[200px]">
+          <h1 className="zaki-title text-sm truncate max-w-[200px]">
             {title}
           </h1>
         </div>

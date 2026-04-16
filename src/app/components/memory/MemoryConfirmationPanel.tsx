@@ -235,7 +235,7 @@ export function MemoryConfirmationPanel({ userId, isOpen, onClose }: MemoryConfi
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-zaki dark:border-[#2b2119] bg-white dark:bg-[#0f0b08] text-sm text-zaki-primary dark:text-[#efe6d9] focus:outline-none focus:border-zaki-brand"
+                            className="w-full px-3 py-2 rounded-lg border border-zaki dark:border-[#2b2119] bg-white dark:bg-[#0c0a09] text-sm text-zaki-primary dark:text-[#efe6d9] focus:outline-none focus:border-zaki-brand"
                             autoFocus
                           />
                         </div>

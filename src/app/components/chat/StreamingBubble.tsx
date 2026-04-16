@@ -15,6 +15,25 @@ interface StreamingBubbleProps {
   onThumbsUpMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
 }
 
+/**
+ * Strip raw tool_call XML blocks from streaming content.
+ * The agent's tool calls are rendered separately in the Worklog panel,
+ * so we hide the raw <tool_call>{...}</tool_call> markup from the chat bubble.
+ * Also strips incomplete/partial tool_call blocks while streaming.
+ */
+function stripToolCallMarkup(raw: string): string {
+  if (!raw) return raw;
+  let cleaned = raw
+    // Complete blocks
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "")
+    // Partial/streaming block at the end
+    .replace(/<tool_call>[\s\S]*$/g, "")
+    // Complete tool_result blocks (if backend echoes them)
+    .replace(/<tool_result>[\s\S]*?<\/tool_result>/g, "")
+    .replace(/<tool_result>[\s\S]*$/g, "");
+  return cleaned;
+}
+
 export function StreamingBubble({
   content,
   isStreaming = false,
@@ -34,7 +53,7 @@ export function StreamingBubble({
       setDisplayedContent("");
       return;
     }
-    setDisplayedContent(content);
+    setDisplayedContent(stripToolCallMarkup(content));
   }, [content]);
 
   useEffect(() => {
@@ -63,7 +82,7 @@ export function StreamingBubble({
         {badgeLabel ? (
           <span
             className={[
-              "inline-flex items-center rounded-full border border-[#ead7c1] bg-[#fff7ee] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a7350] shadow-[0px_6px_14px_rgba(52,36,24,0.08)] dark:border-[#3a2b1f] dark:bg-[#17120e] dark:text-[#d0b79b]",
+              "inline-flex items-center rounded-full border border-zaki bg-zaki-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zaki-muted shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]",
               streamingModeVariant === "final_reply_reveal" ? "zaki-process-enter" : "",
             ]
               .filter(Boolean)
@@ -73,7 +92,7 @@ export function StreamingBubble({
           </span>
         ) : null}
         {helperText && !content.trim() ? (
-          <div className="zaki-process-enter rounded-xl border border-[#ead7c1] bg-white/65 px-3 py-2 text-xs font-medium text-zaki-secondary shadow-[0px_8px_18px_rgba(52,36,24,0.06)] dark:border-[#36291f] dark:bg-[#1a1410]/88 dark:text-zaki-dark-subtle">
+          <div className="zaki-process-enter rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-xs font-medium text-zaki-secondary shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]">
             {helperText}
           </div>
         ) : null}

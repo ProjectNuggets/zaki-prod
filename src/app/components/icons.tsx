@@ -5,13 +5,13 @@ export function LogoArabicOrange({ className }: { className?: string }) {
     <div className={className || "relative h-[32px] w-[46px] shrink-0"}>
       <svg className="block size-full" fill="none" preserveAspectRatio="xMidYMid meet" viewBox="0 0 46 32">
         <g>
-          <path d={svgPaths.p2adfc080} fill="#D24430" />
-          <path d={svgPaths.pc99e400} fill="#D24430" />
-          <path d={svgPaths.p36333a00} fill="#D24430" />
-          <path d={svgPaths.p387374d0} fill="#D24430" />
-          <path d={svgPaths.p34990b80} fill="#D24430" />
-          <path d={svgPaths.p22acf480} fill="#D24430" />
-          <path d={svgPaths.p1ae9a300} fill="#D24430" />
+          <path d={svgPaths.p2adfc080} fill="#f10202" />
+          <path d={svgPaths.pc99e400} fill="#f10202" />
+          <path d={svgPaths.p36333a00} fill="#f10202" />
+          <path d={svgPaths.p387374d0} fill="#f10202" />
+          <path d={svgPaths.p34990b80} fill="#f10202" />
+          <path d={svgPaths.p22acf480} fill="#f10202" />
+          <path d={svgPaths.p1ae9a300} fill="#f10202" />
         </g>
       </svg>
     </div>
@@ -39,7 +39,7 @@ export function SearchIcon() {
   );
 }
 
-export function AddIcon({ color = "#D24430" }: { color?: string }) {
+export function AddIcon({ color = "#f10202" }: { color?: string }) {
   return (
     <svg className="size-[18px]" fill="none" viewBox="0 0 18 18">
       <path d={svgPaths.p90a02f0} fill={color} />
@@ -92,9 +92,9 @@ export function CenterLogo({ className }: { className?: string }) {
     <div className={className || "size-8 relative"}>
       <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 32 32">
         <g>
-          <path d={svgPaths.pb726e00} fill="#D24430" />
-          <path d={svgPaths.p20a408f0} fill="#D24430" />
-          <path d={svgPaths.p1d386f80} fill="#D24430" />
+          <path d={svgPaths.pb726e00} fill="#f10202" />
+          <path d={svgPaths.p20a408f0} fill="#f10202" />
+          <path d={svgPaths.p1d386f80} fill="#f10202" />
         </g>
       </svg>
     </div>

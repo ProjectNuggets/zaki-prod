@@ -73,7 +73,9 @@ export default function App() {
     // Directly update the store state based on URL
     const store = useNavigationStore.getState();
     
-    if (path === '/spaces' && !spaceId) {
+    if (path === '/about') {
+      store.goToAbout();
+    } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
     } else if (spaceId && threadId) {
       store.goToThread(spaceId as string, threadId as string);
@@ -335,7 +337,7 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#fff8f0] dark:bg-[#0f0b08] flex items-center justify-center">
+      <div className="min-h-screen bg-[#fff8f0] dark:bg-[#0c0a09] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           {/* Spinner */}
           <div className="size-8 border-2 border-[#88735A]/20 border-t-[#88735A] rounded-full animate-spin" />
@@ -377,7 +379,7 @@ export default function App() {
       </div>
       {legalReconsentRequired && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-lg rounded-2xl border border-zaki-subtle bg-white p-6 shadow-[0px_20px_60px_rgba(0,0,0,0.35)] dark:border-[#2a2018] dark:bg-[#0F0B0A]">
+          <div className="w-full max-w-lg rounded-2xl border border-zaki-subtle bg-white p-6 shadow-[0px_20px_60px_rgba(0,0,0,0.35)] dark:border-[#2a2018] dark:bg-[#0c0a09]">
             <h2 className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
               {t("app.legal.title")}
             </h2>
@@ -389,7 +391,7 @@ export default function App() {
                 type="checkbox"
                 checked={legalReconsentChecked}
                 onChange={(event) => setLegalReconsentChecked(event.target.checked)}
-                className="mt-0.5 size-4 rounded border border-zaki-strong bg-white accent-[#D97757] dark:border-[#3a3026] dark:bg-[#0f0b08]"
+                className="mt-0.5 size-4 rounded border border-zaki-strong bg-white accent-[var(--zaki-brand)] dark:border-[#3a3026] dark:bg-[#0c0a09]"
               />
               <span className="leading-relaxed">
                 {t("app.legal.checkboxPrefix")}{" "}
@@ -405,7 +407,7 @@ export default function App() {
               </span>
             </label>
             {legalReconsentError && (
-              <div className="mt-3 rounded-zaki-md border border-zaki-strong bg-zaki-error px-3 py-2 text-xs text-zaki-brand dark:border-[#3a1f1b] dark:bg-[rgba(210,68,48,0.18)] dark:text-[#ffe7e2]">
+              <div className="mt-3 rounded-zaki-md border border-zaki-strong bg-zaki-error px-3 py-2 text-xs text-zaki-brand dark:border-[#3a1f1b] dark:bg-[rgba(241,2,2,0.18)] dark:text-[#ffe7e2]">
                 {legalReconsentError}
               </div>
             )}

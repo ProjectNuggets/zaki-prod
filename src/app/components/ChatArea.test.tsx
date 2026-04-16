@@ -64,13 +64,6 @@ jest.mock("@/lib/api", () => ({
   })),
 }));
 
-jest.mock("@/lib/nullalisEnv", () => ({
-  buildNullalisStreamUrl: () => "/api/v1/chat/stream",
-  getNullalisToken: () => "dev-token",
-  getNullalisUserId: () => "1",
-  isNullalisModeEnabled: () => false,
-}));
-
 jest.mock("@/stores", () => ({
   useNavigationStore: jest.fn(),
   useAuthStore: jest.fn(),

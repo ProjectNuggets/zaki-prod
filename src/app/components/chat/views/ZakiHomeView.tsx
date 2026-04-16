@@ -16,6 +16,7 @@ import { useAuthStore } from "@/stores";
 import type { Space } from "@/types";
 import { apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MetaLabel } from "@/app/components/ui/zaki";
 
 interface ZakiHomeViewProps {
   primarySpace: Space | null;
@@ -44,12 +45,13 @@ function QuickStartGrid({
         <button
           key={`${item.title}-${index}`}
           type="button"
-          className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 text-left shadow-zaki-md hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-lg dark:hover:bg-[#17110f]"
+          className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 text-left shadow-zaki-md hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:!bg-[#0c0a09] dark:shadow-zaki-lg dark:hover:bg-[#1a1714]"
           onClick={() => onSendExample(item.title)}
         >
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zaki-muted rtl:text-right rtl:justify-end rtl:w-full rtl:flex-row-reverse dark:text-zaki-dark-muted">
-            <Sparkles className="size-4 text-zaki-brand" />
-            {label}
+          <div className="rtl:text-right rtl:flex rtl:justify-end">
+            <MetaLabel icon={<Sparkles className="size-4 text-zaki-brand" />}>
+              {label}
+            </MetaLabel>
           </div>
           <div className="mt-3 text-base font-semibold text-zaki-primary rtl:text-right dark:text-zaki-dark-primary">{item.title}</div>
           <div className="mt-2 text-sm text-zaki-secondary rtl:text-right dark:text-zaki-dark-subtle">{item.body}</div>
@@ -75,12 +77,9 @@ function MissionCard({
   getSlideAriaLabel: (index: number) => string;
 }) {
   return (
-    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 shadow-zaki-lg mb-8 dark:border-[#2a2018] dark:!bg-[#0F0B0A] dark:shadow-zaki-xl">
+    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 shadow-zaki-lg mb-8 dark:border-[#2a2018] dark:!bg-[#0c0a09] dark:shadow-zaki-xl">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 text-2xs text-zaki-muted font-semibold uppercase tracking-wider dark:text-zaki-dark-muted">
-          {icon}
-          {label}
-        </div>
+        <MetaLabel icon={icon}>{label}</MetaLabel>
       </div>
       <div className="px-1 py-2 min-h-[188px] flex flex-col justify-between text-center">
         <div>
@@ -126,8 +125,8 @@ function CapabilitiesCard({
     <div className="mt-2 border-t border-zaki-subtle/80 pt-5 dark:border-[#2a2018]">
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rtl:text-right">
-          <div className="min-h-[20px] flex items-center text-[11px] text-zaki-muted font-semibold uppercase tracking-[0.18em] dark:text-zaki-dark-muted">
-            {capabilitiesLabel}
+          <div className="min-h-[20px] flex items-center">
+            <MetaLabel>{capabilitiesLabel}</MetaLabel>
           </div>
           <ul className="mt-2 space-y-1.5 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
             {capabilities.map((item) => (
@@ -142,8 +141,8 @@ function CapabilitiesCard({
           </ul>
         </div>
         <div className="rtl:text-right">
-          <div className="min-h-[20px] flex items-center text-[11px] text-zaki-muted font-semibold uppercase tracking-[0.18em] dark:text-zaki-dark-muted">
-            {limitationsLabel}
+          <div className="min-h-[20px] flex items-center">
+            <MetaLabel>{limitationsLabel}</MetaLabel>
           </div>
           <ul className="mt-2 space-y-1.5 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
             {limitations.map((item) => (

@@ -1,4 +1,3 @@
-import { ModalShell } from "@/app/components/ui/ModalShell";
 import {
   useBillingConfig,
   useCancelSubscription,
@@ -12,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { SheetShell, SectionHeader, TypeToConfirmDialog } from "@/app/components/ui/zaki";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -66,7 +65,6 @@ export function SettingsModal({
       ? t("settingsModal.plan.billingUnavailable")
       : null;
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteConfirmValue, setDeleteConfirmValue] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const accessExpiryLabel = useMemo(() => {
@@ -79,10 +77,6 @@ export function SettingsModal({
       day: "numeric",
     });
   }, [accessExpiresAt]);
-  const canDeleteAccount =
-    normalizedEmail.length > 0 &&
-    deleteConfirmValue.trim().toLowerCase() === normalizedEmail &&
-    !deleteAccountMutation.isPending;
   const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
   const effectiveStatusLabel = t(`settingsModal.plan.statusValues.${effectiveStatus}`, {
     defaultValue: effectiveStatus,
@@ -96,51 +90,47 @@ export function SettingsModal({
       return;
     }
     setDeleteConfirmOpen(false);
-    setDeleteConfirmValue("");
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <ModalShell
-      isOpen={isOpen}
-      onClose={onClose}
-      ariaLabel={t("settingsModal.aria.label")}
-      className="w-full max-w-[620px] overflow-hidden rounded-[28px] border border-zaki-subtle bg-white shadow-[0px_30px_80px_rgba(15,15,15,0.18)] dark:border-[#2e241b] dark:bg-[#120e0b] dark:shadow-[0px_44px_110px_rgba(0,0,0,0.62)]"
-      containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
-    >
-      <div className="relative max-h-[calc(100vh-3rem)] overflow-hidden">
-        <div className="pointer-events-none absolute -top-24 -right-20 size-56 rounded-full bg-zaki-brand opacity-10 dark:opacity-20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-20 size-56 rounded-full bg-zaki-accent opacity-10 dark:opacity-20 blur-3xl" />
-        <div className="relative flex items-center justify-between border-b border-zaki-subtle bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] px-5 py-5 dark:border-[#2e241b] dark:bg-[linear-gradient(140deg,#21170f_0%,#17110d_58%,#120e0b_100%)] sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-full border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1a140f] flex items-center justify-center text-zaki-brand text-sm font-semibold shadow-[0px_6px_18px_rgba(15,15,15,0.08)] dark:shadow-none">
-              S
+    <>
+      <SheetShell
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t("settingsModal.header.title")}
+        subtitle={t("settingsModal.header.subtitle")}
+        width="lg"
+        footer={
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-zaki-muted dark:text-[#c9b8a4]">
+              {t("settingsModal.footer.changesApplyImmediately")}
             </div>
-            <div>
-              <div className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
-                {t("settingsModal.header.title")}
-              </div>
-              <div className="text-xs text-zaki-muted dark:text-[#c9b8a4]">
-                {t("settingsModal.header.subtitle")}
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-secondary"
+                onClick={onClose}
+              >
+                {t("settingsModal.footer.cancel")}
+              </button>
+              <button
+                type="button"
+                className="zaki-btn zaki-btn-primary"
+                onClick={onSave}
+                disabled={saving}
+              >
+                {t("settingsModal.footer.saveChanges")}
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            className="zaki-icon-btn size-9"
-            onClick={onClose}
-            aria-label={t("settingsModal.aria.close")}
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="relative max-h-[calc(100vh-10rem)] overflow-y-auto px-5 py-5 space-y-6 sm:px-6">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-[#bca992]">
-              {t("settingsModal.sections.profile")}
-            </div>
-            <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
+        }
+      >
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <SectionHeader title={t("settingsModal.sections.profile")} />
+            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
               <label className="flex flex-col gap-1 text-xs text-zaki-muted dark:text-[#c9b8a4]">
                 {t("settingsModal.profile.displayName")}
                 <input
@@ -158,12 +148,11 @@ export function SettingsModal({
                 />
               </label>
             </div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-[#bca992]">
-              {t("settingsModal.sections.preferences")}
-            </div>
-            <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeader title={t("settingsModal.sections.preferences")} />
+            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
               <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-secondary dark:text-[#d7c9b7]">
                 {t("settingsModal.preferences.theme")}
                 <select
@@ -190,12 +179,11 @@ export function SettingsModal({
                 </select>
               </label>
             </div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-[#bca992]">
-              {t("settingsModal.sections.planBilling")}
-            </div>
-            <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeader title={t("settingsModal.sections.planBilling")} />
+            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
               <div className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-secondary dark:text-[#d7c9b7]">
                 <span>{t("settingsModal.plan.currentPlan")}</span>
                 <span className="text-zaki-primary dark:text-[#efe6d9] font-semibold uppercase text-xs tracking-wider">
@@ -268,7 +256,7 @@ export function SettingsModal({
                 {hasSubscription && (
                   <button
                     type="button"
-                    className="zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(210,68,48,0.15)] transition-colors disabled:opacity-50"
+                    className="zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(241,2,2,0.15)] transition-colors disabled:opacity-50"
                     onClick={async () => {
                       try {
                         if (!billingCancelEnabled) {
@@ -309,12 +297,11 @@ export function SettingsModal({
                 </div>
               )}
             </div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zaki-muted dark:text-[#bca992]">
-              {t("settingsModal.sections.dataPrivacy")}
-            </div>
-            <div className="mt-3 grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeader title={t("settingsModal.sections.dataPrivacy")} />
+            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
               <button
                 type="button"
                 disabled={isExporting}
@@ -358,8 +345,8 @@ export function SettingsModal({
                 </span>
               </button>
               <button
-                className="flex items-center justify-between rounded-zaki-lg border border-zaki-strong dark:border-[#643126] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(210,68,48,0.15)] transition-colors text-left"
-                onClick={() => setDeleteConfirmOpen((open) => !open)}
+                className="flex items-center justify-between rounded-zaki-lg border border-zaki-strong dark:border-[#643126] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(241,2,2,0.15)] transition-colors text-left"
+                onClick={() => setDeleteConfirmOpen(true)}
                 type="button"
               >
                 {t("settingsModal.privacy.deleteAccount")}
@@ -367,76 +354,34 @@ export function SettingsModal({
                   {t("settingsModal.privacy.deleteWarning")}
                 </span>
               </button>
-              {deleteConfirmOpen && (
-                <div className="rounded-zaki-lg border border-zaki-strong dark:border-[#643126] bg-[rgba(210,68,48,0.08)] dark:bg-[rgba(210,68,48,0.14)] px-3 py-3">
-                  <p className="text-xs text-zaki-brand dark:text-[#ffb6a4]">
-                    {t("settingsModal.privacy.deletePrompt")}
-                  </p>
-                  <input
-                    className="mt-2 w-full rounded-zaki-md border border-zaki-strong dark:border-[#643126] bg-white dark:bg-[#120e0b] px-3 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] outline-none focus:border-zaki-brand"
-                    value={deleteConfirmValue}
-                    onChange={(event) => setDeleteConfirmValue(event.target.value)}
-                    placeholder={email || t("settingsModal.privacy.emailPlaceholder")}
-                  />
-                  <div className="mt-3 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      className="zaki-btn-sm zaki-btn-secondary"
-                      onClick={() => {
-                        setDeleteConfirmOpen(false);
-                        setDeleteConfirmValue("");
-                      }}
-                    >
-                      {t("settingsModal.privacy.keepAccount")}
-                    </button>
-                    <button
-                      type="button"
-                      className="zaki-btn-sm zaki-btn-danger disabled:opacity-50"
-                      disabled={!canDeleteAccount}
-                      onClick={async () => {
-                        try {
-                          await deleteAccountMutation.mutateAsync(normalizedEmail);
-                          toast.success(t("settingsModal.privacy.success.accountDeleted"));
-                          onClose();
-                          onAccountDeleted();
-                        } catch (err) {
-                          toast.error(
-                            err instanceof Error ? err.message : t("settingsModal.privacy.errors.deleteAccount")
-                          );
-                        }
-                      }}
-                    >
-                      {deleteAccountMutation.isPending
-                        ? t("settingsModal.privacy.deleting")
-                        : t("settingsModal.privacy.deletePermanently")}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
+          </section>
         </div>
-        <div className="relative flex items-center justify-between gap-2 px-6 py-4 border-t border-zaki-subtle dark:border-[#2e241b] bg-zaki-base/80 dark:bg-[#17110d]">
-          <div className="text-xs text-zaki-muted dark:text-[#c9b8a4]">
-            {t("settingsModal.footer.changesApplyImmediately")}
-          </div>
-          <button
-            type="button"
-            className="zaki-btn zaki-btn-secondary"
-            onClick={onClose}
-          >
-            {t("settingsModal.footer.cancel")}
-          </button>
-          <button
-            type="button"
-            className="zaki-btn zaki-btn-primary"
-            onClick={onSave}
-            disabled={saving}
-          >
-            {t("settingsModal.footer.saveChanges")}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
+      </SheetShell>
+
+      <TypeToConfirmDialog
+        isOpen={deleteConfirmOpen}
+        title={t("settingsModal.privacy.deleteAccount")}
+        body={t("settingsModal.privacy.deletePrompt")}
+        confirmPhrase={normalizedEmail || email}
+        confirmLabel={t("settingsModal.privacy.deletePermanently")}
+        cancelLabel={t("settingsModal.privacy.keepAccount")}
+        isSubmitting={deleteAccountMutation.isPending}
+        onCancel={() => setDeleteConfirmOpen(false)}
+        onConfirm={async () => {
+          try {
+            await deleteAccountMutation.mutateAsync(normalizedEmail);
+            toast.success(t("settingsModal.privacy.success.accountDeleted"));
+            setDeleteConfirmOpen(false);
+            onClose();
+            onAccountDeleted();
+          } catch (err) {
+            toast.error(
+              err instanceof Error ? err.message : t("settingsModal.privacy.errors.deleteAccount")
+            );
+          }
+        }}
+      />
+    </>
   );
 }

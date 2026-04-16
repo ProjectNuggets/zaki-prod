@@ -4,13 +4,12 @@ import {
   CheckCircle2,
   Loader2,
   RefreshCw,
-  X,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchAgentDiagnostics } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/app/components/ui/sheet";
+import { EmptyState, MetaLabel, SheetShell } from "@/app/components/ui/zaki";
 
 type Props = {
   isOpen: boolean;
@@ -43,16 +42,16 @@ type DiagnosticsData = {
 };
 
 function StatusDot({ ok }: { ok?: boolean | null }) {
-  if (ok === true) return <CheckCircle2 className="size-3.5 text-emerald-500" />;
-  if (ok === false) return <XCircle className="size-3.5 text-red-500" />;
-  return <Activity className="size-3.5 text-zinc-400" />;
+  if (ok === true) return <CheckCircle2 className="size-3.5 text-zaki-accent" />;
+  if (ok === false) return <XCircle className="size-3.5 text-zaki-brand" />;
+  return <Activity className="size-3.5 text-zaki-muted" />;
 }
 
 function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <span className="text-zinc-500 dark:text-zinc-400">{label}</span>
-      <span className={cn("text-right", mono && "font-mono")}>{value ?? "—"}</span>
+    <div className="flex items-start justify-between gap-3 py-1.5 font-body">
+      <span className="text-zaki-secondary">{label}</span>
+      <span className={cn("text-right text-zaki-primary", mono && "font-mono-ui")}>{value ?? "\u2014"}</span>
     </div>
   );
 }
@@ -83,52 +82,55 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
   const readyOk = data?.upstreamReady?.ok;
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-[380px] border-l border-zinc-200 bg-white p-0 dark:border-zinc-700 dark:bg-zinc-900 sm:w-[420px]"
-      >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
-          <SheetTitle className="text-sm font-semibold">Diagnostics</SheetTitle>
-          <SheetDescription className="sr-only">
-            Agent runtime diagnostics
-          </SheetDescription>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              title="Refresh"
-            >
-              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
+    <SheetShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Diagnostics"
+      icon={<Activity className="size-4" />}
+      description="Agent runtime diagnostics"
+      padded={false}
+    >
+      <div className="px-4 py-3 text-xs">
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-full p-1.5 text-zaki-secondary transition-colors hover:bg-zaki-hover hover:text-zaki-primary disabled:opacity-60"
+            title="Refresh"
+            aria-label="Refresh diagnostics"
+          >
+            <RefreshCw className={cn("size-4", loading && "animate-spin text-zaki-brand")} />
+          </button>
         </div>
-
-        <div className="overflow-y-auto px-4 py-3 text-xs" style={{ maxHeight: "calc(100vh - 60px)" }}>
-          {loading && !data ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="size-5 animate-spin text-zinc-400" />
-            </div>
-          ) : !data ? (
-            <p className="py-12 text-center text-sm text-zinc-500">No data available</p>
-          ) : (
+        {loading && !data ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-5 animate-spin text-zaki-brand" />
+          </div>
+        ) : !data ? (
+          <EmptyState
+            icon={<Activity className="size-5" />}
+            title="No data available"
+            helper="Diagnostics could not be fetched."
+            action={
+              <button
+                type="button"
+                onClick={load}
+                className="rounded-full border border-zaki-strong px-4 py-2 text-xs font-medium text-zaki-primary transition-colors hover:bg-zaki-hover"
+              >
+                Retry
+              </button>
+            }
+          />
+        ) : (
             <div className="space-y-4">
               {/* Health banner */}
               <div
                 className={cn(
-                  "flex items-center gap-2 rounded-lg border p-3",
+                  "flex items-center gap-2 rounded-zaki-xl border p-3",
                   healthOk && readyOk
-                    ? "border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-950/20"
-                    : "border-red-200 bg-red-50 dark:border-red-700/40 dark:bg-red-950/20"
+                    ? "border-zaki-accent/30 bg-zaki-accent/10 text-zaki-primary"
+                    : "border-zaki-brand/30 bg-zaki-brand/10 text-zaki-primary"
                 )}
               >
                 <StatusDot ok={healthOk && readyOk} />
@@ -140,7 +142,7 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
                       : "Agent runtime status unknown"}
                 </span>
                 {data.upstreamHealth?.latencyMs != null && (
-                  <span className="ml-auto text-[11px] text-zinc-500">
+                  <span className="ml-auto rounded-full bg-zaki-hover px-2 py-0.5 font-mono-ui text-[11px] font-medium text-zaki-secondary">
                     {data.upstreamHealth.latencyMs}ms
                   </span>
                 )}
@@ -148,10 +150,8 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
 
               {/* Runtime section */}
               <div>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                  Runtime
-                </div>
-                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                <MetaLabel className="mb-1 flex">Runtime</MetaLabel>
+                <div className="divide-y divide-zaki border border-zaki-strong rounded-zaki-xl bg-zaki-raised px-3 dark:bg-[#1a1714]">
                   <Row label="Mode" value={data.runtime_mode} />
                   <Row label="Config source" value={data.effective_config_source} />
                   <Row label="Instance" value={data.instance_id?.slice(0, 12)} mono />
@@ -161,10 +161,8 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
 
               {/* Agent config */}
               <div>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                  Agent Config
-                </div>
-                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                <MetaLabel className="mb-1 flex">Agent</MetaLabel>
+                <div className="divide-y divide-zaki border border-zaki-strong rounded-zaki-xl bg-zaki-raised px-3 dark:bg-[#1a1714]">
                   <Row label="Assistant mode" value={data.assistant_mode} />
                   <Row label="Message timeout" value={data.agent_message_timeout_secs ? `${data.agent_message_timeout_secs}s` : null} />
                   <Row label="Provider retries" value={data.provider_retries} />
@@ -174,10 +172,8 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
 
               {/* Features */}
               <div>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                  Features
-                </div>
-                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                <MetaLabel className="mb-1 flex">Memory</MetaLabel>
+                <div className="divide-y divide-zaki border border-zaki-strong rounded-zaki-xl bg-zaki-raised px-3 dark:bg-[#1a1714]">
                   <Row
                     label="Memory search"
                     value={<StatusDot ok={data.memory_search_enabled} />}
@@ -204,12 +200,10 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
               {/* Gateway stats */}
               {data.gateway && (
                 <div>
-                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    Gateway
-                  </div>
-                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    <Row label="Total requests" value={data.gateway.requests_total?.toLocaleString()} />
-                    <Row label="In-flight" value={data.gateway.in_flight_requests} />
+                  <MetaLabel className="mb-1 flex">Gateway</MetaLabel>
+                  <div className="divide-y divide-zaki border border-zaki-strong rounded-zaki-xl bg-zaki-raised px-3 dark:bg-[#1a1714]">
+                    <Row label="Total requests" value={data.gateway.requests_total?.toLocaleString()} mono />
+                    <Row label="In-flight" value={data.gateway.in_flight_requests} mono />
                     <Row
                       label="Draining"
                       value={data.gateway.draining ? "yes" : "no"}
@@ -219,14 +213,13 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
               )}
 
               {lastFetched && (
-                <div className="pt-2 text-center text-[10px] text-zinc-400">
+                <div className="pt-2 text-center font-mono-ui text-[10px] text-zaki-muted">
                   Updated {new Date(lastFetched).toLocaleTimeString()}
                 </div>
               )}
             </div>
           )}
-        </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </SheetShell>
   );
 }

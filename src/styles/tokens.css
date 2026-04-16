@@ -1,36 +1,39 @@
 /**
  * ZAKI Design Tokens
- * 
+ *
  * Built from official brand guidelines (Kreyatif Studio)
- * Typeface: Geist
- * Primary: Terra cotta scale
- * Secondary: Teal scale
- * Neutrals: Warm desert palette
+ * Inspired by, not limited to, the branding PDF.
+ *
+ * Typography: Cabinet Grotesk (headlines), Plus Jakarta Sans (body),
+ *             Zain (Arabic), DM Mono (code), Climate Crisis (logo)
+ * Primary accent: #f10202 (used surgically)
+ * Neutrals: Warm desert palette (15-level scale from branding PDF)
+ * Secondary: Teal scale (interactive highlights)
  */
 
 :root {
   /* ============================================
    * BRAND COLOR SCALES — From Branding PDF
    * ============================================ */
-  
-  /* Primary — Terra Cotta */
-  --zaki-primary-100: #FCBDAC;
-  --zaki-primary-200: #F8A894;
-  --zaki-primary-300: #F3937D;
-  --zaki-primary-400: #EC7E68;
-  --zaki-primary-500: #E56A54;
-  --zaki-primary-600: #DC5741;
-  --zaki-primary-700: #D24430;  /* Brand primary */
-  --zaki-primary-800: #BB3A2B;
-  --zaki-primary-900: #A33227;
-  --zaki-primary-1000: #822B1C;
-  --zaki-primary-1100: #74231E;
-  --zaki-primary-1200: #5D1C19;
-  --zaki-primary-1300: #461514;
-  --zaki-primary-1400: #300F0E;
-  --zaki-primary-1500: #1A0808;
-  
-  /* Secondary — Teal (The differentiating accent) */
+
+  /* Primary — Red (brand accent, surgical use) */
+  --zaki-primary-100: #FEC5C5;
+  --zaki-primary-200: #FEA3A3;
+  --zaki-primary-300: #FD7C7C;
+  --zaki-primary-400: #FC5555;
+  --zaki-primary-500: #FA2E2E;
+  --zaki-primary-600: #F91515;
+  --zaki-primary-700: #f10202;  /* Brand primary */
+  --zaki-primary-800: #D50202;
+  --zaki-primary-900: #B80202;
+  --zaki-primary-1000: #960202;
+  --zaki-primary-1100: #7A0101;
+  --zaki-primary-1200: #5E0101;
+  --zaki-primary-1300: #420101;
+  --zaki-primary-1400: #2B0000;
+  --zaki-primary-1500: #1A0000;
+
+  /* Secondary — Teal (interactive highlights, focus rings) */
   --zaki-secondary-100: #A7F1E3;
   --zaki-secondary-200: #8FECD9;
   --zaki-secondary-300: #77E7CF;
@@ -46,7 +49,7 @@
   --zaki-secondary-1300: #113D2B;
   --zaki-secondary-1400: #0C291D;
   --zaki-secondary-1500: #07160F;
-  
+
   /* Neutrals — Warm Desert (Light scale) */
   --zaki-neutral-100: #F8F2E9;  /* Light background */
   --zaki-neutral-200: #EFE3D2;
@@ -62,57 +65,57 @@
   --zaki-neutral-1200: #544737;
   --zaki-neutral-1300: #42382B;
   --zaki-neutral-1400: #312920;
-  --zaki-neutral-1500: #1F1A14;  /* Primary text */
+  --zaki-neutral-1500: #1F1A14;  /* Primary text (light mode) */
   --zaki-neutral-1600: #0D0B09;  /* Darkest */
-  
+
   /* ============================================
    * SEMANTIC COLOR MAPPINGS
    * ============================================ */
-  
-  /* Brand */
+
+  /* Brand — #f10202 used surgically */
   --zaki-brand: var(--zaki-primary-700);
   --zaki-brand-hover: var(--zaki-primary-800);
   --zaki-brand-light: var(--zaki-primary-500);
-  --zaki-brand-subtle: rgba(210, 68, 48, 0.12);
-  
-  /* Accent (Teal — use for interactive highlights) */
+  --zaki-brand-subtle: rgba(241, 2, 2, 0.12);
+
+  /* Accent (Teal — use for interactive highlights, focus) */
   --zaki-accent: var(--zaki-secondary-900);
   --zaki-accent-hover: var(--zaki-secondary-700);
   --zaki-accent-light: var(--zaki-secondary-400);
   --zaki-accent-subtle: rgba(33, 145, 113, 0.12);
   --zaki-accent-muted: rgba(33, 145, 113, 0.20);
-  
+
   /* Text hierarchy (WCAG AA compliant) */
   --zaki-text-primary: var(--zaki-neutral-1500);
   --zaki-text-secondary: var(--zaki-neutral-1100);
   --zaki-text-muted: var(--zaki-neutral-900);
   --zaki-text-disabled: #767676;
   --zaki-text-placeholder: var(--zaki-neutral-700);
-  
+
   /* Surfaces */
   --zaki-surface-base: #ffffff;
   --zaki-surface-raised: #fffcf8;
   --zaki-surface-elevated: var(--zaki-neutral-100);
   --zaki-surface-sunken: var(--zaki-neutral-200);
   --zaki-surface-overlay: rgba(0, 0, 0, 0.25);
-  
-  /* Borders */
+
+  /* Borders — warm brown tones, visible */
   --zaki-border-default: var(--zaki-neutral-200);
   --zaki-border-subtle: var(--zaki-neutral-100);
   --zaki-border-strong: var(--zaki-neutral-300);
   --zaki-border-focus: var(--zaki-accent);
-  
+
   /* Interactive states */
   --zaki-hover: #f0e1d1;
   --zaki-active: var(--zaki-neutral-200);
-  --zaki-selected: rgba(210, 68, 48, 0.08);
+  --zaki-selected: rgba(241, 2, 2, 0.08);
   --zaki-selected-accent: rgba(33, 145, 113, 0.08);
-  
+
   /* Semantic colors */
   --zaki-success: var(--zaki-secondary-900);
   --zaki-success-bg: rgba(33, 145, 113, 0.12);
   --zaki-error: var(--zaki-primary-700);
-  --zaki-error-bg: rgba(210, 68, 48, 0.08);
+  --zaki-error-bg: rgba(241, 2, 2, 0.08);
   --zaki-warning: #f59e0b;
   --zaki-warning-bg: #fffbeb;
   --zaki-info: var(--zaki-secondary-700);
@@ -122,38 +125,44 @@
   /* Scrollbar */
   --zaki-scrollbar-thumb: #efe2d3;
   --zaki-scrollbar-thumb-hover: #efe2d3;
-  
+
   /* Message bubbles */
   --zaki-bubble-user: var(--zaki-neutral-300);
   --zaki-bubble-user-text: var(--zaki-neutral-1500);
   --zaki-bubble-assistant: transparent;
-  
+
   /* Brand opacity variants */
-  --zaki-brand-10: rgba(210, 68, 48, 0.10);
-  --zaki-brand-15: rgba(210, 68, 48, 0.15);
-  --zaki-brand-20: rgba(210, 68, 48, 0.20);
-  
+  --zaki-brand-10: rgba(241, 2, 2, 0.10);
+  --zaki-brand-15: rgba(241, 2, 2, 0.15);
+  --zaki-brand-20: rgba(241, 2, 2, 0.20);
+
   /* Accent opacity variants */
   --zaki-accent-10: rgba(33, 145, 113, 0.10);
   --zaki-accent-15: rgba(33, 145, 113, 0.15);
   --zaki-accent-20: rgba(33, 145, 113, 0.20);
-  
+
   /* Additional surface variants */
   --zaki-surface-input: var(--zaki-neutral-100);
   --zaki-surface-skeleton: var(--zaki-neutral-200);
-  
-  /* Shadows — elevation levels */
+
+  /* Shadows — warm brown-tinted, visible */
   --zaki-shadow-sm: 0px 4px 12px rgba(31, 26, 20, 0.04);
   --zaki-shadow-md: 0px 14px 30px rgba(31, 26, 20, 0.08);
   --zaki-shadow-lg: 0px 18px 40px rgba(31, 26, 20, 0.10);
   --zaki-shadow-xl: 0px 24px 60px rgba(31, 26, 20, 0.16);
-  
+
   /* ============================================
-   * TYPOGRAPHY — Geist
+   * TYPOGRAPHY
    * ============================================ */
-  
-  --zaki-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  
+
+  --zaki-font-display: 'Cabinet Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --zaki-font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --zaki-font-arabic: 'Zain', 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --zaki-font-mono: 'DM Mono', 'SF Mono', 'Fira Code', monospace;
+  --zaki-font-logo: 'Climate Crisis', sans-serif;
+  /* Legacy alias for body (used in global styles) */
+  --zaki-font-family: var(--zaki-font-body);
+
   /* Font sizes */
   --zaki-text-2xs: 11px;
   --zaki-text-xs: 12px;
@@ -163,25 +172,27 @@
   --zaki-text-xl: 20px;
   --zaki-text-2xl: 24px;
   --zaki-text-3xl: 30px;
-  
+
   /* Line heights */
   --zaki-leading-tight: 1.25;
   --zaki-leading-normal: 1.5;
   --zaki-leading-relaxed: 1.625;
-  
+
   /* Font weights */
   --zaki-font-normal: 400;
   --zaki-font-medium: 500;
   --zaki-font-semibold: 600;
   --zaki-font-bold: 700;
-  
+  --zaki-font-extrabold: 800;
+
   /* Letter spacing */
+  --zaki-tracking-tighter: -0.04em;
   --zaki-tracking-tight: -0.025em;
   --zaki-tracking-normal: 0;
   --zaki-tracking-wide: 0.025em;
   --zaki-tracking-wider: 0.05em;
   --zaki-tracking-widest: 0.1em;
-  
+
   /* ============================================
    * SPACING — 4px base unit
    * ============================================ */
@@ -196,17 +207,17 @@
   --zaki-space-10: 40px;
   --zaki-space-12: 48px;
   --zaki-space-16: 64px;
-  
+
   /* ============================================
-   * BORDER RADIUS
+   * BORDER RADIUS — 20px cards, pill buttons
    * ============================================ */
   --zaki-radius-sm: 8px;
   --zaki-radius-md: 12px;
   --zaki-radius-lg: 16px;
-  --zaki-radius-xl: 22px;
+  --zaki-radius-xl: 20px;
   --zaki-radius-2xl: 24px;
   --zaki-radius-full: 9999px;
-  
+
   /* ============================================
    * TRANSITIONS
    * ============================================ */
@@ -214,7 +225,7 @@
   --zaki-transition-base: 200ms ease;
   --zaki-transition-slow: 300ms ease;
   --zaki-transition-sidebar: 300ms ease;
-  
+
   /* ============================================
    * Z-INDEX LAYERS
    * ============================================ */
@@ -224,7 +235,7 @@
   --zaki-z-modal: 50;
   --zaki-z-toast: 60;
   --zaki-z-tooltip: 70;
-  
+
   /* ============================================
    * COMPONENT-SPECIFIC
    * ============================================ */
@@ -251,37 +262,37 @@
   /* Scrollbar */
   --zaki-scrollbar-thumb: #312a20;
   --zaki-scrollbar-thumb-hover: #312a20;
-  
+
   /* Surfaces — warm dark */
-  --zaki-surface-base: var(--zaki-neutral-1600);
-  --zaki-surface-raised: var(--zaki-neutral-1500);
-  --zaki-surface-elevated: var(--zaki-neutral-1400);
-  --zaki-surface-sunken: var(--zaki-neutral-1300);
+  --zaki-surface-base: #0c0a09;
+  --zaki-surface-raised: #141210;
+  --zaki-surface-elevated: #1a1714;
+  --zaki-surface-sunken: #252118;
   --zaki-surface-overlay: rgba(0, 0, 0, 0.6);
-  
+
   /* Borders */
-  --zaki-border-default: rgba(255, 255, 255, 0.10);
-  --zaki-border-subtle: rgba(255, 255, 255, 0.06);
-  --zaki-border-strong: rgba(255, 255, 255, 0.15);
-  
+  --zaki-border-default: rgba(240, 236, 230, 0.10);
+  --zaki-border-subtle: rgba(240, 236, 230, 0.06);
+  --zaki-border-strong: rgba(240, 236, 230, 0.15);
+
   /* Interactive states */
-  --zaki-hover: rgba(255, 255, 255, 0.06);
-  --zaki-active: rgba(255, 255, 255, 0.10);
-  --zaki-selected: rgba(210, 68, 48, 0.15);
+  --zaki-hover: rgba(240, 236, 230, 0.06);
+  --zaki-active: rgba(240, 236, 230, 0.10);
+  --zaki-selected: rgba(241, 2, 2, 0.15);
   --zaki-selected-accent: rgba(33, 145, 113, 0.15);
-  
+
   /* Message bubbles */
   --zaki-bubble-user: var(--zaki-neutral-1300);
   --zaki-bubble-user-text: var(--zaki-neutral-100);
-  
+
   /* Additional dark surfaces */
-  --zaki-surface-input: var(--zaki-neutral-1500);
-  --zaki-surface-skeleton: var(--zaki-neutral-1300);
-  --zaki-surface-dark-hover: var(--zaki-neutral-1400);
-  --zaki-surface-dark-card: var(--zaki-neutral-1400);
-  --zaki-surface-dark-elevated: var(--zaki-neutral-1300);
-  --zaki-surface-dark-elevated-hover: var(--zaki-neutral-1200);
-  
+  --zaki-surface-input: #141210;
+  --zaki-surface-skeleton: #1a1714;
+  --zaki-surface-dark-hover: #1a1714;
+  --zaki-surface-dark-card: #141210;
+  --zaki-surface-dark-elevated: #1a1714;
+  --zaki-surface-dark-elevated-hover: #252118;
+
   /* Shadows — subtler in dark mode */
   --zaki-shadow-sm: 0px 4px 12px rgba(0, 0, 0, 0.25);
   --zaki-shadow-md: 0px 14px 30px rgba(0, 0, 0, 0.35);
@@ -293,9 +304,25 @@
  * GLOBAL STYLES
  * ============================================ */
 
-/* Apply Geist font */
+/* Apply body font globally */
 body, html {
-  font-family: var(--zaki-font-family);
+  font-family: var(--zaki-font-body);
+}
+
+/* Headlines use display font */
+h1, h2, h3 {
+  font-family: var(--zaki-font-display);
+  letter-spacing: var(--zaki-tracking-tighter);
+}
+
+/* Code uses mono font */
+code, pre, kbd, samp {
+  font-family: var(--zaki-font-mono);
+}
+
+/* Arabic text detection */
+[lang="ar"], [dir="rtl"], .rtl {
+  font-family: var(--zaki-font-arabic);
 }
 
 /* Reduced motion preference */
@@ -309,7 +336,7 @@ body, html {
   }
 }
 
-/* Focus visible ring — now uses accent (teal) */
+/* Focus visible ring — teal accent */
 .zaki-focus-ring:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--zaki-surface-base), 0 0 0 4px var(--zaki-accent);
@@ -428,7 +455,7 @@ body, html {
 .hover\:border-zaki:hover { border-color: var(--zaki-border-default); }
 .hover\:border-zaki-accent:hover { border-color: var(--zaki-accent); }
 
-/* Focus states — now with accent */
+/* Focus states — teal accent */
 .focus-visible\:ring-zaki:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--zaki-surface-base), 0 0 0 4px var(--zaki-accent);
@@ -441,48 +468,64 @@ body, html {
 .zaki-card {
   background-color: var(--zaki-surface-base);
   border: 1px solid var(--zaki-border-default);
-  border-radius: var(--zaki-radius-2xl);
+  border-radius: var(--zaki-radius-xl);
   box-shadow: var(--zaki-shadow-md);
+  transition: all var(--zaki-transition-base);
 }
 
+.zaki-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--zaki-shadow-lg);
+}
+
+/* Primary button — pill, lift on hover, red glow shadow */
 .zaki-button-primary {
   background-color: var(--zaki-brand);
   color: white;
   border-radius: var(--zaki-radius-full);
-  padding: var(--zaki-space-2) var(--zaki-space-4);
+  padding: var(--zaki-space-2) var(--zaki-space-5);
+  font-family: var(--zaki-font-body);
   font-weight: var(--zaki-font-medium);
-  transition: all var(--zaki-transition-fast);
+  transition: all var(--zaki-transition-base);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(241, 2, 2, 0.25);
 }
 
 .zaki-button-primary:hover {
   background-color: var(--zaki-brand-hover);
   transform: translateY(-1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 12px 36px rgba(241, 2, 2, 0.35);
 }
 
 .zaki-button-primary:active {
   transform: translateY(0) scale(0.98);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(241, 2, 2, 0.20);
 }
 
+/* Secondary button — pill, outlined */
 .zaki-button-secondary {
   background-color: var(--zaki-surface-elevated);
   color: var(--zaki-text-primary);
-  border: 1px solid var(--zaki-border-default);
+  border: 1px solid var(--zaki-border-strong);
   border-radius: var(--zaki-radius-full);
-  padding: var(--zaki-space-2) var(--zaki-space-4);
+  padding: var(--zaki-space-2) var(--zaki-space-5);
+  font-family: var(--zaki-font-body);
   font-weight: var(--zaki-font-medium);
-  transition: all var(--zaki-transition-fast);
+  transition: all var(--zaki-transition-base);
 }
 
 .zaki-button-secondary:hover {
   background-color: var(--zaki-hover);
   border-color: var(--zaki-accent);
+  transform: translateY(-1px);
 }
 
+/* Ghost button */
 .zaki-button-ghost {
   background-color: transparent;
   color: var(--zaki-text-secondary);
-  border-radius: var(--zaki-radius-md);
-  padding: var(--zaki-space-2);
+  border-radius: var(--zaki-radius-full);
+  padding: var(--zaki-space-2) var(--zaki-space-4);
+  font-family: var(--zaki-font-body);
   transition: all var(--zaki-transition-fast);
 }
 
@@ -491,12 +534,14 @@ body, html {
   color: var(--zaki-text-primary);
 }
 
+/* Input */
 .zaki-input {
   background-color: var(--zaki-surface-raised);
   border: 1px solid var(--zaki-border-default);
   border-radius: var(--zaki-radius-md);
   padding: var(--zaki-space-2) var(--zaki-space-3);
   color: var(--zaki-text-primary);
+  font-family: var(--zaki-font-body);
   font-size: var(--zaki-text-base);
   transition: border-color var(--zaki-transition-fast);
 }
@@ -519,6 +564,7 @@ body, html {
   padding: var(--zaki-space-2) var(--zaki-space-3);
   border-radius: var(--zaki-radius-md);
   color: var(--zaki-text-primary);
+  font-family: var(--zaki-font-body);
   font-size: var(--zaki-text-sm);
   text-align: left;
   transition: background-color var(--zaki-transition-fast);
@@ -537,7 +583,7 @@ body, html {
 }
 
 /* ============================================
- * ACTIVE STATE — Warm neutral (matches space selection)
+ * ACTIVE STATE — Red accent bar
  * ============================================ */
 
 .zaki-nav-active {
@@ -554,7 +600,7 @@ body, html {
   transform: translateY(-50%);
   width: 3px;
   height: 60%;
-  background-color: var(--zaki-neutral-700);
+  background-color: var(--zaki-brand);
   border-radius: 0 2px 2px 0;
 }
 
@@ -572,13 +618,10 @@ body, html {
   background-color: var(--zaki-accent);
 }
 
-/* Thread hover glow — terra cotta pulse */
+/* Thread hover */
 .zaki-thread-item {
   transition: all var(--zaki-transition-fast);
   position: relative;
-}
-
-.zaki-thread-item {
   background-color: transparent;
 }
 
@@ -586,14 +629,10 @@ body, html {
   background-color: var(--zaki-hover);
 }
 
-/* Sweep highlight animation — kept for potential future use */
+/* Sweep highlight animation */
 @keyframes sweep-highlight {
-  0% {
-    background-position: -100% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
 }
 
 /* ============================================
@@ -617,7 +656,7 @@ body, html {
 .placeholder-zaki::placeholder { color: var(--zaki-text-placeholder); }
 .placeholder-zaki-muted::placeholder { color: var(--zaki-text-muted); }
 
-/* Checkbox/toggle accent — now teal */
+/* Checkbox/toggle accent — teal */
 .accent-zaki { accent-color: var(--zaki-accent); }
 
 /* Skeleton */
@@ -636,13 +675,13 @@ body, html {
 .dark .dark\:text-zaki-dark-subtle { color: var(--zaki-text-secondary); }
 .dark .dark\:border-zaki-dark { border-color: var(--zaki-surface-dark-hover); }
 
-/* Spinner — now uses accent */
+/* Spinner — teal accent */
 .border-zaki-spinner {
   border-color: var(--zaki-accent-20);
   border-top-color: var(--zaki-accent);
 }
 
-/* Info colors — now teal-based */
+/* Info colors — teal-based */
 .bg-zaki-info { background-color: var(--zaki-info-bg); }
 .border-zaki-info { border-color: var(--zaki-info-border); }
 .text-zaki-info { color: var(--zaki-info); }
@@ -658,7 +697,7 @@ body, html {
 }
 
 /* ============================================
- * THINKING INDICATOR — Now with teal dots
+ * THINKING INDICATOR — Teal dots
  * ============================================ */
 
 @keyframes ping-slow {
@@ -737,7 +776,6 @@ body, html {
   100% { opacity: 1; transform: translateY(0); }
 }
 
-
 .zaki-message-enter-user {
   animation: message-slide-up 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
 }
@@ -745,7 +783,6 @@ body, html {
 .zaki-message-enter-assistant {
   animation: message-fade-in 0.4s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
 }
-
 
 /* ============================================
  * SELECTION HIGHLIGHT — Teal
@@ -806,3 +843,62 @@ body, html {
 .dark .zaki-scrollbar-fade.is-scrolling::-webkit-scrollbar-thumb:hover {
   background: var(--zaki-scrollbar-thumb-hover);
 }
+
+/* ============================================
+ * FONT UTILITY CLASSES
+ * ============================================ */
+
+.font-display { font-family: var(--zaki-font-display); }
+
+/* ============================================
+ * TYPOGRAPHY SCALE — 4 sizes, strict
+ * Use these classes instead of ad-hoc text-* utilities for consistency.
+ * ============================================ */
+
+.zaki-display {
+  font-family: var(--zaki-font-display);
+  font-weight: 800;
+  font-size: clamp(1.5rem, 2vw + 1rem, 1.875rem);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  color: var(--zaki-text-primary);
+}
+
+.zaki-title {
+  font-family: var(--zaki-font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--zaki-text-primary);
+}
+
+.zaki-body {
+  font-family: var(--zaki-font-body);
+  font-weight: 400;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--zaki-text-primary);
+}
+
+.zaki-body-secondary {
+  font-family: var(--zaki-font-body);
+  font-weight: 400;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--zaki-text-secondary);
+}
+
+.zaki-meta {
+  font-family: var(--zaki-font-body);
+  font-weight: 600;
+  font-size: 0.6875rem; /* 11px */
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--zaki-text-muted);
+}
+.font-body { font-family: var(--zaki-font-body); }
+.font-arabic { font-family: var(--zaki-font-arabic); }
+.font-mono-ui { font-family: var(--zaki-font-mono); }
+.font-logo { font-family: var(--zaki-font-logo); }

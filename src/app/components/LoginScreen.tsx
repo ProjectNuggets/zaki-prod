@@ -547,13 +547,13 @@ export function LoginScreen() {
     <div
       dir={isRtl ? "rtl" : "ltr"}
       lang={locale}
-      className="min-h-screen bg-zaki-base dark:bg-[#0f0b08] flex items-center justify-center px-4"
+      className="min-h-screen bg-white dark:bg-[#0c0a09] flex items-center justify-center px-4 font-body"
     >
-      <div className={`w-full max-w-md rounded-[28px] border border-zaki dark:border-[#2a2018] bg-zaki-raised dark:bg-[#0F0B0A] shadow-zaki-xl dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] p-8 ${isRtl ? "text-right" : "text-left"}`}>
+      <div className={`w-full max-w-md rounded-zaki-2xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl p-8 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] ${isRtl ? "text-right" : "text-left"}`}>
         <div className="flex items-center">
           <LogoArabicOrange />
         </div>
-        <h1 className="mt-2 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
+        <h1 className="mt-3 font-display text-2xl font-bold text-zaki-primary dark:text-[#efe6d9]">
           {mode === "signup"
             ? copy.title.signup
             : mode === "reset-request"
@@ -576,17 +576,17 @@ export function LoginScreen() {
           <div
             role="tablist"
             aria-label={isRtl ? "تبديل نمط الدخول" : "Authentication mode"}
-            className="mt-4 grid grid-cols-3 gap-2 rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base/70 dark:bg-[#14100d] p-1"
+            className="mt-5 grid grid-cols-3 gap-1 rounded-full border border-zaki bg-zaki-base p-1 dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)]"
           >
             <button
               type="button"
               role="tab"
               aria-selected={mode === "login"}
               onClick={() => setModeClean("login")}
-              className={`rounded-zaki-sm px-3 py-1.5 text-xs font-semibold transition ${
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 mode === "login"
-                  ? "bg-white dark:bg-[#0f0b08] text-zaki-primary dark:text-[#efe6d9] shadow-sm"
-                  : "text-zaki-muted dark:text-[#a79079] hover:text-zaki-primary dark:hover:text-[#efe6d9]"
+                  ? "bg-zaki-elevated text-zaki-primary shadow-sm dark:bg-[#141210] dark:text-[#efe6d9]"
+                  : "text-zaki-muted hover:text-zaki-secondary dark:text-[#a79079] dark:hover:text-[#efe6d9]"
               }`}
             >
               {copy.actions.tabSignIn}
@@ -596,10 +596,10 @@ export function LoginScreen() {
               role="tab"
               aria-selected={mode === "signup"}
               onClick={() => setModeClean("signup")}
-              className={`rounded-zaki-sm px-3 py-1.5 text-xs font-semibold transition ${
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 mode === "signup"
-                  ? "bg-white dark:bg-[#0f0b08] text-zaki-primary dark:text-[#efe6d9] shadow-sm"
-                  : "text-zaki-muted dark:text-[#a79079] hover:text-zaki-primary dark:hover:text-[#efe6d9]"
+                  ? "bg-zaki-elevated text-zaki-primary shadow-sm dark:bg-[#141210] dark:text-[#efe6d9]"
+                  : "text-zaki-muted hover:text-zaki-secondary dark:text-[#a79079] dark:hover:text-[#efe6d9]"
               }`}
             >
               {copy.actions.tabCreate}
@@ -609,10 +609,10 @@ export function LoginScreen() {
               role="tab"
               aria-selected={mode === "reset-request"}
               onClick={() => setModeClean("reset-request")}
-              className={`rounded-zaki-sm px-3 py-1.5 text-xs font-semibold transition ${
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 mode === "reset-request"
-                  ? "bg-white dark:bg-[#0f0b08] text-zaki-primary dark:text-[#efe6d9] shadow-sm"
-                  : "text-zaki-muted dark:text-[#a79079] hover:text-zaki-primary dark:hover:text-[#efe6d9]"
+                  ? "bg-zaki-elevated text-zaki-primary shadow-sm dark:bg-[#141210] dark:text-[#efe6d9]"
+                  : "text-zaki-muted hover:text-zaki-secondary dark:text-[#a79079] dark:hover:text-[#efe6d9]"
               }`}
             >
               {copy.actions.tabReset}
@@ -622,12 +622,12 @@ export function LoginScreen() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {mode === "reset-confirm" && (
-            <div className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base dark:bg-[#14100d] px-3 py-2 text-xs text-zaki-secondary dark:text-[#c9b8a4]">
+            <div className="rounded-zaki-md border border-zaki bg-zaki-base px-3 py-2 text-xs text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
               {copy.resetHint}
             </div>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
               {copy.fields.fullName}
               <input
                 type="text"
@@ -637,17 +637,17 @@ export function LoginScreen() {
                   clearFieldError("fullName");
                 }}
                 placeholder={copy.placeholders.fullName}
-                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                 autoComplete="name"
                 required
               />
               {fieldErrors.fullName ? (
-                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.fullName}</span>
+                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.fullName}</span>
               ) : null}
             </label>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
               {copy.fields.dateOfBirth}
               <input
                 type="date"
@@ -656,19 +656,19 @@ export function LoginScreen() {
                   setDateOfBirth(event.target.value);
                   clearFieldError("dateOfBirth");
                 }}
-                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9]"
                 autoComplete="bday"
                 required
               />
               {fieldErrors.dateOfBirth ? (
-                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.dateOfBirth}</span>
+                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.dateOfBirth}</span>
               ) : null}
             </label>
           )}
           {(mode === "login" ||
             mode === "signup" ||
             mode === "reset-request") && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
               {copy.fields.email}
               <input
                 type="text"
@@ -678,18 +678,18 @@ export function LoginScreen() {
                   clearFieldError("email");
                 }}
                 placeholder={copy.placeholders.email}
-                className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                 autoComplete="email"
                 required
               />
               {fieldErrors.email ? (
-                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.email}</span>
+                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.email}</span>
               ) : null}
             </label>
           )}
 
           {(mode === "login" || mode === "signup") && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
               {copy.fields.password}
               <div className="relative">
                 <input
@@ -700,7 +700,7 @@ export function LoginScreen() {
                     clearFieldError("password");
                   }}
                   placeholder={copy.placeholders.password}
-                  className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 pr-12 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                  className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 pr-12 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
                 />
@@ -718,18 +718,18 @@ export function LoginScreen() {
                 </button>
               </div>
               {fieldErrors.password ? (
-                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.password}</span>
+                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.password}</span>
               ) : null}
             </label>
           )}
 
           {mode === "signup" && (
-            <label className="flex items-start gap-3 rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-zaki-base/70 dark:bg-[#14100d] px-3 py-3 text-xs font-medium text-zaki-secondary dark:text-[#c9b8a4]">
+            <label className="flex items-start gap-3 rounded-zaki-md border border-zaki bg-zaki-base px-3 py-3 text-xs font-medium text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
               <input
                 type="checkbox"
                 checked={signupLegalConsent}
                 onChange={(event) => setSignupLegalConsent(event.target.checked)}
-                className="mt-0.5 size-4 rounded border border-zaki-strong dark:border-[#3a3026] bg-white dark:bg-[#0f0b08] accent-[#D97757]"
+                className="mt-0.5 size-4 rounded border border-zaki-strong bg-white accent-zaki-brand dark:border-[rgba(240,236,230,0.15)] dark:bg-[#0c0a09]"
                 required
               />
               <span className="leading-relaxed">
@@ -751,20 +751,20 @@ export function LoginScreen() {
             <>
               <button
                 type="button"
-                className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+                className="text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
                 onClick={() => setShowLoginAccessCode((prev) => !prev)}
               >
                 {showLoginAccessCode ? copy.actions.hideActivationCode : copy.actions.showActivationCode}
               </button>
               {showLoginAccessCode ? (
-                <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+                <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
                   {copy.fields.accessCode}
                   <input
                     type="text"
                     value={loginAccessCode}
                     onChange={(event) => setLoginAccessCode(event.target.value)}
                     placeholder={copy.placeholders.accessCode}
-                    className="rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                    className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                     autoComplete="off"
                   />
                 </label>
@@ -775,7 +775,7 @@ export function LoginScreen() {
           {mode === "login" && (
             <button
               type="button"
-              className="text-left text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+              className="text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
               onClick={() => {
                 setModeClean("reset-request");
               }}
@@ -785,7 +785,7 @@ export function LoginScreen() {
           )}
 
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
               {copy.fields.confirmPassword}
               <input
                 type={showPassword ? "text" : "password"}
@@ -795,19 +795,19 @@ export function LoginScreen() {
                   clearFieldError("confirmPassword");
                 }}
                 placeholder={copy.placeholders.confirmPassword}
-                className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                 autoComplete="new-password"
                 required
               />
               {fieldErrors.confirmPassword ? (
-                <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.confirmPassword}</span>
+                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.confirmPassword}</span>
               ) : null}
             </label>
           )}
 
           {mode === "reset-confirm" && (
             <>
-              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+              <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
                 {copy.fields.newPassword}
                 <input
                   type={showPassword ? "text" : "password"}
@@ -817,15 +817,15 @@ export function LoginScreen() {
                     clearFieldError("resetPassword");
                   }}
                   placeholder={copy.placeholders.newPassword}
-                  className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                  className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                   autoComplete="new-password"
                   required
                 />
                 {fieldErrors.resetPassword ? (
-                  <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetPassword}</span>
+                  <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetPassword}</span>
                 ) : null}
               </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold text-zaki-muted dark:text-[#c9b8a4]">
+              <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
                 {copy.fields.confirmNewPassword}
                 <input
                   type={showPassword ? "text" : "password"}
@@ -835,24 +835,24 @@ export function LoginScreen() {
                     clearFieldError("resetConfirm");
                   }}
                   placeholder={copy.placeholders.confirmNewPassword}
-                  className="w-full rounded-zaki-md border border-zaki-strong dark:border-[#2a2018] bg-white dark:bg-[#14100d] px-4 py-2 text-sm text-zaki-primary dark:text-[#efe6d9] placeholder:text-zaki-muted dark:placeholder:text-[#8e7b66] outline-none focus:border-zaki-focus focus:ring-2 focus:ring-zaki-focus/20"
+                  className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
                   autoComplete="new-password"
                   required
                 />
                 {fieldErrors.resetConfirm ? (
-                  <span className="text-[11px] font-medium text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetConfirm}</span>
+                  <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetConfirm}</span>
                 ) : null}
               </label>
             </>
           )}
 
           {notice && (
-            <div className="rounded-zaki-md border border-zaki-strong dark:border-[#1d3b30] bg-zaki-success dark:bg-[rgba(33,145,113,0.2)] px-3 py-2 text-xs text-zaki-success dark:text-[#e9fff8]">
+            <div className="rounded-zaki-md border border-zaki bg-zaki-success px-3 py-2 text-xs text-zaki-success dark:bg-[rgba(33,145,113,0.2)] dark:border-[#1d3b30] dark:text-[#e9fff8]">
               {notice}
             </div>
           )}
           {error && (
-            <div className="rounded-zaki-md border border-zaki-strong dark:border-[#3a1f1b] bg-zaki-error dark:bg-[rgba(210,68,48,0.18)] px-3 py-2 text-xs text-zaki-brand dark:text-[#ffe7e2]">
+            <div className="rounded-zaki-md border border-zaki bg-zaki-error px-3 py-2 text-xs text-zaki-brand dark:bg-[rgba(241,2,2,0.18)] dark:border-[#3a1f1b] dark:text-[#ffe7e2]">
               {error}
             </div>
           )}
@@ -867,7 +867,7 @@ export function LoginScreen() {
               (mode === "reset-confirm" &&
                 (resetPassword.length === 0 || resetConfirm.length === 0))
             }
-            className="w-full zaki-btn zaki-btn-primary disabled:opacity-60"
+            className="w-full rounded-full bg-zaki-brand py-2.5 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(241,2,2,0.3)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
           >
             {isLoading
               ? mode === "signup"
@@ -889,7 +889,7 @@ export function LoginScreen() {
 
         <button
           type="button"
-          className="mt-4 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+          className="mt-4 text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
           onClick={() => {
             if (mode === "signup") {
               setModeClean("login");
@@ -907,8 +907,8 @@ export function LoginScreen() {
               : copy.actions.backToSignIn}
         </button>
 
-        <div className="mt-5 border-t border-zaki-strong/60 dark:border-[#2a2018] pt-3 text-[11px] text-zaki-muted dark:text-[#9f8f7c]">
-          {isRtl ? "تسجيل دخول آمن • بنية تحتية موثوقة • امتثال قانوني" : "Secure sign-in • Trusted infrastructure • Legal compliance"}
+        <div className="mt-4 text-xs text-zaki-muted dark:text-[#9f8f7c]">
+          {isRtl ? "تسجيل دخول آمن . بنية تحتية موثوقة . امتثال قانوني" : "Secure sign-in . Trusted infrastructure . Legal compliance"}
         </div>
       </div>
     </div>

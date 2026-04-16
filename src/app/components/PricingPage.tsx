@@ -658,7 +658,7 @@ export function PricingPage() {
                 className={cn(
                   "flex flex-col gap-3 rounded-xl bg-[#fbf8f4] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:bg-[#181512]",
                   highlightGiftCodeCard &&
-                    "ring-2 ring-[#D24430] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
+                    "ring-2 ring-[#f10202] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
                 )}
               >
                 <div className="min-w-0 flex-1">
@@ -840,7 +840,7 @@ export function PricingPage() {
               {paidPlanCurrent ? (
                 <button
                   type="button"
-                  className="w-full zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(210,68,48,0.15)] transition-colors disabled:opacity-50"
+                  className="w-full zaki-btn-sm border border-zaki-strong dark:border-[#643126] text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(241,2,2,0.15)] transition-colors disabled:opacity-50"
                   disabled={cancelAtPeriodEnd || cancelSubscription.isPending || !billingCancelEnabled}
                   onClick={async () => {
                     try {

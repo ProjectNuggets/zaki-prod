@@ -19,6 +19,7 @@ import {
   ApprovalRequiredCard,
   ContextGauge,
   NullalisWorklog,
+  NarrationStatusLine,
   TaskChecklist,
   UsageCostFooter,
 } from "../NullalisRuntimeWidgets";
@@ -181,7 +182,13 @@ export function ChatView({
             );
           }
           return (
-            <div key={msg.id}>
+            <div key={msg.id} className="flex flex-col gap-2">
+              {nullalisMode && nullalisNarrationFrame && (
+                <NarrationStatusLine
+                  frame={nullalisNarrationFrame}
+                  isStreaming={isStreamingMessage}
+                />
+              )}
               <StreamingMessage
                 content={msg.content}
                 isStreaming={isStreamingMessage}

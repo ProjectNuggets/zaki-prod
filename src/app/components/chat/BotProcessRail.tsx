@@ -61,10 +61,10 @@ function fallbackTranscriptEntries(statusEvents: BotStatusEvent[]): ZakiTranscri
 }
 
 function toneClass(kind: ZakiTranscriptEntryKind | null | undefined, state?: ZakiTranscriptEntry["state"]) {
-  if (state === "error") return "bg-rose-500";
-  if (state === "done") return "bg-emerald-500";
+  if (state === "error") return "bg-zaki-brand";
+  if (state === "done") return "bg-zaki-accent";
   if (kind === "task") return "bg-amber-500";
-  if (kind === "tool") return "bg-sky-500";
+  if (kind === "tool") return "bg-zaki-accent";
   if (kind === "transition") return "bg-zaki-brand";
   return "bg-zaki-brand/70";
 }
@@ -139,7 +139,7 @@ export function BotProcessRail({
           ? "Reusing a cached answer"
           : "Preparing the final reply";
     return (
-      <section className="zaki-process-compact max-w-[92%] rounded-2xl border border-[#e8d4bc] bg-white/70 px-3 py-2.5 text-zaki-primary shadow-[0px_10px_20px_rgba(52,36,24,0.08)] dark:border-[#34271d] dark:bg-[#18120e]/88 dark:text-zaki-dark-primary">
+      <section className="zaki-process-compact max-w-[92%] rounded-zaki-xl border border-zaki bg-zaki-raised px-3 py-2.5 text-zaki-primary shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:text-zaki-dark-primary">
         <div className="flex items-center gap-2 text-sm font-medium leading-6">
           <span
             className={["inline-block size-2 rounded-full", toneClass(snapshot?.currentActionKind, phase === "error" ? "error" : "active")].join(" ")}
