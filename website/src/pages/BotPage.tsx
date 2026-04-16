@@ -58,7 +58,7 @@ export function BotPage({ locale }: { locale: Locale }) {
           </Reveal>
 
           <Reveal delay={100}>
-            <Card tone="bot" className="relative overflow-hidden">
+            <Card className="relative overflow-hidden">
               <div className="absolute end-[-40px] top-[-40px] size-32 rounded-full bg-[radial-gradient(circle,rgba(241,2,2,0.20),transparent_68%)] blur-2xl" />
               <div className="grid gap-3 md:grid-cols-2">
                 {runtimeFacts.map((fact) => (
@@ -91,7 +91,7 @@ export function BotPage({ locale }: { locale: Locale }) {
             { icon: Cpu, title: isArabic ? "لماذا هو تجريبي" : "Why it is experimental", body: t.beta.warning },
           ].map((item, index) => (
             <Reveal key={item.title} delay={index * 70}>
-              <Card tone="bot" className="group relative flex h-full flex-col overflow-hidden">
+              <Card className="group relative flex h-full flex-col overflow-hidden">
                 <div className="pointer-events-none absolute -end-12 -top-12 size-24 rounded-full bg-[radial-gradient(circle,rgba(241,2,2,0.12),transparent_60%)] opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
                 <item.icon className="size-6 text-zk-accent" />
                 <h3 className="font-display mt-4 text-[24px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[28px]">
@@ -108,7 +108,7 @@ export function BotPage({ locale }: { locale: Locale }) {
       <section className="px-4 py-14 md:px-8 md:py-24">
         <div className="mx-auto grid max-w-[1240px] gap-6 md:grid-cols-2">
           <Reveal>
-            <Card tone="bot" className="flex h-full flex-col">
+            <Card className="flex h-full flex-col">
               <p className="font-mono-ui text-xs uppercase tracking-[0.24em] text-zk-accent">
                 {isArabic ? "ماذا يتضمن هذا" : "What this includes"}
               </p>
@@ -147,7 +147,7 @@ export function BotPage({ locale }: { locale: Locale }) {
 
           {/* Waitlist — premium conversion surface */}
           <Reveal delay={80}>
-            <Card tone="bot" className="flex h-full flex-col" id="waitlist">
+            <Card className="flex h-full flex-col" id="waitlist">
               <p className="font-mono-ui text-xs uppercase tracking-[0.24em] text-zk-accent">
                 {isArabic ? "وصول مبكر" : "Early access"}
               </p>
@@ -161,7 +161,7 @@ export function BotPage({ locale }: { locale: Locale }) {
               </p>
 
               <div className="mt-5 flex-1">
-                <WaitlistForm locale={locale} source="website_bot_page_waitlist" variant="dark" />
+                <WaitlistForm locale={locale} source="website_bot_page_waitlist" />
               </div>
             </Card>
           </Reveal>
