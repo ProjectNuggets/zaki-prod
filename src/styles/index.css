@@ -23,6 +23,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  white-space: nowrap;
   font-size: var(--zaki-text-sm);
   font-weight: var(--zaki-font-semibold);
   padding: 10px 16px;
@@ -35,6 +36,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
+  white-space: nowrap;
   font-size: var(--zaki-text-xs);
   font-weight: var(--zaki-font-semibold);
   padding: 8px 12px;
