@@ -25,31 +25,6 @@ module.exports = {
           warning: "var(--zk-warning)",
           error: "var(--zk-error)",
         },
-        /* Legacy aliases for unmigrated components */
-        chat: {
-          bg: "var(--zk-bg)",
-          surface: "var(--zk-surface)",
-          "surface-raised": "var(--zk-surface-hover)",
-          text: "var(--zk-text)",
-          muted: "var(--zk-text-secondary)",
-          accent: "var(--zk-accent)",
-          "accent-hover": "var(--zk-accent-hover)",
-        },
-        bot: {
-          bg: "var(--zk-bg)",
-          surface: "var(--zk-surface)",
-          "surface-raised": "var(--zk-surface-hover)",
-          text: "var(--zk-text)",
-          muted: "var(--zk-text-secondary)",
-          accent: "var(--zk-accent)",
-          "accent-hover": "var(--zk-accent-hover)",
-        },
-        line: {
-          DEFAULT: "var(--zk-border)",
-          light: "var(--zk-border)",
-          strong: "var(--zk-border-strong)",
-          "dark-strong": "var(--zk-border-strong)",
-        },
       },
       fontFamily: {
         display: ['"Cabinet Grotesk"', "sans-serif"],

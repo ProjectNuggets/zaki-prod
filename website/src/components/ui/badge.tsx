@@ -16,11 +16,11 @@ export function Badge({
       className={cn(
         "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em]",
         tone === "chat" &&
-          "border-[rgba(241,2,2,0.20)] bg-[rgba(241,2,2,0.07)] text-zk-accent",
+          "border-zk-accent/20 bg-zk-accent/[0.07] text-zk-accent",
         tone === "bot" &&
-          "border-zk-border-strong bg-[rgba(255,255,255,0.05)] text-zk-text",
+          "border-zk-border-strong bg-white/[0.05] text-zk-text",
         tone === "warning" &&
-          "border-[rgba(255,186,107,0.25)] bg-[rgba(255,186,107,0.10)] text-[#f0a050]",
+          "border-zk-warning/25 bg-zk-warning/10 text-zk-warning",
         className
       )}
     >

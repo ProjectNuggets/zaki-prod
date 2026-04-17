@@ -3,7 +3,7 @@ import type { Locale } from "../lib/content";
 import { Reveal } from "./Reveal";
 import { TextGenerate } from "./ui/text-generate";
 import { ShimmerButton } from "./ui/shimmer-button";
-import { SafariMockup } from "./ui/safari-mockup";
+import { ChatDemo } from "./ui/chat-demo";
 
 export function Hero({ locale }: { locale: Locale }) {
   const isArabic = locale === "ar";
@@ -65,10 +65,8 @@ export function Hero({ locale }: { locale: Locale }) {
           <div className="relative mx-auto mt-14 max-w-4xl">
             {/* Red glow behind mockup */}
             <div className="pointer-events-none absolute inset-x-0 top-1/4 -z-10 h-64 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,var(--zk-accent-glow),transparent)] blur-3xl" />
-            <SafariMockup
-              src="/slides/1.png"
-              url="app.chatzaki.com"
-              alt="ZAKI AI agent interface"
+            <ChatDemo
+              locale={locale}
               className="shadow-2xl shadow-black/40 ring-1 ring-zk-border"
             />
           </div>

@@ -136,8 +136,8 @@ export function WaitlistForm({ locale, source = "website_bot" }: { locale: Local
           aria-live="polite"
           className={
             status.kind === "error"
-              ? "rounded-xl border border-[rgba(182,69,53,0.22)] bg-[rgba(182,69,53,0.06)] px-4 py-3 text-sm text-[#e05545] focus:outline-none"
-              : "rounded-xl border border-[rgba(38,103,74,0.20)] bg-[rgba(38,103,74,0.06)] px-4 py-3 text-sm text-[#3a9e6b] focus:outline-none"
+              ? "rounded-xl border border-zk-error/25 bg-zk-error/[0.06] px-4 py-3 text-sm text-zk-error focus:outline-none"
+              : "rounded-xl border border-zk-success/20 bg-zk-success/[0.06] px-4 py-3 text-sm text-zk-success focus:outline-none"
           }
         >
           {status.text}
