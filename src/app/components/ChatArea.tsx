@@ -124,14 +124,20 @@ function numericValue(value: unknown) {
   return null;
 }
 
-/** Build a canonical nullalis session key from the agent user ID and thread slug. */
+/**
+ * Build a canonical nullalis session key from the agent user ID and thread slug.
+ *
+ * Must match the backend BFF's buildCanonicalThreadSessionKey in bot-bff.js,
+ * which always uses the `:thread:<slug>` suffix (including for "main").
+ * Earlier versions of this function special-cased "main" to `agent:zaki-bot:user:N:main`
+ * (no `:thread:` segment) which caused a mismatch: messages were persisted
+ * under `:thread:main` by the backend but we were fetching history for
+ * `:main`, so the latest messages appeared to disappear on refresh.
+ */
 function buildAgentSessionKey(threadSlug: string, agentUserId: string | null) {
   const safeThread = String(threadSlug || "main").trim() || "main";
   const safeUser = String(agentUserId || "").trim();
   if (!safeUser) return null; // not yet resolved
-  if (safeThread === ZAKI_BOT_THREAD_ID || safeThread === "main") {
-    return `agent:zaki-bot:user:${safeUser}:main`;
-  }
   return `agent:zaki-bot:user:${safeUser}:thread:${safeThread}`;
 }
 
