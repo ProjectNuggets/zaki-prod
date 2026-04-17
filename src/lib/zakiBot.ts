@@ -38,63 +38,6 @@ export function shortSessionLabel(key: string) {
   return last || key;
 }
 
-/**
- * Session title overrides (local, per-browser).
- * Stored in localStorage because the backend doesn't expose a rename
- * endpoint yet. Once PATCH /api/agent/sessions/:key lands, migrate to that.
- */
-const SESSION_TITLE_KEY = "zaki:session-titles:v1";
-
-function readSessionTitles(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(SESSION_TITLE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeSessionTitles(map: Record<string, string>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(SESSION_TITLE_KEY, JSON.stringify(map));
-  } catch {
-    // Storage full or disabled. Best-effort only.
-  }
-}
-
-/** Get a custom title for a session key. Returns null if none set. */
-export function getSessionTitleOverride(sessionKey: string): string | null {
-  if (!sessionKey) return null;
-  const titles = readSessionTitles();
-  const value = titles[sessionKey];
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-/** Set a custom title for a session. Empty/whitespace removes the override. */
-export function setSessionTitleOverride(sessionKey: string, title: string) {
-  if (!sessionKey) return;
-  const titles = readSessionTitles();
-  const trimmed = String(title || "").trim();
-  if (trimmed) {
-    titles[sessionKey] = trimmed;
-  } else {
-    delete titles[sessionKey];
-  }
-  writeSessionTitles(titles);
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("zaki:session-titles-changed"));
-  }
-}
-
-/** Delete the local title override (e.g. after backend delete). */
-export function clearSessionTitleOverride(sessionKey: string) {
-  setSessionTitleOverride(sessionKey, "");
-}
-
 /** Format a date value as relative time (e.g. "3m ago", "2h ago").
  *  Handles both epoch seconds (number) and ISO 8601 strings. */
 export function formatSessionTime(value?: string | number | null) {

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { apiRequest, updateProfile, deleteAgentSession } from "@/lib/api";
+import { apiRequest, updateProfile } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
@@ -35,9 +35,7 @@ import {
   isZakiBotSpaceId,
   ZAKI_BOT_LABEL,
   ZAKI_BOT_SPACE_ID,
-  clearSessionTitleOverride,
 } from "@/lib/zakiBot";
-import { zakiSessionKeys } from "@/queries/useZakiSessions";
 import {
   InlineConfirm,
   TypeToConfirmDialog,
@@ -1302,22 +1300,6 @@ export function Sidebar() {
               setActiveItem(threadSlug);
               goToThread(ZAKI_BOT_SPACE_ID, threadSlug);
               window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
-            }}
-            onDeleteSession={async (sessionKey) => {
-              const slug = extractThreadSlug(sessionKey);
-              const isActiveSession = isZakiBotSpaceId(activeSpaceId) && activeThreadId === slug;
-              try {
-                await deleteAgentSession(sessionKey);
-                clearSessionTitleOverride(sessionKey);
-                toast.success("Session deleted");
-                queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
-                if (isActiveSession) {
-                  // Navigate to main session if we just deleted the active one
-                  goToThread(ZAKI_BOT_SPACE_ID, "main");
-                }
-              } catch {
-                toast.error("Failed to delete session");
-              }
             }}
             isRtl={!!isRtl}
           />
