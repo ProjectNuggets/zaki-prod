@@ -7,9 +7,26 @@ import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRai
 
 jest.mock("@/lib/api", () => ({
   fetchUsageQuota: jest.fn(),
+  fetchContextDiagnostics: jest.fn(),
+  fetchMemoryDoctor: jest.fn(),
 }));
 
 const fetchUsageQuotaMock = jest.requireMock("@/lib/api").fetchUsageQuota as jest.Mock;
+const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
+  .fetchContextDiagnostics as jest.Mock;
+const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
+  .fetchMemoryDoctor as jest.Mock;
+
+beforeEach(() => {
+  fetchContextDiagnosticsMock.mockResolvedValue({
+    response: { ok: true },
+    data: { active: false, reason: "no_active_session" },
+  });
+  fetchMemoryDoctorMock.mockResolvedValue({
+    response: { ok: true },
+    data: { active: false, reason: "no_active_session" },
+  });
+});
 
 describe("PowerUserSheet", () => {
   it("opens on Approvals tab by default and is visible (not hidden behind advanced)", () => {
@@ -76,24 +93,81 @@ describe("PowerUserSheet", () => {
     expect(onApprove).toHaveBeenCalledWith("req-1", false);
   });
 
-  it("renders context and memory-health snapshots read-only", () => {
-    render(
-      <PowerUserSheet
-        isOpen
-        onClose={() => {}}
-        initialTab="context"
-        contextSnapshot={{
-          turnsInContext: 12,
-          usedTokens: 4200,
-          totalTokens: 8192,
-          usagePct: 51,
-          compactedTurns: 3,
-          providerFallbackCount: 1,
-        }}
-      />
-    );
-    expect(screen.getByTestId("power-user-context")).toBeInTheDocument();
-    expect(screen.getByText(/51%/)).toBeInTheDocument();
+  it("renders context diagnostics empty state when no active session", async () => {
+    await act(async () => {
+      render(
+        <PowerUserSheet isOpen onClose={() => {}} initialTab="context" />
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-context")).toHaveAttribute(
+        "data-state",
+        "inactive"
+      );
+    });
+    expect(
+      screen.getByText(/Start a conversation to see context diagnostics/i)
+    ).toBeInTheDocument();
+  });
+
+  it("renders real context diagnostics report from BFF", async () => {
+    fetchContextDiagnosticsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        active: true,
+        report: {
+          model: "moonshotai/Kimi-K2.5",
+          history_messages: 43,
+          token_estimate: 12430,
+          context_window_tokens: 128000,
+          context_pressure_percent: 9.7,
+          history_trim_limit_messages: 80,
+          token_compaction_threshold: 96000,
+          token_compaction_triggered: false,
+          tools: 14,
+          roles: { system: 1, user: 10, assistant: 20, tool: 12 },
+          memory: { hot: 5, warm: 12, cold: 40 },
+        },
+      },
+    });
+    await act(async () => {
+      render(
+        <PowerUserSheet isOpen onClose={() => {}} initialTab="context" />
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-context")).toBeInTheDocument();
+      expect(screen.getByText("moonshotai/Kimi-K2.5")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/10%/)).toBeInTheDocument();
+    expect(
+      screen.getByTestId("power-user-context-section-memory")
+    ).toBeInTheDocument();
+  });
+
+  it("renders memory-doctor report text when backend returns it", async () => {
+    fetchMemoryDoctorMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        active: true,
+        runtime: true,
+        report_text: "Memory Doctor Report\n====================\nStatus: OK\n",
+      },
+    });
+    await act(async () => {
+      render(
+        <PowerUserSheet
+          isOpen
+          onClose={() => {}}
+          initialTab="memory_doctor"
+        />
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("power-user-memory-doctor-report")
+      ).toHaveTextContent(/Memory Doctor Report/);
+    });
   });
 
   it("derives soft-limit state at 70% (warning) and 90% (near_limit)", () => {

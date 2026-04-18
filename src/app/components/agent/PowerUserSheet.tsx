@@ -9,7 +9,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SheetShell } from "@/app/components/ui/zaki";
-import { fetchUsageQuota, type UsageQuotaSurface } from "@/lib/api";
+import {
+  fetchContextDiagnostics,
+  fetchMemoryDoctor,
+  fetchUsageQuota,
+  type ContextDiagnosticsResponse,
+  type MemoryDoctorResponse,
+  type UsageQuotaSurface,
+} from "@/lib/api";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 
 export type PowerUserTab = "approvals" | "context" | "memory_doctor" | "usage";
@@ -102,6 +109,53 @@ function formatTs(value?: string | null) {
   return parsed.toLocaleString();
 }
 
+function formatScalar(value: unknown): string {
+  if (value == null) return "—";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number")
+    return Number.isFinite(value) ? String(value) : "—";
+  if (typeof value === "string") return value.length > 0 ? value : "—";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderNestedSection(title: string, data: unknown) {
+  if (!data || typeof data !== "object") return null;
+  const entries = Object.entries(data as Record<string, unknown>);
+  if (entries.length === 0) return null;
+  return (
+    <div
+      key={title}
+      className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+      data-testid={`power-user-context-section-${title.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+        {title}
+      </div>
+      <div className="grid gap-1.5">
+        {entries.map(([key, value]) => {
+          const scalar =
+            value === null ||
+            typeof value === "boolean" ||
+            typeof value === "number" ||
+            typeof value === "string";
+          return (
+            <div key={key} className="flex items-start justify-between gap-3">
+              <span className="text-zaki-secondary">{key}</span>
+              <span className="font-mono-ui text-xs break-all text-right">
+                {scalar ? formatScalar(value) : formatScalar(value)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
  * W3.7: Power-user controls, visible by default (first-class tab).
  *
@@ -122,10 +176,73 @@ export function PowerUserSheet({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [usageSurfaces, setUsageSurfaces] = useState<PowerUserUsageSurface[] | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
+  const [contextDiag, setContextDiag] =
+    useState<ContextDiagnosticsResponse | null>(null);
+  const [contextDiagLoading, setContextDiagLoading] = useState(false);
+  const [contextDiagError, setContextDiagError] = useState<string | null>(null);
+  const [memoryDiag, setMemoryDiag] = useState<MemoryDoctorResponse | null>(null);
+  const [memoryDiagLoading, setMemoryDiagLoading] = useState(false);
+  const [memoryDiagError, setMemoryDiagError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) setTab(initialTab);
   }, [isOpen, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "context") return;
+    let active = true;
+    setContextDiagLoading(true);
+    setContextDiagError(null);
+    void (async () => {
+      try {
+        const { response, data } = await fetchContextDiagnostics();
+        if (!active) return;
+        if (!response.ok) {
+          setContextDiagError(data?.error || data?.reason || "unavailable");
+          setContextDiag(null);
+        } else {
+          setContextDiag(data);
+        }
+      } catch {
+        if (!active) return;
+        setContextDiagError("network_error");
+        setContextDiag(null);
+      } finally {
+        if (active) setContextDiagLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isOpen, tab]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "memory_doctor") return;
+    let active = true;
+    setMemoryDiagLoading(true);
+    setMemoryDiagError(null);
+    void (async () => {
+      try {
+        const { response, data } = await fetchMemoryDoctor();
+        if (!active) return;
+        if (!response.ok) {
+          setMemoryDiagError(data?.error || data?.reason || "unavailable");
+          setMemoryDiag(null);
+        } else {
+          setMemoryDiag(data);
+        }
+      } catch {
+        if (!active) return;
+        setMemoryDiagError("network_error");
+        setMemoryDiag(null);
+      } finally {
+        if (active) setMemoryDiagLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isOpen, tab]);
 
   useEffect(() => {
     if (!isOpen || tab !== "usage") return;
@@ -262,52 +379,136 @@ export function PowerUserSheet({
     </div>
   );
 
-  const renderContext = () => (
-    <div className="space-y-3" data-testid="power-user-context">
-      <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-        <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Window usage</span>
-          <span className="font-mono-ui">
-            {formatPct(contextSnapshot?.usagePct)} ·{" "}
-            {formatCount(contextSnapshot?.usedTokens)} /{" "}
-            {formatCount(contextSnapshot?.totalTokens)}
-          </span>
+  const renderContext = () => {
+    if (contextDiagLoading && !contextDiag) {
+      return (
+        <div
+          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          data-testid="power-user-context"
+        >
+          Loading diagnostics...
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Turns in context</span>
-          <span className="font-mono-ui">
-            {formatCount(contextSnapshot?.turnsInContext)}
-          </span>
+      );
+    }
+    if (contextDiagError) {
+      return (
+        <div
+          className="rounded-zaki-lg border border-rose-400/40 bg-rose-50 px-4 py-6 text-center text-sm text-rose-900 dark:border-rose-700/40 dark:bg-rose-950/30 dark:text-rose-100"
+          data-testid="power-user-context"
+          data-state="error"
+        >
+          Diagnostics unavailable: {contextDiagError}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Compacted turns</span>
-          <span className="font-mono-ui">
-            {formatCount(contextSnapshot?.compactedTurns)}
-          </span>
+      );
+    }
+    if (contextDiag && !contextDiag.active) {
+      const reason = contextDiag.reason || "no_active_session";
+      return (
+        <div
+          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          data-testid="power-user-context"
+          data-state="inactive"
+        >
+          {reason === "no_active_session"
+            ? "Start a conversation to see context diagnostics."
+            : `No context diagnostics available (${reason}).`}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Last compaction</span>
-          <span className="font-mono-ui">
-            {formatTs(contextSnapshot?.lastCompactionAt)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Provider fallbacks (session)</span>
-          <span className="font-mono-ui">
-            {formatCount(contextSnapshot?.providerFallbackCount)}
-          </span>
-        </div>
-      </div>
-      <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
-        Context detail is read-only. Compaction and fallback events also appear
-        as banners above the thread (see W3.5).
-      </div>
-    </div>
-  );
+      );
+    }
+    const report = contextDiag?.report ?? null;
+    const legacy = contextSnapshot ?? null;
+    const pressurePct =
+      report?.context_pressure_percent ?? legacy?.usagePct ?? null;
+    const usedTokens = report?.token_estimate ?? legacy?.usedTokens ?? null;
+    const totalTokens =
+      report?.context_window_tokens ?? legacy?.totalTokens ?? null;
+    const history = report?.history_messages ?? legacy?.turnsInContext ?? null;
+    const compactionTriggered = report?.token_compaction_triggered;
+    const compactionThreshold = report?.token_compaction_threshold ?? null;
+    const historyTrim = report?.history_trim_limit_messages ?? null;
+    const tools = report?.tools ?? null;
+    const roles = report?.roles ?? null;
 
-  const renderMemoryDoctor = () => (
-    <div className="space-y-3" data-testid="power-user-memory-doctor">
+    return (
+      <div className="space-y-3" data-testid="power-user-context">
+        <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">Model</span>
+            <span className="font-mono-ui text-xs">{report?.model || "—"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">Window pressure</span>
+            <span className="font-mono-ui">
+              {formatPct(pressurePct)} · {formatCount(usedTokens)} /{" "}
+              {formatCount(totalTokens)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">History messages</span>
+            <span className="font-mono-ui">
+              {formatCount(history)}
+              {historyTrim != null ? ` / ${formatCount(historyTrim)} trim` : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">Compaction</span>
+            <span
+              className={cn(
+                "font-mono-ui",
+                compactionTriggered === true && "text-amber-500"
+              )}
+            >
+              {compactionTriggered === true ? "triggered" : "none"}
+              {compactionThreshold != null
+                ? ` · ≥ ${formatCount(compactionThreshold)} tok`
+                : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">Tools loaded</span>
+            <span className="font-mono-ui">{formatCount(tools)}</span>
+          </div>
+        </div>
+
+        {roles ? (
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              Role breakdown
+            </div>
+            <div className="grid gap-1.5">
+              {Object.entries(roles).map(([role, count]) => (
+                <div key={role} className="flex items-center justify-between">
+                  <span className="text-zaki-secondary">{role}</span>
+                  <span className="font-mono-ui">{formatCount(count)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {renderNestedSection("Memory", report?.memory)}
+        {renderNestedSection("Prompt", report?.prompt)}
+        {renderNestedSection("Retrieval", report?.retrieval)}
+        {renderNestedSection("Continuity", report?.continuity)}
+        {renderNestedSection("Cache", report?.cache)}
+        {renderNestedSection("Buckets", report?.buckets)}
+        {renderNestedSection("Runtime", report?.runtime)}
+        {renderNestedSection("Last turn", report?.last_turn)}
+
+        <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+          Read-only. Compaction and fallback events also appear as banners
+          above the thread (see W3.5).
+        </div>
+      </div>
+    );
+  };
+
+  const renderLegacyMemoryHealth = () =>
+    memoryHealth ? (
       <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+          Memory snapshot
+        </div>
         <div className="flex items-center justify-between">
           <span className="text-zaki-secondary">Saved memories</span>
           <span className="font-mono-ui">
@@ -331,12 +532,6 @@ export function PowerUserSheet({
           <span className="font-mono-ui">{formatTs(memoryHealth?.lastSaveAt)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Last conflict</span>
-          <span className="font-mono-ui">
-            {formatTs(memoryHealth?.lastConflictAt)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
           <span className="text-zaki-secondary">Storage</span>
           <span
             className={cn(
@@ -353,11 +548,84 @@ export function PowerUserSheet({
           </span>
         </div>
       </div>
-      <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
-        For edit/forget, open the Memory pane. This tab is diagnostic only.
+    ) : null;
+
+  const renderMemoryDoctor = () => {
+    if (memoryDiagLoading && !memoryDiag) {
+      return (
+        <div
+          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          data-testid="power-user-memory-doctor"
+        >
+          Loading memory doctor...
+        </div>
+      );
+    }
+    if (memoryDiagError) {
+      return (
+        <div
+          className="rounded-zaki-lg border border-rose-400/40 bg-rose-50 px-4 py-6 text-center text-sm text-rose-900 dark:border-rose-700/40 dark:bg-rose-950/30 dark:text-rose-100"
+          data-testid="power-user-memory-doctor"
+          data-state="error"
+        >
+          Memory doctor unavailable: {memoryDiagError}
+        </div>
+      );
+    }
+    if (memoryDiag && !memoryDiag.active) {
+      const reason = memoryDiag.reason || "no_active_session";
+      return (
+        <div
+          className="space-y-3"
+          data-testid="power-user-memory-doctor"
+          data-state="inactive"
+        >
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            {reason === "no_active_session"
+              ? "Start a conversation to see memory doctor output."
+              : `Memory doctor unavailable (${reason}).`}
+          </div>
+          {renderLegacyMemoryHealth()}
+        </div>
+      );
+    }
+    if (memoryDiag && memoryDiag.active && memoryDiag.runtime === false) {
+      return (
+        <div
+          className="space-y-3"
+          data-testid="power-user-memory-doctor"
+          data-state="no-runtime"
+        >
+          <div className="rounded-zaki-lg border border-amber-400/40 bg-amber-50 px-4 py-4 text-sm text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-100">
+            Memory runtime is not configured on the backend
+            {memoryDiag.reason ? ` (${memoryDiag.reason})` : ""}.
+          </div>
+          {renderLegacyMemoryHealth()}
+        </div>
+      );
+    }
+    const reportText = (memoryDiag?.report_text || "").trim();
+    return (
+      <div className="space-y-3" data-testid="power-user-memory-doctor">
+        {reportText ? (
+          <pre
+            data-testid="power-user-memory-doctor-report"
+            className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-zaki-lg border border-zaki bg-zaki-raised p-4 font-mono-ui text-xs leading-relaxed text-zaki-primary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          >
+            {reportText}
+          </pre>
+        ) : (
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            Memory doctor returned no text.
+          </div>
+        )}
+        {renderLegacyMemoryHealth()}
+        <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+          For edit/forget, open the Memory pane. This tab is diagnostic only.
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderUsage = () => {
     const stateTone: Record<SoftLimitState, string> = {
@@ -457,7 +725,21 @@ export function PowerUserSheet({
     if (tab === "usage") return renderUsage();
     return renderMemoryDoctor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, pendingApprovals, contextSnapshot, memoryHealth, busyId, usageSurfaces, usageLoading]);
+  }, [
+    tab,
+    pendingApprovals,
+    contextSnapshot,
+    memoryHealth,
+    busyId,
+    usageSurfaces,
+    usageLoading,
+    contextDiag,
+    contextDiagLoading,
+    contextDiagError,
+    memoryDiag,
+    memoryDiagLoading,
+    memoryDiagError,
+  ]);
 
   return (
     <SheetShell
