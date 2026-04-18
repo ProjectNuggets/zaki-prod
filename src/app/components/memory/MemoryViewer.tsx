@@ -10,7 +10,6 @@ import {
   Edit2,
   FileText,
   Filter,
-  GitBranch,
   Heart,
   Lightbulb,
   MessageSquareQuote,
@@ -28,13 +27,18 @@ import { toast } from "sonner";
 import { apiRequest, fetchMemoryActivity, patchMemory, type MemoryActivity } from "@/lib/api";
 import { SkeletonMemoryViewer } from "../ui/skeleton";
 import { MemoryModeToggle, useMemoryPolicy } from "./MemoryModeToggle";
-import { EmptyState, InlineConfirm } from "@/app/components/ui/zaki";
+import { EmptyState, InlineConfirm, SourceChip, type MemoryRole } from "@/app/components/ui/zaki";
 
 type MemoryMetadata = {
   conflictKey?: string;
   polarity?: number;
   userVerified?: boolean;
   editedFrom?: string;
+  source?: string;
+  channel?: string;
+  lane?: string;
+  imageRef?: string;
+  imageUrl?: string;
   [key: string]: unknown;
 };
 
@@ -47,6 +51,9 @@ interface MemoryRecord {
   created_at?: string;
   updated_at?: string;
   threadId?: string | null;
+  source?: string | null;
+  role?: MemoryRole | string | null;
+  at?: string | null;
   metadata?: MemoryMetadata | null;
 }
 
@@ -1375,18 +1382,17 @@ export function MemoryViewer({
                                 )}
 
                                 <div className={cn("mt-3 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted", isRtl && "justify-end")}>
-                                  <span className="inline-flex items-center gap-1">
-                                    <CalendarClock className="size-3.5" />
-                                    {formatTimeLabel(createdAt, locale)}
-                                  </span>
-                                  {memory.threadId ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <GitBranch className="size-3.5" />
-                                      {t("memoryViewer.memories.threadLabel", {
-                                        id: shortId(memory.threadId),
-                                      })}
-                                    </span>
-                                  ) : null}
+                                  <SourceChip
+                                    channel={memory.source || memory.metadata?.source || memory.metadata?.channel}
+                                    lane={
+                                      memory.metadata?.lane ||
+                                      (memory.threadId ? `thread:${shortId(memory.threadId)}` : "main")
+                                    }
+                                    role={memory.role}
+                                    at={memory.at || createdAt}
+                                    imageRef={memory.metadata?.imageRef || memory.metadata?.imageUrl}
+                                    locale={locale}
+                                  />
                                 </div>
                                 <div className={cn("mt-3 flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
                                   {isEditing ? (

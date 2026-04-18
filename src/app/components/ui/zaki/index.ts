@@ -4,3 +4,5 @@ export { EmptyState } from "./EmptyState";
 export { InlineConfirm } from "./InlineConfirm";
 export { TypeToConfirmDialog } from "./TypeToConfirmDialog";
 export { SheetShell } from "./SheetShell";
+export { SourceChip } from "./SourceChip";
+export type { SourceChipProps, SourceChannel, MemoryRole } from "./SourceChip";

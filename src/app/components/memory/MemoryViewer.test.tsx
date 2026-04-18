@@ -180,4 +180,58 @@ describe("MemoryViewer", () => {
     expect(screen.getAllByText("Prefers concise weekly plans").length).toBeGreaterThan(0);
     expect(screen.getByText("Recent changes")).toBeInTheDocument();
   });
+
+  it("shows a provenance chip (channel + lane) on every saved memory", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({
+            memories: [
+              {
+                id: "m-telegram",
+                content: "Likes espresso in the morning",
+                type: "preference",
+                createdAt: "2026-03-23T10:00:00.000Z",
+                source: "telegram_dm",
+                role: "continuity",
+                threadId: "abc-1234-5678-xyz",
+              },
+              {
+                id: "m-web",
+                content: "Working on quarterly review",
+                type: "context",
+                createdAt: "2026-03-22T10:00:00.000Z",
+                metadata: { source: "web", lane: "main" },
+              },
+            ],
+            nextCursor: null,
+            hasMore: false,
+          })
+        );
+      }
+      if (path === "/api/memory/confirmations") {
+        return Promise.resolve(jsonResponse({ confirmations: [] }));
+      }
+      if (path === "/api/memory/conflicts") {
+        return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(jsonResponse({ activities: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    await waitFor(() => {
+      const chips = document.querySelectorAll('[data-testid="source-chip"]');
+      expect(chips.length).toBeGreaterThanOrEqual(2);
+    });
+
+    const chips = Array.from(
+      document.querySelectorAll('[data-testid="source-chip"]')
+    );
+    const channels = chips.map((chip) => chip.getAttribute("data-channel"));
+    expect(channels).toEqual(expect.arrayContaining(["telegram", "web"]));
+  });
 });
