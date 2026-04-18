@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Pencil,
@@ -6,6 +6,7 @@ import {
   Code2,
   Heart,
   Sparkles,
+  Upload,
   X,
   ChevronRight,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { CenterLogo } from "../../icons";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { MetaLabel } from "@/app/components/ui/zaki";
+import { MemoryImportSheet } from "@/app/components/memory/MemoryImportSheet";
 
 interface ZakiDashboardProps {
   onSendExample: (example: string) => void;
@@ -88,13 +90,29 @@ const CATEGORIES: Category[] = [
   },
 ];
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 5) return "Hello, night owl";
+// Greeting buckets, tuned to the user's local wall-clock hour.
+// getHours() returns the browser's local timezone, so users in any tz get
+// a greeting that matches their actual time of day.
+function getGreeting(date: Date = new Date()): string {
+  const hour = date.getHours();
+  if (hour < 5) return "Still up, night owl";
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
-  if (hour < 21) return "Good evening";
+  if (hour < 22) return "Good evening";
   return "Hello, night owl";
+}
+
+// Recompute the greeting each minute so a session that spans a boundary
+// (e.g. 04:59 → 05:01) updates without a page refresh.
+function useLiveGreeting(): string {
+  const [greeting, setGreeting] = useState(() => getGreeting());
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setGreeting(getGreeting());
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return greeting;
 }
 
 export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
@@ -102,8 +120,10 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const { user } = useAuthStore();
   const userName = user?.fullName?.split(" ")[0] || user?.username || "there";
+  const greeting = useLiveGreeting();
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const activeCat = CATEGORIES.find((c) => c.id === activeCategory);
 
@@ -125,7 +145,7 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
               isRtl && "font-arabic"
             )}
           >
-            {getGreeting()}, {userName}
+            {greeting}, {userName}
           </h1>
         </div>
 
@@ -155,6 +175,23 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
             );
           })}
         </div>
+
+        {/* Memory import — bring your context from another AI */}
+        {!activeCat && (
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className={cn(
+              "mt-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+              "text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover",
+              isRtl && "flex-row-reverse"
+            )}
+            data-testid="zaki-memory-import-trigger"
+          >
+            <Upload className="size-3.5" />
+            Bring your memory from ChatGPT, Claude, or Gemini
+          </button>
+        )}
 
         {/* Expanded sub-suggestions */}
         {activeCat && (
@@ -205,6 +242,11 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
           </div>
         )}
       </div>
+
+      <MemoryImportSheet
+        isOpen={importOpen}
+        onClose={() => setImportOpen(false)}
+      />
     </div>
   );
 }
