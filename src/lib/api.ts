@@ -1606,7 +1606,14 @@ export async function deleteAgentSession(sessionKey: string) {
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "DELETE",
   });
-  const data = await parseApiJson<{ ok: boolean }>(response);
+  const data = await parseApiJson<{ ok?: boolean; status?: string; error?: string }>(response);
+  // Treat 404 (session_not_found) as success: the session is already gone
+  // upstream (e.g. a persisted-only session evicted from memory). The caller
+  // will still hide it locally so the UI reflects the deletion.
+  if (!response.ok && response.status !== 404) {
+    const message = data?.error || `Failed to delete session (${response.status})`;
+    throw new Error(message);
+  }
   return { response, data };
 }
 
