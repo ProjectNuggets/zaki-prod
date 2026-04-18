@@ -169,6 +169,45 @@ function normalizeWorklogText(value: string | null | undefined) {
     .toLowerCase();
 }
 
+const GENERIC_REASONING_LABELS = new Set([
+  "analyzing request",
+  "analyzing the request",
+  "gathering context",
+  "checking context and memory",
+  "retrieving memory",
+  "searching saved memory",
+  "trimming context",
+  "trimming context to keep the request focused",
+  "thinking",
+  "thinking through the request",
+  "preparing model request",
+  "preparing the model request",
+  "model response received",
+  "reading the model response",
+  "processing model response",
+  "processing the model response",
+  "preparing final reply",
+  "preparing the final reply",
+  "preparing the final answer",
+  "finalizing reply",
+  "finalizing the response",
+  "finishing the response",
+  "response ready",
+  "processing request",
+  "starting the request",
+  "working through the request",
+  "still working on the reply",
+]);
+
+function isRealReasoningEntry(entry: NullalisTranscriptEntry) {
+  if (entry.source !== "reasoning_summary") return false;
+  const normalized = normalizeWorklogText(entry.text);
+  if (normalized.length < 40) return false;
+  if (GENERIC_REASONING_LABELS.has(normalized)) return false;
+  return true;
+}
+
+
 function inferIntent(entry: NullalisTranscriptEntry): NullalisTranscriptIntent {
   if (entry.intent) return entry.intent;
   const haystack = [
@@ -452,7 +491,11 @@ export function composeNullalisWorklog({
   }));
   const worklogGroups = composeWorklogGroups(displayEntries).slice(-8);
   const meaningfulEntries = displayEntries.filter((entry) => !isLowValueEntry(entry)).slice(-8);
+  const latestReasoning = [...meaningfulEntries]
+    .reverse()
+    .find((entry) => isRealReasoningEntry(entry));
   const latestMeaningful =
+    latestReasoning ??
     [...meaningfulEntries]
       .reverse()
       .find(
@@ -561,8 +604,15 @@ function WorklogGroupRow({
           <WorklogGroupIcon group={group} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[15px] leading-6 text-zaki-primary/95 dark:text-zaki-dark-primary/95">
+          <div className="flex min-w-0 items-start gap-2">
+            <span
+              className={cn(
+                "text-[15px] leading-6 text-zaki-primary/95 dark:text-zaki-dark-primary/95",
+                group.entries[group.entries.length - 1]?.source === "reasoning_summary"
+                  ? "whitespace-pre-wrap break-words"
+                  : "truncate"
+              )}
+            >
               {group.title}
             </span>
             <ChevronDown
@@ -708,7 +758,13 @@ export function NullalisWorklog({
                 aria-hidden
               />
               <div className="min-w-0">
-                <div className="text-[22px] font-medium leading-8 tracking-[-0.01em] text-zaki-primary dark:text-zaki-dark-primary">
+                <div
+                  className={cn(
+                    "text-[22px] font-medium leading-8 tracking-[-0.01em] text-zaki-primary dark:text-zaki-dark-primary",
+                    currentAction.source === "reasoning_summary" &&
+                      "whitespace-pre-wrap break-words text-[17px] leading-7"
+                  )}
+                >
                   {currentAction.text}
                 </div>
                 {currentAction.metaText ? (

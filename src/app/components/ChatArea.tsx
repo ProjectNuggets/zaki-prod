@@ -421,6 +421,17 @@ function normalizeProgressText(rawValue: string | null | undefined) {
     .trim();
 }
 
+function normalizeReasoningSummaryText(rawValue: string | null | undefined) {
+  return String(rawValue || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\f\v]+/g, " ").replace(/\s+$/g, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+
 function isCacheLikeText(rawValue: string | null | undefined) {
   const normalized = normalizeProgressText(rawValue).toLowerCase();
   if (!normalized) return false;
@@ -589,7 +600,7 @@ function extractReasoningSummaryPayload(payload: Record<string, unknown>) {
         ? payload.iteration
         : undefined;
 
-  const text = normalizeProgressText(summaryRaw);
+  const text = normalizeReasoningSummaryText(summaryRaw);
   if (!text) return null;
   return {
     text,
