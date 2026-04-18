@@ -5012,7 +5012,47 @@ const loginHandler = async (req, res) => {
     const data = await response.json().catch(() => ({}));
     res.status(response.status).json(data);
   } catch (error) {
-    res.status(500).json({ error: error?.message || "Server error." });
+    const errorCode = String(error?.cause?.code || error?.code || "").trim();
+    if (errorCode === "CERT_HAS_EXPIRED") {
+      const message =
+        "Local login failed because the configured NOVA.TYP TLS certificate has expired.";
+      res.status(502).json({
+        valid: false,
+        token: null,
+        message,
+        error: message,
+        code: "nova_typ_cert_expired",
+      });
+      return;
+    }
+
+    if (
+      errorCode === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+      errorCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+      errorCode === "ERR_TLS_CERT_ALTNAME_INVALID"
+    ) {
+      const message =
+        "Local login failed because the configured NOVA.TYP TLS certificate is not trusted.";
+      res.status(502).json({
+        valid: false,
+        token: null,
+        message,
+        error: message,
+        code: "nova_typ_cert_invalid",
+      });
+      return;
+    }
+
+    const message =
+      error?.message === "fetch failed"
+        ? "Local login failed because NOVA.TYP is unreachable."
+        : error?.message || "Server error.";
+    res.status(500).json({
+      valid: false,
+      token: null,
+      message,
+      error: message,
+    });
   }
 };
 
@@ -8294,6 +8334,64 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
     lastAgentStreamError: streamState,
   });
 });
+
+async function proxyNullclawUserDiagnostics(req, res, subpath, label) {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+  const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+  if (!authResult) return;
+  const userId = resolveCanonicalAgentUserId(authResult);
+  if (!userId) {
+    return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+  }
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+    return res.status(503).json({
+      active: false,
+      reason: "nullclaw_unavailable",
+    });
+  }
+  try {
+    const upstream = await fetchNullclawPath({
+      baseUrl: nullclawBase,
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId: String(req.requestId || crypto.randomUUID()),
+      path: `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/${subpath}`,
+      method: "GET",
+      fetchWithTimeout,
+      timeoutMs: AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+      label,
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    return res.status(upstream.status || 200).json(payload);
+  } catch (error) {
+    console.error(`[Agent] ${label} failed:`, error);
+    return res.status(502).json({
+      active: false,
+      reason: "upstream_error",
+    });
+  }
+}
+
+app.get(
+  "/api/me/diagnostics/context",
+  requireAgentContext,
+  agentRouteLimiter,
+  async (req, res) => {
+    await proxyNullclawUserDiagnostics(req, res, "context", "Context diagnostics");
+  }
+);
+
+app.get(
+  "/api/me/diagnostics/memory-doctor",
+  requireAgentContext,
+  agentRouteLimiter,
+  async (req, res) => {
+    await proxyNullclawUserDiagnostics(req, res, "memory-doctor", "Memory-doctor diagnostics");
+  }
+);
 
 function resolveAgentUserId(authResult) {
   return resolveCanonicalAgentUserId(authResult);
