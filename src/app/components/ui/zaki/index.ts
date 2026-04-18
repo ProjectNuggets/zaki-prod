@@ -13,4 +13,9 @@ export {
   emitSystemNotice,
   SYSTEM_NOTICE_EVENT,
 } from "./SystemNotice";
-export type { SystemNoticeKind, SystemNoticeProps, SystemNoticePayload } from "./SystemNotice";
+export type {
+  SystemNoticeKind,
+  SystemNoticeSeverity,
+  SystemNoticeProps,
+  SystemNoticePayload,
+} from "./SystemNotice";

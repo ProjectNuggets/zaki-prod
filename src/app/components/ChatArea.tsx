@@ -83,6 +83,62 @@ import {
   markFirstMessageSent,
   type ActivationProgress,
 } from "@/lib/retention";
+import {
+  emitSystemNotice,
+  type SystemNoticeKind,
+  type SystemNoticePayload,
+} from "./ui/zaki/SystemNotice";
+
+const SYSTEM_NOTICE_KINDS: readonly SystemNoticeKind[] = [
+  "compaction",
+  "provider_fallback",
+  "connector_stale",
+  "multimodal_failure",
+  "generic",
+];
+
+function extractSystemNoticePayload(
+  payload: Record<string, unknown>
+): SystemNoticePayload | null {
+  const rawKind =
+    (typeof payload.kind === "string" && payload.kind.trim().toLowerCase()) ||
+    "";
+  const kind: SystemNoticeKind = (
+    SYSTEM_NOTICE_KINDS as readonly string[]
+  ).includes(rawKind)
+    ? (rawKind as SystemNoticeKind)
+    : "generic";
+  const rawSeverity =
+    (typeof payload.severity === "string" &&
+      payload.severity.trim().toLowerCase()) ||
+    "";
+  const severity =
+    rawSeverity === "info" || rawSeverity === "warning" || rawSeverity === "error"
+      ? rawSeverity
+      : undefined;
+  const message =
+    (typeof payload.message === "string" && payload.message.trim()) || null;
+  const detail =
+    (typeof payload.detail === "string" && payload.detail.trim()) || null;
+  const runId =
+    (typeof payload.run_id === "string" && payload.run_id.trim()) ||
+    (typeof payload.runId === "string" && payload.runId.trim()) ||
+    null;
+  const idFromPayload =
+    (typeof payload.id === "string" && payload.id.trim()) || null;
+  const id =
+    idFromPayload ||
+    (runId ? `${kind}:${runId}` : null) ||
+    `${kind}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+  return {
+    id,
+    kind,
+    severity,
+    message,
+    detail,
+    runId,
+  };
+}
 
 class ChatRequestError extends Error {
   status: number;
@@ -3816,6 +3872,11 @@ export function ChatArea() {
         if (agentUrl) {
           return { agentUrl };
         }
+      }
+      if (eventType === "system_notice" || payloadType === "system_notice") {
+        const notice = extractSystemNoticePayload(payload);
+        if (notice) emitSystemNotice(notice);
+        return {};
       }
       if (isZakiAgentSpace) {
         if (eventType === "progress" || payloadType === "progress") {
