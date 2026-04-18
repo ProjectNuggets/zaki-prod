@@ -2,15 +2,31 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Brain,
+  Gauge,
   ShieldCheck,
   Sparkles,
   Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SheetShell } from "@/app/components/ui/zaki";
+import { fetchUsageQuota, type UsageQuotaSurface } from "@/lib/api";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 
-export type PowerUserTab = "approvals" | "context" | "memory_doctor";
+export type PowerUserTab = "approvals" | "context" | "memory_doctor" | "usage";
+
+export type SoftLimitState = "normal" | "warning" | "near_limit" | "unlimited";
+
+export interface PowerUserUsageSurface {
+  surface: UsageQuotaSurface;
+  label: string;
+  unlimited: boolean;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  resetAt: string | null;
+  state: SoftLimitState;
+  error?: string | null;
+}
 
 export interface PowerUserContextSnapshot {
   turnsInContext?: number | null;
@@ -45,7 +61,28 @@ const TABS: Array<{ id: PowerUserTab; label: string; icon: typeof ShieldCheck }>
   { id: "approvals", label: "Approvals", icon: ShieldCheck },
   { id: "context", label: "Context", icon: Activity },
   { id: "memory_doctor", label: "Memory doctor", icon: Brain },
+  { id: "usage", label: "Usage", icon: Gauge },
 ];
+
+const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; label: string }> = [
+  { surface: "app_chat", label: "Web chat" },
+  { surface: "zaki_bot", label: "Telegram" },
+];
+
+const SOFT_LIMIT_WARNING_THRESHOLD = 0.7;
+const SOFT_LIMIT_NEAR_THRESHOLD = 0.9;
+
+export function deriveSoftLimitState(
+  used: number,
+  limit: number | null,
+  unlimited: boolean
+): SoftLimitState {
+  if (unlimited || limit == null || limit <= 0) return "unlimited";
+  const ratio = used / limit;
+  if (ratio >= SOFT_LIMIT_NEAR_THRESHOLD) return "near_limit";
+  if (ratio >= SOFT_LIMIT_WARNING_THRESHOLD) return "warning";
+  return "normal";
+}
 
 function formatPct(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -83,10 +120,49 @@ export function PowerUserSheet({
 }: PowerUserSheetProps) {
   const [tab, setTab] = useState<PowerUserTab>(initialTab);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [usageSurfaces, setUsageSurfaces] = useState<PowerUserUsageSurface[] | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) setTab(initialTab);
   }, [isOpen, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "usage") return;
+    let active = true;
+    setUsageLoading(true);
+    void Promise.all(
+      USAGE_SURFACES.map(async ({ surface, label }) => {
+        const { response, data } = await fetchUsageQuota(surface);
+        const unlimited = Boolean(data?.unlimited);
+        const limit = typeof data?.limit === "number" ? data.limit : null;
+        const used = typeof data?.used === "number" ? data.used : 0;
+        const remaining =
+          typeof data?.remaining === "number" ? data.remaining : null;
+        const resetAt = typeof data?.resetAt === "string" ? data.resetAt : null;
+        const state = deriveSoftLimitState(used, limit, unlimited);
+        const error = response.ok ? null : data?.error || "unavailable";
+        return {
+          surface,
+          label,
+          unlimited,
+          limit,
+          used,
+          remaining,
+          resetAt,
+          state,
+          error,
+        } satisfies PowerUserUsageSurface;
+      })
+    ).then((rows) => {
+      if (!active) return;
+      setUsageSurfaces(rows);
+      setUsageLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [isOpen, tab]);
 
   const pendingCount = pendingApprovals.length;
 
@@ -283,12 +359,105 @@ export function PowerUserSheet({
     </div>
   );
 
+  const renderUsage = () => {
+    const stateTone: Record<SoftLimitState, string> = {
+      normal: "text-emerald-600 dark:text-emerald-400",
+      warning: "text-amber-600 dark:text-amber-400",
+      near_limit: "text-rose-600 dark:text-rose-400",
+      unlimited: "text-zaki-secondary",
+    };
+    const stateLabel: Record<SoftLimitState, string> = {
+      normal: "OK",
+      warning: "Warning",
+      near_limit: "Near limit",
+      unlimited: "Unlimited",
+    };
+    return (
+      <div className="space-y-3" data-testid="power-user-usage">
+        {usageLoading && !usageSurfaces ? (
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            Loading usage...
+          </div>
+        ) : null}
+        {(usageSurfaces || []).map((row) => {
+          const pct =
+            row.unlimited || !row.limit
+              ? null
+              : Math.max(0, Math.min(100, (row.used / row.limit) * 100));
+          return (
+            <div
+              key={row.surface}
+              data-testid={`power-user-usage-surface-${row.surface}`}
+              data-soft-limit-state={row.state}
+              className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">{row.label}</span>
+                <span
+                  className={cn("font-mono-ui text-xs", stateTone[row.state])}
+                  data-testid={`power-user-usage-state-${row.surface}`}
+                >
+                  {stateLabel[row.state]}
+                </span>
+              </div>
+              {row.error ? (
+                <div className="text-xs text-rose-500">Usage unavailable.</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zaki-secondary">Requests today</span>
+                    <span className="font-mono-ui">
+                      {row.unlimited
+                        ? `${formatCount(row.used)} · unlimited`
+                        : `${formatCount(row.used)} / ${formatCount(row.limit)}`}
+                    </span>
+                  </div>
+                  {pct != null ? (
+                    <div
+                      className="h-1.5 w-full overflow-hidden rounded-full bg-zaki-hover"
+                      role="progressbar"
+                      aria-valuenow={Math.round(pct)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          row.state === "near_limit"
+                            ? "bg-rose-500"
+                            : row.state === "warning"
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                        )}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-between">
+                    <span className="text-zaki-secondary">Resets</span>
+                    <span className="font-mono-ui">{formatTs(row.resetAt)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+        <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+          Soft-limit warning at {Math.round(SOFT_LIMIT_WARNING_THRESHOLD * 100)}% used; near-limit at
+          {" "}
+          {Math.round(SOFT_LIMIT_NEAR_THRESHOLD * 100)}%. Hard stops still apply on hit.
+        </div>
+      </div>
+    );
+  };
+
   const body = useMemo(() => {
     if (tab === "approvals") return renderApprovals();
     if (tab === "context") return renderContext();
+    if (tab === "usage") return renderUsage();
     return renderMemoryDoctor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, pendingApprovals, contextSnapshot, memoryHealth, busyId]);
+  }, [tab, pendingApprovals, contextSnapshot, memoryHealth, busyId, usageSurfaces, usageLoading]);
 
   return (
     <SheetShell
@@ -296,7 +465,7 @@ export function PowerUserSheet({
       onClose={onClose}
       title="Controls"
       icon={<Sparkles className="size-4" />}
-      subtitle="Approvals, context, memory health"
+      subtitle="Approvals, context, memory, usage"
       width="md"
       padded={false}
     >

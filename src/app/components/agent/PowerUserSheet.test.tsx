@@ -1,8 +1,15 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { PowerUserSheet } from "./PowerUserSheet";
+import { act } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { PowerUserSheet, deriveSoftLimitState } from "./PowerUserSheet";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
+
+jest.mock("@/lib/api", () => ({
+  fetchUsageQuota: jest.fn(),
+}));
+
+const fetchUsageQuotaMock = jest.requireMock("@/lib/api").fetchUsageQuota as jest.Mock;
 
 describe("PowerUserSheet", () => {
   it("opens on Approvals tab by default and is visible (not hidden behind advanced)", () => {
@@ -87,5 +94,39 @@ describe("PowerUserSheet", () => {
     );
     expect(screen.getByTestId("power-user-context")).toBeInTheDocument();
     expect(screen.getByText(/51%/)).toBeInTheDocument();
+  });
+
+  it("derives soft-limit state at 70% (warning) and 90% (near_limit)", () => {
+    expect(deriveSoftLimitState(0, 10, false)).toBe("normal");
+    expect(deriveSoftLimitState(7, 10, false)).toBe("warning");
+    expect(deriveSoftLimitState(9, 10, false)).toBe("near_limit");
+    expect(deriveSoftLimitState(10, 10, false)).toBe("near_limit");
+    expect(deriveSoftLimitState(100, null, true)).toBe("unlimited");
+  });
+
+  it("fetches usage quota when Usage tab is shown and marks near-limit state", async () => {
+    fetchUsageQuotaMock.mockImplementation((surface: string) => {
+      if (surface === "app_chat") {
+        return Promise.resolve({
+          response: { ok: true },
+          data: { unlimited: false, limit: 10, used: 9, remaining: 1, resetAt: "2026-04-19T00:00:00Z" },
+        });
+      }
+      return Promise.resolve({
+        response: { ok: true },
+        data: { unlimited: false, limit: 10, used: 2, remaining: 8, resetAt: "2026-04-19T00:00:00Z" },
+      });
+    });
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="usage" />);
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("power-user-usage-surface-app_chat")
+      ).toHaveAttribute("data-soft-limit-state", "near_limit");
+    });
+    expect(
+      screen.getByTestId("power-user-usage-surface-zaki_bot")
+    ).toHaveAttribute("data-soft-limit-state", "normal");
   });
 });
