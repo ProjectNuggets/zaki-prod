@@ -2,7 +2,7 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +26,7 @@ import { SessionManagementSheet } from "./agent/SessionManagementSheet";
 import { CronManagementSheet } from "./agent/CronManagementSheet";
 import { SecretsVaultSheet } from "./agent/SecretsVaultSheet";
 import { DiagnosticsSheet } from "./agent/DiagnosticsSheet";
+import { PowerUserSheet, type PowerUserTab } from "./agent/PowerUserSheet";
 import { SettingsModal } from "./sidebar/SettingsModal";
 import { SidebarModeSwitch } from "./sidebar/SidebarModeSwitch";
 import { ZakiSessionList } from "./sidebar/ZakiSessionList";
@@ -113,6 +114,8 @@ export function Sidebar() {
     "memories" | "pending" | "conflicts"
   >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
+  const [powerUserOpen, setPowerUserOpen] = useState(false);
+  const [powerUserInitialTab, setPowerUserInitialTab] = useState<PowerUserTab>("approvals");
   const { data: entitlementsResult } = useEntitlements();
   const entitlements = entitlementsResult?.data ?? null;
   const planTierRaw = entitlements?.plan?.tier ?? "free";
@@ -196,15 +199,26 @@ export function Sidebar() {
         setMemoryConflictCount(detail.count);
       }
     };
+    const handleOpenPowerUser = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: PowerUserTab }>).detail;
+      const tab =
+        detail?.tab === "context" || detail?.tab === "memory_doctor"
+          ? detail.tab
+          : "approvals";
+      setPowerUserInitialTab(tab);
+      setPowerUserOpen(true);
+    };
     window.addEventListener("zaki:open-memory", handleOpenMemory);
     window.addEventListener("zaki:close-memory", handleCloseMemory);
     window.addEventListener("zaki:open-settings", handleOpenSettings);
     window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
+    window.addEventListener("zaki:open-power-user", handleOpenPowerUser);
     return () => {
       window.removeEventListener("zaki:open-memory", handleOpenMemory);
       window.removeEventListener("zaki:close-memory", handleCloseMemory);
       window.removeEventListener("zaki:open-settings", handleOpenSettings);
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
+      window.removeEventListener("zaki:open-power-user", handleOpenPowerUser);
     };
   }, [user?.username]);
 
@@ -1848,6 +1862,19 @@ export function Sidebar() {
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
+                setPowerUserInitialTab("approvals");
+                setPowerUserOpen(true);
+              }}
+              data-testid="profile-menu-power-user"
+	            >
+	              <ShieldCheck className="size-4 text-zaki-muted" />
+	              {isRtl ? "التحكم" : "Controls"}
+	            </button>
+	            <button
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              type="button"
+              onClick={() => {
+                setProfileMenuOpen(false);
                 setSettingsModalOpen(true);
                 window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
               }}
@@ -2024,6 +2051,11 @@ export function Sidebar() {
       <DiagnosticsSheet
         isOpen={zakiDiagnosticsOpen}
         onClose={() => setZakiDiagnosticsOpen(false)}
+      />
+      <PowerUserSheet
+        isOpen={powerUserOpen}
+        onClose={() => setPowerUserOpen(false)}
+        initialTab={powerUserInitialTab}
       />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}
