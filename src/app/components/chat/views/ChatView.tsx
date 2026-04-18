@@ -24,6 +24,7 @@ import {
   UsageCostFooter,
 } from "../NullalisRuntimeWidgets";
 import type { ContextGaugeData } from "../NullalisRuntimeWidgets";
+import { SystemNoticesStack } from "@/app/components/ui/zaki";
 
 interface ChatViewProps {
   messages: Message[];
@@ -153,6 +154,7 @@ export function ChatView({
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
+      <SystemNoticesStack className="-mb-2" />
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
