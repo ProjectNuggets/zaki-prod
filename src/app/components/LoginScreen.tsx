@@ -128,6 +128,8 @@ const AUTH_COPY = {
       consentRequired: "Please accept Terms, Privacy & Compliance to create an account.",
       signupFailed: "Sign up failed. Please check your details and try again.",
       loginFailed: "Login failed. Check your credentials and try again.",
+      loginServiceDown:
+        "Login service is temporarily unavailable. Please try again in a moment.",
       activationCodeInvalid: "Activation code is invalid or expired.",
       genericSignupFailed: "Sign up failed. Please try again.",
       genericResetFailed: "Password reset failed. Please try again.",
@@ -216,6 +218,8 @@ const AUTH_COPY = {
       consentRequired: "يرجى الموافقة على الشروط والخصوصية والامتثال لإنشاء الحساب.",
       signupFailed: "فشل إنشاء الحساب. يرجى مراجعة بياناتك والمحاولة مرة أخرى.",
       loginFailed: "فشل تسجيل الدخول. تحقق من بياناتك ثم حاول مرة أخرى.",
+      loginServiceDown:
+        "خدمة تسجيل الدخول غير متاحة مؤقتًا. يرجى المحاولة بعد قليل.",
       activationCodeInvalid: "رمز التفعيل غير صالح أو منتهي الصلاحية.",
       genericSignupFailed: "فشل إنشاء الحساب. حاول مرة أخرى.",
       genericResetFailed: "فشلت إعادة تعيين كلمة المرور. حاول مرة أخرى.",
@@ -502,7 +506,11 @@ export function LoginScreen() {
       });
       
       if (!response.ok || !data?.valid || !data?.token) {
-        setError(data?.message || copy.errors.loginFailed);
+        const fallback =
+          response.status >= 500
+            ? copy.errors.loginServiceDown
+            : copy.errors.loginFailed;
+        setError(data?.message || data?.error || fallback);
         return;
       }
 
