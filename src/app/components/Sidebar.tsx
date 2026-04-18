@@ -92,6 +92,7 @@ export function Sidebar() {
     goToSpaces,
     goToThread,
     goToZakiBot,
+    clearThread,
   } = useNavigation();
   const { sidebarMode } = useNavigationStore();
   const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(sidebarMode === "zaki");
@@ -1307,13 +1308,15 @@ export function Sidebar() {
               goToThread(ZAKI_BOT_SPACE_ID, threadSlug);
             }}
             onCreateSession={() => {
-              // Generate a new unique thread slug. The backend creates the
-              // nullalis session on first message automatically.
-              const threadSlug = `thread-${Date.now()}`;
+              // Reset to the Zaki welcome view so the user gets a visibly
+              // fresh dashboard. The next message they send materializes a
+              // new session upstream automatically.
               setExpandedSpace(ZAKI_BOT_SPACE_ID);
-              setActiveItem(threadSlug);
-              goToThread(ZAKI_BOT_SPACE_ID, threadSlug);
+              setActiveItem(ZAKI_BOT_SPACE_ID);
+              clearThread();
+              window.dispatchEvent(new Event("zaki:clear-thread"));
               window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
+              toast.success("New session started");
             }}
             isRtl={!!isRtl}
           />
