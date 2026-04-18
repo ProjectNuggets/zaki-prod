@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
+import { SourceChip } from "@/app/components/ui/zaki";
 
 /**
  * Strip raw <tool_call>{...}</tool_call> markup from assistant messages.
@@ -36,6 +37,9 @@ export interface Message {
   memorySources?: { id: string; content: string; type: string }[];
   error?: boolean;
   errorCode?: string | null;
+  channel?: string | null;
+  lane?: string | null;
+  createdAt?: string | null;
 }
 
 export interface MessageBubbleProps {
@@ -149,6 +153,12 @@ export function MessageBubble({
             </div>
           );
         })()}
+        <SourceChip
+          channel={message.channel || "web"}
+          lane={message.lane || "main"}
+          at={message.createdAt}
+          className={cn("mt-0.5", isUser && "self-end")}
+        />
         {showActions && !isUser && (
           <>
             <MessageActions
