@@ -216,6 +216,30 @@ describe("LoginScreen legal consent", () => {
     });
   });
 
+  it("shows upstream auth errors instead of generic credential copy", async () => {
+    const user = userEvent.setup();
+    (requestLogin as unknown as jest.Mock).mockResolvedValueOnce({
+      response: { ok: false },
+      data: {
+        error:
+          "Local login failed because the configured NOVA.TYP TLS certificate has expired.",
+      },
+    });
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(
+      await screen.findByText(
+        "Local login failed because the configured NOVA.TYP TLS certificate has expired."
+      )
+    ).toBeInTheDocument();
+  });
+
   it("keeps explicit pricing-intent auth on pricing after login", async () => {
     const user = userEvent.setup();
     window.history.replaceState({}, "", "/pricing?auth=signup&plan=personal&interval=monthly");
