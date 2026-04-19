@@ -2017,7 +2017,6 @@ export function ChatArea() {
   const [nullalisTranscriptEntries, setNullalisTranscriptEntries] = useState<
     NullalisTranscriptEntry[]
   >([]);
-  const [nullalisTranscriptEntryCount, setNullalisTranscriptEntryCount] = useState(0);
   const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
@@ -2817,7 +2816,6 @@ export function ChatArea() {
     setNullalisNarrationFrame(null);
     if (!options?.preserveNullalisArtifacts) {
       setNullalisTranscriptEntries([]);
-      setNullalisTranscriptEntryCount(0);
       setNullalisTaskItems([]);
       setNullalisApprovalRequest(null);
       setZakiUsageSummary(null);
@@ -3146,7 +3144,6 @@ export function ChatArea() {
     (entry: NullalisTranscriptEntry | null) => {
       if (!isZakiBotActiveSpace || !entry) return;
       const fingerprint = buildNullalisTranscriptFingerprint(entry);
-      let didAdd = false;
       setNullalisTranscriptEntries((prev) => {
         const last = prev[prev.length - 1];
         if (last && buildNullalisTranscriptFingerprint(last) === fingerprint) {
@@ -3160,12 +3157,8 @@ export function ChatArea() {
               Math.abs(entry.timestamp - candidate.timestamp) < 5000
           );
         if (recentDuplicate) return prev;
-        didAdd = true;
         return [...prev, entry].slice(-8);
       });
-      if (didAdd) {
-        setNullalisTranscriptEntryCount((prev) => prev + 1);
-      }
     },
     [isZakiBotActiveSpace]
   );
@@ -5034,7 +5027,6 @@ export function ChatArea() {
             source: "fallback",
           },
         ]);
-        setNullalisTranscriptEntryCount(1);
       }
       setZakiBotStatusEvents([
         {
@@ -5819,9 +5811,6 @@ export function ChatArea() {
         nullalisMode={isZakiBotActiveSpace}
         nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
-        nullalisTranscriptEntryCount={
-          isZakiBotActiveSpace ? nullalisTranscriptEntryCount : 0
-        }
         nullalisTaskItems={isZakiBotActiveSpace ? nullalisTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
         onApprovalAction={isZakiBotActiveSpace ? handleApprovalAction : undefined}

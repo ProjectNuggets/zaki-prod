@@ -104,7 +104,9 @@ describe("ChatView", () => {
     expect(screen.queryByText(/Working for|Worked for/)).not.toBeInTheDocument();
   });
 
-  it("renders nullalis narration inline instead of the old process rail", () => {
+  it("renders the nullalis turn timeline with reasoning block inline", () => {
+    const longReasoning =
+      "I need to read the repo structure, identify the failing test, and then decide whether the fix belongs in the controller or the service layer before making changes.";
     render(
       <ChatView
         messages={[
@@ -126,19 +128,18 @@ describe("ChatView", () => {
           {
             id: "e1",
             kind: "narration",
-            text: "Analyzing request",
+            text: longReasoning,
             timestamp: Date.now(),
             phase: "thinking",
-            source: "progress",
+            source: "reasoning_summary",
           },
         ]}
-        nullalisTranscriptEntryCount={1}
         streamingMode="thinking"
         firstMessageTransition={false}
       />
     );
 
-    expect(screen.getAllByText("Analyzing request").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Working for|Worked for/)).toBeInTheDocument();
+    expect(screen.getByText(longReasoning)).toBeInTheDocument();
+    expect(screen.getByText(/Working for|Working/)).toBeInTheDocument();
   });
 });

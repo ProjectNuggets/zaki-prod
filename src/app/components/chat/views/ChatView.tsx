@@ -18,14 +18,10 @@ import { BotProcessRail } from "../BotProcessRail";
 import {
   ApprovalRequiredCard,
   ContextGauge,
-  NullalisWorklog,
-  NarrationStatusLine,
   TaskChecklist,
-  UsageCostFooter,
 } from "../NullalisRuntimeWidgets";
 import type { ContextGaugeData } from "../NullalisRuntimeWidgets";
 import { NullalisTurnTimeline } from "../NullalisTurnTimeline";
-import { isTurnTimelineEnabled } from "@/lib/turnTimelineFlag";
 import { SystemNoticesStack } from "@/app/components/ui/zaki";
 
 interface ChatViewProps {
@@ -48,7 +44,6 @@ interface ChatViewProps {
   nullalisMode?: boolean;
   nullalisNarrationFrame?: NullalisNarrationFrame | null;
   nullalisTranscriptEntries?: NullalisTranscriptEntry[];
-  nullalisTranscriptEntryCount?: number;
   nullalisTaskItems?: NullalisTaskItem[];
   nullalisApprovalRequest?: NullalisApprovalRequest | null;
   onApprovalAction?: (requestId: string, approved: boolean) => void | Promise<void>;
@@ -82,7 +77,6 @@ export function ChatView({
   nullalisMode = false,
   nullalisNarrationFrame = null,
   nullalisTranscriptEntries = [],
-  nullalisTranscriptEntryCount = 0,
   nullalisTaskItems = [],
   nullalisApprovalRequest = null,
   onApprovalAction,
@@ -118,29 +112,17 @@ export function ChatView({
       zakiUsageSummary?.usageTokens != null ||
       zakiUsageSummary?.costUsd != null);
 
-  const useTurnTimeline = isTurnTimelineEnabled();
-
   const renderNullalisArtifacts = (options?: { compact?: boolean }) => {
     if (!hasNullalisArtifacts) return null;
     return (
       <div className="flex flex-col items-start gap-1.5">
-        {useTurnTimeline ? (
-          <NullalisTurnTimeline
-            entries={nullalisTranscriptEntries}
-            frame={nullalisNarrationFrame}
-            isStreaming={isStreaming}
-            compact={options?.compact}
-            usage={zakiUsageSummary}
-          />
-        ) : (
-          <NullalisWorklog
-            entries={nullalisTranscriptEntries}
-            entryCount={nullalisTranscriptEntryCount}
-            frame={nullalisNarrationFrame}
-            isStreaming={isStreaming}
-            compact={options?.compact}
-          />
-        )}
+        <NullalisTurnTimeline
+          entries={nullalisTranscriptEntries}
+          frame={nullalisNarrationFrame}
+          isStreaming={isStreaming}
+          compact={options?.compact}
+          usage={zakiUsageSummary}
+        />
         <TaskChecklist tasks={nullalisTaskItems} />
         <ApprovalRequiredCard
           request={nullalisApprovalRequest}
@@ -148,7 +130,6 @@ export function ChatView({
           onDeny={onApprovalAction ? (id) => onApprovalAction(id, false) : undefined}
         />
         <ContextGauge data={contextGaugeData} />
-        {useTurnTimeline ? null : <UsageCostFooter usage={zakiUsageSummary} />}
       </div>
     );
   };
@@ -201,12 +182,6 @@ export function ChatView({
           }
           return (
             <div key={msg.id} className="flex flex-col gap-2">
-              {nullalisMode && nullalisNarrationFrame && !useTurnTimeline && (
-                <NarrationStatusLine
-                  frame={nullalisNarrationFrame}
-                  isStreaming={isStreamingMessage}
-                />
-              )}
               <StreamingMessage
                 content={msg.content}
                 isStreaming={isStreamingMessage}
@@ -223,9 +198,7 @@ export function ChatView({
         }
 
         const replayEntries =
-          msg.role === "assistant" && useTurnTimeline
-            ? replayTimelines?.[msg.id]
-            : undefined;
+          msg.role === "assistant" ? replayTimelines?.[msg.id] : undefined;
 
         return (
           <div key={msg.id}>
