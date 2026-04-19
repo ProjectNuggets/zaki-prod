@@ -20,6 +20,8 @@ export {
   UsageCostFooter,
 } from "./NullalisRuntimeWidgets";
 export type { ContextGaugeData } from "./NullalisRuntimeWidgets";
+export { NullalisTurnTimeline, composeTurnTimeline } from "./NullalisTurnTimeline";
+export type { TimelineBlock } from "./NullalisTurnTimeline";
 
 // Memory components (P0 Fix)
 export { MemoryToast } from "../memory/MemoryToast";

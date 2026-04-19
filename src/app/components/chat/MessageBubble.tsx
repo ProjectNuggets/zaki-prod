@@ -28,6 +28,12 @@ function isImageAttachment(type?: string | null, name?: string | null) {
   return /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/.test(n);
 }
 
+export interface PersistedTurnEvent {
+  eventType: string;
+  payload: Record<string, unknown>;
+  ts?: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -40,6 +46,7 @@ export interface Message {
   channel?: string | null;
   lane?: string | null;
   createdAt?: string | null;
+  turnEvents?: PersistedTurnEvent[];
 }
 
 export interface MessageBubbleProps {

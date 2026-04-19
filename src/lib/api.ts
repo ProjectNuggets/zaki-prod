@@ -1430,6 +1430,11 @@ export async function fetchAgentHistory(
       role?: "user" | "assistant";
       content?: string;
       createdAt?: string;
+      events?: Array<{
+        eventType?: string;
+        payload?: Record<string, unknown>;
+        ts?: number;
+      }>;
     }>;
     historyMode?: "merged" | "app";
     source?: string;

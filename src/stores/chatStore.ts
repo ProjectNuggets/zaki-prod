@@ -1,5 +1,11 @@
 import { create } from "zustand";
 
+export interface PersistedTurnEvent {
+  eventType: string;
+  payload: Record<string, unknown>;
+  ts?: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -7,6 +13,7 @@ export interface Message {
   attachments?: { name: string; type: string; url: string }[];
   chatId?: number;
   memorySources?: { id: string; content: string; type: string }[];
+  turnEvents?: PersistedTurnEvent[];
 }
 
 interface ChatState {

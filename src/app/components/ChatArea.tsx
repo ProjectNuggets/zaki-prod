@@ -2040,6 +2040,11 @@ export function ChatArea() {
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
+  const currentTurnAssistantIdRef = useRef<string | null>(null);
+  const prevIsStreamingRef = useRef(false);
+  const [localTurnSnapshots, setLocalTurnSnapshots] = useState<
+    Record<string, NullalisTranscriptEntry[]>
+  >({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
@@ -4872,6 +4877,22 @@ export function ChatArea() {
     zakiBotToolCalls,
   ]);
 
+  // Snapshot the current turn's transcript entries into localTurnSnapshots
+  // when the stream ends, so past-turn timelines persist after
+  // nullalisTranscriptEntries is cleared on the next turn.
+  useEffect(() => {
+    const wasStreaming = prevIsStreamingRef.current;
+    prevIsStreamingRef.current = isStreaming;
+    if (!wasStreaming || isStreaming) return;
+    if (!isZakiBotActiveSpace) return;
+    const msgId = currentTurnAssistantIdRef.current;
+    if (!msgId) return;
+    if (!nullalisTranscriptEntries.length) return;
+    const snapshot = nullalisTranscriptEntries.slice();
+    setLocalTurnSnapshots((prev) => ({ ...prev, [msgId]: snapshot }));
+    currentTurnAssistantIdRef.current = null;
+  }, [isStreaming, isZakiBotActiveSpace, nullalisTranscriptEntries]);
+
   // Multi-session: allow any threadId in the agent space (no longer force "main")
 
   // Handle send message
@@ -4960,6 +4981,7 @@ export function ChatArea() {
     }));
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now()}`;
+    currentTurnAssistantIdRef.current = assistantMessageId;
 
     setMessagesByThread((prev) => ({
         ...prev,
@@ -5352,6 +5374,19 @@ export function ChatArea() {
                     id: String(entry.id || `bot-history-${index}`),
                     role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
                     content: String(entry.content || ""),
+                    turnEvents: Array.isArray((entry as { events?: unknown }).events)
+                      ? ((entry as { events?: unknown }).events as Array<{
+                          eventType?: string;
+                          payload?: Record<string, unknown>;
+                          ts?: number;
+                        }>)
+                          .filter((e) => typeof e?.eventType === "string")
+                          .map((e) => ({
+                            eventType: String(e.eventType),
+                            payload: (e.payload ?? {}) as Record<string, unknown>,
+                            ts: typeof e.ts === "number" ? e.ts : undefined,
+                          }))
+                      : undefined,
                   }))
                 : [];
               setMessagesByThread((prev) => ({
@@ -5363,7 +5398,12 @@ export function ChatArea() {
         }
         // Session history returns { messages: [...] }
         const messages = data?.messages ?? [];
-        const history = Array.isArray(messages)
+        const history: Array<{
+          id: string;
+          role: "assistant" | "user";
+          content: string;
+          turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
+        }> = Array.isArray(messages)
           ? messages.map((entry: Record<string, unknown>, index: number) => ({
               id: String(entry.id || `bot-session-${index}`),
               role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
@@ -5375,6 +5415,43 @@ export function ChatArea() {
           [activeThreadId]: history,
         }));
         historyLoadedRef.current[activeThreadId] = true;
+
+        // Fetch app history alongside to merge persisted turnEvents into the
+        // session-history view so past assistant turns can replay their timeline.
+        void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, zakiBotHistoryMode)
+          .then(({ response: rAlt, data: dAlt }) => {
+            if (cancelled || !rAlt.ok) return;
+            const appHistory = Array.isArray(dAlt.history) ? dAlt.history : [];
+            const assistantEvents = appHistory
+              .filter((e) => e.role === "assistant")
+              .map((e) =>
+                Array.isArray(e.events)
+                  ? e.events
+                      .filter((ev) => typeof ev?.eventType === "string")
+                      .map((ev) => ({
+                        eventType: String(ev.eventType),
+                        payload: (ev.payload ?? {}) as Record<string, unknown>,
+                        ts: typeof ev.ts === "number" ? ev.ts : undefined,
+                      }))
+                  : []
+              );
+            if (!assistantEvents.length) return;
+            setMessagesByThread((prev) => {
+              const current = prev[activeThreadId];
+              if (!Array.isArray(current)) return prev;
+              let assistantIdx = 0;
+              const merged = current.map((m) => {
+                if (m.role !== "assistant") return m;
+                const evs = assistantEvents[assistantIdx++];
+                if (!evs || !evs.length) return m;
+                return { ...m, turnEvents: evs };
+              });
+              return { ...prev, [activeThreadId]: merged };
+            });
+          })
+          .catch(() => {
+            /* best-effort backfill */
+          });
       })
       .catch(() => {
         // Ensure loading clears on error
@@ -5685,9 +5762,32 @@ export function ChatArea() {
           : "Answer is ready"
         : undefined;
 
+    const replayTimelines: Record<string, NullalisTranscriptEntry[]> = {};
+    if (isZakiBotActiveSpace) {
+      for (const m of messages) {
+        if (m.role !== "assistant") continue;
+        const snapshot = localTurnSnapshots[m.id];
+        if (snapshot && snapshot.length) {
+          replayTimelines[m.id] = snapshot;
+          continue;
+        }
+        const events = (m as { turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }> })
+          .turnEvents;
+        if (!Array.isArray(events) || events.length === 0) continue;
+        const entries: NullalisTranscriptEntry[] = [];
+        for (const e of events) {
+          const ts = typeof e.ts === "number" ? e.ts : Date.now();
+          const entry = extractNullalisTranscriptEntry(e.eventType, e.payload ?? {}, ts);
+          if (entry) entries.push(entry);
+        }
+        if (entries.length) replayTimelines[m.id] = entries;
+      }
+    }
+
     return (
       <ChatView
         messages={messages}
+        replayTimelines={replayTimelines}
         isHistoryLoading={isHistoryLoading || (isZakiBotActiveSpace && isBotHistoryLoading)}
         isStreaming={isStreaming}
         streamingLabel={
