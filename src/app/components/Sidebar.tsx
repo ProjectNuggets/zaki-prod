@@ -92,7 +92,7 @@ export function Sidebar() {
     goToSpaces,
     goToThread,
     goToZakiBot,
-    clearThread,
+    goToZakiHome,
   } = useNavigation();
   const { sidebarMode } = useNavigationStore();
   const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(sidebarMode === "zaki");
@@ -1309,11 +1309,12 @@ export function Sidebar() {
             }}
             onCreateSession={() => {
               // Reset to the Zaki welcome view so the user gets a visibly
-              // fresh dashboard. The next message they send materializes a
-              // new session upstream automatically.
+              // fresh dashboard. Keep the Zaki space active (not null) so
+              // SSE narration and the thinking card keep routing correctly —
+              // otherwise reasoning frames leak into the assistant reply.
               setExpandedSpace(ZAKI_BOT_SPACE_ID);
               setActiveItem(ZAKI_BOT_SPACE_ID);
-              clearThread();
+              goToZakiHome();
               window.dispatchEvent(new Event("zaki:clear-thread"));
               window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
               toast.success("New session started");

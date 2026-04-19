@@ -52,6 +52,11 @@ export function useNavigation() {
     navigate('/');
   };
 
+  const goToZakiHome = () => {
+    store.goToZakiHome();
+    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}`);
+  };
+
   return {
     // State from store
     currentView: store.view,
@@ -67,6 +72,7 @@ export function useNavigation() {
     goToThread,
     goToZakiBot,
     goToZakiSession,
+    goToZakiHome,
     clearThread,
     setSidebarMode: store.setSidebarMode,
   };

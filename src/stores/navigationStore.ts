@@ -19,6 +19,7 @@ interface NavigationStore extends NavigationState {
   goToSpace: (spaceId: string) => void;
   goToThread: (spaceId: string, threadId: string) => void;
   goToZakiSession: (sessionKey: string) => void;
+  goToZakiHome: () => void;
   clearThread: () => void;
   setSidebarMode: (mode: SidebarMode) => void;
 
@@ -58,6 +59,13 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
 
   goToZakiSession: (sessionKey) => {
     set({ view: "chat", spaceId: ZAKI_BOT_SPACE_ID, threadId: sessionKey, sidebarMode: "zaki" });
+  },
+
+  // Like clearThread, but keeps the Zaki space active so SSE narration,
+  // approvals, and other zaki-only surfaces keep receiving events while the
+  // welcome dashboard is visible.
+  goToZakiHome: () => {
+    set({ view: "home", spaceId: ZAKI_BOT_SPACE_ID, threadId: null, sidebarMode: "zaki" });
   },
 
   clearThread: () => {
