@@ -544,6 +544,18 @@ export function InputArea({
             )}
             </div>
           ) : null}
+          {zakiBotMode ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending}
+              className="zaki-button-bounce size-11 sm:size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors disabled:opacity-60"
+              aria-label={t("input.menu.uploadFile")}
+              title={t("input.menu.uploadFile")}
+            >
+              <Paperclip className="size-4 text-zaki-muted" />
+            </button>
+          ) : null}
           {!zakiBotMode ? (
             <button
             type="button"
