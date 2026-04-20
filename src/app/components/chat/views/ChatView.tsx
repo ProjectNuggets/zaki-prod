@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
+import { ThinkingIndicator } from "../ThinkingIndicator";
 import { SkeletonMessage } from "../../ui/skeleton";
 import type { BotToolCall } from "../BotToolCallBlock";
 import type {
@@ -176,18 +177,40 @@ export function ChatView({
               />
             );
           }
+          if (streamingModeVariant === "final_reply_reveal") {
+            return (
+              <div key={msg.id} className="flex flex-col gap-2">
+                <StreamingMessage
+                  content={msg.content}
+                  isStreaming={isStreamingMessage}
+                  thinkingLabel={streamingLabel}
+                  thinkingPillLabel={streamingPillLabel}
+                  streamingBadgeLabel={streamingBadgeLabel}
+                  streamingHelperText={streamingHelperText}
+                  streamingModeVariant={streamingModeVariant}
+                  botMode={botMode}
+                />
+                {renderNullalisArtifacts({ compact: true })}
+              </div>
+            );
+          }
           return (
             <div key={msg.id} className="flex flex-col gap-2">
-              <StreamingMessage
-                content={msg.content}
-                isStreaming={isStreamingMessage}
-                thinkingLabel={streamingLabel}
-                thinkingPillLabel={streamingPillLabel}
-                streamingBadgeLabel={streamingBadgeLabel}
-                streamingHelperText={streamingHelperText}
-                streamingModeVariant={streamingModeVariant}
-                botMode={botMode}
-              />
+              {String(msg.content || "").trim() ? (
+                <MessageBubble
+                  message={msg}
+                  onCopy={onCopyMessage}
+                  onRegenerate={onRegenerateMessage}
+                  onThumbsUp={onThumbsUpMessage}
+                />
+              ) : (
+                !botMode && (
+                  <ThinkingIndicator
+                    label={streamingLabel}
+                    pillLabel={streamingPillLabel}
+                  />
+                )
+              )}
               {renderNullalisArtifacts({ compact: true })}
             </div>
           );
