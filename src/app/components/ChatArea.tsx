@@ -1911,14 +1911,7 @@ export function extractNullalisTranscriptEntry(
 }
 
 function buildNullalisTranscriptFingerprint(entry: NullalisTranscriptEntry) {
-  return [
-    entry.kind,
-    normalizeNarrativeKey(entry.text),
-    normalizeProgressText(entry.phase).toLowerCase(),
-    normalizeProgressText(entry.tool).toLowerCase(),
-    normalizeProgressText(entry.taskId).toLowerCase(),
-    normalizeProgressText(entry.status).toLowerCase(),
-  ].join("|");
+  return [entry.kind, normalizeNarrativeKey(entry.text)].join("|");
 }
 
 export function ChatArea() {
@@ -3157,7 +3150,7 @@ export function ChatArea() {
               Math.abs(entry.timestamp - candidate.timestamp) < 5000
           );
         if (recentDuplicate) return prev;
-        return [...prev, entry].slice(-8);
+        return [...prev, entry].slice(-40);
       });
     },
     [isZakiBotActiveSpace]
