@@ -408,6 +408,11 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    ALTER TABLE zaki_bot_messages
+      ADD COLUMN IF NOT EXISTS events_jsonb JSONB NOT NULL DEFAULT '[]'::jsonb;
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_bot_messages_user_thread
     ON zaki_bot_messages (user_id, space_id, thread_id, id ASC);
   `);

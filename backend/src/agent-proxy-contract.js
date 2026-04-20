@@ -33,6 +33,23 @@ export function extractAgentTokenChunk(eventType, payload) {
   );
 }
 
+const PERSISTABLE_AGENT_EVENTS = new Set([
+  "reasoning_summary",
+  "tool_start",
+  "tool_result",
+  "tool_done",
+  "task_update",
+  "approval_required",
+  "system_notice",
+  "progress",
+  "done",
+]);
+
+export function isPersistableAgentEvent(eventType) {
+  if (!eventType) return false;
+  return PERSISTABLE_AGENT_EVENTS.has(String(eventType));
+}
+
 export function buildAgentRetrySsePayload(statusCode) {
   if (statusCode === 409) {
     return {

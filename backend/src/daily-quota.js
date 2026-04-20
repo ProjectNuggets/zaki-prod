@@ -6,6 +6,10 @@ export const DEFAULT_APP_CHAT_DAILY_PROMPT_BUCKET = APP_CHAT_SURFACE;
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_BUCKET = ZAKI_BOT_SURFACE;
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function parsePositiveInteger(raw, fallback) {
   const num = Number(raw);
   if (!Number.isFinite(num) || num < 1) return fallback;
@@ -15,6 +19,15 @@ function parsePositiveInteger(raw, fallback) {
 function parseBucket(raw, fallback) {
   const bucket = String(raw || "").trim();
   return bucket || fallback;
+}
+
+function parseEmailList(raw) {
+  return new Set(
+    String(raw || "")
+      .split(",")
+      .map((value) => normalizeEmail(value))
+      .filter(Boolean)
+  );
 }
 
 export function resolveQuotaSurface(input) {
@@ -64,6 +77,13 @@ export function isUnlimitedUser({ tier, status, accessActive }) {
     ["student", "personal"].includes(normalizedTier) &&
     ["active", "trialing", "past_due"].includes(normalizedStatus);
   return paidActive || accessActive === true;
+}
+
+export function hasLocalUnlimitedQuotaBypass(zakiUser, env = process.env) {
+  const email = normalizeEmail(zakiUser?.email);
+  if (!email) return false;
+  const allowlist = parseEmailList(env?.ZAKI_LOCAL_UNLIMITED_QUOTA_EMAILS);
+  return allowlist.has(email);
 }
 
 export function buildDailyLimitExceededPayload({

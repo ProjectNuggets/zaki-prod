@@ -5283,40 +5283,45 @@ export function ChatArea() {
       return;
     }
 
+    const loadAppHistoryFallback = () =>
+      // Force mode=app so the server reads from our persisted DB rather than
+      // re-querying the upstream runtime (which won't have messages for
+      // legacy/default threads like "main").
+      fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "app")
+        .then(({ response: r2, data: d2 }) => {
+          if (cancelled || !r2.ok) return;
+          const history = Array.isArray(d2.history)
+            ? d2.history.map((entry: Record<string, unknown>, index: number) => ({
+                id: String(entry.id || `bot-history-${index}`),
+                role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
+                content: String(entry.content || ""),
+                turnEvents: Array.isArray((entry as { events?: unknown }).events)
+                  ? ((entry as { events?: unknown }).events as Array<{
+                      eventType?: string;
+                      payload?: Record<string, unknown>;
+                      ts?: number;
+                    }>)
+                      .filter((e) => typeof e?.eventType === "string")
+                      .map((e) => ({
+                        eventType: String(e.eventType),
+                        payload: (e.payload ?? {}) as Record<string, unknown>,
+                        ts: typeof e.ts === "number" ? e.ts : undefined,
+                      }))
+                  : undefined,
+              }))
+            : [];
+          setMessagesByThread((prev) => ({
+            ...prev,
+            [activeThreadId]: history,
+          }));
+          historyLoadedRef.current[activeThreadId] = true;
+        });
+
     void fetchAgentSessionHistory(sessionKey)
       .then(({ response, data }) => {
         if (cancelled) return;
         if (!response.ok) {
-          // Session history failed, fall back to app-level history
-          return fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, zakiBotHistoryMode)
-            .then(({ response: r2, data: d2 }) => {
-              if (cancelled || !r2.ok) return;
-              const history = Array.isArray(d2.history)
-                ? d2.history.map((entry: Record<string, unknown>, index: number) => ({
-                    id: String(entry.id || `bot-history-${index}`),
-                    role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
-                    content: String(entry.content || ""),
-                    turnEvents: Array.isArray((entry as { events?: unknown }).events)
-                      ? ((entry as { events?: unknown }).events as Array<{
-                          eventType?: string;
-                          payload?: Record<string, unknown>;
-                          ts?: number;
-                        }>)
-                          .filter((e) => typeof e?.eventType === "string")
-                          .map((e) => ({
-                            eventType: String(e.eventType),
-                            payload: (e.payload ?? {}) as Record<string, unknown>,
-                            ts: typeof e.ts === "number" ? e.ts : undefined,
-                          }))
-                      : undefined,
-                  }))
-                : [];
-              setMessagesByThread((prev) => ({
-                ...prev,
-                [activeThreadId]: history,
-              }));
-              historyLoadedRef.current[activeThreadId] = true;
-            });
+          return loadAppHistoryFallback();
         }
         // Session history returns { messages: [...] }
         const messages = data?.messages ?? [];
@@ -5332,6 +5337,11 @@ export function ChatArea() {
               content: String(entry.content || ""),
             }))
           : [];
+        if (history.length === 0) {
+          // Upstream session returned empty (e.g. runtime restarted). Fall back to
+          // persisted app history so the user doesn't see an empty thread.
+          return loadAppHistoryFallback();
+        }
         setMessagesByThread((prev) => ({
           ...prev,
           [activeThreadId]: history,

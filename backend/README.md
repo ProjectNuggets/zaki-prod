@@ -23,6 +23,7 @@ cp .env.example .env
 - `ZAKI_APP_CHAT_DAILY_PROMPT_BUCKET` (optional bucket name for normal app chat quota, default `app_chat`)
 - `ZAKI_BOT_DAILY_PROMPT_LIMIT` (optional daily cap for ZAKI BOT chat for all users, default `5`)
 - `ZAKI_BOT_DAILY_PROMPT_BUCKET` (optional bucket name for ZAKI BOT quota, default `zaki_bot`)
+- `ZAKI_LOCAL_UNLIMITED_QUOTA_EMAILS` (optional comma-separated local/dev email allowlist for unlimited quota; ignored in production)
 - `ZAKI_ALLOWED_ORIGINS` (comma-separated list of frontend origins)
 - `ZAKI_BILLING_PROVIDER` (`stripe`, `creem`, `paddle`, `external`, or `none`; default `stripe`)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
