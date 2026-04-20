@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./blocks/CodeBlock";
 import { HeadingBlock } from "./blocks/HeadingBlock";
@@ -7,7 +8,7 @@ import { QuoteBlock } from "./blocks/QuoteBlock";
 import { TableBlock } from "./blocks/TableBlock";
 import type { MessageBlock } from "./types";
 
-export function BlockRenderer({ block, nested = false }: { block: MessageBlock; nested?: boolean }) {
+function BlockRendererImpl({ block, nested = false }: { block: MessageBlock; nested?: boolean }) {
   switch (block.type) {
     case "paragraph":
       return <ParagraphBlock block={block} />;
@@ -50,3 +51,7 @@ export function BlockRenderer({ block, nested = false }: { block: MessageBlock; 
       return null;
   }
 }
+
+export const BlockRenderer = memo(BlockRendererImpl, (prev, next) => {
+  return prev.block === next.block && prev.nested === next.nested;
+});

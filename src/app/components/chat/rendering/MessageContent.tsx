@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { parseMessageMarkdown } from "./parseMessageMarkdown";
 import { BlockRenderer } from "./BlockRenderer";
-import type { MessageDocument } from "./types";
 
 export type MessageContentProps = {
   content: string;
@@ -12,10 +11,6 @@ export type MessageContentProps = {
   surface?: "chat" | "shared" | "bot";
   preserveUserFormatting?: boolean;
 };
-
-function emptyDocument(): MessageDocument {
-  return { blocks: [] };
-}
 
 export function MessageContent({
   content,
@@ -27,26 +22,14 @@ export function MessageContent({
 }: MessageContentProps) {
   const isAssistant = role === "assistant";
   const shouldRenderStructured = isAssistant || preserveUserFormatting;
-  const finalDocument = useMemo(
-    () => (streaming && isAssistant ? emptyDocument() : parseMessageMarkdown(content)),
-    [content, isAssistant, streaming],
-  );
-  const [streamingDocument, setStreamingDocument] = useState<MessageDocument>(finalDocument);
-
-  useEffect(() => {
-    if (!shouldRenderStructured) {
-      setStreamingDocument(emptyDocument());
-      return;
-    }
-    if (!streaming || !isAssistant) {
-      setStreamingDocument(parseMessageMarkdown(content));
-      return;
-    }
-    const handle = window.setTimeout(() => {
-      setStreamingDocument(parseMessageMarkdown(content, { streaming: true }));
-    }, 90);
-    return () => window.clearTimeout(handle);
-  }, [content, isAssistant, shouldRenderStructured, streaming]);
+  const deferredContent = useDeferredValue(content);
+  const parseSource = streaming && isAssistant ? deferredContent : content;
+  const document = useMemo(() => {
+    if (!shouldRenderStructured) return { blocks: [] };
+    return parseMessageMarkdown(parseSource, {
+      streaming: streaming && isAssistant,
+    });
+  }, [parseSource, shouldRenderStructured, streaming, isAssistant]);
 
   if (!shouldRenderStructured) {
     return (
@@ -55,8 +38,6 @@ export function MessageContent({
       </div>
     );
   }
-
-  const document = streaming && isAssistant ? streamingDocument : finalDocument;
 
   return (
     <div

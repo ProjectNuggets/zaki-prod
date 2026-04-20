@@ -4062,12 +4062,12 @@ export function ChatArea() {
     let buffer = "";
     let streamClosed = false;
     let renderedLength = 0;
-    let renderTimer: number | null = null;
+    let renderRaf: number | null = null;
 
     const flushRenderedContent = () => {
-      if (renderTimer) {
-        window.clearTimeout(renderTimer);
-        renderTimer = null;
+      if (renderRaf != null) {
+        window.cancelAnimationFrame(renderRaf);
+        renderRaf = null;
       }
       if (renderedLength === accumulated.length) return;
       renderedLength = accumulated.length;
@@ -4077,11 +4077,13 @@ export function ChatArea() {
     const appendChunk = (chunk: string) => {
       if (!chunk) return;
       accumulated += chunk;
-      if (renderTimer != null) return;
-      renderTimer = window.setTimeout(() => {
-        renderTimer = null;
-        flushRenderedContent();
-      }, 32);
+      if (renderRaf != null) return;
+      renderRaf = window.requestAnimationFrame(() => {
+        renderRaf = null;
+        if (renderedLength === accumulated.length) return;
+        renderedLength = accumulated.length;
+        updateAssistantContent(threadSlug, assistantId, accumulated);
+      });
     };
 
     const processRawData = async (raw: string) => {
