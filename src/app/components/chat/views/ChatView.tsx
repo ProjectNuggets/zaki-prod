@@ -4,7 +4,6 @@ import { StreamingMessage } from "../StreamingMessage";
 import { SkeletonMessage } from "../../ui/skeleton";
 import type { BotToolCall } from "../BotToolCallBlock";
 import type {
-  BotReasoningSummary,
   NullalisApprovalRequest,
   NullalisNarrationFrame,
   NullalisTaskItem,
@@ -36,7 +35,6 @@ interface ChatViewProps {
   streamingModeVariant?: "thinking" | "final_reply_reveal";
   botToolCalls?: BotToolCall[];
   botStatusEvents?: BotStatusEvent[];
-  botReasoningSummary?: BotReasoningSummary | null;
   botReplyStart?: BotReplyStart | null;
   botProcessSnapshot?: ZakiProcessSnapshot | null;
   botProcessCompact?: boolean;
@@ -69,7 +67,6 @@ export function ChatView({
   streamingModeVariant = "thinking",
   botToolCalls = [],
   botStatusEvents = [],
-  botReasoningSummary = null,
   botReplyStart = null,
   botProcessSnapshot = null,
   botProcessCompact = false,
@@ -173,7 +170,6 @@ export function ChatView({
                 stage={isStreaming ? streamingMode : "writing"}
                 toolCalls={botToolCalls}
                 statusEvents={botStatusEvents}
-                reasoningSummary={botReasoningSummary}
                 replyStart={botReplyStart}
                 snapshot={botProcessSnapshot}
                 compact={false}
@@ -230,7 +226,6 @@ export function ChatView({
           stage={isStreaming ? streamingMode : "writing"}
           toolCalls={botToolCalls}
           statusEvents={botStatusEvents}
-          reasoningSummary={botReasoningSummary}
           replyStart={botReplyStart}
           snapshot={botProcessSnapshot}
           compact={botProcessCompact}
