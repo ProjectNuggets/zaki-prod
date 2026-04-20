@@ -8,7 +8,10 @@ import { QuoteBlock } from "./blocks/QuoteBlock";
 import { TableBlock } from "./blocks/TableBlock";
 import type { MessageBlock } from "./types";
 
-function BlockRendererImpl({ block, nested = false }: { block: MessageBlock; nested?: boolean }) {
+type BlockRendererProps = { block: MessageBlock; nested?: boolean };
+
+export const BlockRenderer = memo(
+  function BlockRenderer({ block, nested = false }: BlockRendererProps) {
   switch (block.type) {
     case "paragraph":
       return <ParagraphBlock block={block} />;
@@ -50,8 +53,6 @@ function BlockRendererImpl({ block, nested = false }: { block: MessageBlock; nes
     default:
       return null;
   }
-}
-
-export const BlockRenderer = memo(BlockRendererImpl, (prev, next) => {
-  return prev.block === next.block && prev.nested === next.nested;
-});
+  },
+  (prev, next) => prev.block === next.block && prev.nested === next.nested,
+);
