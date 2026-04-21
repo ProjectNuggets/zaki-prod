@@ -45,6 +45,7 @@ interface ChatViewProps {
   botMode?: boolean;
   firstMessageTransition: boolean;
   turnStartedAt?: number | null;
+  turnDurationMs?: number | null;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
@@ -72,6 +73,7 @@ export function ChatView({
   botMode = false,
   firstMessageTransition,
   turnStartedAt = null,
+  turnDurationMs = null,
   onCopyMessage,
   onRegenerateMessage,
   onThumbsUpMessage,
@@ -116,6 +118,7 @@ export function ChatView({
           compact={options?.compact}
           revealPhase={options?.phase ?? revealPhase}
           turnStartedAt={turnStartedAt}
+          turnDurationMs={turnDurationMs}
           usage={zakiUsageSummary}
         />
         <TaskChecklist tasks={nullalisTaskItems} />

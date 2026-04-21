@@ -1995,6 +1995,7 @@ export function ChatArea() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
+  const [turnDurationMs, setTurnDurationMs] = useState<number | null>(null);
   const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching" | "writing">("thinking");
   const [zakiBotToolCalls, setZakiBotToolCalls] = useState<BotToolCall[]>([]);
   const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
@@ -2041,8 +2042,6 @@ export function ChatArea() {
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
-  const zakiBotProcessCompactTimerRef = useRef<number | null>(null);
-  const [zakiBotProcessCompact, setZakiBotProcessCompact] = useState(false);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
 
@@ -2794,14 +2793,9 @@ export function ChatArea() {
       window.clearTimeout(zakiBotProcessClearTimerRef.current);
       zakiBotProcessClearTimerRef.current = null;
     }
-    if (zakiBotProcessCompactTimerRef.current) {
-      window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-      zakiBotProcessCompactTimerRef.current = null;
-    }
     setZakiBotToolCalls([]);
     setZakiBotStatusEvents([]);
     setZakiBotReplyStart(null);
-    setZakiBotProcessCompact(false);
     setZakiBotProgressTerminalReason(null);
     setNullalisNarrationFrame(null);
     if (!options?.preserveNullalisArtifacts) {
@@ -3739,6 +3733,9 @@ export function ChatArea() {
           const usageSummary = extractNullalisUsageSummary(payload);
           if (usageSummary) {
             setZakiUsageSummary(usageSummary);
+          }
+          if (typeof payload.duration_ms === "number") {
+            setTurnDurationMs(payload.duration_ms);
           }
           // Extract inline context data if nullalis sends it with done
           if (
@@ -4698,48 +4695,6 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
-    if (
-      !zakiBotProcessSnapshot.isReplyReplay ||
-      zakiBotProcessSnapshot.phase === "error"
-    ) {
-      if (zakiBotProcessCompactTimerRef.current) {
-        window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-        zakiBotProcessCompactTimerRef.current = null;
-      }
-      setZakiBotProcessCompact(false);
-      return;
-    }
-    if (zakiBotProcessCompact) return;
-    if (zakiBotProcessCompactTimerRef.current) {
-      window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-    }
-    const compactDelayMs = zakiBotProcessSnapshot.replyRevealStarted
-      ? zakiBotProcessSnapshot.isCacheHit
-        ? 780
-        : 520
-      : zakiBotProcessSnapshot.isCacheHit
-        ? 1050
-        : 900;
-    zakiBotProcessCompactTimerRef.current = window.setTimeout(() => {
-      setZakiBotProcessCompact(true);
-      zakiBotProcessCompactTimerRef.current = null;
-    }, compactDelayMs);
-    return () => {
-      if (zakiBotProcessCompactTimerRef.current) {
-        window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-        zakiBotProcessCompactTimerRef.current = null;
-      }
-    };
-  }, [
-    isZakiBotActiveSpace,
-    zakiBotProcessCompact,
-    zakiBotProcessSnapshot.isCacheHit,
-    zakiBotProcessSnapshot.isReplyReplay,
-    zakiBotProcessSnapshot.replyRevealStarted,
-  ]);
-
-  useEffect(() => {
-    if (!isZakiBotActiveSpace) return;
     if (isStreaming) {
       if (zakiBotProcessClearTimerRef.current) {
         window.clearTimeout(zakiBotProcessClearTimerRef.current);
@@ -4971,6 +4926,7 @@ export function ChatArea() {
     }
     setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
     setTurnStartedAt(Date.now());
+    setTurnDurationMs(null);
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
@@ -5610,10 +5566,6 @@ export function ChatArea() {
         window.clearTimeout(zakiBotProcessClearTimerRef.current);
         zakiBotProcessClearTimerRef.current = null;
       }
-      if (zakiBotProcessCompactTimerRef.current) {
-        window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-        zakiBotProcessCompactTimerRef.current = null;
-      }
       streamAbortRef.current?.abort();
     };
   }, []);
@@ -5755,6 +5707,7 @@ export function ChatArea() {
         botMode={isZakiBotActiveSpace}
         firstMessageTransition={firstMessageTransition}
         turnStartedAt={turnStartedAt}
+        turnDurationMs={turnDurationMs}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
         onThumbsUpMessage={handleThumbsUpMessage}

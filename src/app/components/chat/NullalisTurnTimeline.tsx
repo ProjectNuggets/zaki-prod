@@ -310,6 +310,7 @@ export function NullalisTurnTimeline({
   isStreaming,
   revealPhase = "working",
   turnStartedAt = null,
+  turnDurationMs = null,
   compact = false,
   usage,
 }: {
@@ -318,6 +319,7 @@ export function NullalisTurnTimeline({
   isStreaming: boolean;
   revealPhase?: TimelineRevealPhase;
   turnStartedAt?: number | null;
+  turnDurationMs?: number | null;
   compact?: boolean;
   model?: string | null;
   mode?: string | null;
@@ -341,12 +343,16 @@ export function NullalisTurnTimeline({
   // Timer start preference: user-submit timestamp > first block timestamp.
   const startedAt =
     turnStartedAt ?? (blocks.length > 0 ? blocks[0]!.timestamp : null);
+  // Elapsed preference (in order): server-stamped turnDurationMs when done,
+  // last-block-timestamp clock diff when done, live now-based clock otherwise.
   const elapsedMs =
-    startedAt != null
-      ? revealPhase === "done" && !isStreaming && blocks.length > 0
-        ? Math.max(0, (blocks[blocks.length - 1]!.timestamp || now) - startedAt)
-        : Math.max(0, now - startedAt)
-      : null;
+    revealPhase === "done" && turnDurationMs != null
+      ? Math.max(0, Math.trunc(turnDurationMs))
+      : startedAt != null
+        ? revealPhase === "done" && !isStreaming && blocks.length > 0
+          ? Math.max(0, (blocks[blocks.length - 1]!.timestamp || now) - startedAt)
+          : Math.max(0, now - startedAt)
+        : null;
   const elapsedLabel = elapsedMs != null ? formatElapsed(elapsedMs) : null;
 
   const renderBlocks = (all: TimelineBlock[]) => (
