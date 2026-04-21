@@ -3,16 +3,13 @@ import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { ThinkingIndicator } from "../ThinkingIndicator";
 import { SkeletonMessage } from "../../ui/skeleton";
-import type { BotToolCall } from "../BotToolCallBlock";
 import type {
   NullalisApprovalRequest,
   NullalisNarrationFrame,
   NullalisTaskItem,
   NullalisTranscriptEntry,
   BotReplyStart,
-  BotStatusEvent,
   ZakiUsageSummary,
-  ZakiProcessSnapshot,
 } from "../BotStatusRail";
 import {
   ApprovalRequiredCard,
@@ -36,12 +33,7 @@ interface ChatViewProps {
   streamingBadgeLabel?: string;
   streamingHelperText?: string;
   streamingModeVariant?: "thinking" | "final_reply_reveal";
-  botToolCalls?: BotToolCall[];
-  botStatusEvents?: BotStatusEvent[];
   botReplyStart?: BotReplyStart | null;
-  botProcessSnapshot?: ZakiProcessSnapshot | null;
-  botProcessCompact?: boolean;
-  showBotTimeline?: boolean;
   nullalisMode?: boolean;
   nullalisNarrationFrame?: NullalisNarrationFrame | null;
   nullalisTranscriptEntries?: NullalisTranscriptEntry[];
@@ -51,7 +43,6 @@ interface ChatViewProps {
   contextGaugeData?: ContextGaugeData | null;
   zakiUsageSummary?: ZakiUsageSummary | null;
   botMode?: boolean;
-  streamingMode?: "thinking" | "researching" | "writing";
   firstMessageTransition: boolean;
   turnStartedAt?: number | null;
   onCopyMessage?: (message: Message) => void;
@@ -69,12 +60,7 @@ export function ChatView({
   streamingBadgeLabel,
   streamingHelperText,
   streamingModeVariant = "thinking",
-  botToolCalls: _botToolCalls = [],
-  botStatusEvents: _botStatusEvents = [],
   botReplyStart = null,
-  botProcessSnapshot: _botProcessSnapshot = null,
-  botProcessCompact: _botProcessCompact = false,
-  showBotTimeline: _showBotTimeline = false,
   nullalisMode = false,
   nullalisNarrationFrame = null,
   nullalisTranscriptEntries = [],
@@ -84,7 +70,6 @@ export function ChatView({
   contextGaugeData = null,
   zakiUsageSummary = null,
   botMode = false,
-  streamingMode: _streamingMode = "thinking",
   firstMessageTransition,
   turnStartedAt = null,
   onCopyMessage,

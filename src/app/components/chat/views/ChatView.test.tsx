@@ -9,7 +9,7 @@ jest.mock("../index", () => ({
 import { ChatView } from "./ChatView";
 
 describe("ChatView", () => {
-  it("renders the bot process rail inline while ZAKI is streaming without reply text", () => {
+  it("renders a Thinking shimmer while streaming with no timeline content", () => {
     render(
       <ChatView
         messages={[
@@ -18,56 +18,15 @@ describe("ChatView", () => {
         ]}
         isHistoryLoading={false}
         isStreaming
-        showBotTimeline
         botMode
-        streamingMode="researching"
         firstMessageTransition={false}
-        botStatusEvents={[
-          {
-            id: "status-1",
-            text: "Task task_00000000001: running",
-            timestamp: Date.now() - 1400,
-            phase: "task",
-            state: "update",
-            taskId: "task_00000000001",
-            source: "progress",
-            durationMs: 840,
-          },
-        ]}
-        botProcessSnapshot={{
-          phase: "tooling",
-          summaryText: null,
-          latestStatusText: "Task task_00000000001: running",
-          latestStatusMeta: "Task • task_00000000001 • 840ms",
-          latestToolName: "task_00000000001",
-          currentActionText: "Running task task_00000000001",
-          currentActionMeta: "Task • task_00000000001 • 840ms",
-          currentActionKind: "task",
-          transcriptEntries: [
-            {
-              id: "task-1",
-              kind: "task",
-              text: "Running task task_00000000001",
-              timestamp: Date.now() - 1000,
-              meta: "Task • 840ms",
-              state: "active",
-            },
-          ],
-          workStartedAt: Date.now() - 1400,
-          hasTools: false,
-          isCacheHit: false,
-          isReplyReplay: false,
-          replyRevealStarted: false,
-        }}
       />
     );
 
-    expect(screen.getAllByText("Running task task_00000000001").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Working for|Worked for/)).toBeInTheDocument();
-    expect(screen.queryByText("Task task_00000000001: running")).not.toBeInTheDocument();
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
   });
 
-  it("does not keep a detached process panel visible once answer text is streaming", () => {
+  it("collapses the trail into 'Worked for' once final reply starts", () => {
     render(
       <ChatView
         messages={[
@@ -76,32 +35,24 @@ describe("ChatView", () => {
         ]}
         isHistoryLoading={false}
         isStreaming
-        showBotTimeline
         botMode
-        botProcessCompact={false}
-        streamingMode="researching"
+        botReplyStart={{ id: "1", timestamp: Date.now() }}
+        turnStartedAt={Date.now() - 5000}
+        nullalisTranscriptEntries={[
+          {
+            id: "e1",
+            kind: "narration",
+            text: "I checked the repo layout and identified the failing test file.",
+            timestamp: Date.now() - 2000,
+            phase: "thinking",
+            source: "reasoning_summary",
+          },
+        ]}
         firstMessageTransition={false}
-        botStatusEvents={[]}
-        botProcessSnapshot={{
-          phase: "working",
-          summaryText: null,
-          latestStatusText: "Checking context and memory",
-          latestStatusMeta: null,
-          latestToolName: null,
-          currentActionText: "Checking context and memory",
-          currentActionMeta: "Thinking",
-          currentActionKind: "narration",
-          transcriptEntries: [],
-          workStartedAt: Date.now() - 1400,
-          hasTools: false,
-          isCacheHit: false,
-          isReplyReplay: false,
-          replyRevealStarted: false,
-        }}
       />
     );
 
-    expect(screen.queryByText(/Working for|Worked for/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Worked for/)).toBeInTheDocument();
   });
 
   it("renders the nullalis turn timeline with reasoning block inline", () => {
@@ -115,7 +66,6 @@ describe("ChatView", () => {
         ]}
         isHistoryLoading={false}
         isStreaming
-        showBotTimeline
         botMode
         nullalisMode
         nullalisNarrationFrame={{
@@ -134,12 +84,11 @@ describe("ChatView", () => {
             source: "reasoning_summary",
           },
         ]}
-        streamingMode="thinking"
         firstMessageTransition={false}
       />
     );
 
     expect(screen.getByText(longReasoning)).toBeInTheDocument();
-    expect(screen.getByText(/Working for|Working/)).toBeInTheDocument();
+    expect(screen.getByText(/Working for/)).toBeInTheDocument();
   });
 });

@@ -401,7 +401,7 @@ export function NullalisTurnTimeline({
     const summaryLabel = elapsedLabel ? `Worked for ${elapsedLabel}` : "Worked";
     return (
       <details
-        className="zaki-process-compact max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        className="zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
         dir="auto"
       >
         <summary
@@ -411,8 +411,7 @@ export function NullalisTurnTimeline({
           <span>{summaryLabel}</span>
           <ChevronRight
             className={cn(
-              "size-3 shrink-0 transition-transform",
-              "group-open:rotate-90"
+              "zaki-timeline-chevron size-3 shrink-0 transition-transform"
             )}
             aria-hidden
           />
@@ -427,7 +426,7 @@ export function NullalisTurnTimeline({
     const stepLabel = stepCount === 1 ? "1 step" : `${stepCount} steps`;
     return (
       <details
-        className="zaki-process-compact max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        className="zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
         dir="auto"
       >
         <summary
@@ -439,7 +438,7 @@ export function NullalisTurnTimeline({
               ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel} · ${stepLabel}`
               : stepLabel}
           </span>
-          <ChevronRight className="size-3 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+          <ChevronRight className="zaki-timeline-chevron size-3 shrink-0 transition-transform" aria-hidden />
         </summary>
         <div className="mt-1">{renderBlocks(blocks)}</div>
       </details>

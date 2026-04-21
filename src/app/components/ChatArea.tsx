@@ -5743,12 +5743,7 @@ export function ChatArea() {
         streamingBadgeLabel={zakiStreamingBadgeLabel}
         streamingHelperText={zakiStreamingHelperText}
         streamingModeVariant={zakiStreamingModeVariant}
-        botToolCalls={isZakiBotActiveSpace ? zakiBotToolCalls : []}
-        botStatusEvents={isZakiBotActiveSpace ? zakiBotStatusEvents : []}
         botReplyStart={isZakiBotActiveSpace ? zakiBotReplyStart : null}
-        botProcessSnapshot={isZakiBotActiveSpace ? zakiBotProcessSnapshot : null}
-        botProcessCompact={isZakiBotActiveSpace ? zakiBotProcessCompact : false}
-        showBotTimeline={isZakiBotActiveSpace}
         nullalisMode={isZakiBotActiveSpace}
         nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
@@ -5758,7 +5753,6 @@ export function ChatArea() {
         contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
         botMode={isZakiBotActiveSpace}
-        streamingMode={streamingIndicatorMode}
         firstMessageTransition={firstMessageTransition}
         turnStartedAt={turnStartedAt}
         onCopyMessage={handleCopyMessage}
