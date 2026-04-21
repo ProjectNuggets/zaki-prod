@@ -1,0 +1,207 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const AUTH_TOKEN_KEY = "zaki.auth.token";
+const LOCALE_KEY = "zaki:locale";
+
+async function bootstrapSession(page: Page) {
+  await page.addInitScript(({ tokenKey, localeKey }) => {
+    window.localStorage.setItem(tokenKey, "e2e-token");
+    window.localStorage.setItem(localeKey, "en");
+    window.localStorage.setItem("zaki:onboarding:v1:e2e@example.com", "done");
+  }, { tokenKey: AUTH_TOKEN_KEY, localeKey: LOCALE_KEY });
+}
+
+async function mockMediaRecorder(page: Page) {
+  // Stub getUserMedia + MediaRecorder so the mic button works without real mic access.
+  await page.addInitScript(() => {
+    const fakeStream = { getTracks: () => [{ stop: () => {} }] } as unknown as MediaStream;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: async () => fakeStream },
+    });
+
+    class FakeRecorder {
+      static isTypeSupported() { return true; }
+      state: "inactive" | "recording" = "inactive";
+      ondataavailable: ((e: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+      constructor(_stream: MediaStream, _opts?: { mimeType?: string }) {}
+      start() { this.state = "recording"; }
+      stop() {
+        this.state = "inactive";
+        const blob = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm" });
+        this.ondataavailable?.({ data: blob });
+        this.onstop?.();
+      }
+    }
+    // @ts-expect-error test stub
+    window.MediaRecorder = FakeRecorder;
+  });
+}
+
+async function mockAppShell(page: Page) {
+  await page.route("**/api/profile", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        user: { username: "e2e@example.com", fullName: "E2E User" },
+      }),
+    }),
+  );
+
+  await page.route("**/system/refresh-user", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        user: { id: 123, username: "e2e@example.com", role: "default" },
+      }),
+    }),
+  );
+
+  await page.route("**/api/legal/consent-status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        authenticated: true,
+        policyVersion: "2026-02-17.v2",
+        hasConsent: true,
+        isCurrent: true,
+        requiresReconsent: false,
+      }),
+    }),
+  );
+
+  await page.route("**/api/entitlements", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        plan: { tier: "free", status: "inactive" },
+        access: { active: true, readOnly: false, expiresAt: null, campaign: "e2e" },
+        features: {},
+      }),
+    }),
+  );
+
+  await page.route("**/workspaces", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        workspaces: [{ id: 1, slug: "zaky", name: "ZAKI", description: "E2E" }],
+      }),
+    }),
+  );
+
+  await page.route("**/workspace/*/threads", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads: [{ id: "t-1", slug: "t-1", title: "Thread 1" }] }),
+    }),
+  );
+
+  await page.route("**/workspace/*/thread/*/chats", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ history: [] }),
+    }),
+  );
+
+  await page.route("**/api/memory/status*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ pending: 0, conflicts: 0 }) }),
+  );
+  await page.route("**/api/memory/list*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ memories: [], nextCursor: null, hasMore: false }) }),
+  );
+  await page.route("**/api/documents/accepted-file-types", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ types: { "text/plain": [".txt"] } }) }),
+  );
+  await page.route("**/api/usage/quota*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        unlimited: false,
+        limit: 5,
+        used: 0,
+        remaining: 5,
+        resetAt: "2026-03-14T00:00:00.000Z",
+        surface: "app_chat",
+        bucket: "app_chat",
+      }),
+    }),
+  );
+  await page.route("**/api/telemetry/product-event", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) }),
+  );
+
+  await page.route("**/api/agent/voice/transcribe", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ text: "hello from voice dictation" }),
+    }),
+  );
+}
+
+test.describe("voice dictation", () => {
+  test("records, transcribes, drops text into input without auto-send", async ({ page }) => {
+    const telemetryEvents: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/api/telemetry/product-event")) {
+        try {
+          const body = req.postDataJSON() as { event?: string };
+          if (body?.event) telemetryEvents.push(body.event);
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    await mockMediaRecorder(page);
+    await mockAppShell(page);
+    await bootstrapSession(page);
+
+    // Register AFTER mockAppShell so Playwright's last-match-wins ordering
+    // routes to this handler and we can observe the call.
+    let transcribeCalled = false;
+    await page.route("**/api/agent/voice/transcribe", (route) => {
+      transcribeCalled = true;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ text: "hello from voice dictation" }),
+      });
+    });
+
+    await page.goto("/spaces/zaky/threads/t-1");
+
+    const micButton = page.getByRole("button", { name: /voice input/i });
+    await expect(micButton).toBeVisible();
+    await micButton.click();
+
+    // Now showing the stop-recording variant
+    const stopButton = page.getByRole("button", { name: /stop recording/i });
+    await expect(stopButton).toBeVisible();
+    await stopButton.click();
+
+    const input = page.locator("#chat-input");
+    await expect(input).toHaveValue("hello from voice dictation");
+
+    // Should not have been auto-sent — the text is still in the input.
+    expect(transcribeCalled).toBe(true);
+
+    await expect.poll(() => telemetryEvents).toContain("voice_dictate_started");
+    await expect.poll(() => telemetryEvents).toContain("voice_dictate_completed");
+  });
+});

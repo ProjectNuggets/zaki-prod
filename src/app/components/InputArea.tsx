@@ -65,15 +65,31 @@ export function InputArea({
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
 
   // ── Voice recording (STT) ──────────────────────────────────────────
+  const MAX_RECORDING_SECONDS = 60;
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingSecondsLeft, setRecordingSecondsLeft] = useState(MAX_RECORDING_SECONDS);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const recordingCancelledRef = useRef(false);
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearRecordingTimers = useCallback(() => {
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Prefer webm (Chrome/Edge), fall back to mp4 (Safari), then wav
+      // Prefer webm (Chrome/Edge), fall back to mp4 (Safari/iOS), then wav
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/mp4")
@@ -81,12 +97,15 @@ export function InputArea({
           : "audio/wav";
       const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
+      recordingCancelledRef.current = false;
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
       recorder.onstop = async () => {
         // Stop all tracks to release the mic
         stream.getTracks().forEach((t) => t.stop());
+        clearRecordingTimers();
+        if (recordingCancelledRef.current) return;
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         if (blob.size === 0) return;
         setIsTranscribing(true);
@@ -102,11 +121,14 @@ export function InputArea({
           if (transcribedText) {
             setInputValue((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
             textareaRef.current?.focus();
+            void trackProductEvent({ event: "voice_dictate_completed", source: "chat_input" });
           } else {
             toast.info("No speech detected");
+            void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
           }
         } catch {
           toast.error("Voice transcription failed");
+          void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
         } finally {
           setIsTranscribing(false);
         }
@@ -114,17 +136,44 @@ export function InputArea({
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsRecording(true);
+      setRecordingSecondsLeft(MAX_RECORDING_SECONDS);
+      void trackProductEvent({ event: "voice_dictate_started", source: "chat_input" });
+
+      // Countdown tick
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+      // Hard cap — auto-stop and transcribe whatever was recorded
+      recordingTimeoutRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
+        }
+      }, MAX_RECORDING_SECONDS * 1000);
     } catch {
       toast.error("Microphone access denied");
+      void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
     }
-  }, []);
+  }, [clearRecordingTimers]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      recordingCancelledRef.current = false;
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
   }, []);
+
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      recordingCancelledRef.current = true;
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      clearRecordingTimers();
+    }
+  }, [clearRecordingTimers]);
+
+  useEffect(() => clearRecordingTimers, [clearRecordingTimers]);
 
   // Auto-focus textarea when response completes (isSending: true → false)
   useEffect(() => {
@@ -606,28 +655,48 @@ export function InputArea({
             </span>
           ) : null}
           <span className="flex-1" />
-          {/* Mic button — STT voice input */}
-          {zakiBotMode && !isStopMode ? (
-            <button
-              type="button"
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={isTranscribing || isSending}
-              className={cn(
-                "zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
-                isRecording
-                  ? "bg-zaki-brand hover:bg-zaki-brand-hover border-zaki-brand/30"
-                  : "bg-zaki-elevated hover:bg-zaki-sunken border-zaki-strong"
-              )}
-              aria-label={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
-            >
-              {isTranscribing ? (
-                <span className="size-4 animate-spin rounded-full border-2 border-zaki-muted border-t-transparent" />
-              ) : isRecording ? (
-                <Square className="size-3.5 text-white" />
-              ) : (
-                <Mic className="size-4 text-zaki-muted" />
-              )}
-            </button>
+          {/* Mic button — STT voice input (available on all chat surfaces) */}
+          {!isStopMode ? (
+            <>
+              {isRecording ? (
+                <>
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted tabular-nums"
+                    aria-live="polite"
+                  >
+                    {`Recording ${recordingSecondsLeft}s`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={cancelRecording}
+                    className="zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border border-zaki-strong bg-zaki-elevated hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors"
+                    aria-label="Cancel recording"
+                  >
+                    <X className="size-4 text-zaki-muted" />
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={isTranscribing || isSending}
+                className={cn(
+                  "zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
+                  isRecording
+                    ? "bg-zaki-brand hover:bg-zaki-brand-hover border-zaki-brand/30"
+                    : "bg-zaki-elevated hover:bg-zaki-sunken border-zaki-strong"
+                )}
+                aria-label={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
+              >
+                {isTranscribing ? (
+                  <span className="size-4 animate-spin rounded-full border-2 border-zaki-muted border-t-transparent" />
+                ) : isRecording ? (
+                  <Square className="size-3.5 text-white" />
+                ) : (
+                  <Mic className="size-4 text-zaki-muted" />
+                )}
+              </button>
+            </>
           ) : null}
           <button
             type={isStopMode ? "button" : "submit"}

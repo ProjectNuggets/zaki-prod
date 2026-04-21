@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { parseMessageMarkdown } from "./parseMessageMarkdown";
+import { parseAssistantContent } from "./parseAssistantImages";
 import { BlockRenderer } from "./BlockRenderer";
 import type { MessageBlock } from "./types";
 
@@ -31,9 +32,12 @@ export function MessageContent({
       blockCacheRef.current = new Map();
       return { blocks: [] as MessageBlock[] };
     }
-    const parsed = parseMessageMarkdown(parseSource, {
-      streaming: streaming && isAssistant,
-    });
+    const parsedBlocks = isAssistant
+      ? parseAssistantContent(parseSource, { streaming: streaming && isAssistant })
+      : parseMessageMarkdown(parseSource, {
+          streaming: streaming && isAssistant,
+        }).blocks;
+    const parsed = { blocks: parsedBlocks };
     const prev = blockCacheRef.current;
     const next = new Map<string, { block: MessageBlock; key: string }>();
     const stableBlocks = parsed.blocks.map((block) => {
