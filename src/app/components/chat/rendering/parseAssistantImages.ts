@@ -84,16 +84,18 @@ function classifyLines(content: string): PreBlock[] {
 
     // [IMAGE:/abs/workspace/path] — workspace-saved image with no URL. Hide
     // the path and show the same discreet "saved locally" indicator we use
-    // for the "Saved:" text line.
+    // for the "Saved:" text line. Fires for both standalone and inline
+    // occurrences; inline surrounding prose is preserved.
     let sawImageSentinel = false;
     line = line.replace(IMAGE_SENTINEL_GLOBAL_RE, () => {
       sawImageSentinel = true;
       return "";
     });
-    if (sawImageSentinel && !line.trim()) {
+    if (sawImageSentinel) {
       flush();
       out.push({ kind: "saved" });
-      continue;
+      if (!line.trim()) continue;
+      // fall through so the remaining prose on the line still renders
     }
 
     const trimmed = line.trim();

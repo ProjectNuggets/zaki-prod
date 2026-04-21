@@ -9,6 +9,8 @@ import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio } from "@/lib/api";
 import { toast } from "sonner";
 
+const MAX_RECORDING_SECONDS = 60;
+
 export function InputArea({
   onSend,
   attachments,
@@ -65,7 +67,6 @@ export function InputArea({
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
 
   // ── Voice recording (STT) ──────────────────────────────────────────
-  const MAX_RECORDING_SECONDS = 60;
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingSecondsLeft, setRecordingSecondsLeft] = useState(MAX_RECORDING_SECONDS);
@@ -107,7 +108,11 @@ export function InputArea({
         clearRecordingTimers();
         if (recordingCancelledRef.current) return;
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        if (blob.size === 0) return;
+        if (blob.size === 0) {
+          toast.info("No audio captured");
+          void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
+          return;
+        }
         setIsTranscribing(true);
         try {
           const buf = await blob.arrayBuffer();
@@ -173,7 +178,11 @@ export function InputArea({
     }
   }, [clearRecordingTimers]);
 
-  useEffect(() => clearRecordingTimers, [clearRecordingTimers]);
+  // Release any pending timers when the component unmounts so a half-finished
+  // recording doesn't leak intervals past teardown.
+  useEffect(() => {
+    return () => clearRecordingTimers();
+  }, [clearRecordingTimers]);
 
   // Auto-focus textarea when response completes (isSending: true → false)
   useEffect(() => {
@@ -662,7 +671,7 @@ export function InputArea({
                 <>
                   <span
                     className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted tabular-nums"
-                    aria-live="polite"
+                    aria-hidden="true"
                   >
                     {`Recording ${recordingSecondsLeft}s`}
                   </span>
