@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   NullalisNarrationFrame,
@@ -7,7 +7,17 @@ import type {
   ZakiUsageSummary,
 } from "./BotStatusRail";
 import { ReasoningBlock } from "./blocks/ReasoningBlock";
-import { ToolCard, type ToolBlockStatus } from "./blocks/ToolCard";
+import {
+  CompactToolRow,
+  type ToolRowStatus,
+  type CompactToolRowProps,
+} from "./blocks/CompactToolRow";
+import {
+  ContextToolGroup,
+  isContextGroupTool,
+  type ContextGroupChild,
+} from "./blocks/ContextToolGroup";
+import { TextShimmer } from "./blocks/TextShimmer";
 
 const DEDUP_WINDOW_MS = 450;
 
@@ -59,7 +69,7 @@ function isRealReasoningEntry(entry: NullalisTranscriptEntry) {
 
 function toToolStatus(
   state: NullalisTranscriptEntry["resultState"] | undefined | null
-): ToolBlockStatus {
+): ToolRowStatus {
   if (state === "done") return "done";
   if (state === "failed") return "failed";
   if (state === "queued") return "queued";
@@ -77,39 +87,99 @@ type ReasoningBlockModel = {
 type ToolBlockModel = {
   kind: "tool";
   id: string;
-  tool: string;
-  label?: string | null;
-  status: ToolBlockStatus;
-  startedAt: number;
-  endedAt?: number | null;
-  durationMs?: number | null;
-  command?: string | null;
-  files?: string[];
-  inputPreview?: string | null;
-  input?: string | null;
-  output?: string | null;
-  outputTruncated?: boolean;
-  resultSummary?: string | null;
-  exitCode?: number | null;
   timestamp: number;
+  props: CompactToolRowProps & { id: string };
 };
 
-export type TimelineBlock = ReasoningBlockModel | ToolBlockModel;
+type GroupBlockModel = {
+  kind: "group";
+  id: string;
+  timestamp: number;
+  children: ContextGroupChild[];
+};
+
+export type TimelineBlock = ReasoningBlockModel | ToolBlockModel | GroupBlockModel;
+
+function toolPropsFromEntry(
+  entry: NullalisTranscriptEntry,
+  key: string
+): CompactToolRowProps & { id: string } {
+  const status = toToolStatus(entry.resultState);
+  return {
+    id: key,
+    tool: entry.tool || "tool",
+    label: entry.activityLabel ?? null,
+    status,
+    startedAt: entry.timestamp,
+    endedAt: status !== "running" ? entry.timestamp : null,
+    durationMs: entry.durationMs ?? null,
+    command: entry.command ?? null,
+    files: entry.files ? [...entry.files] : undefined,
+    inputPreview: entry.inputPreview ?? null,
+    input: entry.inputPreview ?? null,
+    output: entry.outputPreview ?? null,
+    outputTruncated: entry.outputTruncated ?? false,
+    resultSummary: entry.resultSummary ?? null,
+    exitCode: entry.exitCode ?? null,
+  };
+}
+
+function mergeToolProps(
+  prev: CompactToolRowProps & { id: string },
+  entry: NullalisTranscriptEntry
+): CompactToolRowProps & { id: string } {
+  const resolvedStatus = toToolStatus(entry.resultState);
+  return {
+    ...prev,
+    status:
+      resolvedStatus === "running" && prev.status !== "running"
+        ? prev.status
+        : resolvedStatus,
+    endedAt: entry.timestamp >= (prev.endedAt ?? 0) ? entry.timestamp : prev.endedAt,
+    durationMs: entry.durationMs ?? prev.durationMs ?? null,
+    command: entry.command ?? prev.command ?? null,
+    files:
+      entry.files && entry.files.length > 0
+        ? Array.from(new Set([...(prev.files ?? []), ...entry.files]))
+        : prev.files,
+    inputPreview: entry.inputPreview ?? prev.inputPreview ?? null,
+    input: entry.inputPreview ?? prev.input ?? null,
+    output: entry.outputPreview ?? prev.output ?? null,
+    outputTruncated: entry.outputTruncated ?? prev.outputTruncated ?? false,
+    resultSummary: entry.resultSummary ?? prev.resultSummary ?? null,
+    exitCode: entry.exitCode ?? prev.exitCode ?? null,
+    label: entry.activityLabel ?? prev.label ?? null,
+  };
+}
 
 export function composeTurnTimeline(
   entries: NullalisTranscriptEntry[]
 ): TimelineBlock[] {
   const sorted = [...entries]
-    .filter((entry) => String(entry.text || "").trim().length > 0 || entry.kind === "tool")
+    .filter(
+      (entry) => String(entry.text || "").trim().length > 0 || entry.kind === "tool"
+    )
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  const blocksByKey = new Map<string, TimelineBlock>();
+  // First pass: build raw blocks (reasoning + individual tools) in order,
+  // merging repeat updates to the same tool_use_id.
+  type RawBlock =
+    | { kind: "reasoning"; id: string; text: string; timestamp: number }
+    | {
+        kind: "tool";
+        id: string;
+        timestamp: number;
+        tool: string;
+        props: CompactToolRowProps & { id: string };
+      };
+
+  const rawByKey = new Map<string, RawBlock>();
   const order: string[] = [];
   const lastExactText: Array<{ text: string; at: number }> = [];
 
-  const pushOrdered = (key: string, block: TimelineBlock) => {
-    if (!blocksByKey.has(key)) order.push(key);
-    blocksByKey.set(key, block);
+  const put = (key: string, block: RawBlock) => {
+    if (!rawByKey.has(key)) order.push(key);
+    rawByKey.set(key, block);
   };
 
   for (const entry of sorted) {
@@ -119,55 +189,25 @@ export function composeTurnTimeline(
         : entry.groupKey
           ? `tool-group:${entry.groupKey}`
           : `tool-entry:${entry.id}`;
-      const previous = blocksByKey.get(key);
-      const resolvedStatus = toToolStatus(entry.resultState);
+      const previous = rawByKey.get(key);
       if (previous && previous.kind === "tool") {
-        pushOrdered(key, {
+        put(key, {
           ...previous,
-          status:
-            resolvedStatus === "running" && previous.status !== "running"
-              ? previous.status
-              : resolvedStatus,
-          endedAt: entry.timestamp >= (previous.endedAt ?? 0) ? entry.timestamp : previous.endedAt,
-          durationMs: entry.durationMs ?? previous.durationMs ?? null,
-          command: entry.command ?? previous.command ?? null,
-          files:
-            entry.files && entry.files.length > 0
-              ? Array.from(new Set([...(previous.files ?? []), ...entry.files]))
-              : previous.files,
-          inputPreview: entry.inputPreview ?? previous.inputPreview ?? null,
-          output: entry.outputPreview ?? previous.output ?? null,
-          outputTruncated: entry.outputTruncated ?? previous.outputTruncated ?? false,
-          resultSummary: entry.resultSummary ?? previous.resultSummary ?? null,
-          exitCode: entry.exitCode ?? previous.exitCode ?? null,
-          label: entry.activityLabel ?? previous.label ?? null,
+          props: mergeToolProps(previous.props, entry),
         });
       } else {
-        pushOrdered(key, {
+        put(key, {
           kind: "tool",
           id: key,
-          tool: entry.tool || "tool",
-          label: entry.activityLabel ?? null,
-          status: resolvedStatus,
-          startedAt: entry.timestamp,
-          endedAt: resolvedStatus !== "running" ? entry.timestamp : null,
-          durationMs: entry.durationMs ?? null,
-          command: entry.command ?? null,
-          files: entry.files ? [...entry.files] : undefined,
-          inputPreview: entry.inputPreview ?? null,
-          input: entry.inputPreview ?? null,
-          output: entry.outputPreview ?? null,
-          outputTruncated: entry.outputTruncated ?? false,
-          resultSummary: entry.resultSummary ?? null,
-          exitCode: entry.exitCode ?? null,
           timestamp: entry.timestamp,
+          tool: entry.tool || "tool",
+          props: toolPropsFromEntry(entry, key),
         });
       }
       continue;
     }
 
     if (!isRealReasoningEntry(entry)) continue;
-
     const text = String(entry.text).trim();
     const normText = normalize(text);
     const recent = lastExactText[lastExactText.length - 1];
@@ -176,49 +216,68 @@ export function composeTurnTimeline(
     }
     lastExactText.push({ text: normText, at: entry.timestamp });
     if (lastExactText.length > 8) lastExactText.shift();
-
     const key = `reason:${entry.id}`;
-    pushOrdered(key, {
-      kind: "reasoning",
-      id: key,
-      text,
-      timestamp: entry.timestamp,
-    });
+    put(key, { kind: "reasoning", id: key, text, timestamp: entry.timestamp });
   }
 
-  return order
-    .map((key) => blocksByKey.get(key))
-    .filter((block): block is TimelineBlock => Boolean(block));
+  const raw: RawBlock[] = order
+    .map((k) => rawByKey.get(k))
+    .filter((b): b is RawBlock => Boolean(b));
+
+  // Second pass: fold consecutive read-like tools into a group block.
+  const result: TimelineBlock[] = [];
+  let buffer: Extract<RawBlock, { kind: "tool" }>[] = [];
+
+  const flushGroup = () => {
+    if (buffer.length === 0) return;
+    if (buffer.length === 1) {
+      const only = buffer[0]!;
+      result.push({
+        kind: "tool",
+        id: only.id,
+        timestamp: only.timestamp,
+        props: only.props,
+      });
+    } else {
+      result.push({
+        kind: "group",
+        id: `group:${buffer[0]!.id}`,
+        timestamp: buffer[0]!.timestamp,
+        children: buffer.map((b) => b.props),
+      });
+    }
+    buffer = [];
+  };
+
+  for (const block of raw) {
+    if (block.kind === "tool" && isContextGroupTool(block.tool)) {
+      buffer.push(block);
+      continue;
+    }
+    flushGroup();
+    if (block.kind === "reasoning") {
+      result.push(block);
+    } else {
+      result.push({
+        kind: "tool",
+        id: block.id,
+        timestamp: block.timestamp,
+        props: block.props,
+      });
+    }
+  }
+  flushGroup();
+
+  return result;
 }
 
 function hasTimelineContent(blocks: TimelineBlock[]): boolean {
   return blocks.some(
     (block) =>
-      (block.kind === "reasoning" && block.text.trim().length > 0) || block.kind === "tool"
+      (block.kind === "reasoning" && block.text.trim().length > 0) ||
+      block.kind === "tool" ||
+      block.kind === "group"
   );
-}
-
-function currentPhaseLabel(frame: NullalisNarrationFrame | null): string | null {
-  if (!frame) return null;
-  const label = String(frame.label || "").trim();
-  switch (frame.phase) {
-    case "tool_start":
-      return frame.tool ? `Running ${frame.tool}...` : label || "Running tool...";
-    case "tool_done":
-      return frame.tool ? `${frame.tool} completed` : label || "Tool completed";
-    case "waiting":
-      return label || "Waiting for provider...";
-    case "error_recovery":
-      return label || "Retrying after a transient issue...";
-    case "listening":
-      return label || "Listening...";
-    case "speaking":
-      return label || "Speaking response...";
-    case "thinking":
-    case "plan_step":
-    default:
-      return label || "Thinking...";
-  }
 }
 
 function formatTokens(value?: number | null): string | null {
@@ -234,75 +293,85 @@ function formatCost(value?: number | null): string | null {
   return `$${value.toFixed(digits)}`;
 }
 
+function formatElapsed(ms: number): string {
+  if (ms < 1000) return "1s";
+  const total = Math.floor(ms / 1000);
+  if (total < 60) return `${total}s`;
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}m ${s}s`;
+}
+
+export type TimelineRevealPhase = "working" | "revealing" | "done";
+
 export function NullalisTurnTimeline({
   entries,
-  frame,
+  frame: _frame,
   isStreaming,
+  revealPhase = "working",
+  turnStartedAt = null,
   compact = false,
-  model,
-  mode,
   usage,
 }: {
   entries: NullalisTranscriptEntry[];
   frame: NullalisNarrationFrame | null;
   isStreaming: boolean;
+  revealPhase?: TimelineRevealPhase;
+  turnStartedAt?: number | null;
   compact?: boolean;
   model?: string | null;
   mode?: string | null;
   usage?: ZakiUsageSummary | null;
 }) {
   const blocks = useMemo(() => composeTurnTimeline(entries), [entries]);
-  const [expandedCompact, setExpandedCompact] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
 
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!isStreaming) return;
     setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(timer);
   }, [isStreaming]);
 
-  if (!hasTimelineContent(blocks) && !frame) return null;
+  const hasContent = hasTimelineContent(blocks);
+  if (!hasContent && !isStreaming && revealPhase !== "revealing" && revealPhase !== "done") {
+    return null;
+  }
 
-  const startedAt = blocks.length > 0 ? blocks[0]!.timestamp : frame?.timestamp ?? null;
-  const elapsedMs = startedAt != null ? Math.max(0, now - startedAt) : null;
-  const elapsedLabel =
-    elapsedMs != null
-      ? elapsedMs < 1000
-        ? "1s"
-        : `${Math.floor(elapsedMs / 1000)}s`
+  // Timer start preference: user-submit timestamp > first block timestamp.
+  const startedAt =
+    turnStartedAt ?? (blocks.length > 0 ? blocks[0]!.timestamp : null);
+  const elapsedMs =
+    startedAt != null
+      ? revealPhase === "done" && !isStreaming && blocks.length > 0
+        ? Math.max(0, (blocks[blocks.length - 1]!.timestamp || now) - startedAt)
+        : Math.max(0, now - startedAt)
       : null;
-  const phaseLabel = isStreaming ? currentPhaseLabel(frame) : null;
+  const elapsedLabel = elapsedMs != null ? formatElapsed(elapsedMs) : null;
 
   const renderBlocks = (all: TimelineBlock[]) => (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col">
       {all.map((block) => {
         if (block.kind === "reasoning") {
           return (
-            <ReasoningBlock
+            <div key={block.id} className="py-1">
+              <ReasoningBlock text={block.text} isStreaming={isStreaming} />
+            </div>
+          );
+        }
+        if (block.kind === "group") {
+          return (
+            <ContextToolGroup
               key={block.id}
-              text={block.text}
+              children={block.children}
               isStreaming={isStreaming}
             />
           );
         }
         return (
-          <ToolCard
+          <CompactToolRow
             key={block.id}
-            tool={block.tool}
-            label={block.label}
-            status={block.status}
-            startedAt={block.startedAt}
-            endedAt={block.endedAt}
-            durationMs={block.durationMs}
-            command={block.command}
-            files={block.files}
-            inputPreview={block.inputPreview}
-            input={block.input}
-            output={block.output}
-            outputTruncated={block.outputTruncated}
-            resultSummary={block.resultSummary}
-            exitCode={block.exitCode}
+            {...block.props}
             isStreaming={isStreaming}
           />
         );
@@ -310,44 +379,69 @@ export function NullalisTurnTimeline({
     </div>
   );
 
-  if (compact) {
-    const hasBlocks = blocks.length > 0;
-    const summary = hasBlocks
-      ? `${blocks.length} ${blocks.length === 1 ? "step" : "steps"}`
-      : phaseLabel || "Working";
+  // Empty while streaming → single Thinking shimmer.
+  const showThinkingOnly = isStreaming && !hasContent;
+
+  // Reveal phase: collapse trail into "Worked for Ns ›" details.
+  const shouldCollapse = revealPhase === "revealing" || revealPhase === "done";
+
+  if (showThinkingOnly) {
+    return (
+      <section
+        className="zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        aria-live="polite"
+        dir="auto"
+      >
+        <TextShimmer text="Thinking" />
+      </section>
+    );
+  }
+
+  if (shouldCollapse) {
+    const summaryLabel = elapsedLabel ? `Worked for ${elapsedLabel}` : "Worked";
     return (
       <details
-        className="zaki-process-compact mt-2 max-w-[92%] rounded-zaki-xl border border-zaki bg-zaki-raised px-3 py-2.5 text-zaki-primary shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:text-zaki-dark-primary"
-        open={expandedCompact}
-        onToggle={(event) =>
-          setExpandedCompact((event.currentTarget as HTMLDetailsElement).open)
-        }
+        className="zaki-process-compact max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
         dir="auto"
       >
         <summary
-          className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium leading-6 [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-          aria-expanded={expandedCompact}
-          aria-label={
-            elapsedLabel
-              ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel}, ${summary}. Toggle details.`
-              : `${summary}. Toggle details.`
-          }
+          className="flex cursor-pointer list-none items-center gap-1.5 text-[14px] leading-6 text-zaki-muted [&::-webkit-details-marker]:hidden focus-visible:outline-none dark:text-zaki-dark-muted"
+          aria-label={`${summaryLabel}. Toggle agent trail.`}
         >
-          <span
+          <span>{summaryLabel}</span>
+          <ChevronRight
             className={cn(
-              "inline-block size-2 rounded-full bg-zaki-brand",
-              isStreaming && "animate-pulse"
+              "size-3 shrink-0 transition-transform",
+              "group-open:rotate-90"
             )}
             aria-hidden
           />
+        </summary>
+        <div className="mt-1">{renderBlocks(blocks)}</div>
+      </details>
+    );
+  }
+
+  if (compact) {
+    const stepCount = blocks.length;
+    const stepLabel = stepCount === 1 ? "1 step" : `${stepCount} steps`;
+    return (
+      <details
+        className="zaki-process-compact max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        dir="auto"
+      >
+        <summary
+          className="flex cursor-pointer list-none items-center gap-1.5 text-[14px] leading-6 text-zaki-muted [&::-webkit-details-marker]:hidden dark:text-zaki-dark-muted"
+          aria-label={`${stepLabel}. Toggle agent trail.`}
+        >
           <span>
             {elapsedLabel
-              ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel} · ${summary}`
-              : summary}
+              ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel} · ${stepLabel}`
+              : stepLabel}
           </span>
-          <ChevronDown className="size-3 text-zaki-muted transition-transform group-open:rotate-180 dark:text-zaki-dark-muted" />
+          <ChevronRight className="size-3 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
         </summary>
-        <div className="mt-2">{renderBlocks(blocks)}</div>
+        <div className="mt-1">{renderBlocks(blocks)}</div>
       </details>
     );
   }
@@ -360,51 +454,16 @@ export function NullalisTurnTimeline({
       aria-label={isStreaming ? "Agent working" : "Agent finished"}
       dir="auto"
     >
-      <div
-        className={cn(
-          "mb-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-medium",
-          "border-zaki bg-zaki-raised text-zaki-secondary dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:text-zaki-dark-subtle",
-          isStreaming && "shadow-[0_0_0_1px_var(--zaki-brand-10),0_0_24px_var(--zaki-brand-15)]"
-        )}
-      >
-        <span
-          className={cn(
-            "inline-block size-2 rounded-full bg-zaki-brand",
-            isStreaming && "animate-pulse"
-          )}
-          aria-hidden
-        />
-        <span>
-          {elapsedLabel
-            ? `${isStreaming ? "Working" : "Worked"} for ${elapsedLabel}`
-            : isStreaming
-              ? "Working"
-              : "Worked"}
-        </span>
-        {phaseLabel && isStreaming ? (
-          <span className="truncate font-mono-ui text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-            {phaseLabel}
-          </span>
-        ) : null}
-        {model ? (
-          <span className="font-mono-ui text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-            · {model}
-          </span>
-        ) : null}
-        {mode ? (
-          <span className="font-mono-ui text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-            · {mode}
-          </span>
-        ) : null}
-      </div>
+      {elapsedLabel ? (
+        <div className="mb-1 text-[13px] leading-6 text-zaki-muted dark:text-zaki-dark-muted">
+          {isStreaming ? `Working for ${elapsedLabel}` : `Worked for ${elapsedLabel}`}
+        </div>
+      ) : null}
       {renderBlocks(blocks)}
       {(usage?.usageTokens != null || usage?.costUsd != null) && !isStreaming ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-          {elapsedLabel ? (
-            <span className="font-mono-ui">{elapsedLabel}</span>
-          ) : null}
           {formatTokens(usage?.usageTokens) ? (
-            <span className="font-mono-ui">· {formatTokens(usage?.usageTokens)}</span>
+            <span className="font-mono-ui">{formatTokens(usage?.usageTokens)}</span>
           ) : null}
           {formatCost(usage?.costUsd) ? (
             <span className="font-mono-ui">· {formatCost(usage?.costUsd)}</span>

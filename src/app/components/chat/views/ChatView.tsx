@@ -14,14 +14,16 @@ import type {
   ZakiUsageSummary,
   ZakiProcessSnapshot,
 } from "../BotStatusRail";
-import { BotProcessRail } from "../BotProcessRail";
 import {
   ApprovalRequiredCard,
   ContextGauge,
   TaskChecklist,
 } from "../NullalisRuntimeWidgets";
 import type { ContextGaugeData } from "../NullalisRuntimeWidgets";
-import { NullalisTurnTimeline } from "../NullalisTurnTimeline";
+import {
+  NullalisTurnTimeline,
+  type TimelineRevealPhase,
+} from "../NullalisTurnTimeline";
 import { SystemNoticesStack } from "@/app/components/ui/zaki";
 
 interface ChatViewProps {
@@ -51,6 +53,7 @@ interface ChatViewProps {
   botMode?: boolean;
   streamingMode?: "thinking" | "researching" | "writing";
   firstMessageTransition: boolean;
+  turnStartedAt?: number | null;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
@@ -66,12 +69,12 @@ export function ChatView({
   streamingBadgeLabel,
   streamingHelperText,
   streamingModeVariant = "thinking",
-  botToolCalls = [],
-  botStatusEvents = [],
+  botToolCalls: _botToolCalls = [],
+  botStatusEvents: _botStatusEvents = [],
   botReplyStart = null,
-  botProcessSnapshot = null,
-  botProcessCompact = false,
-  showBotTimeline = false,
+  botProcessSnapshot: _botProcessSnapshot = null,
+  botProcessCompact: _botProcessCompact = false,
+  showBotTimeline: _showBotTimeline = false,
   nullalisMode = false,
   nullalisNarrationFrame = null,
   nullalisTranscriptEntries = [],
@@ -81,28 +84,19 @@ export function ChatView({
   contextGaugeData = null,
   zakiUsageSummary = null,
   botMode = false,
-  streamingMode = "thinking",
+  streamingMode: _streamingMode = "thinking",
   firstMessageTransition,
+  turnStartedAt = null,
   onCopyMessage,
   onRegenerateMessage,
   onThumbsUpMessage,
 }: ChatViewProps) {
-  const latestMessage = messages[messages.length - 1] ?? null;
-  const inlineBotProcessRail =
-    showBotTimeline &&
-    botMode &&
-    !nullalisMode &&
-    isStreaming &&
-    latestMessage?.role === "assistant" &&
-    !String(latestMessage?.content || "").trim() &&
-    streamingModeVariant !== "final_reply_reveal";
-  const showDetachedBotProcessRail =
-    showBotTimeline &&
-    !inlineBotProcessRail &&
-    botProcessCompact;
-  const hasNullalisArtifacts =
-    nullalisMode &&
-    botMode &&
+  // Unified timeline surface: Nullalis (native reasoning) or bot mode
+  // (sidecar-driven narration) both render through NullalisTurnTimeline.
+  // Bot mode is treated as a Nullalis-compatible mode for rendering.
+  const timelineMode = nullalisMode || botMode;
+  const hasTimelineArtifacts =
+    timelineMode &&
     (nullalisTranscriptEntries.length > 0 ||
       Boolean(nullalisNarrationFrame) ||
       nullalisTaskItems.length > 0 ||
@@ -110,8 +104,24 @@ export function ChatView({
       zakiUsageSummary?.usageTokens != null ||
       zakiUsageSummary?.costUsd != null);
 
-  const renderNullalisArtifacts = (options?: { compact?: boolean }) => {
-    if (!hasNullalisArtifacts) return null;
+  // Reveal phase: final-reply tokens are landing → collapse the trail.
+  const revealPhase: TimelineRevealPhase =
+    botReplyStart != null
+      ? isStreaming
+        ? "revealing"
+        : "done"
+      : isStreaming
+        ? "working"
+        : hasTimelineArtifacts
+          ? "done"
+          : "working";
+
+  const renderTimelineArtifacts = (options?: {
+    compact?: boolean;
+    phase?: TimelineRevealPhase;
+  }) => {
+    if (!timelineMode) return null;
+    if (!hasTimelineArtifacts && !(isStreaming && options?.phase !== "revealing")) return null;
     return (
       <div className="flex flex-col items-start gap-1.5">
         <NullalisTurnTimeline
@@ -119,6 +129,8 @@ export function ChatView({
           frame={nullalisNarrationFrame}
           isStreaming={isStreaming}
           compact={options?.compact}
+          revealPhase={options?.phase ?? revealPhase}
+          turnStartedAt={turnStartedAt}
           usage={zakiUsageSummary}
         />
         <TaskChecklist tasks={nullalisTaskItems} />
@@ -156,30 +168,20 @@ export function ChatView({
 
         if (isStreamingMessage) {
           if (
-            nullalisMode &&
-            botMode &&
+            timelineMode &&
             !String(msg.content || "").trim() &&
             streamingModeVariant !== "final_reply_reveal"
           ) {
-            return <div key={msg.id}>{renderNullalisArtifacts({ compact: false })}</div>;
-          }
-          if (inlineBotProcessRail) {
             return (
-              <BotProcessRail
-                key={msg.id}
-                isStreaming={isStreaming}
-                stage={isStreaming ? streamingMode : "writing"}
-                toolCalls={botToolCalls}
-                statusEvents={botStatusEvents}
-                replyStart={botReplyStart}
-                snapshot={botProcessSnapshot}
-                compact={false}
-              />
+              <div key={msg.id}>
+                {renderTimelineArtifacts({ compact: false, phase: "working" })}
+              </div>
             );
           }
           if (streamingModeVariant === "final_reply_reveal") {
             return (
               <div key={msg.id} className="flex flex-col gap-2">
+                {renderTimelineArtifacts({ phase: "revealing" })}
                 <StreamingMessage
                   content={msg.content}
                   isStreaming={isStreamingMessage}
@@ -190,12 +192,12 @@ export function ChatView({
                   streamingModeVariant={streamingModeVariant}
                   botMode={botMode}
                 />
-                {renderNullalisArtifacts({ compact: true })}
               </div>
             );
           }
           return (
             <div key={msg.id} className="flex flex-col gap-2">
+              {renderTimelineArtifacts({ phase: "revealing" })}
               {String(msg.content || "").trim() ? (
                 <MessageBubble
                   message={msg}
@@ -211,7 +213,6 @@ export function ChatView({
                   />
                 )
               )}
-              {renderNullalisArtifacts({ compact: true })}
             </div>
           );
         }
@@ -220,16 +221,14 @@ export function ChatView({
           msg.role === "assistant" ? replayTimelines?.[msg.id] : undefined;
 
         return (
-          <div key={msg.id}>
+          <div key={msg.id} className="flex flex-col gap-2">
             {replayEntries && replayEntries.length > 0 ? (
-              <div className="mb-2 flex flex-col items-start gap-1.5">
-                <NullalisTurnTimeline
-                  entries={replayEntries}
-                  frame={null}
-                  isStreaming={false}
-                  compact
-                />
-              </div>
+              <NullalisTurnTimeline
+                entries={replayEntries}
+                frame={null}
+                isStreaming={false}
+                revealPhase="done"
+              />
             ) : null}
             <MessageBubble
               message={msg}
@@ -238,22 +237,11 @@ export function ChatView({
               onThumbsUp={onThumbsUpMessage}
             />
             {isLast && msg.role === "assistant"
-              ? renderNullalisArtifacts({ compact: true })
+              ? renderTimelineArtifacts({ phase: "done" })
               : null}
           </div>
         );
       })}
-      {showDetachedBotProcessRail ? (
-        <BotProcessRail
-          isStreaming={isStreaming}
-          stage={isStreaming ? streamingMode : "writing"}
-          toolCalls={botToolCalls}
-          statusEvents={botStatusEvents}
-          replyStart={botReplyStart}
-          snapshot={botProcessSnapshot}
-          compact={botProcessCompact}
-        />
-      ) : null}
     </div>
   );
 }

@@ -1994,6 +1994,7 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching" | "writing">("thinking");
   const [zakiBotToolCalls, setZakiBotToolCalls] = useState<BotToolCall[]>([]);
   const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
@@ -4969,6 +4970,7 @@ export function ChatArea() {
       ]);
     }
     setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
+    setTurnStartedAt(Date.now());
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
@@ -5758,6 +5760,7 @@ export function ChatArea() {
         botMode={isZakiBotActiveSpace}
         streamingMode={streamingIndicatorMode}
         firstMessageTransition={firstMessageTransition}
+        turnStartedAt={turnStartedAt}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
         onThumbsUpMessage={handleThumbsUpMessage}

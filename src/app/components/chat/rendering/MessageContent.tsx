@@ -1,7 +1,8 @@
-import { useDeferredValue, useMemo } from "react";
+import { useDeferredValue, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { parseMessageMarkdown } from "./parseMessageMarkdown";
 import { BlockRenderer } from "./BlockRenderer";
+import type { MessageBlock } from "./types";
 
 export type MessageContentProps = {
   content: string;
@@ -24,11 +25,30 @@ export function MessageContent({
   const shouldRenderStructured = isAssistant || preserveUserFormatting;
   const deferredContent = useDeferredValue(content);
   const parseSource = streaming && isAssistant ? deferredContent : content;
+  const blockCacheRef = useRef<Map<string, { block: MessageBlock; key: string }>>(new Map());
   const document = useMemo(() => {
-    if (!shouldRenderStructured) return { blocks: [] };
-    return parseMessageMarkdown(parseSource, {
+    if (!shouldRenderStructured) {
+      blockCacheRef.current = new Map();
+      return { blocks: [] as MessageBlock[] };
+    }
+    const parsed = parseMessageMarkdown(parseSource, {
       streaming: streaming && isAssistant,
     });
+    const prev = blockCacheRef.current;
+    const next = new Map<string, { block: MessageBlock; key: string }>();
+    const stableBlocks = parsed.blocks.map((block) => {
+      const key = JSON.stringify(block);
+      const cached = prev.get(block.id);
+      if (cached && cached.key === key) {
+        next.set(block.id, cached);
+        return cached.block;
+      }
+      const entry = { block, key };
+      next.set(block.id, entry);
+      return block;
+    });
+    blockCacheRef.current = next;
+    return { blocks: stableBlocks };
   }, [parseSource, shouldRenderStructured, streaming, isAssistant]);
 
   if (!shouldRenderStructured) {
