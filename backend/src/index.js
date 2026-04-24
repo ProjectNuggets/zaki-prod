@@ -87,6 +87,7 @@ import {
   resolveCanonicalChatSessionKey,
 } from "./bot-bff.js";
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
+import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -8416,6 +8417,35 @@ async function requireAgentContext(req, res, next) {
   next();
 }
 
+async function callNullclawJson({ method, path, userId, body, requestId }) {
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+    return { ok: false, status: 503, data: { error: "nullclaw_unavailable" } };
+  }
+  const headers = new Headers(
+    buildAgentForwardHeaders({
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId,
+    })
+  );
+  if (body !== undefined && body !== null) {
+    headers.set("Content-Type", "application/json");
+  }
+  const upstream = await fetchWithTimeout(
+    `${nullclawBase}${path}`,
+    {
+      method,
+      headers,
+      body: body === undefined || body === null ? undefined : JSON.stringify(body),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    `Nullclaw ${method} ${path}`
+  );
+  const data = await upstream.json().catch(() => ({}));
+  return { ok: upstream.ok, status: upstream.status, data };
+}
+
 async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (!nullclawBase) {
@@ -8540,6 +8570,37 @@ const agentProvisionHandler = async (req, res) => {
     );
   }
 };
+
+const makeAgentSecretsTwoPhaseHandler = (action) => async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+    const key = String(req.params?.key || "");
+    if (!key) {
+      return res.status(400).json({ error: "missing_key" });
+    }
+    const value = action === "put" ? req.body?.value : undefined;
+    const requestId = String(req.requestId || crypto.randomUUID());
+    const result = await prepareAndApplySecret({
+      callNullclaw: ({ method, path, body }) =>
+        callNullclawJson({ method, path, userId, body, requestId }),
+      userId,
+      key,
+      action,
+      value,
+    });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    console.error(`[Agent] Secret ${action} error:`, error);
+    return res.status(500).json({ error: error?.message || `Secret ${action} failed.` });
+  }
+};
+const agentSecretsPutHandler = makeAgentSecretsTwoPhaseHandler("put");
+const agentSecretsDeleteHandler = makeAgentSecretsTwoPhaseHandler("delete");
 
 const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
   try {
@@ -8830,22 +8891,21 @@ app.get(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
   )
 );
+// PUT/DELETE use the two-phase prepare + apply flow required by
+// nullalis #11 (D8 secret vault). BFF holds the confirmation_token;
+// client stays ignorant of the pairing.
 app.put(
   "/api/agent/secrets/:key",
   requireAgentContext,
   agentRouteLimiter,
   agentJson1mb,
-  makeAgentUserProxyHandler(
-    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
-  )
+  agentSecretsPutHandler
 );
 app.delete(
   "/api/agent/secrets/:key",
   requireAgentContext,
   agentRouteLimiter,
-  makeAgentUserProxyHandler(
-    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
-  )
+  agentSecretsDeleteHandler
 );
 app.get(
   "/api/agent/secrets",
