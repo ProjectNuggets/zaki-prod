@@ -104,6 +104,7 @@ function createHandlers(overrides = {}) {
       getAuthContext,
       sendUpstreamRequest,
       buildUsageSummary,
+      loadEntitlement: overrides.loadEntitlement,
       telegramWebhookBaseUrl: overrides.telegramWebhookBaseUrl,
       createRequestId: () => "req-1",
       createIdempotencyKey: () => "idem-1",
@@ -625,5 +626,104 @@ describe("normalizeBotUsageSummaryFromQuota", () => {
       tokens_day: 0,
       tokens_month: 0,
     });
+  });
+});
+
+describe("bot BFF provision — entitlement forwarding (S2.1)", () => {
+  it("merges loadEntitlement result into the outbound provision payload", async () => {
+    const loadEntitlement = jest.fn(async (userId) => {
+      expect(userId).toBe("7");
+      return {
+        plan_tier: "pro",
+        status: "active",
+        period_end_unix: 1735689600,
+      };
+    });
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      loadEntitlement,
+      sendUpstreamRequest: jest.fn(async ({ body }) => {
+        expect(body).toEqual({
+          user_id: "7",
+          nickname: "nova",
+          plan_tier: "pro",
+          status: "active",
+          period_end_unix: 1735689600,
+        });
+        return jsonResponse({ status: "provisioned" });
+      }),
+    });
+    const req = { body: { nickname: "nova" }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.provision(req, res);
+
+    expect(loadEntitlement).toHaveBeenCalledTimes(1);
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody).toEqual({ status: "provisioned" });
+  });
+
+  it("still forwards user_id when entitlement lookup returns null (soft-fail)", async () => {
+    const loadEntitlement = jest.fn(async () => null);
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      loadEntitlement,
+      sendUpstreamRequest: jest.fn(async ({ body }) => {
+        expect(body).toEqual({ user_id: "7", nickname: "nova" });
+        expect(body.plan_tier).toBeUndefined();
+        return jsonResponse({ status: "provisioned" });
+      }),
+    });
+    const req = { body: { nickname: "nova" }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.provision(req, res);
+
+    expect(loadEntitlement).toHaveBeenCalledTimes(1);
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("operates normally when loadEntitlement injection is absent", async () => {
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      sendUpstreamRequest: jest.fn(async ({ body }) => {
+        expect(body.user_id).toBe("7");
+        expect(body.plan_tier).toBeUndefined();
+        return jsonResponse({ status: "provisioned" });
+      }),
+    });
+    const req = { body: {}, headers: {} };
+    const res = createMockRes();
+
+    await handlers.provision(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("client-supplied plan_tier is overwritten by the trusted entitlement lookup", async () => {
+    const loadEntitlement = jest.fn(async () => ({
+      plan_tier: "free",
+      status: "expired",
+      period_end_unix: null,
+    }));
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      loadEntitlement,
+      sendUpstreamRequest: jest.fn(async ({ body }) => {
+        expect(body.plan_tier).toBe("free");
+        expect(body.status).toBe("expired");
+        expect(body.period_end_unix).toBeNull();
+        return jsonResponse({ status: "provisioned" });
+      }),
+    });
+    const req = {
+      body: { plan_tier: "enterprise", status: "active", period_end_unix: 9999999999 },
+      headers: {},
+    };
+    const res = createMockRes();
+
+    await handlers.provision(req, res);
+
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
   });
 });

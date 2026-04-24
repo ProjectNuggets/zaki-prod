@@ -87,6 +87,8 @@ import {
   resolveCanonicalChatSessionKey,
 } from "./bot-bff.js";
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
+import { prepareAndApplySecret } from "./nullalis-secrets.js";
+import { buildEntitlementFields } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -1529,6 +1531,7 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   resolveTier,
   tierByPrice: TIER_BY_PRICE,
   fulfillAccessCodePurchaseCheckoutSession,
+  revokeNullalisEntitlement,
 });
 
 // Stripe webhook must use raw body (must be registered before express.json)
@@ -8416,6 +8419,60 @@ async function requireAgentContext(req, res, next) {
   next();
 }
 
+// S2.7 — push a revocation to nullalis's /internal/entitlements/revoke.
+// Called by the Stripe webhook handler when an event (subscription
+// delete/update, invoice payment fail, dispute) should immediately
+// knock a user off paid access. Best-effort: DB is source of truth.
+async function revokeNullalisEntitlement(user, { requestId } = {}) {
+  if (!user || !user.id) {
+    return { ok: false, status: 0, data: { error: "missing_user" } };
+  }
+  const entitlement = buildEntitlementFields(user) || {
+    plan_tier: "free",
+    status: "expired",
+    period_end_unix: null,
+  };
+  return callNullclawJson({
+    method: "POST",
+    path: "/internal/entitlements/revoke",
+    userId: String(user.id),
+    body: {
+      user_id: String(user.id),
+      ...entitlement,
+    },
+    requestId: requestId || String(crypto.randomUUID()),
+  });
+}
+
+async function callNullclawJson({ method, path, userId, body, requestId }) {
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+    return { ok: false, status: 503, data: { error: "nullclaw_unavailable" } };
+  }
+  const headers = new Headers(
+    buildAgentForwardHeaders({
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId,
+    })
+  );
+  if (body !== undefined && body !== null) {
+    headers.set("Content-Type", "application/json");
+  }
+  const upstream = await fetchWithTimeout(
+    `${nullclawBase}${path}`,
+    {
+      method,
+      headers,
+      body: body === undefined || body === null ? undefined : JSON.stringify(body),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    `Nullclaw ${method} ${path}`
+  );
+  const data = await upstream.json().catch(() => ({}));
+  return { ok: upstream.ok, status: upstream.status, data };
+}
+
 async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (!nullclawBase) {
@@ -8487,6 +8544,26 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   Readable.fromWeb(upstream.body).pipe(res);
 }
 
+async function loadUserEntitlement(userId) {
+  try {
+    const row = await dbGet(
+      "SELECT plan_tier, plan_status, current_period_end FROM zaki_users WHERE id = $1",
+      [userId]
+    );
+    return buildEntitlementFields(row);
+  } catch (error) {
+    // Soft-fail: forwarding entitlements is optional on the nullalis
+    // side. If the lookup trips (cold start, transient DB blip) the
+    // provision call still goes through; nullalis collapses to its
+    // default tuple (free/expired) which is safer than 500ing.
+    console.error("[Entitlement] lookup failed:", {
+      userId,
+      error: error?.message || String(error),
+    });
+    return null;
+  }
+}
+
 const agentProvisionHandler = async (req, res) => {
   const requestId = String(req.requestId || crypto.randomUUID());
   try {
@@ -8505,13 +8582,16 @@ const agentProvisionHandler = async (req, res) => {
       );
     }
 
-    const payload =
+    const rawPayload =
       req.body && typeof req.body === "object" ? req.body : {};
+    const basePayload = buildBotProvisionPayload(userId, rawPayload);
+    const entitlement = await loadUserEntitlement(userId);
+    const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
 
     await proxyNullclawRequest(req, res, "/api/v1/users/provision", {
       method: "POST",
       userId,
-      body: buildBotProvisionPayload(userId, payload),
+      body,
       async onUpstreamResponse(upstream) {
         if (upstream.ok) return;
 
@@ -8540,6 +8620,37 @@ const agentProvisionHandler = async (req, res) => {
     );
   }
 };
+
+const makeAgentSecretsTwoPhaseHandler = (action) => async (req, res) => {
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+    const key = String(req.params?.key || "");
+    if (!key) {
+      return res.status(400).json({ error: "missing_key" });
+    }
+    const value = action === "put" ? req.body?.value : undefined;
+    const requestId = String(req.requestId || crypto.randomUUID());
+    const result = await prepareAndApplySecret({
+      callNullclaw: ({ method, path, body }) =>
+        callNullclawJson({ method, path, userId, body, requestId }),
+      userId,
+      key,
+      action,
+      value,
+    });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    console.error(`[Agent] Secret ${action} error:`, error);
+    return res.status(500).json({ error: error?.message || `Secret ${action} failed.` });
+  }
+};
+const agentSecretsPutHandler = makeAgentSecretsTwoPhaseHandler("put");
+const agentSecretsDeleteHandler = makeAgentSecretsTwoPhaseHandler("delete");
 
 const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
   try {
@@ -8768,6 +8879,7 @@ const botBffHandlers = createBotBffHandlers({
   },
   sendUpstreamRequest: sendBotBffUpstreamRequest,
   buildUsageSummary: buildBotBffUsageSummary,
+  loadEntitlement: loadUserEntitlement,
   telegramWebhookBaseUrl: ZAKI_AGENT_WEBHOOK_BASE_URL,
   createRequestId: getOrCreateRequestId,
   createIdempotencyKey: getOrCreateIdempotencyKey,
@@ -8830,22 +8942,21 @@ app.get(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
   )
 );
+// PUT/DELETE use the two-phase prepare + apply flow required by
+// nullalis #11 (D8 secret vault). BFF holds the confirmation_token;
+// client stays ignorant of the pairing.
 app.put(
   "/api/agent/secrets/:key",
   requireAgentContext,
   agentRouteLimiter,
   agentJson1mb,
-  makeAgentUserProxyHandler(
-    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
-  )
+  agentSecretsPutHandler
 );
 app.delete(
   "/api/agent/secrets/:key",
   requireAgentContext,
   agentRouteLimiter,
-  makeAgentUserProxyHandler(
-    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
-  )
+  agentSecretsDeleteHandler
 );
 app.get(
   "/api/agent/secrets",

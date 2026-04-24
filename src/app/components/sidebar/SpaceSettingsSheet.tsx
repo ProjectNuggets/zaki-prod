@@ -160,7 +160,7 @@ export function SpaceSettingsSheet({
 
           <section className="space-y-3">
             <SectionHeader title={t("sidebar.contextSummaryTitle")} />
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3">
               <div className={cn("flex items-start gap-3 rounded-2xl border border-[#e1d4c6] bg-white px-4 py-3 dark:border-[#2b2119] dark:bg-[#17120f]", isRtl && "flex-row-reverse text-right")}>
                 <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f6efe6] text-zaki-brand dark:bg-[#221913]">
                   <Brain className="size-4" />
