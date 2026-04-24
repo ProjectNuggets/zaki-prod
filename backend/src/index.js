@@ -88,6 +88,7 @@ import {
 } from "./bot-bff.js";
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
+import { buildEntitlementFields } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -8517,6 +8518,26 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   Readable.fromWeb(upstream.body).pipe(res);
 }
 
+async function loadUserEntitlement(userId) {
+  try {
+    const row = await dbGet(
+      "SELECT plan_tier, plan_status, current_period_end FROM zaki_users WHERE id = $1",
+      [userId]
+    );
+    return buildEntitlementFields(row);
+  } catch (error) {
+    // Soft-fail: forwarding entitlements is optional on the nullalis
+    // side. If the lookup trips (cold start, transient DB blip) the
+    // provision call still goes through; nullalis collapses to its
+    // default tuple (free/expired) which is safer than 500ing.
+    console.error("[Entitlement] lookup failed:", {
+      userId,
+      error: error?.message || String(error),
+    });
+    return null;
+  }
+}
+
 const agentProvisionHandler = async (req, res) => {
   const requestId = String(req.requestId || crypto.randomUUID());
   try {
@@ -8535,13 +8556,16 @@ const agentProvisionHandler = async (req, res) => {
       );
     }
 
-    const payload =
+    const rawPayload =
       req.body && typeof req.body === "object" ? req.body : {};
+    const basePayload = buildBotProvisionPayload(userId, rawPayload);
+    const entitlement = await loadUserEntitlement(userId);
+    const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
 
     await proxyNullclawRequest(req, res, "/api/v1/users/provision", {
       method: "POST",
       userId,
-      body: buildBotProvisionPayload(userId, payload),
+      body,
       async onUpstreamResponse(upstream) {
         if (upstream.ok) return;
 
@@ -8829,6 +8853,7 @@ const botBffHandlers = createBotBffHandlers({
   },
   sendUpstreamRequest: sendBotBffUpstreamRequest,
   buildUsageSummary: buildBotBffUsageSummary,
+  loadEntitlement: loadUserEntitlement,
   telegramWebhookBaseUrl: ZAKI_AGENT_WEBHOOK_BASE_URL,
   createRequestId: getOrCreateRequestId,
   createIdempotencyKey: getOrCreateIdempotencyKey,

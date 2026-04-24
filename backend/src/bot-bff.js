@@ -767,6 +767,7 @@ export function createBotBffHandlers({
   getAuthContext,
   sendUpstreamRequest,
   buildUsageSummary,
+  loadEntitlement = null,
   telegramWebhookBaseUrl = "",
   nowFn = Date.now,
   sleepFn = (delay) => new Promise((resolve) => setTimeout(resolve, delay)),
@@ -803,7 +804,11 @@ export function createBotBffHandlers({
       if (!context) return;
       const requestId = createRequestId(req);
       const idempotencyKey = createIdempotencyKey(req, requestId);
-      const payload = buildBotProvisionPayload(context.userId, req.body);
+      const basePayload = buildBotProvisionPayload(context.userId, req.body);
+      const entitlement = loadEntitlement
+        ? await loadEntitlement(context.userId)
+        : null;
+      const payload = entitlement ? { ...basePayload, ...entitlement } : basePayload;
 
       await runJsonUpstreamRequest({
         req,
