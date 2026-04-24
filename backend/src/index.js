@@ -1531,6 +1531,7 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   resolveTier,
   tierByPrice: TIER_BY_PRICE,
   fulfillAccessCodePurchaseCheckoutSession,
+  revokeNullalisEntitlement,
 });
 
 // Stripe webhook must use raw body (must be registered before express.json)
@@ -8416,6 +8417,31 @@ async function requireAgentContext(req, res, next) {
   req.agentAuthResult = authResult;
   req.agentUserId = userId;
   next();
+}
+
+// S2.7 — push a revocation to nullalis's /internal/entitlements/revoke.
+// Called by the Stripe webhook handler when an event (subscription
+// delete/update, invoice payment fail, dispute) should immediately
+// knock a user off paid access. Best-effort: DB is source of truth.
+async function revokeNullalisEntitlement(user, { requestId } = {}) {
+  if (!user || !user.id) {
+    return { ok: false, status: 0, data: { error: "missing_user" } };
+  }
+  const entitlement = buildEntitlementFields(user) || {
+    plan_tier: "free",
+    status: "expired",
+    period_end_unix: null,
+  };
+  return callNullclawJson({
+    method: "POST",
+    path: "/internal/entitlements/revoke",
+    userId: String(user.id),
+    body: {
+      user_id: String(user.id),
+      ...entitlement,
+    },
+    requestId: requestId || String(crypto.randomUUID()),
+  });
 }
 
 async function callNullclawJson({ method, path, userId, body, requestId }) {

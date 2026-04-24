@@ -192,3 +192,217 @@ describe("stripe webhook handler integration", () => {
     });
   });
 });
+
+describe("stripe webhook handler — S2.7 nullalis revocation", () => {
+  function makeUser(overrides = {}) {
+    return {
+      id: 42,
+      email: "owner@example.com",
+      plan_tier: "personal",
+      plan_status: "active",
+      current_period_end: "2025-01-01T00:00:00Z",
+      stripe_last_event_created_at: null,
+      ...overrides,
+    };
+  }
+
+  it("fires revoke on customer.subscription.deleted", async () => {
+    const event = {
+      id: "evt_delete",
+      type: "customer.subscription.deleted",
+      created: 1766710800,
+      data: {
+        object: {
+          id: "sub_1",
+          customer: "cus_del",
+          status: "canceled",
+          cancel_at_period_end: false,
+          current_period_end: 1766710800,
+          items: { data: [{ price: { id: "price_personal" } }] },
+          metadata: {},
+        },
+      },
+    };
+    const deps = createDependencies({ event, resolvedUser: makeUser() });
+    const revoke = jest.fn(async () => ({ ok: true, status: 200, data: { status: "ok" } }));
+    const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    const [revokedUser] = revoke.mock.calls[0];
+    expect(revokedUser.id).toBe(42);
+    expect(revokedUser.plan_tier).toBe("free");
+    expect(revokedUser.plan_status).toBe("canceled");
+  });
+
+  it.each([
+    ["past_due"],
+    ["unpaid"],
+    ["canceled"],
+  ])(
+    "fires revoke on customer.subscription.updated → %s",
+    async (nextStatus) => {
+      const event = {
+        id: `evt_upd_${nextStatus}`,
+        type: "customer.subscription.updated",
+        created: 1766710800,
+        data: {
+          object: {
+            id: "sub_1",
+            customer: "cus_upd",
+            status: nextStatus,
+            cancel_at_period_end: false,
+            current_period_end: 1766710800,
+            items: { data: [{ price: { id: "price_personal" } }] },
+            metadata: {},
+          },
+        },
+      };
+      const deps = createDependencies({ event, resolvedUser: makeUser() });
+      const revoke = jest.fn(async () => ({ ok: true, status: 200, data: {} }));
+      const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+      const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+      expect(res.statusCode).toBe(200);
+      expect(revoke).toHaveBeenCalledTimes(1);
+      expect(revoke.mock.calls[0][0].plan_status).toBe(nextStatus);
+    }
+  );
+
+  it("does NOT fire revoke on customer.subscription.updated → active", async () => {
+    const event = {
+      id: "evt_upd_active",
+      type: "customer.subscription.updated",
+      created: 1766710800,
+      data: {
+        object: {
+          id: "sub_1",
+          customer: "cus_upd",
+          status: "active",
+          cancel_at_period_end: false,
+          current_period_end: 1766710800,
+          items: { data: [{ price: { id: "price_personal" } }] },
+          metadata: {},
+        },
+      },
+    };
+    const deps = createDependencies({ event, resolvedUser: makeUser() });
+    const revoke = jest.fn(async () => ({ ok: true, status: 200, data: {} }));
+    const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(revoke).not.toHaveBeenCalled();
+  });
+
+  it("handles invoice.payment_failed → updates DB to past_due + revokes", async () => {
+    const event = {
+      id: "evt_pf_1",
+      type: "invoice.payment_failed",
+      created: 1766710800,
+      data: {
+        object: {
+          id: "in_1",
+          customer: "cus_pf",
+          customer_email: "owner@example.com",
+        },
+      },
+    };
+    const user = makeUser();
+    const deps = createDependencies({ event, resolvedUser: user });
+    const revoke = jest.fn(async () => ({ ok: true, status: 200, data: {} }));
+    const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(deps.resolveUserByStripeCustomer).toHaveBeenCalledWith("cus_pf", "owner@example.com");
+    expect(deps.dbQuery).toHaveBeenCalledWith(
+      expect.stringContaining("plan_status = 'past_due'"),
+      expect.arrayContaining(["evt_pf_1", 42])
+    );
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(revoke.mock.calls[0][0].plan_status).toBe("past_due");
+  });
+
+  it("handles charge.dispute.created → resolves customer via stripe.charges.retrieve + revokes", async () => {
+    const event = {
+      id: "evt_dis_1",
+      type: "charge.dispute.created",
+      created: 1766710800,
+      data: {
+        object: {
+          id: "dp_1",
+          charge: "ch_abc",
+        },
+      },
+    };
+    const user = makeUser();
+    const deps = createDependencies({ event, resolvedUser: user });
+    deps.stripe.charges = {
+      retrieve: jest.fn(async (chargeId) => {
+        expect(chargeId).toBe("ch_abc");
+        return { id: "ch_abc", customer: "cus_disp" };
+      }),
+    };
+    const revoke = jest.fn(async () => ({ ok: true, status: 200, data: {} }));
+    const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(deps.stripe.charges.retrieve).toHaveBeenCalledWith("ch_abc");
+    expect(deps.resolveUserByStripeCustomer).toHaveBeenCalledWith("cus_disp", null);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(revoke.mock.calls[0][0].plan_status).toBe("past_due");
+  });
+
+  it("charge.dispute.created: skips cleanly when stripe.charges.retrieve throws", async () => {
+    const event = {
+      id: "evt_dis_2",
+      type: "charge.dispute.created",
+      created: 1766710800,
+      data: { object: { id: "dp_2", charge: "ch_bad" } },
+    };
+    const deps = createDependencies({ event });
+    deps.stripe.charges = {
+      retrieve: jest.fn(async () => {
+        throw new Error("stripe timeout");
+      }),
+    };
+    const revoke = jest.fn();
+    const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(revoke).not.toHaveBeenCalled();
+  });
+
+  it("revoke failure is swallowed — webhook still returns 200", async () => {
+    const event = {
+      id: "evt_rfail",
+      type: "customer.subscription.deleted",
+      created: 1766710800,
+      data: {
+        object: {
+          id: "sub_1",
+          customer: "cus_rf",
+          status: "canceled",
+          cancel_at_period_end: false,
+          current_period_end: 1766710800,
+          items: { data: [{ price: { id: "price_personal" } }] },
+          metadata: {},
+        },
+      },
+    };
+    const deps = createDependencies({ event, resolvedUser: makeUser() });
+    const revoke = jest.fn(async () => {
+      throw new Error("nullalis down");
+    });
+    const handler = createStripeWebhookHandler({ ...deps, revokeNullalisEntitlement: revoke });
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
+});

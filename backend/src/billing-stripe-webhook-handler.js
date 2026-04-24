@@ -15,6 +15,35 @@ export function isIncomingStripeEventStale({
   return incomingTs < lastTs;
 }
 
+// Nullalis statuses that warrant an immediate revoke push. Other
+// statuses either preserve access (active/trialing) or are write-only
+// to the DB and don't need out-of-band signaling.
+const REVOKE_STATUSES = new Set(["canceled", "past_due", "unpaid", "incomplete_expired"]);
+
+async function fireRevoke({ revokeNullalisEntitlement, user, requestId, eventType }) {
+  if (!revokeNullalisEntitlement || !user) return;
+  try {
+    const result = await revokeNullalisEntitlement(user, { requestId });
+    if (!result?.ok) {
+      console.error("[Stripe] nullalis revoke non-ok:", {
+        eventType,
+        userId: user.id,
+        upstreamStatus: result?.status,
+        upstreamData: result?.data,
+      });
+    }
+  } catch (err) {
+    // Revoke is best-effort: if nullalis can't hear the push, the BFF's
+    // next provision call (Commit 1) will still carry the correct
+    // entitlement tuple. Don't let this throw bubble the webhook 500.
+    console.error("[Stripe] nullalis revoke threw:", {
+      eventType,
+      userId: user?.id,
+      error: err?.message || String(err),
+    });
+  }
+}
+
 export function createStripeWebhookHandler({
   getBillingConfigStatus,
   stripe,
@@ -29,6 +58,7 @@ export function createStripeWebhookHandler({
   resolveTier,
   tierByPrice,
   fulfillAccessCodePurchaseCheckoutSession,
+  revokeNullalisEntitlement = null,
 } = {}) {
   return async function stripeWebhookHandler(req, res) {
     const billingConfig = getBillingConfigStatus();
@@ -209,6 +239,91 @@ export function createStripeWebhookHandler({
                 user.id,
               ]
             );
+
+            if (
+              event.type === "customer.subscription.deleted" ||
+              (event.type === "customer.subscription.updated" && REVOKE_STATUSES.has(statusToStore))
+            ) {
+              await fireRevoke({
+                revokeNullalisEntitlement,
+                user: {
+                  ...user,
+                  plan_tier: tierToStore,
+                  plan_status: statusToStore,
+                  current_period_end: currentPeriodEnd,
+                },
+                requestId: req.requestId || null,
+                eventType: event.type,
+              });
+            }
+          }
+        }
+      }
+
+      // S2.7 — payment failure. Flip plan_status to past_due and push an
+      // immediate revoke so nullalis's Sprint 2 chokepoints see the
+      // degraded state without waiting for the next provision call.
+      if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object;
+        const customerId = invoice?.customer;
+        if (customerId) {
+          const user = await resolveUserByStripeCustomer(customerId, invoice?.customer_email);
+          if (user) {
+            await dbQuery(
+              `UPDATE zaki_users
+               SET plan_status = 'past_due',
+                   stripe_last_event_id = COALESCE($1, stripe_last_event_id),
+                   billing_updated_at = NOW(),
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [eventId || null, user.id]
+            );
+            await fireRevoke({
+              revokeNullalisEntitlement,
+              user: { ...user, plan_status: "past_due" },
+              requestId: req.requestId || null,
+              eventType: event.type,
+            });
+          }
+        }
+      }
+
+      // S2.7 — dispute. The Dispute object only carries `charge` (id);
+      // we fetch the charge to resolve customer. If retrieve fails we
+      // log and skip: better no revoke than wrong-user revoke.
+      if (event.type === "charge.dispute.created") {
+        const dispute = event.data.object;
+        const chargeId = dispute?.charge;
+        let customerId = null;
+        if (chargeId && stripe?.charges?.retrieve) {
+          try {
+            const charge = await stripe.charges.retrieve(chargeId);
+            customerId = charge?.customer || null;
+          } catch (err) {
+            console.error("[Stripe] dispute: charge retrieve failed:", {
+              chargeId,
+              error: err?.message || String(err),
+            });
+          }
+        }
+        if (customerId) {
+          const user = await resolveUserByStripeCustomer(customerId, null);
+          if (user) {
+            await dbQuery(
+              `UPDATE zaki_users
+               SET plan_status = 'past_due',
+                   stripe_last_event_id = COALESCE($1, stripe_last_event_id),
+                   billing_updated_at = NOW(),
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [eventId || null, user.id]
+            );
+            await fireRevoke({
+              revokeNullalisEntitlement,
+              user: { ...user, plan_status: "past_due" },
+              requestId: req.requestId || null,
+              eventType: event.type,
+            });
           }
         }
       }
