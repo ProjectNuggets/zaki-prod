@@ -3806,6 +3806,54 @@ export function ChatArea() {
           return { agentUrl };
         }
       }
+
+      // **D1.5** — nullalis tool_only_turn event (D1.4 emit). Fires
+      // when the model produced tool/spawn calls but no post-tool
+      // assistant text. Without this handler, the gateway falls back
+      // to emitting EMPTY_TURN_PLACEHOLDER text ("[tools ran, no
+      // direct reply this turn — results may arrive on a follow-up.]")
+      // which the user reads as the final reply and closes the
+      // window before the async subagent result arrives. With this
+      // handler, the frontend can render structured chrome instead.
+      //
+      // Minimum-viable implementation: log + push as a transcript
+      // entry so the chrome rail shows "[N tools ran, M subagents
+      // dispatched]". Full UX (replacing the placeholder text bubble
+      // with a structured "awaiting subagent" tile + deep-link to
+      // task status) is a follow-up after the design is locked.
+      if (
+        isZakiAgentSpace &&
+        (eventType === "tool_only_turn" || payloadType === "tool_only_turn")
+      ) {
+        const toolCount =
+          typeof payload.tool_calls_executed === "number"
+            ? (payload.tool_calls_executed as number)
+            : 0;
+        const taskIds = Array.isArray(payload.spawned_task_ids)
+          ? (payload.spawned_task_ids as string[])
+          : [];
+        const iters =
+          typeof payload.iterations_used === "number"
+            ? (payload.iterations_used as number)
+            : 0;
+        // eslint-disable-next-line no-console
+        console.info("[nullalis] tool_only_turn", {
+          tool_calls_executed: toolCount,
+          spawned_task_ids: taskIds,
+          iterations_used: iters,
+        });
+        pushNullalisTranscriptEntry({
+          kind: "tool_only_turn",
+          toolCallsExecuted: toolCount,
+          spawnedTaskIds: taskIds,
+          iterationsUsed: iters,
+          timestamp: Date.now(),
+        } as unknown as ZakiTranscriptSeed);
+        // Don't return done — the gateway will still emit a final
+        // chunk (placeholder or real) plus the close frame.
+        return {};
+      }
+
       if (isZakiAgentSpace) {
         if (eventType === "progress" || payloadType === "progress") {
           const frame = extractNullalisNarrationFrame(payload);
