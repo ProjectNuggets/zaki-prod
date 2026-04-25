@@ -7,3 +7,9 @@ test-results/
 .next/
 .claude/
 .planning/
+
+# D28 incident 2026-04-26: Tailscale TLS certs were accidentally swept in
+# during the D28 commit. Block them going forward.
+zaki-webhook.*.ts.net.crt
+zaki-webhook.*.ts.net.key
+
