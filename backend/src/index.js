@@ -209,11 +209,27 @@ app.use((req, res, next) => {
 });
 const NOVA_TYP_BASE_URL = (process.env.NOVA_TYP_BASE_URL || "").trim();
 const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
-const NULLCLAW_BASE_URL = (process.env.NULLCLAW_BASE_URL || "").trim();
-const NULLCLAW_INTERNAL_TOKEN = (process.env.NULLCLAW_INTERNAL_TOKEN || "").trim();
-const NULLCLAW_DEV_USER_ID = (process.env.NULLCLAW_DEV_USER_ID || "").trim();
+// D28 (sunset 2026-05-15): NULLALIS_* primary, NULLCLAW_* fallback. After
+// sunset, drop the legacy branches. Variable names kept as NULLCLAW_* in JS
+// scope for minimum-diff churn — the rename is from the env-var perspective,
+// not the JS-identifier perspective. JS identifiers are internal; renaming
+// them across the 30+ call sites is its own polish PR (D30-equivalent for
+// zaki-prod).
+function readNullalisEnv(primary, fallback) {
+  const primaryVal = (process.env[primary] || "").trim();
+  if (primaryVal) return primaryVal;
+  const fallbackVal = (process.env[fallback] || "").trim();
+  if (fallbackVal) {
+    console.warn(`env ${fallback} is deprecated; use ${primary} (remove after 2026-05-15)`);
+    return fallbackVal;
+  }
+  return "";
+}
+const NULLCLAW_BASE_URL = readNullalisEnv("NULLALIS_BASE_URL", "NULLCLAW_BASE_URL");
+const NULLCLAW_INTERNAL_TOKEN = readNullalisEnv("NULLALIS_INTERNAL_TOKEN", "NULLCLAW_INTERNAL_TOKEN");
+const NULLCLAW_DEV_USER_ID = readNullalisEnv("NULLALIS_DEV_USER_ID", "NULLCLAW_DEV_USER_ID");
 if (isProduction && NULLCLAW_DEV_USER_ID) {
-  console.error("FATAL: NULLCLAW_DEV_USER_ID must not be set in production — it bypasses all agent authentication.");
+  console.error("FATAL: NULLALIS_DEV_USER_ID must not be set in production — it bypasses all agent authentication.");
   process.exit(1);
 }
 const ZAKI_AGENT_WEBHOOK_BASE_URL = (
