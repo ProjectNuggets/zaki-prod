@@ -8,11 +8,13 @@ export function getNullclawBase(rawBaseUrl) {
 function assertBaseAndToken(baseUrl, internalToken) {
   const resolvedBase = getNullclawBase(baseUrl);
   if (!resolvedBase) {
-    throw new Error("NULLCLAW_BASE_URL is not configured.");
+    // D28 (sunset 2026-05-15): error message names canonical NULLALIS_* env
+    // var; legacy NULLCLAW_BASE_URL still accepted upstream by readNullalisEnv.
+    throw new Error("NULLALIS_BASE_URL is not configured.");
   }
   const resolvedToken = String(internalToken || "").trim();
   if (!resolvedToken) {
-    throw new Error("NULLCLAW_INTERNAL_TOKEN is not configured.");
+    throw new Error("NULLALIS_INTERNAL_TOKEN is not configured.");
   }
   return { resolvedBase, resolvedToken };
 }
