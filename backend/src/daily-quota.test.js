@@ -6,6 +6,7 @@ import {
   consumeDailyPromptQuota,
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
+  hasLocalUnlimitedQuotaBypass,
   isUnlimitedUser,
   readDailyPromptUsage,
   resolveQuotaSurface,
@@ -57,6 +58,26 @@ describe("daily quota helpers", () => {
     expect(isUnlimitedUser({ tier: "student", status: "active", accessActive: false })).toBe(true);
     expect(isUnlimitedUser({ tier: "free", status: "inactive", accessActive: true })).toBe(true);
     expect(isUnlimitedUser({ tier: "free", status: "inactive", accessActive: false })).toBe(false);
+  });
+
+  it("supports a local unlimited quota bypass by email outside production", () => {
+    expect(
+      hasLocalUnlimitedQuotaBypass(
+        { email: "alaasuccar@gmail.com" },
+        {
+          ZAKI_LOCAL_UNLIMITED_QUOTA_EMAILS: "other@example.com, alaasuccar@gmail.com ",
+        }
+      )
+    ).toBe(true);
+
+    expect(
+      hasLocalUnlimitedQuotaBypass(
+        { email: "other@example.com" },
+        {
+          ZAKI_LOCAL_UNLIMITED_QUOTA_EMAILS: "alaasuccar@gmail.com",
+        }
+      )
+    ).toBe(false);
   });
 
   it("builds structured exceeded payloads for app and bot surfaces", () => {

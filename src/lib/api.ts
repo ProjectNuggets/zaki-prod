@@ -285,7 +285,13 @@ export async function requestLogin({
     body: JSON.stringify(payload),
   });
 
-  let data: { valid?: boolean; token?: string | null; message?: string | null } =
+  let data: {
+    valid?: boolean;
+    token?: string | null;
+    message?: string | null;
+    error?: string | null;
+    code?: string | null;
+  } =
     {};
   try {
     data = await response.json();
@@ -1424,12 +1430,83 @@ export async function fetchAgentHistory(
       role?: "user" | "assistant";
       content?: string;
       createdAt?: string;
+      events?: Array<{
+        eventType?: string;
+        payload?: Record<string, unknown>;
+        ts?: number;
+      }>;
     }>;
     historyMode?: "merged" | "app";
     source?: string;
     warning?: string;
     error?: string | null;
   }>(response);
+  return { response, data };
+}
+
+export type ContextDiagnosticsReportMemory = {
+  store?: string | null;
+  hot?: number | null;
+  warm?: number | null;
+  cold?: number | null;
+  total?: number | null;
+  [key: string]: unknown;
+};
+
+export type ContextDiagnosticsReport = {
+  model?: string | null;
+  history_messages?: number | null;
+  token_estimate?: number | null;
+  context_window_tokens?: number | null;
+  context_pressure_percent?: number | null;
+  history_trim_limit_messages?: number | null;
+  token_compaction_threshold?: number | null;
+  token_compaction_triggered?: boolean | null;
+  token_reply_reserve?: number | null;
+  token_tool_reserve?: number | null;
+  token_safety_reserve?: number | null;
+  token_total_reserve?: number | null;
+  tools?: number | null;
+  roles?: Record<string, number> | null;
+  memory?: ContextDiagnosticsReportMemory | null;
+  prompt?: Record<string, unknown> | null;
+  retrieval?: Record<string, unknown> | null;
+  continuity?: Record<string, unknown> | null;
+  cache?: Record<string, unknown> | null;
+  buckets?: Record<string, unknown> | null;
+  runtime?: Record<string, unknown> | null;
+  last_turn?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+export type ContextDiagnosticsResponse = {
+  active?: boolean;
+  reason?: string | null;
+  report?: ContextDiagnosticsReport | null;
+  error?: string | null;
+};
+
+export type MemoryDoctorResponse = {
+  active?: boolean;
+  runtime?: boolean;
+  reason?: string | null;
+  report_text?: string | null;
+  error?: string | null;
+};
+
+export async function fetchContextDiagnostics() {
+  const response = await backendAuthRequest("/api/me/diagnostics/context", {
+    method: "GET",
+  });
+  const data = await parseApiJson<ContextDiagnosticsResponse>(response);
+  return { response, data };
+}
+
+export async function fetchMemoryDoctor() {
+  const response = await backendAuthRequest("/api/me/diagnostics/memory-doctor", {
+    method: "GET",
+  });
+  const data = await parseApiJson<MemoryDoctorResponse>(response);
   return { response, data };
 }
 
@@ -1534,7 +1611,14 @@ export async function deleteAgentSession(sessionKey: string) {
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "DELETE",
   });
-  const data = await parseApiJson<{ ok: boolean }>(response);
+  const data = await parseApiJson<{ ok?: boolean; status?: string; error?: string }>(response);
+  // Treat 404 (session_not_found) as success: the session is already gone
+  // upstream (e.g. a persisted-only session evicted from memory). The caller
+  // will still hide it locally so the UI reflects the deletion.
+  if (!response.ok && response.status !== 404) {
+    const message = data?.error || `Failed to delete session (${response.status})`;
+    throw new Error(message);
+  }
   return { response, data };
 }
 

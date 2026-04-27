@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listAgentSessions, type AgentSession } from "@/lib/api";
+import { useHiddenSessions } from "@/queries/useHiddenSessions";
 
 export const zakiSessionKeys = {
   all: ["zaki-sessions"] as const,
@@ -50,7 +52,8 @@ function extractThreadSlug(key: string): string {
 export { extractThreadSlug };
 
 export function useZakiSessions(enabled = true) {
-  return useQuery({
+  const { hidden } = useHiddenSessions();
+  const query = useQuery({
     queryKey: zakiSessionKeys.all,
     queryFn: async (): Promise<AgentSession[]> => {
       try {
@@ -94,4 +97,15 @@ export function useZakiSessions(enabled = true) {
     staleTime: 10_000,
     retry: 1,
   });
+
+  const filtered = useMemo(() => {
+    if (!query.data) return query.data;
+    if (hidden.size === 0) return query.data;
+    return query.data.filter(
+      (s) =>
+        !hidden.has(s.session_key) && !hidden.has(canonicalSessionKey(s.session_key))
+    );
+  }, [query.data, hidden]);
+
+  return { ...query, data: filtered } as typeof query;
 }

@@ -34,6 +34,12 @@ export interface PinnedFile {
   error?: string | null;
 }
 
+export interface PersistedTurnEvent {
+  eventType: string;
+  payload: Record<string, unknown>;
+  ts?: number;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -43,6 +49,7 @@ export interface Message {
   memorySources?: MemorySource[];
   error?: boolean;
   errorCode?: string | null;
+  turnEvents?: PersistedTurnEvent[];
 }
 
 export interface MessageAttachment {

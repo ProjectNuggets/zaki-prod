@@ -7,7 +7,11 @@ export type ProductTelemetryEvent =
   | "checkout_succeeded"
   | "first_message_sent"
   | "first_memory_saved"
-  | "activation_completed";
+  | "activation_completed"
+  | "image_rendered"
+  | "voice_dictate_started"
+  | "voice_dictate_completed"
+  | "voice_dictate_failed";
 
 export type ProductTelemetrySource =
   | "website_nav"

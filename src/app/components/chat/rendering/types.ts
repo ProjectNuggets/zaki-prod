@@ -17,7 +17,26 @@ export type MessageBlock =
   | TableBlock
   | CalloutBlock
   | CopyPromptBlock
-  | PlainTextBlock;
+  | PlainTextBlock
+  | ImageBlock
+  | DownloadButtonBlock
+  | SavedLocallyBlock;
+
+export type ImageBlock = BlockBase & {
+  type: "image";
+  url: string;
+  alt: string;
+  downloadUrl?: string;
+};
+
+export type DownloadButtonBlock = BlockBase & {
+  type: "download_button";
+  url: string;
+};
+
+export type SavedLocallyBlock = BlockBase & {
+  type: "saved_locally";
+};
 
 export type ParagraphBlock = BlockBase & {
   type: "paragraph";

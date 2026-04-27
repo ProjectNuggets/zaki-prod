@@ -14,6 +14,7 @@ import {
   exportAgentSession,
 } from "@/lib/api";
 import { useZakiSessions } from "@/queries/useZakiSessions";
+import { hideSessionKey } from "@/queries/useHiddenSessions";
 import { cn } from "@/lib/utils";
 import { EmptyState, InlineConfirm, SheetShell } from "@/app/components/ui/zaki";
 
@@ -66,15 +67,19 @@ export function SessionManagementSheet({
       setActionInProgress(`delete:${sessionKey}`);
       try {
         await deleteAgentSession(sessionKey);
+        // Hide locally so UI removes it immediately, even if the upstream
+        // list still returns it (e.g. persisted orphan, eventual consistency).
+        hideSessionKey(sessionKey);
         loadSessions();
         toast.success("Session deleted");
-      } catch {
-        toast.error("Failed to delete session");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to delete session";
+        toast.error(message);
       } finally {
         setActionInProgress(null);
       }
     },
-    [activeSessionKey]
+    [activeSessionKey, loadSessions]
   );
 
   const handleCompact = useCallback(async (sessionKey: string) => {

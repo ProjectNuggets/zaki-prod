@@ -83,6 +83,62 @@ import {
   markFirstMessageSent,
   type ActivationProgress,
 } from "@/lib/retention";
+import {
+  emitSystemNotice,
+  type SystemNoticeKind,
+  type SystemNoticePayload,
+} from "./ui/zaki/SystemNotice";
+
+const SYSTEM_NOTICE_KINDS: readonly SystemNoticeKind[] = [
+  "compaction",
+  "provider_fallback",
+  "connector_stale",
+  "multimodal_failure",
+  "generic",
+];
+
+function extractSystemNoticePayload(
+  payload: Record<string, unknown>
+): SystemNoticePayload | null {
+  const rawKind =
+    (typeof payload.kind === "string" && payload.kind.trim().toLowerCase()) ||
+    "";
+  const kind: SystemNoticeKind = (
+    SYSTEM_NOTICE_KINDS as readonly string[]
+  ).includes(rawKind)
+    ? (rawKind as SystemNoticeKind)
+    : "generic";
+  const rawSeverity =
+    (typeof payload.severity === "string" &&
+      payload.severity.trim().toLowerCase()) ||
+    "";
+  const severity =
+    rawSeverity === "info" || rawSeverity === "warning" || rawSeverity === "error"
+      ? rawSeverity
+      : undefined;
+  const message =
+    (typeof payload.message === "string" && payload.message.trim()) || null;
+  const detail =
+    (typeof payload.detail === "string" && payload.detail.trim()) || null;
+  const runId =
+    (typeof payload.run_id === "string" && payload.run_id.trim()) ||
+    (typeof payload.runId === "string" && payload.runId.trim()) ||
+    null;
+  const idFromPayload =
+    (typeof payload.id === "string" && payload.id.trim()) || null;
+  const id =
+    idFromPayload ||
+    (runId ? `${kind}:${runId}` : null) ||
+    `${kind}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+  return {
+    id,
+    kind,
+    severity,
+    message,
+    detail,
+    runId,
+  };
+}
 
 class ChatRequestError extends Error {
   status: number;
@@ -421,6 +477,17 @@ function normalizeProgressText(rawValue: string | null | undefined) {
     .trim();
 }
 
+function normalizeReasoningSummaryText(rawValue: string | null | undefined) {
+  return String(rawValue || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\f\v]+/g, " ").replace(/\s+$/g, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+
 function isCacheLikeText(rawValue: string | null | undefined) {
   const normalized = normalizeProgressText(rawValue).toLowerCase();
   if (!normalized) return false;
@@ -589,7 +656,7 @@ function extractReasoningSummaryPayload(payload: Record<string, unknown>) {
         ? payload.iteration
         : undefined;
 
-  const text = normalizeProgressText(summaryRaw);
+  const text = normalizeReasoningSummaryText(summaryRaw);
   if (!text) return null;
   return {
     text,
@@ -1844,14 +1911,7 @@ export function extractNullalisTranscriptEntry(
 }
 
 function buildNullalisTranscriptFingerprint(entry: NullalisTranscriptEntry) {
-  return [
-    entry.kind,
-    normalizeNarrativeKey(entry.text),
-    normalizeProgressText(entry.phase).toLowerCase(),
-    normalizeProgressText(entry.tool).toLowerCase(),
-    normalizeProgressText(entry.taskId).toLowerCase(),
-    normalizeProgressText(entry.status).toLowerCase(),
-  ].join("|");
+  return [entry.kind, normalizeNarrativeKey(entry.text)].join("|");
 }
 
 export function ChatArea() {
@@ -1934,11 +1994,11 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
+  const [turnDurationMs, setTurnDurationMs] = useState<number | null>(null);
   const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching" | "writing">("thinking");
   const [zakiBotToolCalls, setZakiBotToolCalls] = useState<BotToolCall[]>([]);
   const [zakiBotStatusEvents, setZakiBotStatusEvents] = useState<BotStatusEvent[]>([]);
-  const [zakiBotReasoningSummary, setZakiBotReasoningSummary] =
-    useState<BotReasoningSummary | null>(null);
   const [zakiBotReplyStart, setZakiBotReplyStart] = useState<BotReplyStart | null>(
     null
   );
@@ -1950,7 +2010,6 @@ export function ChatArea() {
   const [nullalisTranscriptEntries, setNullalisTranscriptEntries] = useState<
     NullalisTranscriptEntry[]
   >([]);
-  const [nullalisTranscriptEntryCount, setNullalisTranscriptEntryCount] = useState(0);
   const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
@@ -1973,13 +2032,16 @@ export function ChatArea() {
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
+  const currentTurnAssistantIdRef = useRef<string | null>(null);
+  const prevIsStreamingRef = useRef(false);
+  const [localTurnSnapshots, setLocalTurnSnapshots] = useState<
+    Record<string, NullalisTranscriptEntry[]>
+  >({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
-  const zakiBotProcessCompactTimerRef = useRef<number | null>(null);
-  const [zakiBotProcessCompact, setZakiBotProcessCompact] = useState(false);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
 
@@ -2245,7 +2307,7 @@ export function ChatArea() {
   const zakiBotProcessSnapshot = useMemo<ZakiProcessSnapshot>(() => {
     return buildZakiProcessSnapshot({
       statusEvents: zakiBotStatusEvents,
-      reasoningSummary: zakiBotReasoningSummary,
+      reasoningSummary: null,
       replyStart: zakiBotReplyStart,
       toolCalls: zakiBotToolCalls,
       latestAssistantMessageContent,
@@ -2254,7 +2316,6 @@ export function ChatArea() {
   }, [
     latestAssistantMessageContent,
     zakiBotProgressTerminalReason,
-    zakiBotReasoningSummary,
     zakiBotReplyStart,
     zakiBotStatusEvents,
     zakiBotToolCalls,
@@ -2732,20 +2793,13 @@ export function ChatArea() {
       window.clearTimeout(zakiBotProcessClearTimerRef.current);
       zakiBotProcessClearTimerRef.current = null;
     }
-    if (zakiBotProcessCompactTimerRef.current) {
-      window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-      zakiBotProcessCompactTimerRef.current = null;
-    }
     setZakiBotToolCalls([]);
     setZakiBotStatusEvents([]);
-    setZakiBotReasoningSummary(null);
     setZakiBotReplyStart(null);
-    setZakiBotProcessCompact(false);
     setZakiBotProgressTerminalReason(null);
     setNullalisNarrationFrame(null);
     if (!options?.preserveNullalisArtifacts) {
       setNullalisTranscriptEntries([]);
-      setNullalisTranscriptEntryCount(0);
       setNullalisTaskItems([]);
       setNullalisApprovalRequest(null);
       setZakiUsageSummary(null);
@@ -3074,7 +3128,6 @@ export function ChatArea() {
     (entry: NullalisTranscriptEntry | null) => {
       if (!isZakiBotActiveSpace || !entry) return;
       const fingerprint = buildNullalisTranscriptFingerprint(entry);
-      let didAdd = false;
       setNullalisTranscriptEntries((prev) => {
         const last = prev[prev.length - 1];
         if (last && buildNullalisTranscriptFingerprint(last) === fingerprint) {
@@ -3088,12 +3141,8 @@ export function ChatArea() {
               Math.abs(entry.timestamp - candidate.timestamp) < 5000
           );
         if (recentDuplicate) return prev;
-        didAdd = true;
-        return [...prev, entry].slice(-8);
+        return [...prev, entry].slice(-40);
       });
-      if (didAdd) {
-        setNullalisTranscriptEntryCount((prev) => prev + 1);
-      }
     },
     [isZakiBotActiveSpace]
   );
@@ -3167,72 +3216,18 @@ export function ChatArea() {
     [isZakiBotActiveSpace, pushNullalisTranscriptEntry]
   );
 
-  const updateZakiBotReasoningSummary = useCallback(
-    (payload: Record<string, unknown>) => {
-      if (!isZakiBotActiveSpace) return;
-      const summary = extractReasoningSummaryPayload(payload);
-      if (!summary) return;
-      setZakiBotProgressTerminalReason(null);
-      setStreamingIndicatorMode(
-        inferStreamingModeFromContext(
-          [summary.phase, summary.tool, summary.text].filter(Boolean).join(" ")
-        )
-      );
-      setZakiBotReasoningSummary({
-        id: `summary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        text: summary.text,
-        timestamp: Date.now(),
-        phase: summary.phase,
-        tool: summary.tool,
-        iteration: summary.iteration,
-      });
-      setZakiBotStatusEvents((prev) => {
-        const fingerprint = [
-          "summary",
-          normalizeProgressText(summary.text).toLowerCase(),
-          normalizeProgressText(summary.phase).toLowerCase(),
-          normalizeProgressText(summary.tool).toLowerCase(),
-        ].join("|");
-        const last = prev[prev.length - 1];
-        if (last?.fingerprint === fingerprint) {
-          if (last.iteration === summary.iteration) {
-            return prev;
-          }
-          const next = [...prev];
-          next[next.length - 1] = {
-            ...last,
-            text: summary.text,
-            timestamp: Date.now(),
-            phase: summary.phase,
-            tool: summary.tool,
-            iteration: summary.iteration,
-            source: "summary",
-          };
-          return next;
-        }
-        const next = [
-          ...prev,
-          {
-            id: `summary-status-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            text: summary.text,
-            timestamp: Date.now(),
-            fingerprint,
-            source: "summary",
-            phase: summary.phase,
-            tool: summary.tool,
-            iteration: summary.iteration,
-          } satisfies BotStatusEvent,
-        ];
-        return next.slice(-16);
-      });
-    },
-    [isZakiBotActiveSpace]
-  );
-
   const updateNullalisReasoningSummary = useCallback(
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
-      updateZakiBotReasoningSummary(payload);
+      const summary = extractReasoningSummaryPayload(payload);
+      if (summary) {
+        setZakiBotProgressTerminalReason(null);
+        setStreamingIndicatorMode(
+          inferStreamingModeFromContext(
+            [summary.phase, summary.tool, summary.text].filter(Boolean).join(" ")
+          )
+        );
+      }
       const frame = extractNullalisReasoningNarrationFrame(payload);
       if (!frame) return;
       setNullalisNarrationFrame(frame);
@@ -3240,7 +3235,7 @@ export function ChatArea() {
         extractNullalisTranscriptEntry("reasoning_summary", payload, frame.timestamp)
       );
     },
-    [isZakiBotActiveSpace, pushNullalisTranscriptEntry, updateZakiBotReasoningSummary]
+    [isZakiBotActiveSpace, pushNullalisTranscriptEntry]
   );
 
   const markZakiBotReplyStart = useCallback(
@@ -3413,7 +3408,7 @@ export function ChatArea() {
               return;
             }
             if (isZakiBotActiveSpace && report?.type === "reasoning_summary") {
-              updateZakiBotReasoningSummary(reportPayload);
+              updateNullalisReasoningSummary(reportPayload);
               return;
             }
             if (isZakiBotActiveSpace && report?.type === "reply_start") {
@@ -3462,7 +3457,7 @@ export function ChatArea() {
           }
           if (payload?.type === "reasoning_summary") {
             if (isZakiBotActiveSpace) {
-              updateZakiBotReasoningSummary(payload);
+              updateNullalisReasoningSummary(payload);
             }
             return;
           }
@@ -3567,7 +3562,7 @@ export function ChatArea() {
     isZakiBotActiveSpace,
     pushZakiBotProgressEvent,
     markZakiBotReplyStart,
-    updateZakiBotReasoningSummary,
+    updateNullalisReasoningSummary,
     updateAssistantContent,
     updateAssistantError,
     upsertZakiBotToolCall,
@@ -3739,6 +3734,9 @@ export function ChatArea() {
           if (usageSummary) {
             setZakiUsageSummary(usageSummary);
           }
+          if (typeof payload.duration_ms === "number") {
+            setTurnDurationMs(payload.duration_ms);
+          }
           // Extract inline context data if nullalis sends it with done
           if (
             typeof payload.context_tokens === "number" &&
@@ -3806,7 +3804,6 @@ export function ChatArea() {
           return { agentUrl };
         }
       }
-
       // **D1.5** — nullalis tool_only_turn event (D1.4 emit). Fires
       // when the model produced tool/spawn calls but no post-tool
       // assistant text. Without this handler, the gateway falls back
@@ -3853,7 +3850,11 @@ export function ChatArea() {
         // chunk (placeholder or real) plus the close frame.
         return {};
       }
-
+      if (eventType === "system_notice" || payloadType === "system_notice") {
+        const notice = extractSystemNoticePayload(payload);
+        if (notice) emitSystemNotice(notice);
+        return {};
+      }
       if (isZakiAgentSpace) {
         if (eventType === "progress" || payloadType === "progress") {
           const frame = extractNullalisNarrationFrame(payload);
@@ -3941,7 +3942,7 @@ export function ChatArea() {
       }
       if (eventType === "reasoning_summary" || payload?.type === "reasoning_summary") {
         if (isZakiAgentSpace) {
-          updateZakiBotReasoningSummary(payload);
+          updateNullalisReasoningSummary(payload);
         }
         return {};
       }
@@ -4047,12 +4048,12 @@ export function ChatArea() {
     let buffer = "";
     let streamClosed = false;
     let renderedLength = 0;
-    let renderTimer: number | null = null;
+    let renderRaf: number | null = null;
 
     const flushRenderedContent = () => {
-      if (renderTimer) {
-        window.clearTimeout(renderTimer);
-        renderTimer = null;
+      if (renderRaf != null) {
+        window.cancelAnimationFrame(renderRaf);
+        renderRaf = null;
       }
       if (renderedLength === accumulated.length) return;
       renderedLength = accumulated.length;
@@ -4062,11 +4063,13 @@ export function ChatArea() {
     const appendChunk = (chunk: string) => {
       if (!chunk) return;
       accumulated += chunk;
-      if (renderTimer != null) return;
-      renderTimer = window.setTimeout(() => {
-        renderTimer = null;
-        flushRenderedContent();
-      }, 32);
+      if (renderRaf != null) return;
+      renderRaf = window.requestAnimationFrame(() => {
+        renderRaf = null;
+        if (renderedLength === accumulated.length) return;
+        renderedLength = accumulated.length;
+        updateAssistantContent(threadSlug, assistantId, accumulated);
+      });
     };
 
     const processRawData = async (raw: string) => {
@@ -4207,7 +4210,6 @@ export function ChatArea() {
     responseFormattingConfig.disableResponseEnvelope,
     spacesList,
     streamAgentInvocation,
-    updateZakiBotReasoningSummary,
     updateAssistantContent,
     updateAssistantSources,
     updateNullalisReasoningSummary,
@@ -4739,48 +4741,6 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
-    if (
-      !zakiBotProcessSnapshot.isReplyReplay ||
-      zakiBotProcessSnapshot.phase === "error"
-    ) {
-      if (zakiBotProcessCompactTimerRef.current) {
-        window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-        zakiBotProcessCompactTimerRef.current = null;
-      }
-      setZakiBotProcessCompact(false);
-      return;
-    }
-    if (zakiBotProcessCompact) return;
-    if (zakiBotProcessCompactTimerRef.current) {
-      window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-    }
-    const compactDelayMs = zakiBotProcessSnapshot.replyRevealStarted
-      ? zakiBotProcessSnapshot.isCacheHit
-        ? 780
-        : 520
-      : zakiBotProcessSnapshot.isCacheHit
-        ? 1050
-        : 900;
-    zakiBotProcessCompactTimerRef.current = window.setTimeout(() => {
-      setZakiBotProcessCompact(true);
-      zakiBotProcessCompactTimerRef.current = null;
-    }, compactDelayMs);
-    return () => {
-      if (zakiBotProcessCompactTimerRef.current) {
-        window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-        zakiBotProcessCompactTimerRef.current = null;
-      }
-    };
-  }, [
-    isZakiBotActiveSpace,
-    zakiBotProcessCompact,
-    zakiBotProcessSnapshot.isCacheHit,
-    zakiBotProcessSnapshot.isReplyReplay,
-    zakiBotProcessSnapshot.replyRevealStarted,
-  ]);
-
-  useEffect(() => {
-    if (!isZakiBotActiveSpace) return;
     if (isStreaming) {
       if (zakiBotProcessClearTimerRef.current) {
         window.clearTimeout(zakiBotProcessClearTimerRef.current);
@@ -4792,7 +4752,6 @@ export function ChatArea() {
     if (
       zakiBotToolCalls.length === 0 &&
       zakiBotStatusEvents.length === 0 &&
-      !zakiBotReasoningSummary &&
       !zakiBotReplyStart
     ) {
       return;
@@ -4802,14 +4761,10 @@ export function ChatArea() {
     }
     const latestStatusEvent = zakiBotStatusEvents[zakiBotStatusEvents.length - 1];
     const latestStatusText = String(latestStatusEvent?.text || "").toLowerCase();
-    const latestSummaryText = String(zakiBotReasoningSummary?.text || "").toLowerCase();
     const latestLooksCached =
       latestStatusText.includes("cached response") ||
       latestStatusText.includes("cache hit") ||
-      latestStatusText.includes("using cached") ||
-      latestSummaryText.includes("cached answer") ||
-      latestSummaryText.includes("cache hit") ||
-      latestSummaryText.includes("using cached");
+      latestStatusText.includes("using cached");
 
     const clearDelayMs =
       zakiBotProgressTerminalReason === "error"
@@ -4842,11 +4797,26 @@ export function ChatArea() {
     isStreaming,
     isZakiBotActiveSpace,
     zakiBotProgressTerminalReason,
-    zakiBotReasoningSummary,
     zakiBotReplyStart,
     zakiBotStatusEvents,
     zakiBotToolCalls,
   ]);
+
+  // Snapshot the current turn's transcript entries into localTurnSnapshots
+  // when the stream ends, so past-turn timelines persist after
+  // nullalisTranscriptEntries is cleared on the next turn.
+  useEffect(() => {
+    const wasStreaming = prevIsStreamingRef.current;
+    prevIsStreamingRef.current = isStreaming;
+    if (!wasStreaming || isStreaming) return;
+    if (!isZakiBotActiveSpace) return;
+    const msgId = currentTurnAssistantIdRef.current;
+    if (!msgId) return;
+    if (!nullalisTranscriptEntries.length) return;
+    const snapshot = nullalisTranscriptEntries.slice();
+    setLocalTurnSnapshots((prev) => ({ ...prev, [msgId]: snapshot }));
+    currentTurnAssistantIdRef.current = null;
+  }, [isStreaming, isZakiBotActiveSpace, nullalisTranscriptEntries]);
 
   // Multi-session: allow any threadId in the agent space (no longer force "main")
 
@@ -4936,6 +4906,7 @@ export function ChatArea() {
     }));
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now()}`;
+    currentTurnAssistantIdRef.current = assistantMessageId;
 
     setMessagesByThread((prev) => ({
         ...prev,
@@ -4988,7 +4959,6 @@ export function ChatArea() {
             source: "fallback",
           },
         ]);
-        setNullalisTranscriptEntryCount(1);
       }
       setZakiBotStatusEvents([
         {
@@ -5001,6 +4971,8 @@ export function ChatArea() {
       ]);
     }
     setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
+    setTurnStartedAt(Date.now());
+    setTurnDurationMs(null);
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
@@ -5315,42 +5287,107 @@ export function ChatArea() {
       return;
     }
 
+    const loadAppHistoryFallback = () =>
+      // Force mode=app so the server reads from our persisted DB rather than
+      // re-querying the upstream runtime (which won't have messages for
+      // legacy/default threads like "main").
+      fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "app")
+        .then(({ response: r2, data: d2 }) => {
+          if (cancelled || !r2.ok) return;
+          const history = Array.isArray(d2.history)
+            ? d2.history.map((entry: Record<string, unknown>, index: number) => ({
+                id: String(entry.id || `bot-history-${index}`),
+                role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
+                content: String(entry.content || ""),
+                turnEvents: Array.isArray((entry as { events?: unknown }).events)
+                  ? ((entry as { events?: unknown }).events as Array<{
+                      eventType?: string;
+                      payload?: Record<string, unknown>;
+                      ts?: number;
+                    }>)
+                      .filter((e) => typeof e?.eventType === "string")
+                      .map((e) => ({
+                        eventType: String(e.eventType),
+                        payload: (e.payload ?? {}) as Record<string, unknown>,
+                        ts: typeof e.ts === "number" ? e.ts : undefined,
+                      }))
+                  : undefined,
+              }))
+            : [];
+          setMessagesByThread((prev) => ({
+            ...prev,
+            [activeThreadId]: history,
+          }));
+          historyLoadedRef.current[activeThreadId] = true;
+        });
+
     void fetchAgentSessionHistory(sessionKey)
       .then(({ response, data }) => {
         if (cancelled) return;
         if (!response.ok) {
-          // Session history failed, fall back to app-level history
-          return fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, zakiBotHistoryMode)
-            .then(({ response: r2, data: d2 }) => {
-              if (cancelled || !r2.ok) return;
-              const history = Array.isArray(d2.history)
-                ? d2.history.map((entry: Record<string, unknown>, index: number) => ({
-                    id: String(entry.id || `bot-history-${index}`),
-                    role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
-                    content: String(entry.content || ""),
-                  }))
-                : [];
-              setMessagesByThread((prev) => ({
-                ...prev,
-                [activeThreadId]: history,
-              }));
-              historyLoadedRef.current[activeThreadId] = true;
-            });
+          return loadAppHistoryFallback();
         }
         // Session history returns { messages: [...] }
         const messages = data?.messages ?? [];
-        const history = Array.isArray(messages)
+        const history: Array<{
+          id: string;
+          role: "assistant" | "user";
+          content: string;
+          turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
+        }> = Array.isArray(messages)
           ? messages.map((entry: Record<string, unknown>, index: number) => ({
               id: String(entry.id || `bot-session-${index}`),
               role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
               content: String(entry.content || ""),
             }))
           : [];
+        if (history.length === 0) {
+          // Upstream session returned empty (e.g. runtime restarted). Fall back to
+          // persisted app history so the user doesn't see an empty thread.
+          return loadAppHistoryFallback();
+        }
         setMessagesByThread((prev) => ({
           ...prev,
           [activeThreadId]: history,
         }));
         historyLoadedRef.current[activeThreadId] = true;
+
+        // Fetch app history alongside to merge persisted turnEvents into the
+        // session-history view so past assistant turns can replay their timeline.
+        void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, zakiBotHistoryMode)
+          .then(({ response: rAlt, data: dAlt }) => {
+            if (cancelled || !rAlt.ok) return;
+            const appHistory = Array.isArray(dAlt.history) ? dAlt.history : [];
+            const assistantEvents = appHistory
+              .filter((e) => e.role === "assistant")
+              .map((e) =>
+                Array.isArray(e.events)
+                  ? e.events
+                      .filter((ev) => typeof ev?.eventType === "string")
+                      .map((ev) => ({
+                        eventType: String(ev.eventType),
+                        payload: (ev.payload ?? {}) as Record<string, unknown>,
+                        ts: typeof ev.ts === "number" ? ev.ts : undefined,
+                      }))
+                  : []
+              );
+            if (!assistantEvents.length) return;
+            setMessagesByThread((prev) => {
+              const current = prev[activeThreadId];
+              if (!Array.isArray(current)) return prev;
+              let assistantIdx = 0;
+              const merged = current.map((m) => {
+                if (m.role !== "assistant") return m;
+                const evs = assistantEvents[assistantIdx++];
+                if (!evs || !evs.length) return m;
+                return { ...m, turnEvents: evs };
+              });
+              return { ...prev, [activeThreadId]: merged };
+            });
+          })
+          .catch(() => {
+            /* best-effort backfill */
+          });
       })
       .catch(() => {
         // Ensure loading clears on error
@@ -5575,10 +5612,6 @@ export function ChatArea() {
         window.clearTimeout(zakiBotProcessClearTimerRef.current);
         zakiBotProcessClearTimerRef.current = null;
       }
-      if (zakiBotProcessCompactTimerRef.current) {
-        window.clearTimeout(zakiBotProcessCompactTimerRef.current);
-        zakiBotProcessCompactTimerRef.current = null;
-      }
       streamAbortRef.current?.abort();
     };
   }, []);
@@ -5661,9 +5694,32 @@ export function ChatArea() {
           : "Answer is ready"
         : undefined;
 
+    const replayTimelines: Record<string, NullalisTranscriptEntry[]> = {};
+    if (isZakiBotActiveSpace) {
+      for (const m of messages) {
+        if (m.role !== "assistant") continue;
+        const snapshot = localTurnSnapshots[m.id];
+        if (snapshot && snapshot.length) {
+          replayTimelines[m.id] = snapshot;
+          continue;
+        }
+        const events = (m as { turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }> })
+          .turnEvents;
+        if (!Array.isArray(events) || events.length === 0) continue;
+        const entries: NullalisTranscriptEntry[] = [];
+        for (const e of events) {
+          const ts = typeof e.ts === "number" ? e.ts : Date.now();
+          const entry = extractNullalisTranscriptEntry(e.eventType, e.payload ?? {}, ts);
+          if (entry) entries.push(entry);
+        }
+        if (entries.length) replayTimelines[m.id] = entries;
+      }
+    }
+
     return (
       <ChatView
         messages={messages}
+        replayTimelines={replayTimelines}
         isHistoryLoading={isHistoryLoading || (isZakiBotActiveSpace && isBotHistoryLoading)}
         isStreaming={isStreaming}
         streamingLabel={
@@ -5685,27 +5741,19 @@ export function ChatArea() {
         streamingBadgeLabel={zakiStreamingBadgeLabel}
         streamingHelperText={zakiStreamingHelperText}
         streamingModeVariant={zakiStreamingModeVariant}
-        botToolCalls={isZakiBotActiveSpace ? zakiBotToolCalls : []}
-        botStatusEvents={isZakiBotActiveSpace ? zakiBotStatusEvents : []}
-        botReasoningSummary={isZakiBotActiveSpace ? zakiBotReasoningSummary : null}
         botReplyStart={isZakiBotActiveSpace ? zakiBotReplyStart : null}
-        botProcessSnapshot={isZakiBotActiveSpace ? zakiBotProcessSnapshot : null}
-        botProcessCompact={isZakiBotActiveSpace ? zakiBotProcessCompact : false}
-        showBotTimeline={isZakiBotActiveSpace}
         nullalisMode={isZakiBotActiveSpace}
         nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
-        nullalisTranscriptEntryCount={
-          isZakiBotActiveSpace ? nullalisTranscriptEntryCount : 0
-        }
         nullalisTaskItems={isZakiBotActiveSpace ? nullalisTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
         onApprovalAction={isZakiBotActiveSpace ? handleApprovalAction : undefined}
         contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
         botMode={isZakiBotActiveSpace}
-        streamingMode={streamingIndicatorMode}
         firstMessageTransition={firstMessageTransition}
+        turnStartedAt={turnStartedAt}
+        turnDurationMs={turnDurationMs}
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
         onThumbsUpMessage={handleThumbsUpMessage}

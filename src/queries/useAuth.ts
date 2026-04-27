@@ -57,7 +57,7 @@ export function useLogin() {
       const { response, data } = await requestLogin(credentials);
       
       if (!response.ok || !data.token) {
-        throw new Error(data.message ?? "Login failed");
+        throw new Error(data.message ?? data.error ?? "Login failed");
       }
       
       return data.token;

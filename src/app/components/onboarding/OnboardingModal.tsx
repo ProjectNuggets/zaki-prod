@@ -857,6 +857,38 @@ export function OnboardingModal({
           <p className="mt-1.5 text-xs leading-[1.6] text-zaki-secondary">
             {t("onboarding.guided.completeBody")}
           </p>
+          <ul
+            className="mt-2.5 flex flex-col gap-1 text-[11px] leading-snug text-zaki-secondary"
+            data-testid="onboarding-continuity-summary"
+          >
+            {[
+              { key: "spaces_threads:space_created", label: isRtl ? "تم إنشاء مساحة" : "Space created" },
+              { key: "spaces_threads:thread_created", label: isRtl ? "تم فتح محادثة" : "Thread ready" },
+              { key: "memory:memory_opened", label: isRtl ? "الذاكرة مفتوحة" : "Memory connected" },
+            ].map((item) => {
+              const done = Boolean(taskStatus[item.key]);
+              return (
+                <li
+                  key={item.key}
+                  data-testid={`onboarding-continuity-${item.key.replace(":", "-")}`}
+                  data-complete={done ? "true" : "false"}
+                  className={cn(
+                    "flex items-center gap-1.5",
+                    done ? "text-zaki-primary" : "text-zaki-muted"
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "inline-block size-1.5 rounded-full",
+                      done ? "bg-emerald-500" : "bg-zaki-muted/40"
+                    )}
+                  />
+                  {item.label}
+                </li>
+              );
+            })}
+          </ul>
           <div className="mt-2 inline-flex items-center rounded-full bg-zaki-hover px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-zaki-muted">
             {t("onboarding.guided.optionalCloseout")}
           </div>

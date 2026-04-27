@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
+import { SourceChip } from "@/app/components/ui/zaki";
 
 /**
  * Strip raw <tool_call>{...}</tool_call> markup from assistant messages.
@@ -27,6 +28,12 @@ function isImageAttachment(type?: string | null, name?: string | null) {
   return /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/.test(n);
 }
 
+export interface PersistedTurnEvent {
+  eventType: string;
+  payload: Record<string, unknown>;
+  ts?: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -36,6 +43,10 @@ export interface Message {
   memorySources?: { id: string; content: string; type: string }[];
   error?: boolean;
   errorCode?: string | null;
+  channel?: string | null;
+  lane?: string | null;
+  createdAt?: string | null;
+  turnEvents?: PersistedTurnEvent[];
 }
 
 export interface MessageBubbleProps {
@@ -149,6 +160,12 @@ export function MessageBubble({
             </div>
           );
         })()}
+        <SourceChip
+          channel={message.channel || "web"}
+          lane={message.lane || "main"}
+          at={message.createdAt}
+          className={cn("mt-0.5", isUser && "self-end")}
+        />
         {showActions && !isUser && (
           <>
             <MessageActions

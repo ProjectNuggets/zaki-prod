@@ -1,13 +1,19 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./blocks/CodeBlock";
+import { DownloadButtonBlock } from "./blocks/DownloadButtonBlock";
 import { HeadingBlock } from "./blocks/HeadingBlock";
+import { ImageBlock } from "./blocks/ImageBlock";
 import { ListBlock } from "./blocks/ListBlock";
 import { ParagraphBlock } from "./blocks/ParagraphBlock";
 import { QuoteBlock } from "./blocks/QuoteBlock";
 import { TableBlock } from "./blocks/TableBlock";
 import type { MessageBlock } from "./types";
 
-export function BlockRenderer({ block, nested = false }: { block: MessageBlock; nested?: boolean }) {
+type BlockRendererProps = { block: MessageBlock; nested?: boolean };
+
+export const BlockRenderer = memo(
+  function BlockRenderer({ block, nested = false }: BlockRendererProps) {
   switch (block.type) {
     case "paragraph":
       return <ParagraphBlock block={block} />;
@@ -31,6 +37,19 @@ export function BlockRenderer({ block, nested = false }: { block: MessageBlock; 
       return <hr className="border-t border-zaki-subtle/80 dark:border-zaki-dark" />;
     case "table":
       return <TableBlock block={block} />;
+    case "image":
+      return <ImageBlock block={block} />;
+    case "download_button":
+      return <DownloadButtonBlock block={block} />;
+    case "saved_locally":
+      return (
+        <div
+          data-testid="assistant-saved-locally"
+          className="text-[11px] italic text-zaki-muted/70 dark:text-zaki-dark-muted/70"
+        >
+          saved locally
+        </div>
+      );
     case "callout":
       return (
         <div className="rounded-[14px] border border-zaki-subtle bg-[rgba(247,241,233,0.7)] px-4 py-3 dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.03)]">
@@ -49,4 +68,6 @@ export function BlockRenderer({ block, nested = false }: { block: MessageBlock; 
     default:
       return null;
   }
-}
+  },
+  (prev, next) => prev.block === next.block && prev.nested === next.nested,
+);

@@ -61,6 +61,7 @@ import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
   extractAgentTokenChunk,
+  isPersistableAgentEvent,
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
@@ -95,6 +96,7 @@ import {
   consumeDailyPromptQuota,
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
+  hasLocalUnlimitedQuotaBypass,
   isUnlimitedUser,
   readDailyPromptUsage,
   resolveQuotaSurface,
@@ -3409,13 +3411,14 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
   const status = zakiUser?.plan_status || "inactive";
   const access = getAccessStatus(zakiUser);
   const unlimited =
-    normalizedSurface === ZAKI_BOT_SURFACE
+    hasLocalUnlimitedQuotaBypass(zakiUser) ||
+    (normalizedSurface === ZAKI_BOT_SURFACE
       ? false
       : isUnlimitedUser({
           tier,
           status,
           accessActive: access.active,
-        });
+        }));
   return { tier, status, access, surface: normalizedSurface, unlimited };
 }
 
@@ -5031,7 +5034,47 @@ const loginHandler = async (req, res) => {
     const data = await response.json().catch(() => ({}));
     res.status(response.status).json(data);
   } catch (error) {
-    res.status(500).json({ error: error?.message || "Server error." });
+    const errorCode = String(error?.cause?.code || error?.code || "").trim();
+    if (errorCode === "CERT_HAS_EXPIRED") {
+      const message =
+        "Local login failed because the configured NOVA.TYP TLS certificate has expired.";
+      res.status(502).json({
+        valid: false,
+        token: null,
+        message,
+        error: message,
+        code: "nova_typ_cert_expired",
+      });
+      return;
+    }
+
+    if (
+      errorCode === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+      errorCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+      errorCode === "ERR_TLS_CERT_ALTNAME_INVALID"
+    ) {
+      const message =
+        "Local login failed because the configured NOVA.TYP TLS certificate is not trusted.";
+      res.status(502).json({
+        valid: false,
+        token: null,
+        message,
+        error: message,
+        code: "nova_typ_cert_invalid",
+      });
+      return;
+    }
+
+    const message =
+      error?.message === "fetch failed"
+        ? "Local login failed because NOVA.TYP is unreachable."
+        : error?.message || "Server error.";
+    res.status(500).json({
+      valid: false,
+      token: null,
+      message,
+      error: message,
+    });
   }
 };
 
@@ -7984,6 +8027,9 @@ const agentChatStreamHandler = async (req, res) => {
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
     let assistantAccumulated = "";
+    let upstreamTerminatedEarly = false;
+    const persistedEvents = [];
+    const PERSISTED_EVENT_CAP = 500;
 
     const processSseBlock = async (block) => {
       if (!isZakiBotSpace) return;
@@ -8012,42 +8058,78 @@ const agentChatStreamHandler = async (req, res) => {
         const payload = JSON.parse(payloadText);
         const chunk = extractAgentTokenChunk(eventType, payload);
         if (chunk) assistantAccumulated += chunk;
+        if (
+          isPersistableAgentEvent(eventType) &&
+          persistedEvents.length < PERSISTED_EVENT_CAP
+        ) {
+          persistedEvents.push({
+            eventType,
+            payload,
+            ts: Date.now(),
+          });
+        }
       } catch {
         // Ignore parse failures for persistence, still stream to client.
       }
     };
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const decoded = decoder.decode(value, { stream: true });
-      if (!decoded) continue;
-      res.write(decoded);
-      buffer += decoded;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const decoded = decoder.decode(value, { stream: true });
+        if (!decoded) continue;
+        res.write(decoded);
+        buffer += decoded;
 
-      let separatorIndex = buffer.indexOf("\n\n");
-      while (separatorIndex !== -1) {
-        const block = buffer.slice(0, separatorIndex);
-        buffer = buffer.slice(separatorIndex + 2);
-        await processSseBlock(block);
-        separatorIndex = buffer.indexOf("\n\n");
+        let separatorIndex = buffer.indexOf("\n\n");
+        while (separatorIndex !== -1) {
+          const block = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+          await processSseBlock(block);
+          separatorIndex = buffer.indexOf("\n\n");
+        }
+      }
+    } catch (readerError) {
+      upstreamTerminatedEarly = true;
+      const trackedUserId = String(req.agentUserId || "").trim();
+      if (trackedUserId) trackAgentStreamDiagnostic(trackedUserId, readerError);
+      console.error("[Agent] Upstream stream terminated early:", readerError?.message || readerError);
+      try {
+        reader.cancel().catch(() => {});
+      } catch {}
+      if (!res.writableEnded) {
+        try {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              code: "upstream_terminated",
+              message: "Upstream stream ended unexpectedly.",
+            })}\n\nevent: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`
+          );
+        } catch {}
       }
     }
 
     const trailing = buffer.trim();
-    if (trailing) {
+    if (trailing && !upstreamTerminatedEarly) {
       await processSseBlock(trailing);
     }
 
     if (isZakiBotSpace && assistantAccumulated.trim()) {
       await dbQuery(
-        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
-         VALUES ($1, $2, $3, 'assistant', $4)`,
-        [userId, resolvedSpaceId, resolvedThreadId, assistantAccumulated.trim()]
+        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content, events_jsonb)
+         VALUES ($1, $2, $3, 'assistant', $4, $5::jsonb)`,
+        [
+          userId,
+          resolvedSpaceId,
+          resolvedThreadId,
+          assistantAccumulated.trim(),
+          JSON.stringify(persistedEvents),
+        ]
       );
     }
 
-    res.end();
+    if (!res.writableEnded) res.end();
   } catch (error) {
     const trackedUserId = String(req.agentUserId || "").trim();
     if (trackedUserId) {
@@ -8056,6 +8138,20 @@ const agentChatStreamHandler = async (req, res) => {
     console.error("[Agent] Stream error:", error);
     const message = error?.message || "Agent stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
+    if (res.headersSent) {
+      if (!res.writableEnded) {
+        try {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              code: timedOut ? "agent_timeout" : "agent_stream_failed",
+              message,
+            })}\n\nevent: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`
+          );
+        } catch {}
+        try { res.end(); } catch {}
+      }
+      return;
+    }
     res.status(timedOut ? 504 : 500).json({ error: message });
   }
 };
@@ -8082,18 +8178,22 @@ app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req
 
   const loadAppHistory = async () => {
     const rows = await dbAll(
-      `SELECT id, role, content, created_at
+      `SELECT id, role, content, created_at, events_jsonb
        FROM zaki_bot_messages
        WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
        ORDER BY id ASC`,
       [userId, spaceId, threadId]
     );
-    return rows.map((row, index) => ({
-      id: `bot-${row.id}-${row.role}-${index}`,
-      role: row.role,
-      content: row.content || "",
-      createdAt: row.created_at,
-    }));
+    return rows.map((row, index) => {
+      const events = Array.isArray(row.events_jsonb) ? row.events_jsonb : [];
+      return {
+        id: `bot-${row.id}-${row.role}-${index}`,
+        role: row.role,
+        content: row.content || "",
+        createdAt: row.created_at,
+        events: row.role === "assistant" && events.length > 0 ? events : undefined,
+      };
+    });
   };
 
   try {
@@ -8314,6 +8414,64 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
   });
 });
 
+async function proxyNullclawUserDiagnostics(req, res, subpath, label) {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+  const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+  if (!authResult) return;
+  const userId = resolveCanonicalAgentUserId(authResult);
+  if (!userId) {
+    return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+  }
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+    return res.status(503).json({
+      active: false,
+      reason: "nullclaw_unavailable",
+    });
+  }
+  try {
+    const upstream = await fetchNullclawPath({
+      baseUrl: nullclawBase,
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId: String(req.requestId || crypto.randomUUID()),
+      path: `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/${subpath}`,
+      method: "GET",
+      fetchWithTimeout,
+      timeoutMs: AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
+      label,
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    return res.status(upstream.status || 200).json(payload);
+  } catch (error) {
+    console.error(`[Agent] ${label} failed:`, error);
+    return res.status(502).json({
+      active: false,
+      reason: "upstream_error",
+    });
+  }
+}
+
+app.get(
+  "/api/me/diagnostics/context",
+  requireAgentContext,
+  agentRouteLimiter,
+  async (req, res) => {
+    await proxyNullclawUserDiagnostics(req, res, "context", "Context diagnostics");
+  }
+);
+
+app.get(
+  "/api/me/diagnostics/memory-doctor",
+  requireAgentContext,
+  agentRouteLimiter,
+  async (req, res) => {
+    await proxyNullclawUserDiagnostics(req, res, "memory-doctor", "Memory-doctor diagnostics");
+  }
+);
+
 function resolveAgentUserId(authResult) {
   return resolveCanonicalAgentUserId(authResult);
 }
@@ -8329,6 +8487,28 @@ function getOrCreateIdempotencyKey(req, requestId) {
   return headerValue || requestId;
 }
 
+async function buildDevAuthResultFromUserId(userId) {
+  const normalizedUserId = Number.parseInt(String(userId || "").trim(), 10);
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+    return null;
+  }
+
+  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1 LIMIT 1", [
+    normalizedUserId,
+  ]);
+  if (!zakiUser) {
+    return null;
+  }
+
+  const email = normalizeEmail(String(zakiUser.email || ""));
+  return {
+    email: email || "dev@localhost",
+    sessionUser: { username: email || "dev@localhost" },
+    zakiUser,
+    userId: String(normalizedUserId),
+  };
+}
+
 async function requireBotBffContext(req, res, next) {
   const existingUserId = String(req.botBffContext?.userId || "").trim();
   if (existingUserId) {
@@ -8338,12 +8518,14 @@ async function requireBotBffContext(req, res, next) {
 
   // Dev mode: skip auth (mirrors requireAgentContext dev bypass)
   if (NULLCLAW_DEV_USER_ID) {
-    req.botBffContext = {
-      email: "dev@localhost",
-      sessionUser: { username: "dev@localhost" },
-      zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) },
-      userId: NULLCLAW_DEV_USER_ID,
-    };
+    const devAuthResult = await buildDevAuthResultFromUserId(NULLCLAW_DEV_USER_ID);
+    if (!devAuthResult) {
+      return res.status(500).json({
+        error: "Invalid NULLCLAW_DEV_USER_ID. Matching ZAKI user not found.",
+        code: "invalid_dev_user_id",
+      });
+    }
+    req.botBffContext = devAuthResult;
     next();
     return;
   }
@@ -8415,8 +8597,15 @@ async function requireAgentContext(req, res, next) {
   // Dev mode: skip auth and use a configured user ID for local development.
   // NEVER set NULLCLAW_DEV_USER_ID in production — it bypasses all authentication.
   if (NULLCLAW_DEV_USER_ID) {
-    req.agentUserId = NULLCLAW_DEV_USER_ID;
-    req.agentAuthResult = { zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) } };
+    const devAuthResult = await buildDevAuthResultFromUserId(NULLCLAW_DEV_USER_ID);
+    if (!devAuthResult) {
+      return res.status(500).json({
+        error: "Invalid NULLCLAW_DEV_USER_ID. Matching ZAKI user not found.",
+        code: "invalid_dev_user_id",
+      });
+    }
+    req.agentUserId = devAuthResult.userId;
+    req.agentAuthResult = devAuthResult;
     next();
     return;
   }
@@ -9687,6 +9876,16 @@ function beginGracefulShutdown(signal) {
 
 process.on("SIGTERM", () => beginGracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => beginGracefulShutdown("SIGINT"));
+
+process.on("unhandledRejection", (reason) => {
+  const message = reason && typeof reason === "object" && "message" in reason
+    ? reason.message
+    : String(reason);
+  console.error("[Process] Unhandled promise rejection:", message, reason?.stack || "");
+});
+process.on("uncaughtException", (error) => {
+  console.error("[Process] Uncaught exception:", error?.message || error, error?.stack || "");
+});
 
 server.listen(PORT, () => {
   console.log(`ZAKI backend listening on port ${PORT}`);

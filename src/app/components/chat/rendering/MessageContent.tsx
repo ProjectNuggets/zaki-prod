@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { parseMessageMarkdown } from "./parseMessageMarkdown";
+import { parseAssistantContent } from "./parseAssistantImages";
 import { BlockRenderer } from "./BlockRenderer";
-import type { MessageDocument } from "./types";
+import type { MessageBlock } from "./types";
 
 export type MessageContentProps = {
   content: string;
@@ -12,10 +13,6 @@ export type MessageContentProps = {
   surface?: "chat" | "shared" | "bot";
   preserveUserFormatting?: boolean;
 };
-
-function emptyDocument(): MessageDocument {
-  return { blocks: [] };
-}
 
 export function MessageContent({
   content,
@@ -27,26 +24,36 @@ export function MessageContent({
 }: MessageContentProps) {
   const isAssistant = role === "assistant";
   const shouldRenderStructured = isAssistant || preserveUserFormatting;
-  const finalDocument = useMemo(
-    () => (streaming && isAssistant ? emptyDocument() : parseMessageMarkdown(content)),
-    [content, isAssistant, streaming],
-  );
-  const [streamingDocument, setStreamingDocument] = useState<MessageDocument>(finalDocument);
-
-  useEffect(() => {
+  const deferredContent = useDeferredValue(content);
+  const parseSource = streaming && isAssistant ? deferredContent : content;
+  const blockCacheRef = useRef<Map<string, { block: MessageBlock; key: string }>>(new Map());
+  const document = useMemo(() => {
     if (!shouldRenderStructured) {
-      setStreamingDocument(emptyDocument());
-      return;
+      blockCacheRef.current = new Map();
+      return { blocks: [] as MessageBlock[] };
     }
-    if (!streaming || !isAssistant) {
-      setStreamingDocument(parseMessageMarkdown(content));
-      return;
-    }
-    const handle = window.setTimeout(() => {
-      setStreamingDocument(parseMessageMarkdown(content, { streaming: true }));
-    }, 90);
-    return () => window.clearTimeout(handle);
-  }, [content, isAssistant, shouldRenderStructured, streaming]);
+    const parsedBlocks = isAssistant
+      ? parseAssistantContent(parseSource, { streaming: streaming && isAssistant })
+      : parseMessageMarkdown(parseSource, {
+          streaming: streaming && isAssistant,
+        }).blocks;
+    const parsed = { blocks: parsedBlocks };
+    const prev = blockCacheRef.current;
+    const next = new Map<string, { block: MessageBlock; key: string }>();
+    const stableBlocks = parsed.blocks.map((block) => {
+      const key = JSON.stringify(block);
+      const cached = prev.get(block.id);
+      if (cached && cached.key === key) {
+        next.set(block.id, cached);
+        return cached.block;
+      }
+      const entry = { block, key };
+      next.set(block.id, entry);
+      return block;
+    });
+    blockCacheRef.current = next;
+    return { blocks: stableBlocks };
+  }, [parseSource, shouldRenderStructured, streaming, isAssistant]);
 
   if (!shouldRenderStructured) {
     return (
@@ -55,8 +62,6 @@ export function MessageContent({
       </div>
     );
   }
-
-  const document = streaming && isAssistant ? streamingDocument : finalDocument;
 
   return (
     <div
