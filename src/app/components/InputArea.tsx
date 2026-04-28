@@ -7,9 +7,24 @@ import { useEntitlements } from "@/queries";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio } from "@/lib/api";
+import {
+  getDisplayOrder,
+  resolveCanonical,
+  type SlashCommand,
+} from "@/lib/slashCommands";
 import { toast } from "sonner";
+import { SlashCommandPalette } from "./chat/SlashCommandPalette";
 
 const MAX_RECORDING_SECONDS = 60;
+const SLASH_LISTBOX_ID = "slash-command-listbox";
+
+const slashOptionId = (index: number) => `slash-command-option-${index}`;
+
+function detectSlash(value: string): { active: boolean; filter: string } {
+  if (!value.startsWith("/")) return { active: false, filter: "" };
+  if (value.includes(" ") || value.includes("\n")) return { active: false, filter: "" };
+  return { active: true, filter: value.slice(1) };
+}
 
 export function InputArea({
   onSend,
@@ -47,6 +62,9 @@ export function InputArea({
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashHighlight, setSlashHighlight] = useState(0);
+  const [showAliases, setShowAliases] = useState(false);
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const placeholderSuggestions = useMemo(
@@ -65,6 +83,33 @@ export function InputArea({
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
+  const slashFilter = useMemo(() => detectSlash(inputValue).filter, [inputValue]);
+  const filteredSlashCommands = useMemo<SlashCommand[]>(
+    () => getDisplayOrder({ filter: slashFilter, showAliases, isOperator: false }).flat,
+    [slashFilter, showAliases],
+  );
+
+  const handleToggleAliases = useCallback(() => {
+    setShowAliases((value) => !value);
+    setSlashHighlight(0);
+  }, []);
+
+  const handleSlashSelect = useCallback((cmd: SlashCommand) => {
+    const canonical = resolveCanonical(cmd);
+    const next = canonical + (cmd.takesArgs ? " " : "");
+    setInputValue(next);
+    setSlashOpen(false);
+    setSlashHighlight(0);
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      const end = next.length;
+      textarea.setSelectionRange(end, end);
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    });
+  }, []);
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -321,6 +366,20 @@ export function InputArea({
     >
       {/* Input Box */}
       <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir={isRtl ? "rtl" : "ltr"}>
+        <SlashCommandPalette
+          open={slashOpen}
+          filter={slashFilter}
+          highlightIndex={slashHighlight}
+          onHighlightChange={setSlashHighlight}
+          onSelect={handleSlashSelect}
+          onDismiss={() => setSlashOpen(false)}
+          showAliases={showAliases}
+          onToggleAliases={handleToggleAliases}
+          isOperator={false}
+          isRtl={isRtl}
+          listboxId={SLASH_LISTBOX_ID}
+          optionId={slashOptionId}
+        />
         <div className="rounded-zaki-xl border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
@@ -472,14 +531,61 @@ export function InputArea({
             dir="auto"
             value={inputValue}
             disabled={isSending}
+            role="combobox"
+            aria-expanded={slashOpen}
+            aria-controls={SLASH_LISTBOX_ID}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              slashOpen && filteredSlashCommands.length > 0
+                ? slashOptionId(slashHighlight)
+                : undefined
+            }
             onChange={(e) => {
-              setInputValue(e.target.value);
+              const value = e.target.value;
+              setInputValue(value);
+              const { active } = detectSlash(value);
+              setSlashOpen(active);
+              if (active) setSlashHighlight(0);
               if (textareaRef.current) {
                 textareaRef.current.style.height = "auto";
                 textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
               }
             }}
             onKeyDown={(event) => {
+              if (slashOpen && filteredSlashCommands.length > 0) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setSlashHighlight((index) => (index + 1) % filteredSlashCommands.length);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setSlashHighlight(
+                    (index) =>
+                      (index - 1 + filteredSlashCommands.length) % filteredSlashCommands.length,
+                  );
+                  return;
+                }
+                if (event.key === "Tab") {
+                  event.preventDefault();
+                  const cmd = filteredSlashCommands[slashHighlight];
+                  if (cmd) handleSlashSelect(cmd);
+                  return;
+                }
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  const cmd = filteredSlashCommands[slashHighlight];
+                  if (cmd) handleSlashSelect(cmd);
+                  return;
+                }
+              }
+              if (slashOpen && event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setSlashOpen(false);
+                setInputValue("");
+                return;
+              }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 submitMessage();

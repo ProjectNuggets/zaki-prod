@@ -71,7 +71,7 @@ describe("InputArea primary action button", () => {
       />
     );
 
-    fireEvent.change(screen.getByRole("textbox"), {
+    fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "hello zaki" },
     });
     fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
@@ -101,7 +101,7 @@ describe("InputArea primary action button", () => {
 
     expect(onStop).toHaveBeenCalledTimes(1);
     expect(onSend).not.toHaveBeenCalled();
-    expect(screen.getByRole("textbox")).toBeDisabled();
+    expect(screen.getByRole("combobox")).toBeDisabled();
   });
 
   it("renders a qualitative quota badge without numeric counters", () => {
@@ -139,5 +139,26 @@ describe("InputArea primary action button", () => {
     expect(screen.getByText("input.accessLabel")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "input.manageAccessCta" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "input.upgradeCta" })).not.toBeInTheDocument();
+  });
+
+  it("selects a slash command instead of sending when the palette is open", () => {
+    const onSend = jest.fn();
+
+    render(
+      <InputArea
+        onSend={onSend}
+        attachments={[]}
+        setAttachments={jest.fn()}
+      />,
+    );
+
+    const composer = screen.getByRole("combobox");
+    fireEvent.change(composer, { target: { value: "/he" } });
+
+    expect(screen.getByTestId("slash-command-palette")).toBeInTheDocument();
+    fireEvent.keyDown(composer, { key: "Enter" });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect((composer as HTMLTextAreaElement).value).toBe("/health");
   });
 });
