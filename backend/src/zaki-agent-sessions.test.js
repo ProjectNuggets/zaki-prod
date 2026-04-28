@@ -1,0 +1,95 @@
+import { describe, expect, it } from "@jest/globals";
+import {
+  buildCanonicalZakiThreadSessionKey,
+  buildDefaultZakiThreadTitle,
+  isThreadLaneZakiSessionKey,
+  mergeZakiAgentSessions,
+  normalizeZakiSessionKey,
+  parseZakiSessionKey,
+} from "./zaki-agent-sessions.js";
+
+describe("zaki agent session helpers", () => {
+  it("normalizes legacy main keys", () => {
+    expect(normalizeZakiSessionKey("agent:zaki-bot:user:7:main")).toBe(
+      "agent:zaki-bot:user:7:thread:main",
+    );
+  });
+
+  it("builds canonical thread session keys", () => {
+    expect(buildCanonicalZakiThreadSessionKey("7", "thread-42")).toBe(
+      "agent:zaki-bot:user:7:thread:thread-42",
+    );
+  });
+
+  it("parses lanes without converting task or cron into thread", () => {
+    expect(parseZakiSessionKey("agent:zaki-bot:user:7:task:77")).toMatchObject({
+      lane: "task",
+      threadId: null,
+      value: "77",
+    });
+    expect(parseZakiSessionKey("agent:zaki-bot:user:7:cron:nightly")).toMatchObject({
+      lane: "cron",
+      threadId: null,
+      value: "nightly",
+    });
+  });
+
+  it("detects thread-lane sessions", () => {
+    expect(isThreadLaneZakiSessionKey("agent:zaki-bot:user:7:thread:main")).toBe(true);
+    expect(isThreadLaneZakiSessionKey("agent:zaki-bot:user:7:task:77")).toBe(false);
+  });
+
+  it("merges local thread summaries over upstream thread sessions", () => {
+    const sessions = mergeZakiAgentSessions({
+      upstreamSessions: [
+        {
+          session_key: "agent:zaki-bot:user:7:thread:thread-42",
+          title: "",
+          message_count: 3,
+          last_active: "2026-04-28T08:00:00Z",
+          live: true,
+        },
+        {
+          session_key: "agent:zaki-bot:user:7:task:77",
+          title: "Task 77",
+          message_count: 1,
+          last_active: "2026-04-27T08:00:00Z",
+        },
+      ],
+      localThreads: [
+        {
+          session_key: "agent:zaki-bot:user:7:thread:thread-42",
+          title: "Travel budget",
+          message_count: 9,
+          last_active: "2026-04-28T09:00:00Z",
+        },
+        {
+          session_key: "agent:zaki-bot:user:7:thread:main",
+          title: "Main session",
+          message_count: 4,
+          last_active: "2026-04-26T08:00:00Z",
+        },
+      ],
+    });
+
+    expect(sessions[0]).toMatchObject({
+      session_key: "agent:zaki-bot:user:7:thread:thread-42",
+      title: "Travel budget",
+      message_count: 9,
+      live: true,
+    });
+    expect(sessions.find((session) => session.session_key.endsWith(":task:77"))).toMatchObject({
+      title: "Task 77",
+    });
+    expect(sessions.find((session) => session.session_key.endsWith(":thread:main"))).toMatchObject({
+      title: "Main session",
+      message_count: 4,
+    });
+  });
+
+  it("keeps New chat as the default local thread title", () => {
+    expect(buildDefaultZakiThreadTitle("")).toBe("New chat");
+    expect(buildDefaultZakiThreadTitle("New chat")).toBe("New chat");
+    expect(buildDefaultZakiThreadTitle("Trip planning")).toBe("Trip planning");
+  });
+});

@@ -15,7 +15,6 @@ import {
   fetchAgentHistory,
   fetchAgentMe,
   fetchAgentSessionContext,
-  fetchAgentSessionHistory,
   approveAgentSession,
   fetchUsageQuota,
   getApiBase,
@@ -77,6 +76,10 @@ import {
   ZAKI_BOT_SPACE_ID,
   ZAKI_BOT_THREAD_ID,
 } from "@/lib/zakiBot";
+import {
+  buildCanonicalZakiThreadSessionKey,
+  normalizeZakiSessionKey,
+} from "@/lib/zakiSessions";
 import {
   getActivationProgress,
   markFirstMemorySaved,
@@ -194,7 +197,7 @@ function buildAgentSessionKey(threadSlug: string, agentUserId: string | null) {
   const safeThread = String(threadSlug || "main").trim() || "main";
   const safeUser = String(agentUserId || "").trim();
   if (!safeUser) return null; // not yet resolved
-  return `agent:zaki-bot:user:${safeUser}:thread:${safeThread}`;
+  return buildCanonicalZakiThreadSessionKey(safeUser, safeThread);
 }
 
 function isAbortError(error: unknown) {
@@ -1977,10 +1980,12 @@ export function ChatArea() {
     view,
     threadId: activeThreadId,
     spaceId: activeWorkspaceSlug,
+    zakiSessionKey,
     goHome,
     goToSpaces,
     goToThread,
     clearThread,
+    setZakiSessionKey,
   } = useNavigationStore();
   const { sidebarMode } = useNavigationStore();
 
@@ -2019,7 +2024,6 @@ export function ChatArea() {
     messageCount?: number;
   } | null>(null);
   const [zakiUsageSummary, setZakiUsageSummary] = useState<ZakiUsageSummary | null>(null);
-  const [zakiBotHistoryMode] = useState<"merged" | "app">("merged");
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
     unlimited: boolean;
     limit: number | null;
@@ -2050,6 +2054,12 @@ export function ChatArea() {
   const [agentUserId, setAgentUserId] = useState<string | null>(
     () => sessionStorage.getItem("zaki:agentUserId")
   );
+  const activeZakiSessionKey = useMemo(() => {
+    const stored = String(zakiSessionKey || "").trim();
+    if (stored) return normalizeZakiSessionKey(stored);
+    if (!isZakiBotSpaceId(activeWorkspaceSlug) || !activeThreadId) return null;
+    return buildAgentSessionKey(activeThreadId, agentUserId);
+  }, [activeThreadId, activeWorkspaceSlug, agentUserId, zakiSessionKey]);
 
   // Memory state for the simplified normal-chat capture flow
   const [recentSavedMemories, setRecentSavedMemories] = useState<
@@ -2272,6 +2282,14 @@ export function ChatArea() {
       });
     return () => { cancelled = true; };
   }, [isAuthReady, isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !activeThreadId || !agentUserId) return;
+    const canonicalKey = buildAgentSessionKey(activeThreadId, agentUserId);
+    if (!canonicalKey) return;
+    if (normalizeZakiSessionKey(zakiSessionKey || "") === canonicalKey) return;
+    setZakiSessionKey(canonicalKey);
+  }, [activeThreadId, agentUserId, isZakiBotActiveSpace, setZakiSessionKey, zakiSessionKey]);
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
@@ -2808,7 +2826,7 @@ export function ChatArea() {
 
   const refreshContextGauge = useCallback(async () => {
     try {
-      const sessionKey = buildAgentSessionKey(activeThreadId || "main", agentUserId);
+      const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
       const { data } = await fetchAgentSessionContext(sessionKey);
       if (data && typeof data.token_count === "number") {
@@ -2821,7 +2839,7 @@ export function ChatArea() {
     } catch {
       // non-critical — gauge just won't update
     }
-  }, [activeThreadId, agentUserId]);
+  }, [activeThreadId, activeZakiSessionKey, agentUserId]);
 
   const finalizeZakiBotProgress = useCallback(
     (reason: "done" | "error" | "abort" | "stream_end") => {
@@ -5149,7 +5167,7 @@ export function ChatArea() {
 
   const handleApprovalAction = useCallback(
     async (requestId: string, approved: boolean) => {
-      const sessionKey = buildAgentSessionKey(activeThreadId || "main", agentUserId);
+      const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) {
         toast.error("Agent user ID not yet resolved — try again in a moment");
         return;
@@ -5167,7 +5185,7 @@ export function ChatArea() {
         throw err; // re-throw so the card stays in the loading state
       }
     },
-    [activeThreadId, agentUserId, nullalisApprovalRequest]
+    [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest]
   );
 
   const handleStartChat = useCallback(() => {
@@ -5265,8 +5283,6 @@ export function ChatArea() {
       setIsBotHistoryLoading(false);
       return;
     }
-    // Wait for agentUserId to resolve before loading session history
-    if (!agentUserId) return;
     if (historyLoadedRef.current[activeThreadId]) {
       setIsBotHistoryLoading(false);
       return;
@@ -5280,114 +5296,34 @@ export function ChatArea() {
     let cancelled = false;
     setIsBotHistoryLoading(true);
 
-    // Use session-specific history endpoint (nullalis runtime history)
-    const sessionKey = buildAgentSessionKey(activeThreadId, agentUserId);
-    if (!sessionKey) {
-      setIsBotHistoryLoading(false);
-      return;
-    }
-
-    const loadAppHistoryFallback = () =>
-      // Force mode=app so the server reads from our persisted DB rather than
-      // re-querying the upstream runtime (which won't have messages for
-      // legacy/default threads like "main").
-      fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "app")
-        .then(({ response: r2, data: d2 }) => {
-          if (cancelled || !r2.ok) return;
-          const history = Array.isArray(d2.history)
-            ? d2.history.map((entry: Record<string, unknown>, index: number) => ({
-                id: String(entry.id || `bot-history-${index}`),
-                role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
-                content: String(entry.content || ""),
-                turnEvents: Array.isArray((entry as { events?: unknown }).events)
-                  ? ((entry as { events?: unknown }).events as Array<{
-                      eventType?: string;
-                      payload?: Record<string, unknown>;
-                      ts?: number;
-                    }>)
-                      .filter((e) => typeof e?.eventType === "string")
-                      .map((e) => ({
-                        eventType: String(e.eventType),
-                        payload: (e.payload ?? {}) as Record<string, unknown>,
-                        ts: typeof e.ts === "number" ? e.ts : undefined,
-                      }))
-                  : undefined,
-              }))
-            : [];
-          setMessagesByThread((prev) => ({
-            ...prev,
-            [activeThreadId]: history,
-          }));
-          historyLoadedRef.current[activeThreadId] = true;
-        });
-
-    void fetchAgentSessionHistory(sessionKey)
+    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "app")
       .then(({ response, data }) => {
-        if (cancelled) return;
-        if (!response.ok) {
-          return loadAppHistoryFallback();
-        }
-        // Session history returns { messages: [...] }
-        const messages = data?.messages ?? [];
-        const history: Array<{
-          id: string;
-          role: "assistant" | "user";
-          content: string;
-          turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
-        }> = Array.isArray(messages)
-          ? messages.map((entry: Record<string, unknown>, index: number) => ({
-              id: String(entry.id || `bot-session-${index}`),
+        if (cancelled || !response.ok) return;
+        const history = Array.isArray(data.history)
+          ? data.history.map((entry: Record<string, unknown>, index: number) => ({
+              id: String(entry.id || `bot-history-${index}`),
               role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
               content: String(entry.content || ""),
+              turnEvents: Array.isArray((entry as { events?: unknown }).events)
+                ? ((entry as { events?: unknown }).events as Array<{
+                    eventType?: string;
+                    payload?: Record<string, unknown>;
+                    ts?: number;
+                  }>)
+                    .filter((e) => typeof e?.eventType === "string")
+                    .map((e) => ({
+                      eventType: String(e.eventType),
+                      payload: (e.payload ?? {}) as Record<string, unknown>,
+                      ts: typeof e.ts === "number" ? e.ts : undefined,
+                    }))
+                : undefined,
             }))
           : [];
-        if (history.length === 0) {
-          // Upstream session returned empty (e.g. runtime restarted). Fall back to
-          // persisted app history so the user doesn't see an empty thread.
-          return loadAppHistoryFallback();
-        }
         setMessagesByThread((prev) => ({
           ...prev,
           [activeThreadId]: history,
         }));
         historyLoadedRef.current[activeThreadId] = true;
-
-        // Fetch app history alongside to merge persisted turnEvents into the
-        // session-history view so past assistant turns can replay their timeline.
-        void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, zakiBotHistoryMode)
-          .then(({ response: rAlt, data: dAlt }) => {
-            if (cancelled || !rAlt.ok) return;
-            const appHistory = Array.isArray(dAlt.history) ? dAlt.history : [];
-            const assistantEvents = appHistory
-              .filter((e) => e.role === "assistant")
-              .map((e) =>
-                Array.isArray(e.events)
-                  ? e.events
-                      .filter((ev) => typeof ev?.eventType === "string")
-                      .map((ev) => ({
-                        eventType: String(ev.eventType),
-                        payload: (ev.payload ?? {}) as Record<string, unknown>,
-                        ts: typeof ev.ts === "number" ? ev.ts : undefined,
-                      }))
-                  : []
-              );
-            if (!assistantEvents.length) return;
-            setMessagesByThread((prev) => {
-              const current = prev[activeThreadId];
-              if (!Array.isArray(current)) return prev;
-              let assistantIdx = 0;
-              const merged = current.map((m) => {
-                if (m.role !== "assistant") return m;
-                const evs = assistantEvents[assistantIdx++];
-                if (!evs || !evs.length) return m;
-                return { ...m, turnEvents: evs };
-              });
-              return { ...prev, [activeThreadId]: merged };
-            });
-          })
-          .catch(() => {
-            /* best-effort backfill */
-          });
       })
       .catch(() => {
         // Ensure loading clears on error
@@ -5399,7 +5335,7 @@ export function ChatArea() {
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, agentUserId, isAuthReady, isZakiBotActiveSpace, messagesByThread, zakiBotHistoryMode]);
+  }, [activeThreadId, isAuthReady, isZakiBotActiveSpace, messagesByThread]);
 
   // First message transition effect
   useEffect(() => {

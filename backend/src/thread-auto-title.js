@@ -109,7 +109,7 @@ function buildAutoTitleMessages({ userMessage, assistantMessage }) {
   ];
 }
 
-function extractFirstExchangeFromHistory(history = []) {
+export function extractFirstExchangeFromHistory(history = []) {
   let firstUserMessage = "";
   let firstAssistantMessage = "";
 
@@ -135,7 +135,7 @@ function extractFirstExchangeFromHistory(history = []) {
   };
 }
 
-function buildFallbackTitleFromUserMessage(userMessage) {
+export function buildFallbackTitleFromUserMessage(userMessage) {
   const normalized = String(userMessage || "")
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
@@ -147,6 +147,43 @@ function buildFallbackTitleFromUserMessage(userMessage) {
     .trim();
   const candidate = withoutFiller || normalized;
   return sanitizeGeneratedThreadTitle(candidate);
+}
+
+export async function generateThreadTitleFromExchange({
+  userMessage,
+  assistantMessage,
+  chatFn = callNovaTypChat,
+} = {}) {
+  const safeUserMessage = String(userMessage || "").trim();
+  const safeAssistantMessage = String(assistantMessage || "").trim();
+  if (!safeUserMessage || !safeAssistantMessage) {
+    return "";
+  }
+
+  let generatedTitle = "";
+  try {
+    const result = await chatFn({
+      messages: buildAutoTitleMessages({
+        userMessage: safeUserMessage,
+        assistantMessage: safeAssistantMessage,
+      }),
+      jsonMode: true,
+      temperature: 0.1,
+      maxTokens: 80,
+      timeoutMs: 4_000,
+      label: "Thread auto-title request",
+    });
+    const parsed = parseJsonObjectFromText(result.content || "");
+    generatedTitle = sanitizeGeneratedThreadTitle(parsed?.title);
+  } catch {
+    generatedTitle = "";
+  }
+
+  if (!generatedTitle) {
+    generatedTitle = buildFallbackTitleFromUserMessage(safeUserMessage);
+  }
+
+  return generatedTitle;
 }
 
 export function createThreadAutoTitleHandler({
@@ -220,25 +257,11 @@ export function createThreadAutoTitleHandler({
         return;
       }
 
-      let generatedTitle = "";
-      try {
-        const result = await chatFn({
-          messages: buildAutoTitleMessages({ userMessage, assistantMessage }),
-          jsonMode: true,
-          temperature: 0.1,
-          maxTokens: 80,
-          timeoutMs: 4_000,
-          label: "Thread auto-title request",
-        });
-        const parsed = parseJsonObjectFromText(result.content || "");
-        generatedTitle = sanitizeGeneratedThreadTitle(parsed?.title);
-      } catch {
-        generatedTitle = "";
-      }
-
-      if (!generatedTitle) {
-        generatedTitle = buildFallbackTitleFromUserMessage(userMessage);
-      }
+      const generatedTitle = await generateThreadTitleFromExchange({
+        userMessage,
+        assistantMessage,
+        chatFn,
+      });
 
       if (!generatedTitle) {
         res.status(200).json({ status: "skipped", reason: "generation_failed" });

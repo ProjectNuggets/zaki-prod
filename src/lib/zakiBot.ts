@@ -1,4 +1,5 @@
 import type { Space, Thread } from "@/types";
+import { formatZakiSessionFallbackLabel } from "@/lib/zakiSessions";
 
 export const ZAKI_BOT_SPACE_ID = "zaki-bot";
 export const ZAKI_BOT_THREAD_ID = "main";
@@ -32,10 +33,7 @@ export function isZakiBotSpaceId(value: string | null | undefined) {
  *  e.g. "agent:zaki-bot:user:42:thread:abc" → "abc"
  *       "agent:zaki-bot:user:42:main" → "Main session" */
 export function shortSessionLabel(key: string) {
-  const parts = key.split(":");
-  const last = parts[parts.length - 1];
-  if (last === "main") return "Main session";
-  return last || key;
+  return formatZakiSessionFallbackLabel(key);
 }
 
 /** Format a date value as relative time (e.g. "3m ago", "2h ago").

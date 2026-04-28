@@ -18,7 +18,6 @@ import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { spaceKeys, useSpaces } from "@/queries/useSpaces";
 import { useEntitlements, useZakiSessions } from "@/queries";
-import { extractThreadSlug } from "@/queries/useZakiSessions";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
@@ -37,6 +36,11 @@ import {
   ZAKI_BOT_LABEL,
   ZAKI_BOT_SPACE_ID,
 } from "@/lib/zakiBot";
+import {
+  extractThreadSlugFromSessionKey,
+  isThreadLaneZakiSessionKey,
+  normalizeZakiSessionKey,
+} from "@/lib/zakiSessions";
 import {
   InlineConfirm,
   TypeToConfirmDialog,
@@ -86,6 +90,7 @@ export function Sidebar() {
     currentView,
     activeSpaceId,
     activeThreadId,
+    activeZakiSessionKey,
     goHome,
     goToAbout,
     goToSpace,
@@ -94,9 +99,12 @@ export function Sidebar() {
     goToZakiBot,
     goToZakiHome,
   } = useNavigation();
-  const { sidebarMode } = useNavigationStore();
+  const { sidebarMode, zakiSessionKey: storedZakiSessionKey } = useNavigationStore();
   const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(sidebarMode === "zaki");
-  const activeSessionKey = isZakiBotSpaceId(activeSpaceId) ? activeThreadId : null;
+  const activeSessionKey =
+    isZakiBotSpaceId(activeSpaceId) && (activeZakiSessionKey || storedZakiSessionKey)
+      ? normalizeZakiSessionKey(activeZakiSessionKey || storedZakiSessionKey || "")
+      : null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setCollapsed = setSidebarCollapsed;
@@ -245,10 +253,6 @@ export function Sidebar() {
   // Focus trap retained for confirmDelete lifecycle (handled via primitives)
   useFocusTrap<HTMLDivElement>(!!confirmDelete);
 
-  // Session key highlighting is deferred — the canonical agent user ID
-  // is resolved in ChatArea via /api/agent/me. Pass null for now.
-  const activeNullalisSessionKey: string | null = null;
-
   const isActive = (item: string) => activeItem === item;
   const isZakiBotNavActive =
     isZakiBotSpaceId(activeSpaceId) ||
@@ -289,6 +293,10 @@ export function Sidebar() {
   const filteredUserSpaces = useMemo(
     () => filteredSpaces.filter((space) => !space.fixed),
     [filteredSpaces]
+  );
+  const zakiThreadSessions = useMemo(
+    () => zakiSessions.filter((session) => isThreadLaneZakiSessionKey(session.session_key)),
+    [zakiSessions]
   );
 
   const blurButtonOnPointerClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -869,7 +877,11 @@ export function Sidebar() {
 
   const createThreadInSpace = async (spaceId: string | null) => {
     if (isZakiBotSpaceId(spaceId)) {
-      openZakiBotView();
+      setExpandedSpace(ZAKI_BOT_SPACE_ID);
+      setActiveItem(ZAKI_BOT_SPACE_ID);
+      goToZakiHome();
+      window.dispatchEvent(new Event("zaki:clear-thread"));
+      window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
       return;
     }
     const resolvedSpaceId =
@@ -1300,12 +1312,13 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto zaki-scrollbar-fade">
         {sidebarMode === "zaki" ? (
           <ZakiSessionList
-            sessions={zakiSessions}
+            sessions={zakiThreadSessions}
             isLoading={zakiSessionsLoading}
             activeSessionKey={activeSessionKey}
             onSelectSession={(sessionKey) => {
-              const threadSlug = extractThreadSlug(sessionKey);
-              goToThread(ZAKI_BOT_SPACE_ID, threadSlug);
+              const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
+              if (!threadSlug) return;
+              goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
             }}
             onCreateSession={() => {
               // Reset to the Zaki welcome view so the user gets a visibly
@@ -2042,7 +2055,13 @@ export function Sidebar() {
       <SessionManagementSheet
         isOpen={zakiSessionsOpen}
         onClose={() => setZakiSessionsOpen(false)}
-        activeSessionKey={activeNullalisSessionKey}
+        activeSessionKey={activeSessionKey}
+        onSwitchSession={(sessionKey) => {
+          const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
+          if (!threadSlug) return;
+          goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
+          setZakiSessionsOpen(false);
+        }}
       />
       <CronManagementSheet
         isOpen={zakiCronOpen}

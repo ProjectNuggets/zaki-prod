@@ -77,6 +77,8 @@ export default function App() {
       store.goToAbout();
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
+    } else if (spaceId && !threadId && isZakiBotSpaceId(spaceId as string)) {
+      store.goToZakiHome();
     } else if (spaceId && threadId) {
       store.goToThread(spaceId as string, threadId as string);
     } else if (spaceId) {
