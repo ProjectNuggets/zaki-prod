@@ -1235,7 +1235,7 @@ export type BotRuntimeStatus = {
 };
 
 export async function fetchBotRuntimeStatus() {
-  const response = await backendAuthRequest("/v1/me/bot/runtime", { method: "GET" });
+  const response = await backendRequest("/v1/me/bot/runtime", { method: "GET" });
   const data = await parseApiJson<BotRuntimeStatus>(response);
   return { response, data };
 }

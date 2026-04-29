@@ -9652,15 +9652,37 @@ app.delete("/api/share/:token", async (req, res) => {
  * Sourced from BFF env (the BFF knows the agent host config) since the
  * upstream nullalis runtime does not yet expose a public status endpoint.
  *
+ * Body shape is identical for every caller and contains no user data, so the
+ * response is intentionally `public, max-age=60` and the route is unauth.
+ * If a future change ever makes the body depend on auth or origin, drop
+ * `public` first or this becomes a cross-tenant leak through shared caches.
+ *
  * Env contract:
  *   ZAKI_SANDBOX_ENABLED  "true" | "false"     default "false"
  *   ZAKI_SANDBOX_BACKEND  "bubblewrap" | "firejail" | "docker" | "landlock" | ""
  */
+const ALLOWED_SANDBOX_BACKENDS = ["bubblewrap", "firejail", "docker", "landlock"];
+const sandboxEnvEnabled =
+  String(process.env.ZAKI_SANDBOX_ENABLED || "").toLowerCase() === "true";
+const sandboxEnvBackendRaw = String(process.env.ZAKI_SANDBOX_BACKEND || "")
+  .trim()
+  .toLowerCase();
+if (
+  sandboxEnvEnabled &&
+  sandboxEnvBackendRaw &&
+  !ALLOWED_SANDBOX_BACKENDS.includes(sandboxEnvBackendRaw)
+) {
+  console.warn(
+    `[runtime] ZAKI_SANDBOX_ENABLED=true but ZAKI_SANDBOX_BACKEND="${sandboxEnvBackendRaw}" is not in [${ALLOWED_SANDBOX_BACKENDS.join(", ")}]. UI badge will hide the backend label.`
+  );
+}
+
 app.get("/v1/me/bot/runtime", (req, res) => {
-  const enabled = String(process.env.ZAKI_SANDBOX_ENABLED || "").toLowerCase() === "true";
-  const rawBackend = String(process.env.ZAKI_SANDBOX_BACKEND || "").trim().toLowerCase();
-  const allowedBackends = ["bubblewrap", "firejail", "docker", "landlock"];
-  const backend = enabled && allowedBackends.includes(rawBackend) ? rawBackend : null;
+  const enabled = sandboxEnvEnabled;
+  const backend =
+    enabled && ALLOWED_SANDBOX_BACKENDS.includes(sandboxEnvBackendRaw)
+      ? sandboxEnvBackendRaw
+      : null;
   res.set("Cache-Control", "public, max-age=60");
   res.status(200).json({
     sandbox: {

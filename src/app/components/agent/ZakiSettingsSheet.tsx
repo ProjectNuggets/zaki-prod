@@ -225,7 +225,7 @@ function extractSettingsFieldErrors(payload: unknown, t: (key: string) => string
   if (raw.includes("invalid_session_timeout_minutes")) {
     fieldErrors.session_timeout_minutes = t("zakiSettingsSheet.errors.invalidSessionTimeoutMinutes");
   }
-  if (raw.includes("invalid_autonomy") || raw.includes("autonomy")) {
+  if (raw.includes("invalid_autonomy")) {
     fieldErrors.autonomy = t("zakiSettingsSheet.errors.invalidAutonomy");
   }
   return fieldErrors;
@@ -699,8 +699,16 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       proactive_updates: settingsDraft.proactive_updates,
       voice_replies: telegramConnected ? settingsDraft.voice_replies : false,
       session_timeout_minutes: parsedTimeout,
-      autonomy: settingsDraft.autonomy,
     };
+    // Only patch autonomy when the user explicitly changed it from what the
+    // server returned. Avoids silently writing the default to every account
+    // the first time anyone opens the sheet on an older runtime that did not
+    // round-trip the field.
+    if (settings?.autonomy !== undefined && settingsDraft.autonomy !== settings.autonomy) {
+      payload.autonomy = settingsDraft.autonomy;
+    } else if (settings?.autonomy === undefined && settingsDraft.autonomy !== DEFAULT_SETTINGS.autonomy) {
+      payload.autonomy = settingsDraft.autonomy;
+    }
     const { response, data } = await updateBotSettings(payload);
     setSavingSettings(false);
     if (!response.ok) {
