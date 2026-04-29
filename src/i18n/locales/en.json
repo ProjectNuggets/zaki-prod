@@ -497,6 +497,13 @@
         "summaryEnabled": "Heartbeat is active.",
         "summaryDisabled": "Heartbeat is off."
       },
+      "usage": {
+        "title": "Usage",
+        "summary": "{{requests}} requests today, {{state}} status",
+        "summaryUnavailable": "Usage temporarily unavailable.",
+        "summaryPending": "No usage snapshot yet.",
+        "stateUnknown": "unknown"
+      },
       "workspace": {
         "title": "Workspace context",
         "summary": "{{connected}} of {{total}} channels connected"
@@ -602,11 +609,36 @@
       "allowFromHelper": "Optional. Add Telegram chat or account IDs if you want to restrict who can reach your agent. Leave it blank for the normal setup flow."
     },
     "autonomy": {
+      "levelTitle": "Autonomy level",
+      "levelHelper": "Pick how independently ZAKI can act inside its sandbox. Supervised is recommended for everyday use.",
+      "levels": {
+        "supervised": {
+          "label": "Supervised (recommended)",
+          "description": "Asks before medium and high risk actions. Reads, browses, and runs safe commands without asking."
+        },
+        "full": {
+          "label": "Full autonomy",
+          "description": "Acts without prompts inside the sandbox. Network and high-risk commands are still blocked."
+        },
+        "read_only": {
+          "label": "Read only",
+          "description": "Observes only. ZAKI can read and answer but cannot run any tools."
+        }
+      },
       "proactiveTitle": "Proactive updates",
       "proactiveHelper": "This stays in assistant settings because it controls behavior, not delivery cadence.",
       "heartbeatTitle": "Heartbeat",
       "heartbeatHelper": "Heartbeat cadence is managed by ZAKI. This switch only controls whether heartbeat delivery is enabled.",
       "heartbeatRequiresTelegram": "Telegram must be connected first."
+    },
+    "usage": {
+      "state": "State",
+      "requestsToday": "Requests today",
+      "tokensToday": "Tokens today",
+      "tokensMonth": "Tokens this month",
+      "unavailable": "Usage is temporarily unavailable. Your bot space still works, but the daily summary did not load.",
+      "pending": "No usage snapshot is available yet.",
+      "helper": "Usage refreshes when this panel opens. The full cost breakdown will land once the runtime exposes per-period totals."
     },
     "limits": {
       "currentPlanTitle": "Current plan",
@@ -674,7 +706,8 @@
       "invalidGroupActivation": "Choose a valid group activation mode.",
       "invalidProactiveUpdates": "Proactive updates must be either enabled or disabled.",
       "invalidVoiceReplies": "Voice replies must be either enabled or disabled.",
-      "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes."
+      "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes.",
+      "invalidAutonomy": "Pick read only, supervised, or full autonomy."
     },
     "footer": {
       "unsaved": "Unsaved changes",

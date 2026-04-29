@@ -1038,12 +1038,15 @@ export type AgentOnboardingState = BotApiError & {
   setup?: Record<string, unknown> | null;
 };
 
+export type BotAutonomyLevel = "read_only" | "supervised" | "full";
+
 export type BotSettingsProfile = BotApiError & {
   assistant_mode?: "fast" | "balanced" | "deep";
   group_activation?: "mention" | "always";
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  autonomy?: BotAutonomyLevel;
 };
 
 export type BotSettingsPatch = {
@@ -1052,6 +1055,7 @@ export type BotSettingsPatch = {
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  autonomy?: BotAutonomyLevel;
 };
 
 export type BotTelegramConnectPayload = {
@@ -1218,6 +1222,21 @@ export async function autoTitleThread(
 export async function fetchBotUsage() {
   const response = await backendAuthRequest("/v1/me/bot/usage", { method: "GET" });
   const data = await parseApiJson<BotUsageSummary>(response);
+  return { response, data };
+}
+
+export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker" | "landlock";
+
+export type BotRuntimeStatus = {
+  sandbox?: {
+    enabled?: boolean;
+    backend?: BotSandboxBackend | null;
+  };
+};
+
+export async function fetchBotRuntimeStatus() {
+  const response = await backendRequest("/v1/me/bot/runtime", { method: "GET" });
+  const data = await parseApiJson<BotRuntimeStatus>(response);
   return { response, data };
 }
 

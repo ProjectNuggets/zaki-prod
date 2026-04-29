@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
+import { Activity, BarChart3, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   connectBotTelegram,
@@ -7,6 +7,7 @@ import {
   fetchBotHeartbeat,
   fetchBotOnboarding,
   fetchBotSettings,
+  fetchBotUsage,
   updateBotHeartbeat,
   type BotHeartbeatState,
   updateBotSettings,
@@ -15,6 +16,7 @@ import {
   type BotTelegramConnectPayload,
   type BotSettingsPatch,
   type BotSettingsProfile,
+  type BotUsageSummary,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
@@ -31,7 +33,7 @@ type BannerState =
   | { tone: "error"; text: string }
   | null;
 
-type SectionValue = "overview" | "assistant" | "telegram" | "autonomy";
+type SectionValue = "overview" | "assistant" | "telegram" | "autonomy" | "usage";
 type OpenSectionValue = SectionValue | "";
 type TelegramUiStatus =
   | "not_connected"
@@ -46,6 +48,7 @@ type SettingsDraft = {
   proactive_updates: boolean;
   voice_replies: boolean;
   session_timeout_minutes: string;
+  autonomy: "read_only" | "supervised" | "full";
 };
 
 type SettingsFieldErrorKey =
@@ -53,7 +56,8 @@ type SettingsFieldErrorKey =
   | "group_activation"
   | "proactive_updates"
   | "voice_replies"
-  | "session_timeout_minutes";
+  | "session_timeout_minutes"
+  | "autonomy";
 
 type TelegramFieldErrorKey = "bot_token" | "allow_from";
 
@@ -66,6 +70,7 @@ const DEFAULT_SETTINGS: SettingsDraft = {
   proactive_updates: true,
   voice_replies: false,
   session_timeout_minutes: "30",
+  autonomy: "supervised",
 };
 
 const TELEGRAM_CONFIRMATION_DELAYS_MS = [0, 300, 1000, 2000];
@@ -220,6 +225,9 @@ function extractSettingsFieldErrors(payload: unknown, t: (key: string) => string
   if (raw.includes("invalid_session_timeout_minutes")) {
     fieldErrors.session_timeout_minutes = t("zakiSettingsSheet.errors.invalidSessionTimeoutMinutes");
   }
+  if (raw.includes("invalid_autonomy")) {
+    fieldErrors.autonomy = t("zakiSettingsSheet.errors.invalidAutonomy");
+  }
   return fieldErrors;
 }
 
@@ -321,6 +329,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
   const [settings, setSettings] = useState<BotSettingsProfile | null>(null);
   const [heartbeat, setHeartbeat] = useState<BotHeartbeatState | null>(null);
+  const [usage, setUsage] = useState<BotUsageSummary | null>(null);
+  const [usageUnavailable, setUsageUnavailable] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(DEFAULT_SETTINGS);
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramAllowFrom, setTelegramAllowFrom] = useState("");
@@ -363,7 +373,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
     settingsDraft.voice_replies !==
       Boolean(settings?.voice_replies ?? DEFAULT_SETTINGS.voice_replies) ||
     settingsDraft.session_timeout_minutes !==
-      String(settings?.session_timeout_minutes ?? DEFAULT_SETTINGS.session_timeout_minutes);
+      String(settings?.session_timeout_minutes ?? DEFAULT_SETTINGS.session_timeout_minutes) ||
+    settingsDraft.autonomy !== (settings?.autonomy ?? DEFAULT_SETTINGS.autonomy);
 
   const responseStyleLabel = t(`zakiSettingsSheet.options.${settingsDraft.assistant_mode}`);
   const joinBehaviorLabel = t(
@@ -469,10 +480,11 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       setAgentUserUnavailable(false);
       let nextAgentUserUnavailable = false;
 
-      const [onboardingResult, settingsResult, heartbeatResult] = await Promise.allSettled([
+      const [onboardingResult, settingsResult, heartbeatResult, usageResult] = await Promise.allSettled([
         fetchBotOnboarding(),
         fetchBotSettings(),
         fetchBotHeartbeat(),
+        fetchBotUsage(),
       ]);
 
       if (!active) return;
@@ -515,6 +527,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               typeof data.session_timeout_minutes === "number"
                 ? String(data.session_timeout_minutes)
                 : DEFAULT_SETTINGS.session_timeout_minutes,
+            autonomy: data.autonomy ?? DEFAULT_SETTINGS.autonomy,
           });
         } else {
           const unknownUser = isUnknownBotUserError(data);
@@ -546,6 +559,20 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       } else {
         setBanner({ tone: "error", text: t("zakiSettingsSheet.errors.heartbeatLoad") });
         setHeartbeat(null);
+      }
+
+      if (usageResult.status === "fulfilled") {
+        const { response, data } = usageResult.value;
+        if (response.ok) {
+          setUsage(data);
+          setUsageUnavailable(false);
+        } else {
+          setUsage(null);
+          setUsageUnavailable(getBotErrorCode(data) === "usage_unavailable");
+        }
+      } else {
+        setUsage(null);
+        setUsageUnavailable(true);
       }
 
       setAgentUserUnavailable(nextAgentUserUnavailable);
@@ -673,6 +700,15 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       voice_replies: telegramConnected ? settingsDraft.voice_replies : false,
       session_timeout_minutes: parsedTimeout,
     };
+    // Only patch autonomy when the user explicitly changed it from what the
+    // server returned. Avoids silently writing the default to every account
+    // the first time anyone opens the sheet on an older runtime that did not
+    // round-trip the field.
+    if (settings?.autonomy !== undefined && settingsDraft.autonomy !== settings.autonomy) {
+      payload.autonomy = settingsDraft.autonomy;
+    } else if (settings?.autonomy === undefined && settingsDraft.autonomy !== DEFAULT_SETTINGS.autonomy) {
+      payload.autonomy = settingsDraft.autonomy;
+    }
     const { response, data } = await updateBotSettings(payload);
     setSavingSettings(false);
     if (!response.ok) {
@@ -695,6 +731,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         typeof data.session_timeout_minutes === "number"
           ? String(data.session_timeout_minutes)
           : DEFAULT_SETTINGS.session_timeout_minutes,
+      autonomy: data.autonomy ?? DEFAULT_SETTINGS.autonomy,
     });
     setBanner({ tone: "success", text: t("zakiSettingsSheet.success.settingsSaved") });
     return true;
@@ -1252,6 +1289,50 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 <AccordionContent className="pb-6">
                   <div className="space-y-3">
                     <CompactRow
+                      title={t("zakiSettingsSheet.autonomy.levelTitle")}
+                      summary={t(`zakiSettingsSheet.autonomy.levels.${settingsDraft.autonomy}.label`)}
+                      helper={t("zakiSettingsSheet.autonomy.levelHelper")}
+                      isRtl={isRtl}
+                      control={
+                        <div className="space-y-2">
+                          {(["supervised", "full", "read_only"] as const).map((level) => (
+                            <label
+                              key={level}
+                              className={`flex cursor-pointer items-start gap-3 rounded-zaki-md border px-3 py-2 transition-colors ${
+                                settingsDraft.autonomy === level
+                                  ? "border-zaki-accent bg-zaki-accent/5 dark:bg-zaki-accent/10"
+                                  : "border-zaki-strong bg-zaki-raised hover:border-zaki-accent/40 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="autonomy-level"
+                                value={level}
+                                checked={settingsDraft.autonomy === level}
+                                onChange={() =>
+                                  setSettingsDraft((current) => ({
+                                    ...current,
+                                    autonomy: level,
+                                  }))
+                                }
+                                className="mt-1"
+                              />
+                              <span className="flex flex-1 flex-col gap-0.5">
+                                <span className="text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
+                                  {t(`zakiSettingsSheet.autonomy.levels.${level}.label`)}
+                                </span>
+                                <span className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                                  {t(`zakiSettingsSheet.autonomy.levels.${level}.description`)}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                          <InlineFieldError text={settingsErrors.autonomy} />
+                        </div>
+                      }
+                    />
+
+                    <CompactRow
                       title={t("zakiSettingsSheet.autonomy.proactiveTitle")}
                       summary={
                         settingsDraft.proactive_updates
@@ -1293,6 +1374,77 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         </label>
                       }
                     />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="usage" className="border-b border-zaki px-0">
+                <AccordionTrigger className="py-5 no-underline hover:no-underline">
+                  <SectionBadge
+                    icon={BarChart3}
+                    title={t("zakiSettingsSheet.sections.usage.title")}
+                    summary={
+                      usageUnavailable
+                        ? t("zakiSettingsSheet.sections.usage.summaryUnavailable")
+                        : usage
+                          ? t("zakiSettingsSheet.sections.usage.summary", {
+                              requests: usage.requests_day ?? 0,
+                              state: usage.state ?? t("zakiSettingsSheet.sections.usage.stateUnknown"),
+                            })
+                          : t("zakiSettingsSheet.sections.usage.summaryPending")
+                    }
+                    isRtl={isRtl}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="pb-6">
+                  <div className="space-y-3">
+                    {usageUnavailable ? (
+                      <p className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-3 text-sm text-zaki-secondary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-subtle">
+                        {t("zakiSettingsSheet.usage.unavailable")}
+                      </p>
+                    ) : usage ? (
+                      <div className="grid gap-2 rounded-zaki-md border border-zaki bg-zaki-raised p-3 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.state")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {usage.state ?? "unknown"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.requestsToday")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {usage.requests_day ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.tokensToday")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {(usage.tokens_day ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.tokensMonth")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {(usage.tokens_month ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-3 text-sm text-zaki-secondary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-subtle">
+                        {t("zakiSettingsSheet.usage.pending")}
+                      </p>
+                    )}
+                    <p className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                      {t("zakiSettingsSheet.usage.helper")}
+                    </p>
                   </div>
                 </AccordionContent>
               </AccordionItem>
