@@ -1225,6 +1225,21 @@ export async function fetchBotUsage() {
   return { response, data };
 }
 
+export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker" | "landlock";
+
+export type BotRuntimeStatus = {
+  sandbox?: {
+    enabled?: boolean;
+    backend?: BotSandboxBackend | null;
+  };
+};
+
+export async function fetchBotRuntimeStatus() {
+  const response = await backendAuthRequest("/v1/me/bot/runtime", { method: "GET" });
+  const data = await parseApiJson<BotRuntimeStatus>(response);
+  return { response, data };
+}
+
 export async function provisionAgent(payload: Record<string, unknown> = {}) {
   const response = await backendAuthRequest("/api/agent/provision", {
     method: "POST",

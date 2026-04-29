@@ -9642,6 +9642,35 @@ app.delete("/api/share/:token", async (req, res) => {
 });
 
 // =============================================================================
+// RUNTIME STATUS (sandbox backend exposure for UI badges)
+// =============================================================================
+
+/**
+ * GET /v1/me/bot/runtime
+ *
+ * Returns deploy-time runtime metadata so the UI can show a sandbox badge.
+ * Sourced from BFF env (the BFF knows the agent host config) since the
+ * upstream nullalis runtime does not yet expose a public status endpoint.
+ *
+ * Env contract:
+ *   ZAKI_SANDBOX_ENABLED  "true" | "false"     default "false"
+ *   ZAKI_SANDBOX_BACKEND  "bubblewrap" | "firejail" | "docker" | "landlock" | ""
+ */
+app.get("/v1/me/bot/runtime", (req, res) => {
+  const enabled = String(process.env.ZAKI_SANDBOX_ENABLED || "").toLowerCase() === "true";
+  const rawBackend = String(process.env.ZAKI_SANDBOX_BACKEND || "").trim().toLowerCase();
+  const allowedBackends = ["bubblewrap", "firejail", "docker", "landlock"];
+  const backend = enabled && allowedBackends.includes(rawBackend) ? rawBackend : null;
+  res.set("Cache-Control", "public, max-age=60");
+  res.status(200).json({
+    sandbox: {
+      enabled,
+      backend,
+    },
+  });
+});
+
+// =============================================================================
 // CATCH-ALL PROXY
 // =============================================================================
 
