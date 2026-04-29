@@ -46,6 +46,7 @@ type SettingsDraft = {
   proactive_updates: boolean;
   voice_replies: boolean;
   session_timeout_minutes: string;
+  autonomy: "read_only" | "supervised" | "full";
 };
 
 type SettingsFieldErrorKey =
@@ -53,7 +54,8 @@ type SettingsFieldErrorKey =
   | "group_activation"
   | "proactive_updates"
   | "voice_replies"
-  | "session_timeout_minutes";
+  | "session_timeout_minutes"
+  | "autonomy";
 
 type TelegramFieldErrorKey = "bot_token" | "allow_from";
 
@@ -66,6 +68,7 @@ const DEFAULT_SETTINGS: SettingsDraft = {
   proactive_updates: true,
   voice_replies: false,
   session_timeout_minutes: "30",
+  autonomy: "supervised",
 };
 
 const TELEGRAM_CONFIRMATION_DELAYS_MS = [0, 300, 1000, 2000];
@@ -220,6 +223,9 @@ function extractSettingsFieldErrors(payload: unknown, t: (key: string) => string
   if (raw.includes("invalid_session_timeout_minutes")) {
     fieldErrors.session_timeout_minutes = t("zakiSettingsSheet.errors.invalidSessionTimeoutMinutes");
   }
+  if (raw.includes("invalid_autonomy") || raw.includes("autonomy")) {
+    fieldErrors.autonomy = t("zakiSettingsSheet.errors.invalidAutonomy");
+  }
   return fieldErrors;
 }
 
@@ -363,7 +369,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
     settingsDraft.voice_replies !==
       Boolean(settings?.voice_replies ?? DEFAULT_SETTINGS.voice_replies) ||
     settingsDraft.session_timeout_minutes !==
-      String(settings?.session_timeout_minutes ?? DEFAULT_SETTINGS.session_timeout_minutes);
+      String(settings?.session_timeout_minutes ?? DEFAULT_SETTINGS.session_timeout_minutes) ||
+    settingsDraft.autonomy !== (settings?.autonomy ?? DEFAULT_SETTINGS.autonomy);
 
   const responseStyleLabel = t(`zakiSettingsSheet.options.${settingsDraft.assistant_mode}`);
   const joinBehaviorLabel = t(
@@ -515,6 +522,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               typeof data.session_timeout_minutes === "number"
                 ? String(data.session_timeout_minutes)
                 : DEFAULT_SETTINGS.session_timeout_minutes,
+            autonomy: data.autonomy ?? DEFAULT_SETTINGS.autonomy,
           });
         } else {
           const unknownUser = isUnknownBotUserError(data);
@@ -672,6 +680,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       proactive_updates: settingsDraft.proactive_updates,
       voice_replies: telegramConnected ? settingsDraft.voice_replies : false,
       session_timeout_minutes: parsedTimeout,
+      autonomy: settingsDraft.autonomy,
     };
     const { response, data } = await updateBotSettings(payload);
     setSavingSettings(false);
@@ -695,6 +704,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         typeof data.session_timeout_minutes === "number"
           ? String(data.session_timeout_minutes)
           : DEFAULT_SETTINGS.session_timeout_minutes,
+      autonomy: data.autonomy ?? DEFAULT_SETTINGS.autonomy,
     });
     setBanner({ tone: "success", text: t("zakiSettingsSheet.success.settingsSaved") });
     return true;
@@ -1251,6 +1261,50 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 </AccordionTrigger>
                 <AccordionContent className="pb-6">
                   <div className="space-y-3">
+                    <CompactRow
+                      title={t("zakiSettingsSheet.autonomy.levelTitle")}
+                      summary={t(`zakiSettingsSheet.autonomy.levels.${settingsDraft.autonomy}.label`)}
+                      helper={t("zakiSettingsSheet.autonomy.levelHelper")}
+                      isRtl={isRtl}
+                      control={
+                        <div className="space-y-2">
+                          {(["supervised", "full", "read_only"] as const).map((level) => (
+                            <label
+                              key={level}
+                              className={`flex cursor-pointer items-start gap-3 rounded-zaki-md border px-3 py-2 transition-colors ${
+                                settingsDraft.autonomy === level
+                                  ? "border-zaki-accent bg-zaki-accent/5 dark:bg-zaki-accent/10"
+                                  : "border-zaki-strong bg-zaki-raised hover:border-zaki-accent/40 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="autonomy-level"
+                                value={level}
+                                checked={settingsDraft.autonomy === level}
+                                onChange={() =>
+                                  setSettingsDraft((current) => ({
+                                    ...current,
+                                    autonomy: level,
+                                  }))
+                                }
+                                className="mt-1"
+                              />
+                              <span className="flex flex-1 flex-col gap-0.5">
+                                <span className="text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
+                                  {t(`zakiSettingsSheet.autonomy.levels.${level}.label`)}
+                                </span>
+                                <span className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                                  {t(`zakiSettingsSheet.autonomy.levels.${level}.description`)}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                          <InlineFieldError text={settingsErrors.autonomy} />
+                        </div>
+                      }
+                    />
+
                     <CompactRow
                       title={t("zakiSettingsSheet.autonomy.proactiveTitle")}
                       summary={

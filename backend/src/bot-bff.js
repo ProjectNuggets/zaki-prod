@@ -51,6 +51,7 @@ const botSettingsProfileSchema = z
     proactive_updates: z.boolean(),
     voice_replies: z.boolean(),
     session_timeout_minutes: z.number().int().min(5).max(180),
+    autonomy: z.enum(["read_only", "supervised", "full"]).optional(),
   })
   .strict();
 
@@ -61,6 +62,7 @@ const botSettingsPatchSchema = z
     proactive_updates: z.boolean().optional(),
     voice_replies: z.boolean().optional(),
     session_timeout_minutes: z.number().int().min(5).max(180).optional(),
+    autonomy: z.enum(["read_only", "supervised", "full"]).optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, {

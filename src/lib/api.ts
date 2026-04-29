@@ -1038,12 +1038,15 @@ export type AgentOnboardingState = BotApiError & {
   setup?: Record<string, unknown> | null;
 };
 
+export type BotAutonomyLevel = "read_only" | "supervised" | "full";
+
 export type BotSettingsProfile = BotApiError & {
   assistant_mode?: "fast" | "balanced" | "deep";
   group_activation?: "mention" | "always";
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  autonomy?: BotAutonomyLevel;
 };
 
 export type BotSettingsPatch = {
@@ -1052,6 +1055,7 @@ export type BotSettingsPatch = {
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  autonomy?: BotAutonomyLevel;
 };
 
 export type BotTelegramConnectPayload = {

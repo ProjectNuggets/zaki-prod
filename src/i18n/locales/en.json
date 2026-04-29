@@ -602,6 +602,22 @@
       "allowFromHelper": "Optional. Add Telegram chat or account IDs if you want to restrict who can reach your agent. Leave it blank for the normal setup flow."
     },
     "autonomy": {
+      "levelTitle": "Autonomy level",
+      "levelHelper": "Pick how independently ZAKI can act inside its sandbox. Supervised is recommended for everyday use.",
+      "levels": {
+        "supervised": {
+          "label": "Supervised (recommended)",
+          "description": "Asks before medium and high risk actions. Reads, browses, and runs safe commands without asking."
+        },
+        "full": {
+          "label": "Full autonomy",
+          "description": "Acts without prompts inside the sandbox. Network and high-risk commands are still blocked."
+        },
+        "read_only": {
+          "label": "Read only",
+          "description": "Observes only. ZAKI can read and answer but cannot run any tools."
+        }
+      },
       "proactiveTitle": "Proactive updates",
       "proactiveHelper": "This stays in assistant settings because it controls behavior, not delivery cadence.",
       "heartbeatTitle": "Heartbeat",
@@ -674,7 +690,8 @@
       "invalidGroupActivation": "Choose a valid group activation mode.",
       "invalidProactiveUpdates": "Proactive updates must be either enabled or disabled.",
       "invalidVoiceReplies": "Voice replies must be either enabled or disabled.",
-      "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes."
+      "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes.",
+      "invalidAutonomy": "Pick read only, supervised, or full autonomy."
     },
     "footer": {
       "unsaved": "Unsaved changes",
