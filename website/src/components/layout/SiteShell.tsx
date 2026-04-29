@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import type { Locale } from "../../lib/content";
 import type { RoutePageKind } from "../../lib/routeRegistry";
+import { CookieBanner } from "./CookieBanner";
 import { Footer } from "./Footer";
 import { NavBar } from "./NavBar";
 
@@ -36,6 +37,7 @@ export function SiteShell({
       <NavBar locale={locale} />
       <main id="main-content">{children}</main>
       <Footer locale={locale} />
+      <CookieBanner locale={locale} />
     </div>
   );
 }
