@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { SiteShell } from "../components/layout/SiteShell";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
@@ -8,6 +10,20 @@ import { getLegalContent } from "../lib/routeContent";
 
 export function LegalPage({ locale, slug }: { locale: Locale; slug: LegalSlug }) {
   const content = getLegalContent(slug, locale);
+  const { hash } = useLocation();
+
+  // React Router does not auto-scroll to hash fragments. Manually align so
+  // /privacy#cookies (linked from the cookie banner) lands on the right
+  // section instead of the page top.
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.startsWith("#") ? hash.slice(1) : hash;
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [hash, slug]);
 
   return (
     <SiteShell locale={locale} route="legal">
@@ -30,7 +46,10 @@ export function LegalPage({ locale, slug }: { locale: Locale; slug: LegalSlug })
           {content.sections.map((section, index) => (
             <Reveal key={section.title} delay={index * 40}>
               <Card>
-                <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[28px]">
+                <h2
+                  id={section.anchor}
+                  className="scroll-mt-24 font-display text-[24px] font-extrabold tracking-[-0.04em] md:text-[28px]"
+                >
                   {section.title}
                 </h2>
                 <p className="mt-4 text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">

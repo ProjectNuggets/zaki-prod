@@ -77,6 +77,7 @@ type LegalContent = {
     title: string;
     body: string;
     items?: string[];
+    anchor?: string;
   }>;
   seo: SeoPayload;
 };
@@ -834,7 +835,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
     en: {
       badge: "Privacy",
       title: "Privacy Notice",
-      intro: "Effective date: February 17, 2026. Policy version: 2026-02-17.v2. Private by default.",
+      intro: "Effective: April 29, 2026. Last updated: April 29, 2026. Policy version: 2026-04-29.v3. Private by default.",
       sections: [
         {
           title: "Who controls this service",
@@ -872,6 +873,25 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
             "Data may be processed outside your home jurisdiction through infrastructure or subprocessors. Where required, we apply transfer safeguards under applicable law.",
         },
         {
+          title: "Subprocessors",
+          anchor: "subprocessors",
+          body:
+            "We use the following third-party processors to deliver the service. Material changes to this list are reflected in this Policy and emailed to active accounts at least 14 days before they take effect.",
+          items: [
+            "Stripe, Inc. (US): payment processing for paid tiers. Shared: email, billing details, transaction metadata. Stripe stores card data; ZAKI never sees card numbers.",
+            "Cloudflare, Inc. (US): DDoS protection, CDN, edge routing. Shared: request IPs, headers, request paths. No conversation contents.",
+            "Anthropic, PBC (US): model inference for the Claude family when selected. Shared: conversation contents at the time of inference.",
+            "OpenAI, OpenAI LLC (US): model inference when selected or used as a fallback. Shared: conversation contents at the time of inference.",
+            "Together AI, Inc. (US): primary model inference (Kimi K2.5 and related open-source families). Shared: conversation contents at the time of inference.",
+          ],
+        },
+        {
+          title: "Cookies and similar technologies",
+          anchor: "cookies",
+          body:
+            "We use a small number of strictly necessary cookies to keep you signed in and to operate the service. Analytics cookies, where used, are off by default and only set after explicit consent in the cookie banner. You can change your choice at any time by clearing the chatzaki-cookie-consent cookie in your browser.",
+        },
+        {
           title: "Retention and deletion",
           body:
             "We retain data only as needed for service operation, security, anti-abuse, and legal obligations. You can request export, correction, or deletion. Account deletion starts deletion workflows subject to lawful retention requirements.",
@@ -880,6 +900,12 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
           title: "Security",
           body:
             "Controls include encryption in transit, controlled access, monitoring, and role-based internal access controls. No internet service can guarantee absolute security.",
+        },
+        {
+          title: "Data Processing Agreement (business customers)",
+          anchor: "dpa",
+          body:
+            "A Data Processing Agreement (DPA) is available on request for business customers. Email support@chatzaki.com with the subject line DPA Request and we will provide our standard DPA template within 5 business days.",
         },
         {
           title: "Contact",
@@ -897,7 +923,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
     ar: {
       badge: "خصوصية",
       title: "إشعار الخصوصية",
-      intro: "تاريخ النفاذ: 17 فبراير 2026. إصدار السياسة: 2026-02-17.v2. الخصوصية افتراضية في التصميم.",
+      intro: "تاريخ النفاذ: 29 أبريل 2026. آخر تحديث: 29 أبريل 2026. إصدار السياسة: 2026-04-29.v3. الخصوصية افتراضية في التصميم.",
       sections: [
         {
           title: "من يتحكم بهذه الخدمة",
@@ -935,6 +961,25 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
             "قد تتم معالجة البيانات خارج نطاقك الجغرافي عبر البنية أو مزودي الخدمات. وعند الحاجة نطبق ضمانات نقل مناسبة وفق القانون المعمول به.",
         },
         {
+          title: "المعالجون الفرعيون",
+          anchor: "subprocessors",
+          body:
+            "نستعين بمعالجين خارجيين لتقديم الخدمة. تُحدَّث هذه القائمة في هذه السياسة، ويتم إشعار الحسابات النشطة بأي تغيير جوهري عبر البريد الإلكتروني قبل سريانه بأربعة عشر يومًا على الأقل.",
+          items: [
+            "Stripe, Inc. (الولايات المتحدة): معالجة المدفوعات للخطط المدفوعة. ما يُشارَك: البريد الإلكتروني، تفاصيل الفوترة، وبيانات المعاملة. تحتفظ Stripe ببيانات البطاقات، ولا يطّلع ZAKI على أرقامها.",
+            "Cloudflare, Inc. (الولايات المتحدة): الحماية من الهجمات وتوصيل المحتوى وتوجيه الحافة. ما يُشارَك: عناوين IP وترويسات الطلب ومسارات الطلب. لا يشمل محتوى المحادثات.",
+            "Anthropic, PBC (الولايات المتحدة): استدلال نماذج Claude عند اختيارها. ما يُشارَك: محتوى المحادثة وقت الاستدلال.",
+            "OpenAI, OpenAI LLC (الولايات المتحدة): استدلال النماذج عند اختيارها أو كاحتياطي. ما يُشارَك: محتوى المحادثة وقت الاستدلال.",
+            "Together AI, Inc. (الولايات المتحدة): استدلال أساسي لعائلة Kimi K2.5 ونماذج مفتوحة المصدر ذات الصلة. ما يُشارَك: محتوى المحادثة وقت الاستدلال.",
+          ],
+        },
+        {
+          title: "ملفات تعريف الارتباط والتقنيات المماثلة",
+          anchor: "cookies",
+          body:
+            "نستخدم عددًا محدودًا من ملفات تعريف الارتباط الضرورية لتسجيل الدخول وتشغيل الخدمة. أما ملفات التحليلات فهي معطّلة افتراضيًا، ولا تُفعَّل إلا بعد موافقة صريحة عبر شريط الموافقة. ويمكنك تغيير اختيارك في أي وقت بحذف ملف chatzaki-cookie-consent من المتصفح.",
+        },
+        {
           title: "الاحتفاظ والحذف",
           body:
             "نحتفظ بالبيانات فقط للمدة اللازمة لتشغيل الخدمة، الأمان، منع الإساءة، والالتزامات القانونية. ويمكنك طلب التصدير أو التصحيح أو الحذف. حذف الحساب يبدأ تدفقات الحذف مع مراعاة فترات الاحتفاظ القانونية.",
@@ -943,6 +988,12 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
           title: "الأمان",
           body:
             "تشمل الضوابط: التشفير أثناء النقل، التحكم بالوصول، المراقبة، ووصول داخلي قائم على الأدوار. لا توجد خدمة عبر الإنترنت تضمن أمانًا مطلقًا.",
+        },
+        {
+          title: "اتفاقية معالجة البيانات (لعملاء الأعمال)",
+          anchor: "dpa",
+          body:
+            "تتوفر اتفاقية معالجة بيانات (DPA) عند الطلب لعملاء الأعمال. راسلنا على support@chatzaki.com مع وضع كلمة DPA Request في عنوان الرسالة، وسنزوّدك بالنموذج الموحّد خلال خمسة أيام عمل.",
         },
         {
           title: "التواصل",
@@ -963,7 +1014,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
       badge: "Legal",
       title: "Terms of Use",
       intro:
-        "Effective date: February 17, 2026. Policy version: 2026-02-17.v2. By creating an account or using ZAKI, you agree to these terms.",
+        "Effective: April 29, 2026. Last updated: April 29, 2026. Policy version: 2026-04-29.v3. By creating an account or using ZAKI, you agree to these terms.",
       sections: [
         {
           title: "0. Who we are",
@@ -1032,7 +1083,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
       badge: "قانوني",
       title: "شروط الاستخدام",
       intro:
-        "تاريخ النفاذ: 17 فبراير 2026. إصدار السياسة: 2026-02-17.v2. بإنشاء حساب أو استخدام زكي، أنت توافق على هذه الشروط.",
+        "تاريخ النفاذ: 29 أبريل 2026. آخر تحديث: 29 أبريل 2026. إصدار السياسة: 2026-04-29.v3. بإنشاء حساب أو استخدام زكي، أنت توافق على هذه الشروط.",
       sections: [
         {
           title: "0. من نحن",
@@ -1103,7 +1154,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
       badge: "Compliance",
       title: "Security and Compliance",
       intro:
-        "Baseline controls and governance commitments for launch. Effective date: February 17, 2026. Private by default.",
+        "Baseline controls and governance commitments for launch. Effective: April 29, 2026. Last updated: April 29, 2026. Private by default.",
       sections: [
         {
           title: "Entity and operating model",
@@ -1158,7 +1209,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
       badge: "امتثال",
       title: "الأمان والامتثال",
       intro:
-        "ضوابط أساسية للحوكمة والأمان عند الإطلاق. تاريخ النفاذ: 17 فبراير 2026. الخصوصية افتراضية في التصميم.",
+        "ضوابط أساسية للحوكمة والأمان عند الإطلاق. تاريخ النفاذ: 29 أبريل 2026. آخر تحديث: 29 أبريل 2026. الخصوصية افتراضية في التصميم.",
       sections: [
         {
           title: "الكيان ونموذج التشغيل",
