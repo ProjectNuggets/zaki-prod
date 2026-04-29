@@ -36,6 +36,10 @@ jest.mock("@/lib/api", () => ({
   fetchBotHeartbeat: jest.fn(),
   fetchBotOnboarding: jest.fn(),
   fetchBotSettings: jest.fn(),
+  fetchBotUsage: jest.fn().mockResolvedValue({
+    response: { ok: true, status: 200 },
+    data: { state: "normal", requests_day: 0, tokens_day: 0, tokens_month: 0 },
+  }),
   updateBotHeartbeat: jest.fn(),
   updateBotSettings: jest.fn(),
 }));
