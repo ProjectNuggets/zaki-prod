@@ -9490,6 +9490,16 @@ app.get("/api/agent/me", requireAgentContext, agentRouteLimiter, (req, res) => {
   res.json({ userId: String(req.agentUserId) });
 });
 
+app.get("/api/agent/status", requireAgentContext, agentRouteLimiter, async (req, res) => {
+  try {
+    await proxyNullclawRequest(req, res, "/api/v1/status");
+    return;
+  } catch (error) {
+    console.error("[Agent] Status proxy error:", error);
+    return res.status(500).json({ error: error?.message || "Agent status request failed." });
+  }
+});
+
 app.get(
   "/api/agent/onboarding",
   requireAgentContext,
@@ -9787,6 +9797,17 @@ app.get(
   )
 );
 
+app.post(
+  "/api/agent/sessions/:sessionKey/mode",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/mode`
+  )
+);
+
 app.get(
   "/api/agent/sessions/:sessionKey/export",
   requireAgentContext,
@@ -10080,20 +10101,20 @@ app.delete("/api/share/:token", async (req, res) => {
 /**
  * GET /v1/me/bot/runtime
  *
- * Returns deploy-time runtime metadata so the UI can show a sandbox badge.
- * Sourced from BFF env (the BFF knows the agent host config) since the
- * upstream nullalis runtime does not yet expose a public status endpoint.
+ * Returns runtime metadata so the UI can show a sandbox badge.
+ * First tries the canonical upstream /api/v1/status sandbox state, then
+ * falls back to deploy-time env vars if the upstream is unavailable.
  *
  * Body shape is identical for every caller and contains no user data, so the
  * response is intentionally `public, max-age=60` and the route is unauth.
  * If a future change ever makes the body depend on auth or origin, drop
  * `public` first or this becomes a cross-tenant leak through shared caches.
  *
- * Env contract:
+ * Env contract fallback:
  *   ZAKI_SANDBOX_ENABLED  "true" | "false"     default "false"
- *   ZAKI_SANDBOX_BACKEND  "bubblewrap" | "firejail" | "docker" | "landlock" | ""
+ *   ZAKI_SANDBOX_BACKEND  "bubblewrap" | "firejail" | "docker" | ""
  */
-const ALLOWED_SANDBOX_BACKENDS = ["bubblewrap", "firejail", "docker", "landlock"];
+const ALLOWED_SANDBOX_BACKENDS = ["bubblewrap", "firejail", "docker"];
 const sandboxEnvEnabled =
   String(process.env.ZAKI_SANDBOX_ENABLED || "").toLowerCase() === "true";
 const sandboxEnvBackendRaw = String(process.env.ZAKI_SANDBOX_BACKEND || "")
@@ -10109,12 +10130,46 @@ if (
   );
 }
 
-app.get("/v1/me/bot/runtime", (req, res) => {
-  const enabled = sandboxEnvEnabled;
-  const backend =
+app.get("/v1/me/bot/runtime", async (req, res) => {
+  let enabled = sandboxEnvEnabled;
+  let backend =
     enabled && ALLOWED_SANDBOX_BACKENDS.includes(sandboxEnvBackendRaw)
       ? sandboxEnvBackendRaw
       : null;
+
+  try {
+    const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+    if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
+      const upstream = await fetchNullclawPath({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId: "runtime-status",
+        requestId: String(req.requestId || crypto.randomUUID()),
+        path: "/api/v1/status",
+        method: "GET",
+        fetchWithTimeout,
+        timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+        label: "Agent runtime status",
+      });
+      if (upstream.ok) {
+        const payload = await upstream.json().catch(() => ({}));
+        const upstreamEnabled = payload?.sandbox?.enabled;
+        const upstreamBackendRaw = String(payload?.sandbox?.backend || "")
+          .trim()
+          .toLowerCase();
+        if (typeof upstreamEnabled === "boolean") {
+          enabled = upstreamEnabled;
+          backend =
+            enabled && ALLOWED_SANDBOX_BACKENDS.includes(upstreamBackendRaw)
+              ? upstreamBackendRaw
+              : null;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[runtime] upstream sandbox status unavailable:", error?.message || error);
+  }
+
   res.set("Cache-Control", "public, max-age=60");
   res.status(200).json({
     sandbox: {

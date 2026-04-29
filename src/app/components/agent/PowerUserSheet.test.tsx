@@ -11,6 +11,49 @@ jest.mock("@/lib/api", () => ({
   fetchMemoryDoctor: jest.fn(),
 }));
 
+const tMock = (key: string, options?: Record<string, unknown>) => {
+  const labels: Record<string, string> = {
+    "zakiControls.powerUser.context.noActiveSession":
+      "Start a conversation to see context diagnostics.",
+    "zakiControls.powerUser.memory.noActiveSession":
+      "Start a conversation to see memory diagnostics.",
+    "zakiControls.powerUser.context.sections.memory": "Memory",
+    "zakiControls.powerUser.tabs.controls": "Controls",
+    "zakiControls.powerUser.tabs.approvals": "Approvals",
+    "zakiControls.powerUser.tabs.context": "Context",
+    "zakiControls.powerUser.tabs.memory": "Memory",
+    "zakiControls.powerUser.tabs.usage": "Usage",
+    "zakiControls.powerUser.approvals.approve": "Approve",
+    "zakiControls.powerUser.approvals.deny": "Deny",
+  };
+  if (labels[key]) return labels[key];
+  if (key === "zakiControls.powerUser.context.unavailable") {
+    return `Diagnostics unavailable: ${String(options?.error ?? "")}`;
+  }
+  if (key === "zakiControls.powerUser.memory.unavailable") {
+    return `Memory doctor unavailable: ${String(options?.error ?? "")}`;
+  }
+  if (key === "zakiControls.powerUser.context.noDiagnostics") {
+    return `No context diagnostics available (${String(options?.reason ?? "")}).`;
+  }
+  if (key === "zakiControls.powerUser.memory.noDiagnostics") {
+    return `Memory doctor unavailable (${String(options?.reason ?? "")}).`;
+  }
+  if (key === "zakiControls.powerUser.usage.usedUnlimited") {
+    return `${String(options?.used ?? "")} · unlimited`;
+  }
+  if (key === "zakiControls.powerUser.usage.footer") {
+    return `Soft-limit warning at ${String(options?.warning ?? "")}% used; near-limit at ${String(options?.near ?? "")}%. Hard stops still apply on hit.`;
+  }
+  return key;
+};
+
+jest.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: tMock,
+  }),
+}));
+
 const fetchUsageQuotaMock = jest.requireMock("@/lib/api").fetchUsageQuota as jest.Mock;
 const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
@@ -29,13 +72,13 @@ beforeEach(() => {
 });
 
 describe("PowerUserSheet", () => {
-  it("opens on Approvals tab by default and is visible (not hidden behind advanced)", () => {
+  it("opens on Controls tab by default and keeps controls visible", () => {
     render(<PowerUserSheet isOpen onClose={() => {}} />);
-    expect(screen.getByTestId("power-user-tab-approvals")).toHaveAttribute(
+    expect(screen.getByTestId("power-user-tab-controls")).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    expect(screen.getByTestId("power-user-approvals")).toBeInTheDocument();
+    expect(screen.getByTestId("power-user-controls")).toBeInTheDocument();
   });
 
   it("renders a badge count when approvals are pending", () => {
@@ -46,15 +89,16 @@ describe("PowerUserSheet", () => {
     render(<PowerUserSheet isOpen onClose={() => {}} pendingApprovals={pending} />);
     const tab = screen.getByTestId("power-user-tab-approvals");
     expect(tab.textContent).toContain("2");
+    fireEvent.click(tab);
     expect(screen.getAllByTestId("power-user-approval-item")).toHaveLength(2);
   });
 
-  it("switches to Context and Memory doctor tabs on click", () => {
+  it("switches to Context and Memory tabs on click", () => {
     render(<PowerUserSheet isOpen onClose={() => {}} />);
     fireEvent.click(screen.getByTestId("power-user-tab-context"));
     expect(screen.getByTestId("power-user-context")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("power-user-tab-memory_doctor"));
-    expect(screen.getByTestId("power-user-memory-doctor")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("power-user-tab-memory"));
+    expect(screen.getByTestId("power-user-memory")).toBeInTheDocument();
   });
 
   it("invokes onApproveRequest with true when Approve is clicked", () => {
@@ -71,7 +115,8 @@ describe("PowerUserSheet", () => {
         onApproveRequest={onApprove}
       />
     );
-    fireEvent.click(screen.getByText("Approve"));
+    fireEvent.click(screen.getByTestId("power-user-tab-approvals"));
+    fireEvent.click(screen.getByTestId("power-user-approval-approve-req-1"));
     expect(onApprove).toHaveBeenCalledWith("req-1", true);
   });
 
@@ -89,7 +134,8 @@ describe("PowerUserSheet", () => {
         onApproveRequest={onApprove}
       />
     );
-    fireEvent.click(screen.getByText("Deny"));
+    fireEvent.click(screen.getByTestId("power-user-tab-approvals"));
+    fireEvent.click(screen.getByTestId("power-user-approval-deny-req-1"));
     expect(onApprove).toHaveBeenCalledWith("req-1", false);
   });
 
@@ -145,7 +191,7 @@ describe("PowerUserSheet", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders memory-doctor report text when backend returns it", async () => {
+  it("renders memory report text when backend returns it", async () => {
     fetchMemoryDoctorMock.mockResolvedValueOnce({
       response: { ok: true },
       data: {
@@ -159,13 +205,13 @@ describe("PowerUserSheet", () => {
         <PowerUserSheet
           isOpen
           onClose={() => {}}
-          initialTab="memory_doctor"
+          initialTab="memory"
         />
       );
     });
     await waitFor(() => {
       expect(
-        screen.getByTestId("power-user-memory-doctor-report")
+        screen.getByTestId("power-user-memory-report")
       ).toHaveTextContent(/Memory Doctor Report/);
     });
   });

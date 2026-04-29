@@ -4,5 +4,6 @@ export { useNavigationStore } from "./navigationStore";
 export { useChatStore } from "./chatStore";
 export { useSpacesStore } from "./spacesStore";
 export { useUIStore } from "./uiStore";
+export { useZakiSessionUiStore } from "./zakiSessionUiStore";
 
 // Types are now in @/types - import from there

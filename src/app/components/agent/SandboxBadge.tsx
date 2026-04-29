@@ -1,57 +1,31 @@
 import { ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
-import { fetchBotRuntimeStatus, type BotSandboxBackend } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import type { BotSandboxBackend } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-type SandboxState = {
-  enabled: boolean;
-  backend: BotSandboxBackend | null;
-};
+import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 
 const BACKEND_LABEL: Record<BotSandboxBackend, string> = {
   bubblewrap: "bwrap",
   firejail: "firejail",
   docker: "docker",
-  landlock: "landlock",
 };
 
 export function SandboxBadge({
   active,
+  sandbox,
   className,
 }: {
   active: boolean;
+  sandbox: ZakiRuntimeSandbox | null;
   className?: string;
 }) {
-  const [state, setState] = useState<SandboxState | null>(null);
+  const { t } = useTranslation();
+  if (!active || !sandbox || !sandbox.enabled) return null;
 
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { response, data } = await fetchBotRuntimeStatus();
-        if (cancelled) return;
-        if (!response.ok) {
-          setState(null);
-          return;
-        }
-        setState({
-          enabled: Boolean(data.sandbox?.enabled),
-          backend: data.sandbox?.backend ?? null,
-        });
-      } catch {
-        if (!cancelled) setState(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [active]);
-
-  if (!active || !state || !state.enabled) return null;
-
-  const backendLabel = state.backend ? BACKEND_LABEL[state.backend] ?? state.backend : null;
-  const labelText = backendLabel ? `Shell sandboxed (${backendLabel})` : "Shell sandboxed";
+  const backendLabel = sandbox.backend ? BACKEND_LABEL[sandbox.backend] ?? sandbox.backend : null;
+  const labelText = backendLabel
+    ? t("zakiControls.sandbox.activeWithBackend", { backend: backendLabel })
+    : t("zakiControls.sandbox.active");
 
   return (
     <div

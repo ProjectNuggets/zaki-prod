@@ -715,6 +715,184 @@
       "saveAssistant": "احفظ إعدادات المساعد"
     }
   },
+  "zakiControls": {
+    "common": {
+      "controls": "التحكم",
+      "web": "الويب"
+    },
+    "modes": {
+      "plan": "خطة",
+      "execute": "تنفيذ",
+      "review": "مراجعة"
+    },
+    "context": {
+      "normal": "طبيعي",
+      "warning": "تحذير",
+      "near_limit": "قريب من الحد"
+    },
+    "strip": {
+      "approvals": "{{count}} بانتظار الموافقة",
+      "context": "السياق"
+    },
+    "sandbox": {
+      "active": "تنفيذ الأوامر داخل بيئة معزولة",
+      "activeWithBackend": "تنفيذ الأوامر داخل بيئة معزولة ({{backend}})"
+    },
+    "sidebarMenu": {
+      "settings": "الإعدادات",
+      "sessions": "الجلسات",
+      "scheduledJobs": "الوظائف المجدولة",
+      "secretsVault": "خزنة الأسرار",
+      "diagnostics": "التشخيص"
+    },
+    "sessionList": {
+      "emptyTitle": "لا توجد جلسات بعد",
+      "emptyHelper": "ابدأ محادثة مع زكي",
+      "newSession": "جلسة جديدة"
+    },
+    "sessionManagement": {
+      "title": "الجلسات",
+      "description": "إدارة جلسات الوكيل",
+      "emptyTitle": "لم يتم العثور على جلسات",
+      "emptyHelper": "ابدأ محادثة لإنشاء جلسة.",
+      "deleteConfirm": "حذف الجلسة؟",
+      "active": "نشطة",
+      "waiting": "{{count}} بانتظار الموافقة",
+      "msgs": "{{count}} رسائل",
+      "tokens": "{{count}} رمزًا",
+      "lanes": {
+        "main": "الرئيسية",
+        "thread": "محادثة",
+        "task": "مهمة",
+        "cron": "مجدول",
+        "session": "جلسة"
+      },
+      "relative": {
+        "justNow": "الآن",
+        "minutesAgo": "منذ {{count}} دقيقة",
+        "hoursAgo": "منذ {{count}} ساعة",
+        "daysAgo": "منذ {{count}} يوم"
+      },
+      "actions": {
+        "compact": "ضغط الجلسة",
+        "export": "تصدير الجلسة",
+        "delete": "حذف الجلسة"
+      },
+      "success": {
+        "deleted": "تم حذف الجلسة",
+        "compacted": "تم ضغط الجلسة",
+        "compactedWithCounts": "تم الضغط: {{before}} -> {{after}} رمزًا",
+        "exported": "تم تصدير الجلسة"
+      },
+      "errors": {
+        "cannotDeleteActive": "لا يمكن حذف الجلسة النشطة",
+        "deleteFailed": "تعذر حذف الجلسة",
+        "compactFailed": "تعذر ضغط الجلسة",
+        "exportFailed": "تعذر تصدير الجلسة"
+      }
+    },
+    "powerUser": {
+      "title": "التحكم",
+      "subtitle": "عناصر الجلسة والتشخيص",
+      "tabs": {
+        "controls": "التحكم",
+        "approvals": "الموافقات",
+        "context": "السياق",
+        "memory": "الذاكرة",
+        "usage": "الاستخدام"
+      },
+      "approvals": {
+        "empty": "لا توجد موافقات معلقة.",
+        "toolFallback": "أداة",
+        "riskUnknown": "المخاطر: غير معروفة",
+        "reasonFallback": "هذه الأداة تحتاج إلى موافقة قبل التنفيذ.",
+        "deny": "رفض",
+        "approve": "موافقة"
+      },
+      "controls": {
+        "sessionModeTitle": "وضع الجلسة",
+        "sessionModeHelper": "بدّل طريقة تعامل زكي مع هذه الجلسة.",
+        "approvalsTitle": "الموافقات",
+        "approvalsPending": "هناك إجراء مطلوب في هذه الجلسة.",
+        "approvalsClear": "لا يوجد شيء بانتظارك الآن.",
+        "channelTitle": "القناة",
+        "channelHelper": "قناة الرد النشطة لهذه الجلسة.",
+        "contextTitle": "السياق",
+        "footer": "استخدم التبويبات أدناه للتشخيص الأعمق. يبقى هذا القسم مخصصًا لوضع الجلسة الحالي."
+      },
+      "context": {
+        "loading": "جارٍ تحميل التشخيص...",
+        "unavailable": "التشخيص غير متاح: {{error}}",
+        "noActiveSession": "ابدأ محادثة لرؤية تشخيص السياق.",
+        "noDiagnostics": "لا توجد بيانات تشخيص للسياق ({{reason}}).",
+        "windowPressure": "ضغط النافذة",
+        "historyMessages": "رسائل السجل",
+        "historyTrimSuffix": " / تقليم {{count}}",
+        "compaction": "الضغط",
+        "compactionTriggered": "تم",
+        "compactionNone": "لا شيء",
+        "compactionThresholdSuffix": " · >= {{count}} رمز",
+        "toolsLoaded": "الأدوات المحملة",
+        "roleBreakdown": "تفصيل الأدوار",
+        "sections": {
+          "memory": "الذاكرة",
+          "prompt": "التوجيه",
+          "retrieval": "الاسترجاع",
+          "continuity": "الاستمرارية",
+          "cache": "الذاكرة المؤقتة",
+          "buckets": "الفئات",
+          "runtime": "المحرّك",
+          "lastTurn": "آخر دورة"
+        },
+        "footer": "هذه البيانات للقراءة فقط. تظهر أيضًا أحداث الضغط والرجوع كتنبيهات فوق المحادثة."
+      },
+      "memory": {
+        "snapshotTitle": "لقطة الذاكرة",
+        "savedMemories": "الذكريات المحفوظة",
+        "pendingReview": "بانتظار المراجعة",
+        "conflicts": "التعارضات",
+        "lastSave": "آخر حفظ",
+        "storage": "التخزين",
+        "storageOk": "سليم",
+        "storageDegraded": "متدهور",
+        "loading": "جارٍ تحميل فاحص الذاكرة...",
+        "unavailable": "فاحص الذاكرة غير متاح: {{error}}",
+        "noActiveSession": "ابدأ محادثة لرؤية تشخيص الذاكرة.",
+        "noDiagnostics": "فاحص الذاكرة غير متاح ({{reason}}).",
+        "noRuntime": "محرّك الذاكرة غير مُعدّ على الخادم{{reason}}.",
+        "noText": "لم يُرجع فاحص الذاكرة نصًا.",
+        "footer": "للتعديل أو النسيان، افتح لوحة الذاكرة. هذا التبويب تشخيصي فقط."
+      },
+      "usage": {
+        "surfaces": {
+          "app_chat": "دردشة الويب",
+          "zaki_bot": "تيليجرام"
+        },
+        "states": {
+          "normal": "جيد",
+          "warning": "تحذير",
+          "near_limit": "قريب من الحد",
+          "unlimited": "غير محدود"
+        },
+        "loading": "جارٍ تحميل الاستخدام...",
+        "unavailable": "الاستخدام غير متاح.",
+        "requestsToday": "طلبات اليوم",
+        "usedUnlimited": "{{used}} · غير محدود",
+        "resets": "إعادة الضبط",
+        "footer": "يبدأ التحذير اللين عند استخدام {{warning}}%، ويصبح قريبًا من الحد عند {{near}}%. ما تزال الحدود الصلبة مطبقة عند بلوغها."
+      }
+    },
+    "errors": {
+      "openSessionFirst": "افتح جلسة زكي أولًا",
+      "updateModeFailed": "تعذر تحديث وضع الجلسة",
+      "updateApprovalFailed": "تعذر تحديث الموافقة",
+      "sessionNotReady": "جلسة زكي ليست جاهزة بعد."
+    },
+    "success": {
+      "approvalSent": "تم إرسال الموافقة",
+      "requestDenied": "تم رفض الطلب"
+    }
+  },
   "onboarding": {
     "eyebrow": "مرحبًا",
     "title": "لنجهّز مساحتك، {{userName}}",

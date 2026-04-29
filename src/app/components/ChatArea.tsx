@@ -15,11 +15,14 @@ import {
   fetchAgentHistory,
   fetchAgentMe,
   fetchAgentSessionContext,
+  fetchBotRuntimeStatus,
+  setAgentSessionMode,
   approveAgentSession,
   fetchUsageQuota,
   getApiBase,
   provisionAgent,
   uploadAgentAttachment,
+  type AgentSessionMode,
   type MemoryActivity,
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
@@ -41,6 +44,7 @@ import {
   EditInstructionsModal,
 } from "./chat";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
+import { ZakiSessionControlStrip } from "./agent/ZakiSessionControlStrip";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type {
   BotReasoningSummary,
@@ -57,7 +61,7 @@ import type {
   ZakiTranscriptEntryKind,
 } from "./chat/BotStatusRail";
 
-import { useNavigationStore, useAuthStore } from "@/stores";
+import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/stores";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
@@ -2048,6 +2052,8 @@ export function ChatArea() {
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const [sessionModePending, setSessionModePending] = useState(false);
+  const approvalSeenBySessionRef = useRef<Record<string, Set<string>>>({});
 
   // Canonical user ID for agent/nullalis routing (resolved from BFF).
   // Seed from sessionStorage so context gauge / approval work on fast re-mount.
@@ -2060,6 +2066,27 @@ export function ChatArea() {
     if (!isZakiBotSpaceId(activeWorkspaceSlug) || !activeThreadId) return null;
     return buildAgentSessionKey(activeThreadId, agentUserId);
   }, [activeThreadId, activeWorkspaceSlug, agentUserId, zakiSessionKey]);
+  const normalizedActiveZakiSessionKey = activeZakiSessionKey
+    ? normalizeZakiSessionKey(activeZakiSessionKey)
+    : null;
+  const activeSessionUi = useZakiSessionUiStore(
+    useCallback(
+      (state) =>
+        normalizedActiveZakiSessionKey ? state.sessions[normalizedActiveZakiSessionKey] : undefined,
+      [normalizedActiveZakiSessionKey]
+    )
+  );
+  const ensureZakiSessionUi = useZakiSessionUiStore((state) => state.ensureSession);
+  const setZakiSessionModeUi = useZakiSessionUiStore((state) => state.setMode);
+  const incrementSessionApprovalCount = useZakiSessionUiStore(
+    (state) => state.incrementApprovalCount
+  );
+  const decrementSessionApprovalCount = useZakiSessionUiStore(
+    (state) => state.decrementApprovalCount
+  );
+  const setSessionContextPressure = useZakiSessionUiStore((state) => state.setContextPressure);
+  const sandboxState = useZakiSessionUiStore((state) => state.sandbox);
+  const setZakiSandboxState = useZakiSessionUiStore((state) => state.setSandbox);
 
   // Memory state for the simplified normal-chat capture flow
   const [recentSavedMemories, setRecentSavedMemories] = useState<
@@ -2290,6 +2317,37 @@ export function ChatArea() {
     if (normalizeZakiSessionKey(zakiSessionKey || "") === canonicalKey) return;
     setZakiSessionKey(canonicalKey);
   }, [activeThreadId, agentUserId, isZakiBotActiveSpace, setZakiSessionKey, zakiSessionKey]);
+
+  useEffect(() => {
+    if (!normalizedActiveZakiSessionKey) return;
+    ensureZakiSessionUi(normalizedActiveZakiSessionKey);
+  }, [ensureZakiSessionUi, normalizedActiveZakiSessionKey]);
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { response, data } = await fetchBotRuntimeStatus();
+        if (cancelled) return;
+        if (!response.ok) {
+          setZakiSandboxState(null);
+          return;
+        }
+        setZakiSandboxState({
+          enabled: Boolean(data?.sandbox?.enabled),
+          backend: data?.sandbox?.backend ?? null,
+        });
+      } catch {
+        if (!cancelled) {
+          setZakiSandboxState(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isZakiBotActiveSpace, setZakiSandboxState]);
   const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
@@ -2829,6 +2887,13 @@ export function ChatArea() {
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
       const { data } = await fetchAgentSessionContext(sessionKey);
+      const pressurePct =
+        typeof data?.context_pressure_percent === "number"
+          ? data.context_pressure_percent
+          : typeof data?.context_window_used_pct === "number"
+          ? data.context_window_used_pct
+          : null;
+      setSessionContextPressure(sessionKey, pressurePct);
       if (data && typeof data.token_count === "number") {
         setNullalisContextGauge({
           tokenCount: data.token_count,
@@ -2839,7 +2904,7 @@ export function ChatArea() {
     } catch {
       // non-critical — gauge just won't update
     }
-  }, [activeThreadId, activeZakiSessionKey, agentUserId]);
+  }, [activeThreadId, activeZakiSessionKey, agentUserId, setSessionContextPressure]);
 
   const finalizeZakiBotProgress = useCallback(
     (reason: "done" | "error" | "abort" | "stream_end") => {
@@ -2862,6 +2927,11 @@ export function ChatArea() {
     },
     [clearZakiBotProgressVisuals, isZakiBotActiveSpace, refreshContextGauge]
   );
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey) return;
+    void refreshContextGauge();
+  }, [isZakiBotActiveSpace, normalizedActiveZakiSessionKey, refreshContextGauge]);
 
   const upsertZakiBotToolCall = useCallback(
     (payload: Record<string, unknown>) => {
@@ -3903,7 +3973,21 @@ export function ChatArea() {
           return {};
         }
         if (eventType === "approval_required" || payloadType === "approval_required") {
-          setNullalisApprovalRequest(extractNullalisApprovalRequest(payload));
+          const approvalRequest = extractNullalisApprovalRequest(payload);
+          setNullalisApprovalRequest(approvalRequest);
+          if (approvalRequest?.id) {
+            const sessionKey =
+              activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+            if (sessionKey) {
+              const seenSet =
+                approvalSeenBySessionRef.current[sessionKey] ||
+                (approvalSeenBySessionRef.current[sessionKey] = new Set<string>());
+              if (!seenSet.has(approvalRequest.id)) {
+                seenSet.add(approvalRequest.id);
+                incrementSessionApprovalCount(sessionKey, approvalRequest);
+              }
+            }
+          }
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("approval_required", payload));
           setNullalisNarrationFrame({
             id: `nullalis-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -5179,14 +5263,73 @@ export function ChatArea() {
           tool: nullalisApprovalRequest?.tool,
           reason: approved ? undefined : "User denied from UI",
         });
+        decrementSessionApprovalCount(sessionKey, requestId);
+        setNullalisApprovalRequest(null);
       } catch (err) {
         console.error("[approval]", err);
         toast.error(approved ? "Failed to send approval" : "Failed to send denial");
         throw err; // re-throw so the card stays in the loading state
       }
     },
-    [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest]
+    [
+      activeThreadId,
+      activeZakiSessionKey,
+      agentUserId,
+      decrementSessionApprovalCount,
+      nullalisApprovalRequest,
+    ]
   );
+
+  const handleSessionModeChange = useCallback(
+    async (mode: AgentSessionMode) => {
+      const sessionKey =
+        activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+      if (!sessionKey) {
+        toast.error(t("zakiControls.errors.sessionNotReady"));
+        return;
+      }
+      const previousMode = activeSessionUi?.mode ?? "execute";
+      if (previousMode === mode) return;
+      setSessionModePending(true);
+      setZakiSessionModeUi(sessionKey, mode);
+      try {
+        const { response, data } = await setAgentSessionMode(sessionKey, mode);
+        if (!response.ok) {
+          throw new Error(data?.error || data?.message || t("zakiControls.errors.updateModeFailed"));
+        }
+      } catch (error) {
+        setZakiSessionModeUi(sessionKey, previousMode);
+        toast.error(error instanceof Error ? error.message : t("zakiControls.errors.updateModeFailed"));
+      } finally {
+        setSessionModePending(false);
+      }
+    },
+    [activeSessionUi?.mode, activeThreadId, activeZakiSessionKey, agentUserId, setZakiSessionModeUi]
+  );
+
+  const openZakiControls = useCallback((tab: "controls" | "approvals" = "controls") => {
+    window.dispatchEvent(new CustomEvent("zaki:open-power-user", { detail: { tab } }));
+  }, []);
+
+  useEffect(() => {
+    const handleApprovalResolved = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ sessionKey?: string | null; requestId?: string | null }>
+      ).detail;
+      const resolvedSessionKey = normalizeZakiSessionKey(String(detail?.sessionKey || ""));
+      const currentSessionKey = normalizeZakiSessionKey(
+        String(activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId) || "")
+      );
+      if (!resolvedSessionKey || resolvedSessionKey !== currentSessionKey) return;
+      if (detail?.requestId && nullalisApprovalRequest?.id === detail.requestId) {
+        setNullalisApprovalRequest(null);
+      }
+    };
+    window.addEventListener("zaki:approval-resolved", handleApprovalResolved);
+    return () => {
+      window.removeEventListener("zaki:approval-resolved", handleApprovalResolved);
+    };
+  }, [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest?.id]);
 
   const handleStartChat = useCallback(() => {
     const spaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
@@ -5833,12 +5976,29 @@ export function ChatArea() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="h-[64px]" aria-hidden="true" />
-          )}
+	          ) : (
+	            <div className="h-[64px]" aria-hidden="true" />
+	          )}
 
-          {/* Main Content */}
-          <div
+	          {!showZakiHome && !showSpacesView && !showSpaceDetail && isZakiBotActiveSpace ? (
+	            <ZakiSessionControlStrip
+	              active
+	              mode={activeSessionUi?.mode ?? "execute"}
+	              onChangeMode={handleSessionModeChange}
+	              modePending={sessionModePending}
+	              approvalCount={activeSessionUi?.approvalCount ?? 0}
+	              channelLabel={activeSessionUi?.lastChannel ?? t("zakiControls.common.web")}
+	              contextPressurePercent={activeSessionUi?.contextPressurePercent ?? null}
+	              contextPressureState={activeSessionUi?.contextPressureState ?? null}
+                sandbox={sandboxState}
+	              onOpenControls={() =>
+	                openZakiControls((activeSessionUi?.approvalCount ?? 0) > 0 ? "approvals" : "controls")
+	              }
+	            />
+	          ) : null}
+
+	          {/* Main Content */}
+	          <div
             className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade"
             ref={scrollRef}
             style={{

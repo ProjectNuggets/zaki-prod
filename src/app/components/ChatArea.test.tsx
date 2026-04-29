@@ -20,14 +20,18 @@ import {
   extractNullalisUsageSummary,
   inferStreamingModeFromProgress,
 } from "./ChatArea";
-import { useNavigationStore, useAuthStore } from "@/stores";
+import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
 import {
   apiRequest,
+  approveAgentSession,
   fetchAgentHistory,
   fetchAgentMe,
+  fetchAgentSessionContext,
+  fetchBotRuntimeStatus,
   fetchMemoryActivity,
   provisionAgent,
+  setAgentSessionMode,
 } from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 import { getZakiBootstrapCardStorageKey } from "./ZakiBootstrapCard";
@@ -71,11 +75,48 @@ jest.mock("@/lib/api", () => ({
     },
     data: { activities: [] },
   })),
+  fetchBotRuntimeStatus: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ sandbox: { enabled: false, backend: null } }),
+      headers: new Headers(),
+    },
+    data: { sandbox: { enabled: false, backend: null } },
+  })),
+  fetchAgentSessionContext: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ session_key: "agent:zaki-bot:user:1:thread:main" }),
+      headers: new Headers(),
+    },
+    data: { session_key: "agent:zaki-bot:user:1:thread:main" },
+  })),
+  setAgentSessionMode: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, mode: "execute" }),
+      headers: new Headers(),
+    },
+    data: { ok: true, mode: "execute" },
+  })),
+  approveAgentSession: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+      headers: new Headers(),
+    },
+    data: { ok: true },
+  })),
 }));
 
 jest.mock("@/stores", () => ({
   useNavigationStore: jest.fn(),
   useAuthStore: jest.fn(),
+  useZakiSessionUiStore: jest.fn(),
 }));
 
 jest.mock("@/queries/useThreads", () => ({
@@ -117,6 +158,27 @@ type NavState = {
   clearThread: () => void;
 };
 
+type TestZakiSessionUiState = {
+  sessions: Record<
+    string,
+    {
+      mode: "plan" | "execute" | "review";
+      approvalCount: number;
+      pendingApprovals: Array<{
+        id: string;
+        tool: string;
+        reason: string;
+        riskLevel: string;
+        timestamp: number;
+      }>;
+      lastChannel: string | null;
+      contextPressurePercent: number | null;
+      contextPressureState: "normal" | "warning" | "near_limit" | null;
+    }
+  >;
+  sandbox: { enabled: boolean; backend: string | null } | null;
+};
+
 function renderChatArea() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -143,13 +205,18 @@ async function renderChatAreaAndWaitForEffects() {
 describe("ChatArea Component", () => {
   let navState: NavState;
   let authState: { user: { username: string } | null; isLoading: boolean };
+  let zakiSessionUiState: TestZakiSessionUiState;
 
   beforeEach(() => {
     (apiRequest as jest.Mock).mockClear();
     (fetchAgentHistory as jest.Mock).mockClear();
     (fetchAgentMe as jest.Mock).mockClear();
+    (fetchAgentSessionContext as jest.Mock).mockClear();
+    (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
     (provisionAgent as jest.Mock).mockClear();
+    (setAgentSessionMode as jest.Mock).mockClear();
+    (approveAgentSession as jest.Mock).mockClear();
     window.sessionStorage.clear();
     window.localStorage.clear();
     navState = {
@@ -172,6 +239,76 @@ describe("ChatArea Component", () => {
     (useAuthStore as jest.Mock).mockImplementation(
       (selector?: (state: { user: { username: string } | null; isLoading: boolean }) => unknown) =>
         selector ? selector(authState) : authState
+    );
+
+    zakiSessionUiState = {
+      sessions: {},
+      sandbox: null,
+    };
+    const ensureSession = (sessionKey: string) => {
+      if (!zakiSessionUiState.sessions[sessionKey]) {
+        zakiSessionUiState.sessions[sessionKey] = {
+          mode: "execute",
+          approvalCount: 0,
+          pendingApprovals: [],
+          lastChannel: "Web",
+          contextPressurePercent: null,
+          contextPressureState: null,
+        };
+      }
+    };
+    (useZakiSessionUiStore as jest.Mock).mockImplementation(
+      (
+        selector?: (state: {
+          sessions: TestZakiSessionUiState["sessions"];
+          sandbox: TestZakiSessionUiState["sandbox"];
+          ensureSession: typeof ensureSession;
+          setMode: (sessionKey: string, mode: "plan" | "execute" | "review") => void;
+          incrementApprovalCount: (sessionKey: string, approval?: unknown) => void;
+          decrementApprovalCount: (sessionKey: string) => void;
+          setLastChannel: (sessionKey: string, channel: string | null) => void;
+          setContextPressure: (sessionKey: string, pressure: number | null) => void;
+          setSandbox: (sandbox: TestZakiSessionUiState["sandbox"]) => void;
+        }) => unknown
+      ) => {
+        const state = {
+          sessions: zakiSessionUiState.sessions,
+          sandbox: zakiSessionUiState.sandbox,
+          ensureSession,
+          setMode: (sessionKey: string, mode: "plan" | "execute" | "review") => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey].mode = mode;
+          },
+          incrementApprovalCount: (sessionKey: string, approval?: unknown) => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey].approvalCount += 1;
+            if (approval) {
+              zakiSessionUiState.sessions[sessionKey].pendingApprovals.push(
+                approval as TestZakiSessionUiState["sessions"][string]["pendingApprovals"][number]
+              );
+            }
+          },
+          decrementApprovalCount: (sessionKey: string) => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey].approvalCount = Math.max(
+              0,
+              zakiSessionUiState.sessions[sessionKey].approvalCount - 1
+            );
+          },
+          setLastChannel: (sessionKey: string, channel: string | null) => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey].lastChannel = channel;
+          },
+          setContextPressure: (sessionKey: string, pressure: number | null) => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey].contextPressurePercent = pressure;
+          },
+          setSandbox: (sandbox: TestZakiSessionUiState["sandbox"]) => {
+            zakiSessionUiState.sandbox = sandbox;
+          },
+        };
+        return selector ? selector(state) : state;
+      }
     );
 
     (useMessages as jest.Mock).mockReturnValue({ data: [], isLoading: false });

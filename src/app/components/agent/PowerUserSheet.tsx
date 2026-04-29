@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Activity,
   Brain,
   Gauge,
   ShieldCheck,
   Sparkles,
-  Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SheetShell } from "@/app/components/ui/zaki";
@@ -13,13 +13,15 @@ import {
   fetchContextDiagnostics,
   fetchMemoryDoctor,
   fetchUsageQuota,
+  type AgentSessionMode,
   type ContextDiagnosticsResponse,
   type MemoryDoctorResponse,
   type UsageQuotaSurface,
 } from "@/lib/api";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
+import type { ZakiContextPressureState } from "@/stores/zakiSessionUiStore";
 
-export type PowerUserTab = "approvals" | "context" | "memory_doctor" | "usage";
+export type PowerUserTab = "controls" | "approvals" | "context" | "memory" | "usage";
 
 export type SoftLimitState = "normal" | "warning" | "near_limit" | "unlimited";
 
@@ -58,22 +60,30 @@ export interface PowerUserSheetProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: PowerUserTab;
+  activeSessionKey?: string | null;
+  activeMode?: AgentSessionMode;
+  modePending?: boolean;
+  onModeChange?: (mode: AgentSessionMode) => Promise<void> | void;
+  sessionChannelLabel?: string | null;
+  contextPressurePercent?: number | null;
+  contextPressureState?: ZakiContextPressureState;
   pendingApprovals?: NullalisApprovalRequest[];
   onApproveRequest?: (id: string, approved: boolean) => Promise<void> | void;
   contextSnapshot?: PowerUserContextSnapshot | null;
   memoryHealth?: PowerUserMemoryHealth | null;
 }
 
-const TABS: Array<{ id: PowerUserTab; label: string; icon: typeof ShieldCheck }> = [
-  { id: "approvals", label: "Approvals", icon: ShieldCheck },
-  { id: "context", label: "Context", icon: Activity },
-  { id: "memory_doctor", label: "Memory doctor", icon: Brain },
-  { id: "usage", label: "Usage", icon: Gauge },
-];
+const TAB_ICONS: Record<PowerUserTab, typeof ShieldCheck> = {
+  controls: Sparkles,
+  approvals: ShieldCheck,
+  context: Activity,
+  memory: Brain,
+  usage: Gauge,
+};
 
-const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; label: string }> = [
-  { surface: "app_chat", label: "Web chat" },
-  { surface: "zaki_bot", label: "Telegram" },
+const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; labelKey: string }> = [
+  { surface: "app_chat", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
+  { surface: "zaki_bot", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
 ];
 
 const SOFT_LIMIT_WARNING_THRESHOLD = 0.7;
@@ -157,21 +167,26 @@ function renderNestedSection(title: string, data: unknown) {
 }
 
 /**
- * W3.7: Power-user controls, visible by default (first-class tab).
- *
- * Approval queue is the default tab. Context and Memory Doctor tabs expose
- * the same truth rendered in the thread rail and memory pane, as a single
- * power-user control surface. Not hidden behind "advanced".
+ * ZAKI power-user surface. Controls stay first; diagnostics stay available
+ * without burying the live session posture.
  */
 export function PowerUserSheet({
   isOpen,
   onClose,
-  initialTab = "approvals",
+  initialTab = "controls",
+  activeSessionKey = null,
+  activeMode = "execute",
+  modePending = false,
+  onModeChange,
+  sessionChannelLabel = null,
+  contextPressurePercent = null,
+  contextPressureState = null,
   pendingApprovals = [],
   onApproveRequest,
   contextSnapshot = null,
   memoryHealth = null,
 }: PowerUserSheetProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<PowerUserTab>(initialTab);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [usageSurfaces, setUsageSurfaces] = useState<PowerUserUsageSurface[] | null>(null);
@@ -217,7 +232,7 @@ export function PowerUserSheet({
   }, [isOpen, tab]);
 
   useEffect(() => {
-    if (!isOpen || tab !== "memory_doctor") return;
+    if (!isOpen || tab !== "memory") return;
     let active = true;
     setMemoryDiagLoading(true);
     setMemoryDiagError(null);
@@ -249,7 +264,7 @@ export function PowerUserSheet({
     let active = true;
     setUsageLoading(true);
     void Promise.all(
-      USAGE_SURFACES.map(async ({ surface, label }) => {
+      USAGE_SURFACES.map(async ({ surface, labelKey }) => {
         const { response, data } = await fetchUsageQuota(surface);
         const unlimited = Boolean(data?.unlimited);
         const limit = typeof data?.limit === "number" ? data.limit : null;
@@ -261,7 +276,7 @@ export function PowerUserSheet({
         const error = response.ok ? null : data?.error || "unavailable";
         return {
           surface,
-          label,
+          label: t(labelKey),
           unlimited,
           limit,
           used,
@@ -279,25 +294,25 @@ export function PowerUserSheet({
     return () => {
       active = false;
     };
-  }, [isOpen, tab]);
+  }, [isOpen, tab, t]);
 
   const pendingCount = pendingApprovals.length;
 
   const header = (
     <div className="flex items-center gap-1 rounded-full bg-zaki-hover p-1" role="tablist">
-      {TABS.map((tabDef) => {
-        const Icon = tabDef.icon;
-        const active = tab === tabDef.id;
+      {(["controls", "approvals", "context", "memory", "usage"] as PowerUserTab[]).map((tabId) => {
+        const Icon = TAB_ICONS[tabId];
+        const active = tab === tabId;
         const badge =
-          tabDef.id === "approvals" && pendingCount > 0 ? pendingCount : null;
+          tabId === "approvals" && pendingCount > 0 ? pendingCount : null;
         return (
           <button
-            key={tabDef.id}
+            key={tabId}
             type="button"
             role="tab"
             aria-selected={active}
-            data-testid={`power-user-tab-${tabDef.id}`}
-            onClick={() => setTab(tabDef.id)}
+            data-testid={`power-user-tab-${tabId}`}
+            onClick={() => setTab(tabId)}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
               active
@@ -306,7 +321,7 @@ export function PowerUserSheet({
             )}
           >
             <Icon className="size-3.5" />
-            {tabDef.label}
+            {t(`zakiControls.powerUser.tabs.${tabId}`)}
             {badge ? (
               <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
                 {badge}
@@ -332,7 +347,7 @@ export function PowerUserSheet({
     <div className="space-y-3" data-testid="power-user-approvals">
       {pendingApprovals.length === 0 ? (
         <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-          No approvals pending.
+          {t("zakiControls.powerUser.approvals.empty")}
         </div>
       ) : (
         pendingApprovals.map((request) => {
@@ -347,29 +362,32 @@ export function PowerUserSheet({
                 <ShieldCheck className="mt-0.5 size-4 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold">
-                    {request.tool || "Tool"} — {request.riskLevel || "risk: unknown"}
+                    {request.tool || t("zakiControls.powerUser.approvals.toolFallback")} —{" "}
+                    {request.riskLevel || t("zakiControls.powerUser.approvals.riskUnknown")}
                   </div>
                   <div className="mt-0.5 leading-relaxed opacity-90">
-                    {request.reason || "Approval required before running this tool."}
+                    {request.reason || t("zakiControls.powerUser.approvals.reasonFallback")}
                   </div>
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  disabled={isBusy}
+                  disabled={isBusy || !onApproveRequest}
                   onClick={() => void handleAction(request.id, false)}
+                  data-testid={`power-user-approval-deny-${request.id}`}
                   className="rounded-full border border-amber-500/40 px-3 py-1 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
                 >
-                  Deny
+                  {t("zakiControls.powerUser.approvals.deny")}
                 </button>
                 <button
                   type="button"
-                  disabled={isBusy}
+                  disabled={isBusy || !onApproveRequest}
                   onClick={() => void handleAction(request.id, true)}
+                  data-testid={`power-user-approval-approve-${request.id}`}
                   className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
                 >
-                  {isBusy ? "..." : "Approve"}
+                  {isBusy ? "..." : t("zakiControls.powerUser.approvals.approve")}
                 </button>
               </div>
             </div>
@@ -379,6 +397,106 @@ export function PowerUserSheet({
     </div>
   );
 
+  const renderControls = () => {
+    const modeButtons: AgentSessionMode[] = ["plan", "execute", "review"];
+    const contextTone =
+      contextPressureState === "near_limit"
+        ? "text-rose-600 dark:text-rose-400"
+        : contextPressureState === "warning"
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-zaki-secondary";
+
+    return (
+      <div className="space-y-3" data-testid="power-user-controls">
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold text-zaki-primary">
+                {t("zakiControls.powerUser.controls.sessionModeTitle")}
+              </div>
+              <div className="text-xs text-zaki-muted">
+                {t("zakiControls.powerUser.controls.sessionModeHelper")}
+              </div>
+            </div>
+            {activeSessionKey ? (
+              <span className="font-mono-ui text-[10px] text-zaki-muted">
+                {activeSessionKey.split(":").slice(-2).join(":")}
+              </span>
+            ) : null}
+          </div>
+          <div className="inline-flex items-center gap-1 rounded-full bg-zaki-hover p-1">
+            {modeButtons.map((mode) => {
+              const active = activeMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={modePending || !onModeChange}
+                  onClick={() => void onModeChange?.(mode)}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                    active
+                      ? "bg-zaki-brand text-white"
+                      : "text-zaki-secondary hover:text-zaki-primary",
+                    (modePending || !onModeChange) && "opacity-70"
+                  )}
+                >
+                  {t(`zakiControls.modes.${mode}`)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              {t("zakiControls.powerUser.controls.approvalsTitle")}
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-zaki-primary">{pendingCount}</div>
+            <div className="mt-1 text-xs text-zaki-muted">
+              {pendingCount > 0
+                ? t("zakiControls.powerUser.controls.approvalsPending")
+                : t("zakiControls.powerUser.controls.approvalsClear")}
+            </div>
+          </div>
+
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              {t("zakiControls.powerUser.controls.channelTitle")}
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-zaki-primary">
+              {sessionChannelLabel || t("zakiControls.common.web")}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted">
+              {t("zakiControls.powerUser.controls.channelHelper")}
+            </div>
+          </div>
+
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              {t("zakiControls.powerUser.controls.contextTitle")}
+            </div>
+            <div className={cn("mt-2 text-2xl font-semibold", contextTone)}>
+              {typeof contextPressurePercent === "number" ? `${Math.round(contextPressurePercent)}%` : "—"}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted">
+              {contextPressureState === "near_limit"
+                ? t("zakiControls.context.near_limit")
+                : contextPressureState === "warning"
+                ? t("zakiControls.context.warning")
+                : t("zakiControls.context.normal")}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+          {t("zakiControls.powerUser.controls.footer")}
+        </div>
+      </div>
+    );
+  };
+
   const renderContext = () => {
     if (contextDiagLoading && !contextDiag) {
       return (
@@ -386,7 +504,7 @@ export function PowerUserSheet({
           className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
           data-testid="power-user-context"
         >
-          Loading diagnostics...
+          {t("zakiControls.powerUser.context.loading")}
         </div>
       );
     }
@@ -397,7 +515,7 @@ export function PowerUserSheet({
           data-testid="power-user-context"
           data-state="error"
         >
-          Diagnostics unavailable: {contextDiagError}
+          {t("zakiControls.powerUser.context.unavailable", { error: contextDiagError })}
         </div>
       );
     }
@@ -410,8 +528,8 @@ export function PowerUserSheet({
           data-state="inactive"
         >
           {reason === "no_active_session"
-            ? "Start a conversation to see context diagnostics."
-            : `No context diagnostics available (${reason}).`}
+            ? t("zakiControls.powerUser.context.noActiveSession")
+            : t("zakiControls.powerUser.context.noDiagnostics", { reason })}
         </div>
       );
     }
@@ -437,35 +555,51 @@ export function PowerUserSheet({
             <span className="font-mono-ui text-xs">{report?.model || "—"}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-zaki-secondary">Window pressure</span>
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.windowPressure")}
+            </span>
             <span className="font-mono-ui">
               {formatPct(pressurePct)} · {formatCount(usedTokens)} /{" "}
               {formatCount(totalTokens)}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-zaki-secondary">History messages</span>
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.historyMessages")}
+            </span>
             <span className="font-mono-ui">
               {formatCount(history)}
-              {historyTrim != null ? ` / ${formatCount(historyTrim)} trim` : ""}
+              {historyTrim != null
+                ? t("zakiControls.powerUser.context.historyTrimSuffix", {
+                    count: Number(historyTrim),
+                  })
+                : ""}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-zaki-secondary">Compaction</span>
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.compaction")}
+            </span>
             <span
               className={cn(
                 "font-mono-ui",
                 compactionTriggered === true && "text-amber-500"
               )}
             >
-              {compactionTriggered === true ? "triggered" : "none"}
+              {compactionTriggered === true
+                ? t("zakiControls.powerUser.context.compactionTriggered")
+                : t("zakiControls.powerUser.context.compactionNone")}
               {compactionThreshold != null
-                ? ` · ≥ ${formatCount(compactionThreshold)} tok`
+                ? t("zakiControls.powerUser.context.compactionThresholdSuffix", {
+                    count: Number(compactionThreshold),
+                  })
                 : ""}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-zaki-secondary">Tools loaded</span>
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.toolsLoaded")}
+            </span>
             <span className="font-mono-ui">{formatCount(tools)}</span>
           </div>
         </div>
@@ -473,7 +607,7 @@ export function PowerUserSheet({
         {roles ? (
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
             <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
-              Role breakdown
+              {t("zakiControls.powerUser.context.roleBreakdown")}
             </div>
             <div className="grid gap-1.5">
               {Object.entries(roles).map(([role, count]) => (
@@ -486,18 +620,17 @@ export function PowerUserSheet({
           </div>
         ) : null}
 
-        {renderNestedSection("Memory", report?.memory)}
-        {renderNestedSection("Prompt", report?.prompt)}
-        {renderNestedSection("Retrieval", report?.retrieval)}
-        {renderNestedSection("Continuity", report?.continuity)}
-        {renderNestedSection("Cache", report?.cache)}
-        {renderNestedSection("Buckets", report?.buckets)}
-        {renderNestedSection("Runtime", report?.runtime)}
-        {renderNestedSection("Last turn", report?.last_turn)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.memory"), report?.memory)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.prompt"), report?.prompt)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.retrieval"), report?.retrieval)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.continuity"), report?.continuity)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.cache"), report?.cache)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.buckets"), report?.buckets)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.runtime"), report?.runtime)}
+        {renderNestedSection(t("zakiControls.powerUser.context.sections.lastTurn"), report?.last_turn)}
 
         <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
-          Read-only. Compaction and fallback events also appear as banners
-          above the thread (see W3.5).
+          {t("zakiControls.powerUser.context.footer")}
         </div>
       </div>
     );
@@ -507,32 +640,36 @@ export function PowerUserSheet({
     memoryHealth ? (
       <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
         <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
-          Memory snapshot
+          {t("zakiControls.powerUser.memory.snapshotTitle")}
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Saved memories</span>
+          <span className="text-zaki-secondary">
+            {t("zakiControls.powerUser.memory.savedMemories")}
+          </span>
           <span className="font-mono-ui">
             {formatCount(memoryHealth?.savedCount)}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Pending review</span>
+          <span className="text-zaki-secondary">
+            {t("zakiControls.powerUser.memory.pendingReview")}
+          </span>
           <span className="font-mono-ui">
             {formatCount(memoryHealth?.pendingCount)}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Conflicts</span>
+          <span className="text-zaki-secondary">{t("zakiControls.powerUser.memory.conflicts")}</span>
           <span className="font-mono-ui">
             {formatCount(memoryHealth?.conflictCount)}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Last save</span>
+          <span className="text-zaki-secondary">{t("zakiControls.powerUser.memory.lastSave")}</span>
           <span className="font-mono-ui">{formatTs(memoryHealth?.lastSaveAt)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-zaki-secondary">Storage</span>
+          <span className="text-zaki-secondary">{t("zakiControls.powerUser.memory.storage")}</span>
           <span
             className={cn(
               "font-mono-ui",
@@ -543,21 +680,21 @@ export function PowerUserSheet({
             {memoryHealth?.storageOk == null
               ? "—"
               : memoryHealth.storageOk
-                ? "ok"
-                : "degraded"}
+                ? t("zakiControls.powerUser.memory.storageOk")
+                : t("zakiControls.powerUser.memory.storageDegraded")}
           </span>
         </div>
       </div>
     ) : null;
 
-  const renderMemoryDoctor = () => {
+  const renderMemory = () => {
     if (memoryDiagLoading && !memoryDiag) {
       return (
         <div
           className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
-          data-testid="power-user-memory-doctor"
+          data-testid="power-user-memory"
         >
-          Loading memory doctor...
+          {t("zakiControls.powerUser.memory.loading")}
         </div>
       );
     }
@@ -565,10 +702,10 @@ export function PowerUserSheet({
       return (
         <div
           className="rounded-zaki-lg border border-rose-400/40 bg-rose-50 px-4 py-6 text-center text-sm text-rose-900 dark:border-rose-700/40 dark:bg-rose-950/30 dark:text-rose-100"
-          data-testid="power-user-memory-doctor"
+          data-testid="power-user-memory"
           data-state="error"
         >
-          Memory doctor unavailable: {memoryDiagError}
+          {t("zakiControls.powerUser.memory.unavailable", { error: memoryDiagError })}
         </div>
       );
     }
@@ -577,13 +714,13 @@ export function PowerUserSheet({
       return (
         <div
           className="space-y-3"
-          data-testid="power-user-memory-doctor"
+          data-testid="power-user-memory"
           data-state="inactive"
         >
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
             {reason === "no_active_session"
-              ? "Start a conversation to see memory doctor output."
-              : `Memory doctor unavailable (${reason}).`}
+              ? t("zakiControls.powerUser.memory.noActiveSession")
+              : t("zakiControls.powerUser.memory.noDiagnostics", { reason })}
           </div>
           {renderLegacyMemoryHealth()}
         </div>
@@ -593,12 +730,13 @@ export function PowerUserSheet({
       return (
         <div
           className="space-y-3"
-          data-testid="power-user-memory-doctor"
+          data-testid="power-user-memory"
           data-state="no-runtime"
         >
           <div className="rounded-zaki-lg border border-amber-400/40 bg-amber-50 px-4 py-4 text-sm text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-100">
-            Memory runtime is not configured on the backend
-            {memoryDiag.reason ? ` (${memoryDiag.reason})` : ""}.
+            {t("zakiControls.powerUser.memory.noRuntime", {
+              reason: memoryDiag.reason ? ` (${memoryDiag.reason})` : "",
+            })}
           </div>
           {renderLegacyMemoryHealth()}
         </div>
@@ -606,22 +744,22 @@ export function PowerUserSheet({
     }
     const reportText = (memoryDiag?.report_text || "").trim();
     return (
-      <div className="space-y-3" data-testid="power-user-memory-doctor">
+      <div className="space-y-3" data-testid="power-user-memory">
         {reportText ? (
           <pre
-            data-testid="power-user-memory-doctor-report"
+            data-testid="power-user-memory-report"
             className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-zaki-lg border border-zaki bg-zaki-raised p-4 font-mono-ui text-xs leading-relaxed text-zaki-primary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
           >
             {reportText}
           </pre>
         ) : (
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-            Memory doctor returned no text.
+            {t("zakiControls.powerUser.memory.noText")}
           </div>
         )}
         {renderLegacyMemoryHealth()}
         <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
-          For edit/forget, open the Memory pane. This tab is diagnostic only.
+          {t("zakiControls.powerUser.memory.footer")}
         </div>
       </div>
     );
@@ -635,16 +773,16 @@ export function PowerUserSheet({
       unlimited: "text-zaki-secondary",
     };
     const stateLabel: Record<SoftLimitState, string> = {
-      normal: "OK",
-      warning: "Warning",
-      near_limit: "Near limit",
-      unlimited: "Unlimited",
+      normal: t("zakiControls.powerUser.usage.states.normal"),
+      warning: t("zakiControls.powerUser.usage.states.warning"),
+      near_limit: t("zakiControls.powerUser.usage.states.near_limit"),
+      unlimited: t("zakiControls.powerUser.usage.states.unlimited"),
     };
     return (
       <div className="space-y-3" data-testid="power-user-usage">
         {usageLoading && !usageSurfaces ? (
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-            Loading usage...
+            {t("zakiControls.powerUser.usage.loading")}
           </div>
         ) : null}
         {(usageSurfaces || []).map((row) => {
@@ -669,14 +807,20 @@ export function PowerUserSheet({
                 </span>
               </div>
               {row.error ? (
-                <div className="text-xs text-rose-500">Usage unavailable.</div>
+                <div className="text-xs text-rose-500">
+                  {t("zakiControls.powerUser.usage.unavailable")}
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-zaki-secondary">Requests today</span>
+                    <span className="text-zaki-secondary">
+                      {t("zakiControls.powerUser.usage.requestsToday")}
+                    </span>
                     <span className="font-mono-ui">
                       {row.unlimited
-                        ? `${formatCount(row.used)} · unlimited`
+                        ? t("zakiControls.powerUser.usage.usedUnlimited", {
+                            used: formatCount(row.used),
+                          })
                         : `${formatCount(row.used)} / ${formatCount(row.limit)}`}
                     </span>
                   </div>
@@ -702,7 +846,9 @@ export function PowerUserSheet({
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between">
-                    <span className="text-zaki-secondary">Resets</span>
+                    <span className="text-zaki-secondary">
+                      {t("zakiControls.powerUser.usage.resets")}
+                    </span>
                     <span className="font-mono-ui">{formatTs(row.resetAt)}</span>
                   </div>
                 </>
@@ -711,19 +857,21 @@ export function PowerUserSheet({
           );
         })}
         <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
-          Soft-limit warning at {Math.round(SOFT_LIMIT_WARNING_THRESHOLD * 100)}% used; near-limit at
-          {" "}
-          {Math.round(SOFT_LIMIT_NEAR_THRESHOLD * 100)}%. Hard stops still apply on hit.
+          {t("zakiControls.powerUser.usage.footer", {
+            warning: Math.round(SOFT_LIMIT_WARNING_THRESHOLD * 100),
+            near: Math.round(SOFT_LIMIT_NEAR_THRESHOLD * 100),
+          })}
         </div>
       </div>
     );
   };
 
   const body = useMemo(() => {
+    if (tab === "controls") return renderControls();
     if (tab === "approvals") return renderApprovals();
     if (tab === "context") return renderContext();
     if (tab === "usage") return renderUsage();
-    return renderMemoryDoctor();
+    return renderMemory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     tab,
@@ -739,15 +887,23 @@ export function PowerUserSheet({
     memoryDiag,
     memoryDiagLoading,
     memoryDiagError,
+    activeSessionKey,
+    activeMode,
+    modePending,
+    onModeChange,
+    sessionChannelLabel,
+    contextPressurePercent,
+    contextPressureState,
+    pendingCount,
   ]);
 
   return (
     <SheetShell
       isOpen={isOpen}
       onClose={onClose}
-      title="Controls"
+      title={t("zakiControls.powerUser.title")}
       icon={<Sparkles className="size-4" />}
-      subtitle="Approvals, context, memory, usage"
+      subtitle={t("zakiControls.powerUser.subtitle")}
       width="md"
       padded={false}
     >
@@ -758,5 +914,3 @@ export function PowerUserSheet({
     </SheetShell>
   );
 }
-
-export { Terminal as _Terminal };
