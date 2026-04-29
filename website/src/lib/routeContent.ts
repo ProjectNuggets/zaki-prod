@@ -77,6 +77,7 @@ type LegalContent = {
     title: string;
     body: string;
     items?: string[];
+    anchor?: string;
   }>;
   seo: SeoPayload;
 };
@@ -873,6 +874,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         },
         {
           title: "Subprocessors",
+          anchor: "subprocessors",
           body:
             "We use the following third-party processors to deliver the service. Material changes to this list are reflected in this Policy and emailed to active accounts at least 14 days before they take effect.",
           items: [
@@ -885,6 +887,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         },
         {
           title: "Cookies and similar technologies",
+          anchor: "cookies",
           body:
             "We use a small number of strictly necessary cookies to keep you signed in and to operate the service. Analytics cookies, where used, are off by default and only set after explicit consent in the cookie banner. You can change your choice at any time by clearing the chatzaki-cookie-consent cookie in your browser.",
         },
@@ -900,6 +903,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         },
         {
           title: "Data Processing Agreement (business customers)",
+          anchor: "dpa",
           body:
             "A Data Processing Agreement (DPA) is available on request for business customers. Email support@chatzaki.com with the subject line DPA Request and we will provide our standard DPA template within 5 business days.",
         },
@@ -958,6 +962,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         },
         {
           title: "المعالجون الفرعيون",
+          anchor: "subprocessors",
           body:
             "نستعين بمعالجين خارجيين لتقديم الخدمة. تُحدَّث هذه القائمة في هذه السياسة، ويتم إشعار الحسابات النشطة بأي تغيير جوهري عبر البريد الإلكتروني قبل سريانه بأربعة عشر يومًا على الأقل.",
           items: [
@@ -970,6 +975,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         },
         {
           title: "ملفات تعريف الارتباط والتقنيات المماثلة",
+          anchor: "cookies",
           body:
             "نستخدم عددًا محدودًا من ملفات تعريف الارتباط الضرورية لتسجيل الدخول وتشغيل الخدمة. أما ملفات التحليلات فهي معطّلة افتراضيًا، ولا تُفعَّل إلا بعد موافقة صريحة عبر شريط الموافقة. ويمكنك تغيير اختيارك في أي وقت بحذف ملف chatzaki-cookie-consent من المتصفح.",
         },
@@ -985,6 +991,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         },
         {
           title: "اتفاقية معالجة البيانات (لعملاء الأعمال)",
+          anchor: "dpa",
           body:
             "تتوفر اتفاقية معالجة بيانات (DPA) عند الطلب لعملاء الأعمال. راسلنا على support@chatzaki.com مع وضع كلمة DPA Request في عنوان الرسالة، وسنزوّدك بالنموذج الموحّد خلال خمسة أيام عمل.",
         },
