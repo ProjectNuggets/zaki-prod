@@ -1,13 +1,16 @@
 import { Plus, MessageSquare, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { formatSessionTime } from "@/lib/zakiBot";
 import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import type { AgentSession } from "@/lib/api";
+import type { ZakiSessionUi } from "@/stores/zakiSessionUiStore";
 
 interface ZakiSessionListProps {
   sessions: AgentSession[];
   isLoading: boolean;
   activeSessionKey: string | null;
+  sessionUiByKey?: Record<string, ZakiSessionUi>;
   onSelectSession: (sessionKey: string) => void;
   onCreateSession: () => void;
   isRtl: boolean;
@@ -17,10 +20,12 @@ export function ZakiSessionList({
   sessions,
   isLoading,
   activeSessionKey,
+  sessionUiByKey = {},
   onSelectSession,
   onCreateSession,
   isRtl,
 }: ZakiSessionListProps) {
+  const { t } = useTranslation();
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -35,15 +40,19 @@ export function ZakiSessionList({
         <div className="w-12 h-12 rounded-2xl bg-zaki-hover flex items-center justify-center mb-3">
           <MessageSquare className="w-6 h-6 text-zaki-muted" />
         </div>
-        <p className="text-sm text-zaki-primary font-medium mb-1">No sessions yet</p>
-        <p className="text-xs text-zaki-secondary mb-4">Start a conversation with ZAKI</p>
+        <p className="text-sm text-zaki-primary font-medium mb-1">
+          {t("zakiControls.sessionList.emptyTitle")}
+        </p>
+        <p className="text-xs text-zaki-secondary mb-4">
+          {t("zakiControls.sessionList.emptyHelper")}
+        </p>
         <button
           onClick={onCreateSession}
           className="flex items-center gap-2 px-3 py-2 bg-zaki-brand text-white text-sm font-medium rounded-zaki-xl hover:bg-zaki-brand-hover transition-colors"
           type="button"
         >
           <Plus className="size-4" />
-          New session
+          {t("zakiControls.sessionList.newSession")}
         </button>
       </div>
     );
@@ -61,6 +70,20 @@ export function ZakiSessionList({
           title: session.title,
         });
         const time = formatSessionTime(session.last_active);
+        const sessionUi = sessionUiByKey[normalizedSessionKey];
+        const approvalCount = sessionUi?.approvalCount ?? 0;
+        const modeLabel =
+          sessionUi?.mode === "plan"
+            ? t("zakiControls.modes.plan")
+            : sessionUi?.mode === "review"
+            ? t("zakiControls.modes.review")
+            : t("zakiControls.modes.execute");
+        const contextTone =
+          sessionUi?.contextPressureState === "near_limit"
+            ? "text-rose-600 dark:text-rose-400"
+            : sessionUi?.contextPressureState === "warning"
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-zaki-muted";
 
         return (
           <button
@@ -80,9 +103,33 @@ export function ZakiSessionList({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+                {approvalCount > 0 ? (
+                  <span className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {approvalCount}
+                  </span>
+                ) : null}
+              </div>
               {time && (
-                <div className="text-2xs text-zaki-muted">{time}</div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-2xs">
+                  <span className="text-zaki-muted">{time}</span>
+                  <span className="rounded-full border border-zaki-strong px-1.5 py-0.5 text-[10px] text-zaki-secondary">
+                    {modeLabel}
+                  </span>
+                  {sessionUi?.lastChannel ? (
+                    <span className="rounded-full border border-zaki-strong px-1.5 py-0.5 text-[10px] text-zaki-secondary">
+                      {sessionUi.lastChannel}
+                    </span>
+                  ) : null}
+                  {sessionUi?.contextPressureState ? (
+                    <span className={cn("text-[10px] font-medium", contextTone)}>
+                      {typeof sessionUi.contextPressurePercent === "number"
+                        ? `${Math.round(sessionUi.contextPressurePercent)}%`
+                        : t("zakiControls.strip.context")}
+                    </span>
+                  ) : null}
+                </div>
               )}
             </div>
             {session.message_count != null && session.message_count > 0 && (
@@ -106,7 +153,9 @@ export function ZakiSessionList({
         <div className="bg-zaki-brand-15 rounded-full size-5 flex items-center justify-center">
           <Plus className="size-3 text-zaki-brand" />
         </div>
-        <span className="text-zaki-brand text-sm font-medium">New session</span>
+        <span className="text-zaki-brand text-sm font-medium">
+          {t("zakiControls.sessionList.newSession")}
+        </span>
       </button>
     </div>
   );

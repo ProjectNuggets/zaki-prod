@@ -22,7 +22,6 @@ import {
   type TimelineRevealPhase,
 } from "../NullalisTurnTimeline";
 import { SystemNoticesStack } from "@/app/components/ui/zaki";
-import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
 
 interface ChatViewProps {
   messages: Message[];
@@ -151,11 +150,6 @@ export function ChatView({
       )}
     >
       <SystemNoticesStack className="-mb-2" />
-      {nullalisMode ? (
-        <div className="-mb-3 flex items-center justify-end">
-          <SandboxBadge active={Boolean(nullalisMode)} />
-        </div>
-      ) : null}
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;

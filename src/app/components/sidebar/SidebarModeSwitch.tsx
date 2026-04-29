@@ -1,4 +1,5 @@
-import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity } from "lucide-react";
+import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { ZAKI_BOT_LABEL } from "@/lib/zakiBot";
@@ -16,6 +17,8 @@ interface SidebarModeSwitchProps {
   onSelectZaki: () => void;
   onSelectSpaces: () => void;
   isRtl: boolean;
+  onOpenControls: () => void;
+  controlBadgeCount?: number;
   onOpenSettings: () => void;
   onOpenSessions: () => void;
   onOpenCron: () => void;
@@ -28,12 +31,15 @@ export function SidebarModeSwitch({
   onSelectZaki,
   onSelectSpaces,
   isRtl,
+  onOpenControls,
+  controlBadgeCount = 0,
   onOpenSettings,
   onOpenSessions,
   onOpenCron,
   onOpenSecrets,
   onOpenDiagnostics,
 }: SidebarModeSwitchProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-1 mb-3">
       {/* ZAKI nav item */}
@@ -84,27 +90,37 @@ export function SidebarModeSwitch({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align={isRtl ? "start" : "end"} className="w-48">
+            <DropdownMenuItem onClick={onOpenControls}>
+              <SlidersHorizontal className="size-3.5" />
+              <span>{t("zakiControls.common.controls")}</span>
+              {controlBadgeCount > 0 ? (
+                <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {controlBadgeCount}
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onOpenSettings}>
               <Settings className="size-3.5" />
-              <span>Settings</span>
+              <span>{t("zakiControls.sidebarMenu.settings")}</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onOpenSessions}>
               <MessageSquareText className="size-3.5" />
-              <span>Sessions</span>
+              <span>{t("zakiControls.sidebarMenu.sessions")}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onOpenCron}>
               <Clock3 className="size-3.5" />
-              <span>Scheduled Jobs</span>
+              <span>{t("zakiControls.sidebarMenu.scheduledJobs")}</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onOpenSecrets}>
               <KeyRound className="size-3.5" />
-              <span>Secrets Vault</span>
+              <span>{t("zakiControls.sidebarMenu.secretsVault")}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onOpenDiagnostics}>
               <Activity className="size-3.5" />
-              <span>Diagnostics</span>
+              <span>{t("zakiControls.sidebarMenu.diagnostics")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -137,7 +153,7 @@ export function SidebarModeSwitch({
             sidebarMode === "spaces" ? "text-zaki-primary" : "text-zaki-secondary"
           )}
         >
-          Spaces
+          {t("sidebar.nav.spaces")}
         </span>
       </button>
     </div>

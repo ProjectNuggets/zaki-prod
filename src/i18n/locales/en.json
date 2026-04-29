@@ -715,6 +715,184 @@
       "saveAssistant": "Save assistant settings"
     }
   },
+  "zakiControls": {
+    "common": {
+      "controls": "Controls",
+      "web": "Web"
+    },
+    "modes": {
+      "plan": "Plan",
+      "execute": "Execute",
+      "review": "Review"
+    },
+    "context": {
+      "normal": "Normal",
+      "warning": "Warning",
+      "near_limit": "Near limit"
+    },
+    "strip": {
+      "approvals": "{{count}} waiting",
+      "context": "Context"
+    },
+    "sandbox": {
+      "active": "Shell sandboxed",
+      "activeWithBackend": "Shell sandboxed ({{backend}})"
+    },
+    "sidebarMenu": {
+      "settings": "Settings",
+      "sessions": "Sessions",
+      "scheduledJobs": "Scheduled Jobs",
+      "secretsVault": "Secrets Vault",
+      "diagnostics": "Diagnostics"
+    },
+    "sessionList": {
+      "emptyTitle": "No sessions yet",
+      "emptyHelper": "Start a conversation with ZAKI",
+      "newSession": "New session"
+    },
+    "sessionManagement": {
+      "title": "Sessions",
+      "description": "Manage your agent sessions",
+      "emptyTitle": "No sessions found",
+      "emptyHelper": "Start a conversation to create one.",
+      "deleteConfirm": "Delete session?",
+      "active": "active",
+      "waiting": "{{count}} waiting",
+      "msgs": "{{count}} msgs",
+      "tokens": "{{count}} tokens",
+      "lanes": {
+        "main": "main",
+        "thread": "thread",
+        "task": "task",
+        "cron": "cron",
+        "session": "session"
+      },
+      "relative": {
+        "justNow": "just now",
+        "minutesAgo": "{{count}}m ago",
+        "hoursAgo": "{{count}}h ago",
+        "daysAgo": "{{count}}d ago"
+      },
+      "actions": {
+        "compact": "Compact session",
+        "export": "Export session",
+        "delete": "Delete session"
+      },
+      "success": {
+        "deleted": "Session deleted",
+        "compacted": "Session compacted",
+        "compactedWithCounts": "Compacted: {{before}} -> {{after}} tokens",
+        "exported": "Session exported"
+      },
+      "errors": {
+        "cannotDeleteActive": "Cannot delete the active session",
+        "deleteFailed": "Failed to delete session",
+        "compactFailed": "Failed to compact session",
+        "exportFailed": "Failed to export session"
+      }
+    },
+    "powerUser": {
+      "title": "Controls",
+      "subtitle": "Session controls and diagnostics",
+      "tabs": {
+        "controls": "Controls",
+        "approvals": "Approvals",
+        "context": "Context",
+        "memory": "Memory",
+        "usage": "Usage"
+      },
+      "approvals": {
+        "empty": "No approvals pending.",
+        "toolFallback": "Tool",
+        "riskUnknown": "risk: unknown",
+        "reasonFallback": "Approval required before running this tool.",
+        "deny": "Deny",
+        "approve": "Approve"
+      },
+      "controls": {
+        "sessionModeTitle": "Session mode",
+        "sessionModeHelper": "Switch how ZAKI handles the current session.",
+        "approvalsTitle": "Approvals",
+        "approvalsPending": "Action required in this session.",
+        "approvalsClear": "Nothing waiting right now.",
+        "channelTitle": "Channel",
+        "channelHelper": "Active reply surface for this session.",
+        "contextTitle": "Context",
+        "footer": "Use the tabs below for deeper diagnostics. This section stays focused on the current session posture."
+      },
+      "context": {
+        "loading": "Loading diagnostics...",
+        "unavailable": "Diagnostics unavailable: {{error}}",
+        "noActiveSession": "Start a conversation to see context diagnostics.",
+        "noDiagnostics": "No context diagnostics available ({{reason}}).",
+        "windowPressure": "Window pressure",
+        "historyMessages": "History messages",
+        "historyTrimSuffix": " / {{count}} trim",
+        "compaction": "Compaction",
+        "compactionTriggered": "triggered",
+        "compactionNone": "none",
+        "compactionThresholdSuffix": " · >= {{count}} tok",
+        "toolsLoaded": "Tools loaded",
+        "roleBreakdown": "Role breakdown",
+        "sections": {
+          "memory": "Memory",
+          "prompt": "Prompt",
+          "retrieval": "Retrieval",
+          "continuity": "Continuity",
+          "cache": "Cache",
+          "buckets": "Buckets",
+          "runtime": "Runtime",
+          "lastTurn": "Last turn"
+        },
+        "footer": "Read-only. Compaction and fallback events also appear as banners above the thread."
+      },
+      "memory": {
+        "snapshotTitle": "Memory snapshot",
+        "savedMemories": "Saved memories",
+        "pendingReview": "Pending review",
+        "conflicts": "Conflicts",
+        "lastSave": "Last save",
+        "storage": "Storage",
+        "storageOk": "ok",
+        "storageDegraded": "degraded",
+        "loading": "Loading memory doctor...",
+        "unavailable": "Memory doctor unavailable: {{error}}",
+        "noActiveSession": "Start a conversation to see memory diagnostics.",
+        "noDiagnostics": "Memory doctor unavailable ({{reason}}).",
+        "noRuntime": "Memory runtime is not configured on the backend{{reason}}.",
+        "noText": "Memory doctor returned no text.",
+        "footer": "For edit and forget actions, open the Memory pane. This tab is diagnostic only."
+      },
+      "usage": {
+        "surfaces": {
+          "app_chat": "Web chat",
+          "zaki_bot": "Telegram"
+        },
+        "states": {
+          "normal": "OK",
+          "warning": "Warning",
+          "near_limit": "Near limit",
+          "unlimited": "Unlimited"
+        },
+        "loading": "Loading usage...",
+        "unavailable": "Usage unavailable.",
+        "requestsToday": "Requests today",
+        "usedUnlimited": "{{used}} · unlimited",
+        "resets": "Resets",
+        "footer": "Soft-limit warning at {{warning}}% used; near-limit at {{near}}%. Hard stops still apply on hit."
+      }
+    },
+    "errors": {
+      "openSessionFirst": "Open a ZAKI session first",
+      "updateModeFailed": "Failed to update session mode",
+      "updateApprovalFailed": "Failed to update approval",
+      "sessionNotReady": "ZAKI session is not ready yet."
+    },
+    "success": {
+      "approvalSent": "Approval sent",
+      "requestDenied": "Request denied"
+    }
+  },
   "onboarding": {
     "eyebrow": "Welcome",
     "title": "Set up your workspace, {{userName}}",

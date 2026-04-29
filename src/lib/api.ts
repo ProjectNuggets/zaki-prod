@@ -1225,7 +1225,7 @@ export async function fetchBotUsage() {
   return { response, data };
 }
 
-export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker" | "landlock";
+export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker";
 
 export type BotRuntimeStatus = {
   sandbox?: {
@@ -1235,7 +1235,7 @@ export type BotRuntimeStatus = {
 };
 
 export async function fetchBotRuntimeStatus() {
-  const response = await backendRequest("/v1/me/bot/runtime", { method: "GET" });
+  const response = await backendAuthRequest("/v1/me/bot/runtime", { method: "GET" });
   const data = await parseApiJson<BotRuntimeStatus>(response);
   return { response, data };
 }
@@ -1595,11 +1595,14 @@ export type AgentSession = {
 
 export type AgentSessionContext = {
   session_key: string;
-  token_count: number;
-  context_window_max: number;
-  context_window_used_pct: number;
-  message_count: number;
+  token_count?: number;
+  context_window_max?: number;
+  context_window_used_pct?: number;
+  context_pressure_percent?: number | null;
+  message_count?: number;
 };
+
+export type AgentSessionMode = "plan" | "execute" | "review";
 
 export type AgentSessionApprovalPayload = {
   approved: boolean;
@@ -1660,6 +1663,22 @@ export async function fetchAgentSessionContext(sessionKey: string) {
     method: "GET",
   });
   const data = await parseApiJson<AgentSessionContext>(response);
+  return { response, data };
+}
+
+export async function setAgentSessionMode(sessionKey: string, mode: AgentSessionMode) {
+  assertSafeSessionKey(sessionKey);
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/mode`, {
+    method: "POST",
+    body: JSON.stringify({ mode }),
+  });
+  const data = await parseApiJson<{
+    ok?: boolean;
+    mode?: AgentSessionMode;
+    error?: string;
+    message?: string;
+  }>(response);
   return { response, data };
 }
 
