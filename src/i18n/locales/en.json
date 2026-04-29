@@ -497,6 +497,13 @@
         "summaryEnabled": "Heartbeat is active.",
         "summaryDisabled": "Heartbeat is off."
       },
+      "usage": {
+        "title": "Usage",
+        "summary": "{{requests}} requests today, {{state}} status",
+        "summaryUnavailable": "Usage temporarily unavailable.",
+        "summaryPending": "No usage snapshot yet.",
+        "stateUnknown": "unknown"
+      },
       "workspace": {
         "title": "Workspace context",
         "summary": "{{connected}} of {{total}} channels connected"
@@ -623,6 +630,15 @@
       "heartbeatTitle": "Heartbeat",
       "heartbeatHelper": "Heartbeat cadence is managed by ZAKI. This switch only controls whether heartbeat delivery is enabled.",
       "heartbeatRequiresTelegram": "Telegram must be connected first."
+    },
+    "usage": {
+      "state": "State",
+      "requestsToday": "Requests today",
+      "tokensToday": "Tokens today",
+      "tokensMonth": "Tokens this month",
+      "unavailable": "Usage is temporarily unavailable. Your bot space still works, but the daily summary did not load.",
+      "pending": "No usage snapshot is available yet.",
+      "helper": "Usage refreshes when this panel opens. The full cost breakdown will land once the runtime exposes per-period totals."
     },
     "limits": {
       "currentPlanTitle": "Current plan",

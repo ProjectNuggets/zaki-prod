@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
+import { Activity, BarChart3, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   connectBotTelegram,
@@ -7,6 +7,7 @@ import {
   fetchBotHeartbeat,
   fetchBotOnboarding,
   fetchBotSettings,
+  fetchBotUsage,
   updateBotHeartbeat,
   type BotHeartbeatState,
   updateBotSettings,
@@ -15,6 +16,7 @@ import {
   type BotTelegramConnectPayload,
   type BotSettingsPatch,
   type BotSettingsProfile,
+  type BotUsageSummary,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
@@ -31,7 +33,7 @@ type BannerState =
   | { tone: "error"; text: string }
   | null;
 
-type SectionValue = "overview" | "assistant" | "telegram" | "autonomy";
+type SectionValue = "overview" | "assistant" | "telegram" | "autonomy" | "usage";
 type OpenSectionValue = SectionValue | "";
 type TelegramUiStatus =
   | "not_connected"
@@ -327,6 +329,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   const [onboarding, setOnboarding] = useState<BotOnboardingState | null>(null);
   const [settings, setSettings] = useState<BotSettingsProfile | null>(null);
   const [heartbeat, setHeartbeat] = useState<BotHeartbeatState | null>(null);
+  const [usage, setUsage] = useState<BotUsageSummary | null>(null);
+  const [usageUnavailable, setUsageUnavailable] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(DEFAULT_SETTINGS);
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramAllowFrom, setTelegramAllowFrom] = useState("");
@@ -476,10 +480,11 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       setAgentUserUnavailable(false);
       let nextAgentUserUnavailable = false;
 
-      const [onboardingResult, settingsResult, heartbeatResult] = await Promise.allSettled([
+      const [onboardingResult, settingsResult, heartbeatResult, usageResult] = await Promise.allSettled([
         fetchBotOnboarding(),
         fetchBotSettings(),
         fetchBotHeartbeat(),
+        fetchBotUsage(),
       ]);
 
       if (!active) return;
@@ -554,6 +559,20 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       } else {
         setBanner({ tone: "error", text: t("zakiSettingsSheet.errors.heartbeatLoad") });
         setHeartbeat(null);
+      }
+
+      if (usageResult.status === "fulfilled") {
+        const { response, data } = usageResult.value;
+        if (response.ok) {
+          setUsage(data);
+          setUsageUnavailable(false);
+        } else {
+          setUsage(null);
+          setUsageUnavailable(getBotErrorCode(data) === "usage_unavailable");
+        }
+      } else {
+        setUsage(null);
+        setUsageUnavailable(true);
       }
 
       setAgentUserUnavailable(nextAgentUserUnavailable);
@@ -1347,6 +1366,77 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                         </label>
                       }
                     />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="usage" className="border-b border-zaki px-0">
+                <AccordionTrigger className="py-5 no-underline hover:no-underline">
+                  <SectionBadge
+                    icon={BarChart3}
+                    title={t("zakiSettingsSheet.sections.usage.title")}
+                    summary={
+                      usageUnavailable
+                        ? t("zakiSettingsSheet.sections.usage.summaryUnavailable")
+                        : usage
+                          ? t("zakiSettingsSheet.sections.usage.summary", {
+                              requests: usage.requests_day ?? 0,
+                              state: usage.state ?? t("zakiSettingsSheet.sections.usage.stateUnknown"),
+                            })
+                          : t("zakiSettingsSheet.sections.usage.summaryPending")
+                    }
+                    isRtl={isRtl}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="pb-6">
+                  <div className="space-y-3">
+                    {usageUnavailable ? (
+                      <p className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-3 text-sm text-zaki-secondary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-subtle">
+                        {t("zakiSettingsSheet.usage.unavailable")}
+                      </p>
+                    ) : usage ? (
+                      <div className="grid gap-2 rounded-zaki-md border border-zaki bg-zaki-raised p-3 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.state")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {usage.state ?? "unknown"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.requestsToday")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {usage.requests_day ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.tokensToday")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {(usage.tokens_day ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {t("zakiSettingsSheet.usage.tokensMonth")}
+                          </span>
+                          <span className="font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+                            {(usage.tokens_month ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-3 text-sm text-zaki-secondary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-subtle">
+                        {t("zakiSettingsSheet.usage.pending")}
+                      </p>
+                    )}
+                    <p className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                      {t("zakiSettingsSheet.usage.helper")}
+                    </p>
                   </div>
                 </AccordionContent>
               </AccordionItem>
