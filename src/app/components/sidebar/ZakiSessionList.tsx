@@ -1,7 +1,7 @@
 import { Plus, MessageSquare, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { shortSessionLabel, formatSessionTime } from "@/lib/zakiBot";
-import { extractThreadSlug } from "@/queries/useZakiSessions";
+import { formatSessionTime } from "@/lib/zakiBot";
+import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import type { AgentSession } from "@/lib/api";
 
 interface ZakiSessionListProps {
@@ -52,25 +52,26 @@ export function ZakiSessionList({
   return (
     <div className="flex flex-col gap-1">
       {sessions.map((session) => {
-        // activeSessionKey is a thread slug (e.g. "main"), match via extractThreadSlug
-        const sessionSlug = extractThreadSlug(session.session_key);
-        const isActive = activeSessionKey != null && (
-          sessionSlug === activeSessionKey ||
-          session.session_key === activeSessionKey
-        );
-        const label = session.title || shortSessionLabel(session.session_key);
+        const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
+        const isActive =
+          activeSessionKey != null &&
+          normalizedSessionKey === normalizeZakiSessionKey(activeSessionKey);
+        const label = formatZakiSessionLabel({
+          sessionKey: normalizedSessionKey,
+          title: session.title,
+        });
         const time = formatSessionTime(session.last_active);
 
         return (
           <button
-            key={session.session_key}
+            key={normalizedSessionKey}
             type="button"
             className={cn(
               "zaki-thread-item w-full text-left py-2 px-2.5 rounded-lg flex items-center gap-2",
               isRtl && "text-right flex-row-reverse",
               isActive ? "zaki-nav-active" : ""
             )}
-            onClick={() => onSelectSession(session.session_key)}
+            onClick={() => onSelectSession(normalizedSessionKey)}
           >
             <div className="relative shrink-0">
               <MessageSquare className="size-3.5 text-zaki-muted" />

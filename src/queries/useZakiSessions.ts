@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listAgentSessions, type AgentSession } from "@/lib/api";
+import { normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import { useHiddenSessions } from "@/queries/useHiddenSessions";
 
 export const zakiSessionKeys = {
@@ -16,40 +17,6 @@ function parseLastActive(value: unknown): number {
   }
   return 0;
 }
-
-/**
- * Normalize session key to a canonical form for deduplication.
- * "agent:zaki-bot:user:1:thread:main" and "agent:zaki-bot:user:1:main"
- * are the same session. Normalize both to "agent:zaki-bot:user:1:main".
- */
-function canonicalSessionKey(key: string): string {
-  return key.replace(/:thread:main$/, ":main");
-}
-
-/**
- * Extract the thread slug from a session key.
- * Handles all known formats:
- *   "agent:zaki-bot:user:1:main" → "main"
- *   "agent:zaki-bot:user:1:thread:abc" → "abc"
- *   "agent:zaki-bot:user:1:task:5" → "task:5"
- *   "agent:zaki-bot:user:1:thread:telegram:thread:123" → "telegram:thread:123"
- */
-function extractThreadSlug(key: string): string {
-  // Match :thread:<slug> pattern (everything after :thread:)
-  const threadMatch = key.match(/:thread:(.+)$/);
-  if (threadMatch?.[1]) return threadMatch[1];
-  // Match :task:<id> pattern
-  const taskMatch = key.match(/:task:(.+)$/);
-  if (taskMatch?.[1]) return `task:${taskMatch[1]}`;
-  // Match :main suffix
-  if (key.endsWith(":main")) return "main";
-  // Fallback: last segment
-  const parts = key.split(":");
-  return parts[parts.length - 1] || "main";
-}
-
-/** Exported so sidebar can use it for navigation */
-export { extractThreadSlug };
 
 export function useZakiSessions(enabled = true) {
   const { hidden } = useHiddenSessions();
@@ -67,20 +34,20 @@ export function useZakiSessions(enabled = true) {
         // Deduplicate by canonical key, preferring live sessions then higher message count
         const byKey = new Map<string, AgentSession>();
         for (const session of raw) {
-          const canonical = canonicalSessionKey(session.session_key);
+          const canonical = normalizeZakiSessionKey(session.session_key);
           const existing = byKey.get(canonical);
           if (!existing) {
-            byKey.set(canonical, session);
+            byKey.set(canonical, { ...session, session_key: canonical });
           } else if (session.live && !existing.live) {
             // Prefer live over persisted
-            byKey.set(canonical, session);
+            byKey.set(canonical, { ...session, session_key: canonical });
           } else if (
             !existing.live &&
             !session.live &&
             (session.message_count ?? 0) > (existing.message_count ?? 0)
           ) {
             // Between two persisted, keep the one with more messages
-            byKey.set(canonical, session);
+            byKey.set(canonical, { ...session, session_key: canonical });
           }
         }
 
@@ -103,7 +70,7 @@ export function useZakiSessions(enabled = true) {
     if (hidden.size === 0) return query.data;
     return query.data.filter(
       (s) =>
-        !hidden.has(s.session_key) && !hidden.has(canonicalSessionKey(s.session_key))
+        !hidden.has(s.session_key) && !hidden.has(normalizeZakiSessionKey(s.session_key))
     );
   }, [query.data, hidden]);
 

@@ -418,6 +418,24 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_bot_threads (
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'New chat',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, space_id, thread_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_bot_threads_user_last_active
+    ON zaki_bot_threads (user_id, last_active_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_daily_prompt_usage (
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
       usage_date DATE NOT NULL,

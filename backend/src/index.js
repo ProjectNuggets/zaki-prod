@@ -110,7 +110,21 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
-import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
+import {
+  DEFAULT_THREAD_LABEL,
+  buildFallbackTitleFromUserMessage,
+  createThreadAutoTitleHandler,
+  extractFirstExchangeFromHistory,
+  generateThreadTitleFromExchange,
+  isDefaultThreadLabel,
+} from "./thread-auto-title.js";
+import {
+  buildCanonicalZakiThreadSessionKey,
+  buildDefaultZakiThreadTitle,
+  mergeZakiAgentSessions,
+  normalizeZakiSessionKey,
+  parseZakiSessionKey,
+} from "./zaki-agent-sessions.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -467,6 +481,345 @@ async function withTimeout(promise, timeoutMs, label = "Operation") {
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+function normalizeUpstreamSessionPayload(payload) {
+  if (Array.isArray(payload?.sessions)) return payload.sessions;
+  if (Array.isArray(payload)) return payload;
+  return [];
+}
+
+const zakiThreadBackfillInFlightByUser = new Map();
+
+async function touchZakiThreadRecord({
+  userId,
+  spaceId = ZAKI_BOT_SPACE_ID,
+  threadId = ZAKI_BOT_THREAD_ID,
+  title,
+  touchedAt = new Date().toISOString(),
+}) {
+  const normalizedTitle = buildDefaultZakiThreadTitle(title);
+  await dbQuery(
+    `INSERT INTO zaki_bot_threads (user_id, space_id, thread_id, title, created_at, updated_at, last_active_at)
+     VALUES ($1, $2, $3, $4, $5, $5, $5)
+     ON CONFLICT (user_id, space_id, thread_id)
+     DO UPDATE SET
+       updated_at = EXCLUDED.updated_at,
+       last_active_at = EXCLUDED.last_active_at`,
+    [userId, spaceId, threadId, normalizedTitle, touchedAt]
+  );
+}
+
+async function maybeSetZakiThreadTitle({
+  userId,
+  spaceId = ZAKI_BOT_SPACE_ID,
+  threadId = ZAKI_BOT_THREAD_ID,
+  title,
+}) {
+  const normalizedTitle = String(title || "").trim();
+  if (!normalizedTitle) return "";
+  const nextTitle = buildDefaultZakiThreadTitle(normalizedTitle);
+  const result = await dbGet(
+    `UPDATE zaki_bot_threads
+     SET title = $4,
+         updated_at = NOW()
+     WHERE user_id = $1
+       AND space_id = $2
+       AND thread_id = $3
+       AND (title IS NULL OR btrim(title) = '' OR lower(btrim(title)) IN ('new chat', 'thread'))
+     RETURNING title`,
+    [userId, spaceId, threadId, nextTitle]
+  );
+  return String(result?.title || "").trim();
+}
+
+async function loadFirstExchangeForZakiThread({
+  userId,
+  spaceId = ZAKI_BOT_SPACE_ID,
+  threadId = ZAKI_BOT_THREAD_ID,
+}) {
+  const rows = await dbAll(
+    `SELECT role, content
+     FROM zaki_bot_messages
+     WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
+     ORDER BY id ASC
+     LIMIT 12`,
+    [userId, spaceId, threadId]
+  );
+  const exchange = extractFirstExchangeFromHistory(rows);
+  if (exchange.userMessage || exchange.assistantMessage) {
+    return exchange;
+  }
+  const firstUserRow = rows.find((row) => String(row?.role || "").trim().toLowerCase() === "user");
+  return {
+    userMessage: String(firstUserRow?.content || "").trim(),
+    assistantMessage: "",
+  };
+}
+
+async function ensureZakiThreadTitle({
+  userId,
+  spaceId = ZAKI_BOT_SPACE_ID,
+  threadId = ZAKI_BOT_THREAD_ID,
+}) {
+  await touchZakiThreadRecord({ userId, spaceId, threadId });
+  const metadata = await dbGet(
+    `SELECT title
+     FROM zaki_bot_threads
+     WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
+     LIMIT 1`,
+    [userId, spaceId, threadId]
+  );
+  const currentTitle = String(metadata?.title || "").trim();
+  if (currentTitle && !isDefaultThreadLabel(currentTitle)) {
+    return currentTitle;
+  }
+
+  const { userMessage, assistantMessage } = await loadFirstExchangeForZakiThread({
+    userId,
+    spaceId,
+    threadId,
+  });
+  if (!userMessage) {
+    return currentTitle || DEFAULT_THREAD_LABEL;
+  }
+
+  let nextTitle = "";
+  if (assistantMessage) {
+    nextTitle = await generateThreadTitleFromExchange({
+      userMessage,
+      assistantMessage,
+    });
+  }
+  if (!nextTitle) {
+    nextTitle = buildFallbackTitleFromUserMessage(userMessage);
+  }
+  if (!nextTitle) {
+    return currentTitle || DEFAULT_THREAD_LABEL;
+  }
+  await maybeSetZakiThreadTitle({ userId, spaceId, threadId, title: nextTitle });
+  return nextTitle;
+}
+
+async function backfillZakiThreadTitles(userId) {
+  await dbQuery(
+    `INSERT INTO zaki_bot_threads (user_id, space_id, thread_id, title, created_at, updated_at, last_active_at)
+     SELECT
+       user_id,
+       space_id,
+       thread_id,
+       $2::text AS title,
+       MIN(created_at) AS created_at,
+       NOW() AS updated_at,
+       MAX(created_at) AS last_active_at
+     FROM zaki_bot_messages
+     WHERE user_id = $1
+     GROUP BY user_id, space_id, thread_id
+     ON CONFLICT (user_id, space_id, thread_id) DO NOTHING`,
+    [userId, DEFAULT_THREAD_LABEL]
+  );
+
+  const rows = await dbAll(
+    `SELECT space_id, thread_id, title
+     FROM zaki_bot_threads
+     WHERE user_id = $1
+       AND (title IS NULL OR btrim(title) = '' OR lower(btrim(title)) IN ('new chat', 'thread'))
+     ORDER BY last_active_at DESC, updated_at DESC
+     LIMIT 6`,
+    [userId]
+  );
+  for (const row of rows) {
+    try {
+      await ensureZakiThreadTitle({
+        userId,
+        spaceId: row.space_id,
+        threadId: row.thread_id,
+      });
+    } catch (error) {
+      console.warn("[Agent] ZAKI thread title backfill failed:", error?.message || error);
+    }
+  }
+}
+
+function scheduleZakiThreadBackfill(userId) {
+  const key = String(userId || "").trim();
+  if (!key || zakiThreadBackfillInFlightByUser.has(key)) return;
+  const task = backfillZakiThreadTitles(key)
+    .catch((error) => {
+      console.warn("[Agent] ZAKI thread title backfill scheduler failed:", error?.message || error);
+    })
+    .finally(() => {
+      zakiThreadBackfillInFlightByUser.delete(key);
+    });
+  zakiThreadBackfillInFlightByUser.set(key, task);
+}
+
+async function listLocalZakiThreadSessions(userId) {
+  const rows = await dbAll(
+    `WITH message_summary AS (
+       SELECT
+         user_id,
+         space_id,
+         thread_id,
+         COUNT(*)::int AS message_count,
+         MAX(created_at) AS last_message_at
+       FROM zaki_bot_messages
+       WHERE user_id = $1
+       GROUP BY user_id, space_id, thread_id
+     )
+     SELECT
+       t.space_id,
+       t.thread_id,
+       t.title,
+       t.created_at,
+       GREATEST(
+         COALESCE(t.last_active_at, t.updated_at, t.created_at),
+         COALESCE(m.last_message_at, t.created_at)
+       ) AS last_active,
+       COALESCE(m.message_count, 0) AS message_count
+     FROM zaki_bot_threads t
+     LEFT JOIN message_summary m
+       ON m.user_id = t.user_id
+      AND m.space_id = t.space_id
+      AND m.thread_id = t.thread_id
+     WHERE t.user_id = $1
+     UNION ALL
+     SELECT
+       m.space_id,
+       m.thread_id,
+       $2::text AS title,
+       m.last_message_at AS created_at,
+       m.last_message_at AS last_active,
+       m.message_count
+     FROM message_summary m
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM zaki_bot_threads t
+       WHERE t.user_id = m.user_id
+         AND t.space_id = m.space_id
+         AND t.thread_id = m.thread_id
+     )`,
+    [userId, DEFAULT_THREAD_LABEL]
+  );
+
+  return rows.map((row) => ({
+    session_key: buildCanonicalZakiThreadSessionKey(userId, row.thread_id || ZAKI_BOT_THREAD_ID),
+    title: row.title || DEFAULT_THREAD_LABEL,
+    created_at: row.created_at || null,
+    last_active: row.last_active || row.created_at || null,
+    message_count: Number.isFinite(row.message_count) ? Number(row.message_count) : 0,
+    live: false,
+  }));
+}
+
+async function fetchUpstreamAgentSessions({ userId, requestId }) {
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+    return [];
+  }
+
+  try {
+    const upstream = await fetchNullclawPath({
+      baseUrl: nullclawBase,
+      internalToken: NULLCLAW_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
+      method: "GET",
+      fetchWithTimeout,
+      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      label: "Agent sessions list",
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      console.warn("[Agent] Upstream sessions list failed:", upstream.status, payload?.error || "");
+      return [];
+    }
+    return normalizeUpstreamSessionPayload(payload).map((session) => ({
+      ...session,
+      session_key: normalizeZakiSessionKey(session?.session_key),
+    }));
+  } catch (error) {
+    console.warn("[Agent] Upstream sessions list unavailable:", error?.message || error);
+    return [];
+  }
+}
+
+async function listAggregatedZakiAgentSessions({ userId, requestId }) {
+  scheduleZakiThreadBackfill(userId);
+  const [upstreamSessions, localThreads] = await Promise.all([
+    fetchUpstreamAgentSessions({ userId, requestId }),
+    listLocalZakiThreadSessions(userId),
+  ]);
+  return mergeZakiAgentSessions({ upstreamSessions, localThreads });
+}
+
+async function deleteLocalZakiThreadSession({ userId, sessionKey }) {
+  const parsed = parseZakiSessionKey(sessionKey);
+  if (parsed.lane !== "thread" || !parsed.threadId) {
+    return { deleted: false, threadId: null };
+  }
+
+  const result = await withDbTransaction(async (client) => {
+    const deletedMessages = await client.query(
+      `DELETE FROM zaki_bot_messages
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
+      [userId, ZAKI_BOT_SPACE_ID, parsed.threadId]
+    );
+    const deletedThreads = await client.query(
+      `DELETE FROM zaki_bot_threads
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
+      [userId, ZAKI_BOT_SPACE_ID, parsed.threadId]
+    );
+    return {
+      deletedMessages: Number(deletedMessages.rowCount || 0),
+      deletedThreads: Number(deletedThreads.rowCount || 0),
+    };
+  });
+
+  return {
+    deleted: (result.deletedMessages + result.deletedThreads) > 0,
+    threadId: parsed.threadId,
+  };
+}
+
+async function deleteUpstreamAgentSession({ userId, requestId, sessionKey }) {
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
+    return {
+      ok: false,
+      status: 503,
+      payload: { error: "nullclaw_unavailable" },
+    };
+  }
+
+  try {
+    const upstream = await fetchWithTimeout(
+      `${nullclawBase}/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
+      {
+        method: "DELETE",
+        headers: buildAgentForwardHeaders({
+          internalToken: NULLCLAW_INTERNAL_TOKEN,
+          userId,
+          requestId,
+        }),
+      },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Agent session delete"
+    );
+    const payload = await readAgentUpstreamPayload(upstream.clone());
+    return {
+      ok: upstream.ok,
+      status: upstream.status || 500,
+      payload,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 502,
+      payload: sanitizeAgentUpstreamPayload(error?.message || "upstream_error"),
+    };
   }
 }
 
@@ -7973,6 +8326,11 @@ const agentChatStreamHandler = async (req, res) => {
          VALUES ($1, $2, $3, 'user', $4)`,
         [userId, resolvedSpaceId, resolvedThreadId, originalMessage]
       );
+      await touchZakiThreadRecord({
+        userId,
+        spaceId: resolvedSpaceId,
+        threadId: resolvedThreadId,
+      });
     }
 
     const upstream = await requestNullclawChatStream({
@@ -8127,6 +8485,18 @@ const agentChatStreamHandler = async (req, res) => {
           JSON.stringify(persistedEvents),
         ]
       );
+      await touchZakiThreadRecord({
+        userId,
+        spaceId: resolvedSpaceId,
+        threadId: resolvedThreadId,
+      });
+      void ensureZakiThreadTitle({
+        userId,
+        spaceId: resolvedSpaceId,
+        threadId: resolvedThreadId,
+      }).catch((error) => {
+        console.warn("[Agent] Failed to update ZAKI thread title:", error?.message || error);
+      });
     }
 
     if (!res.writableEnded) res.end();
@@ -9310,9 +9680,22 @@ app.get(
   "/api/agent/sessions",
   requireAgentContext,
   agentRouteLimiter,
-  makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/sessions`
-  )
+  async (req, res) => {
+    try {
+      const userId = String(req.agentUserId || "").trim();
+      if (!userId) {
+        return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+      }
+      const sessions = await listAggregatedZakiAgentSessions({
+        userId,
+        requestId: String(req.requestId || crypto.randomUUID()),
+      });
+      return res.json({ sessions });
+    } catch (error) {
+      console.error("[Agent] Sessions list error:", error);
+      return res.status(500).json({ error: error?.message || "Failed to load sessions." });
+    }
+  }
 );
 
 app.get(
@@ -9329,10 +9712,59 @@ app.delete(
   "/api/agent/sessions/:sessionKey",
   requireAgentContext,
   agentRouteLimiter,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
-  )
+  async (req, res) => {
+    const sessionKey = validateSessionKeyParam(req, res);
+    if (!sessionKey) return;
+    try {
+      const userId = String(req.agentUserId || "").trim();
+      if (!userId) {
+        return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+      }
+
+      const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
+      const parsed = parseZakiSessionKey(normalizedSessionKey);
+      const requestId = String(req.requestId || crypto.randomUUID());
+
+      if (parsed.lane === "thread") {
+        const localResult = await deleteLocalZakiThreadSession({
+          userId,
+          sessionKey: normalizedSessionKey,
+        });
+        const upstreamResult = await deleteUpstreamAgentSession({
+          userId,
+          requestId,
+          sessionKey: normalizedSessionKey,
+        });
+
+        if (!upstreamResult.ok && upstreamResult.status !== 404 && !localResult.deleted) {
+          return res.status(upstreamResult.status).json(
+            upstreamResult.payload || { error: "Failed to delete session." }
+          );
+        }
+
+        return res.status(200).json({
+          ok: true,
+          deleted: true,
+          session_key: normalizedSessionKey,
+          local_deleted: localResult.deleted,
+          upstream_status: upstreamResult.status,
+          upstream_ok: upstreamResult.ok || upstreamResult.status === 404,
+        });
+      }
+
+      const upstreamResult = await deleteUpstreamAgentSession({
+        userId,
+        requestId,
+        sessionKey: normalizedSessionKey,
+      });
+      return res
+        .status(upstreamResult.ok ? 200 : upstreamResult.status)
+        .json(upstreamResult.payload || { ok: upstreamResult.ok });
+    } catch (error) {
+      console.error("[Agent] Session delete error:", error);
+      return res.status(500).json({ error: error?.message || "Failed to delete session." });
+    }
+  }
 );
 
 app.post(

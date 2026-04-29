@@ -13,6 +13,12 @@ import {
   compactAgentSession,
   exportAgentSession,
 } from "@/lib/api";
+import {
+  formatZakiSessionLabel,
+  normalizeZakiSessionKey,
+  parseZakiSessionKey,
+  isThreadLaneZakiSessionKey,
+} from "@/lib/zakiSessions";
 import { useZakiSessions } from "@/queries/useZakiSessions";
 import { hideSessionKey } from "@/queries/useHiddenSessions";
 import { cn } from "@/lib/utils";
@@ -39,15 +45,6 @@ function formatRelativeTime(value?: string | number | null) {
   return `${diffD}d ago`;
 }
 
-function shortSessionLabel(key: string) {
-  // agent:zaki-bot:user:42:thread:abc → "abc"
-  // agent:zaki-bot:user:42:main → "main"
-  const parts = key.split(":");
-  const last = parts[parts.length - 1];
-  if (last === "main") return "Main session";
-  return last || key;
-}
-
 export function SessionManagementSheet({
   isOpen,
   onClose,
@@ -70,6 +67,7 @@ export function SessionManagementSheet({
         // Hide locally so UI removes it immediately, even if the upstream
         // list still returns it (e.g. persisted orphan, eventual consistency).
         hideSessionKey(sessionKey);
+        hideSessionKey(normalizeZakiSessionKey(sessionKey));
         loadSessions();
         toast.success("Session deleted");
       } catch (err) {
@@ -107,7 +105,7 @@ export function SessionManagementSheet({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `session-${shortSessionLabel(sessionKey)}-${Date.now()}.json`;
+      a.download = `session-${formatZakiSessionLabel({ sessionKey })}-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Session exported");
@@ -144,10 +142,29 @@ export function SessionManagementSheet({
         ) : (
             <div className="flex flex-col gap-2">
               {sessions.map((session) => {
-                const isActive = session.session_key === activeSessionKey;
+                const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
+                const parsed = parseZakiSessionKey(normalizedSessionKey);
+                const isThreadLane = isThreadLaneZakiSessionKey(normalizedSessionKey);
+                const isActive =
+                  activeSessionKey != null &&
+                  normalizedSessionKey === normalizeZakiSessionKey(activeSessionKey);
+                const label = formatZakiSessionLabel({
+                  sessionKey: normalizedSessionKey,
+                  title: session.title,
+                });
+                const laneLabel =
+                  parsed.lane === "thread"
+                    ? parsed.threadId === "main"
+                      ? "main"
+                      : "thread"
+                    : parsed.lane === "task"
+                    ? "task"
+                    : parsed.lane === "cron"
+                    ? "cron"
+                    : "session";
                 return (
                   <div
-                    key={session.session_key}
+                    key={normalizedSessionKey}
                     className={cn(
                       "group relative rounded-zaki-xl border p-3 text-xs transition-colors",
                       isActive
@@ -159,21 +176,21 @@ export function SessionManagementSheet({
                       <div
                         className={cn(
                           "min-w-0 text-left",
-                          onSwitchSession && !isActive && "cursor-pointer hover:opacity-80"
+                          onSwitchSession && !isActive && isThreadLane && "cursor-pointer hover:opacity-80"
                         )}
-                        role={onSwitchSession && !isActive ? "button" : undefined}
-                        tabIndex={onSwitchSession && !isActive ? 0 : undefined}
+                        role={onSwitchSession && !isActive && isThreadLane ? "button" : undefined}
+                        tabIndex={onSwitchSession && !isActive && isThreadLane ? 0 : undefined}
                         onClick={
-                          onSwitchSession && !isActive
-                            ? () => onSwitchSession(session.session_key)
+                          onSwitchSession && !isActive && isThreadLane
+                            ? () => onSwitchSession(normalizedSessionKey)
                             : undefined
                         }
                         onKeyDown={
-                          onSwitchSession && !isActive
+                          onSwitchSession && !isActive && isThreadLane
                             ? (e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
-                                  onSwitchSession(session.session_key);
+                                  onSwitchSession(normalizedSessionKey);
                                 }
                               }
                             : undefined
@@ -182,7 +199,10 @@ export function SessionManagementSheet({
                         <div className="flex items-center gap-1.5">
                           <MessageSquare className="size-3.5 shrink-0 text-zaki-accent" />
                           <span className="font-medium truncate text-zaki-primary">
-                            {shortSessionLabel(session.session_key)}
+                            {label}
+                          </span>
+                          <span className="rounded-full bg-zaki-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zaki-secondary">
+                            {laneLabel}
                           </span>
                           {isActive && (
                             <span className="ml-1 rounded-full bg-zaki-accent px-2 py-0.5 text-[10px] font-medium text-white">

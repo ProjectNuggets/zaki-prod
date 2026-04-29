@@ -32,8 +32,12 @@ export function useNavigation() {
     navigate(`/spaces/${spaceId}`);
   };
 
-  const goToThread = (spaceId: string, threadId: string) => {
-    store.goToThread(spaceId, threadId);
+  const goToThread = (
+    spaceId: string,
+    threadId: string,
+    options?: { zakiSessionKey?: string | null }
+  ) => {
+    store.goToThread(spaceId, threadId, options);
     navigate(`/spaces/${spaceId}/threads/${threadId}`);
   };
 
@@ -42,9 +46,13 @@ export function useNavigation() {
     navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`);
   };
 
-  const goToZakiSession = (sessionKey: string) => {
-    store.goToZakiSession(sessionKey);
-    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${encodeURIComponent(sessionKey)}`);
+  const goToZakiSession = (sessionKey: string, threadId?: string | null) => {
+    store.goToZakiSession(sessionKey, threadId ?? null);
+    if (threadId) {
+      navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${encodeURIComponent(threadId)}`);
+      return;
+    }
+    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}`);
   };
 
   const clearThread = () => {
@@ -62,6 +70,7 @@ export function useNavigation() {
     currentView: store.view,
     activeSpaceId: store.spaceId,
     activeThreadId: store.threadId,
+    activeZakiSessionKey: store.zakiSessionKey,
     sidebarMode: store.sidebarMode,
 
     // Navigation actions (with routing)
