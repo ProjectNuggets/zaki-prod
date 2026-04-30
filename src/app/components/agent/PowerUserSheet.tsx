@@ -19,7 +19,11 @@ import {
   type UsageQuotaSurface,
 } from "@/lib/api";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
-import type { ZakiContextPressureState } from "@/stores/zakiSessionUiStore";
+import {
+  CONTEXT_PRESSURE_WARNING,
+  CONTEXT_PRESSURE_NEAR_LIMIT,
+  type ZakiContextPressureState,
+} from "@/stores/zakiSessionUiStore";
 
 export type PowerUserTab = "controls" | "approvals" | "context" | "memory" | "usage";
 

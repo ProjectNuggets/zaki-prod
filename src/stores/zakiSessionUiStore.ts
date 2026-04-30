@@ -3,6 +3,9 @@ import { persist } from "zustand/middleware";
 import type { AgentSessionMode, BotSandboxBackend } from "@/lib/api";
 import { normalizeZakiSessionKey } from "@/lib/zakiSessions";
 
+export const CONTEXT_PRESSURE_WARNING = 70;
+export const CONTEXT_PRESSURE_NEAR_LIMIT = 90;
+
 export type ZakiContextPressureState = "normal" | "warning" | "near_limit" | null;
 
 export type ZakiRuntimeSandbox = {
@@ -51,8 +54,8 @@ export function getContextPressureState(
   if (typeof contextPressurePercent !== "number" || Number.isNaN(contextPressurePercent)) {
     return null;
   }
-  if (contextPressurePercent > 75) return "near_limit";
-  if (contextPressurePercent > 50) return "warning";
+  if (contextPressurePercent >= CONTEXT_PRESSURE_NEAR_LIMIT) return "near_limit";
+  if (contextPressurePercent >= CONTEXT_PRESSURE_WARNING) return "warning";
   return "normal";
 }
 

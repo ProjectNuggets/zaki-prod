@@ -35,22 +35,22 @@ describe("zakiSessionUiStore", () => {
       riskLevel: "high",
       timestamp: 1,
     });
-    store.setContextPressure("agent:zaki-bot:user:1:thread:main", 76);
+    store.setContextPressure("agent:zaki-bot:user:1:thread:main", 92);
 
     const session =
       useZakiSessionUiStore.getState().sessions["agent:zaki-bot:user:1:thread:main"];
 
     expect(session?.approvalCount).toBe(1);
     expect(session?.pendingApprovals).toHaveLength(1);
-    expect(session?.contextPressurePercent).toBe(76);
+    expect(session?.contextPressurePercent).toBe(92);
     expect(session?.contextPressureState).toBe("near_limit");
   });
 
   it("buckets context pressure with the agreed thresholds", () => {
     expect(getContextPressureState(null)).toBeNull();
-    expect(getContextPressureState(50)).toBe("normal");
-    expect(getContextPressureState(51)).toBe("warning");
-    expect(getContextPressureState(75)).toBe("warning");
-    expect(getContextPressureState(76)).toBe("near_limit");
+    expect(getContextPressureState(69)).toBe("normal");
+    expect(getContextPressureState(70)).toBe("warning");
+    expect(getContextPressureState(89)).toBe("warning");
+    expect(getContextPressureState(90)).toBe("near_limit");
   });
 });
