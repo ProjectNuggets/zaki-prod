@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { spaceKeys, useSpaces } from "@/queries/useSpaces";
-import { useEntitlements, useZakiSessions } from "@/queries";
+import { useEntitlements, useZakiSessions, zakiSessionKeys } from "@/queries";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
@@ -116,14 +116,28 @@ export function Sidebar() {
   const decrementSessionApprovalCount = useZakiSessionUiStore(
     (state) => state.decrementApprovalCount
   );
+  const sandboxState = useZakiSessionUiStore((state) => state.sandbox);
   const activeSessionUi = activeSessionKey ? zakiSessionUiByKey[activeSessionKey] : undefined;
+  const activeSessionRecord =
+    activeSessionKey != null
+      ? zakiSessions.find(
+          (session) => normalizeZakiSessionKey(session.session_key) === activeSessionKey
+        ) ?? null
+      : null;
+  const activeSessionMode =
+    activeSessionUi?.mode ??
+    (activeSessionRecord?.mode === "plan" ||
+    activeSessionRecord?.mode === "execute" ||
+    activeSessionRecord?.mode === "review"
+      ? activeSessionRecord.mode
+      : null);
   const totalPendingApprovals = useMemo(
     () =>
-      Object.values(zakiSessionUiByKey).reduce(
-        (sum, sessionUi) => sum + Math.max(0, sessionUi.approvalCount ?? 0),
+      zakiSessions.reduce(
+        (sum, session) => sum + Math.max(0, session.pending_approval_count ?? 0),
         0
       ),
-    [zakiSessionUiByKey]
+    [zakiSessions]
   );
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -273,6 +287,7 @@ export function Sidebar() {
             data?.error || data?.message || t("zakiControls.errors.updateModeFailed")
           );
         }
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
       } catch (error) {
         setZakiSessionModeUi(activeSessionKey, previousMode);
         toast.error(
@@ -282,7 +297,7 @@ export function Sidebar() {
         setPowerUserModePending(false);
       }
     },
-    [activeSessionKey, activeSessionUi?.mode, setZakiSessionModeUi, t]
+    [activeSessionKey, activeSessionUi?.mode, queryClient, setZakiSessionModeUi, t]
   );
 
   const handlePowerUserApprovalAction = useCallback(
@@ -305,6 +320,7 @@ export function Sidebar() {
           );
         }
         decrementSessionApprovalCount(activeSessionKey, requestId);
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
         window.dispatchEvent(
           new CustomEvent("zaki:approval-resolved", {
             detail: { sessionKey: activeSessionKey, requestId },
@@ -322,7 +338,7 @@ export function Sidebar() {
         throw error;
       }
     },
-    [activeSessionKey, activeSessionUi?.pendingApprovals, decrementSessionApprovalCount, t]
+    [activeSessionKey, activeSessionUi?.pendingApprovals, decrementSessionApprovalCount, queryClient, t]
   );
 
   useEffect(() => {
@@ -1414,7 +1430,6 @@ export function Sidebar() {
             sessions={zakiThreadSessions}
             isLoading={zakiSessionsLoading}
             activeSessionKey={activeSessionKey}
-            sessionUiByKey={zakiSessionUiByKey}
             onSelectSession={(sessionKey) => {
               const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
               if (!threadSlug) return;
@@ -2180,12 +2195,12 @@ export function Sidebar() {
         onClose={() => setPowerUserOpen(false)}
         initialTab={powerUserInitialTab}
         activeSessionKey={activeSessionKey}
-        activeMode={activeSessionUi?.mode ?? "execute"}
+        activeMode={activeSessionMode}
         modePending={powerUserModePending}
         onModeChange={handlePowerUserModeChange}
-        sessionChannelLabel={activeSessionUi?.lastChannel ?? t("zakiControls.common.web")}
         contextPressurePercent={activeSessionUi?.contextPressurePercent ?? null}
         contextPressureState={activeSessionUi?.contextPressureState ?? null}
+        sandbox={sandboxState}
         pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
         onApproveRequest={handlePowerUserApprovalAction}
       />

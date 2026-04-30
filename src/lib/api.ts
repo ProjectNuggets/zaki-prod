@@ -1591,6 +1591,18 @@ export type AgentSession = {
   context_window_used?: number;
   context_window_max?: number;
   live?: boolean;
+  mode?: AgentSessionMode | "background" | null;
+  pending_approval_count?: number | null;
+  last_channel?: string | null;
+  context_pressure_percent?: number | null;
+  pending_approvals?: Array<{
+    id: string;
+    tool?: string | null;
+    reason?: string | null;
+    risk_level?: string | null;
+  }>;
+  turn_count?: number;
+  history_len?: number;
 };
 
 export type AgentSessionContext = {

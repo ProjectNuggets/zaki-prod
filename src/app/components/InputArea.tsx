@@ -6,13 +6,13 @@ import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/queries";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
-import { transcribeAudio } from "@/lib/api";
+import { transcribeAudio, type AgentSessionMode } from "@/lib/api";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
 import {
   getDisplayOrder,
   resolveCanonical,
   type SlashCommand,
 } from "@/lib/slashCommands";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { toast } from "sonner";
 import { SlashCommandPalette } from "./chat/SlashCommandPalette";
 
@@ -41,7 +41,11 @@ export function InputArea({
   sendLocked = false,
   zakiBotMode = false,
   quotaBadge = null,
+  zakiMode = "execute",
+  onZakiModeChange,
+  zakiModePending = false,
   zakiContextPressurePercent = null,
+  zakiContextTooltipCopy = null,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
@@ -59,7 +63,11 @@ export function InputArea({
     label: string;
     tone: "neutral" | "warning" | "danger";
   } | null;
+  zakiMode?: AgentSessionMode | null;
+  onZakiModeChange?: (mode: AgentSessionMode) => void | Promise<void>;
+  zakiModePending?: boolean;
   zakiContextPressurePercent?: number | null;
+  zakiContextTooltipCopy?: string | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
@@ -91,6 +99,14 @@ export function InputArea({
     () => getDisplayOrder({ filter: slashFilter, showAliases, isOperator: false }).flat,
     [slashFilter, showAliases],
   );
+  const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
+  const showZakiModeHint = zakiBotMode && effectiveZakiMode !== "execute";
+  const showZakiContextMeter =
+    zakiBotMode &&
+    typeof zakiContextPressurePercent === "number" &&
+    zakiContextPressurePercent > 0;
+  const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
+  const zakiContextTooltip = zakiContextTooltipCopy || t("input.zaki.contextTooltip");
 
   const handleToggleAliases = useCallback(() => {
     setShowAliases((value) => !value);
@@ -376,6 +392,24 @@ export function InputArea({
     toast.info(t("input.queryMode.onToast"));
   };
 
+  const handleOpenZakiAttachmentPicker = useCallback(() => {
+    if (!isOnboardingControlsLocked) {
+      setMenuOpen(false);
+    }
+    fileInputRef.current?.click();
+  }, [isOnboardingControlsLocked]);
+
+  const handleSelectZakiMode = useCallback(
+    (mode: AgentSessionMode) => {
+      if (!onZakiModeChange || zakiModePending) return;
+      void onZakiModeChange(mode);
+      if (!isOnboardingControlsLocked) {
+        setMenuOpen(false);
+      }
+    },
+    [isOnboardingControlsLocked, onZakiModeChange, zakiModePending]
+  );
+
   return (
     <div
       className="zaki-input-shell w-full max-w-3xl mx-auto px-4 pb-6 z-10 relative"
@@ -611,8 +645,7 @@ export function InputArea({
           />
         </div>
         <div className="zaki-input-row flex items-center gap-2 px-1 pt-0.5">
-          {!zakiBotMode ? (
-            <div className="relative" ref={menuRef}>
+          <div className="relative" ref={menuRef}>
             <button
               type="button"
               className="size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
@@ -629,8 +662,8 @@ export function InputArea({
               aria-expanded={menuOpen}
               aria-label={t("input.menu.addOptions")}
               data-onboarding-id="chat-controls-button"
-            >
-              <Plus className="size-4 text-zaki-muted" />
+              >
+                <Plus className="size-4 text-zaki-muted" />
             </button>
             {menuOpen && (
               <div
@@ -640,102 +673,140 @@ export function InputArea({
                 )}
                 role="menu"
               >
-                <button
-                  className={cn(
-                    "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
-                    queryModeEnabled
-                      ? "bg-zaki-accent/10 text-zaki-primary"
-                      : "text-zaki-primary hover:bg-zaki-hover",
-                    !canToggleQueryMode && "opacity-60 cursor-not-allowed"
-                  )}
-                  type="button"
-                  role="menuitem"
-                  onClick={handleToggleQueryMode}
-                  disabled={!canToggleQueryMode}
-                  data-onboarding-id="chat-control-query-mode"
-                >
-                  <FileText className="size-4 text-zaki-muted" />
-                  {t("input.queryMode.label")}
-                  {queryModeEnabled ? (
-                    <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full bg-zaki-accent/20 px-2 py-0.5 text-[10px] font-semibold text-zaki-accent", isRtl && "ml-0 mr-auto")}>
-                      <Check className="size-3" />
-                      {t("input.queryMode.onBadge")}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (!isOnboardingControlsLocked) {
-                      setMenuOpen(false);
-                    }
-                    window.dispatchEvent(new CustomEvent("zaki:upload-active-space-files"));
-                  }}
-                  data-onboarding-id="chat-control-upload-file"
-                >
-                  <Paperclip className="size-4 text-zaki-muted" />
-                  {t("input.menu.uploadFile")}
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (!isOnboardingControlsLocked) {
-                      setMenuOpen(false);
-                    }
-                    toast.info(t("input.menu.comingSoonToast"));
-                  }}
-                  data-onboarding-id="chat-control-study-learn"
-                >
-                  <GraduationCap className="size-4 text-zaki-muted" />
-                  <span className="flex-1 text-left rtl:text-right">{t("input.menu.studyLearn")}</span>
-                  <span className={cn(
-                    "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
-                    isRtl ? "mr-auto" : "ml-auto"
-                  )}>
-                    {t("input.menu.comingSoonPill")}
-                  </span>
-                </button>
-                <div className="my-1 h-px bg-zaki-subtle" />
-                <button
-                  className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (!isOnboardingControlsLocked) {
-                      setMenuOpen(false);
-                    }
-                    toast.info(t("input.menu.comingSoonToast"));
-                  }}
-                  data-onboarding-id="chat-control-generate-image"
-                >
-                  <Sparkles className="size-4 text-zaki-muted" />
-                  <span className="flex-1 text-left rtl:text-right">{t("input.menu.generateImage")}</span>
-                  <span className={cn(
-                    "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
-                    isRtl ? "mr-auto" : "ml-auto"
-                  )}>
-                    {t("input.menu.comingSoonPill")}
-                  </span>
-                </button>
+                {zakiBotMode ? (
+                  <>
+                    <button
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      type="button"
+                      role="menuitem"
+                      onClick={handleOpenZakiAttachmentPicker}
+                      data-testid="zaki-composer-upload"
+                    >
+                      <Paperclip className="size-4 text-zaki-muted" />
+                      {t("input.zaki.uploadFile")}
+                    </button>
+                    <div className="my-1 h-px bg-zaki-subtle" />
+                    {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
+                      const selected = effectiveZakiMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
+                            selected
+                              ? "bg-zaki-hover text-zaki-primary"
+                              : "text-zaki-primary hover:bg-zaki-hover",
+                            (zakiModePending || !onZakiModeChange) && "opacity-60 cursor-not-allowed"
+                          )}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          onClick={() => handleSelectZakiMode(mode)}
+                          disabled={zakiModePending || !onZakiModeChange}
+                          data-testid={`zaki-composer-mode-${mode}`}
+                        >
+                          <span className="flex-1 text-left rtl:text-right">
+                            {t(`zakiControls.modes.${mode}`)}
+                          </span>
+                          {selected ? (
+                            <Check className={cn("size-4 text-zaki-primary", isRtl ? "mr-auto" : "ml-auto")} />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className={cn(
+                        "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
+                        queryModeEnabled
+                          ? "bg-zaki-accent/10 text-zaki-primary"
+                          : "text-zaki-primary hover:bg-zaki-hover",
+                        !canToggleQueryMode && "opacity-60 cursor-not-allowed"
+                      )}
+                      type="button"
+                      role="menuitem"
+                      onClick={handleToggleQueryMode}
+                      disabled={!canToggleQueryMode}
+                      data-onboarding-id="chat-control-query-mode"
+                    >
+                      <FileText className="size-4 text-zaki-muted" />
+                      {t("input.queryMode.label")}
+                      {queryModeEnabled ? (
+                        <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full bg-zaki-accent/20 px-2 py-0.5 text-[10px] font-semibold text-zaki-accent", isRtl && "ml-0 mr-auto")}>
+                          <Check className="size-3" />
+                          {t("input.queryMode.onBadge")}
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (!isOnboardingControlsLocked) {
+                          setMenuOpen(false);
+                        }
+                        window.dispatchEvent(new CustomEvent("zaki:upload-active-space-files"));
+                      }}
+                      data-onboarding-id="chat-control-upload-file"
+                    >
+                      <Paperclip className="size-4 text-zaki-muted" />
+                      {t("input.menu.uploadFile")}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (!isOnboardingControlsLocked) {
+                          setMenuOpen(false);
+                        }
+                        toast.info(t("input.menu.comingSoonToast"));
+                      }}
+                      data-onboarding-id="chat-control-study-learn"
+                    >
+                      <GraduationCap className="size-4 text-zaki-muted" />
+                      <span className="flex-1 text-left rtl:text-right">{t("input.menu.studyLearn")}</span>
+                      <span className={cn(
+                        "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
+                        isRtl ? "mr-auto" : "ml-auto"
+                      )}>
+                        {t("input.menu.comingSoonPill")}
+                      </span>
+                    </button>
+                    <div className="my-1 h-px bg-zaki-subtle" />
+                    <button
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (!isOnboardingControlsLocked) {
+                          setMenuOpen(false);
+                        }
+                        toast.info(t("input.menu.comingSoonToast"));
+                      }}
+                      data-onboarding-id="chat-control-generate-image"
+                    >
+                      <Sparkles className="size-4 text-zaki-muted" />
+                      <span className="flex-1 text-left rtl:text-right">{t("input.menu.generateImage")}</span>
+                      <span className={cn(
+                        "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
+                        isRtl ? "mr-auto" : "ml-auto"
+                      )}>
+                        {t("input.menu.comingSoonPill")}
+                      </span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
-            </div>
-          ) : null}
-          {zakiBotMode ? (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isSending}
-              className="zaki-button-bounce size-11 sm:size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors disabled:opacity-60"
-              aria-label={t("input.menu.uploadFile")}
-              title={t("input.menu.uploadFile")}
-            >
-              <Paperclip className="size-4 text-zaki-muted" />
-            </button>
+          </div>
+          {showZakiModeHint ? (
+            <span className="text-[11px] font-medium text-zaki-muted" data-testid="zaki-mode-hint">
+              {t("input.zaki.modeHint", { mode: t(`zakiControls.modes.${effectiveZakiMode}`) })}
+            </span>
           ) : null}
           {!zakiBotMode ? (
             <button
@@ -810,6 +881,7 @@ export function InputArea({
               <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
                 <div className="space-y-0.5">
                   <div>{t("input.zaki.contextPercent", { percent: zakiContextValue })}</div>
+                  <div className="text-[11px] opacity-90">{zakiContextTooltip}</div>
                 </div>
               </TooltipContent>
             </Tooltip>

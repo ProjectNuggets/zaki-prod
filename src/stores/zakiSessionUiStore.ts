@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import type { AgentSessionMode, BotSandboxBackend } from "@/lib/api";
+import type { AgentSession, AgentSessionMode, BotSandboxBackend } from "@/lib/api";
 import { normalizeZakiSessionKey } from "@/lib/zakiSessions";
 
 export const CONTEXT_PRESSURE_WARNING = 70;
@@ -22,15 +21,14 @@ export type ZakiSessionApprovalRequest = {
 };
 
 export type ZakiSessionUi = {
-  mode: AgentSessionMode;
+  mode: AgentSessionMode | null;
   approvalCount: number;
   pendingApprovals: ZakiSessionApprovalRequest[];
   lastChannel: string | null;
   contextPressurePercent: number | null;
   contextPressureState: ZakiContextPressureState;
+  live: boolean | null;
 };
-
-type PersistedSessionUi = Pick<ZakiSessionUi, "mode" | "lastChannel">;
 
 type ZakiSessionUiState = {
   sessions: Record<string, ZakiSessionUi>;
@@ -39,14 +37,52 @@ type ZakiSessionUiState = {
 
 type ZakiSessionUiStore = ZakiSessionUiState & {
   ensureSession: (sessionKey: string) => void;
+  hydrateSession: (sessionKey: string, patch: Partial<ZakiSessionUi>) => void;
   setMode: (sessionKey: string, mode: AgentSessionMode) => void;
-  setApprovalCount: (sessionKey: string, approvalCount: number) => void;
   incrementApprovalCount: (sessionKey: string, approval?: ZakiSessionApprovalRequest | null) => void;
   decrementApprovalCount: (sessionKey: string, approvalId?: string | null) => void;
-  setLastChannel: (sessionKey: string, lastChannel: string | null) => void;
   setContextPressure: (sessionKey: string, contextPressurePercent: number | null) => void;
   setSandbox: (sandbox: ZakiRuntimeSandbox | null) => void;
 };
+
+export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): Partial<ZakiSessionUi> {
+  const mode =
+    session.mode === "plan" || session.mode === "execute" || session.mode === "review"
+      ? session.mode
+      : null;
+  return {
+    mode,
+    approvalCount:
+      typeof session.pending_approval_count === "number"
+        ? Math.max(0, session.pending_approval_count)
+        : 0,
+    pendingApprovals: Array.isArray(session.pending_approvals)
+      ? session.pending_approvals
+          .map((approval) => {
+            const id = String(approval?.id || "").trim();
+            if (!id) return null;
+            return {
+              id,
+              tool: String(approval?.tool || "").trim(),
+              reason: String(approval?.reason || "").trim(),
+              riskLevel: String(approval?.risk_level || "").trim(),
+              timestamp: Date.now(),
+            } satisfies ZakiSessionApprovalRequest;
+          })
+          .filter((approval): approval is ZakiSessionApprovalRequest => approval != null)
+      : [],
+    lastChannel:
+      typeof session.last_channel === "string" && session.last_channel.trim().length > 0
+        ? session.last_channel.trim()
+        : null,
+    contextPressurePercent:
+      typeof session.context_pressure_percent === "number"
+        ? session.context_pressure_percent
+        : null,
+    contextPressureState: getContextPressureState(session.context_pressure_percent),
+    live: typeof session.live === "boolean" ? session.live : null,
+  };
+}
 
 export function getContextPressureState(
   contextPressurePercent: number | null | undefined
@@ -61,12 +97,13 @@ export function getContextPressureState(
 
 function createDefaultSessionUi(overrides?: Partial<ZakiSessionUi>): ZakiSessionUi {
   return {
-    mode: "execute",
+    mode: null,
     approvalCount: 0,
     pendingApprovals: [],
     lastChannel: null,
     contextPressurePercent: null,
     contextPressureState: null,
+    live: null,
     ...overrides,
   };
 }
@@ -75,156 +112,114 @@ function normalizeSessionKey(sessionKey: string) {
   return normalizeZakiSessionKey(String(sessionKey || "").trim());
 }
 
-export const useZakiSessionUiStore = create<ZakiSessionUiStore>()(
-  persist(
-    (set, get) => ({
-      sessions: {},
-      sandbox: null,
+export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => ({
+  sessions: {},
+  sandbox: null,
 
-      ensureSession: (sessionKey) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        const existing = get().sessions[normalized];
-        if (existing) return;
-        set((state) => ({
-          sessions: {
-            ...state.sessions,
-            [normalized]: createDefaultSessionUi(),
-          },
-        }));
+  ensureSession: (sessionKey) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    const existing = get().sessions[normalized];
+    if (existing) return;
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [normalized]: createDefaultSessionUi(),
       },
+    }));
+  },
 
-      setMode: (sessionKey, mode) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        set((state) => ({
-          sessions: {
-            ...state.sessions,
-            [normalized]: createDefaultSessionUi({
-              ...state.sessions[normalized],
-              mode,
-            }),
-          },
-        }));
-      },
-
-      setApprovalCount: (sessionKey, approvalCount) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        set((state) => ({
-          sessions: {
-            ...state.sessions,
-            [normalized]: createDefaultSessionUi({
-              ...state.sessions[normalized],
-              approvalCount: Math.max(0, approvalCount),
-            }),
-          },
-        }));
-      },
-
-      incrementApprovalCount: (sessionKey, approval = null) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        set((state) => {
-          const current = state.sessions[normalized];
-          const pendingApprovals = current?.pendingApprovals ?? [];
-          const nextPendingApprovals =
-            approval && !pendingApprovals.some((entry) => entry.id === approval.id)
-              ? [...pendingApprovals, approval]
-              : pendingApprovals;
-          return {
-            sessions: {
-              ...state.sessions,
-              [normalized]: createDefaultSessionUi({
-                ...current,
-                approvalCount: Math.max(0, (current?.approvalCount ?? 0) + 1),
-                pendingApprovals: nextPendingApprovals,
-              }),
-            },
-          };
-        });
-      },
-
-      decrementApprovalCount: (sessionKey, approvalId = null) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        set((state) => {
-          const current = state.sessions[normalized];
-          const nextPendingApprovals = approvalId
-            ? (current?.pendingApprovals ?? []).filter((entry) => entry.id !== approvalId)
-            : (current?.pendingApprovals ?? []).slice(1);
-          return {
-            sessions: {
-              ...state.sessions,
-              [normalized]: createDefaultSessionUi({
-                ...current,
-                approvalCount: Math.max(0, (current?.approvalCount ?? 0) - 1),
-                pendingApprovals: nextPendingApprovals,
-              }),
-            },
-          };
-        });
-      },
-
-      setLastChannel: (sessionKey, lastChannel) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        set((state) => ({
-          sessions: {
-            ...state.sessions,
-            [normalized]: createDefaultSessionUi({
-              ...state.sessions[normalized],
-              lastChannel,
-            }),
-          },
-        }));
-      },
-
-      setContextPressure: (sessionKey, contextPressurePercent) => {
-        const normalized = normalizeSessionKey(sessionKey);
-        if (!normalized) return;
-        set((state) => ({
-          sessions: {
-            ...state.sessions,
-            [normalized]: createDefaultSessionUi({
-              ...state.sessions[normalized],
-              contextPressurePercent,
-              contextPressureState: getContextPressureState(contextPressurePercent),
-            }),
-          },
-        }));
-      },
-
-      setSandbox: (sandbox) => {
-        set({ sandbox });
-      },
-    }),
-    {
-      name: "zaki-session-ui-storage",
-      partialize: (state) => ({
-        sessions: Object.fromEntries(
-          Object.entries(state.sessions).map(([key, value]) => [
-            key,
-            {
-              mode: value.mode,
-              lastChannel: value.lastChannel,
-            } satisfies PersistedSessionUi,
-          ])
-        ),
-      }),
-      merge: (persisted, current) => {
-        const persistedState = persisted as Partial<ZakiSessionUiState>;
-        const persistedSessions = persistedState.sessions || {};
-        return {
-          ...current,
-          sessions: Object.fromEntries(
-            Object.entries(persistedSessions).map(([key, value]) => [
-              key,
-              createDefaultSessionUi(value as Partial<ZakiSessionUi>),
-            ])
+  hydrateSession: (sessionKey, patch) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [normalized]: createDefaultSessionUi({
+          ...state.sessions[normalized],
+          ...patch,
+          contextPressureState: getContextPressureState(
+            patch.contextPressurePercent ?? state.sessions[normalized]?.contextPressurePercent ?? null
           ),
-        };
+        }),
       },
-    }
-  )
-);
+    }));
+  },
+
+  setMode: (sessionKey, mode) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [normalized]: createDefaultSessionUi({
+          ...state.sessions[normalized],
+          mode,
+        }),
+      },
+    }));
+  },
+
+  incrementApprovalCount: (sessionKey, approval = null) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    set((state) => {
+      const current = state.sessions[normalized];
+      const pendingApprovals = current?.pendingApprovals ?? [];
+      const nextPendingApprovals =
+        approval && !pendingApprovals.some((entry) => entry.id === approval.id)
+          ? [approval]
+          : pendingApprovals;
+      return {
+        sessions: {
+          ...state.sessions,
+          [normalized]: createDefaultSessionUi({
+            ...current,
+            approvalCount: Math.max(0, Math.max(current?.approvalCount ?? 0, nextPendingApprovals.length)),
+            pendingApprovals: nextPendingApprovals,
+          }),
+        },
+      };
+    });
+  },
+
+  decrementApprovalCount: (sessionKey, approvalId = null) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    set((state) => {
+      const current = state.sessions[normalized];
+      const nextPendingApprovals = approvalId
+        ? (current?.pendingApprovals ?? []).filter((entry) => entry.id !== approvalId)
+        : [];
+      return {
+        sessions: {
+          ...state.sessions,
+          [normalized]: createDefaultSessionUi({
+            ...current,
+            approvalCount: Math.max(0, nextPendingApprovals.length),
+            pendingApprovals: nextPendingApprovals,
+          }),
+        },
+      };
+    });
+  },
+
+  setContextPressure: (sessionKey, contextPressurePercent) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [normalized]: createDefaultSessionUi({
+          ...state.sessions[normalized],
+          contextPressurePercent,
+          contextPressureState: getContextPressureState(contextPressurePercent),
+        }),
+      },
+    }));
+  },
+
+  setSandbox: (sandbox) => {
+    set({ sandbox });
+  },
+}));

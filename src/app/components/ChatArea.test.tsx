@@ -27,9 +27,11 @@ import {
   approveAgentSession,
   fetchAgentHistory,
   fetchAgentMe,
+  fetchAgentSession,
   fetchAgentSessionContext,
   fetchBotRuntimeStatus,
   fetchMemoryActivity,
+  listAgentSessions,
   provisionAgent,
   setAgentSessionMode,
 } from "@/lib/api";
@@ -92,6 +94,36 @@ jest.mock("@/lib/api", () => ({
       headers: new Headers(),
     },
     data: { session_key: "agent:zaki-bot:user:1:thread:main" },
+  })),
+  fetchAgentSession: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        session_key: "agent:zaki-bot:user:1:thread:main",
+        live: true,
+        mode: "execute",
+        pending_approval_count: 0,
+        context_pressure_percent: null,
+      }),
+      headers: new Headers(),
+    },
+    data: {
+      session_key: "agent:zaki-bot:user:1:thread:main",
+      live: true,
+      mode: "execute",
+      pending_approval_count: 0,
+      context_pressure_percent: null,
+    },
+  })),
+  listAgentSessions: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ sessions: [] }),
+      headers: new Headers(),
+    },
+    data: { sessions: [] },
   })),
   setAgentSessionMode: jest.fn(async () => ({
     response: {
@@ -211,9 +243,11 @@ describe("ChatArea Component", () => {
     (apiRequest as jest.Mock).mockClear();
     (fetchAgentHistory as jest.Mock).mockClear();
     (fetchAgentMe as jest.Mock).mockClear();
+    (fetchAgentSession as jest.Mock).mockClear();
     (fetchAgentSessionContext as jest.Mock).mockClear();
     (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
+    (listAgentSessions as jest.Mock).mockClear();
     (provisionAgent as jest.Mock).mockClear();
     (setAgentSessionMode as jest.Mock).mockClear();
     (approveAgentSession as jest.Mock).mockClear();

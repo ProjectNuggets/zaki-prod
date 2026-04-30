@@ -14,6 +14,7 @@ import {
   fetchMemoryActivity,
   fetchAgentHistory,
   fetchAgentMe,
+  fetchAgentSession,
   fetchAgentSessionContext,
   fetchBotRuntimeStatus,
   setAgentSessionMode,
@@ -61,11 +62,13 @@ import type {
 } from "./chat/BotStatusRail";
 
 import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/stores";
+import { mapAgentSessionToZakiSessionUi } from "@/stores/zakiSessionUiStore";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
+import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import {
@@ -2060,6 +2063,7 @@ export function ChatArea() {
   const [agentUserId, setAgentUserId] = useState<string | null>(
     () => sessionStorage.getItem("zaki:agentUserId")
   );
+  const isZakiBotRouteActive = isZakiBotSpaceId(activeWorkspaceSlug);
   const activeZakiSessionKey = useMemo(() => {
     const stored = String(zakiSessionKey || "").trim();
     if (stored) return normalizeZakiSessionKey(stored);
@@ -2069,6 +2073,17 @@ export function ChatArea() {
   const normalizedActiveZakiSessionKey = activeZakiSessionKey
     ? normalizeZakiSessionKey(activeZakiSessionKey)
     : null;
+  const { data: zakiSessions = [] } = useZakiSessions(isZakiBotRouteActive);
+  const activeSessionRecord = useMemo(
+    () =>
+      normalizedActiveZakiSessionKey
+        ? zakiSessions.find(
+            (session) =>
+              normalizeZakiSessionKey(session.session_key) === normalizedActiveZakiSessionKey
+          ) ?? null
+        : null,
+    [normalizedActiveZakiSessionKey, zakiSessions]
+  );
   const activeSessionUi = useZakiSessionUiStore(
     useCallback(
       (state) =>
@@ -2077,6 +2092,7 @@ export function ChatArea() {
     )
   );
   const ensureZakiSessionUi = useZakiSessionUiStore((state) => state.ensureSession);
+  const hydrateSessionUi = useZakiSessionUiStore((state) => state.hydrateSession);
   const setZakiSessionModeUi = useZakiSessionUiStore((state) => state.setMode);
   const incrementSessionApprovalCount = useZakiSessionUiStore(
     (state) => state.incrementApprovalCount
@@ -2085,8 +2101,14 @@ export function ChatArea() {
     (state) => state.decrementApprovalCount
   );
   const setSessionContextPressure = useZakiSessionUiStore((state) => state.setContextPressure);
-  const sandboxState = useZakiSessionUiStore((state) => state.sandbox);
   const setZakiSandboxState = useZakiSessionUiStore((state) => state.setSandbox);
+  const activeSessionMode =
+    activeSessionUi?.mode ??
+    (activeSessionRecord?.mode === "plan" ||
+    activeSessionRecord?.mode === "execute" ||
+    activeSessionRecord?.mode === "review"
+      ? activeSessionRecord.mode
+      : null);
 
   // Memory state for the simplified normal-chat capture flow
   const [recentSavedMemories, setRecentSavedMemories] = useState<
@@ -2322,6 +2344,35 @@ export function ChatArea() {
     if (!normalizedActiveZakiSessionKey) return;
     ensureZakiSessionUi(normalizedActiveZakiSessionKey);
   }, [ensureZakiSessionUi, normalizedActiveZakiSessionKey]);
+
+  useEffect(() => {
+    if (!normalizedActiveZakiSessionKey || !activeSessionRecord) return;
+    hydrateSessionUi(
+      normalizedActiveZakiSessionKey,
+      mapAgentSessionToZakiSessionUi(activeSessionRecord)
+    );
+  }, [activeSessionRecord, hydrateSessionUi, normalizedActiveZakiSessionKey]);
+
+  const hydrateActiveSessionDetail = useCallback(
+    async (sessionKey: string) => {
+      try {
+        const { response, data } = await fetchAgentSession(sessionKey);
+        if (!response.ok) return;
+        const nextUi = mapAgentSessionToZakiSessionUi(data);
+        hydrateSessionUi(sessionKey, nextUi);
+        const nextApproval = nextUi.pendingApprovals?.[0] ?? null;
+        setNullalisApprovalRequest(nextApproval ?? null);
+      } catch {
+        // best effort only
+      }
+    },
+    [hydrateSessionUi]
+  );
+
+  useEffect(() => {
+    if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey) return;
+    void hydrateActiveSessionDetail(normalizedActiveZakiSessionKey);
+  }, [hydrateActiveSessionDetail, isZakiBotActiveSpace, normalizedActiveZakiSessionKey]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
@@ -5177,6 +5228,13 @@ export function ChatArea() {
         assistantId: assistantMessageId,
         signal: streamController.signal,
       });
+      if (isZakiBotTarget && agentUserId) {
+        const sessionKey = buildAgentSessionKey(threadId, agentUserId);
+        if (sessionKey) {
+          await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+          await hydrateActiveSessionDetail(sessionKey);
+        }
+      }
       void maybeAutoTitleThread(resolvedWorkspaceSlug, threadId, {
         userMessage: trimmed,
         assistantMessage: String(streamResult?.content || "").trim(),
@@ -5226,15 +5284,18 @@ export function ChatArea() {
     activeThreadId,
     activeWorkspaceSlug,
     activationProgress.firstMessageSent,
+    agentUserId,
     authUserId,
     checkForSavedMemories,
     clearZakiBotProgressVisuals,
     ensureZakiBotProvisioned,
     finalizeZakiBotProgress,
+    hydrateActiveSessionDetail,
     isRtl,
     isStreaming,
     navigate,
     primarySpace?.id,
+    queryClient,
     streamChatMessage,
     maybeAutoTitleThread,
     updateAssistantError,
@@ -5290,6 +5351,8 @@ export function ChatArea() {
         });
         decrementSessionApprovalCount(sessionKey, requestId);
         setNullalisApprovalRequest(null);
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+        await hydrateActiveSessionDetail(sessionKey);
       } catch (err) {
         console.error("[approval]", err);
         toast.error(approved ? "Failed to send approval" : "Failed to send denial");
@@ -5301,7 +5364,10 @@ export function ChatArea() {
       activeZakiSessionKey,
       agentUserId,
       decrementSessionApprovalCount,
+      hydrateActiveSessionDetail,
       nullalisApprovalRequest,
+      queryClient,
+      t,
     ]
   );
 
@@ -5322,6 +5388,8 @@ export function ChatArea() {
         if (!response.ok) {
           throw new Error(data?.error || data?.message || t("zakiControls.errors.updateModeFailed"));
         }
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+        await hydrateActiveSessionDetail(sessionKey);
       } catch (error) {
         setZakiSessionModeUi(sessionKey, previousMode);
         toast.error(error instanceof Error ? error.message : t("zakiControls.errors.updateModeFailed"));
@@ -5329,12 +5397,17 @@ export function ChatArea() {
         setSessionModePending(false);
       }
     },
-    [activeSessionUi?.mode, activeThreadId, activeZakiSessionKey, agentUserId, setZakiSessionModeUi]
+    [
+      activeSessionUi?.mode,
+      activeThreadId,
+      activeZakiSessionKey,
+      agentUserId,
+      hydrateActiveSessionDetail,
+      queryClient,
+      setZakiSessionModeUi,
+      t,
+    ]
   );
-
-  const openZakiControls = useCallback((tab: "controls" | "approvals" = "controls") => {
-    window.dispatchEvent(new CustomEvent("zaki:open-power-user", { detail: { tab } }));
-  }, []);
 
   useEffect(() => {
     const handleApprovalResolved = (event: Event) => {
@@ -6086,6 +6159,16 @@ export function ChatArea() {
                 showUpgradeStrip={!isZakiBotActiveSpace}
                 sendLocked={isZakiBotSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
+                zakiMode={activeSessionMode ?? "execute"}
+                onZakiModeChange={isZakiBotActiveSpace ? handleSessionModeChange : undefined}
+                zakiModePending={isZakiBotActiveSpace ? sessionModePending : false}
+                zakiContextPressurePercent={
+                  isZakiBotActiveSpace
+                    ? activeSessionUi?.contextPressurePercent ??
+                      activeSessionRecord?.context_pressure_percent ??
+                      null
+                    : null
+                }
                 quotaBadge={
                   zakiBotQuotaInfo
                     ? {

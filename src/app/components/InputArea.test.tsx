@@ -161,4 +161,52 @@ describe("InputArea primary action button", () => {
     expect(onSend).not.toHaveBeenCalled();
     expect((composer as HTMLTextAreaElement).value).toBe("/health");
   });
+
+  it("shows ZAKI mode actions inside the plus menu and calls the mode change handler", () => {
+    const onZakiModeChange = jest.fn();
+
+    render(
+      <InputArea
+        onSend={jest.fn()}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="review"
+        onZakiModeChange={onZakiModeChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "input.menu.addOptions" }));
+    expect(screen.getByTestId("zaki-composer-upload")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("zaki-composer-mode-plan"));
+
+    expect(onZakiModeChange).toHaveBeenCalledWith("plan");
+    expect(screen.getByTestId("zaki-mode-hint")).toBeInTheDocument();
+  });
+
+  it("shows the context meter only when ZAKI has a real context percentage", () => {
+    const { rerender } = render(
+      <InputArea
+        onSend={jest.fn()}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiContextPressurePercent={0}
+      />
+    );
+
+    expect(screen.queryByTestId("zaki-context-meter")).not.toBeInTheDocument();
+
+    rerender(
+      <InputArea
+        onSend={jest.fn()}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiContextPressurePercent={61}
+      />
+    );
+
+    expect(screen.getByTestId("zaki-context-meter")).toBeInTheDocument();
+  });
 });

@@ -410,6 +410,13 @@
       "comingSoonPill": "Soon",
       "comingSoonToast": "This feature is coming soon."
     },
+    "zaki": {
+      "uploadFile": "Upload file",
+      "modeHint": "{{mode}} mode",
+      "contextAria": "Context usage {{percent}} percent",
+      "contextPercent": "Context: {{percent}}%",
+      "contextTooltip": "Context compacts automatically when needed."
+    },
     "placeholders": [
       "Ask anything",
       "Summarize our last conversation",
@@ -730,10 +737,6 @@
       "warning": "Warning",
       "near_limit": "Near limit"
     },
-    "strip": {
-      "approvals": "{{count}} waiting",
-      "context": "Context"
-    },
     "sandbox": {
       "active": "Shell sandboxed",
       "activeWithBackend": "Shell sandboxed ({{backend}})"
@@ -812,11 +815,10 @@
       "controls": {
         "sessionModeTitle": "Session mode",
         "sessionModeHelper": "Switch how ZAKI handles the current session.",
+        "sandboxTitle": "Sandbox",
         "approvalsTitle": "Approvals",
         "approvalsPending": "Action required in this session.",
         "approvalsClear": "Nothing waiting right now.",
-        "channelTitle": "Channel",
-        "channelHelper": "Active reply surface for this session.",
         "contextTitle": "Context",
         "footer": "Use the tabs below for deeper diagnostics. This section stays focused on the current session posture."
       },

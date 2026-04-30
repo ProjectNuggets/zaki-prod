@@ -81,6 +81,21 @@ describe("PowerUserSheet", () => {
     expect(screen.getByTestId("power-user-controls")).toBeInTheDocument();
   });
 
+  it("keeps mode controls interactive even when runtime state is not yet loaded", () => {
+    const onModeChange = jest.fn();
+    render(
+      <PowerUserSheet
+        isOpen
+        onClose={() => {}}
+        activeMode={null}
+        onModeChange={onModeChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "zakiControls.modes.plan" }));
+    expect(onModeChange).toHaveBeenCalledWith("plan");
+  });
+
   it("renders a badge count when approvals are pending", () => {
     const pending: NullalisApprovalRequest[] = [
       { id: "a1", tool: "send_email", reason: "Needs your ok", riskLevel: "high", timestamp: 1 },

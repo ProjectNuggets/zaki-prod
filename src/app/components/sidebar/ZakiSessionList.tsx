@@ -4,13 +4,11 @@ import { cn } from "@/lib/utils";
 import { formatSessionTime } from "@/lib/zakiBot";
 import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import type { AgentSession } from "@/lib/api";
-import type { ZakiSessionUi } from "@/stores/zakiSessionUiStore";
 
 interface ZakiSessionListProps {
   sessions: AgentSession[];
   isLoading: boolean;
   activeSessionKey: string | null;
-  sessionUiByKey?: Record<string, ZakiSessionUi>;
   onSelectSession: (sessionKey: string) => void;
   onCreateSession: () => void;
   isRtl: boolean;
@@ -20,7 +18,6 @@ export function ZakiSessionList({
   sessions,
   isLoading,
   activeSessionKey,
-  sessionUiByKey = {},
   onSelectSession,
   onCreateSession,
   isRtl,
@@ -70,20 +67,8 @@ export function ZakiSessionList({
           title: session.title,
         });
         const time = formatSessionTime(session.last_active);
-        const sessionUi = sessionUiByKey[normalizedSessionKey];
-        const approvalCount = sessionUi?.approvalCount ?? 0;
-        const modeLabel =
-          sessionUi?.mode === "plan"
-            ? t("zakiControls.modes.plan")
-            : sessionUi?.mode === "review"
-            ? t("zakiControls.modes.review")
-            : t("zakiControls.modes.execute");
-        const contextTone =
-          sessionUi?.contextPressureState === "near_limit"
-            ? "text-rose-600 dark:text-rose-400"
-            : sessionUi?.contextPressureState === "warning"
-            ? "text-amber-600 dark:text-amber-400"
-            : "text-zaki-muted";
+        const hasPendingApproval =
+          typeof session.pending_approval_count === "number" && session.pending_approval_count > 0;
 
         return (
           <button
@@ -98,45 +83,18 @@ export function ZakiSessionList({
           >
             <div className="relative shrink-0">
               <MessageSquare className="size-3.5 text-zaki-muted" />
-              {session.live && (
-                <div className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-zaki-success" />
-              )}
+              {hasPendingApproval ? (
+                <div className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-amber-500" />
+              ) : null}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
-                {approvalCount > 0 ? (
-                  <span className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    {approvalCount}
-                  </span>
-                ) : null}
-              </div>
+              <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
               {time && (
-                <div className="mt-0.5 flex items-center gap-1.5 text-2xs">
+                <div className="mt-0.5 text-2xs text-zaki-muted">
                   <span className="text-zaki-muted">{time}</span>
-                  <span className="rounded-full border border-zaki-strong px-1.5 py-0.5 text-[10px] text-zaki-secondary">
-                    {modeLabel}
-                  </span>
-                  {sessionUi?.lastChannel ? (
-                    <span className="rounded-full border border-zaki-strong px-1.5 py-0.5 text-[10px] text-zaki-secondary">
-                      {sessionUi.lastChannel}
-                    </span>
-                  ) : null}
-                  {sessionUi?.contextPressureState ? (
-                    <span className={cn("text-[10px] font-medium", contextTone)}>
-                      {typeof sessionUi.contextPressurePercent === "number"
-                        ? `${Math.round(sessionUi.contextPressurePercent)}%`
-                        : t("zakiControls.strip.context")}
-                    </span>
-                  ) : null}
                 </div>
               )}
             </div>
-            {session.message_count != null && session.message_count > 0 && (
-              <span className="text-2xs text-zaki-muted shrink-0">
-                {session.message_count}
-              </span>
-            )}
           </button>
         );
       })}

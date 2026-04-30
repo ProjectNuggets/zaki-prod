@@ -23,6 +23,7 @@ import {
   CONTEXT_PRESSURE_WARNING,
   CONTEXT_PRESSURE_NEAR_LIMIT,
   type ZakiContextPressureState,
+  type ZakiRuntimeSandbox,
 } from "@/stores/zakiSessionUiStore";
 
 export type PowerUserTab = "controls" | "approvals" | "context" | "memory" | "usage";
@@ -65,12 +66,12 @@ export interface PowerUserSheetProps {
   onClose: () => void;
   initialTab?: PowerUserTab;
   activeSessionKey?: string | null;
-  activeMode?: AgentSessionMode;
+  activeMode?: AgentSessionMode | null;
   modePending?: boolean;
   onModeChange?: (mode: AgentSessionMode) => Promise<void> | void;
-  sessionChannelLabel?: string | null;
   contextPressurePercent?: number | null;
   contextPressureState?: ZakiContextPressureState;
+  sandbox?: ZakiRuntimeSandbox | null;
   pendingApprovals?: NullalisApprovalRequest[];
   onApproveRequest?: (id: string, approved: boolean) => Promise<void> | void;
   contextSnapshot?: PowerUserContextSnapshot | null;
@@ -179,12 +180,12 @@ export function PowerUserSheet({
   onClose,
   initialTab = "controls",
   activeSessionKey = null,
-  activeMode = "execute",
+  activeMode = null,
   modePending = false,
   onModeChange,
-  sessionChannelLabel = null,
   contextPressurePercent = null,
   contextPressureState = null,
+  sandbox = null,
   pendingApprovals = [],
   onApproveRequest,
   contextSnapshot = null,
@@ -403,12 +404,19 @@ export function PowerUserSheet({
 
   const renderControls = () => {
     const modeButtons: AgentSessionMode[] = ["plan", "execute", "review"];
+    const modeValue = activeMode ?? "execute";
     const contextTone =
       contextPressureState === "near_limit"
         ? "text-rose-600 dark:text-rose-400"
         : contextPressureState === "warning"
         ? "text-amber-600 dark:text-amber-400"
         : "text-zaki-secondary";
+    const sandboxLabel =
+      sandbox?.enabled === true
+        ? sandbox.backend
+          ? t("zakiControls.sandbox.activeWithBackend", { backend: sandbox.backend })
+          : t("zakiControls.sandbox.active")
+        : "—";
 
     return (
       <div className="space-y-3" data-testid="power-user-controls">
@@ -430,7 +438,7 @@ export function PowerUserSheet({
           </div>
           <div className="inline-flex items-center gap-1 rounded-full bg-zaki-hover p-1">
             {modeButtons.map((mode) => {
-              const active = activeMode === mode;
+              const active = modeValue === mode;
               return (
                 <button
                   key={mode}
@@ -455,25 +463,27 @@ export function PowerUserSheet({
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
-              {t("zakiControls.powerUser.controls.approvalsTitle")}
+              {t("zakiControls.powerUser.controls.sandboxTitle")}
             </div>
-            <div className="mt-2 text-2xl font-semibold text-zaki-primary">{pendingCount}</div>
+            <div className="mt-2 text-2xl font-semibold text-zaki-primary">
+              {sandbox?.enabled === true ? t("zakiControls.sandbox.active") : "—"}
+            </div>
             <div className="mt-1 text-xs text-zaki-muted">
-              {pendingCount > 0
-                ? t("zakiControls.powerUser.controls.approvalsPending")
-                : t("zakiControls.powerUser.controls.approvalsClear")}
+              {sandboxLabel}
             </div>
           </div>
 
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
-              {t("zakiControls.powerUser.controls.channelTitle")}
+              {t("zakiControls.powerUser.controls.approvalsTitle")}
             </div>
             <div className="mt-2 text-2xl font-semibold text-zaki-primary">
-              {sessionChannelLabel || t("zakiControls.common.web")}
+              {pendingCount}
             </div>
             <div className="mt-1 text-xs text-zaki-muted">
-              {t("zakiControls.powerUser.controls.channelHelper")}
+              {pendingCount > 0
+                ? t("zakiControls.powerUser.controls.approvalsPending")
+                : t("zakiControls.powerUser.controls.approvalsClear")}
             </div>
           </div>
 
@@ -895,9 +905,9 @@ export function PowerUserSheet({
     activeMode,
     modePending,
     onModeChange,
-    sessionChannelLabel,
     contextPressurePercent,
     contextPressureState,
+    sandbox,
     pendingCount,
   ]);
 

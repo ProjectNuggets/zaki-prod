@@ -410,6 +410,13 @@
       "comingSoonPill": "قريبًا",
       "comingSoonToast": "هذه الميزة قادمة قريبًا."
     },
+    "zaki": {
+      "uploadFile": "رفع ملف",
+      "modeHint": "وضع {{mode}}",
+      "contextAria": "استخدام السياق {{percent}} بالمئة",
+      "contextPercent": "السياق: {{percent}}٪",
+      "contextTooltip": "يتم ضغط السياق تلقائيًا عند الحاجة."
+    },
     "placeholders": [
       "اسأل أي شيء",
       "لخّص محادثتنا الأخيرة",
@@ -730,10 +737,6 @@
       "warning": "تحذير",
       "near_limit": "قريب من الحد"
     },
-    "strip": {
-      "approvals": "{{count}} بانتظار الموافقة",
-      "context": "السياق"
-    },
     "sandbox": {
       "active": "تنفيذ الأوامر داخل بيئة معزولة",
       "activeWithBackend": "تنفيذ الأوامر داخل بيئة معزولة ({{backend}})"
@@ -812,11 +815,10 @@
       "controls": {
         "sessionModeTitle": "وضع الجلسة",
         "sessionModeHelper": "بدّل طريقة تعامل زكي مع هذه الجلسة.",
+        "sandboxTitle": "العزل",
         "approvalsTitle": "الموافقات",
         "approvalsPending": "هناك إجراء مطلوب في هذه الجلسة.",
         "approvalsClear": "لا يوجد شيء بانتظارك الآن.",
-        "channelTitle": "القناة",
-        "channelHelper": "قناة الرد النشطة لهذه الجلسة.",
         "contextTitle": "السياق",
         "footer": "استخدم التبويبات أدناه للتشخيص الأعمق. يبقى هذا القسم مخصصًا لوضع الجلسة الحالي."
       },

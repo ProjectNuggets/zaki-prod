@@ -23,7 +23,6 @@ import {
 import { useZakiSessions } from "@/queries/useZakiSessions";
 import { hideSessionKey } from "@/queries/useHiddenSessions";
 import { cn } from "@/lib/utils";
-import { useZakiSessionUiStore } from "@/stores";
 import { EmptyState, InlineConfirm, SheetShell } from "@/app/components/ui/zaki";
 
 type Props = {
@@ -58,7 +57,6 @@ export function SessionManagementSheet({
 }: Props) {
   const { t } = useTranslation();
   const { data: sessions = [], isLoading: loading, refetch: loadSessions } = useZakiSessions(isOpen);
-  const sessionUiByKey = useZakiSessionUiStore((state) => state.sessions);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null);
 
@@ -163,7 +161,6 @@ export function SessionManagementSheet({
                   sessionKey: normalizedSessionKey,
                   title: session.title,
                 });
-                const sessionUi = sessionUiByKey[normalizedSessionKey];
                 const laneLabel =
                   parsed.lane === "thread"
                     ? parsed.threadId === "main"
@@ -174,6 +171,8 @@ export function SessionManagementSheet({
                     : parsed.lane === "cron"
                     ? t("zakiControls.sessionManagement.lanes.cron")
                     : t("zakiControls.sessionManagement.lanes.session");
+                const hasPendingApproval =
+                  typeof session.pending_approval_count === "number" && session.pending_approval_count > 0;
                 return (
                   <div
                     key={normalizedSessionKey}
@@ -216,46 +215,13 @@ export function SessionManagementSheet({
                           <span className="rounded-full bg-zaki-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zaki-secondary">
                             {laneLabel}
                           </span>
-                          <span className="rounded-full border border-zaki-strong px-1.5 py-0.5 text-[10px] text-zaki-secondary">
-                            {sessionUi?.mode === "plan"
-                              ? t("zakiControls.modes.plan")
-                              : sessionUi?.mode === "review"
-                              ? t("zakiControls.modes.review")
-                              : t("zakiControls.modes.execute")}
-                          </span>
-                          {sessionUi?.lastChannel ? (
-                            <span className="rounded-full border border-zaki-strong px-1.5 py-0.5 text-[10px] text-zaki-secondary">
-                              {sessionUi.lastChannel}
-                            </span>
-                          ) : null}
-                          {(sessionUi?.approvalCount ?? 0) > 0 ? (
-                            <span className="rounded-full bg-zaki-brand px-2 py-0.5 text-[10px] font-medium text-white">
+                          {hasPendingApproval ? (
+                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                               {t("zakiControls.sessionManagement.waiting", {
-                                count: sessionUi?.approvalCount ?? 0,
+                                count: session.pending_approval_count ?? 0,
                               })}
                             </span>
                           ) : null}
-                          {sessionUi?.contextPressureState ? (
-                            <span
-                              className={cn(
-                                "text-[10px] font-medium",
-                                sessionUi.contextPressureState === "near_limit"
-                                  ? "text-rose-600 dark:text-rose-400"
-                                  : sessionUi.contextPressureState === "warning"
-                                  ? "text-amber-600 dark:text-amber-400"
-                                  : "text-zaki-secondary"
-                              )}
-                            >
-                              {typeof sessionUi.contextPressurePercent === "number"
-                                ? `${Math.round(sessionUi.contextPressurePercent)}%`
-                                : t("zakiControls.strip.context")}
-                            </span>
-                          ) : null}
-                          {isActive && (
-                            <span className="ml-1 rounded-full bg-zaki-accent px-2 py-0.5 text-[10px] font-medium text-white">
-                              {t("zakiControls.sessionManagement.active")}
-                            </span>
-                          )}
                         </div>
                       </div>
 
