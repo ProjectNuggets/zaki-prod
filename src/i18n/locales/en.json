@@ -555,7 +555,10 @@
       "voiceReplies": {
         "title": "Voice replies",
         "helper": "Enable spoken responses when the channel supports them.",
-        "requiresTelegram": "Requires Telegram"
+        "requiresTelegram": "Requires Telegram",
+        "connectTelegram": "Connect Telegram",
+        "connectTelegramSuccess": "Telegram connected.",
+        "connectTelegramError": "Could not connect Telegram. Try again."
       }
     },
     "options": {

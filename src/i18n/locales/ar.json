@@ -555,7 +555,10 @@
       "voiceReplies": {
         "title": "ردود صوتية",
         "helper": "فعّل الردود المنطوقة عندما تدعمها القناة.",
-        "requiresTelegram": "يتطلب تيليجرام"
+        "requiresTelegram": "يتطلب تيليجرام",
+        "connectTelegram": "اربط تيليجرام",
+        "connectTelegramSuccess": "تم ربط تيليجرام.",
+        "connectTelegramError": "تعذر ربط تيليجرام. حاول مرة أخرى."
       }
     },
     "options": {

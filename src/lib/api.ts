@@ -1014,10 +1014,6 @@ export type BotApiError = {
   request_id?: string;
 };
 
-export type BotProvisionStatus = {
-  status: string;
-};
-
 export type BotOnboardingSetup = Record<string, unknown>;
 
 export type BotOnboardingState = BotApiError & {
@@ -1027,15 +1023,6 @@ export type BotOnboardingState = BotApiError & {
   minimum_required?: string[] | null;
   operator_configure_model_provider?: boolean;
   setup?: BotOnboardingSetup | null;
-};
-
-export type AgentOnboardingState = BotApiError & {
-  completed?: boolean;
-  completed_at_s?: number | null;
-  can_start_chat_now?: boolean;
-  minimum_required?: string[] | null;
-  operator_configure_model_provider?: boolean;
-  setup?: Record<string, unknown> | null;
 };
 
 export type BotAutonomyLevel = "read_only" | "supervised" | "full";
@@ -1079,12 +1066,6 @@ export type BotUsageSummary = BotApiError & {
   requests_day?: number;
   tokens_day?: number;
   tokens_month?: number;
-};
-
-export type AgentHeartbeatState = BotApiError & {
-  enabled?: boolean;
-  interval_minutes?: number;
-  prompt?: string | null;
 };
 
 export type BotHeartbeatState = BotApiError & {
@@ -1131,26 +1112,8 @@ export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
   return { response, data };
 }
 
-export async function provisionBot(payload: Record<string, unknown> = {}) {
-  const response = await backendAuthRequest("/v1/me/bot/provision", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<BotProvisionStatus & BotApiError>(response);
-  return { response, data };
-}
-
 export async function fetchBotOnboarding() {
   const response = await backendAuthRequest("/v1/me/bot/onboarding", { method: "GET" });
-  const data = await parseApiJson<BotOnboardingState>(response);
-  return { response, data };
-}
-
-export async function updateBotOnboarding(payload: { completed: boolean }) {
-  const response = await backendAuthRequest("/v1/me/bot/onboarding", {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
   const data = await parseApiJson<BotOnboardingState>(response);
   return { response, data };
 }
@@ -1249,21 +1212,6 @@ export async function provisionAgent(payload: Record<string, unknown> = {}) {
   return { response, data };
 }
 
-export async function fetchAgentOnboarding() {
-  const response = await backendAuthRequest("/api/agent/onboarding", { method: "GET" });
-  const data = await parseApiJson<AgentOnboardingState>(response);
-  return { response, data };
-}
-
-export async function saveAgentOnboarding(payload: Record<string, unknown>) {
-  const response = await backendAuthRequest("/api/agent/onboarding", {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
 export async function getAgentSecret(key: string) {
   const response = await backendAuthRequest(`/api/agent/secrets/${encodeURIComponent(key)}`, {
     method: "GET",
@@ -1340,19 +1288,6 @@ export async function transcribeAudio(audioBase64: string, format = "webm") {
   return { response, data };
 }
 
-export async function synthesizeSpeech(
-  text: string,
-  voice = "alloy",
-  format = "mp3"
-) {
-  const response = await backendAuthRequest("/api/agent/voice/synthesize", {
-    method: "POST",
-    body: JSON.stringify({ text, voice, format }),
-  });
-  const data = await parseApiJson<{ audio: string; format: string }>(response);
-  return { response, data };
-}
-
 export type ConnectAgentTelegramPayload = {
   bot_token?: string;
   webhook_url?: string;
@@ -1373,32 +1308,9 @@ export async function connectAgentTelegram(payload: ConnectAgentTelegramPayload)
   return { response, data };
 }
 
-export async function disconnectAgentTelegram() {
-  const response = await backendAuthRequest("/api/agent/channels/telegram/disconnect", {
-    method: "DELETE",
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
 export async function fetchAgentMe() {
   const response = await backendAuthRequest("/api/agent/me", { method: "GET" });
   const data = await parseApiJson<{ userId: string }>(response);
-  return { response, data };
-}
-
-export async function fetchAgentHeartbeat() {
-  const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
-  const data = await parseApiJson<AgentHeartbeatState>(response);
-  return { response, data };
-}
-
-export async function updateAgentHeartbeat(payload: { enabled: boolean }) {
-  const response = await backendAuthRequest("/api/agent/heartbeat", {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<AgentHeartbeatState>(response);
   return { response, data };
 }
 
@@ -1412,23 +1324,6 @@ export async function createAgentCron(payload: Record<string, unknown> | unknown
   const response = await backendAuthRequest("/api/agent/cron", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
-export async function updateAgentCron(id: string, payload: Record<string, unknown>) {
-  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
-export async function deleteAgentCron(id: string) {
-  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
-    method: "DELETE",
   });
   const data = await parseApiJson<Record<string, unknown>>(response);
   return { response, data };
@@ -1698,16 +1593,6 @@ export async function exportAgentSession(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/export`, {
-    method: "GET",
-  });
-  const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
-  return { response, data };
-}
-
-export async function fetchAgentSessionHistory(sessionKey: string) {
-  assertSafeSessionKey(sessionKey);
-  const encoded = encodeURIComponent(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/history`, {
     method: "GET",
   });
   const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);

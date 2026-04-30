@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, BarChart3, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
+  connectAgentTelegram,
   connectBotTelegram,
   disconnectBotTelegram,
   fetchBotHeartbeat,
@@ -1140,6 +1142,22 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                               }
                             />
                           </label>
+                          {!telegramConnected ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await connectAgentTelegram({});
+                                  toast.success(t("zakiSettingsSheet.fields.voiceReplies.connectTelegramSuccess"));
+                                } catch {
+                                  toast.error(t("zakiSettingsSheet.fields.voiceReplies.connectTelegramError"));
+                                }
+                              }}
+                              className="mt-2 text-xs font-semibold text-[#f10202] hover:underline"
+                            >
+                              {t("zakiSettingsSheet.fields.voiceReplies.connectTelegram")}
+                            </button>
+                          ) : null}
                           <InlineFieldError text={settingsErrors.voice_replies} />
                         </div>
                       }
