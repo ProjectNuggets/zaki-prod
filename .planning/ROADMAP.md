@@ -23,7 +23,7 @@
 
 **Requirements:** REQ-V15-001 through REQ-V15-025 (all listed in REQUIREMENTS.md)
 
-**Plans:** 12/13 plans executed
+**Plans:** 13/13 plans complete
 
 Plans:
 - [x] v1.5-frontend-01-PLAN.md — Quick fixes + debt cleanup (C1, C6, H5, H6, H10, H11, H14, L1)
@@ -38,7 +38,7 @@ Plans:
 - [x] v1.5-frontend-10-PLAN.md — Sidebar Brain entry + Dashboard Brain card
 - [x] v1.5-frontend-11-PLAN.md — i18n debt (H9 requiresTelegram, L6 voice, L10 task)
 - [x] v1.5-frontend-12-PLAN.md — Final debt (H13 dead helpers, M9 Telegram, M10 ThumbsDown, M4 mode pills, M8 SSE warn, L4 gauge fallback)
-- [ ] v1.5-frontend-13-PLAN.md — Verification gate (typecheck + tests + requirements coverage report)
+- [x] v1.5-frontend-13-PLAN.md — Verification gate (typecheck + tests + requirements coverage report)
 
 **Wave structure:**
 - Wave 1 (parallel): plans 01, 02, 03, 04, 05
