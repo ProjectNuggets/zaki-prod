@@ -1685,6 +1685,16 @@
         "daily": "Daily",
         "conversation": "Conversation"
       }
+    },
+    "compose": {
+      "title": "Synthesize {{count}} memories",
+      "titleField": "Title",
+      "contentField": "What does ZAKI see across these?",
+      "submit": "Synthesize",
+      "submitting": "Synthesizing…",
+      "cancel": "Cancel",
+      "youSynthesized": "You synthesized",
+      "errorGeneric": "Could not synthesize. Try again."
     }
   },
   "common": {

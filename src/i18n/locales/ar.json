@@ -1694,6 +1694,16 @@
         "daily": "يومي",
         "conversation": "محادثة"
       }
+    },
+    "compose": {
+      "title": "ادمج {{count}} ذكريات",
+      "titleField": "العنوان",
+      "contentField": "ماذا يرى ZAKI عبر هذه؟",
+      "submit": "ادمج",
+      "submitting": "جاري الدمج…",
+      "cancel": "إلغاء",
+      "youSynthesized": "أنت قمت بالدمج",
+      "errorGeneric": "تعذر الدمج. حاول مرة أخرى."
     }
   },
   "common": {
