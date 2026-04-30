@@ -6,6 +6,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { CONTEXT_PRESSURE_WARNING, CONTEXT_PRESSURE_NEAR_LIMIT } from "@/stores/zakiSessionUiStore";
 import type {
@@ -94,6 +95,7 @@ export function ApprovalRequiredCard({
   onApprove?: (requestId: string) => void | Promise<void>;
   onDeny?: (requestId: string) => void | Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null);
   const [decided, setDecided] = useState<"approved" | "denied" | null>(null);
 
@@ -132,15 +134,15 @@ export function ApprovalRequiredCard({
             <ShieldAlert className="size-4 shrink-0" aria-hidden />
           )}
           <span className="font-semibold font-mono-ui">
-            {request.tool} . {decided === "approved" ? "Approved" : "Denied"}
+            {request.tool} . {decided === "approved" ? t("zakiControls.approval.decidedApproved") : t("zakiControls.approval.decidedDenied")}
           </span>
         </div>
       </div>
     );
   }
 
-  const approveLabel = `Approve ${request.tool} action`;
-  const denyLabel = `Deny ${request.tool} action`;
+  const approveLabel = t("zakiControls.approval.approveAria", { tool: request.tool });
+  const denyLabel = t("zakiControls.approval.denyAria", { tool: request.tool });
 
   return (
     <div
@@ -153,16 +155,16 @@ export function ApprovalRequiredCard({
         <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
         <div className="min-w-0">
           <div id={`approval-title-${request.id}`} className="font-semibold">
-            Approval required for <span className="font-mono-ui">{request.tool}</span>
+            {t("zakiControls.approval.title", { tool: request.tool })}
           </div>
           <div
             id={`approval-reason-${request.id}`}
             className="mt-1 text-amber-900/80 dark:text-amber-100/80"
           >
-            {request.reason || "Nullalis requested approval before continuing."}
+            {request.reason || t("zakiControls.approval.defaultReason")}
           </div>
           <div className="mt-2 text-[11px] uppercase tracking-[0.1em] text-amber-800/70 dark:text-amber-100/70">
-            Risk: {request.riskLevel || "unknown"}
+            {t("zakiControls.approval.riskLabel")} {request.riskLevel || "unknown"}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -179,10 +181,10 @@ export function ApprovalRequiredCard({
             >
               {submitting === "approve" ? (
                 <span className="flex items-center gap-1">
-                  <Loader2 className="size-3 animate-spin" aria-hidden /> Approving...
+                  <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.approvingState")}
                 </span>
               ) : (
-                "Approve"
+                t("zakiControls.approval.approveBtn")
               )}
             </button>
             <button
@@ -199,10 +201,10 @@ export function ApprovalRequiredCard({
             >
               {submitting === "deny" ? (
                 <span className="flex items-center gap-1">
-                  <Loader2 className="size-3 animate-spin" aria-hidden /> Denying...
+                  <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.denyingState")}
                 </span>
               ) : (
-                "Deny"
+                t("zakiControls.approval.denyBtn")
               )}
             </button>
           </div>

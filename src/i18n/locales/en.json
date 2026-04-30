@@ -741,6 +741,19 @@
       "active": "Shell sandboxed",
       "activeWithBackend": "Shell sandboxed ({{backend}})"
     },
+    "approval": {
+      "title": "Approval required for {{tool}}",
+      "defaultReason": "ZAKI requested approval before continuing.",
+      "riskLabel": "Risk:",
+      "approveAria": "Approve {{tool}} action",
+      "denyAria": "Deny {{tool}} action",
+      "approveBtn": "Approve",
+      "denyBtn": "Deny",
+      "approvingState": "Approving...",
+      "denyingState": "Denying...",
+      "decidedApproved": "Approved",
+      "decidedDenied": "Denied"
+    },
     "sidebarMenu": {
       "settings": "Settings",
       "sessions": "Sessions",

@@ -741,6 +741,19 @@
       "active": "تنفيذ الأوامر داخل بيئة معزولة",
       "activeWithBackend": "تنفيذ الأوامر داخل بيئة معزولة ({{backend}})"
     },
+    "approval": {
+      "title": "مطلوب موافقة على {{tool}}",
+      "defaultReason": "زاكي طلب الموافقة قبل المتابعة.",
+      "riskLabel": "المخاطرة:",
+      "approveAria": "الموافقة على إجراء {{tool}}",
+      "denyAria": "رفض إجراء {{tool}}",
+      "approveBtn": "موافقة",
+      "denyBtn": "رفض",
+      "approvingState": "جارٍ الموافقة...",
+      "denyingState": "جارٍ الرفض...",
+      "decidedApproved": "تمت الموافقة",
+      "decidedDenied": "تم الرفض"
+    },
     "sidebarMenu": {
       "settings": "الإعدادات",
       "sessions": "الجلسات",
