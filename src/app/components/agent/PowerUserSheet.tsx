@@ -20,8 +20,6 @@ import {
 } from "@/lib/api";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 import {
-  CONTEXT_PRESSURE_WARNING,
-  CONTEXT_PRESSURE_NEAR_LIMIT,
   type ZakiContextPressureState,
   type ZakiRuntimeSandbox,
 } from "@/stores/zakiSessionUiStore";

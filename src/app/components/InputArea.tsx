@@ -101,11 +101,6 @@ export function InputArea({
   );
   const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
   const showZakiModeHint = zakiBotMode && effectiveZakiMode !== "execute";
-  const showZakiContextMeter =
-    zakiBotMode &&
-    typeof zakiContextPressurePercent === "number" &&
-    zakiContextPressurePercent > 0;
-  const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
   const zakiContextTooltip = zakiContextTooltipCopy || t("input.zaki.contextTooltip");
 
   const handleToggleAliases = useCallback(() => {
