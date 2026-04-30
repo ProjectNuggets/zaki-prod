@@ -1715,3 +1715,105 @@ export async function approveAgentSession(
   const data = await parseApiJson<{ ok: boolean }>(response);
   return { response, data };
 }
+
+// ── /brain/graph ─────────────────────────────────────────────
+export interface BrainGraphResponse {
+  nodes: BrainGraphNode[];
+  edges: BrainGraphEdge[];
+  trimmed: boolean;
+  total_skipped: number;
+  total_nodes_in_corpus: number;
+  semantic_degraded: boolean;
+}
+
+export interface BrainGraphNode {
+  id: string;
+  kind: "core" | "daily" | "conversation" | string;
+  created_at: number;
+  session_id: string | null;
+  summary: string;
+  valid_to: number | null;
+}
+
+export type BrainGraphEdge =
+  | { type: "session"; source: string; target: string }
+  | { type: "semantic"; source: string; target: string; weight: number }
+  | { type: "reference"; source: string; target: string };
+
+// ── /brain/timeline ──────────────────────────────────────────
+export interface BrainTimelineResponse {
+  entries: BrainTimelineEntry[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface BrainTimelineEntry {
+  id: string;
+  key: string;
+  kind: "core" | "daily" | "conversation" | string;
+  created_at: number;
+  session_id: string | null;
+  summary: string;
+  valid_to: number | null;
+}
+
+// ── /brain/compose ───────────────────────────────────────────
+export interface BrainComposeRequest {
+  title: string;
+  content: string;
+  references: string[];
+  category?: "core" | "daily" | "conversation";
+  key?: string;
+}
+
+export interface BrainComposeResponse {
+  key: string;
+  synthesized_by: "user";
+  references_count: number;
+  category: string;
+  composed_at: number;
+}
+
+export async function fetchBrainGraph(
+  userId: string,
+  opts?: { since?: number; max_nodes?: number; node_kinds?: string }
+): Promise<BrainGraphResponse> {
+  const params = new URLSearchParams();
+  if (opts?.since !== undefined) params.set("since", String(opts.since));
+  if (opts?.max_nodes !== undefined) params.set("max_nodes", String(opts.max_nodes));
+  if (opts?.node_kinds) params.set("node_kinds", opts.node_kinds);
+  const qs = params.toString();
+  const response = await apiRequest(
+    `/api/v1/users/${userId}/brain/graph${qs ? `?${qs}` : ""}`,
+  );
+  if (!response.ok) throw new Error(`brain/graph ${response.status}`);
+  return (await response.json()) as BrainGraphResponse;
+}
+
+export async function fetchBrainTimeline(
+  userId: string,
+  opts?: { cursor?: string; limit?: number; kind?: string }
+): Promise<BrainTimelineResponse> {
+  const params = new URLSearchParams();
+  if (opts?.cursor) params.set("cursor", opts.cursor);
+  if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts?.kind) params.set("kind", opts.kind);
+  const qs = params.toString();
+  const response = await apiRequest(
+    `/api/v1/users/${userId}/brain/timeline${qs ? `?${qs}` : ""}`,
+  );
+  if (!response.ok) throw new Error(`brain/timeline ${response.status}`);
+  return (await response.json()) as BrainTimelineResponse;
+}
+
+export async function postBrainCompose(
+  userId: string,
+  body: BrainComposeRequest,
+): Promise<BrainComposeResponse> {
+  const response = await apiRequest(
+    `/api/v1/users/${userId}/brain/compose`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+  if (!response.ok) throw new Error(`brain/compose ${response.status}`);
+  return (await response.json()) as BrainComposeResponse;
+}
