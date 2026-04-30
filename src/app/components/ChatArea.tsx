@@ -44,7 +44,6 @@ import {
   EditInstructionsModal,
 } from "./chat";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
-import { ZakiSessionControlStrip } from "./agent/ZakiSessionControlStrip";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type {
   BotReasoningSummary,
@@ -91,6 +90,7 @@ import {
   type ActivationProgress,
 } from "@/lib/retention";
 import {
+  SystemNoticesStack,
   emitSystemNotice,
   type SystemNoticeKind,
   type SystemNoticePayload,
@@ -4082,6 +4082,31 @@ export function ChatArea() {
         );
       }
 
+      // C3: system notice events — handle before the isZakiAgentSpace text filter
+      // so that these events surface on all views (not just agent mode).
+      if (
+        eventType === "system_notice" || payloadType === "system_notice" ||
+        eventType === "compaction" || eventType === "provider_fallback" ||
+        eventType === "connector_stale" || eventType === "multimodal_failure"
+      ) {
+        const notice: SystemNoticePayload | null =
+          eventType === "system_notice" || payloadType === "system_notice"
+            ? (() => {
+                const kind = (
+                  typeof payload.kind === "string" ? payload.kind : "system_notice"
+                ) as SystemNoticeKind;
+                const message =
+                  typeof payload.message === "string" ? payload.message : null;
+                return { kind, message };
+              })()
+            : ({
+                kind: eventType as SystemNoticeKind,
+                message: (payload as { message?: string }).message ?? null,
+              } as SystemNoticePayload);
+        if (notice) emitSystemNotice(notice);
+        return {};
+      }
+
       if (isZakiAgentSpace) {
         const explicitTextPayload =
           payloadType === "textResponse" ||
@@ -5980,25 +6005,12 @@ export function ChatArea() {
 	            <div className="h-[64px]" aria-hidden="true" />
 	          )}
 
-	          {!showZakiHome && !showSpacesView && !showSpaceDetail && isZakiBotActiveSpace ? (
-	            <ZakiSessionControlStrip
-	              active
-	              mode={activeSessionUi?.mode ?? "execute"}
-	              onChangeMode={handleSessionModeChange}
-	              modePending={sessionModePending}
-	              approvalCount={activeSessionUi?.approvalCount ?? 0}
-	              channelLabel={activeSessionUi?.lastChannel ?? t("zakiControls.common.web")}
-	              contextPressurePercent={activeSessionUi?.contextPressurePercent ?? null}
-	              contextPressureState={activeSessionUi?.contextPressureState ?? null}
-                sandbox={sandboxState}
-	              onOpenControls={() =>
-	                openZakiControls((activeSessionUi?.approvalCount ?? 0) > 0 ? "approvals" : "controls")
-	              }
-	            />
-	          ) : null}
+          {/* C5: System notices — rendered here so they appear on ALL views
+              (home, spaces, chat, brain) regardless of which view is active */}
+          <SystemNoticesStack className="-mb-2" />
 
-	          {/* Main Content */}
-	          <div
+          {/* Main Content */}
+          <div
             className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade"
             ref={scrollRef}
             style={{
