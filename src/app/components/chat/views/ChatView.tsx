@@ -130,7 +130,6 @@ export function ChatView({
           onApprove={onApprovalAction ? (id) => onApprovalAction(id, true) : undefined}
           onDeny={onApprovalAction ? (id) => onApprovalAction(id, false) : undefined}
         />
-        <ContextGauge data={contextGaugeData} />
         <UsageCostFooter usage={zakiUsageSummary} />
       </div>
     );
@@ -153,6 +152,9 @@ export function ChatView({
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
+      {/* C4: ContextGauge is rendered persistently whenever data is available,
+          independent of timelineMode or nullalisMode */}
+      {contextGaugeData ? <ContextGauge data={contextGaugeData} /> : null}
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;

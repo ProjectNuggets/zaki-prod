@@ -7,6 +7,7 @@ import { useEntitlements } from "@/queries";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio } from "@/lib/api";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { toast } from "sonner";
 
 export function InputArea({
@@ -23,6 +24,7 @@ export function InputArea({
   sendLocked = false,
   zakiBotMode = false,
   quotaBadge = null,
+  zakiContextPressurePercent = null,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
@@ -40,6 +42,7 @@ export function InputArea({
     label: string;
     tone: "neutral" | "warning" | "danger";
   } | null;
+  zakiContextPressurePercent?: number | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
@@ -63,6 +66,20 @@ export function InputArea({
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
+
+  // M3: context pressure meter — shown only when ZAKI bot mode and pressure > 0
+  const showZakiContextMeter =
+    zakiBotMode &&
+    typeof zakiContextPressurePercent === "number" &&
+    zakiContextPressurePercent > 0;
+  const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
+  // M3: tiered color by pressure: ≤50% green, ≤75% amber, >75% brand red
+  const pressureColor =
+    zakiContextValue <= 50
+      ? "#22c55e"   // green
+      : zakiContextValue <= 75
+        ? "#f59e0b" // amber
+        : "#f10202"; // red (brand)
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -594,6 +611,33 @@ export function InputArea({
             </span>
           ) : null}
           <span className="flex-1" />
+          {/* M3: Context pressure meter — conic-gradient ring with tiered color */}
+          {showZakiContextMeter ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="group inline-flex size-9 items-center justify-center rounded-full border border-zaki-strong bg-zaki-elevated text-zaki-muted transition-colors hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+                  aria-label={t("input.zaki.contextAria", { percent: zakiContextValue })}
+                  data-testid="zaki-context-meter"
+                >
+                  <span
+                    className="relative block size-4 rounded-full"
+                    style={{
+                      background: `conic-gradient(${pressureColor} ${zakiContextValue}%, rgba(120,114,106,0.18) ${zakiContextValue}% 100%)`,
+                    }}
+                  >
+                    <span className="absolute inset-[3px] rounded-full bg-zaki-elevated" />
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
+                <div className="space-y-0.5">
+                  <div>{t("input.zaki.contextPercent", { percent: zakiContextValue })}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
           {/* Mic button — STT voice input */}
           {zakiBotMode && !isStopMode ? (
             <button
