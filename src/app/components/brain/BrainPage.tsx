@@ -5,6 +5,8 @@ import { useBrainGraph } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
+import { BrainGraphView } from "./BrainGraphView";
+import { BrainTimelineView } from "./BrainTimelineView";
 
 type BrainTab = "timeline" | "graph";
 
@@ -14,6 +16,7 @@ export function BrainPage() {
   const userId = String(user?.id ?? "");
   const [tab, setTab] = useState<BrainTab>("timeline");
   const [degradedDismissed, setDegradedDismissed] = useState(false);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 
   const graphQuery = useBrainGraph(userId);
 
@@ -58,15 +61,18 @@ export function BrainPage() {
 
       {tab === "timeline" ? (
         <div data-testid="brain-timeline-slot">
-          {/* Plan 07 replaces this with <BrainTimelineView userId={userId} /> */}
-          <p className="text-sm text-zaki-muted">Timeline view (plan 07).</p>
+          <BrainTimelineView userId={userId} />
         </div>
       ) : (
         <div data-testid="brain-graph-slot">
-          {/* Plan 08 replaces this with <BrainGraphView ... /> */}
-          <p className="text-sm text-zaki-muted">Graph view (plan 08).</p>
+          <BrainGraphView
+            userId={userId}
+            selectedIds={selectedNodeIds}
+            onSelectionChange={setSelectedNodeIds}
+          />
         </div>
       )}
+      {/* Plan 09 mounts BrainComposeModal here, gated on selectedNodeIds.length >= 2 */}
     </div>
   );
 }

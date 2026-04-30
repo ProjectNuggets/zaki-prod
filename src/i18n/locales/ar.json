@@ -1673,6 +1673,27 @@
     "degraded": {
       "title": "الروابط في الرسم تقريبية",
       "body": "تتم إعادة بناء الفهرسة الدلالية. قد تكون بعض الروابط ناقصة حتى التحديث التالي."
+    },
+    "graph": {
+      "mobileTitle": "قائمة الذاكرة",
+      "selectHint": "Shift+النقر للاختيار المتعدد",
+      "selected": "{{count}} محددة",
+      "superseded": "مُستبدل",
+      "kindLabel": {
+        "core": "أساسي",
+        "daily": "يومي",
+        "conversation": "محادثة"
+      }
+    },
+    "timeline": {
+      "loading": "جاري التحميل…",
+      "end": "هذا كل شيء.",
+      "superseded": "مُستبدل",
+      "kindLabel": {
+        "core": "أساسي",
+        "daily": "يومي",
+        "conversation": "محادثة"
+      }
     }
   },
   "common": {

@@ -1664,6 +1664,27 @@
     "degraded": {
       "title": "Graph connections are approximate",
       "body": "Semantic indexing is rebuilding. Edges shown may be incomplete until the next sync."
+    },
+    "graph": {
+      "mobileTitle": "Memory list",
+      "selectHint": "Shift-click to multi-select",
+      "selected": "{{count}} selected",
+      "superseded": "Superseded",
+      "kindLabel": {
+        "core": "Core",
+        "daily": "Daily",
+        "conversation": "Conversation"
+      }
+    },
+    "timeline": {
+      "loading": "Loading more…",
+      "end": "That's everything.",
+      "superseded": "Superseded",
+      "kindLabel": {
+        "core": "Core",
+        "daily": "Daily",
+        "conversation": "Conversation"
+      }
     }
   },
   "common": {
