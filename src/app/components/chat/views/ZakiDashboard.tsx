@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Brain,
   Check,
   Pencil,
   Compass,
@@ -14,9 +15,11 @@ import {
   ChevronRight,
   ChevronUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { CenterLogo } from "../../icons";
 import { useAuthStore } from "@/stores";
+import { useBrainGraph } from "@/queries";
 import { cn } from "@/lib/utils";
 import { MetaLabel } from "@/app/components/ui/zaki";
 
@@ -136,6 +139,36 @@ Zaki: here are my facts. Save and update your memory accordingly.
 
 Then wrap the entire export in a single code block. After the code block, state whether this is the complete set or if more entries remain.`;
 
+function BrainNodeCluster() {
+  return (
+    <div className="relative size-10 opacity-70 transition-opacity group-hover:opacity-100">
+      {[
+        { top: "10%", left: "20%", delay: "0s" },
+        { top: "55%", left: "10%", delay: "0.4s" },
+        { top: "30%", left: "60%", delay: "0.8s" },
+        { top: "70%", left: "65%", delay: "1.2s" },
+        { top: "20%", left: "80%", delay: "1.6s" },
+      ].map((s, i) => (
+        <span
+          key={i}
+          className="absolute size-1.5 rounded-full bg-[#f10202]"
+          style={{
+            top: s.top,
+            left: s.left,
+            animation: `brainPulse 2s ease-in-out ${s.delay} infinite`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes brainPulse {
+          0%, 100% { opacity: 0.35; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.3); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // Recompute the greeting each minute so a session that spans a boundary
 // (e.g. 04:59 → 05:01) updates without a page refresh.
 function useLiveGreeting(): string {
@@ -150,10 +183,14 @@ function useLiveGreeting(): string {
 }
 
 export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const userName = user?.fullName?.split(" ")[0] || user?.username || "there";
+  const userId = String(user?.id ?? "");
+  const { data: brainGraph } = useBrainGraph(userId, { max_nodes: 1 });
+  const memoryCount = brainGraph?.total_nodes_in_corpus ?? 0;
   const greeting = useLiveGreeting();
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -221,6 +258,30 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
             );
           })}
         </div>
+
+        {/* Brain entry card */}
+        {!activeCat && (
+          <button
+            type="button"
+            onClick={() => navigate("/brain")}
+            className="group mt-3 flex w-full items-center justify-between gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 text-left transition-colors hover:border-[#f10202]/40 hover:bg-zaki-raised/80"
+          >
+            <div className="flex items-center gap-3">
+              <Brain className="size-5 text-[#f10202]" />
+              <div>
+                <div className="text-sm font-semibold text-zaki-text">
+                  {t("brain.dashboard.title")}
+                </div>
+                <div className="text-xs text-zaki-muted">
+                  {memoryCount > 0
+                    ? t("brain.dashboard.memoryCount", { count: memoryCount })
+                    : t("brain.dashboard.memoryCountZero")}
+                </div>
+              </div>
+            </div>
+            <BrainNodeCluster />
+          </button>
+        )}
 
         {/* Memory import — bring your context from another AI */}
         {!activeCat && (

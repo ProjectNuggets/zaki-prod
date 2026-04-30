@@ -1,5 +1,6 @@
-import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal } from "lucide-react";
+import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal, Brain } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { ZAKI_BOT_LABEL } from "@/lib/zakiBot";
@@ -40,6 +41,8 @@ export function SidebarModeSwitch({
   onOpenDiagnostics,
 }: SidebarModeSwitchProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
   return (
     <div className="flex flex-col gap-1 mb-3">
       {/* ZAKI nav item */}
@@ -154,6 +157,38 @@ export function SidebarModeSwitch({
           )}
         >
           {t("sidebar.nav.spaces")}
+        </span>
+      </button>
+
+      {/* Brain nav item */}
+      <button
+        className={cn(
+          "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors relative",
+          isRtl ? "text-right flex-row-reverse" : "text-left",
+          location.pathname === "/brain" ? "bg-zaki-selected" : "hover:bg-zaki-hover"
+        )}
+        onClick={() => navigate("/brain")}
+        type="button"
+        aria-current={location.pathname === "/brain" ? "page" : undefined}
+      >
+        {location.pathname === "/brain" && (
+          <div
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-zaki-brand rounded-r-sm",
+              isRtl ? "right-0 rounded-r-none rounded-l-sm" : "left-0"
+            )}
+          />
+        )}
+        <div className="size-5 flex items-center justify-center">
+          <Brain className="size-4 text-zaki-muted" />
+        </div>
+        <span
+          className={cn(
+            "text-sm font-medium flex-1",
+            location.pathname === "/brain" ? "text-zaki-primary" : "text-zaki-secondary"
+          )}
+        >
+          {t("sidebar.brain")}
         </span>
       </button>
     </div>

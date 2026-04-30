@@ -1695,6 +1695,11 @@
       "cancel": "Cancel",
       "youSynthesized": "You synthesized",
       "errorGeneric": "Could not synthesize. Try again."
+    },
+    "dashboard": {
+      "title": "Your brain",
+      "memoryCount": "{{count}} memories",
+      "memoryCountZero": "No memories yet"
     }
   },
   "common": {
