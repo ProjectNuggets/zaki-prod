@@ -418,6 +418,15 @@
       "contextPercent": "السياق: {{percent}}٪",
       "contextTooltip": "يتم ضغط السياق تلقائيًا عند الحاجة."
     },
+    "voice": {
+      "tapToRecord": "اضغط للتسجيل",
+      "recording": "جاري التسجيل…",
+      "listening": "جاري الاستماع…",
+      "stop": "إيقاف",
+      "errorMicAccess": "تم رفض الوصول للميكروفون",
+      "errorGeneric": "فشل التقاط الصوت",
+      "errorNoBrowser": "الصوت غير مدعوم في هذا المتصفح"
+    },
     "placeholders": [
       "اسأل أي شيء",
       "لخّص محادثتنا الأخيرة",
@@ -545,7 +554,8 @@
       },
       "voiceReplies": {
         "title": "ردود صوتية",
-        "helper": "فعّل الردود المنطوقة عندما تدعمها القناة."
+        "helper": "فعّل الردود المنطوقة عندما تدعمها القناة.",
+        "requiresTelegram": "يتطلب تيليجرام"
       }
     },
     "options": {
@@ -1710,6 +1720,11 @@
       "memoryCount": "{{count}} ذكريات",
       "memoryCountZero": "لا توجد ذكريات بعد"
     }
+  },
+  "task": {
+    "plan": "خطة المهام",
+    "task": "مهمة",
+    "tasks": "مهام"
   },
   "common": {
     "dismiss": "إغلاق"

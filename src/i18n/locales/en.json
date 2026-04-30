@@ -418,6 +418,15 @@
       "contextPercent": "Context: {{percent}}%",
       "contextTooltip": "Context compacts automatically when needed."
     },
+    "voice": {
+      "tapToRecord": "Tap to record",
+      "recording": "Recording…",
+      "listening": "Listening…",
+      "stop": "Stop",
+      "errorMicAccess": "Microphone access denied",
+      "errorGeneric": "Voice capture failed",
+      "errorNoBrowser": "Voice not supported in this browser"
+    },
     "placeholders": [
       "Ask anything",
       "Summarize our last conversation",
@@ -545,7 +554,8 @@
       },
       "voiceReplies": {
         "title": "Voice replies",
-        "helper": "Enable spoken responses when the channel supports them."
+        "helper": "Enable spoken responses when the channel supports them.",
+        "requiresTelegram": "Requires Telegram"
       }
     },
     "options": {
@@ -1701,6 +1711,11 @@
       "memoryCount": "{{count}} memories",
       "memoryCountZero": "No memories yet"
     }
+  },
+  "task": {
+    "plan": "Task Plan",
+    "task": "Task",
+    "tasks": "Tasks"
   },
   "common": {
     "dismiss": "Dismiss"
