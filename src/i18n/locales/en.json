@@ -188,7 +188,8 @@
       "cancel": "Cancel",
       "save": "Save changes",
       "saving": "Saving..."
-    }
+    },
+    "brain": "Brain"
   },
   "empty": {
     "headline": "Ready when you are",
@@ -1648,5 +1649,24 @@
       "failedServer": "Failed to connect to server",
       "incorrectPassword": "Incorrect password"
     }
+  },
+  "brain": {
+    "title": "Your Brain",
+    "subtitle": "Everything ZAKI remembers",
+    "tabs": {
+      "timeline": "Timeline",
+      "graph": "Graph"
+    },
+    "empty": {
+      "title": "ZAKI hasn't learned much about you yet.",
+      "cta": "Migrate your memories from ChatGPT, Claude, or Gemini to see them here."
+    },
+    "degraded": {
+      "title": "Graph connections are approximate",
+      "body": "Semantic indexing is rebuilding. Edges shown may be incomplete until the next sync."
+    }
+  },
+  "common": {
+    "dismiss": "Dismiss"
   }
 }

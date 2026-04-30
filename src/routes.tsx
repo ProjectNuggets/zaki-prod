@@ -7,6 +7,7 @@ import { BillingSuccessPage } from './app/components/BillingSuccessPage';
 import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPage';
 import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
+import { BrainPage } from './app/components/brain/BrainPage';
 
 /**
  * Route structure:
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
       {
         path: 'internal/admin-access-codes',
         element: <AdminAccessCodesPage />,
+      },
+      {
+        path: 'brain',
+        element: <BrainPage />,
       },
     ],
   },
