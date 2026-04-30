@@ -34,6 +34,7 @@ function taskStatusIcon(status: NullalisTaskStatus) {
 }
 
 export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(() => tasks.some((t) => t.status === "running"));
   if (!tasks.length) return null;
 
@@ -50,9 +51,9 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
       <summary
         className="cursor-pointer select-none text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary"
         aria-expanded={open}
-        aria-label={`Task plan, ${sortedTasks.length} ${sortedTasks.length === 1 ? "task" : "tasks"}`}
+        aria-label={`${t("task.plan")}, ${sortedTasks.length} ${sortedTasks.length === 1 ? t("task.task") : t("task.tasks")}`}
       >
-        Task Plan
+        {t("task.plan")}
       </summary>
       <ul className="mt-2 space-y-2 list-none p-0">
         {sortedTasks.map((task) => (

@@ -182,7 +182,7 @@ export function InputArea({
         if (recordingCancelledRef.current) return;
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         if (blob.size === 0) {
-          toast.info("No audio captured");
+          toast.info(t("input.voice.errorGeneric"));
           void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
           return;
         }
@@ -201,11 +201,11 @@ export function InputArea({
             textareaRef.current?.focus();
             void trackProductEvent({ event: "voice_dictate_completed", source: "chat_input" });
           } else {
-            toast.info("No speech detected");
+            toast.info(t("input.voice.errorGeneric"));
             void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
           }
         } catch {
-          toast.error("Voice transcription failed");
+          toast.error(t("input.voice.errorGeneric"));
           void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
         } finally {
           setIsTranscribing(false);
@@ -229,7 +229,7 @@ export function InputArea({
         }
       }, MAX_RECORDING_SECONDS * 1000);
     } catch {
-      toast.error("Microphone access denied");
+      toast.error(t("input.voice.errorMicAccess"));
       void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
     }
   }, [clearRecordingTimers]);
@@ -890,13 +890,13 @@ export function InputArea({
                     className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted tabular-nums"
                     aria-hidden="true"
                   >
-                    {`Recording ${recordingSecondsLeft}s`}
+                    {`${t("input.voice.recording")} ${recordingSecondsLeft}s`}
                   </span>
                   <button
                     type="button"
                     onClick={cancelRecording}
                     className="zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border border-zaki-strong bg-zaki-elevated hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors"
-                    aria-label="Cancel recording"
+                    aria-label={t("input.voice.stop")}
                   >
                     <X className="size-4 text-zaki-muted" />
                   </button>
@@ -912,7 +912,7 @@ export function InputArea({
                     ? "bg-zaki-brand hover:bg-zaki-brand-hover border-zaki-brand/30"
                     : "bg-zaki-elevated hover:bg-zaki-sunken border-zaki-strong"
                 )}
-                aria-label={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
+                aria-label={isRecording ? t("input.voice.stop") : isTranscribing ? t("input.voice.listening") : t("input.voice.tapToRecord")}
               >
                 {isTranscribing ? (
                   <span className="size-4 animate-spin rounded-full border-2 border-zaki-muted border-t-transparent" />
