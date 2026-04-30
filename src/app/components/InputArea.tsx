@@ -798,6 +798,32 @@ export function InputArea({
               </div>
             )}
           </div>
+          {zakiBotMode ? (
+            <div className="flex items-center gap-1" role="group" aria-label={t("input.zaki.modeGroupAria")}>
+              {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
+                const selected = effectiveZakiMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={zakiModePending || !onZakiModeChange}
+                    onClick={() => handleSelectZakiMode(mode)}
+                    aria-pressed={selected}
+                    data-testid={`zaki-mode-pill-${mode}`}
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                      selected
+                        ? "bg-zaki-brand text-white"
+                        : "bg-zaki-elevated text-zaki-muted hover:bg-zaki-sunken",
+                      (zakiModePending || !onZakiModeChange) && "opacity-60 cursor-not-allowed"
+                    )}
+                  >
+                    {t(`zakiControls.modes.${mode}`)}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           {showZakiModeHint ? (
             <span className="text-[11px] font-medium text-zaki-muted" data-testid="zaki-mode-hint">
               {t("input.zaki.modeHint", { mode: t(`zakiControls.modes.${effectiveZakiMode}`) })}

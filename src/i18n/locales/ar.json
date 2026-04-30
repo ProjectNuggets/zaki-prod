@@ -343,6 +343,9 @@
     "expires": "سينتهي هذا الرابط خلال 10 أيام.",
     "done": "تم"
   },
+  "messageActions": {
+    "thumbsDown": "علامة سيئ"
+  },
   "chat": {
     "thinking": "جاري التفكير",
     "researching": "جارٍ البحث",
@@ -414,6 +417,7 @@
     "zaki": {
       "uploadFile": "رفع ملف",
       "modeHint": "وضع {{mode}}",
+      "modeGroupAria": "وضع الوكيل",
       "contextAria": "استخدام السياق {{percent}} بالمئة",
       "contextPercent": "السياق: {{percent}}٪",
       "contextTooltip": "يتم ضغط السياق تلقائيًا عند الحاجة."

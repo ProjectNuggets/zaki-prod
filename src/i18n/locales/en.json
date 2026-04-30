@@ -343,6 +343,9 @@
     "expires": "This link will expire in 10 days.",
     "done": "Done"
   },
+  "messageActions": {
+    "thumbsDown": "Mark as bad"
+  },
   "chat": {
     "thinking": "Thinking",
     "researching": "Researching",
@@ -414,6 +417,7 @@
     "zaki": {
       "uploadFile": "Upload file",
       "modeHint": "{{mode}} mode",
+      "modeGroupAria": "Agent mode",
       "contextAria": "Context usage {{percent}} percent",
       "contextPercent": "Context: {{percent}}%",
       "contextTooltip": "Context compacts automatically when needed."

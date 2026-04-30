@@ -216,9 +216,10 @@ export function ApprovalRequiredCard({
 }
 
 export type ContextGaugeData = {
-  tokenCount: number;
+  tokenCount?: number;
   contextMax: number;
   messageCount?: number;
+  context_pressure_percent?: number | null;
 };
 
 export function ContextGauge({
@@ -230,9 +231,11 @@ export function ContextGauge({
 }) {
   if (!data || !data.contextMax || data.contextMax <= 0) return null;
 
-  const pct = Math.min(100, Math.max(0, (data.tokenCount / data.contextMax) * 100));
+  // L4: back-derive tokenCount from context_pressure_percent when tokenCount is missing
+  const tokenCount = data.tokenCount ?? Math.round(((data.context_pressure_percent ?? 0) / 100) * (data.contextMax ?? 0));
+  const pct = Math.min(100, Math.max(0, (tokenCount / data.contextMax) * 100));
   const pctLabel = pct.toFixed(0);
-  const tokenLabel = new Intl.NumberFormat("en-US").format(data.tokenCount);
+  const tokenLabel = new Intl.NumberFormat("en-US").format(tokenCount);
   const maxLabel = new Intl.NumberFormat("en-US").format(data.contextMax);
   const ariaLabel = `Context window ${tokenLabel} of ${maxLabel} tokens, ${pctLabel} percent used`;
 

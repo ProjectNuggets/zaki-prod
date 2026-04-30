@@ -57,6 +57,7 @@ export interface MessageBubbleProps {
   onCopy?: (message: Message) => void;
   onRegenerate?: (message: Message) => void;
   onThumbsUp?: (message: Message) => void;
+  onThumbsDown?: (message: Message) => void;
 }
 
 export function MessageBubble({
@@ -67,6 +68,7 @@ export function MessageBubble({
   onCopy,
   onRegenerate,
   onThumbsUp,
+  onThumbsDown,
 }: MessageBubbleProps) {
   // isStreaming can be used to show typing indicator or disable actions
   void isStreaming;
@@ -173,6 +175,7 @@ export function MessageBubble({
               onCopy={onCopy ? () => onCopy(message) : undefined}
               onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
               onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}
+              onThumbsDown={onThumbsDown ? () => onThumbsDown(message) : undefined}
             />
             {memorySources.length > 0 && (
               <button

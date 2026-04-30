@@ -4178,6 +4178,10 @@ export function ChatArea() {
         (typeof payload.message === "string" && payload.message) ||
         "";
 
+      if (!chunk && eventType && process.env.NODE_ENV === "development") {
+        console.warn("[zaki:sse] unhandled event type:", eventType, payload);
+      }
+
       return chunk ? { chunk } : {};
     };
 
@@ -5337,6 +5341,10 @@ export function ChatArea() {
     toast.success("Thanks for the feedback");
   }, []);
 
+  const handleThumbsDownMessage = useCallback(() => {
+    toast.success("Thanks for the feedback");
+  }, []);
+
   const handleApprovalAction = useCallback(
     async (requestId: string, approved: boolean) => {
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
@@ -5960,6 +5968,7 @@ export function ChatArea() {
         onCopyMessage={handleCopyMessage}
         onRegenerateMessage={handleRegenerateMessage}
         onThumbsUpMessage={handleThumbsUpMessage}
+        onThumbsDownMessage={handleThumbsDownMessage}
       />
     );
   };

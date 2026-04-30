@@ -48,6 +48,7 @@ interface ChatViewProps {
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
+  onThumbsDownMessage?: (message: Message) => void;
 }
 
 export function ChatView({
@@ -76,6 +77,7 @@ export function ChatView({
   onCopyMessage,
   onRegenerateMessage,
   onThumbsUpMessage,
+  onThumbsDownMessage,
 }: ChatViewProps) {
   // Unified timeline surface: Nullalis (native reasoning) or bot mode
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
@@ -223,6 +225,7 @@ export function ChatView({
               onCopy={onCopyMessage}
               onRegenerate={onRegenerateMessage}
               onThumbsUp={onThumbsUpMessage}
+              onThumbsDown={onThumbsDownMessage}
             />
             {isLast && msg.role === "assistant"
               ? renderTimelineArtifacts({ phase: "done" })
