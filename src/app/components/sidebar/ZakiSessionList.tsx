@@ -67,8 +67,13 @@ export function ZakiSessionList({
           title: session.title,
         });
         const time = formatSessionTime(session.last_active);
-        const hasPendingApproval =
-          typeof session.pending_approval_count === "number" && session.pending_approval_count > 0;
+        const mode = session.mode ?? null;
+        const live = session.live === true;
+        const lastChannel = session.last_channel ?? null;
+        const pendingApprovalCount =
+          typeof session.pending_approval_count === "number"
+            ? Math.max(0, session.pending_approval_count)
+            : 0;
 
         return (
           <button
@@ -83,17 +88,33 @@ export function ZakiSessionList({
           >
             <div className="relative shrink-0">
               <MessageSquare className="size-3.5 text-zaki-muted" />
-              {hasPendingApproval ? (
-                <div className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-amber-500" />
-              ) : null}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
-              {time && (
-                <div className="mt-0.5 text-2xs text-zaki-muted">
-                  <span className="text-zaki-muted">{time}</span>
-                </div>
-              )}
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {mode ? (
+                  <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+                    {mode}
+                  </span>
+                ) : null}
+                <span
+                  aria-label={live ? "live" : "idle"}
+                  className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
+                />
+                {lastChannel ? (
+                  <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                    {lastChannel}
+                  </span>
+                ) : null}
+                {pendingApprovalCount > 0 ? (
+                  <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
+                    {pendingApprovalCount}
+                  </span>
+                ) : null}
+                {time ? (
+                  <span className="text-2xs text-zaki-muted">{time}</span>
+                ) : null}
+              </div>
             </div>
           </button>
         );

@@ -207,7 +207,7 @@ export function SessionManagementSheet({
                             : undefined
                         }
                       >
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <MessageSquare className="size-3.5 shrink-0 text-zaki-accent" />
                           <span className="font-medium truncate text-zaki-primary">
                             {label}
@@ -215,6 +215,20 @@ export function SessionManagementSheet({
                           <span className="rounded-full bg-zaki-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zaki-secondary">
                             {laneLabel}
                           </span>
+                          {session.mode ? (
+                            <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+                              {session.mode}
+                            </span>
+                          ) : null}
+                          <span
+                            aria-label={session.live ? "live" : "idle"}
+                            className={`size-2 rounded-full ${session.live ? "bg-green-500" : "bg-zaki-muted/40"}`}
+                          />
+                          {session.last_channel ? (
+                            <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                              {session.last_channel}
+                            </span>
+                          ) : null}
                           {hasPendingApproval ? (
                             <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                               {t("zakiControls.sessionManagement.waiting", {

@@ -1,5 +1,6 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea } from "./InputArea";
+import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
 import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -2102,6 +2103,7 @@ export function ChatArea() {
   );
   const setSessionContextPressure = useZakiSessionUiStore((state) => state.setContextPressure);
   const setZakiSandboxState = useZakiSessionUiStore((state) => state.setSandbox);
+  const sandboxState = useZakiSessionUiStore((s) => s.sandbox);
   const activeSessionMode =
     activeSessionUi?.mode ??
     (activeSessionRecord?.mode === "plan" ||
@@ -6011,6 +6013,11 @@ export function ChatArea() {
                 <span className="text-zaki-muted">/</span>
                 {headerThreadName}
               </span>
+              <SandboxBadge
+                active={isZakiBotActiveSpace}
+                sandbox={sandboxState}
+                className="ml-2"
+              />
               <div className="relative z-30 ml-auto flex items-center gap-2" ref={menuRef}>
                 <button
                   type="button"
