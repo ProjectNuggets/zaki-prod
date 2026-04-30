@@ -5431,6 +5431,30 @@ export function ChatArea() {
     };
   }, [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest?.id]);
 
+  // H7: y/n keyboard shortcuts — fire approve/deny when an approval card is visible
+  useEffect(() => {
+    if (!nullalisApprovalRequest) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        (e.target as HTMLElement)?.isContentEditable
+      )
+        return;
+      if (e.key === "y" || e.key === "Y") {
+        e.preventDefault();
+        void handleApprovalAction(nullalisApprovalRequest.id, true);
+      } else if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        void handleApprovalAction(nullalisApprovalRequest.id, false);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [nullalisApprovalRequest, handleApprovalAction]);
+
   const handleStartChat = useCallback(() => {
     const spaceId = activeWorkspaceSlug ?? primarySpace?.id ?? null;
     if (!spaceId) {
