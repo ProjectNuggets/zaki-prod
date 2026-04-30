@@ -83,6 +83,12 @@ import {
   markFirstMessageSent,
   type ActivationProgress,
 } from "@/lib/retention";
+import {
+  SystemNoticesStack,
+  emitSystemNotice,
+  type SystemNoticeKind,
+  type SystemNoticePayload,
+} from "@/app/components/ui/zaki";
 
 class ChatRequestError extends Error {
   status: number;
@@ -3979,6 +3985,31 @@ export function ChatArea() {
         );
       }
 
+      // C3: system notice events — handle before the isZakiAgentSpace text filter
+      // so that these events surface on all views (not just agent mode).
+      if (
+        eventType === "system_notice" || payloadType === "system_notice" ||
+        eventType === "compaction" || eventType === "provider_fallback" ||
+        eventType === "connector_stale" || eventType === "multimodal_failure"
+      ) {
+        const notice: SystemNoticePayload | null =
+          eventType === "system_notice" || payloadType === "system_notice"
+            ? (() => {
+                const kind = (
+                  typeof payload.kind === "string" ? payload.kind : "system_notice"
+                ) as SystemNoticeKind;
+                const message =
+                  typeof payload.message === "string" ? payload.message : null;
+                return { kind, message };
+              })()
+            : ({
+                kind: eventType as SystemNoticeKind,
+                message: (payload as { message?: string }).message ?? null,
+              } as SystemNoticePayload);
+        if (notice) emitSystemNotice(notice);
+        return {};
+      }
+
       if (isZakiAgentSpace) {
         const explicitTextPayload =
           payloadType === "textResponse" ||
@@ -5852,6 +5883,10 @@ export function ChatArea() {
           ) : (
             <div className="h-[64px]" aria-hidden="true" />
           )}
+
+          {/* C5: System notices — rendered here so they appear on ALL views
+              (home, spaces, chat, brain) regardless of which view is active */}
+          <SystemNoticesStack className="-mb-2" />
 
           {/* Main Content */}
           <div
