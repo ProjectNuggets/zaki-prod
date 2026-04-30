@@ -23,7 +23,7 @@
 
 **Requirements:** REQ-V15-001 through REQ-V15-025 (all listed in REQUIREMENTS.md)
 
-**Plans:** 9/13 plans executed
+**Plans:** 10/13 plans executed
 
 Plans:
 - [x] v1.5-frontend-01-PLAN.md — Quick fixes + debt cleanup (C1, C6, H5, H6, H10, H11, H14, L1)
@@ -35,7 +35,7 @@ Plans:
 - [x] v1.5-frontend-07-PLAN.md — BrainTimelineView (infinite scroll, cursor, deprecated visual)
 - [x] v1.5-frontend-08-PLAN.md — BrainGraphView (SVG spring physics, multi-select, mobile fallback)
 - [x] v1.5-frontend-09-PLAN.md — BrainComposeModal slide-up panel + POST /brain/compose
-- [ ] v1.5-frontend-10-PLAN.md — Sidebar Brain entry + Dashboard Brain card
+- [x] v1.5-frontend-10-PLAN.md — Sidebar Brain entry + Dashboard Brain card
 - [ ] v1.5-frontend-11-PLAN.md — i18n debt (H9 requiresTelegram, L6 voice, L10 task)
 - [ ] v1.5-frontend-12-PLAN.md — Final debt (H13 dead helpers, M9 Telegram, M10 ThumbsDown, M4 mode pills, M8 SSE warn, L4 gauge fallback)
 - [ ] v1.5-frontend-13-PLAN.md — Verification gate (typecheck + tests + requirements coverage report)
