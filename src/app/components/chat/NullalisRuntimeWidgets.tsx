@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { CONTEXT_PRESSURE_WARNING, CONTEXT_PRESSURE_NEAR_LIMIT } from "@/stores/zakiSessionUiStore";
 import type {
   NullalisApprovalRequest,
   NullalisNarrationFrame,
@@ -942,16 +943,16 @@ export function ContextGauge({
   const maxLabel = new Intl.NumberFormat("en-US").format(data.contextMax);
 
   const barColor =
-    pct >= 90
+    pct >= CONTEXT_PRESSURE_NEAR_LIMIT
       ? "bg-zaki-brand"
-      : pct >= 70
+      : pct >= CONTEXT_PRESSURE_WARNING
         ? "bg-amber-500 dark:bg-amber-400"
         : "bg-zaki-accent";
 
   const textColor =
-    pct >= 90
+    pct >= CONTEXT_PRESSURE_NEAR_LIMIT
       ? "text-zaki-brand"
-      : pct >= 70
+      : pct >= CONTEXT_PRESSURE_WARNING
         ? "text-amber-700 dark:text-amber-300"
         : "text-zaki-muted dark:text-zaki-dark-muted";
 

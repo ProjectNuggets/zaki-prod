@@ -1593,3 +1593,53 @@ export async function approveAgentSession(
   const data = await parseApiJson<{ ok: boolean }>(response);
   return { response, data };
 }
+
+// ---------------------------------------------------------------------------
+// Context diagnostics + Memory doctor (stubs — wired in a later merge)
+// ---------------------------------------------------------------------------
+
+export type ContextDiagnosticsResponse = {
+  active?: boolean;
+  reason?: string | null;
+  report?: {
+    model?: string | null;
+    context_pressure_percent?: number | null;
+    token_estimate?: number | null;
+    context_window_tokens?: number | null;
+    history_messages?: number | null;
+    token_compaction_triggered?: boolean;
+    token_compaction_threshold?: number | null;
+    history_trim_limit_messages?: number | null;
+    tools?: number | null;
+    roles?: Record<string, number> | null;
+    memory?: Record<string, unknown> | null;
+    prompt?: Record<string, unknown> | null;
+    retrieval?: Record<string, unknown> | null;
+    continuity?: Record<string, unknown> | null;
+    cache?: Record<string, unknown> | null;
+    buckets?: Record<string, unknown> | null;
+    runtime?: Record<string, unknown> | null;
+    last_turn?: Record<string, unknown> | null;
+  } | null;
+  error?: string | null;
+};
+
+export type MemoryDoctorResponse = {
+  active?: boolean;
+  runtime?: boolean;
+  reason?: string | null;
+  report_text?: string | null;
+  error?: string | null;
+};
+
+export async function fetchContextDiagnostics() {
+  const response = await backendAuthRequest("/api/agent/context/diagnostics", { method: "GET" });
+  const data = await parseApiJson<ContextDiagnosticsResponse>(response);
+  return { response, data };
+}
+
+export async function fetchMemoryDoctor() {
+  const response = await backendAuthRequest("/api/agent/memory/doctor", { method: "GET" });
+  const data = await parseApiJson<MemoryDoctorResponse>(response);
+  return { response, data };
+}
