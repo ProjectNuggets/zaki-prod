@@ -229,6 +229,7 @@ export function ContextGauge({
   data: ContextGaugeData | null;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   if (!data || !data.contextMax || data.contextMax <= 0) return null;
 
   // L4: back-derive tokenCount from context_pressure_percent when tokenCount is missing
@@ -279,7 +280,7 @@ export function ContextGauge({
   return (
     <div className="mt-1.5 max-w-[88%] text-[11px]">
       <div className="flex items-center justify-between gap-2 mb-0.5">
-        <span className="text-zaki-muted dark:text-zaki-dark-muted">Context</span>
+        <span className="text-zaki-muted dark:text-zaki-dark-muted">{t("contextGauge.label")}</span>
         <span className={cn("font-mono-ui", textColor)}>
           {tokenLabel} / {maxLabel} ({pctLabel}%)
         </span>
@@ -299,7 +300,7 @@ export function ContextGauge({
       </div>
       {typeof data.messageCount === "number" && (
         <div className="mt-0.5 text-zaki-muted dark:text-zaki-dark-muted">
-          {data.messageCount} message{data.messageCount !== 1 ? "s" : ""} in session
+          {t("contextGauge.messageCount", { count: data.messageCount })}
         </div>
       )}
     </div>

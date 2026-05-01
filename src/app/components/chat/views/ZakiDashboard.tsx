@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Brain,
@@ -34,79 +34,24 @@ type Category = {
   suggestions: string[];
 };
 
-const CATEGORIES: Category[] = [
-  {
-    id: "write",
-    label: "Write",
-    icon: Pencil,
-    suggestions: [
-      "Create blog article series",
-      "Research topics for my writing",
-      "Create interview questions",
-      "Write video scripts",
-      "Improve my writing style",
-    ],
-  },
-  {
-    id: "learn",
-    label: "Learn",
-    icon: Compass,
-    suggestions: [
-      "Explain a complex topic simply",
-      "Create a study plan for a new skill",
-      "Quiz me on what I am learning",
-      "Summarize a research paper",
-      "Break down a difficult concept",
-    ],
-  },
-  {
-    id: "code",
-    label: "Code",
-    icon: Code2,
-    suggestions: [
-      "Debug my code and explain the fix",
-      "Review my code for best practices",
-      "Help me design a system architecture",
-      "Write unit tests for my function",
-      "Optimize my database queries",
-    ],
-  },
-  {
-    id: "life",
-    label: "Life stuff",
-    icon: Heart,
-    suggestions: [
-      "Plan my week for balance and focus",
-      "Help me make a decision with pros and cons",
-      "Draft a message I have been putting off",
-      "Create a meal plan for the week",
-      "Help me organize my thoughts on something",
-    ],
-  },
-  {
-    id: "zaki",
-    label: "ZAKI picks",
-    icon: Sparkles,
-    suggestions: [
-      "Plan my day for focus, energy, and calm",
-      "Teach me something useful in 5 minutes",
-      "Give me three smart ideas I can use today",
-      "Help me think through a problem step by step",
-      "Summarize what we have been working on",
-    ],
-  },
+const CATEGORY_DEFS: Array<{ id: string; icon: typeof Pencil }> = [
+  { id: "write", icon: Pencil },
+  { id: "learn", icon: Compass },
+  { id: "code", icon: Code2 },
+  { id: "life", icon: Heart },
+  { id: "zaki", icon: Sparkles },
 ];
 
 // Greeting buckets, tuned to the user's local wall-clock hour.
 // getHours() returns the browser's local timezone, so users in any tz get
 // a greeting that matches their actual time of day.
-function getGreeting(date: Date = new Date()): string {
+function getGreetingKey(date: Date = new Date()): string {
   const hour = date.getHours();
-  if (hour < 5) return "Still up, night owl";
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  if (hour < 22) return "Good evening";
-  return "Hello, night owl";
+  if (hour < 5) return "nightEarly";
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  if (hour < 22) return "evening";
+  return "nightLate";
 }
 
 const MEMORY_IMPORT_PROMPT = `Export all of my stored memories and any context you have learned about me from past conversations. Preserve my words verbatim where possible, especially for instructions and preferences.
@@ -171,15 +116,15 @@ function BrainNodeCluster() {
 
 // Recompute the greeting each minute so a session that spans a boundary
 // (e.g. 04:59 → 05:01) updates without a page refresh.
-function useLiveGreeting(): string {
-  const [greeting, setGreeting] = useState(() => getGreeting());
+function useLiveGreetingKey(): string {
+  const [key, setKey] = useState(() => getGreetingKey());
   useEffect(() => {
     const id = window.setInterval(() => {
-      setGreeting(getGreeting());
+      setKey(getGreetingKey());
     }, 60_000);
     return () => window.clearInterval(id);
   }, []);
-  return greeting;
+  return key;
 }
 
 export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
@@ -189,16 +134,25 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
   const { user } = useAuthStore();
   const userName = user?.fullName?.split(" ")[0] || user?.username || "there";
   const userId = String(user?.id ?? "");
-  const { data: brainGraph } = useBrainGraph(userId, { max_nodes: 1 });
+  const { data: brainGraph } = useBrainGraph(userId);
   const memoryCount = brainGraph?.total_nodes_in_corpus ?? 0;
-  const greeting = useLiveGreeting();
+  const greetingKey = useLiveGreetingKey();
+
+  const categories = useMemo<Category[]>(
+    () => CATEGORY_DEFS.map((def) => ({
+      ...def,
+      label: t(`zakiDashboard.categories.${def.id}.label`),
+      suggestions: t(`zakiDashboard.categories.${def.id}.suggestions`, { returnObjects: true }) as string[],
+    })),
+    [t],
+  );
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFullView, setImportFullView] = useState(false);
   const [importCopied, setImportCopied] = useState(false);
 
-  const activeCat = CATEGORIES.find((c) => c.id === activeCategory);
+  const activeCat = categories.find((c) => c.id === activeCategory);
 
   const handleCopyImportPrompt = useCallback(async () => {
     try {
@@ -206,9 +160,9 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
       setImportCopied(true);
       window.setTimeout(() => setImportCopied(false), 2000);
     } catch {
-      toast.error("Could not copy. Select the text manually.");
+      toast.error(t("zakiDashboard.import.copyError"));
     }
-  }, []);
+  }, [t]);
 
   return (
     <div
@@ -228,13 +182,13 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
               isRtl && "font-arabic"
             )}
           >
-            {greeting}, {userName}
+            {t(`zakiDashboard.greeting.${greetingKey}`)}, {userName}
           </h1>
         </div>
 
         {/* Suggestion pills */}
         <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const Icon = cat.icon;
             const isActive = activeCategory === cat.id;
             return (
@@ -301,7 +255,7 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
               data-testid="zaki-memory-import-trigger"
             >
               <Upload className="size-3.5" />
-              Bring your memory from ChatGPT, Claude, or Gemini
+              {t("zakiDashboard.import.trigger")}
               {importOpen ? (
                 <ChevronUp className="size-3.5" />
               ) : (
@@ -319,13 +273,13 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
               >
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-zaki dark:border-[rgba(240,236,230,0.06)]">
                   <MetaLabel icon={<Upload className="size-3.5" />}>
-                    Memory import
+                    {t("zakiDashboard.import.title")}
                   </MetaLabel>
                   <button
                     type="button"
                     onClick={() => setImportOpen(false)}
                     className="size-6 rounded-md flex items-center justify-center text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover transition-colors"
-                    aria-label="Close"
+                    aria-label={t("common.dismiss")}
                   >
                     <X className="size-3.5" />
                   </button>
@@ -353,7 +307,7 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
                       onClick={() => setImportFullView((v) => !v)}
                       className="text-xs font-medium text-zaki-brand hover:underline"
                     >
-                      {importFullView ? "Show less" : "Show full prompt"}
+                      {importFullView ? t("zakiDashboard.import.showLess") : t("zakiDashboard.import.showFull")}
                     </button>
                     <button
                       type="button"
@@ -366,20 +320,18 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
                     >
                       {importCopied ? (
                         <>
-                          <Check className="size-3.5" /> Copied
+                          <Check className="size-3.5" /> {t("zakiDashboard.import.copied")}
                         </>
                       ) : (
                         <>
-                          <Copy className="size-3.5" /> Copy prompt
+                          <Copy className="size-3.5" /> {t("zakiDashboard.import.copy")}
                         </>
                       )}
                     </button>
                   </div>
 
                   <p className="text-xs text-zaki-muted leading-relaxed">
-                    Paste it into ChatGPT, Claude, or Gemini. Then paste the
-                    answer into Zaki's chat box below and send. Zaki will save
-                    the facts into memory and confirm.
+                    {t("zakiDashboard.import.instructions")}
                   </p>
                 </div>
               </div>

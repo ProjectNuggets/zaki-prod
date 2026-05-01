@@ -15,6 +15,7 @@ export function BrainTimelineView({ userId }: Props) {
     hasNextPage,
     isFetchingNextPage,
     isLoading,
+    isError,
   } = useBrainTimeline(userId);
 
   const entries: BrainTimelineEntry[] = useMemo(
@@ -38,15 +39,21 @@ export function BrainTimelineView({ userId }: Props) {
     return groups;
   }, [entries]);
 
-  // Sentinel-based infinite scroll
+  // Sentinel-based infinite scroll — keep a ref so the observer callback always
+  // reads the latest isFetchingNextPage without being a dep (which would recreate
+  // the observer on every fetch-state change and risk a duplicate request).
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const isFetchingRef = useRef(isFetchingNextPage);
+  useEffect(() => {
+    isFetchingRef.current = isFetchingNextPage;
+  }, [isFetchingNextPage]);
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
     const obs = new IntersectionObserver(
       (items) => {
         for (const it of items) {
-          if (it.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          if (it.isIntersecting && hasNextPage && !isFetchingRef.current) {
             fetchNextPage();
           }
         }
@@ -55,10 +62,18 @@ export function BrainTimelineView({ userId }: Props) {
     );
     obs.observe(node);
     return () => obs.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [hasNextPage, fetchNextPage]);
 
   if (isLoading) {
     return <div className="py-6 text-sm text-zaki-muted">…</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="py-6 text-center text-sm text-zaki-muted">
+        {t("brain.error.loadFailed")}
+      </div>
+    );
   }
 
   return (

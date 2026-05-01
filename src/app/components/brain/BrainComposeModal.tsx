@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBrainCompose } from "@/queries";
@@ -21,11 +21,26 @@ export function BrainComposeModal({
 }: Props) {
   const { t } = useTranslation();
   const compose = useBrainCompose(userId);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [justSynthesized, setJustSynthesized] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  const handleClose = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    onClose();
+  };
 
   // Auto-suggest title from first 1-2 selected node summaries.
   useEffect(() => {
@@ -54,8 +69,7 @@ export function BrainComposeModal({
       });
       setJustSynthesized(true);
       onSynthesized?.();
-      // Close after a beat so user sees success
-      setTimeout(() => {
+      closeTimerRef.current = setTimeout(() => {
         setJustSynthesized(false);
         onClose();
       }, 800);
@@ -87,7 +101,7 @@ export function BrainComposeModal({
             </h3>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="text-xs text-zaki-muted hover:text-zaki-text"
             >
               {t("brain.compose.cancel")}

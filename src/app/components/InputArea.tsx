@@ -251,10 +251,18 @@ export function InputArea({
     }
   }, [clearRecordingTimers]);
 
-  // Release any pending timers when the component unmounts so a half-finished
-  // recording doesn't leak intervals past teardown.
+  // Release any pending timers and stop an active recorder on unmount.
   useEffect(() => {
-    return () => clearRecordingTimers();
+    return () => {
+      clearRecordingTimers();
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        recordingCancelledRef.current = true;
+        mediaRecorderRef.current.stop();
+      }
+    };
   }, [clearRecordingTimers]);
 
   // Auto-focus textarea when response completes (isSending: true → false)
@@ -275,7 +283,7 @@ export function InputArea({
     }, 4000);
     
     return () => clearInterval(interval);
-  }, [inputValue.length]);
+  }, [inputValue.length, placeholderSuggestions.length]);
 
   const submitMessage = () => {
     if (isSending || sendLocked) {

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { ZAKI_BOT_SPACE_ID } from "@/lib/zakiBot";
 
 type ViewType = "home" | "about" | "spaces" | "space-detail" | "chat";
-export type SidebarMode = "zaki" | "spaces";
+export type SidebarMode = "zaki" | "spaces" | "brain";
 
 interface NavigationState {
   view: ViewType;

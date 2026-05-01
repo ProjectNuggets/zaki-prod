@@ -1717,6 +1717,85 @@
       "title": "Your brain",
       "memoryCount": "{{count}} memories",
       "memoryCountZero": "No memories yet"
+    },
+    "error": {
+      "loadFailed": "Failed to load your brain. Try again."
+    }
+  },
+  "contextGauge": {
+    "label": "Context",
+    "messageCount_one": "{{count}} message in session",
+    "messageCount_other": "{{count}} messages in session"
+  },
+  "zakiDashboard": {
+    "greeting": {
+      "nightEarly": "Still up, night owl",
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening",
+      "nightLate": "Hello, night owl"
+    },
+    "categories": {
+      "write": {
+        "label": "Write",
+        "suggestions": [
+          "Create blog article series",
+          "Research topics for my writing",
+          "Create interview questions",
+          "Write video scripts",
+          "Improve my writing style"
+        ]
+      },
+      "learn": {
+        "label": "Learn",
+        "suggestions": [
+          "Explain a complex topic simply",
+          "Create a study plan for a new skill",
+          "Quiz me on what I am learning",
+          "Summarize a research paper",
+          "Break down a difficult concept"
+        ]
+      },
+      "code": {
+        "label": "Code",
+        "suggestions": [
+          "Debug my code and explain the fix",
+          "Review my code for best practices",
+          "Help me design a system architecture",
+          "Write unit tests for my function",
+          "Optimize my database queries"
+        ]
+      },
+      "life": {
+        "label": "Life stuff",
+        "suggestions": [
+          "Plan my week for balance and focus",
+          "Help me make a decision with pros and cons",
+          "Draft a message I have been putting off",
+          "Create a meal plan for the week",
+          "Help me organize my thoughts on something"
+        ]
+      },
+      "zaki": {
+        "label": "ZAKI picks",
+        "suggestions": [
+          "Plan my day for focus, energy, and calm",
+          "Teach me something useful in 5 minutes",
+          "Give me three smart ideas I can use today",
+          "Help me think through a problem step by step",
+          "Summarize what we have been working on"
+        ]
+      }
+    },
+    "import": {
+      "trigger": "Bring your memory from ChatGPT, Claude, or Gemini",
+      "title": "Memory import",
+      "showFull": "Show full prompt",
+      "showLess": "Show less",
+      "copy": "Copy prompt",
+      "copied": "Copied",
+      "instructions": "Paste it into ChatGPT, Claude, or Gemini. Then paste the answer into ZAKI's chat box below and send. ZAKI will save the facts into memory and confirm.",
+      "copyError": "Could not copy. Select the text manually."
     }
   },
   "task": {

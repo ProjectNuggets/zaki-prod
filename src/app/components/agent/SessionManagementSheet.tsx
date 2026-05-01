@@ -115,7 +115,9 @@ export function SessionManagementSheet({
       const a = document.createElement("a");
       a.href = url;
       a.download = `session-${formatZakiSessionLabel({ sessionKey })}-${Date.now()}.json`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success(t("zakiControls.sessionManagement.success.exported"));
     } catch {

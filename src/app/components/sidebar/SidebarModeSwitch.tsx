@@ -1,9 +1,11 @@
 import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal, Brain } from "lucide-react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { ZAKI_BOT_LABEL } from "@/lib/zakiBot";
+import { useNavigationStore } from "@/stores/navigationStore";
 import type { SidebarMode } from "@/stores/navigationStore";
 import {
   DropdownMenu,
@@ -43,6 +45,15 @@ export function SidebarModeSwitch({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const setSidebarMode = useNavigationStore((s) => s.setSidebarMode);
+
+  // Sync store when user arrives at /brain via direct URL or browser navigation.
+  useEffect(() => {
+    if (location.pathname === "/brain" && sidebarMode !== "brain") {
+      setSidebarMode("brain");
+    }
+  }, [location.pathname, sidebarMode, setSidebarMode]);
+
   return (
     <div className="flex flex-col gap-1 mb-3">
       {/* ZAKI nav item */}
@@ -165,13 +176,13 @@ export function SidebarModeSwitch({
         className={cn(
           "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors relative",
           isRtl ? "text-right flex-row-reverse" : "text-left",
-          location.pathname === "/brain" ? "bg-zaki-selected" : "hover:bg-zaki-hover"
+          sidebarMode === "brain" ? "bg-zaki-selected" : "hover:bg-zaki-hover"
         )}
-        onClick={() => navigate("/brain")}
+        onClick={() => { navigate("/brain"); setSidebarMode("brain"); }}
         type="button"
-        aria-current={location.pathname === "/brain" ? "page" : undefined}
+        aria-current={sidebarMode === "brain" ? "page" : undefined}
       >
-        {location.pathname === "/brain" && (
+        {sidebarMode === "brain" && (
           <div
             className={cn(
               "absolute top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-zaki-brand rounded-r-sm",
@@ -185,7 +196,7 @@ export function SidebarModeSwitch({
         <span
           className={cn(
             "text-sm font-medium flex-1",
-            location.pathname === "/brain" ? "text-zaki-primary" : "text-zaki-secondary"
+            sidebarMode === "brain" ? "text-zaki-primary" : "text-zaki-secondary"
           )}
         >
           {t("sidebar.brain")}

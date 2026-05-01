@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
@@ -8,7 +9,6 @@ import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
 import { BrainGraphView } from "./BrainGraphView";
 import { BrainTimelineView } from "./BrainTimelineView";
 import { BrainComposeModal } from "./BrainComposeModal";
-import type { BrainGraphNode } from "@/lib/api";
 
 type BrainTab = "timeline" | "graph";
 
@@ -20,12 +20,22 @@ export function BrainPage() {
   const [degradedDismissed, setDegradedDismissed] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 
+  const navigate = useNavigate();
   const graphQuery = useBrainGraph(userId);
+  const selectedNodes = useMemo(
+    () => (graphQuery.data?.nodes ?? []).filter((n) => selectedNodeIds.includes(n.id)),
+    [graphQuery.data?.nodes, selectedNodeIds],
+  );
 
-  const selectedNodes: BrainGraphNode[] =
-    (graphQuery.data?.nodes ?? []).filter((n) => selectedNodeIds.includes(n.id));
+  if (!userId || graphQuery.isLoading) return <SkeletonBrainPage />;
 
-  if (graphQuery.isLoading) return <SkeletonBrainPage />;
+  if (graphQuery.isError) {
+    return (
+      <div className="px-6 py-16 text-center text-sm text-zaki-muted">
+        {t("brain.error.loadFailed")}
+      </div>
+    );
+  }
 
   const totalNodes = graphQuery.data?.total_nodes_in_corpus ?? 0;
   const semanticDegraded = graphQuery.data?.semantic_degraded ?? false;
@@ -33,11 +43,7 @@ export function BrainPage() {
   if (totalNodes === 0) {
     return (
       <BrainEmptyState
-        onMigrate={() => {
-          // TODO(plan 09/10): wire to the same import panel ZakiDashboard uses
-          // For now, navigate to the dashboard import flow trigger
-          window.location.assign("/?import=memories");
-        }}
+        onMigrate={() => navigate("/")}
       />
     );
   }

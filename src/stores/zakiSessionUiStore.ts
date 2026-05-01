@@ -168,14 +168,14 @@ export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => 
       const pendingApprovals = current?.pendingApprovals ?? [];
       const nextPendingApprovals =
         approval && !pendingApprovals.some((entry) => entry.id === approval.id)
-          ? [approval]
+          ? [...pendingApprovals, approval]
           : pendingApprovals;
       return {
         sessions: {
           ...state.sessions,
           [normalized]: createDefaultSessionUi({
             ...current,
-            approvalCount: Math.max(0, Math.max(current?.approvalCount ?? 0, nextPendingApprovals.length)),
+            approvalCount: nextPendingApprovals.length,
             pendingApprovals: nextPendingApprovals,
           }),
         },

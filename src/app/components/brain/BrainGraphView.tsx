@@ -38,7 +38,7 @@ function useIsMobile() {
 
 export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props) {
   const { t } = useTranslation();
-  const { data } = useBrainGraph(userId);
+  const { data, isLoading, isError } = useBrainGraph(userId);
   const isMobile = useIsMobile();
   const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -159,7 +159,15 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     }
   }
 
-  if (!data) return null;
+  if (isLoading || (!data && !isError)) return null;
+
+  if (isError || !data) {
+    return (
+      <div className="py-6 text-center text-sm text-zaki-muted">
+        {t("brain.error.loadFailed")}
+      </div>
+    );
+  }
 
   // Mobile fallback: vertical sorted list
   if (isMobile) {
@@ -212,7 +220,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
         aria-label="memory-graph"
       >
         <g>
-          {data.edges.map((e, i) => {
+          {data.edges.map((e) => {
             const a = nodeById.get(e.source);
             const b = nodeById.get(e.target);
             if (!a || !b) return null;
@@ -228,7 +236,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
               const my = (a.y + b.y) / 2 - 30;
               return (
                 <path
-                  key={i}
+                  key={`${e.source}:${e.target}:${e.type}`}
                   d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
                   fill="none"
                   {...style}
@@ -237,7 +245,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
             }
             return (
               <line
-                key={i}
+                key={`${e.source}:${e.target}:${e.type}`}
                 x1={a.x}
                 y1={a.y}
                 x2={b.x}

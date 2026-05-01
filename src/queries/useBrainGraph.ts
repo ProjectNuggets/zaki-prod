@@ -6,7 +6,7 @@ export function useBrainGraph(
   opts?: { since?: number; max_nodes?: number; node_kinds?: string },
 ) {
   return useQuery<BrainGraphResponse>({
-    queryKey: ["brain", "graph", userId, opts ?? {}],
+    queryKey: ["brain", "graph", userId, opts?.since, opts?.max_nodes, opts?.node_kinds],
     queryFn: () => fetchBrainGraph(userId, opts),
     enabled: !!userId,
     staleTime: 30_000,
