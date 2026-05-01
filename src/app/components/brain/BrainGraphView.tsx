@@ -426,6 +426,14 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     [simNodes],
   );
 
+  // Z-ordering: conversation → daily → core (core renders on top)
+  const orderedNodes = useMemo(() => {
+    const order: Record<string, number> = { conversation: 0, daily: 1, core: 2 };
+    return [...simNodes].sort(
+      (a, b) => (order[a.ref.kind] ?? 0) - (order[b.ref.kind] ?? 0),
+    );
+  }, [simNodes]);
+
   // ── Interaction ─────────────────────────────────────────────
 
   const handleSvgPointerDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
@@ -548,14 +556,6 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
 
   const hoverNode = hoverId ? nodeById.get(hoverId) ?? null : null;
   const hoverPos = hoverNode && !detailNode ? tooltipPos(hoverNode) : null;
-
-  // Z-ordering: conversation → daily → core (core renders on top)
-  const orderedNodes = useMemo(() => {
-    const order: Record<string, number> = { conversation: 0, daily: 1, core: 2 };
-    return [...simNodes].sort(
-      (a, b) => (order[a.ref.kind] ?? 0) - (order[b.ref.kind] ?? 0),
-    );
-  }, [simNodes]);
 
   return (
     <div ref={containerRef} className="relative" style={{ touchAction: "none" }}>
