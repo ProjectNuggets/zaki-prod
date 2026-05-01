@@ -49,33 +49,35 @@ export function BrainPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <header className="mb-6">
-        <h1 className="text-xl font-semibold text-zaki-text">{t("brain.title")}</h1>
-        <p className="text-sm text-zaki-muted">{t("brain.subtitle")}</p>
-      </header>
+    <div className="py-8">
+      <div className="mx-auto max-w-4xl px-6">
+        <header className="mb-6">
+          <h1 className="text-xl font-semibold text-zaki-text">{t("brain.title")}</h1>
+          <p className="text-sm text-zaki-muted">{t("brain.subtitle")}</p>
+        </header>
 
-      {semanticDegraded && !degradedDismissed && (
-        <div className="mb-4">
-          <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
+        {semanticDegraded && !degradedDismissed && (
+          <div className="mb-4">
+            <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
+          </div>
+        )}
+
+        <div className="mb-6 flex gap-2 border-b border-zaki-border">
+          <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
+            {t("brain.tabs.timeline")}
+          </TabButton>
+          <TabButton active={tab === "graph"} onClick={() => setTab("graph")}>
+            {t("brain.tabs.graph")}
+          </TabButton>
         </div>
-      )}
-
-      <div className="mb-6 flex gap-2 border-b border-zaki-border">
-        <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
-          {t("brain.tabs.timeline")}
-        </TabButton>
-        <TabButton active={tab === "graph"} onClick={() => setTab("graph")}>
-          {t("brain.tabs.graph")}
-        </TabButton>
       </div>
 
       {tab === "timeline" ? (
-        <div data-testid="brain-timeline-slot">
+        <div className="mx-auto max-w-4xl px-6" data-testid="brain-timeline-slot">
           <BrainTimelineView userId={userId} />
         </div>
       ) : (
-        <div data-testid="brain-graph-slot" className="relative">
+        <div data-testid="brain-graph-slot" className="relative px-3 sm:px-5">
           <BrainGraphView
             userId={userId}
             selectedIds={selectedNodeIds}

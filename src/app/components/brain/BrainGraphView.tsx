@@ -25,13 +25,14 @@ interface ViewTransform {
   scale: number;
 }
 
-const W = 1000;
-const H = 1000;
+// 16:9 canvas — fills wide screens without the aspect-ratio height penalty
+const W = 1600;
+const H = 900;
 
 const NODE_RADIUS: Record<string, number> = {
-  core: 14,
-  daily: 10,
-  conversation: 7,
+  core: 20,
+  daily: 13,
+  conversation: 8,
 };
 
 function useIsMobile() {
@@ -47,7 +48,7 @@ function useIsMobile() {
 }
 
 function nodeRadius(kind: string): number {
-  return NODE_RADIUS[kind] ?? 7;
+  return NODE_RADIUS[kind] ?? 8;
 }
 
 function nodeColor(kind: string): string {
@@ -56,17 +57,24 @@ function nodeColor(kind: string): string {
   return "#94a3b8";
 }
 
+// Glow color is the node color at lower opacity for the bloom ring
+function nodeGlowColor(kind: string): string {
+  if (kind === "core") return "rgba(241,2,2,0.35)";
+  if (kind === "daily") return "rgba(34,197,94,0.35)";
+  return "rgba(148,163,184,0.25)";
+}
+
 function edgeStyle(edge: BrainGraphEdge, bloom: boolean) {
-  const opacity = bloom ? 0.5 : 0.1;
+  const opacity = bloom ? 0.6 : 0.12;
   const stroke = "#94a3b8";
   if (edge.type === "semantic") {
-    const w = Math.max(0.5, Math.min(2.5, edge.weight * 2));
-    return { stroke, strokeOpacity: opacity, strokeDasharray: "4 3", strokeWidth: w };
+    const w = Math.max(0.6, Math.min(3, edge.weight * 2.5));
+    return { stroke, strokeOpacity: opacity, strokeDasharray: "6 4", strokeWidth: w };
   }
   if (edge.type === "reference") {
-    return { stroke, strokeOpacity: opacity, strokeDasharray: "1 4" };
+    return { stroke, strokeOpacity: opacity, strokeDasharray: "1 5", strokeWidth: 0.8 };
   }
-  return { stroke, strokeOpacity: opacity };
+  return { stroke, strokeOpacity: opacity, strokeWidth: 0.8 };
 }
 
 // Sunflower/golden-angle spiral — deterministic, avoids corner bias
@@ -74,7 +82,7 @@ function sunflowerPlacement(count: number): Array<{ x: number; y: number }> {
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));
   const cx = W / 2;
   const cy = H / 2;
-  const maxR = Math.min(W, H) / 2 - 70;
+  const maxR = Math.min(W, H) / 2 - 80;
   return Array.from({ length: count }, (_, i) => {
     const r = maxR * Math.sqrt((i + 0.5) / count);
     const theta = i * GOLDEN;
@@ -86,7 +94,7 @@ function sunflowerPlacement(count: number): Array<{ x: number; y: number }> {
 function radialByKindPlacement(nodes: BrainGraphNode[]): Array<{ x: number; y: number }> {
   const cx = W / 2;
   const cy = H / 2;
-  const radii: Record<string, number> = { core: 100, daily: 240, conversation: 400 };
+  const radii: Record<string, number> = { core: 120, daily: 290, conversation: 470 };
   const buckets: Record<string, number[]> = {};
   nodes.forEach((n, i) => {
     const k = n.kind in radii ? n.kind : "conversation";
@@ -95,7 +103,7 @@ function radialByKindPlacement(nodes: BrainGraphNode[]): Array<{ x: number; y: n
   });
   const positions: Array<{ x: number; y: number }> = new Array(nodes.length);
   for (const [kind, indices] of Object.entries(buckets)) {
-    const r = radii[kind] ?? 400;
+    const r = radii[kind] ?? 470;
     indices.forEach((nodeIdx, i) => {
       const angle = (i / Math.max(indices.length, 1)) * Math.PI * 2 - Math.PI / 2;
       positions[nodeIdx] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
@@ -117,6 +125,10 @@ function isSparseGraph(
   return semanticCount < nodes.length / 4;
 }
 
+function truncateLabel(text: string, max = 22): string {
+  return text.length <= max ? text : text.slice(0, max - 1) + "…";
+}
+
 // ── Detail panel ──────────────────────────────────────────────
 
 interface DetailPanelProps {
@@ -129,10 +141,10 @@ function DetailPanel({ node, onClose, t }: DetailPanelProps) {
   const isDeprecated = node.valid_to !== null;
   const color = nodeColor(node.kind);
   return (
-    <div className="absolute right-0 top-0 z-20 flex h-full w-64 flex-col rounded-r-zaki-lg border-l border-zaki-border bg-zaki-base/96 p-4 shadow-xl backdrop-blur-sm">
+    <div className="absolute right-0 top-0 z-20 flex h-full w-64 flex-col rounded-r-zaki-xl border-l border-white/10 bg-black/70 p-4 shadow-2xl backdrop-blur-md">
       <div className="mb-3 flex items-center justify-between">
         <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
+          className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
           style={{ backgroundColor: color }}
         >
           {t(`brain.graph.kindLabel.${node.kind}` as never, { defaultValue: node.kind })}
@@ -140,19 +152,19 @@ function DetailPanel({ node, onClose, t }: DetailPanelProps) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-1 text-zaki-muted hover:text-zaki-text"
+          className="rounded-full p-1 text-white/50 hover:text-white"
           aria-label={t("brain.graph.detail.close")}
         >
           <X className="size-3.5" />
         </button>
       </div>
-      <p className="flex-1 overflow-y-auto text-sm leading-relaxed text-zaki-text">
+      <p className="flex-1 overflow-y-auto text-sm leading-relaxed text-white/90">
         {node.summary}
       </p>
-      <div className="mt-4 space-y-1.5 border-t border-zaki-border pt-3 text-[11px] text-zaki-muted">
+      <div className="mt-4 space-y-1.5 border-t border-white/10 pt-3 text-[11px] text-white/50">
         <div className="flex items-center justify-between gap-2">
           <span>{t("brain.graph.detail.saved")}</span>
-          <span className="text-right font-medium text-zaki-text">
+          <span className="text-right font-medium text-white/80">
             {new Date(node.created_at * 1000).toLocaleString(undefined, {
               month: "short",
               day: "numeric",
@@ -164,7 +176,7 @@ function DetailPanel({ node, onClose, t }: DetailPanelProps) {
           <div className="flex items-center justify-between gap-2">
             <span>{t("brain.graph.detail.session")}</span>
             <span
-              className="truncate font-mono text-[10px] text-zaki-text"
+              className="truncate font-mono text-[10px] text-white/70"
               title={node.session_id}
             >
               …{node.session_id.slice(-8)}
@@ -172,7 +184,7 @@ function DetailPanel({ node, onClose, t }: DetailPanelProps) {
           </div>
         )}
         {isDeprecated && (
-          <div className="mt-2 rounded-full bg-amber-500/10 px-2 py-1 text-center text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+          <div className="mt-2 rounded-full bg-amber-500/15 px-2 py-1 text-center text-[10px] font-semibold text-amber-400">
             {t("brain.graph.superseded")}
           </div>
         )}
@@ -240,17 +252,17 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     alphaRef.current = 1.0;
     setSimNodes([...nodes]);
 
-    if (sparse) return; // Radial layout is static — no physics needed
+    if (sparse) return;
 
     const idIdx = new Map(nodes.map((n, i) => [n.id, i]));
     const edges = data.edges.filter((e) => idIdx.has(e.source) && idIdx.has(e.target));
 
-    const REPEL = 4000;
-    const REPEL_MAX_D = 280;
-    const SPRING_K = 0.15;
-    const SPRING_LEN = 90;
+    const REPEL = 6000;
+    const REPEL_MAX_D = 320;
+    const SPRING_K = 0.12;
+    const SPRING_LEN = 120;
     const DAMP = 0.78;
-    const CENTER_G = 0.008;
+    const CENTER_G = 0.006;
     const ALPHA_DECAY = 0.992;
     const SUB_TICKS = 5;
     const RENDER_EVERY = 3;
@@ -263,7 +275,6 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
       const alpha = alphaRef.current;
 
       for (let sub = 0; sub < SUB_TICKS; sub++) {
-        // Repulsion between all pairs (capped distance for performance)
         for (let i = 0; i < ns.length; i++) {
           const a = ns[i]!;
           for (let j = i + 1; j < ns.length; j++) {
@@ -283,7 +294,6 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
           }
         }
 
-        // Spring attraction along edges
         for (const e of edges) {
           const ai = idIdx.get(e.source);
           const bi = idIdx.get(e.target);
@@ -302,14 +312,13 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
           b.vy -= ny2 * f;
         }
 
-        // Center gravity + integrate + bound
         for (const n of ns) {
           n.vx += (W / 2 - n.x) * CENTER_G * alpha;
           n.vy += (H / 2 - n.y) * CENTER_G * alpha;
           n.vx *= DAMP;
           n.vy *= DAMP;
-          n.x = Math.max(30, Math.min(W - 30, n.x + n.vx));
-          n.y = Math.max(30, Math.min(H - 30, n.y + n.vy));
+          n.x = Math.max(40, Math.min(W - 40, n.x + n.vx));
+          n.y = Math.max(40, Math.min(H - 40, n.y + n.vy));
         }
       }
 
@@ -325,18 +334,18 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     };
   }, [data, sparse]);
 
-  // Non-passive wheel listener (React's onWheel is passive in some versions)
+  // Non-passive wheel listener — prevents browser scroll while zooming
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
       const rect = el.getBoundingClientRect();
       const svgX = ((e.clientX - rect.left) / rect.width) * W;
       const svgY = ((e.clientY - rect.top) / rect.height) * H;
       setViewTransform((prev) => {
-        const newScale = Math.max(0.3, Math.min(5, prev.scale * factor));
+        const newScale = Math.max(0.25, Math.min(6, prev.scale * factor));
         const cx = (svgX - prev.x) / prev.scale;
         const cy = (svgY - prev.y) / prev.scale;
         return { x: svgX - cx * newScale, y: svgY - cy * newScale, scale: newScale };
@@ -344,7 +353,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [data]); // re-attach when SVG mounts after data loads
+  }, [data]);
 
   const nodeById = useMemo(
     () => new Map(simNodes.map((n) => [n.id, n])),
@@ -386,7 +395,6 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
   }, []);
 
   const handleNodePointerDown = useCallback((e: React.PointerEvent) => {
-    // Prevent SVG pan from starting when clicking a node
     e.stopPropagation();
     didDragRef.current = false;
   }, []);
@@ -407,7 +415,6 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     [selectedIds, onSelectionChange],
   );
 
-  // Compute tooltip position in container-relative pixels
   function tooltipPos(sn: SimNode): { left: number; top: number } | null {
     const svgEl = svgRef.current;
     const containerEl = containerRef.current;
@@ -423,7 +430,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     return { left: clientX - containerRect.left, top: clientY - containerRect.top };
   }
 
-  // ── Early returns ────────────────────────────────────────────
+  // ── Early returns ─────────────────────────────────────────────
 
   if (isLoading || (!data && !isError)) return null;
 
@@ -435,7 +442,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     );
   }
 
-  // Mobile: sorted list fallback (no SVG)
+  // Mobile: sorted list fallback
   if (isMobile) {
     const sorted = [...data.nodes].sort((a, b) => b.created_at - a.created_at);
     return (
@@ -471,7 +478,6 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     );
   }
 
-  // Tooltip
   const hoverNode = hoverId ? nodeById.get(hoverId) ?? null : null;
   const hoverPos = hoverNode && !detailNode ? tooltipPos(hoverNode) : null;
 
@@ -482,16 +488,20 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
           {t("brain.graph.sparseNotice")}
         </p>
       )}
-      <p className="mb-2 text-[11px] text-zaki-muted">{t("brain.graph.selectHint")}</p>
-      {selectedIds.length > 0 && (
-        <p className="mb-2 text-[11px] font-semibold text-zaki-text">
-          {t("brain.graph.selected", { count: selectedIds.length })}
-        </p>
-      )}
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] text-zaki-muted">{t("brain.graph.selectHint")}</p>
+        {selectedIds.length > 0 && (
+          <p className="text-[11px] font-semibold text-zaki-text">
+            {t("brain.graph.selected", { count: selectedIds.length })}
+          </p>
+        )}
+      </div>
+
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className={`w-full max-h-[60vh] rounded-zaki-lg bg-zaki-raised ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`w-full rounded-zaki-xl ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        style={{ height: "72vh", minHeight: 480 }}
         role="img"
         aria-label={t("brain.graph.ariaLabel")}
         onPointerDown={handleSvgPointerDown}
@@ -500,7 +510,51 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
         onPointerLeave={handleSvgPointerUp}
         onDoubleClick={handleSvgDoubleClick}
       >
+        <defs>
+          {/* Star-map deep-space background gradient */}
+          <radialGradient id="brain-bg" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stopColor="#1a1210" />
+            <stop offset="60%" stopColor="#100c0a" />
+            <stop offset="100%" stopColor="#080604" />
+          </radialGradient>
+
+          {/* Per-kind glow filters */}
+          <filter id="glow-core" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="glow-daily" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
+          {/* CSS keyframes for semantic edge flow + selection pulse */}
+          <style>{`
+            .brain-edge-semantic { animation: brain-edge-flow 3s linear infinite; }
+            @keyframes brain-edge-flow { to { stroke-dashoffset: -10; } }
+            .brain-node-pulse { animation: brain-node-pulse 2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+            @keyframes brain-node-pulse { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 0.15; transform: scale(2.2); } }
+          `}</style>
+        </defs>
+
+        {/* Deep-space background */}
+        <rect width={W} height={H} fill="url(#brain-bg)" />
+
         <g transform={`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.scale})`}>
+
           {/* Edges */}
           {data.edges.map((e) => {
             const a = nodeById.get(e.source);
@@ -514,12 +568,13 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
             const style = edgeStyle(e, bloom);
             if (e.type === "semantic") {
               const mx = (a.x + b.x) / 2;
-              const my = (a.y + b.y) / 2 - 40;
+              const my = (a.y + b.y) / 2 - 50;
               return (
                 <path
                   key={`${e.source}:${e.target}:${e.type}`}
                   d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
                   fill="none"
+                  className="brain-edge-semantic"
                   {...style}
                 />
               );
@@ -535,12 +590,18 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
               />
             );
           })}
+
           {/* Nodes */}
           {simNodes.map((sn) => {
             const r = nodeRadius(sn.ref.kind);
             const isSelected = selectedIds.includes(sn.id);
             const isHovered = hoverId === sn.id;
             const isDeprecated = sn.ref.valid_to !== null;
+            const isCore = sn.ref.kind === "core";
+            const isDaily = sn.ref.kind === "daily";
+            const glowId = isCore ? "glow-core" : isDaily ? "glow-daily" : "glow-soft";
+            const showLabel = isCore || isHovered;
+
             return (
               <g
                 key={sn.id}
@@ -550,7 +611,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
                 onMouseEnter={() => setHoverId(sn.id)}
                 onMouseLeave={() => setHoverId((h) => (h === sn.id ? null : h))}
                 onClick={(e) => handleNodeClick(e, sn)}
-                style={{ cursor: "pointer", opacity: isDeprecated ? 0.45 : 1 }}
+                style={{ cursor: "pointer", opacity: isDeprecated ? 0.4 : 1 }}
                 role="button"
                 aria-label={t("brain.graph.nodeAriaLabel", { summary: sn.ref.summary })}
                 tabIndex={0}
@@ -562,17 +623,57 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
                   }
                 }}
               >
+                {/* Selection pulse ring */}
+                {isSelected && (
+                  <circle
+                    r={r + 4}
+                    fill="none"
+                    stroke="#f10202"
+                    strokeWidth="1.5"
+                    className="brain-node-pulse"
+                  />
+                )}
+
+                {/* Glow halo (larger, blurred, behind main circle) */}
+                <circle
+                  r={r * 1.6}
+                  fill={nodeGlowColor(sn.ref.kind)}
+                  filter={`url(#${glowId})`}
+                  style={{
+                    transform: isHovered ? "scale(1.4)" : "scale(1)",
+                    transformOrigin: "center",
+                    transformBox: "fill-box",
+                    transition: "transform 0.2s ease-out",
+                  }}
+                />
+
+                {/* Main node */}
                 <circle
                   r={r}
                   fill={nodeColor(sn.ref.kind)}
-                  stroke={isSelected ? "#f10202" : "transparent"}
-                  strokeWidth={isSelected ? 2.5 : 0}
+                  stroke={isSelected ? "#f10202" : isHovered ? "rgba(255,255,255,0.5)" : "transparent"}
+                  strokeWidth={isSelected ? 2.5 : isHovered ? 1.5 : 0}
                   style={{
-                    transform: isHovered ? "scale(1.3)" : "scale(1)",
+                    transform: isHovered ? "scale(1.25)" : "scale(1)",
                     transformOrigin: "center",
+                    transformBox: "fill-box",
                     transition: "transform 0.15s ease-out",
                   }}
                 />
+
+                {/* Node label — always for core, on hover for others */}
+                {showLabel && (
+                  <text
+                    y={r + 14}
+                    textAnchor="middle"
+                    fontSize={isCore ? 11 : 10}
+                    fill={isHovered ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.55)"}
+                    style={{ pointerEvents: "none", userSelect: "none" }}
+                  >
+                    {truncateLabel(sn.ref.summary)}
+                  </text>
+                )}
+
                 <title>{sn.ref.summary}</title>
               </g>
             );
@@ -584,19 +685,19 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
       {hoverNode && hoverPos && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute z-10 max-w-[200px] -translate-x-1/2 -translate-y-full rounded-zaki-md bg-zaki-base/95 px-2.5 py-1.5 shadow-lg backdrop-blur-sm"
-          style={{ left: hoverPos.left, top: hoverPos.top - 8 }}
+          className="pointer-events-none absolute z-10 max-w-[220px] -translate-x-1/2 -translate-y-full rounded-zaki-lg border border-white/10 bg-black/80 px-3 py-2 shadow-xl backdrop-blur-md"
+          style={{ left: hoverPos.left, top: hoverPos.top - 10 }}
         >
           <div className="flex items-center gap-1.5">
             <span
               className="size-2 shrink-0 rounded-full"
               style={{ backgroundColor: nodeColor(hoverNode.ref.kind) }}
             />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
               {hoverNode.ref.kind}
             </span>
           </div>
-          <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-zaki-text">
+          <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-white/90">
             {hoverNode.ref.summary}
           </p>
         </div>
@@ -615,7 +716,7 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
       )}
 
       {/* Fit-to-view hint */}
-      <p className="mt-1 text-right text-[10px] text-zaki-muted">
+      <p className="mt-1.5 text-right text-[10px] text-zaki-muted">
         {t("brain.graph.fitToView")}
       </p>
     </div>
