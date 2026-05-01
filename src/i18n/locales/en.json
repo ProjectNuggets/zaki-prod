@@ -1687,10 +1687,19 @@
       "selectHint": "Shift-click to multi-select",
       "selected": "{{count}} selected",
       "superseded": "Superseded",
+      "ariaLabel": "Memory graph",
+      "nodeAriaLabel": "Memory: {{summary}}",
+      "fitToView": "Double-click to reset view",
+      "sparseNotice": "Memory connections are sparse — showing radial layout",
       "kindLabel": {
         "core": "Core",
         "daily": "Daily",
         "conversation": "Conversation"
+      },
+      "detail": {
+        "saved": "Saved",
+        "session": "Session",
+        "close": "Close"
       }
     },
     "timeline": {

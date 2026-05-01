@@ -1696,10 +1696,19 @@
       "selectHint": "Shift+النقر للاختيار المتعدد",
       "selected": "{{count}} محددة",
       "superseded": "مُستبدل",
+      "ariaLabel": "مخطط الذاكرة",
+      "nodeAriaLabel": "ذاكرة: {{summary}}",
+      "fitToView": "انقر مرتين لإعادة ضبط العرض",
+      "sparseNotice": "روابط الذاكرة محدودة — يُعرض التخطيط الدائري",
       "kindLabel": {
         "core": "أساسي",
         "daily": "يومي",
         "conversation": "محادثة"
+      },
+      "detail": {
+        "saved": "حُفظ",
+        "session": "الجلسة",
+        "close": "إغلاق"
       }
     },
     "timeline": {
