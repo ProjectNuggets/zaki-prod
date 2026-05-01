@@ -1705,16 +1705,31 @@
         "daily": "يومي",
         "conversation": "محادثة"
       },
+      "search": {
+        "placeholder": "ابحث في الذكريات…",
+        "clear": "مسح البحث"
+      },
       "detail": {
         "saved": "حُفظ",
         "session": "الجلسة",
-        "close": "إغلاق"
+        "close": "إغلاق",
+        "source": "المصدر",
+        "linked": "الذكريات المرتبطة",
+        "priorVersions_one": "{{count}} نسخة سابقة",
+        "priorVersions_other": "{{count}} نسخ سابقة",
+        "confidence": "الثقة"
       }
     },
     "timeline": {
       "loading": "جاري التحميل…",
       "end": "هذا كل شيء.",
       "superseded": "مُستبدل",
+      "slider": {
+        "label": "التنقل عبر الزمن",
+        "now": "الآن",
+        "asOf": "حتى {{date}}",
+        "resetAria": "العودة إلى الحاضر"
+      },
       "kindLabel": {
         "core": "أساسي",
         "daily": "يومي",

@@ -1696,16 +1696,31 @@
         "daily": "Daily",
         "conversation": "Conversation"
       },
+      "search": {
+        "placeholder": "Search memories…",
+        "clear": "Clear search"
+      },
       "detail": {
         "saved": "Saved",
         "session": "Session",
-        "close": "Close"
+        "close": "Close",
+        "source": "Source",
+        "linked": "Linked memories",
+        "priorVersions_one": "{{count}} prior version",
+        "priorVersions_other": "{{count}} prior versions",
+        "confidence": "Confidence"
       }
     },
     "timeline": {
       "loading": "Loading more…",
       "end": "That's everything.",
       "superseded": "Superseded",
+      "slider": {
+        "label": "Time travel",
+        "now": "Now",
+        "asOf": "As of {{date}}",
+        "resetAria": "Reset to present"
+      },
       "kindLabel": {
         "core": "Core",
         "daily": "Daily",

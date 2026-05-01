@@ -332,6 +332,17 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
 
     const sparse = isSparse(data.nodes, data.edges, data.semantic_degraded ?? false);
 
+    // S2: Load persisted node positions from localStorage (keyed by userId)
+    const POSITIONS_KEY = `brain-graph-positions-${userId}`;
+    const savedPositions = (() => {
+      try {
+        const raw = localStorage.getItem(POSITIONS_KEY);
+        if (!raw) return null;
+        const arr = JSON.parse(raw) as Array<{ id: string; x: number; y: number }>;
+        return new Map(arr.map(p => [p.id, { x: p.x, y: p.y }]));
+      } catch { return null; }
+    })();
+
     // Build degree map for M1 synthetic importance + initial placement sort
     const degree = new Map<string, number>();
     data.edges.forEach(e => {
@@ -352,8 +363,13 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
       const imp = syntheticImportance(n, degree.get(n.id) ?? 0, maxDegree);
       const r = importanceToRadius(n.kind, imp);
 
+      // S2: prefer persisted position; fall back to physics initial placement
+      const saved = savedPositions?.get(n.id);
+
       let x: number, y: number;
-      if (sparse) {
+      if (saved) {
+        x = saved.x; y = saved.y;
+      } else if (sparse) {
         // Radial by kind
         const radii: Record<string, number> = { core: 100, daily: 260, conversation: 420 };
         const kindNodes = sorted.filter(m => m.kind === n.kind);
@@ -428,10 +444,22 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
 
     // RAF render + simulation tick loop
     let frame = 0;
+    let positionsSaved = !!savedPositions; // skip initial save if we just restored
+    function savePositions() {
+      try {
+        const payload = nodes.map(n => ({ id: n.id, x: Math.round(n.x ?? 0), y: Math.round(n.y ?? 0) }));
+        localStorage.setItem(POSITIONS_KEY, JSON.stringify(payload));
+      } catch { /* storage quota exceeded — ignore */ }
+    }
     function loop() {
       if (sim.alpha() > sim.alphaMin()) {
         sim.tick();
         simNodesRef.current = [...nodes];
+        positionsSaved = false;
+      } else if (!positionsSaved) {
+        // Simulation settled — persist final layout (S2)
+        positionsSaved = true;
+        savePositions();
       }
       draw();
       if (++frame % 60 === 0) {
@@ -453,6 +481,8 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
     return () => {
       sim.stop();
       if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      // S2: persist on unmount so positions survive navigation away
+      savePositions();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);

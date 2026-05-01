@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores";
@@ -19,6 +19,8 @@ export function BrainPage() {
   const [tab, setTab] = useState<BrainTab>("timeline");
   const [degradedDismissed, setDegradedDismissed] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useNavigate();
   const graphQuery = useBrainGraph(userId);
@@ -78,10 +80,45 @@ export function BrainPage() {
         </div>
       ) : (
         <div data-testid="brain-graph-slot" className="relative px-3 sm:px-5">
+          {/* M2/S3: Search bar — above graph only */}
+          <div className="mx-auto mb-3 max-w-4xl">
+            <div className="relative">
+              <svg
+                className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zaki-muted"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("brain.graph.search.placeholder")}
+                aria-label={t("brain.graph.search.placeholder")}
+                className="w-full rounded-zaki-lg border border-zaki-border bg-zaki-raised py-2 pl-8 pr-8 text-sm text-zaki-text placeholder:text-zaki-muted focus:border-[#f10202] focus:outline-none focus:ring-1 focus:ring-[#f10202]/30"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(""); searchInputRef.current?.focus(); }}
+                  aria-label={t("brain.graph.search.clear")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-zaki-muted hover:text-zaki-text"
+                >
+                  <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
           <BrainGraphView
             userId={userId}
             selectedIds={selectedNodeIds}
             onSelectionChange={setSelectedNodeIds}
+            searchQuery={searchQuery}
           />
           <BrainComposeModal
             userId={userId}

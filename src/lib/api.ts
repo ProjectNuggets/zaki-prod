@@ -1772,12 +1772,13 @@ export async function fetchBrainGraph(
 
 export async function fetchBrainTimeline(
   _userId: string,
-  opts?: { cursor?: string; limit?: number; kind?: string }
+  opts?: { cursor?: string; limit?: number; kind?: string; to?: number }
 ): Promise<BrainTimelineResponse> {
   const params = new URLSearchParams();
   if (opts?.cursor) params.set("cursor", opts.cursor);
   if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts?.kind) params.set("kind", opts.kind);
+  if (opts?.to !== undefined) params.set("to", String(opts.to));
   const qs = params.toString();
   const response = await backendAuthRequest(
     `/api/agent/brain/timeline${qs ? `?${qs}` : ""}`,
