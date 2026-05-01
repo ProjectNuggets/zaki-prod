@@ -297,97 +297,112 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props
     if (displayNodes.length === 0) return;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-    const positions = sparse
-      ? radialByKindPlacement(displayNodes)
-      : sunflowerPlacement(displayNodes.length);
+    if (sparse) {
+      const positions = radialByKindPlacement(displayNodes);
+      const nodes: SimNode[] = displayNodes.map((n, i) => ({
+        id: n.id,
+        x: positions[i]?.x ?? W / 2,
+        y: positions[i]?.y ?? H / 2,
+        vx: 0, vy: 0, ref: n,
+      }));
+      simNodesRef.current = nodes;
+      alphaRef.current = 0;
+      setSimNodes([...nodes]);
+      return;
+    }
 
-    const nodes: SimNode[] = displayNodes.map((n, i) => ({
+    // Degree-sorted sunflower: most-connected nodes land near center,
+    // isolated nodes at periphery → physics converges significantly faster
+    const degree = new Map<string, number>();
+    displayEdges.forEach((e) => {
+      degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+      degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+    });
+    const sortedForPlacement = [...displayNodes].sort(
+      (a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0),
+    );
+    const positions = sunflowerPlacement(sortedForPlacement.length);
+    // Build nodes in degree order so high-degree nodes get center positions
+    const nodesByDegree: SimNode[] = sortedForPlacement.map((n, i) => ({
       id: n.id,
       x: positions[i]?.x ?? W / 2,
       y: positions[i]?.y ?? H / 2,
-      vx: 0,
-      vy: 0,
-      ref: n,
+      vx: 0, vy: 0, ref: n,
     }));
 
-    simNodesRef.current = nodes;
-    alphaRef.current = 1.0;
-    setSimNodes([...nodes]);
-
-    if (sparse) return;
-
-    const idIdx = new Map(nodes.map((n, i) => [n.id, i]));
+    const idIdx = new Map(nodesByDegree.map((n, i) => [n.id, i]));
     const edges = displayEdges.filter((e) => idIdx.has(e.source) && idIdx.has(e.target));
 
-    // Physics constants tuned for ≤80 nodes in 1600×900
-    const REPEL = 14000;
-    const REPEL_MAX_D = 480; // allow long-range repulsion so nodes actually spread
-    const SPRING_K = 0.06;
-    const SPRING_LEN = 160;
-    const DAMP = 0.75;
-    const ALPHA_DECAY = 0.994;
-    const SUB_TICKS = 6;
-    const RENDER_EVERY = 3;
+    // Tuned to match d3-force proportions for 60–80 nodes in 1600×900.
+    // Warm-start runs 200 ticks sync so first render already shows a settled layout.
+    const REPEL = 12000;
+    const REPEL_MAX_D = 500;
+    const SPRING_K = 0.05;
+    const SPRING_LEN = 150;
+    const DAMP = 0.60;        // closer to d3's velocityDecay=0.4 → faster convergence
+    const ALPHA_DECAY = 0.978; // d3-like: reaches 0.004 in ~190 ticks
+    const WARM_TICKS = 200;   // pre-run synchronously before first render
+    const SUB_TICKS = 4;
+    const RENDER_EVERY = 2;
     let frame = 0;
+
+    function applyForces(ns: SimNode[], alpha: number) {
+      for (let i = 0; i < ns.length; i++) {
+        const a = ns[i]!;
+        for (let j = i + 1; j < ns.length; j++) {
+          const b = ns[j]!;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const d2 = dx * dx + dy * dy + 0.01;
+          const d = Math.sqrt(d2);
+          if (d > REPEL_MAX_D) continue;
+          const f = (REPEL / d2) * alpha;
+          const nx2 = dx / d;
+          const ny2 = dy / d;
+          a.vx -= nx2 * f; a.vy -= ny2 * f;
+          b.vx += nx2 * f; b.vy += ny2 * f;
+        }
+      }
+      for (const e of edges) {
+        const ai = idIdx.get(e.source);
+        const bi = idIdx.get(e.target);
+        if (ai === undefined || bi === undefined) continue;
+        const a = ns[ai]!;
+        const b = ns[bi]!;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+        const f = SPRING_K * (d - SPRING_LEN) * alpha;
+        const nx2 = dx / d;
+        const ny2 = dy / d;
+        a.vx += nx2 * f; a.vy += ny2 * f;
+        b.vx -= nx2 * f; b.vy -= ny2 * f;
+      }
+      for (const n of ns) {
+        const G = (KIND_GRAVITY[n.ref.kind] ?? 0) * alpha;
+        n.vx += (W / 2 - n.x) * G;
+        n.vy += (H / 2 - n.y) * G;
+        n.vx *= DAMP; n.vy *= DAMP;
+        n.x = Math.max(40, Math.min(W - 40, n.x + n.vx));
+        n.y = Math.max(40, Math.min(H - 40, n.y + n.vy));
+      }
+    }
+
+    // Warm-start: 200 silent ticks so the first frame shows a settled layout
+    let alpha = 1.0;
+    for (let t = 0; t < WARM_TICKS; t++) {
+      for (let sub = 0; sub < SUB_TICKS; sub++) applyForces(nodesByDegree, alpha);
+      alpha *= ALPHA_DECAY;
+    }
+
+    simNodesRef.current = nodesByDegree;
+    alphaRef.current = alpha;
+    setSimNodes([...nodesByDegree]); // first render: already settled
 
     function tick() {
       if (alphaRef.current < 0.004) return;
-
       const ns = simNodesRef.current;
-      const alpha = alphaRef.current;
-
-      for (let sub = 0; sub < SUB_TICKS; sub++) {
-        // Pairwise repulsion
-        for (let i = 0; i < ns.length; i++) {
-          const a = ns[i]!;
-          for (let j = i + 1; j < ns.length; j++) {
-            const b = ns[j]!;
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const d2 = dx * dx + dy * dy + 0.01;
-            const d = Math.sqrt(d2);
-            if (d > REPEL_MAX_D) continue;
-            const f = (REPEL / d2) * alpha;
-            const nx2 = dx / d;
-            const ny2 = dy / d;
-            a.vx -= nx2 * f;
-            a.vy -= ny2 * f;
-            b.vx += nx2 * f;
-            b.vy += ny2 * f;
-          }
-        }
-
-        // Spring attraction along edges
-        for (const e of edges) {
-          const ai = idIdx.get(e.source);
-          const bi = idIdx.get(e.target);
-          if (ai === undefined || bi === undefined) continue;
-          const a = ns[ai]!;
-          const b = ns[bi]!;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-          const f = SPRING_K * (d - SPRING_LEN) * alpha;
-          const nx2 = dx / d;
-          const ny2 = dy / d;
-          a.vx += nx2 * f;
-          a.vy += ny2 * f;
-          b.vx -= nx2 * f;
-          b.vy -= ny2 * f;
-        }
-
-        // Per-kind gravity toward center + integrate + bound
-        for (const n of ns) {
-          const G = (KIND_GRAVITY[n.ref.kind] ?? 0) * alpha;
-          n.vx += (W / 2 - n.x) * G;
-          n.vy += (H / 2 - n.y) * G;
-          n.vx *= DAMP;
-          n.vy *= DAMP;
-          n.x = Math.max(40, Math.min(W - 40, n.x + n.vx));
-          n.y = Math.max(40, Math.min(H - 40, n.y + n.vy));
-        }
-      }
-
+      for (let sub = 0; sub < SUB_TICKS; sub++) applyForces(ns, alphaRef.current);
       alphaRef.current *= ALPHA_DECAY;
       frame++;
       if (frame % RENDER_EVERY === 0) setSimNodes([...ns]);
