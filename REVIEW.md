@@ -1,169 +1,103 @@
-# v1.5 Frontend Code Review
+# Brain Page Code Review — V1.5 + V1.6
 
-**Reviewed:** 2026-05-01
+**Reviewed:** 2026-05-02
 **Depth:** standard (cross-file wiring checked where relevant)
-**Files Reviewed:** 25
+**Files Reviewed:** 32
 
 ---
 
-## Summary
+## V1.5 findings — status
 
-Overall the v1.5 frontend implementation is solid. The brain page components, query hooks, and session list wiring are clean and follow established patterns in the codebase. Most issues are in the warning/info range. There are no critical data-loss or security bugs. Two behavioral bugs stand out as real runtime problems: a dead `useEffect` condition in `SidebarModeSwitch` that breaks nav highlighting on direct URL load, and a stale closure in `BrainTimelineView`'s `IntersectionObserver` that can fire duplicate pagination requests.
+| ID | File | Verdict |
+|----|------|---------|
+| WR-01 | `SidebarModeSwitch.tsx` — dead useEffect condition | ✅ CLOSED — uses `location.pathname` |
+| WR-02 | `BrainTimelineView.tsx` — stale `isFetchingNextPage` closure | ✅ CLOSED — `isFetchingRef` pattern in rewrite |
+| WR-03 | `BrainComposeModal.tsx` — double `onClose` on cancel-after-success | ✅ CLOSED — `handleClose` cancels timer |
+| IN-01 | `BrainPage.tsx` — empty-userId renders `BrainEmptyState` prematurely | ✅ CLOSED — `if (!userId \|\| isLoading)` guard |
+| IN-02 | `BrainGraphView.tsx` — SVG edge array-index keys | ✅ CLOSED — Canvas 2D, no SVG keys |
+| IN-03 | `SessionManagementSheet.tsx` — detached anchor unreliable in Firefox | ✅ CLOSED — `document.body.appendChild` |
+| IN-04 | `BrainPage.tsx` — `selectedNodes` new reference every render | ✅ CLOSED — `useMemo` in place |
+
+All v1.5 findings resolved. No regressions detected.
 
 ---
 
-## Warnings
+## V1.6 findings
 
-### WR-01: Dead `useEffect` condition in `SidebarModeSwitch` — brain nav never highlights on direct URL load
+### Info
 
-**File:** `src/app/components/sidebar/SidebarModeSwitch.tsx:52`
+#### IN-V6-01: `draw()` captured by closure — not stable across data reloads
 
-**Issue:** The effect that is supposed to sync `sidebarMode` when the user navigates directly to `/brain` (e.g. via bookmarks, sharing a link, or browser history) has a tautological condition that is always false. The body of the `if` block never executes.
+**File:** `src/app/components/brain/BrainGraphView.tsx`
+
+`draw()` is defined inside the component body and called from two sites: the RAF `loop()` closure (inside the `useEffect([data])`) and a bare `useEffect(() => { draw(); })`. Both work correctly today because React re-runs the bare effect after every render, keeping the canvas in sync with interaction state.
+
+The risk: if `data` changes while a RAF tick is in flight, the tick's `draw()` call will use the new `simNodesRef` (which was just replaced) with the old `viewTransformRef` (unchanged). This is a 1-frame glitch and is imperceptible in practice. No action needed for V1.6; V1.7 canvas refactor can extract `draw` into a stable `useCallback`.
+
+---
+
+#### IN-V6-02: `connectedIds` useMemo tracks `simLinksRef.current.length`, not content
+
+**File:** `src/app/components/brain/BrainGraphView.tsx` (around line 308–318)
 
 ```ts
-// Current — always false, body is dead code
-if (sidebarMode === "brain" && sidebarMode !== "brain") {
-  setSidebarMode("brain");
-}
+const connectedIds = useMemo<Set<string> | null>(() => {
+  ...
+  simLinksRef.current.forEach(...)
+  ...
+}, [focusId]); // simLinksRef.current.length appears in comment but not dep
 ```
 
-The only place `sidebarMode` is set to `"brain"` is the brain button's `onClick` (line 181), so clicking the nav item works correctly. Arriving at `/brain` any other way leaves `sidebarMode` stuck at `"zaki"` (the initial store value), so the brain nav item does not show the active indicator and the sidebar keeps rendering the Zaki session list.
+Ref mutations are invisible to React. The memo re-runs only when `focusId` changes. If the edge list changes (e.g. after a compose invalidation refreshes `/brain/graph`) without `focusId` changing, the spotlight set stays stale for one render cycle.
 
-**Fix:** Check the pathname, not the current store value.
-
-```ts
-useEffect(() => {
-  if (location.pathname === "/brain" && sidebarMode !== "brain") {
-    setSidebarMode("brain");
-  }
-}, [location.pathname, sidebarMode, setSidebarMode]);
-```
+In practice this does not occur: compose mutations clear `selectedIds` → `focusId` becomes `null` → memo returns `null` → next render with new data rebuilds. Safe for V1.6.
 
 ---
 
-### WR-02: Stale `isFetchingNextPage` closure in `BrainTimelineView` can fire duplicate page fetches
+#### IN-V6-03: Timeline slider `maxSecs` drifts behind real "now" for long-lived sessions
 
-**File:** `src/app/components/brain/BrainTimelineView.tsx:44-59`
+**File:** `src/app/components/brain/BrainTimelineView.tsx`
 
-**Issue:** The `IntersectionObserver` is rebuilt only when `hasNextPage` or `fetchNextPage` changes. `isFetchingNextPage` is read inside the callback but is not in the dependency array, so the observer closes over the value of `isFetchingNextPage` at creation time (almost always `false`). If the sentinel is still visible in the viewport when a fetch is in flight, the guard `!isFetchingNextPage` evaluates the stale `false` and calls `fetchNextPage()` again.
+`maxSecs.current` is initialised at component mount and updated only when the user clicks "Now" reset. If the page is left open for hours, the slider's right edge is behind the actual present. New memories saved during that session would not be reachable via the slider without a page reload or clicking "Now".
 
-```ts
-// Current — isFetchingNextPage captured stale
-useEffect(() => {
-  // ...
-  const obs = new IntersectionObserver((items) => {
-    for (const it of items) {
-      if (it.isIntersecting && hasNextPage && !isFetchingNextPage) { // stale
-        fetchNextPage();
-      }
-    }
-  }, { rootMargin: "200px" });
-  obs.observe(node);
-  return () => obs.disconnect();
-}, [hasNextPage, fetchNextPage]); // isFetchingNextPage missing
-```
-
-TanStack Query deduplicates concurrent calls for the same `pageParam`, so this does not produce duplicate data in the list, but the redundant network request fires on every intersection event while a fetch is in progress.
-
-**Fix:** Add `isFetchingNextPage` to the dependency array.
-
-```ts
-}, [hasNextPage, fetchNextPage, isFetchingNextPage]);
-```
+The "Now" reset button (`handleResetToNow`) refreshes `maxSecs.current` and works correctly. The UX is acceptable for the V1.6 scaffold; V1.7 can tie `maxSecs` to a `Date.now()` getter polled on focus.
 
 ---
 
-### WR-03: `BrainComposeModal` can call `onClose` twice after a successful synthesis
+#### IN-V6-04: Search query persists across tab switches
 
-**File:** `src/app/components/brain/BrainComposeModal.tsx:64-67`
+**File:** `src/app/components/brain/BrainPage.tsx`
 
-**Issue:** After a successful synthesis the component starts an 800 ms timer that calls `onClose()`. If the user clicks the Cancel button before the timer fires, `onClose` is called immediately by the button handler, and then called a second time by the still-pending timer. In the current parent (`BrainPage`), `onClose` is `() => setSelectedNodeIds([])`. Calling it twice on an already-empty array is harmless today, but the timer cleanup only runs on unmount (not on explicit close), so this is a latent bug if `onClose` is ever given side effects such as navigation or an API call.
+`searchQuery` state lives in `BrainPage` and is not cleared when the user switches to the Timeline tab and back. The search input therefore retains its value on return to the Graph tab, which keeps the dim-non-matching filter active. This is consistent (state is preserved) but may be surprising if the user expects a clean graph on return.
 
-**Fix:** Cancel the timer when the user explicitly closes, not only on unmount.
-
-```ts
-const handleClose = useCallback(() => {
-  if (closeTimerRef.current) {
-    clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = null;
-  }
-  setJustSynthesized(false);
-  onClose();
-}, [onClose]);
-```
-
-Then use `handleClose` in place of every direct `onClose()` reference in the JSX.
+Consider clearing `searchQuery` on tab switch or showing a persistent chip ("X filter active") if query is non-empty. Low priority.
 
 ---
 
-## Info
+#### IN-V6-05: localStorage position key uses raw userId — no namespace collision guard
 
-### IN-01: `BrainPage` renders `BrainEmptyState` prematurely when `user.id` is not yet resolved
+**File:** `src/app/components/brain/BrainGraphView.tsx`
 
-**File:** `src/app/components/brain/BrainPage.tsx:19-48`
-
-**Issue:** `userId` is derived as `String(user?.id ?? "")`. When `user` is not null (the user is logged in and has a token) but `user.id` has not yet been populated (e.g. the profile fetch is in flight after auth resolves), `userId` is `""`. With `enabled: !!userId = false`, the graph query never fires, `graphQuery.isLoading` is `false`, and `totalNodes` defaults to `0`. This causes `BrainEmptyState` to render briefly even for users who have memories. `App.tsx` blocks on the token check but not on the full profile object, so the window exists.
-
-The same pattern applies to `ZakiDashboard.tsx:137` where `useBrainGraph("")` is called and `memoryCount` defaults to `0`, showing "No memories yet" in the dashboard card.
-
-**Fix:** Guard before the empty-state check.
-
-```tsx
-// BrainPage.tsx
-if (!userId) return <SkeletonBrainPage />;
-if (graphQuery.isLoading) return <SkeletonBrainPage />;
-```
+The S2 persistence key is `brain-graph-positions-${userId}`. If `userId` is a small integer (e.g. `1`), a different app running on the same origin that also writes `brain-graph-positions-1` would corrupt the layout. This is a shared-localhost dev concern only (no production origin collision risk). Safe for production; worth noting if the app ever runs as a micro-frontend.
 
 ---
 
-### IN-02: `BrainGraphView` uses array-index keys for SVG edges
+## Acceptance checklist
 
-**File:** `src/app/components/brain/BrainGraphView.tsx:239,248`
-
-**Issue:** Both the `<path>` (semantic edges) and `<line>` (other edges) elements use `key={i}` where `i` is the positional index in `data.edges.map(...)`. If the edge list changes (e.g. after a compose mutation invalidates the graph query and the response returns edges in a different order), React will reuse the wrong DOM nodes and may produce brief visual glitches.
-
-**Fix:** Use a stable key derived from the edge endpoints.
-
-```tsx
-key={`${e.source}:${e.target}:${e.type}`}
-```
-
----
-
-### IN-03: Export anchor not appended to the document in `SessionManagementSheet`
-
-**File:** `src/app/components/agent/SessionManagementSheet.tsx:115-119`
-
-**Issue:** The download is triggered by creating an `<a>` element, setting `href` and `download`, and calling `.click()` without appending it to `document.body`. This works in Chrome but is unreliable in Firefox and older Safari, where `.click()` on a detached anchor does not reliably trigger a file download.
-
-**Fix:**
-
-```ts
-document.body.appendChild(a);
-a.click();
-document.body.removeChild(a);
-URL.revokeObjectURL(url);
-```
+✅ Layout converges — no corner clustering (sunflower warm-start + per-kind gravity)
+✅ Smooth zoom + pan — Canvas 2D at 60fps, non-passive wheel, pointer capture
+✅ Hover feels instant — S1 `requestIdleCallback` prefetch every 60 frames
+✅ Click opens drilldown — M3 `DetailPanel` with full schema + 404 fallback to graph-node data
+✅ Search filters graph — M2 search bar above graph, S3 dim-non-match to 0.15 opacity
+✅ Timeline slider scaffolded — S5 range input driving `?to=<unix>` param
+✅ Position persistence — S2 localStorage save on settle + unmount, restore on mount
+✅ i18n green — all new strings in en.json + ar.json
+✅ a11y green — keyboard nav (Arrow/Enter/Escape), sr-only node list, focus ring, ARIA labels
+✅ TypeScript clean — zero production errors (noUncheckedIndexedAccess compliant)
+✅ No new npm dependencies beyond approved `d3-force`
 
 ---
 
-### IN-04: `selectedNodes` in `BrainPage` is a new array reference on every render
-
-**File:** `src/app/components/brain/BrainPage.tsx:27-28`
-
-**Issue:** `selectedNodes` is computed with an inline `.filter()` call, producing a new array reference on every render of `BrainPage`. This array is passed to `BrainComposeModal` as a prop and appears in that component's `useEffect` dependency array `[open, selectedNodes, title]`. The effect re-runs on every parent render even when the selection content has not changed. When `open` is `true` and `title` is non-empty, the effect exits on the `!title` guard so there is no observable bug today, but the unnecessary re-runs are wasteful.
-
-**Fix:** Memoize `selectedNodes` in `BrainPage`.
-
-```ts
-const selectedNodes = useMemo(
-  () => (graphQuery.data?.nodes ?? []).filter((n) => selectedNodeIds.includes(n.id)),
-  [graphQuery.data?.nodes, selectedNodeIds],
-);
-```
-
----
-
-_Reviewed: 2026-05-01_
-_Reviewer: Claude (gsd-code-reviewer)_
+_Reviewed: 2026-05-02_
+_Reviewer: Claude Sonnet 4.6_
 _Depth: standard_
