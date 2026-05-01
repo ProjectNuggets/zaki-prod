@@ -1671,8 +1671,14 @@ export interface BrainComposeResponse {
   composed_at: number;
 }
 
+// Brain endpoints route through the express BFF (`/api/agent/brain/*`),
+// which proxies to nullalis (`/api/v1/users/{canonical}/brain/*`). The BFF
+// derives the canonical bigint user_id from the auth context, so the
+// `userId` argument here is no longer interpolated into the URL — it is
+// retained on the function signature so query keys and call sites stay
+// stable across this refactor.
 export async function fetchBrainGraph(
-  userId: string,
+  _userId: string,
   opts?: { since?: number; max_nodes?: number; node_kinds?: string }
 ): Promise<BrainGraphResponse> {
   const params = new URLSearchParams();
@@ -1680,15 +1686,15 @@ export async function fetchBrainGraph(
   if (opts?.max_nodes !== undefined) params.set("max_nodes", String(opts.max_nodes));
   if (opts?.node_kinds) params.set("node_kinds", opts.node_kinds);
   const qs = params.toString();
-  const response = await apiRequest(
-    `/api/v1/users/${userId}/brain/graph${qs ? `?${qs}` : ""}`,
+  const response = await backendAuthRequest(
+    `/api/agent/brain/graph${qs ? `?${qs}` : ""}`,
   );
   if (!response.ok) throw new Error(`brain/graph ${response.status}`);
   return (await response.json()) as BrainGraphResponse;
 }
 
 export async function fetchBrainTimeline(
-  userId: string,
+  _userId: string,
   opts?: { cursor?: string; limit?: number; kind?: string }
 ): Promise<BrainTimelineResponse> {
   const params = new URLSearchParams();
@@ -1696,19 +1702,19 @@ export async function fetchBrainTimeline(
   if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts?.kind) params.set("kind", opts.kind);
   const qs = params.toString();
-  const response = await apiRequest(
-    `/api/v1/users/${userId}/brain/timeline${qs ? `?${qs}` : ""}`,
+  const response = await backendAuthRequest(
+    `/api/agent/brain/timeline${qs ? `?${qs}` : ""}`,
   );
   if (!response.ok) throw new Error(`brain/timeline ${response.status}`);
   return (await response.json()) as BrainTimelineResponse;
 }
 
 export async function postBrainCompose(
-  userId: string,
+  _userId: string,
   body: BrainComposeRequest,
 ): Promise<BrainComposeResponse> {
-  const response = await apiRequest(
-    `/api/v1/users/${userId}/brain/compose`,
+  const response = await backendAuthRequest(
+    `/api/agent/brain/compose`,
     { method: "POST", body: JSON.stringify(body) },
   );
   if (!response.ok) throw new Error(`brain/compose ${response.status}`);

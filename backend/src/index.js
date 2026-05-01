@@ -9565,6 +9565,42 @@ app.post(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/attachments`
   )
 );
+// ── Brain: V1.5 second-brain visualization ──────────────────────────
+// GET  /api/agent/brain/graph    → nullalis /brain/graph (semantic+session+ref edges)
+// GET  /api/agent/brain/timeline → nullalis /brain/timeline (cursor pagination)
+// POST /api/agent/brain/compose  → nullalis /brain/compose (synthesis create)
+//
+// userId in BFF URL is unused — proxy derives canonical bigint from auth.
+// Query strings need explicit pass-through; proxyNullclawRequest does not
+// propagate them automatically.
+app.get(
+  "/api/agent/brain/graph",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/graph${qs}`;
+  })
+);
+app.get(
+  "/api/agent/brain/timeline",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/timeline${qs}`;
+  })
+);
+app.post(
+  "/api/agent/brain/compose",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`
+  )
+);
+
 // ── Voice: STT and TTS ──────────────────────────────────────────────
 app.post(
   "/api/agent/voice/transcribe",
