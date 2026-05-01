@@ -1630,12 +1630,89 @@ export interface BrainGraphNode {
   session_id: string | null;
   summary: string;
   valid_to: number | null;
+  // V1.6 — lands with M1 backend commit ~4
+  importance_score?: number;
+  // V1.6 — lands with M4 backend commit ~11 (truncated source excerpt for hover)
+  source_snippet?: string;
 }
 
 export type BrainGraphEdge =
   | { type: "session"; source: string; target: string }
   | { type: "semantic"; source: string; target: string; weight: number }
-  | { type: "reference"; source: string; target: string };
+  | { type: "reference"; source: string; target: string }
+  // V1.6 — lands when atomic-fact extraction ships (commit ~12)
+  | { type: "typed"; source: string; target: string; link_type: string };
+
+// ── /brain/search (M2 — V1.6 commit ~9) ─────────────────────
+// Scaffold now; swap fetchBrainSearch from stub to real call when endpoint lands.
+export interface BrainSearchResult {
+  key: string;
+  kind: "core" | "daily" | "conversation";
+  summary: string;
+  relevance_score: number; // 0..1
+  created_at: number;
+}
+
+export interface BrainSearchResponse {
+  results: BrainSearchResult[];
+  total_matched: number;
+}
+
+export async function fetchBrainSearch(
+  _userId: string,
+  q: string,
+  limit = 20,
+): Promise<BrainSearchResponse> {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  const response = await backendAuthRequest(`/api/agent/brain/search?${params.toString()}`);
+  if (!response.ok) throw new Error(`brain/search ${response.status}`);
+  return (await response.json()) as BrainSearchResponse;
+}
+
+// ── /brain/memory/{key} (M3 — V1.6 commit ~10) ──────────────
+// Scaffold now; fetch falls back to graph-node data on 404 until backend lands.
+export interface BrainMemoryDetail {
+  key: string;
+  content: string;
+  kind: "core" | "daily" | "conversation";
+  subject?: string;
+  predicate?: string;
+  object_key?: string;
+  link_type?: "updates" | "extends" | "derives" | "contradicts";
+  importance_score: number;
+  confidence_score: number;
+  created_at: number;
+  valid_at?: number;
+  valid_to: number | null;
+  session_id: string | null;
+  metadata: Record<string, unknown>;
+  source: {
+    session_id: string;
+    message_id: string;
+    timestamp: number;
+    snippet: string; // 200-char excerpt of originating conversation
+  } | null;
+  linked_memories: Array<{
+    key: string;
+    summary: string;
+    link_type: string;
+    edge_direction: "incoming" | "outgoing";
+  }>;
+  valid_history: Array<{
+    valid_from: number;
+    valid_to: number | null;
+    content: string;
+  }>;
+}
+
+export async function fetchBrainMemory(
+  _userId: string,
+  key: string,
+): Promise<BrainMemoryDetail> {
+  const response = await backendAuthRequest(`/api/agent/brain/memory/${encodeURIComponent(key)}`);
+  if (!response.ok) throw new Error(`brain/memory ${response.status}`);
+  return (await response.json()) as BrainMemoryDetail;
+}
 
 // ── /brain/timeline ──────────────────────────────────────────
 export interface BrainTimelineResponse {
