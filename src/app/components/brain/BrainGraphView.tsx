@@ -823,6 +823,39 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
     setHoveredNode(null);
   }, []);
 
+  // ── Keyboard navigation (a11y) ────────────────────────────────
+  // Tab → canvas focus ring; Arrow keys → cycle nodes; Enter → open detail; Escape → close
+  const kbIdxRef = useRef<number>(-1);
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    const nodes = simNodesRef.current;
+    if (nodes.length === 0) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      kbIdxRef.current = (kbIdxRef.current + 1) % nodes.length;
+      const n = nodes[kbIdxRef.current];
+      if (n) setHoveredNode(n);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      kbIdxRef.current = (kbIdxRef.current - 1 + nodes.length) % nodes.length;
+      const n = nodes[kbIdxRef.current];
+      if (n) setHoveredNode(n);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const n = nodes[kbIdxRef.current];
+      if (n) {
+        const closing = detailNodeId === n.id;
+        setDetailNodeId(closing ? null : n.id);
+        onSelectionChange(closing ? [] : [n.id]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setDetailNodeId(null);
+      onSelectionChange([]);
+      setHoveredNode(null);
+      kbIdxRef.current = -1;
+    }
+  }, [detailNodeId, onSelectionChange]);
+
   // Re-draw whenever interaction state changes
   useEffect(() => { draw(); });
 
@@ -892,17 +925,29 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
 
   return (
     <div ref={containerRef} className="relative" style={{ touchAction: "none" }}>
+      {/* sr-only node list — gives screen readers a text representation of the graph */}
+      <ul className="sr-only" aria-label={t("brain.graph.ariaLabel")}>
+        {data.nodes.map(n => (
+          <li key={n.id} aria-label={t("brain.graph.nodeAriaLabel", { summary: n.summary })}>
+            {n.summary}
+          </li>
+        ))}
+      </ul>
+
       <canvas
         ref={canvasRef}
-        className={`w-full rounded-zaki-xl ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        tabIndex={0}
+        className={`w-full rounded-zaki-xl outline-none focus-visible:ring-2 focus-visible:ring-[#f10202]/50 ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
         style={{ height: "72vh", minHeight: 480, display: "block" }}
         aria-label={t("brain.graph.ariaLabel")}
-        role="img"
+        aria-roledescription="interactive memory graph — use arrow keys to navigate nodes, Enter to open details"
+        role="application"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handleMouseLeave}
         onDoubleClick={handleDoubleClick}
+        onKeyDown={handleKeyDown}
       />
 
       {/* Hover tooltip */}
