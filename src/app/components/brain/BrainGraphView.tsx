@@ -1,225 +1,260 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+/**
+ * BrainGraphView — Canvas 2D + d3-force
+ *
+ * Architecture: Canvas for rendering (60fps at 500+ nodes), d3-force for
+ * physics (battle-tested: alphaDecay=0.0228, velocityDecay=0.4, forceCollide).
+ * DOM overlays: tooltip, detail panel (positioned via containerRef).
+ *
+ * Rendering pipeline each RAF tick:
+ *   clearRect → draw edges → draw nodes → draw labels → HUD
+ *
+ * Interaction: O(n) hit-test on mousemove (fine for ≤500 nodes), pointer
+ * capture for drag-pan, non-passive wheel for zoom.
+ */
+
+import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  type Simulation,
+  type SimulationNodeDatum,
+  type SimulationLinkDatum,
+} from "d3-force";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
-import { useBrainGraph } from "@/queries";
-import type { BrainGraphEdge, BrainGraphNode } from "@/lib/api";
+import { X, ChevronDown, ChevronUp } from "lucide-react";
+import { useBrainGraph, useBrainMemory, useBrainMemoryPrefetch } from "@/queries";
+import type { BrainGraphEdge, BrainGraphNode, BrainMemoryDetail } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────
 
 interface Props {
   userId: string;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
+  searchQuery?: string; // driven by BrainPage search bar
 }
 
-interface SimNode {
+// d3-force requires mutable x/y — we extend the node ref
+interface SimNode extends SimulationNodeDatum {
   id: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
   ref: BrainGraphNode;
+  r: number; // computed radius (importance-scaled)
 }
 
-interface ViewTransform {
-  x: number;
-  y: number;
-  scale: number;
+interface SimLink extends SimulationLinkDatum<SimNode> {
+  edge: BrainGraphEdge;
 }
+
+interface ViewTransform { x: number; y: number; scale: number }
+
+// ── Constants ─────────────────────────────────────────────────
 
 const W = 1600;
 const H = 900;
-const MAX_DISPLAY_NODES = 80;
+const BASE_R = { core: 14, daily: 8, conversation: 5 } as Record<string, number>;
+const COLOR = { core: "#f10202", daily: "#22c55e", conversation: "#6b7280" } as Record<string, string>;
+const GLOW  = { core: "rgba(241,2,2,0.35)", daily: "rgba(34,197,94,0.25)", conversation: "rgba(107,114,128,0.12)" } as Record<string, string>;
+const EDGE_COLOR = { semantic: "#7b9fd4", reference: "#a89070", session: "#7a7a8a", typed: "#c084fc" } as Record<string, string>;
 
-const NODE_RADIUS: Record<string, number> = {
-  core: 16,
-  daily: 9,
-  conversation: 5,
-};
-
-// Per-kind gravity toward canvas center — creates solar-system hierarchy automatically
-const KIND_GRAVITY: Record<string, number> = {
-  core: 0.045,       // anchored near center
-  daily: 0.004,      // mid-ring
-  conversation: 0,   // outer ring, free-floating
-};
+// ── Utilities ─────────────────────────────────────────────────
 
 function useIsMobile() {
-  const [m, setM] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 640 : false,
-  );
+  const [m, setM] = useState(() => typeof window !== "undefined" ? window.innerWidth < 640 : false);
   useEffect(() => {
-    const onR = () => setM(window.innerWidth < 640);
-    window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
+    const h = () => setM(window.innerWidth < 640);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
   }, []);
   return m;
 }
 
-function nodeRadius(kind: string): number {
-  return NODE_RADIUS[kind] ?? 5;
+/** M1: Derive importance from edge degree until backend delivers importance_score */
+function syntheticImportance(node: BrainGraphNode, degree: number, maxDegree: number): number {
+  if (typeof node.importance_score === "number") return node.importance_score;
+  if (maxDegree === 0) return 0;
+  return degree / maxDegree;
 }
 
-function nodeColor(kind: string): string {
-  if (kind === "core") return "#f10202";
-  if (kind === "daily") return "#22c55e";
-  return "#6b7280";
+/** Power-scale importance → radius (sqrt gives good mid-tier distinction) */
+function importanceToRadius(kind: string, importance: number): number {
+  const base = BASE_R[kind] ?? 5;
+  return base + 10 * Math.sqrt(Math.max(0, Math.min(1, importance)));
 }
 
-function nodeGlowColor(kind: string): string {
-  if (kind === "core") return "rgba(241,2,2,0.3)";
-  if (kind === "daily") return "rgba(34,197,94,0.25)";
-  return "rgba(107,114,128,0.15)";
+function kindColor(kind: string): string { return COLOR[kind] ?? "#6b7280"; }
+function kindGlow(kind: string): string  { return GLOW[kind]  ?? "rgba(107,114,128,0.12)"; }
+
+function isSparse(nodes: BrainGraphNode[], edges: BrainGraphEdge[], degraded: boolean) {
+  if (degraded) return true;
+  return edges.filter(e => e.type === "semantic").length < nodes.length / 4;
 }
 
-// Prioritise: all core → most-recent daily → most-recent conversation
-function selectDisplayNodes(all: BrainGraphNode[]): BrainGraphNode[] {
-  const byKind = (kind: string) =>
-    all.filter((n) => n.kind === kind).sort((a, b) => b.created_at - a.created_at);
-  const core = byKind("core");
-  const daily = byKind("daily");
-  const conv = byKind("conversation");
-  const other = all.filter((n) => n.kind !== "core" && n.kind !== "daily" && n.kind !== "conversation");
+function truncate(s: string, n: number) { return s.length <= n ? s : s.slice(0, n - 1) + "…"; }
 
-  const result: BrainGraphNode[] = [...core];
-  let remaining = MAX_DISPLAY_NODES - result.length;
-  if (remaining > 0) {
-    const dailySlot = Math.ceil(remaining * 0.6);
-    result.push(...daily.slice(0, dailySlot));
-    remaining = MAX_DISPLAY_NODES - result.length;
-  }
-  if (remaining > 0) {
-    result.push(...conv.slice(0, remaining));
-    remaining = MAX_DISPLAY_NODES - result.length;
-  }
-  if (remaining > 0) result.push(...other.slice(0, remaining));
-  return result;
+function matchesSearch(node: BrainGraphNode, q: string) {
+  if (!q) return true;
+  return node.summary.toLowerCase().includes(q.toLowerCase());
 }
 
-// Sunflower/golden-angle — deterministic, avoids corner bias
-function sunflowerPlacement(count: number): Array<{ x: number; y: number }> {
-  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-  const cx = W / 2;
-  const cy = H / 2;
-  const maxR = Math.min(W, H) / 2 - 80;
-  return Array.from({ length: count }, (_, i) => {
-    const r = maxR * Math.sqrt((i + 0.5) / count);
-    const theta = i * GOLDEN;
-    return { x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) };
-  });
-}
-
-// Concentric rings by kind for sparse/degraded graphs
-function radialByKindPlacement(nodes: BrainGraphNode[]): Array<{ x: number; y: number }> {
-  const cx = W / 2;
-  const cy = H / 2;
-  const radii: Record<string, number> = { core: 100, daily: 260, conversation: 420 };
-  const buckets: Record<string, number[]> = {};
-  nodes.forEach((n, i) => {
-    const k = n.kind in radii ? n.kind : "conversation";
-    if (!buckets[k]) buckets[k] = [];
-    buckets[k].push(i);
-  });
-  const positions: Array<{ x: number; y: number }> = new Array(nodes.length);
-  for (const [kind, indices] of Object.entries(buckets)) {
-    const r = radii[kind] ?? 420;
-    indices.forEach((idx, i) => {
-      const angle = (i / Math.max(indices.length, 1)) * Math.PI * 2 - Math.PI / 2;
-      positions[idx] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
-    });
-  }
-  nodes.forEach((_, i) => {
-    if (!positions[i]) positions[i] = { x: cx, y: cy };
-  });
-  return positions;
-}
-
-function isSparseGraph(
-  nodes: BrainGraphNode[],
-  edges: BrainGraphEdge[],
-  semanticDegraded: boolean,
-): boolean {
-  if (semanticDegraded) return true;
-  const semanticCount = edges.filter((e) => e.type === "semantic").length;
-  return semanticCount < nodes.length / 4;
-}
-
-function truncateLabel(text: string, max = 24): string {
-  return text.length <= max ? text : text.slice(0, max - 1) + "…";
-}
-
-// ── Edge opacity logic — the relationship reveal system ──────
-function computeEdgeOpacity(
-  edge: BrainGraphEdge,
-  hoverId: string | null,
-  focusId: string | null, // node clicked (detail open or selected)
-  connectedIds: Set<string> | null,
-): number {
-  if (focusId && connectedIds) {
-    // Spotlight mode: show only edges connecting to focused node
-    const directEdge = edge.source === focusId || edge.target === focusId;
-    return directEdge ? 0.9 : 0.04;
-  }
-  if (hoverId) {
-    // Hover mode: illuminate this node's web
-    if (edge.source === hoverId || edge.target === hoverId) return 0.72;
-    return 0.05;
-  }
-  // Default: visible but calm
-  return edge.type === "semantic" ? 0.28 : 0.16;
-}
-
-// ── Detail panel ──────────────────────────────────────────────
+// ── Detail Panel ──────────────────────────────────────────────
 
 interface DetailPanelProps {
   node: BrainGraphNode;
+  detail: BrainMemoryDetail | null;
+  loading: boolean;
   onClose: () => void;
   t: ReturnType<typeof useTranslation>["t"];
 }
 
-function DetailPanel({ node, onClose, t }: DetailPanelProps) {
+function DetailPanel({ node, detail, loading, onClose, t }: DetailPanelProps) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const color = kindColor(node.kind);
   const isDeprecated = node.valid_to !== null;
-  const color = nodeColor(node.kind);
+
+  // Use M3 full content when available, fall back to graph-node summary
+  const content = detail?.content ?? node.summary;
+  const importance = detail?.importance_score;
+  const confidence = detail?.confidence_score;
+  const source = detail?.source;
+  const linked = detail?.linked_memories ?? [];
+  const history = detail?.valid_history ?? [];
+
+  const linkTypeColor: Record<string, string> = {
+    updates: "bg-blue-500/15 text-blue-400",
+    extends: "bg-green-500/15 text-green-400",
+    derives: "bg-purple-500/15 text-purple-400",
+    contradicts: "bg-red-500/15 text-red-400",
+  };
+
   return (
-    <div className="absolute inset-y-0 right-0 z-20 flex w-64 flex-col border-l border-white/10 bg-black/75 p-4 shadow-2xl backdrop-blur-lg">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="absolute inset-y-0 right-0 z-20 flex w-72 flex-col border-l border-white/10 bg-black/80 backdrop-blur-xl">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
         <span
           className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
           style={{ backgroundColor: color }}
         >
           {t(`brain.graph.kindLabel.${node.kind}` as never, { defaultValue: node.kind })}
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full p-1 text-white/40 transition-colors hover:text-white"
-          aria-label={t("brain.graph.detail.close")}
-        >
-          <X className="size-3.5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {typeof importance === "number" && (
+            <div className="flex items-center gap-1" title={`Importance: ${(importance * 100).toFixed(0)}%`}>
+              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full bg-[#f10202]" style={{ width: `${importance * 100}%` }} />
+              </div>
+            </div>
+          )}
+          <button type="button" onClick={onClose} className="rounded-full p-1 text-white/40 transition-colors hover:text-white" aria-label={t("brain.graph.detail.close")}>
+            <X className="size-3.5" />
+          </button>
+        </div>
       </div>
-      <p className="flex-1 overflow-y-auto text-sm leading-relaxed text-white/90">
-        {node.summary}
-      </p>
-      <div className="mt-4 space-y-1.5 border-t border-white/10 pt-3 text-[11px] text-white/40">
-        <div className="flex items-center justify-between gap-2">
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {loading && !detail ? (
+          <div className="space-y-2">
+            <div className="h-3 w-full animate-pulse rounded bg-white/10" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-white/10" />
+            <div className="h-3 w-3/5 animate-pulse rounded bg-white/10" />
+          </div>
+        ) : (
+          <p className="text-sm leading-relaxed text-white/90">{content}</p>
+        )}
+
+        {/* Source attribution — M4 */}
+        {source && (
+          <div className="mt-4 rounded-zaki-md border border-white/10 bg-white/5 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              {t("brain.graph.detail.source")}
+            </p>
+            <p className="mt-1 text-[11px] text-white/60">
+              {new Date(source.timestamp * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+            </p>
+            {source.snippet && (
+              <p className="mt-1 line-clamp-2 text-[11px] italic text-white/50">"{source.snippet}"</p>
+            )}
+          </div>
+        )}
+
+        {/* Linked memories — M3 */}
+        {linked.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              {t("brain.graph.detail.linked")}
+            </p>
+            <div className="space-y-1.5">
+              {linked.map((lm, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-zaki-md bg-white/5 px-2.5 py-2">
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${linkTypeColor[lm.link_type] ?? "bg-white/10 text-white/50"}`}>
+                    {lm.link_type}
+                  </span>
+                  <p className="line-clamp-2 text-[11px] text-white/70">{lm.summary}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Valid history — collapsible */}
+        {history.length > 0 && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(o => !o)}
+              className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-white/40 hover:text-white/60"
+            >
+              {t("brain.graph.detail.priorVersions", { count: history.length })}
+              {historyOpen ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+            </button>
+            {historyOpen && (
+              <div className="mt-2 space-y-2">
+                {history.map((h, i) => (
+                  <div key={i} className="rounded-zaki-md border border-white/10 bg-white/5 px-2.5 py-2">
+                    <p className="mb-1 text-[10px] text-white/40">
+                      {new Date(h.valid_from * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      {h.valid_to ? ` → ${new Date(h.valid_to * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
+                    </p>
+                    <p className="text-[11px] text-white/60">{h.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="shrink-0 border-t border-white/10 px-4 py-3 text-[11px] text-white/40">
+        <div className="flex items-center justify-between">
           <span>{t("brain.graph.detail.saved")}</span>
           <span className="font-medium text-white/70">
-            {new Date(node.created_at * 1000).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {new Date(node.created_at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
           </span>
         </div>
         {node.session_id && (
-          <div className="flex items-center justify-between gap-2">
+          <div className="mt-1 flex items-center justify-between">
             <span>{t("brain.graph.detail.session")}</span>
-            <span className="truncate font-mono text-[10px] text-white/60" title={node.session_id}>
-              …{node.session_id.slice(-8)}
-            </span>
+            <span className="font-mono text-[10px] text-white/60" title={node.session_id}>…{node.session_id.slice(-8)}</span>
+          </div>
+        )}
+        {typeof confidence === "number" && (
+          <div className="mt-1 flex items-center justify-between">
+            <span>{t("brain.graph.detail.confidence")}</span>
+            <span className="font-medium text-white/70">{(confidence * 100).toFixed(0)}%</span>
           </div>
         )}
         {isDeprecated && (
-          <div className="mt-2 rounded-full bg-amber-500/15 px-2 py-1 text-center text-[10px] font-semibold text-amber-400">
+          <div className="mt-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-center text-[10px] font-semibold text-amber-400">
             {t("brain.graph.superseded")}
           </div>
         )}
@@ -230,644 +265,644 @@ function DetailPanel({ node, onClose, t }: DetailPanelProps) {
 
 // ── BrainGraphView ────────────────────────────────────────────
 
-export function BrainGraphView({ userId, selectedIds, onSelectionChange }: Props) {
+export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQuery = "" }: Props) {
   const { t } = useTranslation();
   const { data, isLoading, isError } = useBrainGraph(userId);
   const isMobile = useIsMobile();
 
-  const [simNodes, setSimNodes] = useState<SimNode[]>([]);
-  const [viewTransform, setViewTransform] = useState<ViewTransform>({ x: 0, y: 0, scale: 1 });
-  const [hoverId, setHoverId] = useState<string | null>(null);
-  const [detailNode, setDetailNode] = useState<BrainGraphNode | null>(null);
-  const [isPanning, setIsPanning] = useState(false);
+  // Canvas + container refs
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const rafRef       = useRef<number | null>(null);
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragStart = useRef<{ x: number; y: number; vt: ViewTransform } | null>(null);
-  const rafRef = useRef<number | null>(null);
+  // d3 simulation ref — stable across renders
+  const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
-  const alphaRef = useRef(1.0);
-  const viewTransformRef = useRef(viewTransform);
-  const didDragRef = useRef(false);
+  const simLinksRef = useRef<SimLink[]>([]);
 
-  useEffect(() => {
-    viewTransformRef.current = viewTransform;
-  }, [viewTransform]);
+  // Interaction state
+  const [viewTransform, setViewTransform] = useState<ViewTransform>({ x: 0, y: 0, scale: 1 });
+  const viewTransformRef = useRef<ViewTransform>({ x: 0, y: 0, scale: 1 });
+  const [hoveredNode, setHoveredNode] = useState<SimNode | null>(null);
+  const hoveredNodeRef = useRef<SimNode | null>(null);
+  const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const dragStartRef = useRef<{ cx: number; cy: number; vt: ViewTransform } | null>(null);
+  const didDragRef   = useRef(false);
 
+  // Keep refs in sync with state for use in canvas render loop
+  useEffect(() => { viewTransformRef.current = viewTransform; }, [viewTransform]);
+  useEffect(() => { hoveredNodeRef.current = hoveredNode; }, [hoveredNode]);
+
+  // M3 drilldown
+  const detailNode = useMemo(
+    () => simNodesRef.current.find(n => n.id === detailNodeId)?.ref ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [detailNodeId, simNodesRef.current.length],
+  );
+  const { data: memoryDetail, isLoading: memoryLoading } = useBrainMemory(userId, detailNodeId);
+  const prefetchMemory = useBrainMemoryPrefetch(userId);
+
+  // Focus set for spotlight rendering
+  const focusId = detailNodeId ?? (selectedIds.length === 1 ? selectedIds[0] : null);
+  const connectedIds = useMemo<Set<string> | null>(() => {
+    if (!focusId || !simLinksRef.current.length) return null;
+    const s = new Set<string>([focusId]);
+    simLinksRef.current.forEach(l => {
+      const src = (l.source as SimNode).id;
+      const tgt = (l.target as SimNode).id;
+      if (src === focusId) s.add(tgt);
+      if (tgt === focusId) s.add(src);
+    });
+    return s;
+  }, [focusId]);
+
+  // Close detail when compose modal takes over
   useEffect(() => {
-    if (selectedIds.length >= 2) setDetailNode(null);
+    if (selectedIds.length >= 2) setDetailNodeId(null);
   }, [selectedIds]);
 
-  // Display nodes (capped + prioritised)
-  const displayNodes = useMemo(
-    () => (data ? selectDisplayNodes(data.nodes) : []),
-    [data],
-  );
-  const hiddenCount = (data?.nodes.length ?? 0) - displayNodes.length;
+  // ── d3-force simulation setup ────────────────────────────────
 
-  const sparse = useMemo(
-    () =>
-      data
-        ? isSparseGraph(displayNodes, data.edges, data.semantic_degraded ?? false)
-        : false,
-    [data, displayNodes],
-  );
-
-  // Edges filtered to display nodes only
-  const displayEdges = useMemo(() => {
-    if (!data) return [];
-    const ids = new Set(displayNodes.map((n) => n.id));
-    return data.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
-  }, [data, displayNodes]);
-
-  // IDs connected to the focused node (for spotlight mode)
-  const focusId = detailNode?.id ?? (selectedIds.length === 1 ? selectedIds[0] : null) ?? null;
-  const connectedIds = useMemo<Set<string> | null>(() => {
-    if (!focusId) return null;
-    const connected = new Set<string>([focusId]);
-    displayEdges.forEach((e) => {
-      if (e.source === focusId) connected.add(e.target);
-      if (e.target === focusId) connected.add(e.source);
-    });
-    return connected;
-  }, [focusId, displayEdges]);
-
-  // Simulation setup
   useEffect(() => {
-    if (displayNodes.length === 0) return;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (!data || data.nodes.length === 0) return;
 
-    if (sparse) {
-      const positions = radialByKindPlacement(displayNodes);
-      const nodes: SimNode[] = displayNodes.map((n, i) => ({
-        id: n.id,
-        x: positions[i]?.x ?? W / 2,
-        y: positions[i]?.y ?? H / 2,
-        vx: 0, vy: 0, ref: n,
-      }));
-      simNodesRef.current = nodes;
-      alphaRef.current = 0;
-      setSimNodes([...nodes]);
-      return;
-    }
+    // Cancel any running RAF
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
 
-    // Degree-sorted sunflower: most-connected nodes land near center,
-    // isolated nodes at periphery → physics converges significantly faster
+    const sparse = isSparse(data.nodes, data.edges, data.semantic_degraded ?? false);
+
+    // Build degree map for M1 synthetic importance + initial placement sort
     const degree = new Map<string, number>();
-    displayEdges.forEach((e) => {
+    data.edges.forEach(e => {
       degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
       degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
     });
-    const sortedForPlacement = [...displayNodes].sort(
-      (a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0),
-    );
-    const positions = sunflowerPlacement(sortedForPlacement.length);
-    // Build nodes in degree order so high-degree nodes get center positions
-    const nodesByDegree: SimNode[] = sortedForPlacement.map((n, i) => ({
-      id: n.id,
-      x: positions[i]?.x ?? W / 2,
-      y: positions[i]?.y ?? H / 2,
-      vx: 0, vy: 0, ref: n,
-    }));
+    const maxDegree = Math.max(1, ...degree.values());
 
-    const idIdx = new Map(nodesByDegree.map((n, i) => [n.id, i]));
-    const edges = displayEdges.filter((e) => idIdx.has(e.source) && idIdx.has(e.target));
+    // Sort by degree desc so high-connectivity nodes get center sunflower positions
+    const sorted = [...data.nodes].sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0));
 
-    // Tuned to match d3-force proportions for 60–80 nodes in 1600×900.
-    // Warm-start runs 200 ticks sync so first render already shows a settled layout.
-    const REPEL = 12000;
-    const REPEL_MAX_D = 500;
-    const SPRING_K = 0.05;
-    const SPRING_LEN = 150;
-    const DAMP = 0.60;        // closer to d3's velocityDecay=0.4 → faster convergence
-    const ALPHA_DECAY = 0.978; // d3-like: reaches 0.004 in ~190 ticks
-    const WARM_TICKS = 200;   // pre-run synchronously before first render
-    const SUB_TICKS = 4;
-    const RENDER_EVERY = 2;
+    // Initial placement
+    const cx = W / 2, cy = H / 2;
+    const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+    const maxR = Math.min(W, H) / 2 - 80;
+
+    const nodes: SimNode[] = sorted.map((n, i) => {
+      const imp = syntheticImportance(n, degree.get(n.id) ?? 0, maxDegree);
+      const r = importanceToRadius(n.kind, imp);
+
+      let x: number, y: number;
+      if (sparse) {
+        // Radial by kind
+        const radii: Record<string, number> = { core: 100, daily: 260, conversation: 420 };
+        const kindNodes = sorted.filter(m => m.kind === n.kind);
+        const ki = kindNodes.indexOf(n);
+        const kr = radii[n.kind] ?? 420;
+        const angle = (ki / Math.max(kindNodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
+        x = cx + kr * Math.cos(angle);
+        y = cy + kr * Math.sin(angle);
+      } else {
+        // Sunflower spiral (degree-sorted → connected nodes near center)
+        const spiralR = maxR * Math.sqrt((i + 0.5) / sorted.length);
+        const theta = i * GOLDEN;
+        x = cx + spiralR * Math.cos(theta);
+        y = cy + spiralR * Math.sin(theta);
+      }
+
+      return { id: n.id, ref: n, r, x, y, vx: 0, vy: 0 };
+    });
+
+    const nodeById = new Map(nodes.map(n => [n.id, n]));
+
+    const links: SimLink[] = data.edges
+      .filter(e => nodeById.has(e.source) && nodeById.has(e.target))
+      .map(e => ({ source: nodeById.get(e.source)!, target: nodeById.get(e.target)!, edge: e }));
+
+    simNodesRef.current = nodes;
+    simLinksRef.current = links;
+
+    if (simRef.current) simRef.current.stop();
+
+    if (sparse) {
+      // Radial layout is static — no simulation needed
+      draw();
+      return;
+    }
+
+    // d3-force: battle-tested constants + custom per-kind gravity
+    const sim = forceSimulation<SimNode, SimLink>(nodes)
+      .force("charge", forceManyBody<SimNode>().strength(n => {
+        // Stronger repulsion for larger nodes
+        return -180 - n.r * 12;
+      }))
+      .force("link", forceLink<SimNode, SimLink>(links)
+        .id(n => n.id)
+        .distance(l => {
+          const a = l.source as SimNode;
+          const b = l.target as SimNode;
+          return 100 + a.r + b.r;
+        })
+        .strength(0.4))
+      .force("collide", forceCollide<SimNode>().radius(n => n.r + 6).strength(0.8))
+      .force("center", forceCenter(cx, cy).strength(0.04))
+      .force("kindGravity", (alpha: number) => {
+        // Per-kind pull toward center: core strong, daily mild, conversation free
+        const G: Record<string, number> = { core: 0.08, daily: 0.015, conversation: 0 };
+        nodes.forEach(n => {
+          const g = (G[n.ref.kind] ?? 0) * alpha;
+          if (g === 0) return;
+          n.vx = (n.vx ?? 0) + (cx - (n.x ?? cx)) * g;
+          n.vy = (n.vy ?? 0) + (cy - (n.y ?? cy)) * g;
+        });
+      })
+      .alphaDecay(0.0228)    // d3 default — ~300 ticks to convergence
+      .velocityDecay(0.4)    // d3 default — good damping
+      .alphaMin(0.001);
+
+    simRef.current = sim;
+
+    // Warm-start: run 200 ticks silently so first frame shows settled layout
+    sim.tick(200);
+    simNodesRef.current = [...nodes]; // snapshot after warm-start
+
+    // RAF render + simulation tick loop
     let frame = 0;
-
-    function applyForces(ns: SimNode[], alpha: number) {
-      for (let i = 0; i < ns.length; i++) {
-        const a = ns[i]!;
-        for (let j = i + 1; j < ns.length; j++) {
-          const b = ns[j]!;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const d2 = dx * dx + dy * dy + 0.01;
-          const d = Math.sqrt(d2);
-          if (d > REPEL_MAX_D) continue;
-          const f = (REPEL / d2) * alpha;
-          const nx2 = dx / d;
-          const ny2 = dy / d;
-          a.vx -= nx2 * f; a.vy -= ny2 * f;
-          b.vx += nx2 * f; b.vy += ny2 * f;
+    function loop() {
+      if (sim.alpha() > sim.alphaMin()) {
+        sim.tick();
+        simNodesRef.current = [...nodes];
+      }
+      draw();
+      if (++frame % 60 === 0) {
+        // S1 idle prefetch: every ~1s, prefetch M3 for nodes near cursor
+        const vt = viewTransformRef.current;
+        const visible = simNodesRef.current.filter(n => {
+          const sx = (n.x ?? 0) * vt.scale + vt.x;
+          const sy = (n.y ?? 0) * vt.scale + vt.y;
+          return sx >= -50 && sx <= W + 50 && sy >= -50 && sy <= H + 50;
+        }).slice(0, 10);
+        if (typeof requestIdleCallback !== "undefined") {
+          requestIdleCallback(() => prefetchMemory(visible.map(n => ({ id: n.id }))));
         }
       }
-      for (const e of edges) {
-        const ai = idIdx.get(e.source);
-        const bi = idIdx.get(e.target);
-        if (ai === undefined || bi === undefined) continue;
-        const a = ns[ai]!;
-        const b = ns[bi]!;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        const f = SPRING_K * (d - SPRING_LEN) * alpha;
-        const nx2 = dx / d;
-        const ny2 = dy / d;
-        a.vx += nx2 * f; a.vy += ny2 * f;
-        b.vx -= nx2 * f; b.vy -= ny2 * f;
-      }
-      for (const n of ns) {
-        const G = (KIND_GRAVITY[n.ref.kind] ?? 0) * alpha;
-        n.vx += (W / 2 - n.x) * G;
-        n.vy += (H / 2 - n.y) * G;
-        n.vx *= DAMP; n.vy *= DAMP;
-        n.x = Math.max(40, Math.min(W - 40, n.x + n.vx));
-        n.y = Math.max(40, Math.min(H - 40, n.y + n.vy));
-      }
+      rafRef.current = requestAnimationFrame(loop);
     }
+    rafRef.current = requestAnimationFrame(loop);
 
-    // Warm-start: 200 silent ticks so the first frame shows a settled layout
-    let alpha = 1.0;
-    for (let t = 0; t < WARM_TICKS; t++) {
-      for (let sub = 0; sub < SUB_TICKS; sub++) applyForces(nodesByDegree, alpha);
-      alpha *= ALPHA_DECAY;
-    }
-
-    simNodesRef.current = nodesByDegree;
-    alphaRef.current = alpha;
-    setSimNodes([...nodesByDegree]); // first render: already settled
-
-    function tick() {
-      if (alphaRef.current < 0.004) return;
-      const ns = simNodesRef.current;
-      for (let sub = 0; sub < SUB_TICKS; sub++) applyForces(ns, alphaRef.current);
-      alphaRef.current *= ALPHA_DECAY;
-      frame++;
-      if (frame % RENDER_EVERY === 0) setSimNodes([...ns]);
-      rafRef.current = requestAnimationFrame(tick);
-    }
-
-    rafRef.current = requestAnimationFrame(tick);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      sim.stop();
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     };
-  }, [displayNodes, displayEdges, sparse]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
-  // Non-passive wheel for zoom
+  // ── Canvas draw ───────────────────────────────────────────────
+
+  function draw() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const { width, height } = canvas;
+    const vt = viewTransformRef.current;
+    const hovered = hoveredNodeRef.current;
+    const nodes = simNodesRef.current;
+    const links = simLinksRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const scaleX = (width / dpr) / W;
+    const scaleY = (height / dpr) / H;
+
+    // Background — deep-space gradient via simple fill (gradient is static)
+    ctx.fillStyle = "#0d0a08";
+    ctx.fillRect(0, 0, width, height);
+
+    // Apply viewport transform
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.translate(vt.x * scaleX * W / W, vt.y * scaleY * H / H);
+    ctx.scale(vt.scale, vt.scale);
+    ctx.scale(scaleX, scaleY);
+
+    // Determine edge opacity based on interaction state
+    function edgeOpacity(link: SimLink): number {
+      const src = (link.source as SimNode).id;
+      const tgt = (link.target as SimNode).id;
+      if (connectedIds) {
+        return (connectedIds.has(src) && connectedIds.has(tgt)) ? 0.85 : 0.04;
+      }
+      if (hovered) {
+        const hid = hovered.id;
+        return (src === hid || tgt === hid) ? 0.72 : 0.05;
+      }
+      // Search filter
+      if (searchQuery) {
+        const srcMatch = matchesSearch(nodes.find(n => n.id === src)?.ref ?? { summary: "" } as BrainGraphNode, searchQuery);
+        const tgtMatch = matchesSearch(nodes.find(n => n.id === tgt)?.ref ?? { summary: "" } as BrainGraphNode, searchQuery);
+        if (srcMatch && tgtMatch) return 0.5;
+        if (srcMatch || tgtMatch) return 0.12;
+        return 0.03;
+      }
+      return link.edge.type === "semantic" ? 0.28 : 0.16;
+    }
+
+    // Draw edges
+    links.forEach(link => {
+      const a = link.source as SimNode;
+      const b = link.target as SimNode;
+      if (a.x == null || a.y == null || b.x == null || b.y == null) return;
+      const opacity = edgeOpacity(link);
+      const stroke = EDGE_COLOR[link.edge.type] ?? "#7a7a8a";
+      const w = link.edge.type === "semantic" && "weight" in link.edge
+        ? Math.max(0.6, Math.min(3, link.edge.weight * 2))
+        : 0.8;
+
+      ctx.globalAlpha = opacity;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = w;
+
+      if (link.edge.type === "semantic") {
+        // Curved quadratic bezier
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2 - 40;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo(mx, my, b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (link.edge.type === "reference") {
+        ctx.setLineDash([1, 5]);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    // Z-order: conversation → daily → core on top
+    const order: Record<string, number> = { conversation: 0, daily: 1, core: 2 };
+    const sorted = [...nodes].sort((a, b) => (order[a.ref.kind] ?? 0) - (order[b.ref.kind] ?? 0));
+
+    sorted.forEach(node => {
+      if (node.x == null || node.y == null) return;
+      const { x, y, r } = node;
+      const color = kindColor(node.ref.kind);
+      const glow = kindGlow(node.ref.kind);
+      const isSelected = selectedIds.includes(node.id);
+      const isHovered = hovered?.id === node.id;
+      const isDeprecated = node.ref.valid_to !== null;
+      const isFocused = focusId === node.id;
+      const isDimmed = connectedIds ? !connectedIds.has(node.id) : false;
+      const searchActive = !!searchQuery;
+      const matchesQ = matchesSearch(node.ref, searchQuery);
+
+      // Node opacity
+      let alpha = 1;
+      if (isDeprecated) alpha = 0.35;
+      else if (isDimmed) alpha = 0.12;
+      else if (searchActive && !matchesQ) alpha = 0.15;
+      ctx.globalAlpha = alpha;
+
+      // Glow halo via shadowBlur
+      const glowR = isHovered ? r * 2.2 : r * 1.6;
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = isHovered ? 28 : (node.ref.kind === "core" ? 18 : 10);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Selection pulse ring — drawn as extra outer circle
+      if (isSelected || isFocused) {
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#f10202";
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.7 * alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Main node circle
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, isHovered ? r * 1.25 : r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hover ring
+      if (isHovered) {
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.25, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Search match pulse ring
+      if (searchActive && matchesQ) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1;
+
+      // Node label: always for core, on hover for others
+      if (node.ref.kind === "core" || isHovered) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = isHovered ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)";
+        ctx.font = `${node.ref.kind === "core" ? 11 : 10}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(truncate(node.ref.summary, 24), x, y + r + 4);
+      }
+
+      // S4: Backlinks on hover — incoming edge count from links
+      if (isHovered) {
+        const incoming = links.filter(l => (l.target as SimNode).id === node.id).length;
+        if (incoming > 0) {
+          ctx.font = "10px system-ui, sans-serif";
+          ctx.fillStyle = "rgba(255,255,255,0.5)";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(`← ${incoming}`, x, y + r + 18);
+        }
+      }
+    });
+
+    ctx.restore();
+
+    // HUD — drawn in screen space (no viewport transform)
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    const hw = width / dpr, hh = height / dpr;
+
+    // Bottom-left: hint
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`${t("brain.graph.selectHint")} · ${t("brain.graph.fitToView")}`, 16, hh - 14);
+
+    // Bottom-right: legend
+    const kinds = ["core", "daily", "conversation"] as const;
+    let lx = hw - 14;
+    kinds.forEach(k => {
+      const label = t(`brain.graph.kindLabel.${k}` as never, { defaultValue: k });
+      ctx.font = "10px system-ui, sans-serif";
+      const tw = ctx.measureText(label).width;
+      lx -= tw + 20;
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(label, lx + 12, hh - 14);
+      ctx.fillStyle = kindColor(k);
+      ctx.beginPath();
+      ctx.arc(lx + 5, hh - 20, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Top: selected count or search result count
+    if (selectedIds.length > 0) {
+      ctx.font = "bold 12px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(241,2,2,0.9)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(t("brain.graph.selected", { count: selectedIds.length }), hw / 2, 14);
+    }
+
+    ctx.restore();
+  }
+
+  // ── Non-passive wheel for zoom ────────────────────────────────
+
   useEffect(() => {
-    const el = svgRef.current;
+    const el = canvasRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
       const rect = el.getBoundingClientRect();
-      const svgX = ((e.clientX - rect.left) / rect.width) * W;
-      const svgY = ((e.clientY - rect.top) / rect.height) * H;
-      setViewTransform((prev) => {
-        const newScale = Math.max(0.2, Math.min(8, prev.scale * factor));
-        const cx = (svgX - prev.x) / prev.scale;
-        const cy = (svgY - prev.y) / prev.scale;
-        return { x: svgX - cx * newScale, y: svgY - cy * newScale, scale: newScale };
+      // Convert cursor to canvas logical space
+      const cx = ((e.clientX - rect.left) / rect.width) * W;
+      const cy = ((e.clientY - rect.top) / rect.height) * H;
+      setViewTransform(prev => {
+        const s = Math.max(0.2, Math.min(8, prev.scale * factor));
+        return {
+          x: cx - (cx - prev.x) * (s / prev.scale),
+          y: cy - (cy - prev.y) * (s / prev.scale),
+          scale: s,
+        };
       });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [data]);
+  }, []);
 
-  const nodeById = useMemo(
-    () => new Map(simNodes.map((n) => [n.id, n])),
-    [simNodes],
-  );
+  // ── Pointer interaction ───────────────────────────────────────
 
-  // Z-ordering: conversation → daily → core (core renders on top)
-  const orderedNodes = useMemo(() => {
-    const order: Record<string, number> = { conversation: 0, daily: 1, core: 2 };
-    return [...simNodes].sort(
-      (a, b) => (order[a.ref.kind] ?? 0) - (order[b.ref.kind] ?? 0),
-    );
-  }, [simNodes]);
+  const hitTest = useCallback((clientX: number, clientY: number): SimNode | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const vt = viewTransformRef.current;
+    // Convert client → simulation space
+    const sx = ((clientX - rect.left) / rect.width) * W;
+    const sy = ((clientY - rect.top) / rect.height) * H;
+    const simX = (sx - vt.x) / vt.scale;
+    const simY = (sy - vt.y) / vt.scale;
+    let best: SimNode | null = null;
+    let bestD = Infinity;
+    simNodesRef.current.forEach(n => {
+      if (n.x == null || n.y == null) return;
+      const d = Math.hypot(simX - n.x, simY - n.y);
+      if (d < n.r + 8 && d < bestD) { best = n; bestD = d; }
+    });
+    return best;
+  }, []);
 
-  // ── Interaction ─────────────────────────────────────────────
-
-  const handleSvgPointerDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     didDragRef.current = false;
-    dragStart.current = { x: e.clientX, y: e.clientY, vt: { ...viewTransformRef.current } };
+    dragStartRef.current = { cx: e.clientX, cy: e.clientY, vt: { ...viewTransformRef.current } };
     setIsPanning(true);
   }, []);
 
-  const handleSvgPointerMove = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragStart.current) return;
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    const rect = svgEl.getBoundingClientRect();
-    const dx = (e.clientX - dragStart.current.x) * (W / rect.width);
-    const dy = (e.clientY - dragStart.current.y) * (H / rect.height);
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Hover hit-test
+    const hit = hitTest(e.clientX, e.clientY);
+    if (hit?.id !== hoveredNodeRef.current?.id) {
+      setHoveredNode(hit);
+    }
+    // Pan
+    if (!dragStartRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dx = (e.clientX - dragStartRef.current.cx) * (W / rect.width);
+    const dy = (e.clientY - dragStartRef.current.cy) * (H / rect.height);
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDragRef.current = true;
     if (!didDragRef.current) return;
     setViewTransform({
-      ...dragStart.current.vt,
-      x: dragStart.current.vt.x + dx,
-      y: dragStart.current.vt.y + dy,
+      ...dragStartRef.current.vt,
+      x: dragStartRef.current.vt.x + dx,
+      y: dragStartRef.current.vt.y + dy,
     });
-  }, []);
+  }, [hitTest]);
 
-  const handleSvgPointerUp = useCallback(() => {
-    dragStart.current = null;
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!didDragRef.current) {
+      const hit = hitTest(e.clientX, e.clientY);
+      if (hit) {
+        if (e.shiftKey) {
+          onSelectionChange(selectedIds.includes(hit.id) ? selectedIds.filter(x => x !== hit.id) : [...selectedIds, hit.id]);
+        } else {
+          const closing = detailNodeId === hit.id;
+          setDetailNodeId(closing ? null : hit.id);
+          onSelectionChange(closing ? [] : [hit.id]);
+        }
+      } else {
+        // Click on empty space — deselect
+        setDetailNodeId(null);
+        onSelectionChange([]);
+      }
+    }
+    dragStartRef.current = null;
     setIsPanning(false);
-  }, []);
+  }, [hitTest, selectedIds, onSelectionChange, detailNodeId]);
 
-  const handleSvgDoubleClick = useCallback(() => {
+  const handleDoubleClick = useCallback(() => {
     setViewTransform({ x: 0, y: 0, scale: 1 });
   }, []);
 
-  const handleNodePointerDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
-    didDragRef.current = false;
+  const handleMouseLeave = useCallback(() => {
+    setHoveredNode(null);
   }, []);
 
-  const handleNodeClick = useCallback(
-    (e: React.MouseEvent, sn: SimNode) => {
-      if (didDragRef.current) return;
-      if (e.shiftKey) {
-        const next = selectedIds.includes(sn.id)
-          ? selectedIds.filter((x) => x !== sn.id)
-          : [...selectedIds, sn.id];
-        onSelectionChange(next);
-      } else {
-        const closing = detailNode?.id === sn.id;
-        setDetailNode(closing ? null : sn.ref);
-        onSelectionChange(closing ? [] : [sn.id]);
-      }
-    },
-    [selectedIds, onSelectionChange, detailNode],
-  );
+  // Re-draw whenever interaction state changes
+  useEffect(() => { draw(); });
 
-  function tooltipPos(sn: SimNode): { left: number; top: number } | null {
-    const svgEl = svgRef.current;
-    const containerEl = containerRef.current;
-    if (!svgEl || !containerEl) return null;
-    const svgRect = svgEl.getBoundingClientRect();
-    const containerRect = containerEl.getBoundingClientRect();
-    if (svgRect.width === 0) return null;
-    const vt = viewTransform;
-    const svgViewX = sn.x * vt.scale + vt.x;
-    const svgViewY = sn.y * vt.scale + vt.y;
-    return {
-      left: svgRect.left - containerRect.left + (svgViewX / W) * svgRect.width,
-      top: svgRect.top - containerRect.top + (svgViewY / H) * svgRect.height,
+  // ── Canvas sizing (DPR-aware) ─────────────────────────────────
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width  = rect.width  * dpr;
+      canvas.height = rect.height * dpr;
+      draw();
     };
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    resize();
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Tooltip position ──────────────────────────────────────────
+
+  function tooltipPos(node: SimNode): { left: number; top: number } | null {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || node.x == null || node.y == null) return null;
+    const cr = canvas.getBoundingClientRect();
+    const ctr = container.getBoundingClientRect();
+    const vt = viewTransformRef.current;
+    const sx = (node.x * vt.scale + vt.x) * (cr.width / W);
+    const sy = (node.y * vt.scale + vt.y) * (cr.height / H);
+    return { left: cr.left - ctr.left + sx, top: cr.top - ctr.top + sy };
   }
 
   // ── Early returns ─────────────────────────────────────────────
 
   if (isLoading || (!data && !isError)) return null;
-
   if (isError || !data) {
-    return (
-      <div className="py-6 text-center text-sm text-zaki-muted">
-        {t("brain.error.loadFailed")}
-      </div>
-    );
+    return <div className="py-6 text-center text-sm text-zaki-muted">{t("brain.error.loadFailed")}</div>;
   }
 
-  // Mobile: sorted list fallback
+  // Mobile: list fallback
   if (isMobile) {
     const sorted = [...data.nodes].sort((a, b) => b.created_at - a.created_at);
     return (
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-zaki-text">
-          {t("brain.graph.mobileTitle")}
-        </h3>
+        <h3 className="mb-2 text-sm font-semibold text-zaki-text">{t("brain.graph.mobileTitle")}</h3>
         <ul className="space-y-2">
-          {sorted.map((n) => {
-            const deprecated = n.valid_to !== null;
-            return (
-              <li
-                key={n.id}
-                className={`rounded-zaki-lg bg-zaki-raised p-3 ${deprecated ? "opacity-50" : ""}`}
-              >
-                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
-                  <span style={{ color: nodeColor(n.kind) }}>●</span>
-                  <span>
-                    {t(`brain.graph.kindLabel.${n.kind}` as never, { defaultValue: n.kind })}
-                  </span>
-                  {deprecated && (
-                    <span className="rounded-full bg-zaki-base px-1.5 py-0.5">
-                      {t("brain.graph.superseded")}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-sm text-zaki-text">{n.summary}</p>
-              </li>
-            );
-          })}
+          {sorted.map(n => (
+            <li key={n.id} className={`rounded-zaki-lg bg-zaki-raised p-3 ${n.valid_to !== null ? "opacity-50" : ""}`}>
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+                <span style={{ color: kindColor(n.kind) }}>●</span>
+                <span>{t(`brain.graph.kindLabel.${n.kind}` as never, { defaultValue: n.kind })}</span>
+                {n.valid_to !== null && <span className="rounded-full bg-zaki-base px-1.5 py-0.5">{t("brain.graph.superseded")}</span>}
+              </div>
+              <p className="mt-1 text-sm text-zaki-text">{n.summary}</p>
+            </li>
+          ))}
         </ul>
       </div>
     );
   }
 
-  const hoverNode = hoverId ? nodeById.get(hoverId) ?? null : null;
-  const hoverPos = hoverNode && !detailNode ? tooltipPos(hoverNode) : null;
+  const hoverPos = hoveredNode && !detailNodeId ? tooltipPos(hoveredNode) : null;
 
   return (
     <div ref={containerRef} className="relative" style={{ touchAction: "none" }}>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className={`w-full overflow-hidden rounded-zaki-xl ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
-        style={{ height: "72vh", minHeight: 480 }}
-        role="img"
+      <canvas
+        ref={canvasRef}
+        className={`w-full rounded-zaki-xl ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        style={{ height: "72vh", minHeight: 480, display: "block" }}
         aria-label={t("brain.graph.ariaLabel")}
-        onPointerDown={handleSvgPointerDown}
-        onPointerMove={handleSvgPointerMove}
-        onPointerUp={handleSvgPointerUp}
-        onPointerLeave={handleSvgPointerUp}
-        onDoubleClick={handleSvgDoubleClick}
-      >
-        <defs>
-          {/* Deep-space background */}
-          <radialGradient id="brain-bg" cx="50%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="#191210" />
-            <stop offset="55%" stopColor="#0f0c0a" />
-            <stop offset="100%" stopColor="#070503" />
-          </radialGradient>
+        role="img"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handleMouseLeave}
+        onDoubleClick={handleDoubleClick}
+      />
 
-          {/* Bloom filters per kind */}
-          <filter id="glow-core" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="glow-daily" x="-70%" y="-70%" width="240%" height="240%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="glow-soft" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-
-          {/* CSS: semantic edge flow + selection pulse */}
-          <style>{`
-            .brain-edge-flow { animation: brain-edge-flow 4s linear infinite; }
-            @keyframes brain-edge-flow { to { stroke-dashoffset: -10; } }
-            .brain-pulse { animation: brain-pulse 2.2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
-            @keyframes brain-pulse { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.05; transform:scale(2.4); } }
-          `}</style>
-        </defs>
-
-        {/* Background */}
-        <rect width={W} height={H} fill="url(#brain-bg)" />
-
-        {/* HUD — hint text inside canvas, bottom-left */}
-        <text
-          x={20}
-          y={H - 20}
-          fontSize={11}
-          fill="rgba(255,255,255,0.25)"
-          style={{ pointerEvents: "none", userSelect: "none" }}
-        >
-          {t("brain.graph.selectHint")} · {t("brain.graph.fitToView")}
-        </text>
-
-        {/* Node count / hidden notice */}
-        {hiddenCount > 0 && (
-          <text
-            x={20}
-            y={30}
-            fontSize={11}
-            fill="rgba(255,255,255,0.3)"
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            {`Showing ${displayNodes.length} of ${data.nodes.length} memories`}
-          </text>
-        )}
-
-        {/* Kind legend — bottom right */}
-        <g transform={`translate(${W - 20}, ${H - 14})`} style={{ pointerEvents: "none" }}>
-          {(["core", "daily", "conversation"] as const).map((kind, i) => (
-            <g key={kind} transform={`translate(${-i * 95}, 0)`}>
-              <circle r={5} fill={nodeColor(kind)} />
-              <text
-                x={9}
-                fontSize={10}
-                fill="rgba(255,255,255,0.35)"
-                dominantBaseline="middle"
-                style={{ userSelect: "none" }}
-              >
-                {t(`brain.graph.kindLabel.${kind}` as never, { defaultValue: kind })}
-              </text>
-            </g>
-          ))}
-        </g>
-
-        {/* Selected node count badge */}
-        {selectedIds.length > 0 && (
-          <text
-            x={W / 2}
-            y={30}
-            textAnchor="middle"
-            fontSize={12}
-            fill="rgba(241,2,2,0.9)"
-            fontWeight="600"
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            {t("brain.graph.selected", { count: selectedIds.length })}
-          </text>
-        )}
-
-        {/* Sparse notice */}
-        {sparse && (
-          <text
-            x={W / 2}
-            y={50}
-            textAnchor="middle"
-            fontSize={11}
-            fill="rgba(245,158,11,0.7)"
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            {t("brain.graph.sparseNotice")}
-          </text>
-        )}
-
-        <g transform={`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.scale})`}>
-
-          {/* Edges — rendered before nodes so nodes sit on top */}
-          {displayEdges.map((e) => {
-            const a = nodeById.get(e.source);
-            const b = nodeById.get(e.target);
-            if (!a || !b) return null;
-
-            const opacity = computeEdgeOpacity(e, hoverId, focusId, connectedIds);
-            // Semantic = blue-tinted, reference = warm gray, session = slate
-            const stroke =
-              e.type === "semantic" ? "#7b9fd4" : e.type === "reference" ? "#a89070" : "#8a8a9a";
-            const isFlow = e.type === "semantic";
-
-            if (e.type === "semantic") {
-              const w = Math.max(0.7, Math.min(3, e.weight * 2.5));
-              const mx = (a.x + b.x) / 2;
-              const my = (a.y + b.y) / 2 - 50;
-              return (
-                <path
-                  key={`${e.source}:${e.target}:${e.type}`}
-                  d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
-                  fill="none"
-                  stroke={stroke}
-                  strokeOpacity={opacity}
-                  strokeWidth={w}
-                  strokeDasharray="6 4"
-                  className={isFlow ? "brain-edge-flow" : undefined}
-                />
-              );
-            }
-            return (
-              <line
-                key={`${e.source}:${e.target}:${e.type}`}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={stroke}
-                strokeOpacity={opacity}
-                strokeWidth={0.9}
-                strokeDasharray={e.type === "reference" ? "1 5" : undefined}
-              />
-            );
-          })}
-
-          {/* Nodes (ordered: conversation → daily → core) */}
-          {orderedNodes.map((sn) => {
-            const r = nodeRadius(sn.ref.kind);
-            const isSelected = selectedIds.includes(sn.id);
-            const isHovered = hoverId === sn.id;
-            const isDeprecated = sn.ref.valid_to !== null;
-            const isCore = sn.ref.kind === "core";
-            const isDaily = sn.ref.kind === "daily";
-            const glowId = isCore ? "glow-core" : isDaily ? "glow-daily" : "glow-soft";
-            const showLabel = isCore || isHovered;
-            // Dim unconnected nodes in spotlight mode
-            const dimNode =
-              connectedIds !== null && !connectedIds.has(sn.id) && sn.id !== focusId;
-
-            return (
-              <g
-                key={sn.id}
-                transform={`translate(${sn.x},${sn.y})`}
-                onPointerDown={handleNodePointerDown}
-                onDoubleClick={(e) => e.stopPropagation()}
-                onMouseEnter={() => setHoverId(sn.id)}
-                onMouseLeave={() => setHoverId((h) => (h === sn.id ? null : h))}
-                onClick={(e) => handleNodeClick(e, sn)}
-                style={{
-                  cursor: "pointer",
-                  opacity: isDeprecated ? 0.35 : dimNode ? 0.15 : 1,
-                  transition: "opacity 0.25s ease",
-                }}
-                role="button"
-                aria-label={t("brain.graph.nodeAriaLabel", { summary: sn.ref.summary })}
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setDetailNode((prev) => (prev?.id === sn.id ? null : sn.ref));
-                    onSelectionChange([sn.id]);
-                  }
-                }}
-              >
-                {/* Selection pulse ring */}
-                {isSelected && (
-                  <circle r={r + 5} fill="none" stroke="#f10202" strokeWidth="1.5" className="brain-pulse" />
-                )}
-
-                {/* Glow halo */}
-                <circle
-                  r={r * 1.8}
-                  fill={nodeGlowColor(sn.ref.kind)}
-                  filter={`url(#${glowId})`}
-                  style={{
-                    transform: isHovered ? "scale(1.5)" : "scale(1)",
-                    transformOrigin: "center",
-                    transformBox: "fill-box",
-                    transition: "transform 0.2s ease-out",
-                  }}
-                />
-
-                {/* Core node */}
-                <circle
-                  r={r}
-                  fill={nodeColor(sn.ref.kind)}
-                  stroke={isSelected ? "#f10202" : isHovered ? "rgba(255,255,255,0.6)" : "transparent"}
-                  strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 0}
-                  style={{
-                    transform: isHovered ? "scale(1.3)" : "scale(1)",
-                    transformOrigin: "center",
-                    transformBox: "fill-box",
-                    transition: "transform 0.15s ease-out",
-                  }}
-                />
-
-                {/* Label */}
-                {showLabel && (
-                  <text
-                    y={r + 13}
-                    textAnchor="middle"
-                    fontSize={isCore ? 11 : 10}
-                    fill={isHovered ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)"}
-                    style={{ pointerEvents: "none", userSelect: "none" }}
-                  >
-                    {truncateLabel(sn.ref.summary)}
-                  </text>
-                )}
-
-                <title>{sn.ref.summary}</title>
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-
-      {/* Hover tooltip — glass card above node */}
-      {hoverNode && hoverPos && (
+      {/* Hover tooltip */}
+      {hoveredNode && hoverPos && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute z-10 max-w-[220px] -translate-x-1/2 -translate-y-full rounded-zaki-lg border border-white/10 bg-black/85 px-3 py-2 shadow-2xl backdrop-blur-xl"
           style={{ left: hoverPos.left, top: hoverPos.top - 12 }}
         >
           <div className="flex items-center gap-1.5">
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: nodeColor(hoverNode.ref.kind) }}
-            />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
-              {hoverNode.ref.kind}
-            </span>
+            <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: kindColor(hoveredNode.ref.kind) }} />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/50">{hoveredNode.ref.kind}</span>
+            {hoveredNode.ref.source_snippet && (
+              <span className="ml-auto text-[9px] text-white/30">{t("brain.graph.detail.source")}</span>
+            )}
           </div>
-          <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-white/90">
-            {hoverNode.ref.summary}
-          </p>
+          <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-white/90">{hoveredNode.ref.summary}</p>
+          {hoveredNode.ref.source_snippet && (
+            <p className="mt-1 line-clamp-1 text-[10px] italic text-white/40">"{hoveredNode.ref.source_snippet}"</p>
+          )}
         </div>
       )}
 
-      {/* Click detail panel — inset overlay on canvas right */}
-      {detailNode && (
+      {/* M3 Detail panel — full drilldown */}
+      {detailNodeId && detailNode && (
         <DetailPanel
           node={detailNode}
-          onClose={() => {
-            setDetailNode(null);
-            onSelectionChange([]);
-          }}
+          detail={memoryDetail ?? null}
+          loading={memoryLoading}
+          onClose={() => { setDetailNodeId(null); onSelectionChange([]); }}
           t={t}
         />
       )}
