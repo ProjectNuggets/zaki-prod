@@ -172,6 +172,7 @@ export async function loginHandler(req, res) {
       { id: user.id, email: user.email },
       req
     );
+    console.log(`[ZakiAudit] login userId=${user.id} ip=${req?.ip ?? "unknown"}`);
 
     // Phase 1: set HttpOnly refresh cookie before writing response body
     res.setHeader("Set-Cookie", [buildRefreshCookie(refreshToken)]);

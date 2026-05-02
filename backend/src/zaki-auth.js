@@ -69,6 +69,7 @@ export async function mintZakiSession(zakiUser, req) {
       req?.headers?.["user-agent"] ?? null,
     ]
   );
+  console.log(`[ZakiAudit] session_mint userId=${zakiUser.id} ip=${req?.ip ?? "unknown"}`);
 
   const accessToken = await signAccessToken(zakiUser);
   return { accessToken, refreshToken, refreshTokenHash };
@@ -168,4 +169,13 @@ export async function cleanupExpiredSessions() {
   await dbQuery(
     `DELETE FROM zaki_sessions WHERE expires_at < NOW() - INTERVAL '${CLEANUP_AGE_INTERVAL}' OR (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '${CLEANUP_AGE_INTERVAL}')`
   );
+}
+
+/**
+ * Sign an access JWT for an existing session's user — used by the concurrent refresh guard
+ * (AUTH-06) which has already proven session validity via the recent-rotation lookup.
+ * Does NOT insert a new zaki_sessions row.
+ */
+export async function signAccessTokenForUser(zakiUser) {
+  return signAccessToken(zakiUser);
 }
