@@ -109,22 +109,30 @@ export function clearAuthToken() {
 // Internal: calls POST /api/auth/refresh to rotate token.
 // Returns the new access token string, or null on failure.
 // IMPORTANT: Uses raw fetch — never call apiRequest here (prevents recursive loop).
+// WR-02: module-level singleton collapses concurrent callers onto one in-flight request.
+let _refreshPromise: Promise<string | null> | null = null;
 async function refreshAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch(buildApiUrl("/api/auth/refresh"), {
-      method: "POST",
-      credentials: "include", // send HttpOnly cookie
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { token?: string };
-    if (data.token) {
-      useAuthStore.getState().setToken(data.token);
-      return data.token;
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    try {
+      const res = await fetch(buildApiUrl("/api/auth/refresh"), {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { token?: string };
+      if (data.token) {
+        useAuthStore.getState().setToken(data.token);
+        return data.token;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      _refreshPromise = null;
     }
-    return null;
-  } catch {
-    return null;
-  }
+  })();
+  return _refreshPromise;
 }
 
 export function buildApiUrl(path: string) {
@@ -171,8 +179,13 @@ export async function apiRequest(
   if (!skipAuth && response.status === 401 && !_isRetry) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      // Retry once with the new token
-      return apiRequest(path, options, true);
+      const retryResponse = await apiRequest(path, options, true);
+      // WR-01: if the retry also returns 401, the token is invalid — log out.
+      if (retryResponse.status === 401 && typeof window !== "undefined") {
+        useAuthStore.getState().logout();
+        window.location.href = "/";
+      }
+      return retryResponse;
     }
     // Refresh failed — redirect to login
     if (typeof window !== "undefined") {
@@ -206,6 +219,7 @@ export async function backendRequest(
 
   return fetch(url, {
     ...rest,
+    credentials: "include", // WR-03: send HttpOnly cookie on backend routes
     headers: requestHeaders,
     body,
   });
@@ -214,14 +228,28 @@ export async function backendRequest(
 export async function backendAuthRequest(
   path: string,
   options: ApiRequestOptions = {}
-) {
+): Promise<Response> {
   const { headers, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
   const token = getAuthToken();
   if (token && !requestHeaders.has("Authorization")) {
     requestHeaders.set("Authorization", `Bearer ${token}`);
   }
-  return backendRequest(path, { ...rest, headers: requestHeaders });
+  const response = await backendRequest(path, { ...rest, headers: requestHeaders });
+  // WR-03: 401 on backend routes — attempt one silent refresh then retry.
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      const retryHeaders = new Headers(headers ?? {});
+      retryHeaders.set("Authorization", `Bearer ${newToken}`);
+      return backendRequest(path, { ...rest, headers: retryHeaders });
+    }
+    if (typeof window !== "undefined") {
+      useAuthStore.getState().logout();
+      window.location.href = "/";
+    }
+  }
+  return response;
 }
 
 export async function captureMemory({
