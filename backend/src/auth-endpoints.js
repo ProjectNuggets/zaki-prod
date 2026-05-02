@@ -39,6 +39,8 @@ function sha256Hex(value) {
  * Returns { accessToken, userId } on hit, null on miss.
  */
 async function tryConcurrentRefreshGuard(tokenHash) {
+  // Inner subquery intentionally omits revoked_at IS NULL: the winning tab already
+  // revoked the original token hash, so we must still be able to resolve user_id from it.
   const recent = await dbGet(
     `SELECT s.id, s.user_id, u.email
        FROM zaki_sessions s

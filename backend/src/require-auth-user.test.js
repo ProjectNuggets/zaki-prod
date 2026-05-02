@@ -277,7 +277,7 @@ describe("requireAuthUser — legacy TYP path (AUTH-02, AUTH-04, AUTH-05)", () =
       expect.objectContaining({ id: 42, email: "a@chatzaki.com" }),
       req
     );
-    expect(res.setHeader).toHaveBeenCalledWith("X-Zaki-Session-Upgrade", "new-jwt");
+    expect(res.setHeader).toHaveBeenCalledWith("X-Zaki-Session-Upgrade", "1");
   });
 
   it("legacy SELECT uses email column and EXCLUDES password_hash (AUTH-03)", async () => {

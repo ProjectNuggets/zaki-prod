@@ -39,14 +39,21 @@ export function createRequireAuthUser(deps) {
 
   // ZAKI path: local verify + DB lookup by id (AUTH-01, AUTH-03)
   async function resolveZakiPath(token) {
-    const payload = await verifyZakiAccessToken(token);
-    if (!payload || !payload.sub) return { error: "invalid_token" };
-    const zakiUser = await dbGet(
-      `SELECT ${ZAKI_USER_COLUMNS} FROM zaki_users WHERE id = $1`,
-      [Number(payload.sub)]
-    );
-    if (!zakiUser || !zakiUser.verified) return { error: "user_not_found" };
-    return { ok: true, email: zakiUser.email, zakiUser, sessionUser: null };
+    try {
+      const payload = await verifyZakiAccessToken(token);
+      if (!payload || !payload.sub) return { error: "invalid_token" };
+      const userId = Number.parseInt(String(payload.sub), 10);
+      if (!Number.isInteger(userId) || userId <= 0) return { error: "invalid_token" };
+      const zakiUser = await dbGet(
+        `SELECT ${ZAKI_USER_COLUMNS} FROM zaki_users WHERE id = $1`,
+        [userId]
+      );
+      if (!zakiUser || !zakiUser.verified) return { error: "user_not_found" };
+      return { ok: true, email: zakiUser.email, zakiUser, sessionUser: null };
+    } catch (err) {
+      console.error("[ZakiAuth] resolveZakiPath error:", err?.message);
+      return { error: "invalid_token" };
+    }
   }
 
   // Legacy TYP path: 5s AbortController timeout, mint ZAKI session on success (AUTH-02, AUTH-04, AUTH-05)
@@ -73,10 +80,15 @@ export function createRequireAuthUser(deps) {
       );
       if (!zakiUser) return { error: "user_not_found" };
 
-      // Best-effort ZAKI session mint + X-Zaki-Session-Upgrade header (AUTH-05)
+      // M-03: apply verified check on legacy path for consistency with ZAKI path
+      if (!zakiUser.verified) return { error: "user_not_found" };
+
+      // Best-effort ZAKI session mint + X-Zaki-Session-Upgrade: 1 signal (AUTH-05)
+      // The header value is a signal only — not the token. Frontend (Phase 3) calls
+      // POST /api/auth/refresh to get the cookie + access token.
       try {
-        const { accessToken } = await mintZakiSession({ id: zakiUser.id, email: zakiUser.email }, req);
-        try { res.setHeader("X-Zaki-Session-Upgrade", accessToken); } catch (_e) {}
+        await mintZakiSession({ id: zakiUser.id, email: zakiUser.email }, req);
+        try { res.setHeader("X-Zaki-Session-Upgrade", "1"); } catch (_e) {}
         console.log(`[ZakiAudit] legacy_typ_path userId=${zakiUser.id} ip=${req?.ip ?? "unknown"}`);
       } catch (mintErr) {
         console.warn("[ZakiAuth] legacy path session mint failed:", mintErr?.message);
