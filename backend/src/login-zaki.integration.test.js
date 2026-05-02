@@ -41,8 +41,8 @@ function makeApp() {
   return app;
 }
 
-// bcryptjs sync hash for "correct-horse-battery"
-const BCRYPT_HASH_FOR_PASSWORD = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"; // hash of "password"
+// bcryptjs hash of "password" with rounds=4 (fast for tests, still valid bcrypt)
+const BCRYPT_HASH_FOR_PASSWORD = "$2a$04$GZJl0Ju7BhV3MEN8EvWGpuZSYFHlOrPHWpDoBNHuoWQp/rCW3quKS";
 
 describe("loginHandler — ZAKI session minting (OATH-01..05, OATH-10)", () => {
   it("OATH-04: response body is { valid:true, token:<ZAKI JWT> } — no TYP token in body", async () => {
