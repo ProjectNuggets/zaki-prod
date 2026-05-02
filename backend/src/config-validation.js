@@ -237,6 +237,22 @@ export function validateRuntimeConfig(env = process.env) {
     );
   }
 
+  // OATH-09 — ZAKI_JWT_SIGNING_KEY (256-bit hex, in k8s secret zaki-api-secrets)
+  const zakiSigningKey = normalize(env.ZAKI_JWT_SIGNING_KEY);
+  if (!zakiSigningKey) {
+    pushIssue(
+      errors,
+      "ZAKI_JWT_SIGNING_KEY",
+      "ZAKI_JWT_SIGNING_KEY must be set in production (256-bit hex string)."
+    );
+  } else if (!/^[0-9a-f]{64}$/i.test(zakiSigningKey)) {
+    pushIssue(
+      errors,
+      "ZAKI_JWT_SIGNING_KEY",
+      "ZAKI_JWT_SIGNING_KEY must be a 64-character hex string (256-bit key)."
+    );
+  }
+
   return {
     ok: errors.length === 0,
     isProduction,
