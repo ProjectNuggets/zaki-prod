@@ -117,3 +117,70 @@ describe("Rate limiter on /api/auth/refresh (OATH-11)", () => {
     expect(saw429).toBe(true);
   }, 30000);
 });
+
+describe("POST /api/auth/refresh — concurrent refresh guard (AUTH-06)", () => {
+  it("returns existing token when same user has a session created in the last 5 seconds", async () => {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    // First dbGet (the standard lookup) returns null → falls into guard path
+    dbGetMock.mockResolvedValueOnce(null);
+    // Second dbGet (the guard's secondary lookup) returns a recent session
+    dbGetMock.mockResolvedValueOnce({ id: "sess-recent", user_id: 42, email: "alfred@chatzaki.com" });
+    const res = await request(makeApp()).post("/api/auth/refresh").set("Cookie", `zaki_refresh=${rawToken}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.token).toBe("string");
+    // The guard SQL should reference NOW() - INTERVAL '5 seconds' — assert dbGet was called with that pattern
+    const guardCall = dbGetMock.mock.calls.find(([sql]) => /INTERVAL '5 seconds'/i.test(sql));
+    expect(guardCall).toBeDefined();
+  });
+
+  it("returns 401 invalid_refresh_token when guard's secondary lookup also returns null", async () => {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    dbGetMock.mockResolvedValueOnce(null); // primary lookup miss
+    dbGetMock.mockResolvedValueOnce(null); // guard miss
+    const res = await request(makeApp()).post("/api/auth/refresh").set("Cookie", `zaki_refresh=${rawToken}`);
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("invalid_refresh_token");
+  });
+
+  it("returns existing token when rotateRefreshToken throws SESSION_NOT_FOUND but a recent session exists", async () => {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    dbGetMock.mockResolvedValueOnce({ id: "sess-1", user_id: 42, email: "alfred@chatzaki.com", expires_at: new Date(Date.now()+86400000), revoked_at: null });
+    // rotateRefreshToken FOR UPDATE finds nothing → throws SESSION_NOT_FOUND
+    dbQueryMock.mockImplementation(async (sql) => {
+      if (/SELECT.*FOR UPDATE/i.test(sql)) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    });
+    // Guard secondary lookup finds recent session
+    dbGetMock.mockResolvedValueOnce({ id: "sess-recent", user_id: 42, email: "alfred@chatzaki.com" });
+    const res = await request(makeApp()).post("/api/auth/refresh").set("Cookie", `zaki_refresh=${rawToken}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.token).toBe("string");
+  });
+});
+
+describe("POST /api/auth/refresh — [ZakiAudit] session_refresh log (AUTH-07)", () => {
+  it("logs [ZakiAudit] session_refresh userId=<id> ip=<ip> after successful rotate", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    dbGetMock.mockResolvedValue({ id: "sess-1", user_id: 42, email: "alfred@chatzaki.com", expires_at: new Date(Date.now()+86400000), revoked_at: null });
+    dbQueryMock.mockImplementation(async (sql) => {
+      if (/SELECT.*FOR UPDATE/i.test(sql)) return { rows: [{ id: "sess-1", user_id: 42, expires_at: new Date(Date.now()+86400000), revoked_at: null }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    });
+    await request(makeApp()).post("/api/auth/refresh").set("Cookie", `zaki_refresh=${rawToken}`);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/\[ZakiAudit\] session_refresh userId=42/));
+    logSpy.mockRestore();
+  });
+});
+
+describe("POST /api/auth/logout — [ZakiAudit] session_revoke log (AUTH-07)", () => {
+  it("logs [ZakiAudit] session_revoke userId=<id> reason=logout", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    dbGetMock.mockResolvedValue({ user_id: 42 });
+    dbQueryMock.mockResolvedValue({ rows: [], rowCount: 1 });
+    await request(makeApp()).post("/api/auth/logout").set("Cookie", `zaki_refresh=${rawToken}`);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/\[ZakiAudit\] session_revoke.*reason=logout/));
+    logSpy.mockRestore();
+  });
+});
