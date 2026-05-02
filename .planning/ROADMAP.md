@@ -113,11 +113,22 @@ Plans:
 
 ## Phase 04-typ-adapter: TYP becomes an adapter
 
-**Goal:** Remove TYP /request-token call from loginHandler. Workspace routes resolve typ_session_token from DB (server-side novaAdminRequest with nova_user_id). Drop typ_session_token column. Browser never touches TYP tokens.
+**Goal:** Remove TYP /request-token call from loginHandler. Workspace routes resolve workspace access via server-side novaAdminRequest with nova_user_id (no client token forwarding). Drop typ_session_token column. Browser never touches TYP tokens.
 
 **Requirements:** TYP-01, TYP-02, TYP-03, TYP-04
 
-**Plans:** 0/? plans
+**Plans:** 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Wave 1: typ-client.js adapter module (fetchTypWorkspaces, fetchTypWorkspaceSlugs, requestTypChatStream) [TYP-04]
+- [ ] 04-02-PLAN.md — Wave 1: login-handler.js TYP removal (bestEffortTypFetch, novaUserId block, typ_session_token UPDATE) + test updates [TYP-01]
+- [ ] 04-03-PLAN.md — Wave 2: Wire workspace routes + streamChatHandler to typ-client.js using zakiUser.nova_user_id [TYP-02]
+- [ ] 04-04-PLAN.md — Wave 3: Drop typ_session_token column (db.js + migration SQL + full codebase sweep) [TYP-03]
+
+**Wave structure:**
+- Wave 1 (parallel): 04-01, 04-02
+- Wave 2: 04-03 (depends on 04-01 — needs typ-client.js to exist)
+- Wave 3: 04-04 (depends on 04-01 + 04-02 + 04-03 — all code refs must be gone before column drop)
 
 **Status:** Not started
 
