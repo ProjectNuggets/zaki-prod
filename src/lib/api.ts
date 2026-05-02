@@ -1,6 +1,6 @@
 import type { ProductTelemetrySource } from "./productTelemetry";
 import { getConfiguredApiBase, getConfiguredLegacyApiBase } from "./runtimeEnv";
-const TOKEN_KEY = "zaki.auth.token";
+import { useAuthStore } from "@/stores/authStore";
 
 export type MemoryCaptureResponse = {
   saved: Array<{
@@ -94,19 +94,37 @@ export function getBackendBase() {
   return "";
 }
 
-export function getAuthToken() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+export function getAuthToken(): string | null {
+  return useAuthStore.getState().token;
 }
 
 export function setAuthToken(token: string) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(TOKEN_KEY, token);
+  useAuthStore.getState().setToken(token);
 }
 
 export function clearAuthToken() {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(TOKEN_KEY);
+  useAuthStore.getState().setToken(null);
+}
+
+// Internal: calls POST /api/auth/refresh to rotate token.
+// Returns the new access token string, or null on failure.
+// IMPORTANT: Uses raw fetch — never call apiRequest here (prevents recursive loop).
+async function refreshAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch(buildApiUrl("/api/auth/refresh"), {
+      method: "POST",
+      credentials: "include", // send HttpOnly cookie
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { token?: string };
+    if (data.token) {
+      useAuthStore.getState().setToken(data.token);
+      return data.token;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function buildApiUrl(path: string) {
@@ -119,7 +137,11 @@ export function buildApiUrl(path: string) {
   return `${base}${normalizedPath}`;
 }
 
-export async function apiRequest(path: string, options: ApiRequestOptions = {}) {
+export async function apiRequest(
+  path: string,
+  options: ApiRequestOptions = {},
+  _isRetry = false  // internal flag — prevents refresh loop
+): Promise<Response> {
   const { skipAuth, headers, body, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
   const token = getAuthToken();
@@ -132,11 +154,34 @@ export async function apiRequest(path: string, options: ApiRequestOptions = {}) 
     requestHeaders.set("Content-Type", "application/json");
   }
 
-  return fetch(buildApiUrl(path), {
+  const response = await fetch(buildApiUrl(path), {
     ...rest,
+    credentials: "include", // send cookies on all requests
     headers: requestHeaders,
     body,
   });
+
+  // FE-03: X-Zaki-Session-Upgrade — silently upgrade token in background.
+  // Don't await; fire-and-forget so caller gets the response immediately.
+  if (!skipAuth && response.headers.get("X-Zaki-Session-Upgrade") === "1") {
+    void refreshAccessToken();
+  }
+
+  // FE-04: 401 retry — attempt one refresh then retry the original request.
+  if (!skipAuth && response.status === 401 && !_isRetry) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      // Retry once with the new token
+      return apiRequest(path, options, true);
+    }
+    // Refresh failed — redirect to login
+    if (typeof window !== "undefined") {
+      useAuthStore.getState().logout();
+      window.location.href = "/";
+    }
+  }
+
+  return response;
 }
 
 export async function backendRequest(
@@ -285,13 +330,7 @@ export async function requestLogin({
     body: JSON.stringify(payload),
   });
 
-  let data: {
-    valid?: boolean;
-    token?: string | null;
-    message?: string | null;
-    error?: string | null;
-    code?: string | null;
-  } =
+  let data: { valid?: boolean; token?: string | null; message?: string | null } =
     {};
   try {
     data = await response.json();
@@ -1014,6 +1053,10 @@ export type BotApiError = {
   request_id?: string;
 };
 
+export type BotProvisionStatus = {
+  status: string;
+};
+
 export type BotOnboardingSetup = Record<string, unknown>;
 
 export type BotOnboardingState = BotApiError & {
@@ -1025,7 +1068,14 @@ export type BotOnboardingState = BotApiError & {
   setup?: BotOnboardingSetup | null;
 };
 
-export type BotAutonomyLevel = "read_only" | "supervised" | "full";
+export type AgentOnboardingState = BotApiError & {
+  completed?: boolean;
+  completed_at_s?: number | null;
+  can_start_chat_now?: boolean;
+  minimum_required?: string[] | null;
+  operator_configure_model_provider?: boolean;
+  setup?: Record<string, unknown> | null;
+};
 
 export type BotSettingsProfile = BotApiError & {
   assistant_mode?: "fast" | "balanced" | "deep";
@@ -1033,7 +1083,6 @@ export type BotSettingsProfile = BotApiError & {
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
-  autonomy?: BotAutonomyLevel;
 };
 
 export type BotSettingsPatch = {
@@ -1042,7 +1091,6 @@ export type BotSettingsPatch = {
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
-  autonomy?: BotAutonomyLevel;
 };
 
 export type BotTelegramConnectPayload = {
@@ -1066,6 +1114,12 @@ export type BotUsageSummary = BotApiError & {
   requests_day?: number;
   tokens_day?: number;
   tokens_month?: number;
+};
+
+export type AgentHeartbeatState = BotApiError & {
+  enabled?: boolean;
+  interval_minutes?: number;
+  prompt?: string | null;
 };
 
 export type BotHeartbeatState = BotApiError & {
@@ -1112,8 +1166,26 @@ export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
   return { response, data };
 }
 
+export async function provisionBot(payload: Record<string, unknown> = {}) {
+  const response = await backendAuthRequest("/v1/me/bot/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<BotProvisionStatus & BotApiError>(response);
+  return { response, data };
+}
+
 export async function fetchBotOnboarding() {
   const response = await backendAuthRequest("/v1/me/bot/onboarding", { method: "GET" });
+  const data = await parseApiJson<BotOnboardingState>(response);
+  return { response, data };
+}
+
+export async function updateBotOnboarding(payload: { completed: boolean }) {
+  const response = await backendAuthRequest("/v1/me/bot/onboarding", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
   const data = await parseApiJson<BotOnboardingState>(response);
   return { response, data };
 }
@@ -1188,24 +1260,24 @@ export async function fetchBotUsage() {
   return { response, data };
 }
 
-export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker";
-
-export type BotRuntimeStatus = {
-  sandbox?: {
-    enabled?: boolean;
-    backend?: BotSandboxBackend | null;
-  };
-};
-
-export async function fetchBotRuntimeStatus() {
-  const response = await backendAuthRequest("/v1/me/bot/runtime", { method: "GET" });
-  const data = await parseApiJson<BotRuntimeStatus>(response);
-  return { response, data };
-}
-
 export async function provisionAgent(payload: Record<string, unknown> = {}) {
   const response = await backendAuthRequest("/api/agent/provision", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function fetchAgentOnboarding() {
+  const response = await backendAuthRequest("/api/agent/onboarding", { method: "GET" });
+  const data = await parseApiJson<AgentOnboardingState>(response);
+  return { response, data };
+}
+
+export async function saveAgentOnboarding(payload: Record<string, unknown>) {
+  const response = await backendAuthRequest("/api/agent/onboarding", {
+    method: "PUT",
     body: JSON.stringify(payload),
   });
   const data = await parseApiJson<Record<string, unknown>>(response);
@@ -1288,6 +1360,19 @@ export async function transcribeAudio(audioBase64: string, format = "webm") {
   return { response, data };
 }
 
+export async function synthesizeSpeech(
+  text: string,
+  voice = "alloy",
+  format = "mp3"
+) {
+  const response = await backendAuthRequest("/api/agent/voice/synthesize", {
+    method: "POST",
+    body: JSON.stringify({ text, voice, format }),
+  });
+  const data = await parseApiJson<{ audio: string; format: string }>(response);
+  return { response, data };
+}
+
 export type ConnectAgentTelegramPayload = {
   bot_token?: string;
   webhook_url?: string;
@@ -1308,9 +1393,32 @@ export async function connectAgentTelegram(payload: ConnectAgentTelegramPayload)
   return { response, data };
 }
 
+export async function disconnectAgentTelegram() {
+  const response = await backendAuthRequest("/api/agent/channels/telegram/disconnect", {
+    method: "DELETE",
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
 export async function fetchAgentMe() {
   const response = await backendAuthRequest("/api/agent/me", { method: "GET" });
   const data = await parseApiJson<{ userId: string }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentHeartbeat() {
+  const response = await backendAuthRequest("/api/agent/heartbeat", { method: "GET" });
+  const data = await parseApiJson<AgentHeartbeatState>(response);
+  return { response, data };
+}
+
+export async function updateAgentHeartbeat(payload: { enabled: boolean }) {
+  const response = await backendAuthRequest("/api/agent/heartbeat", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<AgentHeartbeatState>(response);
   return { response, data };
 }
 
@@ -1324,6 +1432,23 @@ export async function createAgentCron(payload: Record<string, unknown> | unknown
   const response = await backendAuthRequest("/api/agent/cron", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function updateAgentCron(id: string, payload: Record<string, unknown>) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function deleteAgentCron(id: string) {
+  const response = await backendAuthRequest(`/api/agent/cron/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
   const data = await parseApiJson<Record<string, unknown>>(response);
   return { response, data };
@@ -1344,83 +1469,12 @@ export async function fetchAgentHistory(
       role?: "user" | "assistant";
       content?: string;
       createdAt?: string;
-      events?: Array<{
-        eventType?: string;
-        payload?: Record<string, unknown>;
-        ts?: number;
-      }>;
     }>;
     historyMode?: "merged" | "app";
     source?: string;
     warning?: string;
     error?: string | null;
   }>(response);
-  return { response, data };
-}
-
-export type ContextDiagnosticsReportMemory = {
-  store?: string | null;
-  hot?: number | null;
-  warm?: number | null;
-  cold?: number | null;
-  total?: number | null;
-  [key: string]: unknown;
-};
-
-export type ContextDiagnosticsReport = {
-  model?: string | null;
-  history_messages?: number | null;
-  token_estimate?: number | null;
-  context_window_tokens?: number | null;
-  context_pressure_percent?: number | null;
-  history_trim_limit_messages?: number | null;
-  token_compaction_threshold?: number | null;
-  token_compaction_triggered?: boolean | null;
-  token_reply_reserve?: number | null;
-  token_tool_reserve?: number | null;
-  token_safety_reserve?: number | null;
-  token_total_reserve?: number | null;
-  tools?: number | null;
-  roles?: Record<string, number> | null;
-  memory?: ContextDiagnosticsReportMemory | null;
-  prompt?: Record<string, unknown> | null;
-  retrieval?: Record<string, unknown> | null;
-  continuity?: Record<string, unknown> | null;
-  cache?: Record<string, unknown> | null;
-  buckets?: Record<string, unknown> | null;
-  runtime?: Record<string, unknown> | null;
-  last_turn?: Record<string, unknown> | null;
-  [key: string]: unknown;
-};
-
-export type ContextDiagnosticsResponse = {
-  active?: boolean;
-  reason?: string | null;
-  report?: ContextDiagnosticsReport | null;
-  error?: string | null;
-};
-
-export type MemoryDoctorResponse = {
-  active?: boolean;
-  runtime?: boolean;
-  reason?: string | null;
-  report_text?: string | null;
-  error?: string | null;
-};
-
-export async function fetchContextDiagnostics() {
-  const response = await backendAuthRequest("/api/me/diagnostics/context", {
-    method: "GET",
-  });
-  const data = await parseApiJson<ContextDiagnosticsResponse>(response);
-  return { response, data };
-}
-
-export async function fetchMemoryDoctor() {
-  const response = await backendAuthRequest("/api/me/diagnostics/memory-doctor", {
-    method: "GET",
-  });
-  const data = await parseApiJson<MemoryDoctorResponse>(response);
   return { response, data };
 }
 
@@ -1486,30 +1540,15 @@ export type AgentSession = {
   context_window_used?: number;
   context_window_max?: number;
   live?: boolean;
-  mode?: AgentSessionMode | "background" | null;
-  pending_approval_count?: number | null;
-  last_channel?: string | null;
-  context_pressure_percent?: number | null;
-  pending_approvals?: Array<{
-    id: string;
-    tool?: string | null;
-    reason?: string | null;
-    risk_level?: string | null;
-  }>;
-  turn_count?: number;
-  history_len?: number;
 };
 
 export type AgentSessionContext = {
   session_key: string;
-  token_count?: number;
-  context_window_max?: number;
-  context_window_used_pct?: number;
-  context_pressure_percent?: number | null;
-  message_count?: number;
+  token_count: number;
+  context_window_max: number;
+  context_window_used_pct: number;
+  message_count: number;
 };
-
-export type AgentSessionMode = "plan" | "execute" | "review";
 
 export type AgentSessionApprovalPayload = {
   approved: boolean;
@@ -1540,14 +1579,7 @@ export async function deleteAgentSession(sessionKey: string) {
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "DELETE",
   });
-  const data = await parseApiJson<{ ok?: boolean; status?: string; error?: string }>(response);
-  // Treat 404 (session_not_found) as success: the session is already gone
-  // upstream (e.g. a persisted-only session evicted from memory). The caller
-  // will still hide it locally so the UI reflects the deletion.
-  if (!response.ok && response.status !== 404) {
-    const message = data?.error || `Failed to delete session (${response.status})`;
-    throw new Error(message);
-  }
+  const data = await parseApiJson<{ ok: boolean }>(response);
   return { response, data };
 }
 
@@ -1573,26 +1605,20 @@ export async function fetchAgentSessionContext(sessionKey: string) {
   return { response, data };
 }
 
-export async function setAgentSessionMode(sessionKey: string, mode: AgentSessionMode) {
-  assertSafeSessionKey(sessionKey);
-  const encoded = encodeURIComponent(sessionKey);
-  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/mode`, {
-    method: "POST",
-    body: JSON.stringify({ mode }),
-  });
-  const data = await parseApiJson<{
-    ok?: boolean;
-    mode?: AgentSessionMode;
-    error?: string;
-    message?: string;
-  }>(response);
-  return { response, data };
-}
-
 export async function exportAgentSession(sessionKey: string) {
   assertSafeSessionKey(sessionKey);
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/export`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentSessionHistory(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/history`, {
     method: "GET",
   });
   const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
@@ -1612,190 +1638,3 @@ export async function approveAgentSession(
   const data = await parseApiJson<{ ok: boolean }>(response);
   return { response, data };
 }
-
-// ── /brain/graph ─────────────────────────────────────────────
-export interface BrainGraphResponse {
-  nodes: BrainGraphNode[];
-  edges: BrainGraphEdge[];
-  trimmed: boolean;
-  total_skipped: number;
-  total_nodes_in_corpus: number;
-  semantic_degraded: boolean;
-}
-
-export interface BrainGraphNode {
-  id: string;
-  kind: "core" | "daily" | "conversation" | string;
-  created_at: number;
-  session_id: string | null;
-  summary: string;
-  valid_to: number | null;
-  // V1.6 — lands with M1 backend commit ~4
-  importance_score?: number;
-  // V1.6 — lands with M4 backend commit ~11 (truncated source excerpt for hover)
-  source_snippet?: string;
-}
-
-export type BrainGraphEdge =
-  | { type: "session"; source: string; target: string }
-  | { type: "semantic"; source: string; target: string; weight: number }
-  | { type: "reference"; source: string; target: string }
-  // V1.6 — lands when atomic-fact extraction ships (commit ~12)
-  | { type: "typed"; source: string; target: string; link_type: string };
-
-// ── /brain/search (M2 — V1.6 commit ~9) ─────────────────────
-// Scaffold now; swap fetchBrainSearch from stub to real call when endpoint lands.
-export interface BrainSearchResult {
-  key: string;
-  kind: "core" | "daily" | "conversation";
-  summary: string;
-  relevance_score: number; // 0..1
-  created_at: number;
-}
-
-export interface BrainSearchResponse {
-  results: BrainSearchResult[];
-  total_matched: number;
-}
-
-export async function fetchBrainSearch(
-  _userId: string,
-  q: string,
-  limit = 20,
-): Promise<BrainSearchResponse> {
-  const params = new URLSearchParams({ q, limit: String(limit) });
-  const response = await backendAuthRequest(`/api/agent/brain/search?${params.toString()}`);
-  if (!response.ok) throw new Error(`brain/search ${response.status}`);
-  return (await response.json()) as BrainSearchResponse;
-}
-
-// ── /brain/memory/{key} (M3 — V1.6 commit ~10) ──────────────
-// Scaffold now; fetch falls back to graph-node data on 404 until backend lands.
-export interface BrainMemoryDetail {
-  key: string;
-  content: string;
-  kind: "core" | "daily" | "conversation";
-  subject?: string;
-  predicate?: string;
-  object_key?: string;
-  link_type?: "updates" | "extends" | "derives" | "contradicts";
-  importance_score: number;
-  confidence_score: number;
-  created_at: number;
-  valid_at?: number;
-  valid_to: number | null;
-  session_id: string | null;
-  metadata: Record<string, unknown>;
-  source: {
-    session_id: string;
-    message_id: string;
-    timestamp: number;
-    snippet: string; // 200-char excerpt of originating conversation
-  } | null;
-  linked_memories: Array<{
-    key: string;
-    summary: string;
-    link_type: string;
-    edge_direction: "incoming" | "outgoing";
-  }>;
-  valid_history: Array<{
-    valid_from: number;
-    valid_to: number | null;
-    content: string;
-  }>;
-}
-
-export async function fetchBrainMemory(
-  _userId: string,
-  key: string,
-): Promise<BrainMemoryDetail> {
-  const response = await backendAuthRequest(`/api/agent/brain/memory/${encodeURIComponent(key)}`);
-  if (!response.ok) throw new Error(`brain/memory ${response.status}`);
-  return (await response.json()) as BrainMemoryDetail;
-}
-
-// ── /brain/timeline ──────────────────────────────────────────
-export interface BrainTimelineResponse {
-  entries: BrainTimelineEntry[];
-  next_cursor: string | null;
-  has_more: boolean;
-}
-
-export interface BrainTimelineEntry {
-  id: string;
-  key: string;
-  kind: "core" | "daily" | "conversation" | string;
-  created_at: number;
-  session_id: string | null;
-  summary: string;
-  valid_to: number | null;
-}
-
-// ── /brain/compose ───────────────────────────────────────────
-export interface BrainComposeRequest {
-  title: string;
-  content: string;
-  references: string[];
-  category?: "core" | "daily" | "conversation";
-  key?: string;
-}
-
-export interface BrainComposeResponse {
-  key: string;
-  synthesized_by: "user";
-  references_count: number;
-  category: string;
-  composed_at: number;
-}
-
-// Brain endpoints route through the express BFF (`/api/agent/brain/*`),
-// which proxies to nullalis (`/api/v1/users/{canonical}/brain/*`). The BFF
-// derives the canonical bigint user_id from the auth context, so the
-// `userId` argument here is no longer interpolated into the URL — it is
-// retained on the function signature so query keys and call sites stay
-// stable across this refactor.
-export async function fetchBrainGraph(
-  _userId: string,
-  opts?: { since?: number; max_nodes?: number; node_kinds?: string }
-): Promise<BrainGraphResponse> {
-  const params = new URLSearchParams();
-  if (opts?.since !== undefined) params.set("since", String(opts.since));
-  if (opts?.max_nodes !== undefined) params.set("max_nodes", String(opts.max_nodes));
-  if (opts?.node_kinds) params.set("node_kinds", opts.node_kinds);
-  const qs = params.toString();
-  const response = await backendAuthRequest(
-    `/api/agent/brain/graph${qs ? `?${qs}` : ""}`,
-  );
-  if (!response.ok) throw new Error(`brain/graph ${response.status}`);
-  return (await response.json()) as BrainGraphResponse;
-}
-
-export async function fetchBrainTimeline(
-  _userId: string,
-  opts?: { cursor?: string; limit?: number; kind?: string; to?: number }
-): Promise<BrainTimelineResponse> {
-  const params = new URLSearchParams();
-  if (opts?.cursor) params.set("cursor", opts.cursor);
-  if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
-  if (opts?.kind) params.set("kind", opts.kind);
-  if (opts?.to !== undefined) params.set("to", String(opts.to));
-  const qs = params.toString();
-  const response = await backendAuthRequest(
-    `/api/agent/brain/timeline${qs ? `?${qs}` : ""}`,
-  );
-  if (!response.ok) throw new Error(`brain/timeline ${response.status}`);
-  return (await response.json()) as BrainTimelineResponse;
-}
-
-export async function postBrainCompose(
-  _userId: string,
-  body: BrainComposeRequest,
-): Promise<BrainComposeResponse> {
-  const response = await backendAuthRequest(
-    `/api/agent/brain/compose`,
-    { method: "POST", body: JSON.stringify(body) },
-  );
-  if (!response.ok) throw new Error(`brain/compose ${response.status}`);
-  return (await response.json()) as BrainComposeResponse;
-}
-

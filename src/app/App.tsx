@@ -13,7 +13,7 @@ import { Toaster } from "./components/ui/sonner";
 import { OnboardingModal } from "./components/onboarding/OnboardingModal";
 import { SimpleOnboardingModal } from "./components/onboarding/SimpleOnboardingModal";
 import {
-  clearAuthToken,
+  buildApiUrl,
   fetchCurrentUser,
   fetchProfile,
   fetchLegalConsentStatus,
@@ -45,7 +45,7 @@ export default function App() {
   const isZakiBotRoute = isZakiBotSpaceId(params.spaceId);
   
   // Auth state from Zustand
-  const { token, user, isLoading: authLoading, setUser, setLoading, logout } = useAuthStore();
+  const { token, user, isHydrating, setToken, setUser, setHydrating, logout } = useAuthStore();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [guidedOnboardingOpen, setGuidedOnboardingOpen] = useState(false);
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
@@ -77,8 +77,6 @@ export default function App() {
       store.goToAbout();
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
-    } else if (spaceId && !threadId && isZakiBotSpaceId(spaceId as string)) {
-      store.goToZakiHome();
     } else if (spaceId && threadId) {
       store.goToThread(spaceId as string, threadId as string);
     } else if (spaceId) {
@@ -130,61 +128,59 @@ export default function App() {
     return () => media.removeEventListener("change", handleChange);
   }, [setSystemTheme]);
 
-  // Fetch user on mount if token exists
+  // FE-02 + FE-03: Boot hydration — call /api/auth/refresh before rendering protected routes.
+  // The HttpOnly refresh cookie is sent automatically (credentials: include via raw fetch).
   useEffect(() => {
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return;
+    let isMounted = true;
+
+    async function hydrate() {
+      try {
+        const res = await fetch(buildApiUrl("/api/auth/refresh"), {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!isMounted) return;
+        if (res.ok) {
+          const data = (await res.json()) as { token?: string };
+          if (data.token && isMounted) {
+            setToken(data.token);
+            // Now fetch user profile with the new token
+            try {
+              const { response: ur, data: ud } = await fetchCurrentUser();
+              if (!isMounted) return;
+              if (ur.ok && ud?.success && ud.user) {
+                let mergedUser = ud.user;
+                try {
+                  const profileResult = await fetchProfile();
+                  if (profileResult.response.ok && profileResult.data?.success && profileResult.data.user) {
+                    mergedUser = { ...ud.user, fullName: profileResult.data.user.fullName ?? ud.user.fullName ?? null };
+                  }
+                } catch {
+                  // Keep base user if profile lookup fails
+                }
+                if (isMounted) setUser(mergedUser);
+              } else if (isMounted) {
+                logout();
+              }
+            } catch {
+              if (isMounted) logout();
+            }
+          }
+        } else {
+          // 401 from /api/auth/refresh — no valid session
+          if (isMounted) logout();
+        }
+      } catch {
+        if (isMounted) logout();
+      } finally {
+        if (isMounted) setHydrating(false);
+      }
     }
 
-    let isMounted = true;
-    setLoading(true);
-    fetchCurrentUser()
-      .then(async ({ data, response }) => {
-        if (!isMounted) return;
-        if (!response.ok || !data?.success) {
-          clearAuthToken();
-          logout();
-          return;
-        }
-        const nextUser = data.user ?? null;
-        if (!nextUser) {
-          setUser(null);
-          return;
-        }
-        let mergedUser = nextUser;
-        try {
-          const profileResult = await fetchProfile();
-          if (
-            profileResult.response.ok &&
-            profileResult.data?.success &&
-            profileResult.data.user
-          ) {
-            mergedUser = {
-              ...nextUser,
-              fullName: profileResult.data.user.fullName ?? nextUser.fullName ?? null,
-            };
-          }
-        } catch {
-          // Keep session user payload when profile lookup fails.
-        }
-        if (!isMounted) return;
-        setUser(mergedUser);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        clearAuthToken();
-        logout();
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
+    void hydrate();
 
-    return () => {
-      isMounted = false;
-    };
-  }, [token, setUser, setLoading, logout]);
+    return () => { isMounted = false; };
+  }, []); // Run once on mount — empty deps (FE-02)
 
   useEffect(() => {
     if (isZakiBotRoute) {
@@ -195,7 +191,7 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!user?.username || authLoading) return;
+    if (!user?.username || isHydrating) return;
     if (isZakiBotRoute) {
       setOnboardingOpen(false);
       return;
@@ -214,10 +210,10 @@ export default function App() {
       setOnboardingOpen(true);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [user?.username, authLoading, isZakiBotRoute, guidedOnboardingOpen]);
+  }, [user?.username, isHydrating, isZakiBotRoute, guidedOnboardingOpen]);
 
   useEffect(() => {
-    if (!token || !user?.username || authLoading) {
+    if (!token || !user?.username || isHydrating) {
       setLegalReconsentRequired(false);
       setLegalReconsentChecked(false);
       setLegalReconsentError("");
@@ -246,7 +242,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [token, user?.username, authLoading]);
+  }, [token, user?.username, isHydrating]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -329,15 +325,15 @@ export default function App() {
     }
   };
 
-  if (!token && !authLoading && location.pathname === "/legal") {
+  if (!token && !isHydrating && location.pathname === "/legal") {
     return <LegalPage />;
   }
 
-  if (!token && !authLoading) {
+  if (!token && !isHydrating) {
     return <LoginScreen />;
   }
 
-  if (authLoading) {
+  if (isHydrating) {
     return (
       <div className="min-h-screen bg-[#fff8f0] dark:bg-[#0c0a09] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -418,7 +414,6 @@ export default function App() {
                 type="button"
                 className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:border-[#2a2018] dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
                 onClick={() => {
-                  clearAuthToken();
                   logout();
                   setLegalReconsentRequired(false);
                   setLegalReconsentChecked(false);

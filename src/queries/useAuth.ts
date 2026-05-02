@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchCurrentUser, fetchProfile, requestLogin, setAuthToken, clearAuthToken } from "@/lib/api";
+import { fetchCurrentUser, fetchProfile, requestLogin, clearAuthToken } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
 // Keys
@@ -9,34 +9,29 @@ export const authKeys = {
 
 // Hooks
 export function useCurrentUser() {
-  const { setUser, setLoading } = useAuthStore();
-  
+  const { setUser } = useAuthStore();
+
   return useQuery({
     queryKey: authKeys.user,
     queryFn: async () => {
-      setLoading(true);
-      try {
-        const { response, data } = await fetchCurrentUser();
-        if (response.ok && data.user) {
-          const baseUser = data.user;
-          try {
-            const profile = await fetchProfile();
-            if (profile.response.ok && profile.data.user) {
-              const merged = { ...baseUser, fullName: profile.data.user.fullName ?? null };
-              setUser(merged);
-              return merged;
-            }
-          } catch {
-            // Ignore profile fetch failure
+      const { response, data } = await fetchCurrentUser();
+      if (response.ok && data.user) {
+        const baseUser = data.user;
+        try {
+          const profile = await fetchProfile();
+          if (profile.response.ok && profile.data.user) {
+            const merged = { ...baseUser, fullName: profile.data.user.fullName ?? null };
+            setUser(merged);
+            return merged;
           }
-          setUser(baseUser);
-          return baseUser;
+        } catch {
+          // Ignore profile fetch failure
         }
-        setUser(null);
-        return null;
-      } finally {
-        setLoading(false);
+        setUser(baseUser);
+        return baseUser;
       }
+      setUser(null);
+      return null;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: false,
@@ -57,13 +52,12 @@ export function useLogin() {
       const { response, data } = await requestLogin(credentials);
       
       if (!response.ok || !data.token) {
-        throw new Error(data.message ?? data.error ?? "Login failed");
+        throw new Error(data.message ?? "Login failed");
       }
       
       return data.token;
     },
     onSuccess: (token) => {
-      setAuthToken(token);
       setToken(token);
       queryClient.invalidateQueries({ queryKey: authKeys.user });
     },

@@ -1,4 +1,4 @@
-import { buildApiUrl } from "./api";
+import { buildApiUrl, getAuthToken } from "./api";
 
 export type ProductTelemetryEvent =
   | "pricing_viewed"
@@ -7,11 +7,7 @@ export type ProductTelemetryEvent =
   | "checkout_succeeded"
   | "first_message_sent"
   | "first_memory_saved"
-  | "activation_completed"
-  | "image_rendered"
-  | "voice_dictate_started"
-  | "voice_dictate_completed"
-  | "voice_dictate_failed";
+  | "activation_completed";
 
 export type ProductTelemetrySource =
   | "website_nav"
@@ -43,11 +39,9 @@ function resolveViewportClass(): ProductTelemetryViewport {
 
 export async function trackProductEvent(payload: ProductTelemetryPayload) {
   const headers = new Headers({ "Content-Type": "application/json" });
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem("zaki.auth.token");
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+  const token = getAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
   const response = await fetch(buildApiUrl("/api/telemetry/product-event"), {
     method: "POST",
