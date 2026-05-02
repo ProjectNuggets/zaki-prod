@@ -105,7 +105,7 @@ Plans:
 
 **Requirements:** FE-01, FE-02, FE-03, FE-04
 
-**Plans:** 0/? plans
+**Plans:** 2/2 plans complete
 
 **Status:** Not started
 
