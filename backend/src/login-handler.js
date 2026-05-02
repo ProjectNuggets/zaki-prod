@@ -98,12 +98,6 @@ export async function loginHandler(req, res) {
 
     const normalizedEmail = String(emailInput).trim().toLowerCase();
 
-    const typBase = process.env.NOVA_API_BASE;
-    if (!typBase) {
-      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
-      return;
-    }
-
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [normalizedEmail]);
     if (!user) {
       res.status(401).json({
@@ -196,7 +190,14 @@ export async function loginHandler(req, res) {
     res.setHeader("Set-Cookie", [buildRefreshCookie(refreshToken)]);
 
     // Phase 1: best-effort TYP call with 5s AbortController timeout (OATH-05)
-    const typToken = await bestEffortTypFetch(typBase, normalizedEmail, password);
+    // Resolve TYP base from NOVA_TYP_BASE_URL (matches getApiBase() normalization in index.js)
+    const rawTypBase = process.env.NOVA_TYP_BASE_URL;
+    const typApiBase = rawTypBase
+      ? (() => { const n = rawTypBase.replace(/\/+$/, ""); return n.endsWith("/api") ? n : `${n}/api`; })()
+      : null;
+    const typToken = typApiBase
+      ? await bestEffortTypFetch(typApiBase, normalizedEmail, password)
+      : null;
     if (typToken) {
       try {
         await dbQuery(

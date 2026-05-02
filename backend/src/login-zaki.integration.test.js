@@ -21,7 +21,7 @@ beforeAll(async () => {
   process.env.ZAKI_JWT_SIGNING_KEY = "a".repeat(64);
   process.env.ZAKI_JWT_KID = "test-v1";
   process.env.NODE_ENV = "production";
-  process.env.NOVA_API_BASE = "http://typ:3001";
+  process.env.NOVA_TYP_BASE_URL = "http://typ:3001/api";
   ({ loginHandler } = await import("./login-handler.js"));
 });
 
