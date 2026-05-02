@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { getAuthToken, setAuthToken, clearAuthToken } from "@/lib/api";
 
 interface User {
   id?: number | string;
@@ -11,38 +10,32 @@ interface User {
 interface AuthState {
   token: string | null;
   user: User | null;
-  isLoading: boolean;
-  
+  isHydrating: boolean;
   // Actions
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
-  setLoading: (loading: boolean) => void;
+  setHydrating: (hydrating: boolean) => void;
   logout: () => void;
-  initFromStorage: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  token: getAuthToken(), // Read from localStorage on init
+  token: null,        // NOT seeded from localStorage — FE-01
   user: null,
-  isLoading: !!getAuthToken(), // Start loading if token exists (needs validation)
-  
+  isHydrating: true,  // Boot starts in hydrating state — FE-02
+
   setToken: (token) => {
     if (token) {
-      setAuthToken(token);
-      set({ token, user: null, isLoading: true });
+      set({ token });
     } else {
-      clearAuthToken();
-      set({ token: null, user: null, isLoading: false });
+      set({ token: null, user: null, isHydrating: false });
     }
   },
+
   setUser: (user) => set({ user }),
-  setLoading: (isLoading) => set({ isLoading }),
-  logout: () => {
-    clearAuthToken();
-    set({ token: null, user: null, isLoading: false });
-  },
-  initFromStorage: () => {
-    const token = getAuthToken();
-    set({ token, isLoading: !!token });
-  },
+
+  setHydrating: (isHydrating) => set({ isHydrating }),
+
+  logout: () => set({ token: null, user: null, isHydrating: false }),
 }));
+
+export type { AuthState };
