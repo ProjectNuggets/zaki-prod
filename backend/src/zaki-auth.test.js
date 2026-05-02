@@ -70,6 +70,14 @@ describe("mintZakiSession (OATH-01, OATH-02)", () => {
     expect(payload.jti).toMatch(/^[0-9a-f-]{36}$/);
     expect(payload.exp - payload.iat).toBe(15 * 60);
   });
+
+  it("logs [ZakiAudit] session_mint userId=<id> ip=<ip> (AUTH-07)", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    dbQueryMock.mockResolvedValue({ rows: [], rowCount: 1 });
+    await zakiAuth.mintZakiSession(fakeUser, fakeReq);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/\[ZakiAudit\] session_mint userId=42 ip=10\.0\.0\.1/));
+    logSpy.mockRestore();
+  });
 });
 
 describe("verifyZakiAccessToken (OATH-01)", () => {
