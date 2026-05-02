@@ -90,6 +90,7 @@ import {
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import { buildEntitlementFields } from "./nullalis-entitlement.js";
+import { buildAuthRouter } from "./auth-endpoints.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -2086,7 +2087,7 @@ app.use(
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
-    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search"],
+    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search", "X-Zaki-Session-Upgrade"],
   })
 );
 
@@ -5433,6 +5434,7 @@ const loginHandler = async (req, res) => {
 
 app.post("/login", loginHandler);
 app.post("/api/login", loginHandler);
+app.use("/api/auth", buildAuthRouter());
 
 app.get("/api/legal/consent-status", async (req, res) => {
   try {
