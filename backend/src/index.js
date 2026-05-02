@@ -92,6 +92,7 @@ import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import { buildEntitlementFields } from "./nullalis-entitlement.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler } from "./login-handler.js";
+import { createRequireAuthUser } from "./require-auth-user.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -3841,48 +3842,26 @@ function getAppUrl() {
   ).replace(/\/+$/, "");
 }
 
-async function requireAuthUser(req, res) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
-    res.status(401).json({ error: "Missing authorization token." });
-    return null;
-  }
-
-  let sessionResponse;
-  try {
-    sessionResponse = await novaSessionRequest(
-      "/system/refresh-user",
-      authHeader,
-      { method: "GET" }
-    );
-  } catch (error) {
-    console.error("[Auth] Session refresh failed:", error);
-    res.status(502).json({ error: "Unable to validate session." });
-    return null;
-  }
-  const sessionData = await sessionResponse.json().catch(() => ({}));
-  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-    res.status(401).json({ error: "Invalid or expired token." });
-    return null;
-  }
-
-  const email = normalizeEmail(String(sessionData.user.username || ""));
-  if (!email) {
-    res.status(400).json({ error: "Invalid user." });
-    return null;
-  }
-
-  const zakiUser = await dbGet(
-    "SELECT * FROM zaki_users WHERE email = $1",
-    [email]
-  );
-  if (!zakiUser) {
-    res.status(404).json({ error: "ZAKI user not found." });
-    return null;
-  }
-
-  return { email, zakiUser, sessionUser: sessionData.user };
+// Phase 2 (AUTH-01..05): dual-auth requireAuthUser + requireBotBffContext factory.
+// ZAKI tokens verify locally; legacy TYP tokens fall back with 5s timeout + session mint.
+// Implementation in ./require-auth-user.js for testability.
+// Lazy ref pattern used because getOrCreateRequestId and buildDevAuthResultFromUserId
+// are defined later in this file (lines 8687+) and must be in scope at first call.
+const _authImpl = { requireAuthUser: null, requireBotBffContext: null };
+function _ensureAuthImpl() {
+  if (_authImpl.requireAuthUser) return;
+  Object.assign(_authImpl, createRequireAuthUser({
+    novaSessionRequest,
+    normalizeEmail,
+    resolveCanonicalAgentUserId,
+    mapBotBffAuthFailure,
+    getOrCreateRequestId,
+    NULLCLAW_DEV_USER_ID,
+    buildDevAuthResultFromUserId,
+  }));
 }
+async function requireAuthUser(req, res) { _ensureAuthImpl(); return _authImpl.requireAuthUser(req, res); }
+async function requireBotBffContext(req, res, next) { _ensureAuthImpl(); return _authImpl.requireBotBffContext(req, res, next); }
 
 const listWorkspacesHandler = async (req, res) => {
   try {
@@ -8715,84 +8694,6 @@ async function buildDevAuthResultFromUserId(userId) {
     zakiUser,
     userId: String(normalizedUserId),
   };
-}
-
-async function requireBotBffContext(req, res, next) {
-  const existingUserId = String(req.botBffContext?.userId || "").trim();
-  if (existingUserId) {
-    next();
-    return;
-  }
-
-  // Dev mode: skip auth (mirrors requireAgentContext dev bypass)
-  if (NULLCLAW_DEV_USER_ID) {
-    const devAuthResult = await buildDevAuthResultFromUserId(NULLCLAW_DEV_USER_ID);
-    if (!devAuthResult) {
-      return res.status(500).json({
-        error: "Invalid NULLCLAW_DEV_USER_ID. Matching ZAKI user not found.",
-        code: "invalid_dev_user_id",
-      });
-    }
-    req.botBffContext = devAuthResult;
-    next();
-    return;
-  }
-
-  const requestId = getOrCreateRequestId(req);
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
-    const failure = mapBotBffAuthFailure("unauthorized", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  let sessionResponse;
-  try {
-    sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, {
-      method: "GET",
-    });
-  } catch (error) {
-    console.error("[Auth][BFF] Session refresh failed:", error);
-    const failure = mapBotBffAuthFailure("unauthorized", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const sessionData = await sessionResponse.json().catch(() => ({}));
-  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-    const failure = mapBotBffAuthFailure("unauthorized", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const email = normalizeEmail(String(sessionData.user.username || ""));
-  if (!email) {
-    const failure = mapBotBffAuthFailure("forbidden", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [email]);
-  if (!zakiUser) {
-    const failure = mapBotBffAuthFailure("forbidden", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const userId = resolveCanonicalAgentUserId({ zakiUser });
-  if (!userId) {
-    const failure = mapBotBffAuthFailure("forbidden", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  req.botBffContext = {
-    email,
-    sessionUser: sessionData.user,
-    zakiUser,
-    userId,
-  };
-  next();
 }
 
 async function requireAgentContext(req, res, next) {
