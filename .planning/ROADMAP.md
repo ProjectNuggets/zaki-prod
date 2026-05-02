@@ -83,12 +83,12 @@ Plans:
 
 **Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — Wave 1: RED test stubs for AUTH-01..08 (require-auth-user.test.js + auth-endpoints/zaki-auth/login-handler test extensions)
-- [ ] 02-02-PLAN.md — Wave 2: requireAuthUser + requireBotBffContext dual-auth replacement (extracted module + index.js wiring) [AUTH-01..05]
-- [ ] 02-03-PLAN.md — Wave 3: Concurrent refresh guard + audit logs + password-change revokeAllSessions [AUTH-06, AUTH-07, AUTH-08]
+- [x] 02-01-PLAN.md — Wave 1: RED test stubs for AUTH-01..08 (require-auth-user.test.js + auth-endpoints/zaki-auth/login-handler test extensions)
+- [x] 02-02-PLAN.md — Wave 2: requireAuthUser + requireBotBffContext dual-auth replacement (extracted module + index.js wiring) [AUTH-01..05]
+- [x] 02-03-PLAN.md — Wave 3: Concurrent refresh guard + audit logs + password-change revokeAllSessions [AUTH-06, AUTH-07, AUTH-08]
 
 **Wave structure:**
 - Wave 1: 02-01 (RED tests, no production code)
