@@ -93,6 +93,7 @@ import { buildEntitlementFields } from "./nullalis-entitlement.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler } from "./login-handler.js";
 import { createRequireAuthUser } from "./require-auth-user.js";
+import { revokeAllSessionsForUser } from "./zaki-auth.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
@@ -5222,6 +5223,14 @@ const passwordResetConfirmHandler = async (req, res) => {
       `UPDATE zaki_users SET password_hash = $1, updated_at = $2 WHERE id = $3`,
       [passwordHash, nowIso, record.user_id]
     );
+    // AUTH-08: revoke all of this user's active sessions on password change.
+    // Best-effort logging — do not fail the request if revoke errors (the password is already changed).
+    try {
+      await revokeAllSessionsForUser(record.user_id);
+      console.log(`[ZakiAudit] session_revoke userId=${record.user_id} reason=password_change`);
+    } catch (revokeErr) {
+      console.warn("[ZakiAuth] revokeAllSessionsForUser after password change failed:", revokeErr?.message);
+    }
 
     res.status(200).json({
       success: true,
