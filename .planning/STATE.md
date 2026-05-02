@@ -1,31 +1,35 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: milestone
-status: unknown
-last_updated: "2026-04-30T23:16:22.718Z"
-last_activity: 2026-04-30
+milestone: zaki-owned-oath
+milestone_name: ZAKI-owned Oath
+status: in_progress
+last_updated: "2026-05-02T00:00:00.000Z"
+last_activity: 2026-05-02
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 4
+  percent: 20
 ---
 
 # ZAKI Web — Project State
 
-**Project:** zaki-prod (ZAKI web frontend)
-**Stack:** Vite + React 18 + TypeScript + Tailwind + Zustand + TanStack Query
-**Current milestone:** V1.5 Frontend
-**Last activity:** 2026-04-30
-**Last session stopped at:** Completed v1.5-frontend-11-PLAN.md
+**Project:** zaki-prod (ZAKI web backend + frontend)
+**Stack:** Node.js + Express + PostgreSQL (backend), Vite + React 18 + TypeScript + Tailwind + Zustand + TanStack Query (frontend)
+**Current milestone:** ZAKI-owned Oath (central auth takeover — 5-phase migration)
+**Last activity:** 2026-05-02
+**Last session stopped at:** Phase 1 all 4 plans executed, awaiting gsd-verifier
 
 ## Phase Status
 
 | Phase | Name | Status |
 |-------|------|--------|
-| v1.5-frontend | V1.5 Frontend — Brain Page + Audit Fixes | In Progress (plan 11 done) |
+| 01-zaki-mints-sessions | ZAKI mints sessions (backend only, zero user impact) | Plans complete — pending verification |
+| 02-replace-requireauthuser | Replace requireAuthUser (dual-auth window) | Not started |
+| 03-frontend-token-memory | Frontend moves to memory store | Not started |
+| 04-typ-adapter | TYP becomes an adapter | Not started |
+| 05-legacy-sunset | Legacy sunset (Day 60 gate) | Not started |
 
 ## Key Decisions (locked)
 
