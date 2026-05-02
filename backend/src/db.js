@@ -905,6 +905,35 @@ export async function initDb() {
   } catch (err) {
     console.warn("[DB] Memory undo windows table creation failed:", err.message);
   }
+
+  // --- ZAKI sessions (v2.0 OATH phase) ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_sessions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      refresh_token_hash TEXT UNIQUE NOT NULL,
+      typ_session_token TEXT,
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ,
+      last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_sessions_user_id
+      ON zaki_sessions (user_id);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_sessions_active
+      ON zaki_sessions (user_id, last_used_at DESC)
+      WHERE revoked_at IS NULL;
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_sessions_refresh_hash
+      ON zaki_sessions (refresh_token_hash);
+  `);
 }
 
 export function getDb() {
