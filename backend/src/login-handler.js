@@ -13,22 +13,9 @@ import bcrypt from "bcryptjs";
 
 import { dbGet, dbQuery } from "./db.js";
 import { mintZakiSession } from "./zaki-auth.js";
+import { buildRefreshCookie } from "./zaki-session-cookie.js";
 
-const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const COOKIE_NAME = "zaki_refresh";
-const COOKIE_DOMAIN = ".chatzaki.com";
-const COOKIE_PATH = "/api/auth/refresh";
 const TYP_TIMEOUT_MS = 5000; // RESEARCH.md Open Question A2
-
-function isProduction() {
-  return process.env.NODE_ENV === "production";
-}
-
-function buildRefreshCookie(token) {
-  const expires = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
-  const secure = isProduction() ? "Secure; " : "";
-  return `${COOKIE_NAME}=${token}; HttpOnly; ${secure}SameSite=Strict; Domain=${COOKIE_DOMAIN}; Path=${COOKIE_PATH}; Expires=${expires.toUTCString()}`;
-}
 
 /** Best-effort TYP /request-token call with 5-second AbortController timeout. */
 async function bestEffortTypFetch(typBase, normalizedEmail, password) {
@@ -115,7 +102,7 @@ export async function loginHandler(req, res) {
       });
       return;
     }
-    if (!bcrypt.compareSync(String(password), user.password_hash)) {
+    if (!(await bcrypt.compare(String(password), user.password_hash))) {
       res.status(401).json({
         valid: false,
         token: null,

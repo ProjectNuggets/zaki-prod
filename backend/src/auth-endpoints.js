@@ -7,15 +7,7 @@ import rateLimit from "express-rate-limit";
 
 import { dbGet, dbQuery } from "./db.js";
 import { rotateRefreshToken } from "./zaki-auth.js";
-
-const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const COOKIE_NAME = "zaki_refresh";
-const COOKIE_DOMAIN = ".chatzaki.com";
-const COOKIE_PATH = "/api/auth/refresh";
-
-function isProduction() {
-  return process.env.NODE_ENV === "production";
-}
+import { COOKIE_NAME, buildRefreshCookie, buildClearedRefreshCookie } from "./zaki-session-cookie.js";
 
 /** Manual cookie parser — no cookie-parser dependency (locked decision). */
 export function parseRefreshCookie(req) {
@@ -36,17 +28,6 @@ export function parseRefreshCookie(req) {
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function buildRefreshCookie(token) {
-  const expires = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
-  const secure = isProduction() ? "Secure; " : "";
-  return `${COOKIE_NAME}=${token}; HttpOnly; ${secure}SameSite=Strict; Domain=${COOKIE_DOMAIN}; Path=${COOKIE_PATH}; Expires=${expires.toUTCString()}`;
-}
-
-function buildClearedRefreshCookie() {
-  const secure = isProduction() ? "Secure; " : "";
-  return `${COOKIE_NAME}=; HttpOnly; ${secure}SameSite=Strict; Domain=${COOKIE_DOMAIN}; Path=${COOKIE_PATH}; Max-Age=0`;
 }
 
 /** Express handler: POST /api/auth/refresh — rotate refresh token, return new access JWT. */

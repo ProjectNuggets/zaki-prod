@@ -19,6 +19,11 @@ function getSigningKey() {
     err.code = "SIGNING_KEY_MISSING";
     throw err;
   }
+  if (!/^[0-9a-f]{64}$/i.test(hex)) {
+    const err = new Error("[ZakiAuth] ZAKI_JWT_SIGNING_KEY must be a 64-character hex string (256 bits)");
+    err.code = "SIGNING_KEY_INVALID";
+    throw err;
+  }
   return new Uint8Array(Buffer.from(hex, "hex"));
 }
 
