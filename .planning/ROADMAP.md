@@ -47,4 +47,88 @@ Plans:
 - Wave 4 (sequential as needed): plans 09, 10, 11→12
 - Wave 5: plan 13
 
-**Status:** In Progress (Wave 1b: plans 04+05 running)
+**Status:** Complete
+
+---
+
+## Active Milestone: ZAKI-owned Oath
+
+**Goal:** Remove NOVA.TYP from the auth critical path. ZAKI issues its own HS256 JWTs. TYP becomes a downstream adapter. Every downstream service speaks X-Internal-Token + X-Zaki-User-Id. Zero user-visible disruption throughout.
+
+**Migration window:** 60 days (TYP token TTL 30 days × 2 safety margin)
+
+---
+
+## Phase 01-zaki-mints-sessions: ZAKI mints sessions
+
+**Goal:** Backend issues ZAKI-owned JWTs and HttpOnly refresh cookies on login. Zero user-visible change. TYP token stored server-side only.
+
+**Requirements:** OATH-01, OATH-02, OATH-03, OATH-04, OATH-05, OATH-06, OATH-07, OATH-08, OATH-09, OATH-10, OATH-11, OATH-12
+
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 01-01-PLAN.md — Wave 0: RED test stubs (zaki-auth, auth-endpoints, login-zaki integration)
+- [x] 01-02-PLAN.md — Wave 1: zaki-auth.js (6 exports) + db.js zaki_sessions table + config-validation.js ZAKI_JWT_SIGNING_KEY
+- [x] 01-03-PLAN.md — Wave 2: auth-endpoints.js (/refresh + /logout) + index.js wiring + CORS X-Zaki-Session-Upgrade
+- [x] 01-04-PLAN.md — Wave 3: login-handler.js extracted + ZAKI session mint + best-effort TYP 5s timeout
+
+**Status:** Complete — VERIFICATION.md PASS 6/6
+
+---
+
+## Phase 02-replace-requireauthuser: Replace requireAuthUser (dual-auth window)
+
+**Goal:** Replace requireAuthUser with ZAKI-first logic: verify locally if iss==="zaki", fall back to TYP call with 5s timeout otherwise. Mint ZAKI session on legacy path. Add concurrent refresh guard, audit logging, revokeAllSessionsForUser on password change.
+
+**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Wave 1: RED test stubs for AUTH-01..08 (require-auth-user.test.js + auth-endpoints/zaki-auth/login-handler test extensions)
+- [ ] 02-02-PLAN.md — Wave 2: requireAuthUser + requireBotBffContext dual-auth replacement (extracted module + index.js wiring) [AUTH-01..05]
+- [ ] 02-03-PLAN.md — Wave 3: Concurrent refresh guard + audit logs + password-change revokeAllSessions [AUTH-06, AUTH-07, AUTH-08]
+
+**Wave structure:**
+- Wave 1: 02-01 (RED tests, no production code)
+- Wave 2: 02-02 (require-auth-user.js + index.js auth wiring) [AUTH-01..05]
+- Wave 3: 02-03 (auth-endpoints.js + zaki-auth.js + login-handler.js + index.js password-reset wiring) [AUTH-06..08] — sequential after 02-02 because both modify index.js
+
+**Status:** Plans complete — pending execution
+
+---
+
+## Phase 03-frontend-token-memory: Frontend moves to memory
+
+**Goal:** api.ts reads access token from Zustand store (not localStorage). On app boot, POST /api/auth/refresh to hydrate token. Watch X-Zaki-Session-Upgrade on every response and silently swap token in-memory.
+
+**Requirements:** FE-01, FE-02, FE-03, FE-04
+
+**Plans:** 0/? plans
+
+**Status:** Not started
+
+---
+
+## Phase 04-typ-adapter: TYP becomes an adapter
+
+**Goal:** Remove TYP /request-token call from loginHandler. Workspace routes resolve typ_session_token from DB (server-side novaAdminRequest with nova_user_id). Drop typ_session_token column. Browser never touches TYP tokens.
+
+**Requirements:** TYP-01, TYP-02, TYP-03, TYP-04
+
+**Plans:** 0/? plans
+
+**Status:** Not started
+
+---
+
+## Phase 05-legacy-sunset: Legacy sunset (Day 60 gate)
+
+**Goal:** After 45-day checkpoint confirms zero legacy path usage, add ZAKI_LEGACY_TYP_AUTH_CUTOFF env var. After cutoff date, legacy path returns 401 session_expired. Remove legacy code path.
+
+**Requirements:** SUN-01, SUN-02, SUN-03
+
+**Plans:** 0/? plans
+
+**Status:** Not started
