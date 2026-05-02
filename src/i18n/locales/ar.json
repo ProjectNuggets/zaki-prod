@@ -1716,6 +1716,9 @@
         "source": "المصدر",
         "linked": "الذكريات المرتبطة",
         "priorVersions_one": "{{count}} نسخة سابقة",
+        "priorVersions_two": "نسختان سابقتان",
+        "priorVersions_few": "{{count}} نسخ سابقة",
+        "priorVersions_many": "{{count}} نسخة سابقة",
         "priorVersions_other": "{{count}} نسخ سابقة",
         "confidence": "الثقة"
       }

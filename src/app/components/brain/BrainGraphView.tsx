@@ -279,6 +279,10 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
   const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
   const simLinksRef = useRef<SimLink[]>([]);
+  // IN-03: pre-sorted z-order so draw() doesn't allocate per frame
+  const sortedNodesRef = useRef<SimNode[]>([]);
+  // IN-02: bump each time simNodesRef is rebuilt so useMemos recompute
+  const [simVersion, setSimVersion] = useState(0);
 
   // Interaction state
   const [viewTransform, setViewTransform] = useState<ViewTransform>({ x: 0, y: 0, scale: 1 });
@@ -290,21 +294,29 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
   const dragStartRef = useRef<{ cx: number; cy: number; vt: ViewTransform } | null>(null);
   const didDragRef   = useRef(false);
 
-  // Keep refs in sync with state for use in canvas render loop
+  // WR-02: promote interaction values to refs so the RAF loop always reads current values
+  const selectedIdsRef = useRef<string[]>(selectedIds);
+  const searchQueryRef = useRef<string>(searchQuery);
+  const focusIdRef     = useRef<string | null>(null);
+  const connectedIdsRef = useRef<Set<string> | null>(null);
+
+  // Keep refs in sync with state / derived values
   useEffect(() => { viewTransformRef.current = viewTransform; }, [viewTransform]);
   useEffect(() => { hoveredNodeRef.current = hoveredNode; }, [hoveredNode]);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
 
-  // M3 drilldown
+  // M3 drilldown — simVersion dep ensures recompute when graph data refreshes (IN-02)
   const detailNode = useMemo(
     () => simNodesRef.current.find(n => n.id === detailNodeId)?.ref ?? null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [detailNodeId, simNodesRef.current.length],
+    [detailNodeId, simVersion],
   );
   const { data: memoryDetail, isLoading: memoryLoading } = useBrainMemory(userId, detailNodeId);
   const prefetchMemory = useBrainMemoryPrefetch(userId);
 
   // Focus set for spotlight rendering
   const focusId = detailNodeId ?? (selectedIds.length === 1 ? selectedIds[0] : null);
+  // simVersion dep ensures neighbors recompute after topology changes (IN-05)
   const connectedIds = useMemo<Set<string> | null>(() => {
     if (!focusId || !simLinksRef.current.length) return null;
     const s = new Set<string>([focusId]);
@@ -315,7 +327,11 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
       if (tgt === focusId) s.add(src);
     });
     return s;
-  }, [focusId]);
+  }, [focusId, simVersion]);
+
+  // WR-02: keep focusId and connectedIds refs current for RAF loop
+  useEffect(() => { focusIdRef.current = focusId ?? null; }, [focusId]);
+  useEffect(() => { connectedIdsRef.current = connectedIds; }, [connectedIds]);
 
   // Close detail when compose modal takes over
   useEffect(() => {
@@ -339,7 +355,12 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
         const raw = localStorage.getItem(POSITIONS_KEY);
         if (!raw) return null;
         const arr = JSON.parse(raw) as Array<{ id: string; x: number; y: number }>;
-        return new Map(arr.map(p => [p.id, { x: p.x, y: p.y }]));
+        // IN-04: reject stale/corrupt entries with NaN or Infinity coords
+        return new Map(
+          arr
+            .filter(p => typeof p.id === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
+            .map(p => [p.id, { x: p.x, y: p.y }])
+        );
       } catch { return null; }
     })();
 
@@ -397,6 +418,11 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
 
     simNodesRef.current = nodes;
     simLinksRef.current = links;
+    // IN-03: pre-sort by z-order once (kind never changes per node mid-session)
+    const zOrder: Record<string, number> = { conversation: 0, daily: 1, core: 2 };
+    sortedNodesRef.current = [...nodes].sort((a, b) => (zOrder[a.ref.kind] ?? 0) - (zOrder[b.ref.kind] ?? 0));
+    // IN-02: bump version so detailNode + connectedIds useMemos recompute
+    setSimVersion(v => v + 1);
 
     if (simRef.current) simRef.current.stop();
 
@@ -498,8 +524,12 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
     const { width, height } = canvas;
     const vt = viewTransformRef.current;
     const hovered = hoveredNodeRef.current;
-    const nodes = simNodesRef.current;
     const links = simLinksRef.current;
+    // WR-02: shadow closure values with always-fresh refs so RAF loop never draws stale state
+    const connectedIds = connectedIdsRef.current;
+    const selectedIds  = selectedIdsRef.current;
+    const focusId      = focusIdRef.current;
+    const searchQuery  = searchQueryRef.current;
     const dpr = window.devicePixelRatio || 1;
     const scaleX = (width / dpr) / W;
     const scaleY = (height / dpr) / H;
@@ -526,10 +556,10 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
         const hid = hovered.id;
         return (src === hid || tgt === hid) ? 0.72 : 0.05;
       }
-      // Search filter
+      // Search filter — O(1): d3-force resolves link.source/target to SimNode objects (WR-01)
       if (searchQuery) {
-        const srcMatch = matchesSearch(nodes.find(n => n.id === src)?.ref ?? { summary: "" } as BrainGraphNode, searchQuery);
-        const tgtMatch = matchesSearch(nodes.find(n => n.id === tgt)?.ref ?? { summary: "" } as BrainGraphNode, searchQuery);
+        const srcMatch = matchesSearch((link.source as SimNode).ref, searchQuery);
+        const tgtMatch = matchesSearch((link.target as SimNode).ref, searchQuery);
         if (srcMatch && tgtMatch) return 0.5;
         if (srcMatch || tgtMatch) return 0.12;
         return 0.03;
@@ -578,11 +608,8 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
     });
     ctx.globalAlpha = 1;
 
-    // Z-order: conversation → daily → core on top
-    const order: Record<string, number> = { conversation: 0, daily: 1, core: 2 };
-    const sorted = [...nodes].sort((a, b) => (order[a.ref.kind] ?? 0) - (order[b.ref.kind] ?? 0));
-
-    sorted.forEach(node => {
+    // Z-order: conversation → daily → core on top (pre-sorted in useEffect — IN-03)
+    sortedNodesRef.current.forEach(node => {
       if (node.x == null || node.y == null) return;
       const { x, y, r } = node;
       const color = kindColor(node.ref.kind);
@@ -928,9 +955,8 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
       {/* sr-only node list — gives screen readers a text representation of the graph */}
       <ul className="sr-only" aria-label={t("brain.graph.ariaLabel")}>
         {data.nodes.map(n => (
-          <li key={n.id} aria-label={t("brain.graph.nodeAriaLabel", { summary: n.summary })}>
-            {n.summary}
-          </li>
+          // WR-03: aria-label is the accessible name; no child text to avoid double-announcement
+          <li key={n.id} aria-label={t("brain.graph.nodeAriaLabel", { summary: n.summary })} />
         ))}
       </ul>
 
@@ -977,7 +1003,12 @@ export function BrainGraphView({ userId, selectedIds, onSelectionChange, searchQ
           node={detailNode}
           detail={memoryDetail ?? null}
           loading={memoryLoading}
-          onClose={() => { setDetailNodeId(null); onSelectionChange([]); }}
+          onClose={() => {
+            setDetailNodeId(null);
+            onSelectionChange([]);
+            // WR-04: return focus to canvas so keyboard nav continues without re-tab
+            requestAnimationFrame(() => canvasRef.current?.focus());
+          }}
           t={t}
         />
       )}
