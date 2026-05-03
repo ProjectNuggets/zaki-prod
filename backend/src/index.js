@@ -114,6 +114,12 @@ import {
   fetchTypWorkspaceSlugs,
   requestTypChatStream,
 } from "./typ-client.js";
+import { buildAuthRouter } from "./auth-endpoints.js";
+import {
+  verifyZakiAccessToken,
+  tryDecodeJwtPayload,
+  mintZakiSession,
+} from "./zaki-auth.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -2553,6 +2559,9 @@ app.get("/ready", async (_, res) => {
   res.status(ready.statusCode).json(ready.body);
 });
 
+// ZAKI auth endpoints (OATH-03, OATH-07, OATH-08, OATH-11)
+app.use("/api/auth", express.json({ limit: "16kb" }), buildAuthRouter());
+
 // =============================================================================
 // INPUT VALIDATION SCHEMAS
 // =============================================================================
@@ -3477,47 +3486,90 @@ function getAppUrl() {
   ).replace(/\/+$/, "");
 }
 
-async function requireAuthUser(req, res) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
-    res.status(401).json({ error: "Missing authorization token." });
-    return null;
-  }
+// AUTH-01..05: ZAKI dual-auth — ZAKI-first local verify, legacy TYP fallback.
+// SELECT list excludes password_hash (AUTH-03). Legacy path mints a ZAKI session on success (AUTH-05).
+const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end";
+const _LEGACY_TYP_CUTOFF_MS = (() => {
+  const v = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
+  if (!v) return null;
+  const ms = new Date(v).getTime();
+  return Number.isNaN(ms) ? null : ms;
+})();
 
-  let sessionResponse;
+function _extractBearer(req) {
+  const h = req?.headers?.authorization;
+  if (!h || !/^Bearer\s+\S+/i.test(String(h))) return null;
+  return String(h).slice(String(h).indexOf(" ") + 1).trim();
+}
+
+async function _resolveZakiUser(token) {
   try {
-    sessionResponse = await novaSessionRequest(
+    const payload = await verifyZakiAccessToken(token);
+    if (!payload?.sub) return { error: "invalid_token" };
+    const userId = Number.parseInt(String(payload.sub), 10);
+    if (!Number.isInteger(userId) || userId <= 0) return { error: "invalid_token" };
+    const zakiUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [userId]);
+    if (!zakiUser || !zakiUser.verified) return { error: "user_not_found" };
+    return { ok: true, email: zakiUser.email, zakiUser, sessionUser: null };
+  } catch {
+    return { error: "invalid_token" };
+  }
+}
+
+async function _resolveLegacyUser(authHeader, req, res) {
+  if (_LEGACY_TYP_CUTOFF_MS !== null && Date.now() >= _LEGACY_TYP_CUTOFF_MS) {
+    return { error: "session_expired" };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const sessionResponse = await novaSessionRequest(
       "/system/refresh-user",
       authHeader,
-      { method: "GET" }
+      { method: "GET", signal: controller.signal }
     );
-  } catch (error) {
-    console.error("[Auth] Session refresh failed:", error);
-    res.status(502).json({ error: "Unable to validate session." });
-    return null;
+    if (!sessionResponse?.ok) return { error: "invalid_token" };
+    const sessionData = await sessionResponse.json().catch(() => null);
+    if (!sessionData) return { error: "invalid_token" };
+    const rawEmail = sessionData?.user?.username || sessionData?.email || sessionData?.username;
+    const email = normalizeEmail(String(rawEmail || ""));
+    if (!email) return { error: "invalid_token" };
+    const zakiUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE email = $1`, [email]);
+    if (!zakiUser || !zakiUser.verified) return { error: "user_not_found" };
+    try {
+      await mintZakiSession({ id: zakiUser.id, email: zakiUser.email }, req);
+      try { res.setHeader("X-Zaki-Session-Upgrade", "1"); } catch (_e) {}
+      console.log(`[ZakiAudit] legacy_typ_path userId=${zakiUser.id} ip=${req?.ip ?? "unknown"}`);
+    } catch (mintErr) {
+      console.warn("[ZakiAuth] legacy path session mint failed:", mintErr?.message);
+    }
+    return { ok: true, email, zakiUser, sessionUser: sessionData.user || sessionData };
+  } catch {
+    return { error: "invalid_token" };
+  } finally {
+    clearTimeout(timer);
   }
-  const sessionData = await sessionResponse.json().catch(() => ({}));
-  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-    res.status(401).json({ error: "Invalid or expired token." });
-    return null;
-  }
+}
 
-  const email = normalizeEmail(String(sessionData.user.username || ""));
-  if (!email) {
-    res.status(400).json({ error: "Invalid user." });
+async function requireAuthUser(req, res) {
+  const token = _extractBearer(req);
+  if (!token) {
+    res.status(401).json({ error: "auth_required" });
     return null;
   }
-
-  const zakiUser = await dbGet(
-    "SELECT * FROM zaki_users WHERE email = $1",
-    [email]
-  );
-  if (!zakiUser) {
-    res.status(404).json({ error: "ZAKI user not found." });
+  const decoded = tryDecodeJwtPayload(token);
+  const result = decoded?.iss === "zaki"
+    ? await _resolveZakiUser(token)
+    : await _resolveLegacyUser(req.headers.authorization, req, res);
+  if (!result.ok) {
+    if (result.error === "session_expired") {
+      res.status(401).json({ error: "session_expired", code: "session_expired", message: "Please log in again." });
+    } else {
+      res.status(401).json({ error: result.error });
+    }
     return null;
   }
-
-  return { email, zakiUser, sessionUser: sessionData.user };
+  return { email: result.email, zakiUser: result.zakiUser, sessionUser: result.sessionUser };
 }
 
 const listWorkspacesHandler = async (req, res) => {
@@ -8331,65 +8383,44 @@ function getOrCreateIdempotencyKey(req, requestId) {
 
 async function requireBotBffContext(req, res, next) {
   const existingUserId = String(req.botBffContext?.userId || "").trim();
-  if (existingUserId) {
-    next();
-    return;
-  }
+  if (existingUserId) { next(); return; }
 
-  // Dev mode: skip auth (mirrors requireAgentContext dev bypass)
   if (NULLCLAW_DEV_USER_ID) {
+    const devUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [Number(NULLCLAW_DEV_USER_ID)]);
+    if (!devUser) {
+      return res.status(500).json({ error: "Invalid NULLCLAW_DEV_USER_ID. Matching ZAKI user not found.", code: "invalid_dev_user_id" });
+    }
     req.botBffContext = {
-      email: "dev@localhost",
-      sessionUser: { username: "dev@localhost" },
-      zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) },
-      userId: NULLCLAW_DEV_USER_ID,
+      email: devUser.email,
+      sessionUser: null,
+      zakiUser: devUser,
+      userId: String(devUser.id),
     };
     next();
     return;
   }
 
   const requestId = getOrCreateRequestId(req);
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
+  const token = _extractBearer(req);
+  if (!token) {
     const failure = mapBotBffAuthFailure("unauthorized", requestId);
     res.status(failure.status).json(failure.body);
     return;
   }
 
-  let sessionResponse;
-  try {
-    sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, {
-      method: "GET",
-    });
-  } catch (error) {
-    console.error("[Auth][BFF] Session refresh failed:", error);
-    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+  const decoded = tryDecodeJwtPayload(token);
+  const result = decoded?.iss === "zaki"
+    ? await _resolveZakiUser(token)
+    : await _resolveLegacyUser(req.headers.authorization, req, res);
+
+  if (!result.ok) {
+    const reason = result.error === "user_not_found" ? "forbidden" : "unauthorized";
+    const failure = mapBotBffAuthFailure(reason, requestId);
     res.status(failure.status).json(failure.body);
     return;
   }
 
-  const sessionData = await sessionResponse.json().catch(() => ({}));
-  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
-    const failure = mapBotBffAuthFailure("unauthorized", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const email = normalizeEmail(String(sessionData.user.username || ""));
-  if (!email) {
-    const failure = mapBotBffAuthFailure("forbidden", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [email]);
-  if (!zakiUser) {
-    const failure = mapBotBffAuthFailure("forbidden", requestId);
-    res.status(failure.status).json(failure.body);
-    return;
-  }
-
-  const userId = resolveCanonicalAgentUserId({ zakiUser });
+  const userId = resolveCanonicalAgentUserId({ zakiUser: result.zakiUser });
   if (!userId) {
     const failure = mapBotBffAuthFailure("forbidden", requestId);
     res.status(failure.status).json(failure.body);
@@ -8397,9 +8428,9 @@ async function requireBotBffContext(req, res, next) {
   }
 
   req.botBffContext = {
-    email,
-    sessionUser: sessionData.user,
-    zakiUser,
+    email: result.email,
+    sessionUser: result.sessionUser,
+    zakiUser: result.zakiUser,
     userId,
   };
   next();
