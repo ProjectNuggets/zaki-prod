@@ -358,7 +358,7 @@ export async function requestLogin({
     body: JSON.stringify(payload),
   });
 
-  let data: { valid?: boolean; token?: string | null; message?: string | null } =
+  let data: { valid?: boolean; token?: string | null; message?: string | null; error?: string | null } =
     {};
   try {
     data = await response.json();
@@ -1111,6 +1111,7 @@ export type BotSettingsProfile = BotApiError & {
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  autonomy?: "read_only" | "supervised" | "full";
 };
 
 export type BotSettingsPatch = {
@@ -1119,6 +1120,7 @@ export type BotSettingsPatch = {
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  autonomy?: "read_only" | "supervised" | "full";
 };
 
 export type BotTelegramConnectPayload = {
@@ -1567,7 +1569,12 @@ export type AgentSession = {
   token_count?: number;
   context_window_used?: number;
   context_window_max?: number;
+  context_pressure_percent?: number;
   live?: boolean;
+  mode?: AgentSessionMode;
+  last_channel?: string | null;
+  pending_approval_count?: number;
+  pending_approvals?: AgentPendingApproval[];
 };
 
 export type AgentSessionContext = {
@@ -1575,7 +1582,76 @@ export type AgentSessionContext = {
   token_count: number;
   context_window_max: number;
   context_window_used_pct: number;
+  context_pressure_percent?: number;
   message_count: number;
+};
+
+export type AgentSessionMode = "plan" | "execute" | "review";
+
+export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker";
+
+export type AgentPendingApproval = {
+  id?: string;
+  tool?: string;
+  reason?: string;
+  risk_level?: string;
+};
+
+export type BotRuntimeStatusResponse = {
+  sandbox?: {
+    enabled?: boolean;
+    backend?: BotSandboxBackend | null;
+  } | null;
+};
+
+export type AgentSessionModeResponse = {
+  ok?: boolean;
+  mode?: AgentSessionMode;
+  session_key?: string;
+  error?: string | null;
+  message?: string | null;
+};
+
+export type ContextDiagnosticsResponse = {
+  active?: boolean;
+  runtime?: boolean;
+  reason?: string | null;
+  error?: string | null;
+  report?: {
+    model?: string | null;
+    context_pressure_percent?: number | null;
+    context_window_used_pct?: number | null;
+    token_estimate?: number | null;
+    used_tokens?: number | null;
+    context_window_tokens?: number | null;
+    total_tokens?: number | null;
+    history_messages?: number | null;
+    history_trim_limit_messages?: number | null;
+    history_trimmed?: number | null;
+    token_compaction_triggered?: boolean | null;
+    compaction_triggered?: boolean | null;
+    token_compaction_threshold?: number | null;
+    compaction_threshold_pct?: number | null;
+    tools?: number | null;
+    tools_loaded?: number | null;
+    roles?: Record<string, number> | null;
+    memory?: Record<string, unknown> | null;
+    prompt?: Record<string, unknown> | null;
+    retrieval?: Record<string, unknown> | null;
+    continuity?: Record<string, unknown> | null;
+    cache?: Record<string, unknown> | null;
+    buckets?: Record<string, unknown> | null;
+    runtime?: Record<string, unknown> | null;
+    last_turn?: Record<string, unknown> | null;
+  } | null;
+};
+
+export type MemoryDoctorResponse = {
+  active?: boolean;
+  runtime?: boolean;
+  reason?: string | null;
+  error?: string | null;
+  report_text?: string | null;
 };
 
 export type AgentSessionApprovalPayload = {
@@ -1653,6 +1729,42 @@ export async function fetchAgentSessionHistory(sessionKey: string) {
   return { response, data };
 }
 
+export async function setAgentSessionMode(
+  sessionKey: string,
+  mode: AgentSessionMode
+) {
+  assertSafeSessionKey(sessionKey);
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/mode`, {
+    method: "POST",
+    body: JSON.stringify({ mode }),
+  });
+  const data = await parseApiJson<AgentSessionModeResponse>(response);
+  return { response, data };
+}
+
+export async function fetchBotRuntimeStatus() {
+  const response = await backendRequest("/v1/me/bot/runtime", { method: "GET" });
+  const data = await parseApiJson<BotRuntimeStatusResponse>(response);
+  return { response, data };
+}
+
+export async function fetchContextDiagnostics() {
+  const response = await backendAuthRequest("/api/me/diagnostics/context", {
+    method: "GET",
+  });
+  const data = await parseApiJson<ContextDiagnosticsResponse>(response);
+  return { response, data };
+}
+
+export async function fetchMemoryDoctor() {
+  const response = await backendAuthRequest("/api/me/diagnostics/memory-doctor", {
+    method: "GET",
+  });
+  const data = await parseApiJson<MemoryDoctorResponse>(response);
+  return { response, data };
+}
+
 export async function approveAgentSession(
   sessionKey: string,
   payload: AgentSessionApprovalPayload
@@ -1665,4 +1777,184 @@ export async function approveAgentSession(
   });
   const data = await parseApiJson<{ ok: boolean }>(response);
   return { response, data };
+}
+
+// ── /brain/graph ─────────────────────────────────────────────
+export interface BrainGraphResponse {
+  nodes: BrainGraphNode[];
+  edges: BrainGraphEdge[];
+  trimmed: boolean;
+  total_skipped: number;
+  total_nodes_in_corpus: number;
+  semantic_degraded: boolean;
+}
+
+export interface BrainGraphNode {
+  id: string;
+  kind: "core" | "daily" | "conversation" | string;
+  created_at: number;
+  session_id: string | null;
+  summary: string;
+  valid_to: number | null;
+  importance_score?: number;
+  source_snippet?: string | null;
+}
+
+export type BrainGraphEdge =
+  | { type: "session"; source: string; target: string }
+  | { type: "semantic"; source: string; target: string; weight: number }
+  | { type: "reference"; source: string; target: string }
+  | { type: "typed"; source: string; target: string; label?: string };
+
+// ── /brain/timeline ──────────────────────────────────────────
+export interface BrainTimelineResponse {
+  entries: BrainTimelineEntry[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface BrainTimelineEntry {
+  id: string;
+  key: string;
+  kind: "core" | "daily" | "conversation" | string;
+  created_at: number;
+  session_id: string | null;
+  summary: string;
+  valid_to: number | null;
+}
+
+// ── /brain/compose ───────────────────────────────────────────
+export interface BrainComposeRequest {
+  title: string;
+  content: string;
+  references: string[];
+  category?: "core" | "daily" | "conversation";
+  key?: string;
+}
+
+export interface BrainComposeResponse {
+  key: string;
+  synthesized_by: "user";
+  references_count: number;
+  category: string;
+  composed_at: number;
+}
+
+export interface BrainSearchResponse {
+  results: BrainGraphNode[];
+}
+
+export interface BrainMemoryDetail {
+  id: string;
+  key?: string;
+  kind: "core" | "daily" | "conversation" | string;
+  created_at: number;
+  session_id: string | null;
+  summary: string;
+  content?: string;
+  valid_to: number | null;
+  importance_score?: number;
+  confidence_score?: number;
+  source?: {
+    timestamp: number;
+    snippet?: string | null;
+  } | null;
+  linked_memories?: Array<{
+    id?: string;
+    link_type: string;
+    summary: string;
+  }>;
+  valid_history?: Array<{
+    content: string;
+    valid_from: number;
+    valid_to: number | null;
+  }>;
+}
+
+function appendBrainQueryParams(
+  path: string,
+  params: Record<string, string | number | undefined>
+) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") {
+      search.set(key, String(value));
+    }
+  }
+  const qs = search.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
+export async function fetchBrainGraph(
+  userId: string,
+  opts?: { since?: number; max_nodes?: number; node_kinds?: string }
+): Promise<BrainGraphResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/graph", {
+      since: opts?.since,
+      max_nodes: opts?.max_nodes,
+      node_kinds: opts?.node_kinds,
+    }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/graph ${response.status}`);
+  return parseApiJson<BrainGraphResponse>(response);
+}
+
+export async function fetchBrainTimeline(
+  userId: string,
+  opts?: { cursor?: string; limit?: number; kind?: string; to?: number }
+): Promise<BrainTimelineResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/timeline", {
+      cursor: opts?.cursor,
+      limit: opts?.limit,
+      kind: opts?.kind,
+      to: opts?.to,
+    }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/timeline ${response.status}`);
+  return parseApiJson<BrainTimelineResponse>(response);
+}
+
+export async function postBrainCompose(
+  userId: string,
+  body: BrainComposeRequest
+): Promise<BrainComposeResponse> {
+  void userId;
+  const response = await backendAuthRequest("/api/agent/brain/compose", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`brain/compose ${response.status}`);
+  return parseApiJson<BrainComposeResponse>(response);
+}
+
+export async function fetchBrainSearch(
+  userId: string,
+  q: string
+): Promise<BrainSearchResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/search", { q }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/search ${response.status}`);
+  return parseApiJson<BrainSearchResponse>(response);
+}
+
+export async function fetchBrainMemory(
+  userId: string,
+  key: string
+): Promise<BrainMemoryDetail> {
+  void userId;
+  const response = await backendAuthRequest(
+    `/api/agent/brain/memory/${encodeURIComponent(key)}`,
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/memory ${response.status}`);
+  return parseApiJson<BrainMemoryDetail>(response);
 }
