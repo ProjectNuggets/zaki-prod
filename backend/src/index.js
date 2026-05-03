@@ -61,7 +61,6 @@ import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
   extractAgentTokenChunk,
-  isPersistableAgentEvent,
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
@@ -90,17 +89,12 @@ import {
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import { buildEntitlementFields } from "./nullalis-entitlement.js";
-import { buildAuthRouter } from "./auth-endpoints.js";
-import { loginHandler } from "./login-handler.js";
-import { createRequireAuthUser } from "./require-auth-user.js";
-import { revokeAllSessionsForUser } from "./zaki-auth.js";
 import {
   APP_CHAT_SURFACE,
   ZAKI_BOT_SURFACE,
   consumeDailyPromptQuota,
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
-  hasLocalUnlimitedQuotaBypass,
   isUnlimitedUser,
   readDailyPromptUsage,
   resolveQuotaSurface,
@@ -114,21 +108,12 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
+import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
 import {
-  DEFAULT_THREAD_LABEL,
-  buildFallbackTitleFromUserMessage,
-  createThreadAutoTitleHandler,
-  extractFirstExchangeFromHistory,
-  generateThreadTitleFromExchange,
-  isDefaultThreadLabel,
-} from "./thread-auto-title.js";
-import {
-  buildCanonicalZakiThreadSessionKey,
-  buildDefaultZakiThreadTitle,
-  mergeZakiAgentSessions,
-  normalizeZakiSessionKey,
-  parseZakiSessionKey,
-} from "./zaki-agent-sessions.js";
+  fetchTypWorkspaces,
+  fetchTypWorkspaceSlugs,
+  requestTypChatStream,
+} from "./typ-client.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -485,345 +470,6 @@ async function withTimeout(promise, timeoutMs, label = "Operation") {
     ]);
   } finally {
     if (timer) clearTimeout(timer);
-  }
-}
-
-function normalizeUpstreamSessionPayload(payload) {
-  if (Array.isArray(payload?.sessions)) return payload.sessions;
-  if (Array.isArray(payload)) return payload;
-  return [];
-}
-
-const zakiThreadBackfillInFlightByUser = new Map();
-
-async function touchZakiThreadRecord({
-  userId,
-  spaceId = ZAKI_BOT_SPACE_ID,
-  threadId = ZAKI_BOT_THREAD_ID,
-  title,
-  touchedAt = new Date().toISOString(),
-}) {
-  const normalizedTitle = buildDefaultZakiThreadTitle(title);
-  await dbQuery(
-    `INSERT INTO zaki_bot_threads (user_id, space_id, thread_id, title, created_at, updated_at, last_active_at)
-     VALUES ($1, $2, $3, $4, $5, $5, $5)
-     ON CONFLICT (user_id, space_id, thread_id)
-     DO UPDATE SET
-       updated_at = EXCLUDED.updated_at,
-       last_active_at = EXCLUDED.last_active_at`,
-    [userId, spaceId, threadId, normalizedTitle, touchedAt]
-  );
-}
-
-async function maybeSetZakiThreadTitle({
-  userId,
-  spaceId = ZAKI_BOT_SPACE_ID,
-  threadId = ZAKI_BOT_THREAD_ID,
-  title,
-}) {
-  const normalizedTitle = String(title || "").trim();
-  if (!normalizedTitle) return "";
-  const nextTitle = buildDefaultZakiThreadTitle(normalizedTitle);
-  const result = await dbGet(
-    `UPDATE zaki_bot_threads
-     SET title = $4,
-         updated_at = NOW()
-     WHERE user_id = $1
-       AND space_id = $2
-       AND thread_id = $3
-       AND (title IS NULL OR btrim(title) = '' OR lower(btrim(title)) IN ('new chat', 'thread'))
-     RETURNING title`,
-    [userId, spaceId, threadId, nextTitle]
-  );
-  return String(result?.title || "").trim();
-}
-
-async function loadFirstExchangeForZakiThread({
-  userId,
-  spaceId = ZAKI_BOT_SPACE_ID,
-  threadId = ZAKI_BOT_THREAD_ID,
-}) {
-  const rows = await dbAll(
-    `SELECT role, content
-     FROM zaki_bot_messages
-     WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
-     ORDER BY id ASC
-     LIMIT 12`,
-    [userId, spaceId, threadId]
-  );
-  const exchange = extractFirstExchangeFromHistory(rows);
-  if (exchange.userMessage || exchange.assistantMessage) {
-    return exchange;
-  }
-  const firstUserRow = rows.find((row) => String(row?.role || "").trim().toLowerCase() === "user");
-  return {
-    userMessage: String(firstUserRow?.content || "").trim(),
-    assistantMessage: "",
-  };
-}
-
-async function ensureZakiThreadTitle({
-  userId,
-  spaceId = ZAKI_BOT_SPACE_ID,
-  threadId = ZAKI_BOT_THREAD_ID,
-}) {
-  await touchZakiThreadRecord({ userId, spaceId, threadId });
-  const metadata = await dbGet(
-    `SELECT title
-     FROM zaki_bot_threads
-     WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
-     LIMIT 1`,
-    [userId, spaceId, threadId]
-  );
-  const currentTitle = String(metadata?.title || "").trim();
-  if (currentTitle && !isDefaultThreadLabel(currentTitle)) {
-    return currentTitle;
-  }
-
-  const { userMessage, assistantMessage } = await loadFirstExchangeForZakiThread({
-    userId,
-    spaceId,
-    threadId,
-  });
-  if (!userMessage) {
-    return currentTitle || DEFAULT_THREAD_LABEL;
-  }
-
-  let nextTitle = "";
-  if (assistantMessage) {
-    nextTitle = await generateThreadTitleFromExchange({
-      userMessage,
-      assistantMessage,
-    });
-  }
-  if (!nextTitle) {
-    nextTitle = buildFallbackTitleFromUserMessage(userMessage);
-  }
-  if (!nextTitle) {
-    return currentTitle || DEFAULT_THREAD_LABEL;
-  }
-  await maybeSetZakiThreadTitle({ userId, spaceId, threadId, title: nextTitle });
-  return nextTitle;
-}
-
-async function backfillZakiThreadTitles(userId) {
-  await dbQuery(
-    `INSERT INTO zaki_bot_threads (user_id, space_id, thread_id, title, created_at, updated_at, last_active_at)
-     SELECT
-       user_id,
-       space_id,
-       thread_id,
-       $2::text AS title,
-       MIN(created_at) AS created_at,
-       NOW() AS updated_at,
-       MAX(created_at) AS last_active_at
-     FROM zaki_bot_messages
-     WHERE user_id = $1
-     GROUP BY user_id, space_id, thread_id
-     ON CONFLICT (user_id, space_id, thread_id) DO NOTHING`,
-    [userId, DEFAULT_THREAD_LABEL]
-  );
-
-  const rows = await dbAll(
-    `SELECT space_id, thread_id, title
-     FROM zaki_bot_threads
-     WHERE user_id = $1
-       AND (title IS NULL OR btrim(title) = '' OR lower(btrim(title)) IN ('new chat', 'thread'))
-     ORDER BY last_active_at DESC, updated_at DESC
-     LIMIT 6`,
-    [userId]
-  );
-  for (const row of rows) {
-    try {
-      await ensureZakiThreadTitle({
-        userId,
-        spaceId: row.space_id,
-        threadId: row.thread_id,
-      });
-    } catch (error) {
-      console.warn("[Agent] ZAKI thread title backfill failed:", error?.message || error);
-    }
-  }
-}
-
-function scheduleZakiThreadBackfill(userId) {
-  const key = String(userId || "").trim();
-  if (!key || zakiThreadBackfillInFlightByUser.has(key)) return;
-  const task = backfillZakiThreadTitles(key)
-    .catch((error) => {
-      console.warn("[Agent] ZAKI thread title backfill scheduler failed:", error?.message || error);
-    })
-    .finally(() => {
-      zakiThreadBackfillInFlightByUser.delete(key);
-    });
-  zakiThreadBackfillInFlightByUser.set(key, task);
-}
-
-async function listLocalZakiThreadSessions(userId) {
-  const rows = await dbAll(
-    `WITH message_summary AS (
-       SELECT
-         user_id,
-         space_id,
-         thread_id,
-         COUNT(*)::int AS message_count,
-         MAX(created_at) AS last_message_at
-       FROM zaki_bot_messages
-       WHERE user_id = $1
-       GROUP BY user_id, space_id, thread_id
-     )
-     SELECT
-       t.space_id,
-       t.thread_id,
-       t.title,
-       t.created_at,
-       GREATEST(
-         COALESCE(t.last_active_at, t.updated_at, t.created_at),
-         COALESCE(m.last_message_at, t.created_at)
-       ) AS last_active,
-       COALESCE(m.message_count, 0) AS message_count
-     FROM zaki_bot_threads t
-     LEFT JOIN message_summary m
-       ON m.user_id = t.user_id
-      AND m.space_id = t.space_id
-      AND m.thread_id = t.thread_id
-     WHERE t.user_id = $1
-     UNION ALL
-     SELECT
-       m.space_id,
-       m.thread_id,
-       $2::text AS title,
-       m.last_message_at AS created_at,
-       m.last_message_at AS last_active,
-       m.message_count
-     FROM message_summary m
-     WHERE NOT EXISTS (
-       SELECT 1
-       FROM zaki_bot_threads t
-       WHERE t.user_id = m.user_id
-         AND t.space_id = m.space_id
-         AND t.thread_id = m.thread_id
-     )`,
-    [userId, DEFAULT_THREAD_LABEL]
-  );
-
-  return rows.map((row) => ({
-    session_key: buildCanonicalZakiThreadSessionKey(userId, row.thread_id || ZAKI_BOT_THREAD_ID),
-    title: row.title || DEFAULT_THREAD_LABEL,
-    created_at: row.created_at || null,
-    last_active: row.last_active || row.created_at || null,
-    message_count: Number.isFinite(row.message_count) ? Number(row.message_count) : 0,
-    live: false,
-  }));
-}
-
-async function fetchUpstreamAgentSessions({ userId, requestId }) {
-  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
-  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
-    return [];
-  }
-
-  try {
-    const upstream = await fetchNullclawPath({
-      baseUrl: nullclawBase,
-      internalToken: NULLCLAW_INTERNAL_TOKEN,
-      userId,
-      requestId,
-      path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
-      method: "GET",
-      fetchWithTimeout,
-      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-      label: "Agent sessions list",
-    });
-    const payload = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      console.warn("[Agent] Upstream sessions list failed:", upstream.status, payload?.error || "");
-      return [];
-    }
-    return normalizeUpstreamSessionPayload(payload).map((session) => ({
-      ...session,
-      session_key: normalizeZakiSessionKey(session?.session_key),
-    }));
-  } catch (error) {
-    console.warn("[Agent] Upstream sessions list unavailable:", error?.message || error);
-    return [];
-  }
-}
-
-async function listAggregatedZakiAgentSessions({ userId, requestId }) {
-  scheduleZakiThreadBackfill(userId);
-  const [upstreamSessions, localThreads] = await Promise.all([
-    fetchUpstreamAgentSessions({ userId, requestId }),
-    listLocalZakiThreadSessions(userId),
-  ]);
-  return mergeZakiAgentSessions({ upstreamSessions, localThreads });
-}
-
-async function deleteLocalZakiThreadSession({ userId, sessionKey }) {
-  const parsed = parseZakiSessionKey(sessionKey);
-  if (parsed.lane !== "thread" || !parsed.threadId) {
-    return { deleted: false, threadId: null };
-  }
-
-  const result = await withDbTransaction(async (client) => {
-    const deletedMessages = await client.query(
-      `DELETE FROM zaki_bot_messages
-       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
-      [userId, ZAKI_BOT_SPACE_ID, parsed.threadId]
-    );
-    const deletedThreads = await client.query(
-      `DELETE FROM zaki_bot_threads
-       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
-      [userId, ZAKI_BOT_SPACE_ID, parsed.threadId]
-    );
-    return {
-      deletedMessages: Number(deletedMessages.rowCount || 0),
-      deletedThreads: Number(deletedThreads.rowCount || 0),
-    };
-  });
-
-  return {
-    deleted: (result.deletedMessages + result.deletedThreads) > 0,
-    threadId: parsed.threadId,
-  };
-}
-
-async function deleteUpstreamAgentSession({ userId, requestId, sessionKey }) {
-  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
-  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
-    return {
-      ok: false,
-      status: 503,
-      payload: { error: "nullclaw_unavailable" },
-    };
-  }
-
-  try {
-    const upstream = await fetchWithTimeout(
-      `${nullclawBase}/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
-      {
-        method: "DELETE",
-        headers: buildAgentForwardHeaders({
-          internalToken: NULLCLAW_INTERNAL_TOKEN,
-          userId,
-          requestId,
-        }),
-      },
-      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-      "Agent session delete"
-    );
-    const payload = await readAgentUpstreamPayload(upstream.clone());
-    return {
-      ok: upstream.ok,
-      status: upstream.status || 500,
-      payload,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      status: 502,
-      payload: sanitizeAgentUpstreamPayload(error?.message || "upstream_error"),
-    };
   }
 }
 
@@ -2090,7 +1736,7 @@ app.use(
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
-    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search", "X-Zaki-Session-Upgrade"],
+    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search"],
   })
 );
 
@@ -2372,30 +2018,12 @@ async function fetchNovaUserIdByUsername(username) {
   return match?.id ?? null;
 }
 
-async function fetchSessionWorkspaceSlugs(authHeader) {
-  const response = await novaSessionRequest("/workspaces", authHeader, {
-    method: "GET",
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !Array.isArray(data?.workspaces)) {
-    return {
-      success: false,
-      status: response.status || 502,
-      error: data?.error || data?.message || "Unable to fetch workspaces.",
-      slugs: [],
-    };
-  }
-  return {
-    success: true,
-    status: response.status,
-    slugs: data.workspaces
-      .map((workspace) => String(workspace?.slug || "").trim().toLowerCase())
-      .filter(Boolean),
-  };
+async function fetchSessionWorkspaceSlugs(novaUserId) {
+  return fetchTypWorkspaceSlugs(novaUserId);
 }
 
-async function workspaceVisibleForSession(authHeader, normalizedSlug) {
-  const result = await fetchSessionWorkspaceSlugs(authHeader);
+async function workspaceVisibleForSession(novaUserId, normalizedSlug) {
+  const result = await fetchSessionWorkspaceSlugs(novaUserId);
   if (!result.success) {
     return result;
   }
@@ -2407,9 +2035,9 @@ async function workspaceVisibleForSession(authHeader, normalizedSlug) {
   };
 }
 
-async function verifyWorkspaceDeleted(authHeader, normalizedSlug, attempts = 3) {
+async function verifyWorkspaceDeleted(novaUserId, normalizedSlug, attempts = 3) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const check = await workspaceVisibleForSession(authHeader, normalizedSlug);
+    const check = await workspaceVisibleForSession(novaUserId, normalizedSlug);
     if (!check.success) return check;
     if (!check.visible) {
       return { success: true, deleted: true };
@@ -2418,11 +2046,7 @@ async function verifyWorkspaceDeleted(authHeader, normalizedSlug, attempts = 3) 
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
-  return {
-    success: true,
-    deleted: false,
-    error: "Workspace is still visible after delete verification.",
-  };
+  return { success: false, status: 502, error: "Workspace still visible after delete." };
 }
 
 async function resolveNovaUserIdForZakiUser(zakiUser, email) {
@@ -2729,7 +2353,12 @@ async function requireWorkspaceAccess(req, res) {
     return null;
   }
 
-  const accessCheck = await workspaceVisibleForSession(req.headers.authorization, slug);
+  if (!zakiUser.nova_user_id) {
+    res.status(403).json({ error: "Workspace access requires a linked TYP account." });
+    return null;
+  }
+
+  const accessCheck = await workspaceVisibleForSession(zakiUser.nova_user_id, slug);
   if (!accessCheck.success) {
     res.status(accessCheck.status || 502).json({
       error: accessCheck.error || "Unable to verify workspace access.",
@@ -3768,14 +3397,13 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
   const status = zakiUser?.plan_status || "inactive";
   const access = getAccessStatus(zakiUser);
   const unlimited =
-    hasLocalUnlimitedQuotaBypass(zakiUser) ||
-    (normalizedSurface === ZAKI_BOT_SURFACE
+    normalizedSurface === ZAKI_BOT_SURFACE
       ? false
       : isUnlimitedUser({
           tier,
           status,
           accessActive: access.active,
-        }));
+        });
   return { tier, status, access, surface: normalizedSurface, unlimited };
 }
 
@@ -3843,37 +3471,64 @@ function getAppUrl() {
   ).replace(/\/+$/, "");
 }
 
-// Phase 2 (AUTH-01..05): dual-auth requireAuthUser + requireBotBffContext factory.
-// ZAKI tokens verify locally; legacy TYP tokens fall back with 5s timeout + session mint.
-// Implementation in ./require-auth-user.js for testability.
-// Lazy ref pattern used because getOrCreateRequestId and buildDevAuthResultFromUserId
-// are defined later in this file (lines 8687+) and must be in scope at first call.
-const _authImpl = { requireAuthUser: null, requireBotBffContext: null };
-function _ensureAuthImpl() {
-  if (_authImpl.requireAuthUser) return;
-  Object.assign(_authImpl, createRequireAuthUser({
-    novaSessionRequest,
-    normalizeEmail,
-    resolveCanonicalAgentUserId,
-    mapBotBffAuthFailure,
-    getOrCreateRequestId,
-    NULLCLAW_DEV_USER_ID,
-    buildDevAuthResultFromUserId,
-  }));
+async function requireAuthUser(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
+    res.status(401).json({ error: "Missing authorization token." });
+    return null;
+  }
+
+  let sessionResponse;
+  try {
+    sessionResponse = await novaSessionRequest(
+      "/system/refresh-user",
+      authHeader,
+      { method: "GET" }
+    );
+  } catch (error) {
+    console.error("[Auth] Session refresh failed:", error);
+    res.status(502).json({ error: "Unable to validate session." });
+    return null;
+  }
+  const sessionData = await sessionResponse.json().catch(() => ({}));
+  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+    res.status(401).json({ error: "Invalid or expired token." });
+    return null;
+  }
+
+  const email = normalizeEmail(String(sessionData.user.username || ""));
+  if (!email) {
+    res.status(400).json({ error: "Invalid user." });
+    return null;
+  }
+
+  const zakiUser = await dbGet(
+    "SELECT * FROM zaki_users WHERE email = $1",
+    [email]
+  );
+  if (!zakiUser) {
+    res.status(404).json({ error: "ZAKI user not found." });
+    return null;
+  }
+
+  return { email, zakiUser, sessionUser: sessionData.user };
 }
-async function requireAuthUser(req, res) { _ensureAuthImpl(); return _authImpl.requireAuthUser(req, res); }
-async function requireBotBffContext(req, res, next) { _ensureAuthImpl(); return _authImpl.requireBotBffContext(req, res, next); }
 
 const listWorkspacesHandler = async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { zakiUser } = authResult;
-    const authHeader = req.headers.authorization;
 
-    const upstream = await novaSessionRequest("/workspaces", authHeader, {
-      method: "GET",
-    });
+    if (!zakiUser.nova_user_id) {
+      res.status(403).json({
+        success: false,
+        error: "Workspace listing requires a linked TYP account.",
+      });
+      return;
+    }
+
+    const upstream = await fetchTypWorkspaces(zakiUser.nova_user_id);
     const data = await upstream.json().catch(() => ({}));
     if (!upstream.ok || !Array.isArray(data?.workspaces)) {
       res.status(upstream.status || 502).json({
@@ -5223,14 +4878,6 @@ const passwordResetConfirmHandler = async (req, res) => {
       `UPDATE zaki_users SET password_hash = $1, updated_at = $2 WHERE id = $3`,
       [passwordHash, nowIso, record.user_id]
     );
-    // AUTH-08: revoke all of this user's active sessions on password change.
-    // Best-effort logging — do not fail the request if revoke errors (the password is already changed).
-    try {
-      await revokeAllSessionsForUser(record.user_id);
-      console.log(`[ZakiAudit] session_revoke userId=${record.user_id} reason=password_change`);
-    } catch (revokeErr) {
-      console.warn("[ZakiAuth] revokeAllSessionsForUser after password change failed:", revokeErr?.message);
-    }
 
     res.status(200).json({
       success: true,
@@ -5256,9 +4903,133 @@ app.post(
   passwordResetConfirmHandler
 );
 
+const loginHandler = async (req, res) => {
+  try {
+    // Validate input
+    const validation = validateInput(LoginSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        valid: false,
+        token: null,
+        message: validation.errors.map(e => e.message).join(', '),
+      });
+      return;
+    }
+
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+      return;
+    }
+
+    const { email, username, password } = validation.data;
+    const normalizedEmail = normalizeEmail(email || username);
+
+    const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
+      normalizedEmail,
+    ]);
+    if (!user) {
+      res.status(401).json({
+        valid: false,
+        token: null,
+        message: "Invalid login credentials.",
+      });
+      return;
+    }
+    if (!user.verified) {
+      res.status(401).json({
+        valid: false,
+        token: null,
+        message: "Please verify your email before signing in.",
+      });
+      return;
+    }
+    if (!bcrypt.compareSync(String(password), user.password_hash)) {
+      res.status(401).json({
+        valid: false,
+        token: null,
+        message: "Invalid login credentials.",
+      });
+      return;
+    }
+
+    let novaUserId = user.nova_user_id ? Number(user.nova_user_id) : null;
+
+    if (!novaUserId) {
+      // First, try to fetch existing NOVA user
+      const fetchedId = await fetchNovaUserIdByUsername(normalizedEmail);
+      
+      if (fetchedId) {
+        // Link existing NOVA user
+        await dbQuery(
+          `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+          [Number(fetchedId), new Date().toISOString(), user.id]
+        );
+        novaUserId = Number(fetchedId);
+      } else {
+        // Create new NOVA user
+        const createResponse = await novaAdminRequest("/v1/admin/users/new", {
+          method: "POST",
+          body: JSON.stringify({
+            username: normalizedEmail,
+            password: String(password),
+            role: "default",
+          }),
+        });
+        const payload = await createResponse.json().catch(() => ({}));
+        if (createResponse.ok && payload?.user?.id) {
+          await dbQuery(
+            `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+            [Number(payload.user.id), new Date().toISOString(), user.id]
+          );
+          novaUserId = Number(payload.user.id);
+        } else if (createResponse.status === 401) {
+          res.status(401).json({
+            valid: false,
+            token: null,
+            message: "NOVA.TYP is not in multi-user mode.",
+          });
+          return;
+        } else if (payload?.error && !String(payload.error).toLowerCase().includes("exists")) {
+          // Only fail if it's not a "user exists" error
+          res.status(400).json({
+            valid: false,
+            token: null,
+            message: payload.error,
+          });
+          return;
+        }
+        // If user exists error, fetch ID and continue
+        if (payload?.error && String(payload.error).toLowerCase().includes("exists")) {
+          const retryFetchId = await fetchNovaUserIdByUsername(normalizedEmail);
+          if (retryFetchId) {
+            await dbQuery(
+              `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+              [Number(retryFetchId), new Date().toISOString(), user.id]
+            );
+            novaUserId = Number(retryFetchId);
+          }
+        }
+      }
+    }
+
+    const response = await fetch(`${apiBase}/request-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: normalizedEmail,
+        password: String(password),
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    res.status(response.status).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error?.message || "Server error." });
+  }
+};
+
 app.post("/login", loginHandler);
 app.post("/api/login", loginHandler);
-app.use("/api/auth", buildAuthRouter());
 
 app.get("/api/legal/consent-status", async (req, res) => {
   try {
@@ -7216,7 +6987,6 @@ const deleteWorkspaceHandler = async (req, res) => {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { email, zakiUser } = authResult;
-    const authHeader = req.headers.authorization;
 
     if (!zakiUser.verified) {
       res.status(403).json({ error: "Email is not verified." });
@@ -7229,8 +6999,14 @@ const deleteWorkspaceHandler = async (req, res) => {
       return;
     }
     const normalizedSlug = slug.toLowerCase();
+
+    if (!zakiUser.nova_user_id) {
+      res.status(403).json({ success: false, error: "Workspace access requires a linked TYP account." });
+      return;
+    }
+
     // Permission scope: only allow deleting a workspace currently visible to this session user.
-    const accessCheck = await workspaceVisibleForSession(authHeader, normalizedSlug);
+    const accessCheck = await workspaceVisibleForSession(zakiUser.nova_user_id, normalizedSlug);
     if (!accessCheck.success) {
       res.status(accessCheck.status || 502).json({
         success: false,
@@ -7297,7 +7073,7 @@ const deleteWorkspaceHandler = async (req, res) => {
     }
 
     // Strong consistency check: confirm workspace is gone for this user before reporting success.
-    const verification = await verifyWorkspaceDeleted(authHeader, normalizedSlug);
+    const verification = await verifyWorkspaceDeleted(zakiUser.nova_user_id, normalizedSlug);
     if (!verification.success) {
       if (ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED) {
         await hideWorkspaceForUser(
@@ -8152,11 +7928,6 @@ const agentChatStreamHandler = async (req, res) => {
          VALUES ($1, $2, $3, 'user', $4)`,
         [userId, resolvedSpaceId, resolvedThreadId, originalMessage]
       );
-      await touchZakiThreadRecord({
-        userId,
-        spaceId: resolvedSpaceId,
-        threadId: resolvedThreadId,
-      });
     }
 
     const upstream = await requestNullclawChatStream({
@@ -8211,9 +7982,6 @@ const agentChatStreamHandler = async (req, res) => {
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
     let assistantAccumulated = "";
-    let upstreamTerminatedEarly = false;
-    const persistedEvents = [];
-    const PERSISTED_EVENT_CAP = 500;
 
     const processSseBlock = async (block) => {
       if (!isZakiBotSpace) return;
@@ -8242,90 +8010,42 @@ const agentChatStreamHandler = async (req, res) => {
         const payload = JSON.parse(payloadText);
         const chunk = extractAgentTokenChunk(eventType, payload);
         if (chunk) assistantAccumulated += chunk;
-        if (
-          isPersistableAgentEvent(eventType) &&
-          persistedEvents.length < PERSISTED_EVENT_CAP
-        ) {
-          persistedEvents.push({
-            eventType,
-            payload,
-            ts: Date.now(),
-          });
-        }
       } catch {
         // Ignore parse failures for persistence, still stream to client.
       }
     };
 
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const decoded = decoder.decode(value, { stream: true });
-        if (!decoded) continue;
-        res.write(decoded);
-        buffer += decoded;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const decoded = decoder.decode(value, { stream: true });
+      if (!decoded) continue;
+      res.write(decoded);
+      buffer += decoded;
 
-        let separatorIndex = buffer.indexOf("\n\n");
-        while (separatorIndex !== -1) {
-          const block = buffer.slice(0, separatorIndex);
-          buffer = buffer.slice(separatorIndex + 2);
-          await processSseBlock(block);
-          separatorIndex = buffer.indexOf("\n\n");
-        }
-      }
-    } catch (readerError) {
-      upstreamTerminatedEarly = true;
-      const trackedUserId = String(req.agentUserId || "").trim();
-      if (trackedUserId) trackAgentStreamDiagnostic(trackedUserId, readerError);
-      console.error("[Agent] Upstream stream terminated early:", readerError?.message || readerError);
-      try {
-        reader.cancel().catch(() => {});
-      } catch {}
-      if (!res.writableEnded) {
-        try {
-          res.write(
-            `event: error\ndata: ${JSON.stringify({
-              code: "upstream_terminated",
-              message: "Upstream stream ended unexpectedly.",
-            })}\n\nevent: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`
-          );
-        } catch {}
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        await processSseBlock(block);
+        separatorIndex = buffer.indexOf("\n\n");
       }
     }
 
     const trailing = buffer.trim();
-    if (trailing && !upstreamTerminatedEarly) {
+    if (trailing) {
       await processSseBlock(trailing);
     }
 
     if (isZakiBotSpace && assistantAccumulated.trim()) {
       await dbQuery(
-        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content, events_jsonb)
-         VALUES ($1, $2, $3, 'assistant', $4, $5::jsonb)`,
-        [
-          userId,
-          resolvedSpaceId,
-          resolvedThreadId,
-          assistantAccumulated.trim(),
-          JSON.stringify(persistedEvents),
-        ]
+        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
+         VALUES ($1, $2, $3, 'assistant', $4)`,
+        [userId, resolvedSpaceId, resolvedThreadId, assistantAccumulated.trim()]
       );
-      await touchZakiThreadRecord({
-        userId,
-        spaceId: resolvedSpaceId,
-        threadId: resolvedThreadId,
-      });
-      void ensureZakiThreadTitle({
-        userId,
-        spaceId: resolvedSpaceId,
-        threadId: resolvedThreadId,
-      }).catch((error) => {
-        console.warn("[Agent] Failed to update ZAKI thread title:", error?.message || error);
-      });
     }
 
-    if (!res.writableEnded) res.end();
+    res.end();
   } catch (error) {
     const trackedUserId = String(req.agentUserId || "").trim();
     if (trackedUserId) {
@@ -8334,20 +8054,6 @@ const agentChatStreamHandler = async (req, res) => {
     console.error("[Agent] Stream error:", error);
     const message = error?.message || "Agent stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
-    if (res.headersSent) {
-      if (!res.writableEnded) {
-        try {
-          res.write(
-            `event: error\ndata: ${JSON.stringify({
-              code: timedOut ? "agent_timeout" : "agent_stream_failed",
-              message,
-            })}\n\nevent: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`
-          );
-        } catch {}
-        try { res.end(); } catch {}
-      }
-      return;
-    }
     res.status(timedOut ? 504 : 500).json({ error: message });
   }
 };
@@ -8374,22 +8080,18 @@ app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req
 
   const loadAppHistory = async () => {
     const rows = await dbAll(
-      `SELECT id, role, content, created_at, events_jsonb
+      `SELECT id, role, content, created_at
        FROM zaki_bot_messages
        WHERE user_id = $1 AND space_id = $2 AND thread_id = $3
        ORDER BY id ASC`,
       [userId, spaceId, threadId]
     );
-    return rows.map((row, index) => {
-      const events = Array.isArray(row.events_jsonb) ? row.events_jsonb : [];
-      return {
-        id: `bot-${row.id}-${row.role}-${index}`,
-        role: row.role,
-        content: row.content || "",
-        createdAt: row.created_at,
-        events: row.role === "assistant" && events.length > 0 ? events : undefined,
-      };
-    });
+    return rows.map((row, index) => ({
+      id: `bot-${row.id}-${row.role}-${index}`,
+      role: row.role,
+      content: row.content || "",
+      createdAt: row.created_at,
+    }));
   };
 
   try {
@@ -8610,64 +8312,6 @@ app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async 
   });
 });
 
-async function proxyNullclawUserDiagnostics(req, res, subpath, label) {
-  if (!ZAKI_AGENT_BACKEND_ENABLED) {
-    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
-  }
-  const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
-  if (!authResult) return;
-  const userId = resolveCanonicalAgentUserId(authResult);
-  if (!userId) {
-    return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
-  }
-  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
-  if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
-    return res.status(503).json({
-      active: false,
-      reason: "nullclaw_unavailable",
-    });
-  }
-  try {
-    const upstream = await fetchNullclawPath({
-      baseUrl: nullclawBase,
-      internalToken: NULLCLAW_INTERNAL_TOKEN,
-      userId,
-      requestId: String(req.requestId || crypto.randomUUID()),
-      path: `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/${subpath}`,
-      method: "GET",
-      fetchWithTimeout,
-      timeoutMs: AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS,
-      label,
-    });
-    const payload = await upstream.json().catch(() => ({}));
-    return res.status(upstream.status || 200).json(payload);
-  } catch (error) {
-    console.error(`[Agent] ${label} failed:`, error);
-    return res.status(502).json({
-      active: false,
-      reason: "upstream_error",
-    });
-  }
-}
-
-app.get(
-  "/api/me/diagnostics/context",
-  requireAgentContext,
-  agentRouteLimiter,
-  async (req, res) => {
-    await proxyNullclawUserDiagnostics(req, res, "context", "Context diagnostics");
-  }
-);
-
-app.get(
-  "/api/me/diagnostics/memory-doctor",
-  requireAgentContext,
-  agentRouteLimiter,
-  async (req, res) => {
-    await proxyNullclawUserDiagnostics(req, res, "memory-doctor", "Memory-doctor diagnostics");
-  }
-);
-
 function resolveAgentUserId(authResult) {
   return resolveCanonicalAgentUserId(authResult);
 }
@@ -8683,26 +8327,80 @@ function getOrCreateIdempotencyKey(req, requestId) {
   return headerValue || requestId;
 }
 
-async function buildDevAuthResultFromUserId(userId) {
-  const normalizedUserId = Number.parseInt(String(userId || "").trim(), 10);
-  if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
-    return null;
+async function requireBotBffContext(req, res, next) {
+  const existingUserId = String(req.botBffContext?.userId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
   }
 
-  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE id = $1 LIMIT 1", [
-    normalizedUserId,
-  ]);
+  // Dev mode: skip auth (mirrors requireAgentContext dev bypass)
+  if (NULLCLAW_DEV_USER_ID) {
+    req.botBffContext = {
+      email: "dev@localhost",
+      sessionUser: { username: "dev@localhost" },
+      zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) },
+      userId: NULLCLAW_DEV_USER_ID,
+    };
+    next();
+    return;
+  }
+
+  const requestId = getOrCreateRequestId(req);
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Bearer\s+\S+/i.test(String(authHeader))) {
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  let sessionResponse;
+  try {
+    sessionResponse = await novaSessionRequest("/system/refresh-user", authHeader, {
+      method: "GET",
+    });
+  } catch (error) {
+    console.error("[Auth][BFF] Session refresh failed:", error);
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const sessionData = await sessionResponse.json().catch(() => ({}));
+  if (!sessionResponse.ok || !sessionData?.success || !sessionData?.user) {
+    const failure = mapBotBffAuthFailure("unauthorized", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const email = normalizeEmail(String(sessionData.user.username || ""));
+  if (!email) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  const zakiUser = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [email]);
   if (!zakiUser) {
-    return null;
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
   }
 
-  const email = normalizeEmail(String(zakiUser.email || ""));
-  return {
-    email: email || "dev@localhost",
-    sessionUser: { username: email || "dev@localhost" },
+  const userId = resolveCanonicalAgentUserId({ zakiUser });
+  if (!userId) {
+    const failure = mapBotBffAuthFailure("forbidden", requestId);
+    res.status(failure.status).json(failure.body);
+    return;
+  }
+
+  req.botBffContext = {
+    email,
+    sessionUser: sessionData.user,
     zakiUser,
-    userId: String(normalizedUserId),
+    userId,
   };
+  next();
 }
 
 async function requireAgentContext(req, res, next) {
@@ -8715,15 +8413,8 @@ async function requireAgentContext(req, res, next) {
   // Dev mode: skip auth and use a configured user ID for local development.
   // NEVER set NULLCLAW_DEV_USER_ID in production — it bypasses all authentication.
   if (NULLCLAW_DEV_USER_ID) {
-    const devAuthResult = await buildDevAuthResultFromUserId(NULLCLAW_DEV_USER_ID);
-    if (!devAuthResult) {
-      return res.status(500).json({
-        error: "Invalid NULLCLAW_DEV_USER_ID. Matching ZAKI user not found.",
-        code: "invalid_dev_user_id",
-      });
-    }
-    req.agentUserId = devAuthResult.userId;
-    req.agentAuthResult = devAuthResult;
+    req.agentUserId = NULLCLAW_DEV_USER_ID;
+    req.agentAuthResult = { zakiUser: { id: Number(NULLCLAW_DEV_USER_ID) } };
     next();
     return;
   }
@@ -9238,16 +8929,6 @@ app.get("/api/agent/me", requireAgentContext, agentRouteLimiter, (req, res) => {
   res.json({ userId: String(req.agentUserId) });
 });
 
-app.get("/api/agent/status", requireAgentContext, agentRouteLimiter, async (req, res) => {
-  try {
-    await proxyNullclawRequest(req, res, "/api/v1/status");
-    return;
-  } catch (error) {
-    console.error("[Agent] Status proxy error:", error);
-    return res.status(500).json({ error: error?.message || "Agent status request failed." });
-  }
-});
-
 app.get(
   "/api/agent/onboarding",
   requireAgentContext,
@@ -9313,42 +8994,6 @@ app.post(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/attachments`
   )
 );
-// ── Brain: V1.5 second-brain visualization ──────────────────────────
-// GET  /api/agent/brain/graph    → nullalis /brain/graph (semantic+session+ref edges)
-// GET  /api/agent/brain/timeline → nullalis /brain/timeline (cursor pagination)
-// POST /api/agent/brain/compose  → nullalis /brain/compose (synthesis create)
-//
-// userId in BFF URL is unused — proxy derives canonical bigint from auth.
-// Query strings need explicit pass-through; proxyNullclawRequest does not
-// propagate them automatically.
-app.get(
-  "/api/agent/brain/graph",
-  requireAgentContext,
-  agentRouteLimiter,
-  makeAgentUserProxyHandler((userId, req) => {
-    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    return `/api/v1/users/${encodeURIComponent(userId)}/brain/graph${qs}`;
-  })
-);
-app.get(
-  "/api/agent/brain/timeline",
-  requireAgentContext,
-  agentRouteLimiter,
-  makeAgentUserProxyHandler((userId, req) => {
-    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    return `/api/v1/users/${encodeURIComponent(userId)}/brain/timeline${qs}`;
-  })
-);
-app.post(
-  "/api/agent/brain/compose",
-  requireAgentContext,
-  agentRouteLimiter,
-  agentJson1mb,
-  makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`
-  )
-);
-
 // ── Voice: STT and TTS ──────────────────────────────────────────────
 app.post(
   "/api/agent/voice/transcribe",
@@ -9474,22 +9119,9 @@ app.get(
   "/api/agent/sessions",
   requireAgentContext,
   agentRouteLimiter,
-  async (req, res) => {
-    try {
-      const userId = String(req.agentUserId || "").trim();
-      if (!userId) {
-        return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
-      }
-      const sessions = await listAggregatedZakiAgentSessions({
-        userId,
-        requestId: String(req.requestId || crypto.randomUUID()),
-      });
-      return res.json({ sessions });
-    } catch (error) {
-      console.error("[Agent] Sessions list error:", error);
-      return res.status(500).json({ error: error?.message || "Failed to load sessions." });
-    }
-  }
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/sessions`
+  )
 );
 
 app.get(
@@ -9506,59 +9138,10 @@ app.delete(
   "/api/agent/sessions/:sessionKey",
   requireAgentContext,
   agentRouteLimiter,
-  async (req, res) => {
-    const sessionKey = validateSessionKeyParam(req, res);
-    if (!sessionKey) return;
-    try {
-      const userId = String(req.agentUserId || "").trim();
-      if (!userId) {
-        return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
-      }
-
-      const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
-      const parsed = parseZakiSessionKey(normalizedSessionKey);
-      const requestId = String(req.requestId || crypto.randomUUID());
-
-      if (parsed.lane === "thread") {
-        const localResult = await deleteLocalZakiThreadSession({
-          userId,
-          sessionKey: normalizedSessionKey,
-        });
-        const upstreamResult = await deleteUpstreamAgentSession({
-          userId,
-          requestId,
-          sessionKey: normalizedSessionKey,
-        });
-
-        if (!upstreamResult.ok && upstreamResult.status !== 404 && !localResult.deleted) {
-          return res.status(upstreamResult.status).json(
-            upstreamResult.payload || { error: "Failed to delete session." }
-          );
-        }
-
-        return res.status(200).json({
-          ok: true,
-          deleted: true,
-          session_key: normalizedSessionKey,
-          local_deleted: localResult.deleted,
-          upstream_status: upstreamResult.status,
-          upstream_ok: upstreamResult.ok || upstreamResult.status === 404,
-        });
-      }
-
-      const upstreamResult = await deleteUpstreamAgentSession({
-        userId,
-        requestId,
-        sessionKey: normalizedSessionKey,
-      });
-      return res
-        .status(upstreamResult.ok ? 200 : upstreamResult.status)
-        .json(upstreamResult.payload || { ok: upstreamResult.ok });
-    } catch (error) {
-      console.error("[Agent] Session delete error:", error);
-      return res.status(500).json({ error: error?.message || "Failed to delete session." });
-    }
-  }
+  makeSessionProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
+  )
 );
 
 app.post(
@@ -9578,17 +9161,6 @@ app.get(
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/context`
-  )
-);
-
-app.post(
-  "/api/agent/sessions/:sessionKey/mode",
-  requireAgentContext,
-  agentRouteLimiter,
-  agentJson1mb,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/mode`
   )
 );
 
@@ -9879,91 +9451,6 @@ app.delete("/api/share/:token", async (req, res) => {
 });
 
 // =============================================================================
-// RUNTIME STATUS (sandbox backend exposure for UI badges)
-// =============================================================================
-
-/**
- * GET /v1/me/bot/runtime
- *
- * Returns runtime metadata so the UI can show a sandbox badge.
- * First tries the canonical upstream /api/v1/status sandbox state, then
- * falls back to deploy-time env vars if the upstream is unavailable.
- *
- * Body shape is identical for every caller and contains no user data, so the
- * response is intentionally `public, max-age=60` and the route is unauth.
- * If a future change ever makes the body depend on auth or origin, drop
- * `public` first or this becomes a cross-tenant leak through shared caches.
- *
- * Env contract fallback:
- *   ZAKI_SANDBOX_ENABLED  "true" | "false"     default "false"
- *   ZAKI_SANDBOX_BACKEND  "bubblewrap" | "firejail" | "docker" | ""
- */
-const ALLOWED_SANDBOX_BACKENDS = ["bubblewrap", "firejail", "docker"];
-const sandboxEnvEnabled =
-  String(process.env.ZAKI_SANDBOX_ENABLED || "").toLowerCase() === "true";
-const sandboxEnvBackendRaw = String(process.env.ZAKI_SANDBOX_BACKEND || "")
-  .trim()
-  .toLowerCase();
-if (
-  sandboxEnvEnabled &&
-  sandboxEnvBackendRaw &&
-  !ALLOWED_SANDBOX_BACKENDS.includes(sandboxEnvBackendRaw)
-) {
-  console.warn(
-    `[runtime] ZAKI_SANDBOX_ENABLED=true but ZAKI_SANDBOX_BACKEND="${sandboxEnvBackendRaw}" is not in [${ALLOWED_SANDBOX_BACKENDS.join(", ")}]. UI badge will hide the backend label.`
-  );
-}
-
-app.get("/v1/me/bot/runtime", async (req, res) => {
-  let enabled = sandboxEnvEnabled;
-  let backend =
-    enabled && ALLOWED_SANDBOX_BACKENDS.includes(sandboxEnvBackendRaw)
-      ? sandboxEnvBackendRaw
-      : null;
-
-  try {
-    const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
-    if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
-      const upstream = await fetchNullclawPath({
-        baseUrl: nullclawBase,
-        internalToken: NULLCLAW_INTERNAL_TOKEN,
-        userId: "runtime-status",
-        requestId: String(req.requestId || crypto.randomUUID()),
-        path: "/api/v1/status",
-        method: "GET",
-        fetchWithTimeout,
-        timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-        label: "Agent runtime status",
-      });
-      if (upstream.ok) {
-        const payload = await upstream.json().catch(() => ({}));
-        const upstreamEnabled = payload?.sandbox?.enabled;
-        const upstreamBackendRaw = String(payload?.sandbox?.backend || "")
-          .trim()
-          .toLowerCase();
-        if (typeof upstreamEnabled === "boolean") {
-          enabled = upstreamEnabled;
-          backend =
-            enabled && ALLOWED_SANDBOX_BACKENDS.includes(upstreamBackendRaw)
-              ? upstreamBackendRaw
-              : null;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn("[runtime] upstream sandbox status unavailable:", error?.message || error);
-  }
-
-  res.set("Cache-Control", "public, max-age=60");
-  res.status(200).json({
-    sandbox: {
-      enabled,
-      backend,
-    },
-  });
-});
-
-// =============================================================================
 // CATCH-ALL PROXY
 // =============================================================================
 
@@ -10198,16 +9685,6 @@ function beginGracefulShutdown(signal) {
 
 process.on("SIGTERM", () => beginGracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => beginGracefulShutdown("SIGINT"));
-
-process.on("unhandledRejection", (reason) => {
-  const message = reason && typeof reason === "object" && "message" in reason
-    ? reason.message
-    : String(reason);
-  console.error("[Process] Unhandled promise rejection:", message, reason?.stack || "");
-});
-process.on("uncaughtException", (error) => {
-  console.error("[Process] Uncaught exception:", error?.message || error, error?.stack || "");
-});
 
 server.listen(PORT, () => {
   console.log(`ZAKI backend listening on port ${PORT}`);
