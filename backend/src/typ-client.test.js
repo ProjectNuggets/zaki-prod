@@ -30,23 +30,35 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-// Test 1: fetchTypWorkspaces — calls TYP admin endpoint with Bearer admin key
+// Test 1: fetchTypWorkspaces — calls TYP admin endpoint with Bearer admin key, filters by thread ownership
 describe("fetchTypWorkspaces", () => {
-  test("calls /v1/admin/users/:novaUserId/workspaces with Bearer admin key", async () => {
-    const fakeResponse = { ok: true, status: 200, json: jest.fn().mockResolvedValue({ workspaces: [] }) };
+  test("calls /v1/workspaces with Bearer admin key and returns only workspaces owned by user", async () => {
+    const mockWorkspaces = [
+      { slug: "ws-a", threads: [{ user_id: 42 }] },
+      { slug: "ws-b", threads: [{ user_id: 99 }] }, // different user — filtered out
+    ];
+    const fakeResponse = {
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ workspaces: mockWorkspaces }),
+    };
     const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(fakeResponse);
 
     const result = await fetchTypWorkspaces(42);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, options] = fetchSpy.mock.calls[0];
-    expect(url).toBe("https://typ.example.com/api/v1/admin/users/42/workspaces");
+    expect(url).toBe("https://typ.example.com/api/v1/workspaces");
     expect(options.method).toBe("GET");
 
     // Must use admin key, not a user token
     const authHeader = options.headers.get("Authorization");
     expect(authHeader).toBe("Bearer test-admin-key");
-    expect(result).toBe(fakeResponse);
+
+    // Returns a synthetic Response with only the workspaces that have threads for user 42
+    const data = await result.json();
+    expect(data.workspaces).toHaveLength(1);
+    expect(data.workspaces[0].slug).toBe("ws-a");
   });
 });
 
@@ -57,7 +69,11 @@ describe("fetchTypWorkspaceSlugs", () => {
       ok: true,
       status: 200,
       json: jest.fn().mockResolvedValue({
-        workspaces: [{ slug: "Space-One" }, { slug: "space_two" }, { slug: "  SPACE-THREE  " }],
+        workspaces: [
+          { slug: "Space-One", threads: [{ user_id: 7 }] },
+          { slug: "space_two", threads: [{ user_id: 7 }] },
+          { slug: "  SPACE-THREE  ", threads: [{ user_id: 7 }] },
+        ],
       }),
     };
     jest.spyOn(global, "fetch").mockResolvedValue(fakeResponse);

@@ -41,7 +41,21 @@ export async function fetchTypWorkspaces(novaUserId) {
   const { base, key } = assertTypConfig();
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${key}`);
-  return fetch(`${base}/v1/admin/users/${novaUserId}/workspaces`, { method: "GET", headers });
+  // TYP admin API returns all workspaces; filter to those where the user has threads.
+  // /v1/admin/users/:id/workspaces does not exist in TYP — thread ownership is the
+  // only per-user signal available from the admin key.
+  const response = await fetch(`${base}/v1/workspaces`, { method: "GET", headers });
+  if (!response.ok) return response;
+  const data = await response.json().catch(() => null);
+  if (!data?.workspaces) return response;
+  const userId = Number(novaUserId);
+  const filtered = data.workspaces.filter(
+    (w) => Array.isArray(w.threads) && w.threads.some((t) => t.user_id === userId)
+  );
+  return new Response(JSON.stringify({ workspaces: filtered }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 /**
