@@ -37,6 +37,16 @@ export function createRequireAuthUser(deps) {
   const tryDecodeJwtPayload = zakiAuthOverrides.tryDecodeJwtPayload || defaultTryDecodeJwtPayload;
   const mintZakiSession = zakiAuthOverrides.mintZakiSession || defaultMintZakiSession;
 
+  // SUN-02: resolve cutoff once at factory-creation time for test overrideability.
+  // Tests inject via zakiAuthOverrides.legacyTypCutoffMs; production reads env at startup.
+  const legacyTypCutoffMs = (() => {
+    if ("legacyTypCutoffMs" in zakiAuthOverrides) return zakiAuthOverrides.legacyTypCutoffMs;
+    const val = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
+    if (!val) return null;
+    const ms = new Date(val).getTime();
+    return Number.isNaN(ms) ? null : ms;
+  })();
+
   // ZAKI path: local verify + DB lookup by id (AUTH-01, AUTH-03)
   async function resolveZakiPath(token) {
     try {
@@ -59,12 +69,8 @@ export function createRequireAuthUser(deps) {
   // Legacy TYP path: 5s AbortController timeout, mint ZAKI session on success (AUTH-02, AUTH-04, AUTH-05)
   async function resolveLegacyPath(authHeader, req, res) {
     // SUN-02: cutoff check — runs BEFORE any network call
-    const cutoffEnv = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
-    if (cutoffEnv) {
-      const cutoffMs = new Date(cutoffEnv).getTime();
-      if (!Number.isNaN(cutoffMs) && Date.now() >= cutoffMs) {
-        return { error: "session_expired" };
-      }
+    if (legacyTypCutoffMs !== null && Date.now() >= legacyTypCutoffMs) {
+      return { error: "session_expired" };
     }
 
     const controller = new AbortController();

@@ -140,6 +140,14 @@ Plans:
 
 **Requirements:** SUN-01, SUN-02, SUN-03
 
-**Plans:** 0/? plans
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Day 45 checkpoint gate (SUN-01) + ZAKI_LEGACY_TYP_AUTH_CUTOFF cutoff enforcement (SUN-02)
+- [ ] 05-02-PLAN.md — Legacy code removal: resolveLegacyPath + TYP deps deleted, tests cleaned up (SUN-03)
+
+**Wave structure:**
+- Wave 1: 05-01 (human gate — autonomous: false)
+- Wave 2: 05-02 (depends on 05-01 checkpoint PASS — autonomous: true)
 
 **Status:** Not started

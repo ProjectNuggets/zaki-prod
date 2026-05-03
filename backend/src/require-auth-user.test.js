@@ -41,6 +41,17 @@ const buildDevAuthResultFromUserIdMock = jest.fn();
 
 let requireAuthUser;
 let requireBotBffContext;
+let createRequireAuthUserFn;
+
+const standardDeps = () => ({
+  novaSessionRequest: novaSessionRequestMock,
+  normalizeEmail: normalizeEmailMock,
+  resolveCanonicalAgentUserId: resolveCanonicalAgentUserIdMock,
+  mapBotBffAuthFailure: mapBotBffAuthFailureMock,
+  getOrCreateRequestId: getOrCreateRequestIdMock,
+  NULLCLAW_DEV_USER_ID: null,
+  buildDevAuthResultFromUserId: buildDevAuthResultFromUserIdMock,
+});
 
 beforeAll(async () => {
   process.env.ZAKI_JWT_SIGNING_KEY = TEST_SIGNING_KEY;
@@ -48,15 +59,8 @@ beforeAll(async () => {
   delete process.env.NULLCLAW_DEV_USER_ID;
 
   const mod = await import("./require-auth-user.js");
-  const factory = mod.createRequireAuthUser({
-    novaSessionRequest: novaSessionRequestMock,
-    normalizeEmail: normalizeEmailMock,
-    resolveCanonicalAgentUserId: resolveCanonicalAgentUserIdMock,
-    mapBotBffAuthFailure: mapBotBffAuthFailureMock,
-    getOrCreateRequestId: getOrCreateRequestIdMock,
-    NULLCLAW_DEV_USER_ID: null,
-    buildDevAuthResultFromUserId: buildDevAuthResultFromUserIdMock,
-  });
+  createRequireAuthUserFn = mod.createRequireAuthUser;
+  const factory = createRequireAuthUserFn(standardDeps());
   requireAuthUser = factory.requireAuthUser;
   requireBotBffContext = factory.requireBotBffContext;
 });
@@ -476,14 +480,10 @@ describe("requireBotBffContext — same dual-auth (AUTH-02)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. SUN-02 — cutoff guard (ZAKI_LEGACY_TYP_AUTH_CUTOFF)
+// 6. SUN-02 — cutoff guard (legacyTypCutoffMs via zakiAuthOverrides)
 // ---------------------------------------------------------------------------
 describe("resolveLegacyPath — SUN-02 cutoff guard", () => {
-  afterEach(() => {
-    delete process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
-  });
-
-  it("proceeds normally when ZAKI_LEGACY_TYP_AUTH_CUTOFF is unset", async () => {
+  const legacySuccess = () => {
     tryDecodeJwtPayloadMock.mockReturnValue({});
     novaSessionRequestMock.mockResolvedValue({
       ok: true,
@@ -491,40 +491,36 @@ describe("resolveLegacyPath — SUN-02 cutoff guard", () => {
     });
     dbGetMock.mockResolvedValue({ id: 42, email: "a@chatzaki.com", verified: true, plan_tier: "free", plan_status: "active", nova_user_id: 7, current_period_end: null });
     mintZakiSessionMock.mockResolvedValue({ accessToken: "t", refreshToken: "r", refreshTokenHash: "h" });
+  };
 
+  const makeCutoffFactory = (legacyTypCutoffMs) =>
+    createRequireAuthUserFn({ ...standardDeps(), zakiAuthOverrides: { legacyTypCutoffMs } });
+
+  it("proceeds normally when cutoff is null (unset)", async () => {
+    legacySuccess();
+    const { requireAuthUser: authUser } = makeCutoffFactory(null);
     const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
     const res = makeRes();
-    const result = await requireAuthUser(req, res);
-
+    const result = await authUser(req, res);
     expect(novaSessionRequestMock).toHaveBeenCalledTimes(1);
     expect(result).not.toBeNull();
   });
 
   it("proceeds normally when cutoff is in the future", async () => {
-    process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF = new Date(Date.now() + 86400000).toISOString();
-    tryDecodeJwtPayloadMock.mockReturnValue({});
-    novaSessionRequestMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ email: "a@chatzaki.com" }),
-    });
-    dbGetMock.mockResolvedValue({ id: 42, email: "a@chatzaki.com", verified: true, plan_tier: "free", plan_status: "active", nova_user_id: 7, current_period_end: null });
-    mintZakiSessionMock.mockResolvedValue({ accessToken: "t", refreshToken: "r", refreshTokenHash: "h" });
-
+    legacySuccess();
+    const { requireAuthUser: authUser } = makeCutoffFactory(Date.now() + 86400000);
     const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
     const res = makeRes();
-    await requireAuthUser(req, res);
-
+    await authUser(req, res);
     expect(novaSessionRequestMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns 401 session_expired without calling TYP when cutoff is in the past", async () => {
-    process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF = new Date(Date.now() - 1000).toISOString();
     tryDecodeJwtPayloadMock.mockReturnValue({});
-
+    const { requireAuthUser: authUser } = makeCutoffFactory(Date.now() - 1000);
     const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
     const res = makeRes();
-    const result = await requireAuthUser(req, res);
-
+    const result = await authUser(req, res);
     expect(novaSessionRequestMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -535,20 +531,30 @@ describe("resolveLegacyPath — SUN-02 cutoff guard", () => {
     expect(result).toBeNull();
   });
 
-  it("proceeds normally when ZAKI_LEGACY_TYP_AUTH_CUTOFF is not a valid date (NaN)", async () => {
-    process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF = "not-a-date";
-    tryDecodeJwtPayloadMock.mockReturnValue({});
-    novaSessionRequestMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ email: "a@chatzaki.com" }),
-    });
-    dbGetMock.mockResolvedValue({ id: 42, email: "a@chatzaki.com", verified: true, plan_tier: "free", plan_status: "active", nova_user_id: 7, current_period_end: null });
-    mintZakiSessionMock.mockResolvedValue({ accessToken: "t", refreshToken: "r", refreshTokenHash: "h" });
-
+  it("proceeds normally when legacyTypCutoffMs is NaN (invalid date)", async () => {
+    legacySuccess();
+    const { requireAuthUser: authUser } = makeCutoffFactory(NaN);
     const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
     const res = makeRes();
-    await requireAuthUser(req, res);
-
+    await authUser(req, res);
     expect(novaSessionRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks at the exact cutoff boundary (Date.now() === cutoffMs)", async () => {
+    tryDecodeJwtPayloadMock.mockReturnValue({});
+    const cutoffMs = 1_700_000_000_000;
+    jest.useFakeTimers();
+    jest.setSystemTime(cutoffMs);
+    try {
+      const { requireAuthUser: authUser } = makeCutoffFactory(cutoffMs);
+      const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
+      const res = makeRes();
+      const result = await authUser(req, res);
+      expect(novaSessionRequestMock).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(result).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
