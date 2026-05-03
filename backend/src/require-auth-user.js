@@ -58,6 +58,15 @@ export function createRequireAuthUser(deps) {
 
   // Legacy TYP path: 5s AbortController timeout, mint ZAKI session on success (AUTH-02, AUTH-04, AUTH-05)
   async function resolveLegacyPath(authHeader, req, res) {
+    // SUN-02: cutoff check — runs BEFORE any network call
+    const cutoffEnv = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
+    if (cutoffEnv) {
+      const cutoffMs = new Date(cutoffEnv).getTime();
+      if (!Number.isNaN(cutoffMs) && Date.now() >= cutoffMs) {
+        return { error: "session_expired" };
+      }
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TYP_FALLBACK_TIMEOUT_MS);
     try {
@@ -114,7 +123,15 @@ export function createRequireAuthUser(deps) {
       ? await resolveZakiPath(token)
       : await resolveLegacyPath(req.headers.authorization, req, res);
     if (!result.ok) {
-      res.status(401).json({ error: result.error });
+      if (result.error === "session_expired") {
+        res.status(401).json({
+          error: "session_expired",
+          code: "session_expired",
+          message: "Please log in again.",
+        });
+      } else {
+        res.status(401).json({ error: result.error });
+      }
       return null;
     }
     return { email: result.email, zakiUser: result.zakiUser, sessionUser: result.sessionUser };

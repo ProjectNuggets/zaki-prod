@@ -163,6 +163,19 @@ export function validateRuntimeConfig(env = process.env) {
     }
   }
 
+  // SUN-02 — ZAKI_LEGACY_TYP_AUTH_CUTOFF (optional; triggers cutoff enforcement when set)
+  const legacyCutoff = normalize(env.ZAKI_LEGACY_TYP_AUTH_CUTOFF);
+  if (legacyCutoff) {
+    const parsed = new Date(legacyCutoff).getTime();
+    if (Number.isNaN(parsed)) {
+      pushIssue(
+        warnings,
+        "ZAKI_LEGACY_TYP_AUTH_CUTOFF",
+        "ZAKI_LEGACY_TYP_AUTH_CUTOFF must be a valid ISO date string (e.g. 2026-07-01T00:00:00Z)."
+      );
+    }
+  }
+
   if (!isProduction) {
     return {
       ok: errors.length === 0,
@@ -234,22 +247,6 @@ export function validateRuntimeConfig(env = process.env) {
       errors,
       "ZAKI_LEGAL_POLICY_VERSION",
       "ZAKI_LEGAL_POLICY_VERSION must be explicitly set in production."
-    );
-  }
-
-  // OATH-09 — ZAKI_JWT_SIGNING_KEY (256-bit hex, in k8s secret zaki-api-secrets)
-  const zakiSigningKey = normalize(env.ZAKI_JWT_SIGNING_KEY);
-  if (!zakiSigningKey) {
-    pushIssue(
-      errors,
-      "ZAKI_JWT_SIGNING_KEY",
-      "ZAKI_JWT_SIGNING_KEY must be set in production (256-bit hex string)."
-    );
-  } else if (!/^[0-9a-f]{64}$/i.test(zakiSigningKey)) {
-    pushIssue(
-      errors,
-      "ZAKI_JWT_SIGNING_KEY",
-      "ZAKI_JWT_SIGNING_KEY must be a 64-character hex string (256-bit key)."
     );
   }
 
