@@ -1987,6 +1987,12 @@ async function novaAdminRequest(path, options = {}) {
   });
 }
 
+/**
+ * Session validation path only. Forwards the user's ZAKI JWT to TYP's
+ * /system/refresh-user endpoint so TYP can validate and return the user profile.
+ * This is the ONE sanctioned place where a user token crosses to TYP.
+ * All workspace/chat data calls MUST go through typ-client.js (admin key only).
+ */
 async function novaSessionRequest(path, authHeader, options = {}) {
   const apiBase = getApiBase();
   if (!apiBase) throw new Error("NOVA_TYP_BASE_URL is not configured.");
@@ -7519,8 +7525,12 @@ const streamChatHandler = async (req, res) => {
     const zakiUser = authResult.zakiUser;
     console.log(`[Chat] User: ${userEmail}`);
 
+    if (!zakiUser.nova_user_id) {
+      return res.status(403).json({ error: "Chat requires a linked TYP account." });
+    }
+
     const requestPayload = req.body;
-    const originalMessage = extractStreamMessage(requestPayload);
+    const originalMessage = extractStreamMessage(requestPayload) || "";
     const requestedFormat = getRequestedResponseFormat(originalMessage);
     const promptCategory = classifyPromptCategory(originalMessage, requestPayload);
     console.log(`[Chat] Message length: ${originalMessage.length}`);

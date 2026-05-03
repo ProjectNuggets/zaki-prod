@@ -66,44 +66,7 @@ export async function loginHandler(req, res) {
     // --- return ZAKI JWT ---
     res.status(200).json({ valid: true, token: accessToken });
   } catch (err) {
-    const errorCode = String(err?.cause?.code || err?.code || "").trim();
-    if (errorCode === "CERT_HAS_EXPIRED") {
-      const message =
-        "Local login failed because the configured NOVA.TYP TLS certificate has expired.";
-      res.status(502).json({
-        valid: false,
-        token: null,
-        message,
-        error: message,
-        code: "nova_typ_cert_expired",
-      });
-      return;
-    }
-    if (
-      errorCode === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
-      errorCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
-      errorCode === "ERR_TLS_CERT_ALTNAME_INVALID"
-    ) {
-      const message =
-        "Local login failed because the configured NOVA.TYP TLS certificate is not trusted.";
-      res.status(502).json({
-        valid: false,
-        token: null,
-        message,
-        error: message,
-        code: "nova_typ_cert_invalid",
-      });
-      return;
-    }
-    const message =
-      err?.message === "fetch failed"
-        ? "Local login failed because NOVA.TYP is unreachable."
-        : err?.message || "Server error.";
-    res.status(500).json({
-      valid: false,
-      token: null,
-      message,
-      error: message,
-    });
+    const message = err?.message || "Server error.";
+    res.status(500).json({ valid: false, token: null, message, error: message });
   }
 }
