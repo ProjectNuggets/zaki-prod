@@ -458,7 +458,7 @@ export async function confirmPasswordReset({
 }
 
 export async function fetchCurrentUser() {
-  const response = await apiRequest("/system/refresh-user");
+  const response = await backendAuthRequest("/api/profile", { method: "GET" });
   const data = (await response.json()) as {
     success?: boolean;
     user?: { username?: string; role?: string; id?: number | string; fullName?: string | null } | null;
