@@ -117,13 +117,13 @@ Plans:
 
 **Requirements:** TYP-01, TYP-02, TYP-03, TYP-04
 
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 Plans:
-- [ ] 04-01-PLAN.md — Wave 1: typ-client.js adapter module (fetchTypWorkspaces, fetchTypWorkspaceSlugs, requestTypChatStream) [TYP-04]
-- [ ] 04-02-PLAN.md — Wave 1: login-handler.js TYP removal (bestEffortTypFetch, novaUserId block, typ_session_token UPDATE) + test updates [TYP-01]
-- [ ] 04-03-PLAN.md — Wave 2: Wire workspace routes + streamChatHandler to typ-client.js using zakiUser.nova_user_id [TYP-02]
-- [ ] 04-04-PLAN.md — Wave 3: Drop typ_session_token column (db.js + migration SQL + full codebase sweep) [TYP-03]
+- [x] 04-01-PLAN.md — Wave 1: typ-client.js adapter module (fetchTypWorkspaces, fetchTypWorkspaceSlugs, requestTypChatStream) [TYP-04]
+- [x] 04-02-PLAN.md — Wave 1: login-handler.js TYP removal (bestEffortTypFetch, novaUserId block, typ_session_token UPDATE) + test updates [TYP-01]
+- [x] 04-03-PLAN.md — Wave 2: Wire workspace routes + streamChatHandler to typ-client.js using zakiUser.nova_user_id [TYP-02]
+- [x] 04-04-PLAN.md — Wave 3: Drop typ_session_token column (db.js + migration SQL + full codebase sweep) [TYP-03]
 
 **Wave structure:**
 - Wave 1 (parallel): 04-01, 04-02
