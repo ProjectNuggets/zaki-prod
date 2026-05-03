@@ -912,7 +912,6 @@ export async function initDb() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
       refresh_token_hash TEXT UNIQUE NOT NULL,
-      typ_session_token TEXT,
       expires_at TIMESTAMPTZ NOT NULL,
       revoked_at TIMESTAMPTZ,
       last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -933,6 +932,10 @@ export async function initDb() {
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_sessions_refresh_hash
       ON zaki_sessions (refresh_token_hash);
+  `);
+  // Phase 04-typ-adapter: TYP-03 — drop typ_session_token from running DBs
+  await pool.query(`
+    ALTER TABLE zaki_sessions DROP COLUMN IF EXISTS typ_session_token;
   `);
 }
 
