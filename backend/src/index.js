@@ -7510,7 +7510,6 @@ const streamChatHandler = async (req, res) => {
       return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
     }
 
-    const authHeader = req.headers.authorization;
     const authResult = await requireAuthUser(req, res);
     if (!authResult) {
       console.error("[Chat] Authorization failed");
@@ -7694,18 +7693,11 @@ ${originalMessage}`;
     });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
-    const upstreamResponse = await fetchWithTimeout(
+    const upstreamResponse = await requestTypChatStream(
       targetUrl,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader,
-        },
-        body: JSON.stringify(upstreamPayload),
-      },
-      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-      "Chat upstream request"
+      upstreamPayload,
+      fetchWithTimeout,
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS
     );
 
     console.log("[Chat] Upstream response", {
