@@ -101,7 +101,7 @@ describe("agent client", () => {
         fetchWithTimeout,
         timeoutMs: 1000,
       })
-    ).rejects.toThrow("NULLCLAW_BASE_URL is not configured.");
+    ).rejects.toThrow("NULLALIS_BASE_URL is not configured.");
 
     await expect(
       fetchNullclawPath({
@@ -113,6 +113,6 @@ describe("agent client", () => {
         fetchWithTimeout,
         timeoutMs: 1000,
       })
-    ).rejects.toThrow("NULLCLAW_INTERNAL_TOKEN is not configured.");
+    ).rejects.toThrow("NULLALIS_INTERNAL_TOKEN is not configured.");
   });
 });
