@@ -207,12 +207,12 @@ if (testUser) {
       ok(`POST /api/auth/refresh → 200, new token issued`);
       // Use new token to verify it works
       const newToken = json.token;
-      const { status: s2 } = await request("GET", "/api/user/me", {
+      const { status: s2, json: j2 } = await request("GET", "/api/usage/quota", {
         headers: { Authorization: `Bearer ${newToken}` },
       });
       s2 === 200
-        ? ok("New token from refresh → authenticated request works")
-        : fail("New token from refresh should work", `got ${s2}`);
+        ? ok("New token from refresh → /api/usage/quota 200 (ZAKI auth verified)")
+        : fail("New token from refresh should work on protected route", `got ${s2} ${JSON.stringify(j2)}`);
 
       // Reuse old refresh token after rotation — within the 5s concurrent-refresh guard window
       // the server may return a new token (guard hit) or 401. Both are correct.
