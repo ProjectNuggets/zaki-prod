@@ -1,4 +1,5 @@
-// RED tests for Phase 2 login-handler.js [ZakiAudit] login log (AUTH-07)
+// Tests for login-handler.js [ZakiAudit] login log (AUTH-07)
+// Phase 4: TYP fetch removed — fetchMock no longer needed.
 // Mocking patterns mirror auth-endpoints.test.js verbatim.
 
 import { jest } from "@jest/globals";
@@ -33,16 +34,12 @@ jest.unstable_mockModule("./zaki-session-cookie.js", () => ({
   buildClearedRefreshCookie: buildClearedRefreshCookieMock,
 }));
 
-const fetchMock = jest.fn();
-global.fetch = fetchMock;
-
 let loginHandler;
 
 beforeAll(async () => {
   process.env.ZAKI_JWT_SIGNING_KEY = "a".repeat(64);
   process.env.ZAKI_JWT_KID = "test-v1";
   process.env.NODE_ENV = "test";
-  process.env.NOVA_TYP_BASE_URL = "http://typ:3001/api";
   ({ loginHandler } = await import("./login-handler.js"));
 });
 
@@ -54,7 +51,6 @@ beforeEach(() => {
   mintZakiSessionMock.mockReset();
   revokeAllSessionsForUserMock.mockReset();
   buildRefreshCookieMock.mockReturnValue("zaki_refresh=mock; HttpOnly");
-  fetchMock.mockReset();
 });
 
 function makeRes() {
@@ -87,9 +83,6 @@ describe("loginHandler — [ZakiAudit] login log (AUTH-07)", () => {
       refreshToken: "refresh-token",
       refreshTokenHash: "refresh-hash",
     });
-
-    // Best-effort TYP fetch — let it fail silently
-    fetchMock.mockRejectedValue(new Error("connection refused"));
 
     const req = {
       body: { email: "a@chatzaki.com", password: "testpass" },
