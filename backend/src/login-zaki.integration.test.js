@@ -65,7 +65,7 @@ describe("loginHandler — ZAKI session minting (OATH-01..05, OATH-10)", () => {
     expect(setCookie).toMatch(/Secure/);
     expect(setCookie).toMatch(/SameSite=Strict/);
     expect(setCookie).toMatch(/Domain=\.chatzaki\.com/);
-    expect(setCookie).toMatch(/Path=\/api\/auth\/refresh/);
+    expect(setCookie).toMatch(/Path=\/api\/auth/);
   });
 
   it("OATH-05 (Phase4): login completes without any TYP network call", async () => {

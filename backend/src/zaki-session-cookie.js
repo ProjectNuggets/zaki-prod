@@ -3,8 +3,8 @@
 
 export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const COOKIE_NAME = "zaki_refresh";
-export const COOKIE_DOMAIN = ".chatzaki.com";
-export const COOKIE_PATH = "/api/auth/refresh";
+// Path covers both /api/auth/refresh and /api/auth/logout so the cookie is available to both.
+export const COOKIE_PATH = "/api/auth";
 
 function isProduction() {
   return process.env.NODE_ENV === "production";
@@ -13,10 +13,15 @@ function isProduction() {
 export function buildRefreshCookie(token) {
   const expires = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
   const secure = isProduction() ? "Secure; " : "";
-  return `${COOKIE_NAME}=${token}; HttpOnly; ${secure}SameSite=Strict; Domain=${COOKIE_DOMAIN}; Path=${COOKIE_PATH}; Expires=${expires.toUTCString()}`;
+  // Domain is only set in production (.chatzaki.com). In local dev, omitting Domain
+  // makes the browser bind the cookie to the request host (localhost), which is required
+  // for Set-Cookie to be accepted at all when the response origin is localhost.
+  const domain = isProduction() ? "Domain=.chatzaki.com; " : "";
+  return `${COOKIE_NAME}=${token}; HttpOnly; ${secure}SameSite=Strict; ${domain}Path=${COOKIE_PATH}; Expires=${expires.toUTCString()}`;
 }
 
 export function buildClearedRefreshCookie() {
   const secure = isProduction() ? "Secure; " : "";
-  return `${COOKIE_NAME}=; HttpOnly; ${secure}SameSite=Strict; Domain=${COOKIE_DOMAIN}; Path=${COOKIE_PATH}; Max-Age=0`;
+  const domain = isProduction() ? "Domain=.chatzaki.com; " : "";
+  return `${COOKIE_NAME}=; HttpOnly; ${secure}SameSite=Strict; ${domain}Path=${COOKIE_PATH}; Max-Age=0`;
 }

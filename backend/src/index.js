@@ -120,6 +120,7 @@ import {
   tryDecodeJwtPayload,
   mintZakiSession,
 } from "./zaki-auth.js";
+import { buildRefreshCookie } from "./zaki-session-cookie.js";
 
 // Load environment variables from the first valid .env location.
 const envCandidates = [
@@ -1742,7 +1743,7 @@ app.use(
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
-    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search"],
+    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search", "X-Zaki-Session-Upgrade"],
   })
 );
 
@@ -3537,8 +3538,11 @@ async function _resolveLegacyUser(authHeader, req, res) {
     const zakiUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE email = $1`, [email]);
     if (!zakiUser || !zakiUser.verified) return { error: "user_not_found" };
     try {
-      await mintZakiSession({ id: zakiUser.id, email: zakiUser.email }, req);
-      try { res.setHeader("X-Zaki-Session-Upgrade", "1"); } catch (_e) {}
+      const { refreshToken: legacyRefreshToken } = await mintZakiSession({ id: zakiUser.id, email: zakiUser.email }, req);
+      try {
+        res.setHeader("X-Zaki-Session-Upgrade", "1");
+        res.setHeader("Set-Cookie", [buildRefreshCookie(legacyRefreshToken)]);
+      } catch (_e) {}
       console.log(`[ZakiAudit] legacy_typ_path userId=${zakiUser.id} ip=${req?.ip ?? "unknown"}`);
     } catch (mintErr) {
       console.warn("[ZakiAuth] legacy path session mint failed:", mintErr?.message);
@@ -4974,12 +4978,6 @@ const loginHandler = async (req, res) => {
       return;
     }
 
-    const apiBase = getApiBase();
-    if (!apiBase) {
-      res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
-      return;
-    }
-
     const { email, username, password } = validation.data;
     const normalizedEmail = normalizeEmail(email || username);
 
@@ -5011,76 +5009,54 @@ const loginHandler = async (req, res) => {
       return;
     }
 
-    let novaUserId = user.nova_user_id ? Number(user.nova_user_id) : null;
-
-    if (!novaUserId) {
-      // First, try to fetch existing NOVA user
-      const fetchedId = await fetchNovaUserIdByUsername(normalizedEmail);
-      
-      if (fetchedId) {
-        // Link existing NOVA user
-        await dbQuery(
-          `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-          [Number(fetchedId), new Date().toISOString(), user.id]
-        );
-        novaUserId = Number(fetchedId);
-      } else {
-        // Create new NOVA user
-        const createResponse = await novaAdminRequest("/v1/admin/users/new", {
-          method: "POST",
-          body: JSON.stringify({
-            username: normalizedEmail,
-            password: String(password),
-            role: "default",
-          }),
-        });
-        const payload = await createResponse.json().catch(() => ({}));
-        if (createResponse.ok && payload?.user?.id) {
-          await dbQuery(
-            `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-            [Number(payload.user.id), new Date().toISOString(), user.id]
-          );
-          novaUserId = Number(payload.user.id);
-        } else if (createResponse.status === 401) {
-          res.status(401).json({
-            valid: false,
-            token: null,
-            message: "NOVA.TYP is not in multi-user mode.",
-          });
-          return;
-        } else if (payload?.error && !String(payload.error).toLowerCase().includes("exists")) {
-          // Only fail if it's not a "user exists" error
-          res.status(400).json({
-            valid: false,
-            token: null,
-            message: payload.error,
-          });
-          return;
-        }
-        // If user exists error, fetch ID and continue
-        if (payload?.error && String(payload.error).toLowerCase().includes("exists")) {
-          const retryFetchId = await fetchNovaUserIdByUsername(normalizedEmail);
-          if (retryFetchId) {
+    // Best-effort: link nova_user_id for workspace access. Failure does not block login —
+    // ZAKI owns auth in Phase 4; TYP is an adapter.
+    if (!user.nova_user_id) {
+      try {
+        const apiBase = getApiBase();
+        if (apiBase) {
+          const fetchedId = await fetchNovaUserIdByUsername(normalizedEmail);
+          if (fetchedId) {
             await dbQuery(
               `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-              [Number(retryFetchId), new Date().toISOString(), user.id]
+              [Number(fetchedId), new Date().toISOString(), user.id]
             );
-            novaUserId = Number(retryFetchId);
+          } else {
+            const createResponse = await novaAdminRequest("/v1/admin/users/new", {
+              method: "POST",
+              body: JSON.stringify({
+                username: normalizedEmail,
+                password: String(password),
+                role: "default",
+              }),
+            });
+            const payload = await createResponse.json().catch(() => ({}));
+            if (createResponse.ok && payload?.user?.id) {
+              await dbQuery(
+                `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+                [Number(payload.user.id), new Date().toISOString(), user.id]
+              );
+            } else if (payload?.error && String(payload.error).toLowerCase().includes("exists")) {
+              const retryFetchId = await fetchNovaUserIdByUsername(normalizedEmail);
+              if (retryFetchId) {
+                await dbQuery(
+                  `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+                  [Number(retryFetchId), new Date().toISOString(), user.id]
+                );
+              }
+            }
           }
         }
+      } catch (linkErr) {
+        console.warn("[Login] nova_user_id linking failed (non-fatal):", linkErr?.message);
       }
     }
 
-    const response = await fetch(`${apiBase}/request-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: normalizedEmail,
-        password: String(password),
-      }),
-    });
-    const data = await response.json().catch(() => ({}));
-    res.status(response.status).json(data);
+    // Mint ZAKI session — ZAKI JWT (iss: "zaki") returned to client, HttpOnly refresh cookie set.
+    const { accessToken, refreshToken } = await mintZakiSession({ id: user.id, email: user.email }, req);
+    console.log(`[ZakiAudit] login userId=${user.id} ip=${req?.ip ?? "unknown"}`);
+    res.setHeader("Set-Cookie", [buildRefreshCookie(refreshToken)]);
+    res.status(200).json({ valid: true, token: accessToken });
   } catch (error) {
     res.status(500).json({ error: error?.message || "Server error." });
   }

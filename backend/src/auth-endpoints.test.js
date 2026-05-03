@@ -74,7 +74,7 @@ describe("POST /api/auth/refresh (OATH-07, OATH-11)", () => {
     expect(setCookie).toMatch(/Secure/);
     expect(setCookie).toMatch(/SameSite=Strict/);
     expect(setCookie).toMatch(/Domain=\.chatzaki\.com/);
-    expect(setCookie).toMatch(/Path=\/api\/auth\/refresh/);
+    expect(setCookie).toMatch(/Path=\/api\/auth/);
   });
 });
 
