@@ -474,3 +474,81 @@ describe("requireBotBffContext — same dual-auth (AUTH-02)", () => {
     expect(req.botBffContext).toMatchObject({ userId: "99" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. SUN-02 — cutoff guard (ZAKI_LEGACY_TYP_AUTH_CUTOFF)
+// ---------------------------------------------------------------------------
+describe("resolveLegacyPath — SUN-02 cutoff guard", () => {
+  afterEach(() => {
+    delete process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
+  });
+
+  it("proceeds normally when ZAKI_LEGACY_TYP_AUTH_CUTOFF is unset", async () => {
+    tryDecodeJwtPayloadMock.mockReturnValue({});
+    novaSessionRequestMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "a@chatzaki.com" }),
+    });
+    dbGetMock.mockResolvedValue({ id: 42, email: "a@chatzaki.com", verified: true, plan_tier: "free", plan_status: "active", nova_user_id: 7, current_period_end: null });
+    mintZakiSessionMock.mockResolvedValue({ accessToken: "t", refreshToken: "r", refreshTokenHash: "h" });
+
+    const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
+    const res = makeRes();
+    const result = await requireAuthUser(req, res);
+
+    expect(novaSessionRequestMock).toHaveBeenCalledTimes(1);
+    expect(result).not.toBeNull();
+  });
+
+  it("proceeds normally when cutoff is in the future", async () => {
+    process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF = new Date(Date.now() + 86400000).toISOString();
+    tryDecodeJwtPayloadMock.mockReturnValue({});
+    novaSessionRequestMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "a@chatzaki.com" }),
+    });
+    dbGetMock.mockResolvedValue({ id: 42, email: "a@chatzaki.com", verified: true, plan_tier: "free", plan_status: "active", nova_user_id: 7, current_period_end: null });
+    mintZakiSessionMock.mockResolvedValue({ accessToken: "t", refreshToken: "r", refreshTokenHash: "h" });
+
+    const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
+    const res = makeRes();
+    await requireAuthUser(req, res);
+
+    expect(novaSessionRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 401 session_expired without calling TYP when cutoff is in the past", async () => {
+    process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF = new Date(Date.now() - 1000).toISOString();
+    tryDecodeJwtPayloadMock.mockReturnValue({});
+
+    const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
+    const res = makeRes();
+    const result = await requireAuthUser(req, res);
+
+    expect(novaSessionRequestMock).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({
+      error: "session_expired",
+      code: "session_expired",
+      message: "Please log in again.",
+    });
+    expect(result).toBeNull();
+  });
+
+  it("proceeds normally when ZAKI_LEGACY_TYP_AUTH_CUTOFF is not a valid date (NaN)", async () => {
+    process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF = "not-a-date";
+    tryDecodeJwtPayloadMock.mockReturnValue({});
+    novaSessionRequestMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "a@chatzaki.com" }),
+    });
+    dbGetMock.mockResolvedValue({ id: 42, email: "a@chatzaki.com", verified: true, plan_tier: "free", plan_status: "active", nova_user_id: 7, current_period_end: null });
+    mintZakiSessionMock.mockResolvedValue({ accessToken: "t", refreshToken: "r", refreshTokenHash: "h" });
+
+    const req = makeReq({ headers: { authorization: "Bearer legacy-token" } });
+    const res = makeRes();
+    await requireAuthUser(req, res);
+
+    expect(novaSessionRequestMock).toHaveBeenCalledTimes(1);
+  });
+});
