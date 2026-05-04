@@ -8,7 +8,6 @@ import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
@@ -1579,124 +1578,8 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Rate limiting - general API
-// Removed global limiter per requirement. Auth limiter remains below.
-
-// Auth endpoint rate limiter — IP-scoped, failures only (skipSuccessfulRequests=true).
-// 100 users successfully logging in from the same NAT IP = 0 counts toward this limit.
-// Primary per-account protection is the per-email throttle in loginHandler.
-// This limiter's job is stopping botnet credential scanning from one IP, not normal users.
-// 60 failed attempts / hour / IP is aggressive enough for scanning while not hurting
-// shared networks (office, campus) where many real users may fat-finger passwords.
-const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 60, // 60 failed attempts per IP per hour; real accounts protected by per-email throttle
-  skipSuccessfulRequests: true,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many authentication attempts. Please try again later.' }
-});
-app.use('/login', authLimiter);
-app.use('/signup', authLimiter);
-app.use('/password-reset', authLimiter);
-app.use('/api/login', authLimiter);
-app.use('/api/signup', authLimiter);
-app.use('/api/password-reset', authLimiter);
-
-const memoryReadLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 180,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many memory read requests. Please retry in a minute." },
-});
-
-const memoryWriteLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 90,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many memory write requests. Please retry in a minute." },
-});
-
-const streamChatLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many chat requests. Please retry in a minute." },
-});
-
-const agentRouteLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: () => runtimeRateLimitSettings.agentPerMinuteLimit,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    const scopedUserId = String(req.agentUserId || "").trim();
-    if (scopedUserId) return `agent_user:${scopedUserId}`;
-    const rawIp =
-      String(req.ip || "").trim() ||
-      String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
-      String(req.socket?.remoteAddress || "").trim() ||
-      "unknown";
-    const ipKey = ipKeyGenerator(rawIp);
-    return `agent_anon:${ipKey}`;
-  },
-  message: { error: "Too many agent requests. Please retry in a minute.", code: "agent_rate_limited" },
-});
-
-const productTelemetryLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many telemetry events. Please retry in a minute." },
-});
-
-const websiteFeedbackPostLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 8,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many feedback posts. Please retry a bit later." },
-});
-
-const websiteFeedbackVoteLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 90,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many votes. Please slow down for a minute." },
-});
-
-const websiteBetaWaitlistLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "Too many waitlist submissions. Please retry a bit later." },
-});
-
-// Workspace mutation limiters — prevent hammering TYP with create/delete storms.
-// Auth is the primary gate; these are a backstop against runaway clients/scripts.
-const workspaceCreateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // 20 workspace creations per IP per hour
-  skipSuccessfulRequests: false,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "Too many workspace creation requests. Please try again later." },
-});
-
-const threadCreateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60, // 60 thread creations per IP per 15 min
-  skipSuccessfulRequests: false,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many thread creation requests. Please slow down." },
-});
+// Rate limiting removed — IP-based limiters were broken under Cloudflare (all users share one IP).
+// Replacement: Cloudflare WAF + CF-Connecting-IP solution (planned).
 
 const memoryReadPathMatchers = [
   /^\/api\/memory\/health\/?$/u,
@@ -1731,19 +1614,6 @@ function isLocalDevelopmentOrigin(origin) {
 }
 
 app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    return next();
-  }
-  if (
-    memoryWriteMatchers.some(
-      (entry) => entry.method === req.method && entry.matcher.test(req.path)
-    )
-  ) {
-    return memoryWriteLimiter(req, res, next);
-  }
-  if (memoryReadPathMatchers.some((matcher) => matcher.test(req.path))) {
-    return memoryReadLimiter(req, res, next);
-  }
   return next();
 });
 
@@ -2851,7 +2721,7 @@ app.get("/api/website-feedback", async (req, res) => {
   }
 });
 
-app.post("/api/website-feedback", websiteFeedbackPostLimiter, express.json({ limit: "50kb" }), async (req, res) => {
+app.post("/api/website-feedback", express.json({ limit: "50kb" }), async (req, res) => {
   const validation = validateInput(WebsiteFeedbackCreateSchema, req.body || {});
   if (!validation.valid) {
     res.status(400).json({ success: false, error: validation.errors.map((issue) => issue.message).join(", ") });
@@ -2880,7 +2750,6 @@ app.post("/api/website-feedback", websiteFeedbackPostLimiter, express.json({ lim
 
 app.post(
   "/api/website-feedback/:id/vote",
-  websiteFeedbackVoteLimiter,
   express.json({ limit: "20kb" }),
   async (req, res) => {
     const id = String(req.params.id || "").trim();
@@ -2921,7 +2790,6 @@ app.post(
 
 app.post(
   "/api/website-beta-waitlist",
-  websiteBetaWaitlistLimiter,
   express.json({ limit: "50kb" }),
   async (req, res) => {
     const validation = validateInput(WebsiteBetaWaitlistSchema, req.body || {});
@@ -3092,7 +2960,6 @@ app.post("/api/telemetry/client-error", express.json({ limit: "200kb" }), async 
 
 app.post(
   "/api/telemetry/product-event",
-  productTelemetryLimiter,
   express.json({ limit: "100kb" }),
   async (req, res) => {
     const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
@@ -6727,8 +6594,8 @@ const createThreadHandler = async (req, res) => {
   }
 };
 
-app.post("/workspace/:slug/thread/new", threadCreateLimiter, express.json({ limit: "200kb" }), createThreadHandler);
-app.post("/api/workspace/:slug/thread/new", threadCreateLimiter, express.json({ limit: "200kb" }), createThreadHandler);
+app.post("/workspace/:slug/thread/new", express.json({ limit: "200kb" }), createThreadHandler);
+app.post("/api/workspace/:slug/thread/new", express.json({ limit: "200kb" }), createThreadHandler);
 
 const updateThreadHandler = async (req, res) => {
   try {
@@ -7120,8 +6987,8 @@ const createWorkspaceHandler = async (req, res) => {
   }
 };
 
-app.post("/zaki/workspaces", workspaceCreateLimiter, express.json({ limit: "1mb" }), createWorkspaceHandler);
-app.post("/api/zaki/workspaces", workspaceCreateLimiter, express.json({ limit: "1mb" }), createWorkspaceHandler);
+app.post("/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspaceHandler);
+app.post("/api/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspaceHandler);
 
 /**
  * Route: DELETE /zaki/workspaces/:slug
@@ -7931,13 +7798,11 @@ ${originalMessage}`;
 
 app.post(
   "/workspace/:slug/thread/:threadSlug/stream-chat",
-  streamChatLimiter,
   express.json({ limit: "10mb" }),
   streamChatHandler
 );
 app.post(
   "/api/workspace/:slug/thread/:threadSlug/stream-chat",
-  streamChatLimiter,
   express.json({ limit: "10mb" }),
   streamChatHandler
 );
@@ -8200,7 +8065,7 @@ const agentChatStreamHandler = async (req, res) => {
   }
 };
 
-app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req, res) => {
+app.get("/api/agent/history", requireAgentContext, async (req, res) => {
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
@@ -8320,7 +8185,7 @@ app.get("/api/agent/history", requireAgentContext, agentRouteLimiter, async (req
   }
 });
 
-app.get("/api/agent/diagnostics", requireAgentContext, agentRouteLimiter, async (req, res) => {
+app.get("/api/agent/diagnostics", requireAgentContext, async (req, res) => {
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
@@ -9032,7 +8897,6 @@ app.options("/api/agent/disconnect", cors());
 app.post(
   "/api/agent/chat/stream",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson30mb,
   agentChatStreamHandler
 );
@@ -9040,39 +8904,34 @@ app.post(
 app.post(
   "/api/agent/provision",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   agentProvisionHandler
 );
 // Lightweight endpoint returning the caller's canonical agent user ID.
 // The frontend uses this to build session keys without hardcoding user IDs.
-app.get("/api/agent/me", requireAgentContext, agentRouteLimiter, (req, res) => {
+app.get("/api/agent/me", requireAgentContext, (req, res) => {
   res.json({ userId: String(req.agentUserId) });
 });
 
 app.get(
   "/api/agent/onboarding",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
 );
 app.put(
   "/api/agent/onboarding",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
 );
 app.get(
   "/api/agent/config",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
 app.get(
   "/api/agent/secrets/:key",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/secrets/${encodeURIComponent(req.params.key)}`
   )
@@ -9083,20 +8942,17 @@ app.get(
 app.put(
   "/api/agent/secrets/:key",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   agentSecretsPutHandler
 );
 app.delete(
   "/api/agent/secrets/:key",
   requireAgentContext,
-  agentRouteLimiter,
   agentSecretsDeleteHandler
 );
 app.get(
   "/api/agent/secrets",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/secrets`
   )
@@ -9109,7 +8965,6 @@ app.get(
 app.post(
   "/api/agent/attachments",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson30mb,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/attachments`
@@ -9119,7 +8974,6 @@ app.post(
 app.post(
   "/api/agent/voice/transcribe",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson30mb,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/voice/transcribe`
@@ -9128,7 +8982,6 @@ app.post(
 app.post(
   "/api/agent/voice/synthesize",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/voice/synthesize`
@@ -9137,45 +8990,38 @@ app.post(
 app.post(
   "/api/agent/channels/telegram/connect",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   agentTelegramConnectHandler
 );
 registerTelegramDisconnectAliases(app, {
   requireAgentContext,
-  agentRouteLimiter,
   agentTelegramDisconnectHandler,
 });
 app.get(
   "/api/agent/heartbeat",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
 );
 app.put(
   "/api/agent/heartbeat",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
 );
 app.get(
   "/api/agent/cron",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
 );
 app.post(
   "/api/agent/cron",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
 );
 app.patch(
   "/api/agent/cron/:id",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
@@ -9184,7 +9030,6 @@ app.patch(
 
 registerBotBffAliases(app, {
   requireAgentContext: requireBotBffContext,
-  agentRouteLimiter,
   json1mb: agentJson1mb,
   json10mb: agentJson10mb,
   provisionHandler: botBffHandlers.provision,
@@ -9202,7 +9047,6 @@ registerBotBffAliases(app, {
 app.delete(
   "/api/agent/cron/:id",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
   )
@@ -9239,7 +9083,6 @@ const makeSessionProxyHandler = (pathBuilder) => {
 app.get(
   "/api/agent/sessions",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/sessions`
   )
@@ -9248,7 +9091,6 @@ app.get(
 app.get(
   "/api/agent/sessions/:sessionKey",
   requireAgentContext,
-  agentRouteLimiter,
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
@@ -9258,7 +9100,6 @@ app.get(
 app.delete(
   "/api/agent/sessions/:sessionKey",
   requireAgentContext,
-  agentRouteLimiter,
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
@@ -9268,7 +9109,6 @@ app.delete(
 app.post(
   "/api/agent/sessions/:sessionKey/compact",
   requireAgentContext,
-  agentRouteLimiter,
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/compact`
@@ -9278,7 +9118,6 @@ app.post(
 app.get(
   "/api/agent/sessions/:sessionKey/context",
   requireAgentContext,
-  agentRouteLimiter,
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/context`
@@ -9288,7 +9127,6 @@ app.get(
 app.get(
   "/api/agent/sessions/:sessionKey/export",
   requireAgentContext,
-  agentRouteLimiter,
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/export`
@@ -9298,7 +9136,6 @@ app.get(
 app.get(
   "/api/agent/sessions/:sessionKey/history",
   requireAgentContext,
-  agentRouteLimiter,
   makeSessionProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/history`
@@ -9308,7 +9145,6 @@ app.get(
 app.post(
   "/api/agent/sessions/:sessionKey/approve",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeSessionProxyHandler(
     (userId, req) =>
@@ -9341,7 +9177,6 @@ app.post(
 app.get(
   "/api/agent/brain/graph",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.since) qs.set("since", req.query.since);
@@ -9361,7 +9196,6 @@ app.get(
 app.get(
   "/api/agent/brain/local-graph",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.center_key) qs.set("center_key", req.query.center_key);
@@ -9376,7 +9210,6 @@ app.get(
 app.get(
   "/api/agent/brain/orphans",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.limit) qs.set("limit", req.query.limit);
@@ -9389,7 +9222,6 @@ app.get(
 app.get(
   "/api/agent/brain/diff",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.date) qs.set("date", req.query.date);
@@ -9403,7 +9235,6 @@ app.get(
 app.get(
   "/api/agent/brain/communities",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/communities`
   )
@@ -9413,7 +9244,6 @@ app.get(
 app.post(
   "/api/agent/brain/communities/recompute",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler(
     (userId) =>
@@ -9424,7 +9254,6 @@ app.post(
 app.get(
   "/api/agent/brain/timeline",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.cursor) qs.set("cursor", req.query.cursor);
@@ -9439,7 +9268,6 @@ app.get(
 app.get(
   "/api/agent/brain/search",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.q) qs.set("q", req.query.q);
@@ -9451,7 +9279,6 @@ app.get(
 app.get(
   "/api/agent/brain/memory/:key",
   requireAgentContext,
-  agentRouteLimiter,
   makeAgentUserProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/brain/memory/${encodeURIComponent(req.params.key)}`
@@ -9461,7 +9288,6 @@ app.get(
 app.post(
   "/api/agent/brain/compose",
   requireAgentContext,
-  agentRouteLimiter,
   agentJson1mb,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`

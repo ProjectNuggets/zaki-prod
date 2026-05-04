@@ -109,7 +109,6 @@ describe("agent BOT BFF contract", () => {
     };
     const handlers = {
       requireAgentContext: jest.fn(),
-      agentRouteLimiter: jest.fn(),
       json1mb: jest.fn(),
       json10mb: jest.fn(),
       provisionHandler: jest.fn(),
@@ -130,27 +129,23 @@ describe("agent BOT BFF contract", () => {
     expect(app.post).toHaveBeenCalledWith(
       "/v1/me/bot/provision",
       handlers.requireAgentContext,
-      handlers.agentRouteLimiter,
       handlers.json1mb,
       handlers.provisionHandler
     );
     expect(app.post).toHaveBeenCalledWith(
       "/v1/me/bot/chat/stream",
       handlers.requireAgentContext,
-      handlers.agentRouteLimiter,
       handlers.json10mb,
       handlers.chatStreamHandler
     );
     expect(app.post).toHaveBeenCalledWith(
       "/v1/me/bot/telegram/disconnect",
       handlers.requireAgentContext,
-      handlers.agentRouteLimiter,
       handlers.telegramDisconnectHandler
     );
     expect(app.put).toHaveBeenCalledWith(
       "/v1/me/bot/heartbeat",
       handlers.requireAgentContext,
-      handlers.agentRouteLimiter,
       handlers.json1mb,
       handlers.heartbeatPutHandler
     );
@@ -168,7 +163,6 @@ describe("agent BOT BFF contract", () => {
     };
     const handlers = {
       requireAgentContext: jest.fn(),
-      agentRouteLimiter: jest.fn(),
       agentTelegramDisconnectHandler: jest.fn(),
     };
 
@@ -177,13 +171,11 @@ describe("agent BOT BFF contract", () => {
     expect(app.delete).toHaveBeenCalledWith(
       "/api/agent/channels/telegram/disconnect",
       handlers.requireAgentContext,
-      handlers.agentRouteLimiter,
       handlers.agentTelegramDisconnectHandler
     );
     expect(app.post).toHaveBeenCalledWith(
       "/api/agent/channels/telegram/disconnect",
       handlers.requireAgentContext,
-      handlers.agentRouteLimiter,
       handlers.agentTelegramDisconnectHandler
     );
   });

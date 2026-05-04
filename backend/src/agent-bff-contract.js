@@ -97,7 +97,6 @@ export function normalizeTelegramDisconnectErrorPayload(payload, statusCode = 0)
 export function registerBotBffAliases(app, handlers) {
   const {
     requireAgentContext,
-    agentRouteLimiter,
     json1mb,
     json10mb,
     provisionHandler,
@@ -116,69 +115,60 @@ export function registerBotBffAliases(app, handlers) {
   app.post(
     "/v1/me/bot/provision",
     requireAgentContext,
-    agentRouteLimiter,
     json1mb,
     provisionHandler
   );
-  app.get("/v1/me/bot/onboarding", requireAgentContext, agentRouteLimiter, onboardingGetHandler);
+  app.get("/v1/me/bot/onboarding", requireAgentContext, onboardingGetHandler);
   app.put(
     "/v1/me/bot/onboarding",
     requireAgentContext,
-    agentRouteLimiter,
     json1mb,
     onboardingPutHandler
   );
   app.post(
     "/v1/me/bot/chat/stream",
     requireAgentContext,
-    agentRouteLimiter,
     json10mb,
     chatStreamHandler
   );
-  app.get("/v1/me/bot/settings", requireAgentContext, agentRouteLimiter, settingsGetHandler);
+  app.get("/v1/me/bot/settings", requireAgentContext, settingsGetHandler);
   app.patch(
     "/v1/me/bot/settings",
     requireAgentContext,
-    agentRouteLimiter,
     json1mb,
     settingsPatchHandler
   );
-  app.get("/v1/me/bot/heartbeat", requireAgentContext, agentRouteLimiter, heartbeatGetHandler);
+  app.get("/v1/me/bot/heartbeat", requireAgentContext, heartbeatGetHandler);
   app.put(
     "/v1/me/bot/heartbeat",
     requireAgentContext,
-    agentRouteLimiter,
     json1mb,
     heartbeatPutHandler
   );
   app.post(
     "/v1/me/bot/telegram/connect",
     requireAgentContext,
-    agentRouteLimiter,
     json1mb,
     telegramConnectHandler
   );
   app.post(
     "/v1/me/bot/telegram/disconnect",
     requireAgentContext,
-    agentRouteLimiter,
     telegramDisconnectHandler
   );
   app.get("/v1/me/bot/usage", requireAgentContext, usageHandler);
 }
 
 export function registerTelegramDisconnectAliases(app, handlers) {
-  const { requireAgentContext, agentRouteLimiter, agentTelegramDisconnectHandler } = handlers;
+  const { requireAgentContext, agentTelegramDisconnectHandler } = handlers;
   app.delete(
     "/api/agent/channels/telegram/disconnect",
     requireAgentContext,
-    agentRouteLimiter,
     agentTelegramDisconnectHandler
   );
   app.post(
     "/api/agent/channels/telegram/disconnect",
     requireAgentContext,
-    agentRouteLimiter,
     agentTelegramDisconnectHandler
   );
 }
