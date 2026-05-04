@@ -10,6 +10,8 @@ import {
   confirmPasswordReset,
   redeemAccessCode,
   fetchLegalConsentStatus,
+  fetchCurrentUser,
+  fetchProfile,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
@@ -241,7 +243,7 @@ function getInitialLegalPolicyVersion() {
 
 export function LoginScreen() {
   const { i18n } = useTranslation();
-  const { setToken } = useAuthStore();
+  const { setToken, setUser } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
   const locale = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
@@ -527,6 +529,25 @@ export function LoginScreen() {
       }
 
       setToken(data.token);
+      // Immediately populate the user store so dependent components (spaces, brain, etc.)
+      // don't have to wait for the next page load's hydration effect.
+      try {
+        const { response: ur, data: ud } = await fetchCurrentUser();
+        if (ur.ok && ud?.success && ud.user) {
+          let mergedUser = ud.user;
+          try {
+            const profileResult = await fetchProfile();
+            if (profileResult.response.ok && profileResult.data?.success && profileResult.data.user) {
+              mergedUser = { ...ud.user, fullName: profileResult.data.user.fullName ?? ud.user.fullName ?? null };
+            }
+          } catch {
+            // Keep base user if profile lookup fails
+          }
+          setUser(mergedUser);
+        }
+      } catch {
+        // Non-fatal — user will be populated on next hydration
+      }
       setLoginAccessCode("");
       setShowLoginAccessCode(false);
       if (

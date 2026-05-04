@@ -176,6 +176,22 @@ export function validateRuntimeConfig(env = process.env) {
     }
   }
 
+  // OATH-09 — ZAKI_JWT_SIGNING_KEY: warn in dev (error in prod block below)
+  const zakiSigningKeyEarly = normalize(env.ZAKI_JWT_SIGNING_KEY);
+  if (!zakiSigningKeyEarly) {
+    pushIssue(
+      warnings,
+      "ZAKI_JWT_SIGNING_KEY",
+      "ZAKI_JWT_SIGNING_KEY is not set. Auth will throw at runtime. Add a 64-char hex key to .env."
+    );
+  } else if (!/^[0-9a-f]{64}$/i.test(zakiSigningKeyEarly)) {
+    pushIssue(
+      warnings,
+      "ZAKI_JWT_SIGNING_KEY",
+      "ZAKI_JWT_SIGNING_KEY must be a 64-character hex string (256-bit key)."
+    );
+  }
+
   if (!isProduction) {
     return {
       ok: errors.length === 0,

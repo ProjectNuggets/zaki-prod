@@ -119,6 +119,7 @@ import {
   verifyZakiAccessToken,
   tryDecodeJwtPayload,
   mintZakiSession,
+  cleanupExpiredSessions,
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
 
@@ -1584,7 +1585,7 @@ app.use((err, req, res, next) => {
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 100, // 10 attempts per hour
+  max: 20, // 20 failed attempts per IP per hour (skipSuccessfulRequests=true)
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
@@ -1727,11 +1728,6 @@ app.use(
     origin: (origin, callback) => {
       // In development, allow non-browser/local requests and localhost loopback origins.
       if (!isProduction && (!origin || isLocalDevelopmentOrigin(origin))) {
-        return callback(null, true);
-      }
-      
-      // In development, allow file:// protocol for local testing
-      if (!isProduction && origin?.startsWith('file://')) {
         return callback(null, true);
       }
       
@@ -3493,7 +3489,7 @@ function getAppUrl() {
 
 // AUTH-01..05: ZAKI dual-auth — ZAKI-first local verify, legacy TYP fallback.
 // SELECT list excludes password_hash (AUTH-03). Legacy path mints a ZAKI session on success (AUTH-05).
-const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, legal_consent_version, legal_consent_at";
+const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, legal_consent_version, legal_consent_at, full_name";
 const _LEGACY_TYP_CUTOFF_MS = (() => {
   const v = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
   if (!v) return null;
@@ -4973,6 +4969,38 @@ app.post(
   passwordResetConfirmHandler
 );
 
+// Per-email login failure tracker — stops credential-stuffing against specific accounts.
+// In-memory: cleared on restart (acceptable — restarts are rare and this is a second layer).
+// Keyed by normalised email → { count: number, resetAt: number (epoch ms) }.
+const _emailLoginFailures = new Map();
+const EMAIL_FAILURE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const EMAIL_FAILURE_MAX = 10; // lock account for 15 min after 10 consecutive failures
+
+function checkEmailLoginThrottle(email) {
+  const now = Date.now();
+  const entry = _emailLoginFailures.get(email);
+  if (!entry || now >= entry.resetAt) return { blocked: false };
+  if (entry.count >= EMAIL_FAILURE_MAX) {
+    const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
+    return { blocked: true, retryAfterSec };
+  }
+  return { blocked: false };
+}
+
+function recordEmailLoginFailure(email) {
+  const now = Date.now();
+  const entry = _emailLoginFailures.get(email);
+  if (!entry || now >= entry.resetAt) {
+    _emailLoginFailures.set(email, { count: 1, resetAt: now + EMAIL_FAILURE_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
+}
+
+function clearEmailLoginFailures(email) {
+  _emailLoginFailures.delete(email);
+}
+
 const loginHandler = async (req, res) => {
   try {
     // Validate input
@@ -4989,10 +5017,22 @@ const loginHandler = async (req, res) => {
     const { email, username, password } = validation.data;
     const normalizedEmail = normalizeEmail(email || username);
 
+    // Per-email brute-force guard (in-memory, complements IP rate limit)
+    const throttle = checkEmailLoginThrottle(normalizedEmail);
+    if (throttle.blocked) {
+      res.status(429).json({
+        valid: false,
+        token: null,
+        message: "Too many failed login attempts. Try again later.",
+      });
+      return;
+    }
+
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
       normalizedEmail,
     ]);
     if (!user) {
+      recordEmailLoginFailure(normalizedEmail);
       res.status(401).json({
         valid: false,
         token: null,
@@ -5001,6 +5041,7 @@ const loginHandler = async (req, res) => {
       return;
     }
     if (!user.verified) {
+      recordEmailLoginFailure(normalizedEmail);
       res.status(401).json({
         valid: false,
         token: null,
@@ -5009,6 +5050,7 @@ const loginHandler = async (req, res) => {
       return;
     }
     if (!bcrypt.compareSync(String(password), user.password_hash)) {
+      recordEmailLoginFailure(normalizedEmail);
       res.status(401).json({
         valid: false,
         token: null,
@@ -5016,6 +5058,9 @@ const loginHandler = async (req, res) => {
       });
       return;
     }
+
+    // Credentials verified — reset failure counter
+    clearEmailLoginFailures(normalizedEmail);
 
     // Best-effort: link nova_user_id for workspace access. Failure does not block login —
     // ZAKI owns auth in Phase 4; TYP is an adapter.
@@ -9873,4 +9918,18 @@ process.on("SIGINT", () => beginGracefulShutdown("SIGINT"));
 
 server.listen(PORT, () => {
   console.log(`ZAKI backend listening on port ${PORT}`);
+
+  // Session cleanup: purge expired/revoked rows older than 7 days.
+  // Run once 30s after startup (let the DB pool warm up), then every 6 hours.
+  const SESSION_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  setTimeout(() => {
+    cleanupExpiredSessions().catch((err) =>
+      console.warn("[ZakiAuth] session cleanup failed:", err?.message)
+    );
+    setInterval(() => {
+      cleanupExpiredSessions().catch((err) =>
+        console.warn("[ZakiAuth] session cleanup failed:", err?.message)
+      );
+    }, SESSION_CLEANUP_INTERVAL_MS);
+  }, 30_000);
 });

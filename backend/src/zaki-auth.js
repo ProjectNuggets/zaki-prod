@@ -10,6 +10,7 @@ import { dbQuery, dbGet, withDbTransaction } from "./db.js";
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;       // 15 minutes
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CLEANUP_AGE_INTERVAL = "7 days";
+const MAX_ACTIVE_SESSIONS_PER_USER = 20; // Revoke oldest sessions beyond this cap
 
 // Lazy load — DO NOT cache at module scope (tests set env after import). See Pitfall 1.
 function getSigningKey() {
@@ -69,6 +70,23 @@ export async function mintZakiSession(zakiUser, req) {
       req?.headers?.["user-agent"] ?? null,
     ]
   );
+
+  // Session cap: revoke sessions beyond the MAX_ACTIVE_SESSIONS_PER_USER oldest active ones.
+  // Keeps the DB clean and limits blast radius if a refresh token is stolen.
+  await dbQuery(
+    `UPDATE zaki_sessions
+        SET revoked_at = NOW()
+      WHERE user_id = $1
+        AND revoked_at IS NULL
+        AND id NOT IN (
+          SELECT id FROM zaki_sessions
+           WHERE user_id = $1 AND revoked_at IS NULL
+           ORDER BY created_at DESC
+           LIMIT $2
+        )`,
+    [zakiUser.id, MAX_ACTIVE_SESSIONS_PER_USER]
+  );
+
   console.log(`[ZakiAudit] session_mint userId=${zakiUser.id} ip=${req?.ip ?? "unknown"}`);
 
   const accessToken = await signAccessToken(zakiUser);
