@@ -1582,10 +1582,15 @@ app.use((err, req, res, next) => {
 // Rate limiting - general API
 // Removed global limiter per requirement. Auth limiter remains below.
 
-// Stricter rate limiting for auth endpoints
+// Auth endpoint rate limiter — IP-scoped, failures only (skipSuccessfulRequests=true).
+// 100 users successfully logging in from the same NAT IP = 0 counts toward this limit.
+// Primary per-account protection is the per-email throttle in loginHandler.
+// This limiter's job is stopping botnet credential scanning from one IP, not normal users.
+// 60 failed attempts / hour / IP is aggressive enough for scanning while not hurting
+// shared networks (office, campus) where many real users may fat-finger passwords.
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // 20 failed attempts per IP per hour (skipSuccessfulRequests=true)
+  max: 60, // 60 failed attempts per IP per hour; real accounts protected by per-email throttle
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
@@ -1671,6 +1676,26 @@ const websiteBetaWaitlistLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: "Too many waitlist submissions. Please retry a bit later." },
+});
+
+// Workspace mutation limiters — prevent hammering TYP with create/delete storms.
+// Auth is the primary gate; these are a backstop against runaway clients/scripts.
+const workspaceCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // 20 workspace creations per IP per hour
+  skipSuccessfulRequests: false,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many workspace creation requests. Please try again later." },
+});
+
+const threadCreateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // 60 thread creations per IP per 15 min
+  skipSuccessfulRequests: false,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many thread creation requests. Please slow down." },
 });
 
 const memoryReadPathMatchers = [
@@ -6702,8 +6727,8 @@ const createThreadHandler = async (req, res) => {
   }
 };
 
-app.post("/workspace/:slug/thread/new", express.json({ limit: "200kb" }), createThreadHandler);
-app.post("/api/workspace/:slug/thread/new", express.json({ limit: "200kb" }), createThreadHandler);
+app.post("/workspace/:slug/thread/new", threadCreateLimiter, express.json({ limit: "200kb" }), createThreadHandler);
+app.post("/api/workspace/:slug/thread/new", threadCreateLimiter, express.json({ limit: "200kb" }), createThreadHandler);
 
 const updateThreadHandler = async (req, res) => {
   try {
@@ -7095,8 +7120,8 @@ const createWorkspaceHandler = async (req, res) => {
   }
 };
 
-app.post("/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspaceHandler);
-app.post("/api/zaki/workspaces", express.json({ limit: "1mb" }), createWorkspaceHandler);
+app.post("/zaki/workspaces", workspaceCreateLimiter, express.json({ limit: "1mb" }), createWorkspaceHandler);
+app.post("/api/zaki/workspaces", workspaceCreateLimiter, express.json({ limit: "1mb" }), createWorkspaceHandler);
 
 /**
  * Route: DELETE /zaki/workspaces/:slug
