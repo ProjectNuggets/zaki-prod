@@ -49,8 +49,9 @@ export async function fetchTypWorkspaces(novaUserId) {
   const data = await response.json().catch(() => null);
   if (!data?.workspaces) return response;
   const userId = Number(novaUserId);
+  // Use Number() coercion on both sides — TYP may return user_id as string or number.
   const filtered = data.workspaces.filter(
-    (w) => Array.isArray(w.threads) && w.threads.some((t) => t.user_id === userId)
+    (w) => Array.isArray(w.threads) && w.threads.some((t) => Number(t.user_id) === userId)
   );
   return new Response(JSON.stringify({ workspaces: filtered }), {
     status: 200,

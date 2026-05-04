@@ -2366,12 +2366,16 @@ async function requireWorkspaceAccess(req, res) {
     return null;
   }
 
-  if (!zakiUser.nova_user_id) {
+  let novaUserId = zakiUser.nova_user_id ? Number(zakiUser.nova_user_id) : null;
+  if (!novaUserId) {
+    novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, email);
+  }
+  if (!novaUserId) {
     res.status(403).json({ error: "Workspace access requires a linked TYP account." });
     return null;
   }
 
-  const accessCheck = await workspaceVisibleForSession(zakiUser.nova_user_id, slug);
+  const accessCheck = await workspaceVisibleForSession(novaUserId, slug);
   if (!accessCheck.success) {
     res.status(accessCheck.status || 502).json({
       error: accessCheck.error || "Unable to verify workspace access.",
@@ -3489,7 +3493,7 @@ function getAppUrl() {
 
 // AUTH-01..05: ZAKI dual-auth — ZAKI-first local verify, legacy TYP fallback.
 // SELECT list excludes password_hash (AUTH-03). Legacy path mints a ZAKI session on success (AUTH-05).
-const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end";
+const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, legal_consent_version, legal_consent_at";
 const _LEGACY_TYP_CUTOFF_MS = (() => {
   const v = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
   if (!v) return null;
@@ -3582,7 +3586,11 @@ const listWorkspacesHandler = async (req, res) => {
     if (!authResult) return;
     const { zakiUser } = authResult;
 
-    if (!zakiUser.nova_user_id) {
+    let novaUserId = zakiUser.nova_user_id ? Number(zakiUser.nova_user_id) : null;
+    if (!novaUserId) {
+      novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, zakiUser.email);
+    }
+    if (!novaUserId) {
       res.status(403).json({
         success: false,
         error: "Workspace listing requires a linked TYP account.",
@@ -3590,7 +3598,7 @@ const listWorkspacesHandler = async (req, res) => {
       return;
     }
 
-    const upstream = await fetchTypWorkspaces(zakiUser.nova_user_id);
+    const upstream = await fetchTypWorkspaces(novaUserId);
     const data = await upstream.json().catch(() => ({}));
     if (!upstream.ok || !Array.isArray(data?.workspaces)) {
       res.status(upstream.status || 502).json({
@@ -5166,6 +5174,7 @@ const getProfileHandler = async (req, res) => {
     res.status(200).json({
       success: true,
       user: {
+        id: zakiUser.id,
         username: zakiUser.email,
         fullName: zakiUser.full_name || null,
       },
@@ -6751,6 +6760,39 @@ const deleteThreadHandler = async (req, res) => {
 
 app.delete("/workspace/:slug/thread/:threadSlug", deleteThreadHandler);
 app.delete("/api/workspace/:slug/thread/:threadSlug", deleteThreadHandler);
+
+const getThreadChatsHandler = async (req, res) => {
+  try {
+    const access = await requireWorkspaceAccess(req, res);
+    if (!access) return;
+
+    const threadSlug = String(req.params.threadSlug || "").trim();
+    if (!threadSlug) {
+      res.status(400).json({ error: "Thread slug is required." });
+      return;
+    }
+
+    const response = await novaAdminRequest(
+      `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/chats`,
+      { method: "GET" }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      res.status(response.status || 400).json({
+        error: data?.error || data?.message || "Unable to load thread history.",
+      });
+      return;
+    }
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error("[Workspace] Thread chats error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load thread history." });
+  }
+};
+
+app.get("/workspace/:slug/thread/:threadSlug/chats", getThreadChatsHandler);
+app.get("/api/workspace/:slug/thread/:threadSlug/chats", getThreadChatsHandler);
 
 const getAcceptedDocumentTypesHandler = async (_req, res) => {
   try {

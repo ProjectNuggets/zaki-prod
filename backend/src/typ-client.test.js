@@ -60,6 +60,24 @@ describe("fetchTypWorkspaces", () => {
     expect(data.workspaces).toHaveLength(1);
     expect(data.workspaces[0].slug).toBe("ws-a");
   });
+
+  test("treats string user_id ('42') same as numeric user_id (42) when filtering", async () => {
+    const mockWorkspaces = [
+      { slug: "ws-string", threads: [{ user_id: "42" }] }, // TYP returns string
+      { slug: "ws-number", threads: [{ user_id: 42 }] },   // TYP returns number
+      { slug: "ws-other",  threads: [{ user_id: 99 }] },   // different user
+    ];
+    const fakeResponse = {
+      ok: true,
+      json: jest.fn().mockResolvedValue({ workspaces: mockWorkspaces }),
+    };
+    jest.spyOn(global, "fetch").mockResolvedValue(fakeResponse);
+
+    const result = await fetchTypWorkspaces(42);
+    const data = await result.json();
+    expect(data.workspaces).toHaveLength(2);
+    expect(data.workspaces.map((w) => w.slug)).toEqual(["ws-string", "ws-number"]);
+  });
 });
 
 // Test 2: fetchTypWorkspaceSlugs — success path returns { success, slugs }

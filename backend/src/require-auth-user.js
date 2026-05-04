@@ -13,7 +13,7 @@ import {
 import { dbGet } from "./db.js";
 
 const TYP_FALLBACK_TIMEOUT_MS = 5000; // AUTH-04
-const ZAKI_USER_COLUMNS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end"; // AUTH-03 — password_hash deliberately excluded
+const ZAKI_USER_COLUMNS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, full_name"; // AUTH-03 — password_hash deliberately excluded
 
 function extractBearerToken(req) {
   const header = req?.headers?.authorization;
