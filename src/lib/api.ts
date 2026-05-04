@@ -1791,20 +1791,53 @@ export interface BrainGraphResponse {
 
 export interface BrainGraphNode {
   id: string;
+  key?: string;
   kind: "core" | "daily" | "conversation" | string;
   created_at: number;
   session_id: string | null;
   summary: string;
   valid_to: number | null;
   importance_score?: number;
+  // V1.7 fields
+  importance?: number;
+  display_label?: string;
+  community_id?: number | null;
+  community_name?: string | null;
+  link_type?: BrainLinkType | string | null;
   source_snippet?: string | null;
 }
 
+export type BrainLinkType =
+  | "preference"
+  | "attribute"
+  | "supersession"
+  | "relationship"
+  | "usage"
+  | "synthesis"
+  | "episode";
+
+export const BRAIN_LINK_TYPES: BrainLinkType[] = [
+  "preference",
+  "attribute",
+  "supersession",
+  "relationship",
+  "usage",
+  "synthesis",
+  "episode",
+];
+
 export type BrainGraphEdge =
-  | { type: "session"; source: string; target: string }
-  | { type: "semantic"; source: string; target: string; weight: number }
-  | { type: "reference"; source: string; target: string }
-  | { type: "typed"; source: string; target: string; label?: string };
+  | { type: "session"; source: string; target: string; weight?: number; predicate?: string }
+  | { type: "semantic"; source: string; target: string; weight: number; predicate?: string }
+  | { type: "reference"; source: string; target: string; weight?: number; predicate?: string }
+  | {
+      type: "typed";
+      source: string;
+      target: string;
+      weight?: number;
+      predicate?: string;
+      label?: string;
+    };
 
 // ── /brain/timeline ──────────────────────────────────────────
 export interface BrainTimelineResponse {
@@ -1885,9 +1918,18 @@ function appendBrainQueryParams(
   return qs ? `${path}?${qs}` : path;
 }
 
+export interface BrainGraphFetchOpts {
+  since?: number;
+  max_nodes?: number;
+  node_kinds?: string;
+  search?: string;
+  link_types?: string;
+  exclude_orphans?: boolean;
+}
+
 export async function fetchBrainGraph(
   userId: string,
-  opts?: { since?: number; max_nodes?: number; node_kinds?: string }
+  opts?: BrainGraphFetchOpts
 ): Promise<BrainGraphResponse> {
   void userId;
   const response = await backendAuthRequest(
@@ -1895,11 +1937,185 @@ export async function fetchBrainGraph(
       since: opts?.since,
       max_nodes: opts?.max_nodes,
       node_kinds: opts?.node_kinds,
+      search: opts?.search,
+      link_types: opts?.link_types,
+      exclude_orphans:
+        opts?.exclude_orphans === undefined ? undefined : String(opts.exclude_orphans),
     }),
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/graph ${response.status}`);
   return parseApiJson<BrainGraphResponse>(response);
+}
+
+// ── /brain/local-graph ────────────────────────────────────────
+export interface BrainLocalGraphNode {
+  id?: string;
+  key: string;
+  kind: string;
+  hop_distance: number;
+  score?: number;
+  summary: string;
+  valid_to: number | null;
+  session_id?: string | null;
+  link_type?: string | null;
+  importance?: number;
+  display_label?: string;
+  community_id?: number | null;
+  community_name?: string | null;
+}
+
+export interface BrainLocalGraphEdge {
+  source: string;
+  target: string;
+  predicate?: string;
+  weight?: number;
+  link_type?: string | null;
+}
+
+export interface BrainLocalGraphResponse {
+  center_key: string;
+  depth: number;
+  nodes: BrainLocalGraphNode[];
+  edges: BrainLocalGraphEdge[];
+  stats: { nodes: number; edges: number };
+}
+
+export async function fetchBrainLocalGraph(
+  userId: string,
+  opts: { center_key: string; depth?: number; max_nodes?: number }
+): Promise<BrainLocalGraphResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/local-graph", {
+      center_key: opts.center_key,
+      depth: opts.depth,
+      max_nodes: opts.max_nodes,
+    }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/local-graph ${response.status}`);
+  return parseApiJson<BrainLocalGraphResponse>(response);
+}
+
+// ── /brain/orphans ────────────────────────────────────────────
+export interface BrainOrphan {
+  id: string;
+  key?: string;
+  kind: string;
+  created_at: number;
+  session_id: string | null;
+  summary: string;
+  valid_to: number | null;
+  link_type?: string | null;
+}
+
+export interface BrainOrphansResponse {
+  orphans: BrainOrphan[];
+  stats: { orphans: number; limit: number };
+}
+
+export async function fetchBrainOrphans(
+  userId: string,
+  opts?: { limit?: number }
+): Promise<BrainOrphansResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/orphans", { limit: opts?.limit }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/orphans ${response.status}`);
+  return parseApiJson<BrainOrphansResponse>(response);
+}
+
+// ── /brain/diff ───────────────────────────────────────────────
+export interface BrainDiffEntry {
+  id?: string;
+  key: string;
+  kind: string;
+  summary: string;
+  valid_to?: number | null;
+  created_at?: number;
+}
+
+export interface BrainDiffResponse {
+  window: { from: number; to: number; date: string; window_days: number };
+  births: BrainDiffEntry[];
+  deaths: BrainDiffEntry[];
+  stats: { births: number; deaths: number };
+}
+
+export async function fetchBrainDiff(
+  userId: string,
+  opts: { date: string; window_days?: number }
+): Promise<BrainDiffResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/diff", {
+      date: opts.date,
+      window_days: opts.window_days,
+    }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/diff ${response.status}`);
+  return parseApiJson<BrainDiffResponse>(response);
+}
+
+// ── /brain/communities ────────────────────────────────────────
+export interface BrainCommunity {
+  community_id: number;
+  member_count: number;
+  generated_at: number | null;
+  name: string;
+  name_source: "llm" | "fallback" | string;
+}
+
+export interface BrainCommunitiesResponse {
+  communities: BrainCommunity[];
+  stats: { communities: number };
+}
+
+export interface BrainCommunitiesRecomputeResponse {
+  stats: {
+    edges_loaded: number;
+    nodes_in_lpa: number;
+    communities_found: number;
+    members_assigned: number;
+    llm_calls_succeeded: number;
+    llm_calls_failed: number;
+    fallback_names_written: number;
+  };
+}
+
+export async function fetchBrainCommunities(
+  userId: string
+): Promise<BrainCommunitiesResponse> {
+  void userId;
+  const response = await backendAuthRequest("/api/agent/brain/communities", {
+    method: "GET",
+  });
+  if (!response.ok) throw new Error(`brain/communities ${response.status}`);
+  return parseApiJson<BrainCommunitiesResponse>(response);
+}
+
+export class BrainRecomputeConflictError extends Error {
+  constructor() {
+    super("recompute_in_progress");
+    this.name = "BrainRecomputeConflictError";
+  }
+}
+
+export async function postBrainCommunitiesRecompute(
+  userId: string
+): Promise<BrainCommunitiesRecomputeResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    "/api/agent/brain/communities/recompute",
+    { method: "POST", body: JSON.stringify({}) }
+  );
+  if (response.status === 409) throw new BrainRecomputeConflictError();
+  if (!response.ok) throw new Error(`brain/communities/recompute ${response.status}`);
+  return parseApiJson<BrainCommunitiesRecomputeResponse>(response);
 }
 
 export async function fetchBrainTimeline(

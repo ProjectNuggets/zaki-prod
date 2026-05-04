@@ -1,12 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchBrainGraph, type BrainGraphResponse } from "@/lib/api";
+import {
+  fetchBrainGraph,
+  type BrainGraphFetchOpts,
+  type BrainGraphResponse,
+} from "@/lib/api";
 
-export function useBrainGraph(
-  userId: string,
-  opts?: { since?: number; max_nodes?: number; node_kinds?: string },
-) {
+export function useBrainGraph(userId: string, opts?: BrainGraphFetchOpts) {
   return useQuery<BrainGraphResponse>({
-    queryKey: ["brain", "graph", userId, opts?.since, opts?.max_nodes, opts?.node_kinds],
+    queryKey: [
+      "brain",
+      "graph",
+      userId,
+      opts?.since,
+      opts?.max_nodes,
+      opts?.node_kinds,
+      opts?.search,
+      opts?.link_types,
+      opts?.exclude_orphans,
+    ],
     queryFn: () => fetchBrainGraph(userId, opts),
     enabled: !!userId,
     staleTime: 30_000,

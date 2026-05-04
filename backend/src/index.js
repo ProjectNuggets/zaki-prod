@@ -9223,6 +9223,140 @@ app.post(
 );
 
 // =============================================================================
+// BRAIN ROUTES — proxy to nullalis brain endpoints
+// =============================================================================
+
+app.get(
+  "/api/agent/brain/graph",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = new URLSearchParams();
+    if (req.query.since) qs.set("since", req.query.since);
+    if (req.query.max_nodes) qs.set("max_nodes", req.query.max_nodes);
+    if (req.query.node_kinds) qs.set("node_kinds", req.query.node_kinds);
+    if (req.query.search) qs.set("search", req.query.search);
+    if (req.query.link_types) qs.set("link_types", req.query.link_types);
+    if (req.query.exclude_orphans !== undefined) {
+      qs.set("exclude_orphans", req.query.exclude_orphans);
+    }
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/graph${qstr ? `?${qstr}` : ""}`;
+  })
+);
+
+// V1.7a-7: N-hop local subgraph centered on a node
+app.get(
+  "/api/agent/brain/local-graph",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = new URLSearchParams();
+    if (req.query.center_key) qs.set("center_key", req.query.center_key);
+    if (req.query.depth) qs.set("depth", req.query.depth);
+    if (req.query.max_nodes) qs.set("max_nodes", req.query.max_nodes);
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/local-graph${qstr ? `?${qstr}` : ""}`;
+  })
+);
+
+// V1.7a-8a: brain-visible facts with no edges
+app.get(
+  "/api/agent/brain/orphans",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = new URLSearchParams();
+    if (req.query.limit) qs.set("limit", req.query.limit);
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/orphans${qstr ? `?${qstr}` : ""}`;
+  })
+);
+
+// V1.7a-6: births + deaths in a date window
+app.get(
+  "/api/agent/brain/diff",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = new URLSearchParams();
+    if (req.query.date) qs.set("date", req.query.date);
+    if (req.query.window_days) qs.set("window_days", req.query.window_days);
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/diff${qstr ? `?${qstr}` : ""}`;
+  })
+);
+
+// V1.7a-9d: cluster summaries (id, name, member_count)
+app.get(
+  "/api/agent/brain/communities",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/communities`
+  )
+);
+
+// V1.7a-9d + S1: trigger LPA recompute + LLM naming
+app.post(
+  "/api/agent/brain/communities/recompute",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/brain/communities/recompute`
+  )
+);
+
+app.get(
+  "/api/agent/brain/timeline",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = new URLSearchParams();
+    if (req.query.cursor) qs.set("cursor", req.query.cursor);
+    if (req.query.limit) qs.set("limit", req.query.limit);
+    if (req.query.kind) qs.set("kind", req.query.kind);
+    if (req.query.to) qs.set("to", req.query.to);
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/timeline${qstr ? `?${qstr}` : ""}`;
+  })
+);
+
+app.get(
+  "/api/agent/brain/search",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler((userId, req) => {
+    const qs = new URLSearchParams();
+    if (req.query.q) qs.set("q", req.query.q);
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/search${qstr ? `?${qstr}` : ""}`;
+  })
+);
+
+app.get(
+  "/api/agent/brain/memory/:key",
+  requireAgentContext,
+  agentRouteLimiter,
+  makeAgentUserProxyHandler(
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/brain/memory/${encodeURIComponent(req.params.key)}`
+  )
+);
+
+app.post(
+  "/api/agent/brain/compose",
+  requireAgentContext,
+  agentRouteLimiter,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`
+  )
+);
+
+// =============================================================================
 // SHARE CONVERSATION ROUTES
 // =============================================================================
 

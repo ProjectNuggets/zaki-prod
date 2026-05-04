@@ -21,3 +21,11 @@ export { useBrainTimeline } from "./useBrainTimeline";
 export { useBrainCompose } from "./useBrainCompose";
 export { useBrainMemory, useBrainMemoryPrefetch, brainMemoryKeys } from "./useBrainMemory";
 export { useBrainSearch, brainSearchKeys } from "./useBrainSearch";
+export { useBrainOrphans } from "./useBrainOrphans";
+export { useBrainLocalGraph } from "./useBrainLocalGraph";
+export { useBrainDiff } from "./useBrainDiff";
+export {
+  useBrainCommunities,
+  useBrainCommunitiesRecompute,
+  BrainRecomputeConflictError,
+} from "./useBrainCommunities";
