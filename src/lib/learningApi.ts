@@ -62,9 +62,18 @@ export const learningKeys = {
   questions: ["learning", "questions"] as const,
   skills: ["learning", "skills"] as const,
   memory: ["learning", "memory"] as const,
+  sessions: ["learning", "sessions"] as const,
   tutorAgents: ["learning", "tutor-agents"] as const,
   solveSessions: ["learning", "solve", "sessions"] as const,
 };
+
+export function listLearningSessions(limit = 50, offset = 0) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return learningRequest<unknown>(`/api/learning/sessions?${params.toString()}`);
+}
 
 export function listLearningKnowledge() {
   return learningRequest<unknown>("/api/learning/knowledge/list");

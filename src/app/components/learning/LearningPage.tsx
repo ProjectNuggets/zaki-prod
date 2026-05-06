@@ -68,6 +68,7 @@ import {
   listLearningBooks,
   listLearningCoWriterDocuments,
   listLearningKnowledge,
+  listLearningSessions,
   listLearningNotebooks,
   listLearningQuestions,
   listLearningSkills,
@@ -140,6 +141,11 @@ type LearningSpacePickerKey =
   | "question_bank"
   | "skills"
   | "memory";
+
+type SelectedHistorySpaceItem = {
+  id: string;
+  title: string;
+};
 
 type SelectedBookSpaceItem = {
   id: string;
@@ -472,6 +478,11 @@ export function LearningPage() {
     queryFn: listLearningKnowledge,
     retry: 1,
   });
+  const sessions = useQuery({
+    queryKey: learningKeys.sessions,
+    queryFn: () => listLearningSessions(100),
+    retry: 1,
+  });
   const books = useQuery({
     queryKey: learningKeys.books,
     queryFn: listLearningBooks,
@@ -516,6 +527,10 @@ export function LearningPage() {
   const knowledgeItems = useMemo(
     () => itemList(knowledge.data, ["knowledge_bases", "items", "databases"]),
     [knowledge.data],
+  );
+  const sessionItems = useMemo(
+    () => itemList(sessions.data, ["sessions", "items"]),
+    [sessions.data],
   );
   const bookItems = useMemo(() => itemList(books.data, ["books", "items"]), [books.data]);
   const notebookItems = useMemo(
@@ -748,11 +763,11 @@ export function LearningPage() {
             kbName={kbName}
             setKbName={setKbName}
             knowledgeItems={knowledgeItems}
+            sessionItems={sessionItems}
             bookItems={bookItems}
             notebookItems={notebookItems}
             questionItems={questionItems}
             skillItems={skillItems}
-            onSelectSpace={selectLearningTab}
           />
         ) : (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -1758,20 +1773,20 @@ function LearningChatPanel({
   kbName,
   setKbName,
   knowledgeItems,
+  sessionItems,
   bookItems,
   notebookItems,
   questionItems,
   skillItems,
-  onSelectSpace,
 }: {
   kbName: string;
   setKbName: (name: string) => void;
   knowledgeItems: Item[];
+  sessionItems: Item[];
   bookItems: Item[];
   notebookItems: Item[];
   questionItems: Item[];
   skillItems: Item[];
-  onSelectSpace: (tab: LearningTab) => void;
 }) {
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
@@ -1795,6 +1810,9 @@ function LearningChatPanel({
     Set<LearningResearchSource>
   >(new Set(["kb", "web", "papers"]));
   const [attachments, setAttachments] = useState<LearningAttachment[]>([]);
+  const [selectedHistorySessions, setSelectedHistorySessions] = useState<
+    SelectedHistorySpaceItem[]
+  >([]);
   const [selectedBooks, setSelectedBooks] = useState<SelectedBookSpaceItem[]>([]);
   const [selectedNotebooks, setSelectedNotebooks] = useState<SelectedNotebookSpaceItem[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestionSpaceItem[]>([]);
@@ -1838,6 +1856,7 @@ function LearningChatPanel({
     Boolean(
       input.trim() ||
         attachments.length ||
+        selectedHistorySessions.length ||
         selectedBooks.length ||
         selectedNotebooks.length ||
         selectedQuestions.length ||
@@ -1848,7 +1867,7 @@ function LearningChatPanel({
     ) &&
     !(isResearchMode && Object.keys(researchErrors).length > 0);
   const spaceSelectionCounts = {
-    chatHistory: 0,
+    chatHistory: selectedHistorySessions.length,
     books: selectedBooks.length,
     notebooks: selectedNotebooks.length,
     questionBank: selectedQuestions.length,
@@ -2209,6 +2228,7 @@ function LearningChatPanel({
     const content =
       input.trim() ||
       (attachments.length ||
+      selectedHistorySessions.length ||
       selectedBooks.length ||
       selectedNotebooks.length ||
       selectedQuestions.length ||
@@ -2310,6 +2330,7 @@ function LearningChatPanel({
     ]);
     setInput("");
     setAttachments([]);
+    setSelectedHistorySessions([]);
     setSelectedBooks([]);
     setSelectedNotebooks([]);
     setSelectedQuestions([]);
@@ -2331,6 +2352,7 @@ function LearningChatPanel({
         knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
         tools: Array.from(selectedTools),
         config,
+        history_references: selectedHistorySessions.map((session) => session.id),
         notebook_references: notebookReferences,
         book_references: bookReferences,
         question_notebook_references: selectedQuestions.map((question) => question.id),
@@ -2542,6 +2564,18 @@ function LearningChatPanel({
         ) : null}
         {spaceSelectionCount > 0 ? (
           <div className="flex flex-wrap gap-2 px-4 pt-3.5">
+            {selectedHistorySessions.map((session) => (
+              <SpaceContextChip
+                key={`history-${session.id}`}
+                icon={MessageSquare}
+                label={session.title}
+                onRemove={() =>
+                  setSelectedHistorySessions((items) =>
+                    items.filter((item) => item.id !== session.id),
+                  )
+                }
+              />
+            ))}
             {selectedBooks.map((book) => (
               <SpaceContextChip
                 key={`book-${book.id}`}
@@ -2868,6 +2902,8 @@ function LearningChatPanel({
                       const count =
                         entry.key === "books"
                           ? spaceSelectionCounts.books
+                          : entry.key === "chat_history"
+                            ? spaceSelectionCounts.chatHistory
                           : entry.key === "notebooks"
                             ? spaceSelectionCounts.notebooks
                             : entry.key === "question_bank"
@@ -2883,10 +2919,6 @@ function LearningChatPanel({
                           type="button"
                           onClick={() => {
                             setSpaceMenuOpen(false);
-                            if (entry.key === "chat_history") {
-                              onSelectSpace("chat");
-                              return;
-                            }
                             setSpacePickerOpen(entry.key as LearningSpacePickerKey);
                           }}
                           className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--muted)]/40"
@@ -3016,16 +3048,19 @@ function LearningChatPanel({
       <LearningSpacePickerModal
         open={spacePickerOpen}
         onClose={() => setSpacePickerOpen(null)}
+        sessionItems={sessionItems}
         bookItems={bookItems}
         notebookItems={notebookItems}
         questionItems={questionItems}
         skillItems={skillItems}
+        selectedHistorySessions={selectedHistorySessions}
         selectedBooks={selectedBooks}
         selectedNotebooks={selectedNotebooks}
         selectedQuestions={selectedQuestions}
         selectedSkills={selectedSkills}
         skillsAutoMode={skillsAutoMode}
         selectedMemoryFiles={selectedMemoryFiles}
+        onChangeHistorySessions={setSelectedHistorySessions}
         onChangeBooks={setSelectedBooks}
         onChangeNotebooks={setSelectedNotebooks}
         onChangeQuestions={setSelectedQuestions}
@@ -3040,16 +3075,19 @@ function LearningChatPanel({
 function LearningSpacePickerModal({
   open,
   onClose,
+  sessionItems,
   bookItems,
   notebookItems,
   questionItems,
   skillItems,
+  selectedHistorySessions,
   selectedBooks,
   selectedNotebooks,
   selectedQuestions,
   selectedSkills,
   skillsAutoMode,
   selectedMemoryFiles,
+  onChangeHistorySessions,
   onChangeBooks,
   onChangeNotebooks,
   onChangeQuestions,
@@ -3059,16 +3097,19 @@ function LearningSpacePickerModal({
 }: {
   open: LearningSpacePickerKey | null;
   onClose: () => void;
+  sessionItems: Item[];
   bookItems: Item[];
   notebookItems: Item[];
   questionItems: Item[];
   skillItems: Item[];
+  selectedHistorySessions: SelectedHistorySpaceItem[];
   selectedBooks: SelectedBookSpaceItem[];
   selectedNotebooks: SelectedNotebookSpaceItem[];
   selectedQuestions: SelectedQuestionSpaceItem[];
   selectedSkills: string[];
   skillsAutoMode: boolean;
   selectedMemoryFiles: LearningMemoryFile[];
+  onChangeHistorySessions: (items: SelectedHistorySpaceItem[]) => void;
   onChangeBooks: (items: SelectedBookSpaceItem[]) => void;
   onChangeNotebooks: (items: SelectedNotebookSpaceItem[]) => void;
   onChangeQuestions: (items: SelectedQuestionSpaceItem[]) => void;
@@ -3085,7 +3126,9 @@ function LearningSpacePickerModal({
   if (!open) return null;
 
   const title =
-    open === "books"
+    open === "chat_history"
+      ? "Select History Sessions"
+      : open === "books"
       ? "Select Books"
       : open === "notebooks"
         ? "Select Notebooks"
@@ -3095,7 +3138,9 @@ function LearningSpacePickerModal({
             ? "Select Skills"
             : "Select Memory";
   const eyebrow =
-    open === "books"
+    open === "chat_history"
+      ? "Chat History Reference"
+      : open === "books"
       ? "Book Reference"
       : open === "notebooks"
         ? "Notebook Reference"
@@ -3105,7 +3150,9 @@ function LearningSpacePickerModal({
             ? "Skills Reference"
             : "Memory Reference";
   const Icon =
-    open === "books"
+    open === "chat_history"
+      ? MessageSquare
+      : open === "books"
       ? BookOpen
       : open === "notebooks"
         ? FileText
@@ -3119,14 +3166,16 @@ function LearningSpacePickerModal({
   const filterItems = (items: Item[]) =>
     keyword
       ? items.filter((item, index) =>
-          `${itemTitle(item, String(index))} ${textOf(item.description)} ${textOf(item.question)}`
+          `${itemTitle(item, String(index))} ${textOf(item.description)} ${textOf(item.question)} ${textOf(item.last_message)}`
             .toLowerCase()
             .includes(keyword),
         )
       : items;
 
   const selectedCount =
-    open === "books"
+    open === "chat_history"
+      ? selectedHistorySessions.length
+      : open === "books"
       ? selectedBooks.length
       : open === "notebooks"
         ? selectedNotebooks.length
@@ -3137,12 +3186,15 @@ function LearningSpacePickerModal({
               ? 1
               : selectedSkills.length
             : selectedMemoryFiles.length;
+  const visibleSessions = open === "chat_history" ? filterItems(sessionItems) : [];
   const visibleBooks = open === "books" ? filterItems(bookItems) : [];
   const visibleNotebooks = open === "notebooks" ? filterItems(notebookItems) : [];
   const visibleQuestions = open === "question_bank" ? filterItems(questionItems) : [];
   const visibleSkills = open === "skills" ? filterItems(skillItems) : [];
   const emptyMessage =
-    open === "books"
+    open === "chat_history"
+      ? "No matching sessions found."
+      : open === "books"
       ? "No books found."
       : open === "notebooks"
         ? "No notebooks found."
@@ -3151,6 +3203,16 @@ function LearningSpacePickerModal({
           : open === "skills"
             ? "No skills found."
             : "";
+
+  const toggleHistorySession = (item: Item, index: number) => {
+    const id = itemId(item, `session-${index}`);
+    const title = itemTitle(item, `Session ${index + 1}`);
+    onChangeHistorySessions(
+      selectedHistorySessions.some((entry) => entry.id === id)
+        ? selectedHistorySessions.filter((entry) => entry.id !== id)
+        : [...selectedHistorySessions, { id, title }],
+    );
+  };
 
   const toggleBook = (item: Item, index: number) => {
     const id = itemId(item, `book-${index}`);
@@ -3242,6 +3304,7 @@ function LearningSpacePickerModal({
               <button
                 type="button"
                 onClick={() => {
+                  if (open === "chat_history") onChangeHistorySessions([]);
                   if (open === "books") onChangeBooks([]);
                   if (open === "notebooks") onChangeNotebooks([]);
                   if (open === "question_bank") onChangeQuestions([]);
@@ -3283,6 +3346,29 @@ function LearningSpacePickerModal({
 
           <div className="max-h-[56vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
             <div className="divide-y divide-[var(--border)]">
+              {open === "chat_history"
+                ? visibleSessions.map((item, index) => {
+                    const id = itemId(item, `session-${index}`);
+                    const active = selectedHistorySessions.some((entry) => entry.id === id);
+                    const lastMessage = textOf(item.last_message);
+                    const messageCount = textOf(item.message_count);
+                    return (
+                      <LearningSpacePickerRow
+                        key={id}
+                        active={active}
+                        icon={MessageSquare}
+                        title={itemTitle(item, `Session ${index + 1}`)}
+                        description={[
+                          lastMessage,
+                          messageCount ? `${messageCount} messages` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        onClick={() => toggleHistorySession(item, index)}
+                      />
+                    );
+                  })
+                : null}
               {open === "books"
                 ? visibleBooks.map((item, index) => {
                     const id = itemId(item, `book-${index}`);
@@ -3352,6 +3438,7 @@ function LearningSpacePickerModal({
                   })
                 : null}
               {open !== "memory" &&
+              !visibleSessions.length &&
               !visibleBooks.length &&
               !visibleNotebooks.length &&
               !visibleQuestions.length &&
