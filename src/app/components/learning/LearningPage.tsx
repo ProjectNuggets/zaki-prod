@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
-import type { DragEvent, ReactNode, RefObject } from "react";
+import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, ReactNode, RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Activity,
@@ -9,6 +9,7 @@ import {
   BookOpen,
   Bot,
   Brain,
+  ChevronDown,
   CheckCircle2,
   Clock3,
   FileText,
@@ -17,10 +18,12 @@ import {
   Image,
   Layers,
   MessageSquare,
+  Paperclip,
   PenLine,
   Plus,
   RefreshCw,
   Send,
+  Square,
   Star,
   Trash2,
   Upload,
@@ -63,6 +66,15 @@ import {
   type LearningJson,
 } from "@/lib/learningApi";
 import {
+  classifyLearningFile,
+  formatLearningBytes,
+  LEARNING_ATTACHMENT_ACCEPT,
+  LEARNING_MAX_ATTACHMENT_BYTES,
+  LEARNING_MAX_TOTAL_ATTACHMENT_BYTES,
+  learningDocIconFor,
+  type LearningAttachment,
+} from "@/lib/learningAttachments";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -102,6 +114,7 @@ type TutorChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
   thinking?: string[];
+  attachments?: LearningAttachment[];
 };
 
 const tabs: Array<{ id: LearningTab; label: string; icon: typeof BookOpen }> = [
@@ -312,7 +325,7 @@ function fileToBase64(file: File): Promise<string> {
       const raw = String(reader.result || "");
       resolve(raw.includes(",") ? raw.split(",").slice(1).join(",") : raw);
     };
-    reader.onerror = () => reject(new Error("Unable to read image."));
+    reader.onerror = () => reject(new Error("Unable to read file."));
     reader.readAsDataURL(file);
   });
 }
@@ -848,22 +861,144 @@ function learningEventText(eventType: string, payload: Item) {
   return textOf(metadata.label) || textOf(metadata.status);
 }
 
+function LearningAttachmentChip({
+  attachment,
+  onRemove,
+  compact = false,
+}: {
+  attachment: LearningAttachment;
+  onRemove?: () => void;
+  compact?: boolean;
+}) {
+  if (attachment.type === "image" && attachment.previewUrl) {
+    return (
+      <div className="group relative" title={attachment.filename}>
+        <div
+          className={cn(
+            "overflow-hidden rounded-zaki-md border border-zaki-border bg-zaki-raised",
+            compact ? "h-11 w-11" : "h-16 w-16",
+          )}
+        >
+          <img
+            src={attachment.previewUrl}
+            alt={attachment.filename}
+            className="h-full w-full object-cover"
+          />
+        </div>
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove attachment"
+            className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-zaki-text text-zaki-base opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+          >
+            <X className="size-2.5" />
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  const icon = learningDocIconFor(attachment.filename);
+  const Icon = icon.Icon;
+  const sizeLabel = attachment.size ? formatLearningBytes(attachment.size) : "";
+
+  return (
+    <div className="group relative" title={attachment.filename}>
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 text-left",
+          compact ? "h-11 w-[132px]" : "h-16 w-[160px]",
+        )}
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-zaki-sm bg-zaki-base">
+          <Icon className={cn("size-5", icon.tint)} strokeWidth={1.6} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium text-zaki-text">
+            {attachment.filename}
+          </div>
+          <div className="truncate text-[10px] uppercase text-zaki-muted">
+            {sizeLabel ? `${icon.label} - ${sizeLabel}` : icon.label}
+          </div>
+        </div>
+      </div>
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="Remove attachment"
+          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-zaki-text text-zaki-base opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+        >
+          <X className="size-2.5" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function LearningChatPanel({ kbName }: { kbName: string }) {
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [capability, setCapability] = useState("");
+  const [capabilityMenuOpen, setCapabilityMenuOpen] = useState(false);
+  const [attachments, setAttachments] = useState<LearningAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [connected, setConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
   const socketRef = useRef<WebSocket | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const dragCounterRef = useRef(0);
+  const attachmentErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attachmentsRef = useRef<LearningAttachment[]>([]);
+  const messagesRef = useRef<TutorChatMessage[]>([]);
   const thinkingRef = useRef<string[]>([]);
   const activeAssistantIdRef = useRef<string | null>(null);
+  const activeTurnIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const activeCapability =
+    learningCapabilities.find((entry) => entry.value === capability) ??
+    learningCapabilities[0]!;
+  const ActiveCapabilityIcon = activeCapability.icon;
+  const canSend = connected && !streaming && Boolean(input.trim() || attachments.length);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, thinking]);
+
+  useEffect(() => {
+    const folderInput = folderInputRef.current;
+    if (!folderInput) return;
+    folderInput.setAttribute("webkitdirectory", "");
+    folderInput.setAttribute("directory", "");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (attachmentErrorTimerRef.current) {
+        clearTimeout(attachmentErrorTimerRef.current);
+      }
+      const previews = [
+        ...attachmentsRef.current,
+        ...messagesRef.current.flatMap((message) => message.attachments ?? []),
+      ];
+      previews.forEach((attachment) => {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      });
+    };
+  }, []);
 
   useEffect(() => {
     const socket = openLearningSocket("/api/learning/ws");
@@ -883,7 +1018,9 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
       const eventType = textOf(payload.type, "content");
       const content = learningEventText(eventType, payload);
       const nextSessionId = textOf(payload.session_id);
+      const nextTurnId = textOf(payload.turn_id);
       if (nextSessionId) setSessionId(nextSessionId);
+      if (nextTurnId) activeTurnIdRef.current = nextTurnId;
 
       if (eventType === "session") {
         const metadata = asRecord(payload.metadata);
@@ -971,6 +1108,7 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
           });
         }
         activeAssistantIdRef.current = null;
+        activeTurnIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
         return;
@@ -978,6 +1116,7 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
 
       if (eventType === "done") {
         activeAssistantIdRef.current = null;
+        activeTurnIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
         setStreaming(false);
@@ -994,6 +1133,7 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
           },
         ]);
         activeAssistantIdRef.current = null;
+        activeTurnIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
         setStreaming(false);
@@ -1020,58 +1160,174 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
     };
   }, []);
 
+  const showAttachmentError = (message: string) => {
+    setAttachmentError(message);
+    if (attachmentErrorTimerRef.current) clearTimeout(attachmentErrorTimerRef.current);
+    attachmentErrorTimerRef.current = setTimeout(() => {
+      setAttachmentError(null);
+      attachmentErrorTimerRef.current = null;
+    }, 4000);
+  };
+
+  const addFiles = async (files: File[]) => {
+    if (!files.length) return;
+    let runningTotal = attachments.reduce((sum, attachment) => sum + attachment.size, 0);
+    const accepted: File[] = [];
+
+    for (const file of files) {
+      const kind = classifyLearningFile(file);
+      if (!kind) {
+        showAttachmentError(`Unsupported file type: ${file.name}`);
+        continue;
+      }
+      if (file.size > LEARNING_MAX_ATTACHMENT_BYTES) {
+        showAttachmentError(`File too large: ${file.name}`);
+        continue;
+      }
+      if (runningTotal + file.size > LEARNING_MAX_TOTAL_ATTACHMENT_BYTES) {
+        showAttachmentError("Too many files, skipped some.");
+        break;
+      }
+      runningTotal += file.size;
+      accepted.push(file);
+    }
+
+    if (!accepted.length) return;
+
+    try {
+      const nextAttachments = await Promise.all(
+        accepted.map(async (file) => {
+          const kind = classifyLearningFile(file) ?? "file";
+          return {
+            id: makeClientId("attachment"),
+            type: kind,
+            filename: file.name,
+            base64: await fileToBase64(file),
+            mime_type: file.type || undefined,
+            size: file.size,
+            previewUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
+          } satisfies LearningAttachment;
+        }),
+      );
+      setAttachments((items) => [...items, ...nextAttachments]);
+    } catch {
+      showAttachmentError("Unable to read the selected file.");
+    }
+  };
+
+  const handleFileInput = async (event: ChangeEvent<HTMLInputElement>) => {
+    await addFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+  };
+
+  const handlePaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    if (!files.length) return;
+    event.preventDefault();
+    await addFiles(files);
+  };
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounterRef.current += 1;
+    if (event.dataTransfer.types.includes("Files")) setDragging(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setDragging(false);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragging(false);
+    dragCounterRef.current = 0;
+    await addFiles(Array.from(event.dataTransfer.files));
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    setAttachments((items) => {
+      const removed = items.find((attachment) => attachment.id === attachmentId);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return items.filter((attachment) => attachment.id !== attachmentId);
+    });
+  };
+
   const sendMessage = () => {
-    const content = input.trim();
+    const fallbackContent = attachments.some((attachment) => attachment.type === "image")
+      ? "Please analyze the attached image(s)."
+      : "Please use the selected context to help with this request.";
+    const content = input.trim() || (attachments.length ? fallbackContent : "");
     const socket = socketRef.current;
     if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+    const sentAttachments = attachments;
     setMessages((items) => [
       ...items,
       {
         id: makeClientId("user"),
         role: "user",
         content,
+        attachments: sentAttachments,
       },
     ]);
     setInput("");
+    setAttachments([]);
     setStreaming(true);
     activeAssistantIdRef.current = makeClientId("assistant");
+    activeTurnIdRef.current = null;
     thinkingRef.current = [];
     setThinking([]);
     socket.send(
       JSON.stringify({
-        type: "message",
+        type: "start_turn",
         content,
         capability: capability || null,
         session_id: sessionId,
         knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
+        attachments: sentAttachments.map((attachment) => ({
+          type: attachment.type,
+          filename: attachment.filename,
+          base64: attachment.base64,
+          mime_type: attachment.mime_type,
+        })),
       }),
     );
   };
 
+  const cancelStreaming = () => {
+    const socket = socketRef.current;
+    const turnId = activeTurnIdRef.current;
+    if (socket && socket.readyState === WebSocket.OPEN && turnId) {
+      socket.send(JSON.stringify({ type: "cancel_turn", turn_id: turnId }));
+    }
+    activeAssistantIdRef.current = null;
+    activeTurnIdRef.current = null;
+    thinkingRef.current = [];
+    setThinking([]);
+    setStreaming(false);
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (canSend) sendMessage();
+    }
+  };
+
   return (
-    <Section title="Chat" subtitle="DeepTutor-style learning conversation with capability modes.">
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-zaki-md border border-zaki-border bg-zaki-base p-1">
-        {learningCapabilities.map((entry) => {
-          const Icon = entry.icon;
-          const active = capability === entry.value;
-          return (
-            <button
-              key={entry.label}
-              type="button"
-              onClick={() => setCapability(entry.value)}
-              className={cn(
-                "inline-flex h-9 shrink-0 items-center gap-2 rounded-zaki-md px-3 text-xs font-semibold transition-colors",
-                active
-                  ? "bg-zaki-brand text-white"
-                  : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text",
-              )}
-            >
-              <Icon className="size-4" />
-              {entry.label}
-            </button>
-          );
-        })}
-      </div>
+    <Section title="Chat">
       <div className="mb-3 min-h-[420px] rounded-zaki-lg border border-zaki-border bg-zaki-base p-4">
         {messages.length || thinking.length ? (
           <div className="space-y-3">
@@ -1095,6 +1351,17 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
                   </div>
                 ) : null}
                 <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                {message.attachments?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {message.attachments.map((attachment) => (
+                      <LearningAttachmentChip
+                        key={attachment.id}
+                        attachment={attachment}
+                        compact
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
             {thinking.length ? (
@@ -1107,31 +1374,154 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
             <div ref={bottomRef} />
           </div>
         ) : (
-          <EmptyLine label="Ask a learning question or choose a capability mode." />
+          <EmptyLine label="Ask a learning question, attach a file, or choose a capability mode." />
         )}
       </div>
-      <div className="flex gap-2">
-        <input
+
+      <div
+        className={cn(
+          "relative rounded-zaki-lg border bg-zaki-base transition-colors",
+          dragging ? "border-zaki-brand bg-zaki-brand/5" : "border-zaki-border",
+        )}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {dragging ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-zaki-lg border border-dashed border-zaki-brand bg-zaki-brand/10 text-sm font-semibold text-zaki-brand">
+            Drop files to attach
+          </div>
+        ) : null}
+        <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              sendMessage();
-            }
-          }}
+          onPaste={handlePaste}
+          onKeyDown={handleComposerKeyDown}
           placeholder="Ask about your study material..."
-          className="h-11 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+          rows={3}
+          className="min-h-[96px] w-full resize-none rounded-t-zaki-lg bg-transparent px-4 py-3 text-sm text-zaki-text outline-none placeholder:text-zaki-muted"
         />
-        <button
-          type="button"
-          disabled={!connected || !input.trim() || streaming}
-          onClick={sendMessage}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <Send className="size-4" />
-          Send
-        </button>
+        {attachments.length ? (
+          <div className="flex flex-wrap gap-2 px-4 pb-3">
+            {attachments.map((attachment) => (
+              <LearningAttachmentChip
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={() => removeAttachment(attachment.id)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {attachmentError ? (
+          <div className="px-4 pb-2 text-xs text-red-600">{attachmentError}</div>
+        ) : null}
+        <div className="flex items-center gap-2 border-t border-zaki-border px-3 py-2">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setCapabilityMenuOpen((open) => !open)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-2 text-xs font-semibold text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text"
+            >
+              <ActiveCapabilityIcon className="size-4" />
+              {activeCapability.label}
+              <ChevronDown
+                className={cn("size-3 transition-transform", capabilityMenuOpen && "rotate-180")}
+              />
+            </button>
+            {capabilityMenuOpen ? (
+              <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[220px] rounded-zaki-md border border-zaki-border bg-zaki-raised py-1 shadow-lg">
+                {learningCapabilities.map((entry) => {
+                  const Icon = entry.icon;
+                  const active = capability === entry.value;
+                  return (
+                    <button
+                      key={entry.label}
+                      type="button"
+                      onClick={() => {
+                        setCapability(entry.value);
+                        setCapabilityMenuOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs font-semibold transition-colors",
+                        active
+                          ? "text-zaki-brand"
+                          : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text",
+                      )}
+                    >
+                      <Icon className="size-4" />
+                      <span className="flex-1">{entry.label}</span>
+                      {active ? <span className="h-1.5 w-1.5 rounded-full bg-zaki-brand" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1 truncate text-xs text-zaki-muted">
+            {kbName.trim() ? kbName.trim() : ""}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={LEARNING_ATTACHMENT_ACCEPT}
+            className="hidden"
+            onChange={handleFileInput}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileInput}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach files"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text"
+          >
+            <Paperclip className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => folderInputRef.current?.click()}
+            title="Attach folder"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text"
+          >
+            <FolderUp className="size-4" />
+          </button>
+          {streaming ? (
+            <button
+              type="button"
+              onClick={cancelStreaming}
+              title="Stop"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-text text-zaki-base"
+            >
+              <Square className="size-3.5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!canSend}
+              onClick={sendMessage}
+              title="Send"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-brand text-white disabled:opacity-50"
+            >
+              <Send className="size-4" />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zaki-muted">
+        <span>{connected ? "Connected" : "Disconnected"}</span>
+        {kbName.trim() ? <span>Knowledge: {kbName.trim()}</span> : null}
+        {attachments.length ? (
+          <span>
+            {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
       </div>
     </Section>
   );
