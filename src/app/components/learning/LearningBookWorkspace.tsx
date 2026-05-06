@@ -4,6 +4,8 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   CheckCircle2,
   Layers,
@@ -185,6 +187,14 @@ const CHANGEABLE_TYPES: BlockType[] = [
   "deep_dive",
 ];
 
+const CHAPTER_CONTENT_TYPES = [
+  { value: "theory", label: "Theory" },
+  { value: "derivation", label: "Derivation" },
+  { value: "history", label: "History" },
+  { value: "practice", label: "Practice" },
+  { value: "concept", label: "Concept" },
+];
+
 function asRecord(value: unknown): Item {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Item) : {};
 }
@@ -310,6 +320,22 @@ function parseJsonText(value: string) {
   } catch {
     throw new Error("Invalid JSON.");
   }
+}
+
+function parseJsonDraftOrFallback(value: string, fallback: Item) {
+  try {
+    return value.trim() ? (JSON.parse(value) as Item) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function splitLines(value: unknown) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  return String(value || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 function getBookPageChatSession(book: LearningBook, pageId: string) {
@@ -1200,7 +1226,9 @@ function BookProposalView({
   loading: boolean;
   onConfirm: () => void;
 }) {
-  const proposal = asRecord(book.proposal);
+  const baseProposal = asRecord(book.proposal);
+  const proposal = parseJsonDraftOrFallback(draft, baseProposal);
+  const updateProposal = (patch: Item) => setDraft(jsonText({ ...proposal, ...patch }));
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-4xl">
@@ -1208,24 +1236,86 @@ function BookProposalView({
           <div className="mb-1 text-xs font-semibold uppercase tracking-normal text-zaki-brand">
             Draft proposal
           </div>
-          <h2 className="text-2xl font-semibold text-zaki-text">
-            {textOf(proposal.title, book.title)}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-zaki-muted">
-            {textOf(proposal.description, book.description || "Review and confirm the generated proposal.")}
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <ProposalField label="Scope" value={textOf(proposal.scope, "Not specified")} />
-            <ProposalField label="Level" value={textOf(proposal.target_level, "Not specified")} />
-            <ProposalField label="Chapters" value={textOf(proposal.estimated_chapters, "Auto")} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Title
+              </span>
+              <input
+                value={textOf(proposal.title, book.title)}
+                onChange={(event) => updateProposal({ title: event.target.value })}
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-lg font-semibold text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Description
+              </span>
+              <textarea
+                value={textOf(proposal.description, book.description || "")}
+                onChange={(event) => updateProposal({ description: event.target.value })}
+                rows={3}
+                className="mt-1 w-full resize-none rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm leading-6 text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Scope
+              </span>
+              <input
+                value={textOf(proposal.scope)}
+                onChange={(event) => updateProposal({ scope: event.target.value })}
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Target level
+              </span>
+              <input
+                value={textOf(proposal.target_level)}
+                onChange={(event) => updateProposal({ target_level: event.target.value })}
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Estimated chapters
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={24}
+                value={numberOf(proposal.estimated_chapters, 0)}
+                onChange={(event) =>
+                  updateProposal({ estimated_chapters: Number(event.target.value) || 0 })
+                }
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Language
+              </span>
+              <input
+                value={textOf(proposal.language, book.language || "")}
+                onChange={(event) => updateProposal({ language: event.target.value })}
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
           </div>
         </div>
         {progress ? <LearningBookProgressTimeline progress={progress} className="mb-5" /> : null}
-        <textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          className="min-h-[340px] w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-raised p-4 font-mono text-xs text-zaki-text outline-none focus:border-zaki-brand"
-        />
+        <details className="rounded-zaki-md border border-zaki-border bg-zaki-raised">
+          <summary className="cursor-pointer px-4 py-3 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+            Advanced payload
+          </summary>
+          <textarea
+            value={draft || jsonText(baseProposal)}
+            onChange={(event) => setDraft(event.target.value)}
+            className="min-h-[220px] w-full resize-y border-t border-zaki-border bg-zaki-base p-4 font-mono text-xs text-zaki-text outline-none focus:border-zaki-brand"
+          />
+        </details>
         <div className="mt-4 flex justify-end">
           <button
             type="button"
@@ -1238,15 +1328,6 @@ function BookProposalView({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function ProposalField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-zaki-md border border-zaki-border bg-zaki-base p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-normal text-zaki-muted">{label}</div>
-      <div className="mt-1 text-sm text-zaki-text">{value}</div>
     </div>
   );
 }
@@ -1266,7 +1347,45 @@ function BookSpineView({
   loading: boolean;
   onConfirm: () => void;
 }) {
-  const chapters = arrayOfRecords(spine.chapters);
+  const currentSpine = parseJsonDraftOrFallback(draft, spine);
+  const chapters = arrayOfRecords(currentSpine.chapters);
+  const updateChapters = (nextChapters: Item[]) =>
+    setDraft(jsonText({ ...currentSpine, chapters: nextChapters }));
+  const updateChapter = (index: number, patch: Item) => {
+    updateChapters(chapters.map((chapter, chapterIndex) =>
+      chapterIndex === index ? { ...chapter, ...patch } : chapter,
+    ));
+  };
+  const moveChapter = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= chapters.length) return;
+    const next = [...chapters];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    updateChapters(next.map((chapter, chapterIndex) => ({ ...chapter, order: chapterIndex })));
+  };
+  const removeChapter = (index: number) => {
+    updateChapters(
+      chapters
+        .filter((_, chapterIndex) => chapterIndex !== index)
+        .map((chapter, chapterIndex) => ({ ...chapter, order: chapterIndex })),
+    );
+  };
+  const addChapter = () => {
+    updateChapters([
+      ...chapters,
+      {
+        id: `ch_new_${chapters.length + 1}_${Date.now().toString(36)}`,
+        title: "New chapter",
+        learning_objectives: [],
+        content_type: "theory",
+        source_anchors: [],
+        prerequisites: [],
+        page_ids: [],
+        summary: "",
+        order: chapters.length,
+      },
+    ]);
+  };
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-5xl">
@@ -1291,27 +1410,103 @@ function BookSpineView({
           </button>
         </div>
         {progress ? <LearningBookProgressTimeline progress={progress} className="mb-5" /> : null}
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="space-y-3">
-            {chapters.map((chapter, index) => (
-              <div key={itemId(chapter, `chapter-${index}`)} className="rounded-zaki-md border border-zaki-border bg-zaki-raised p-4">
-                <div className="text-xs font-semibold text-zaki-brand">Chapter {index + 1}</div>
-                <div className="mt-1 text-base font-semibold text-zaki-text">
-                  {textOf(chapter.title, `Chapter ${index + 1}`)}
+        <div className="space-y-3">
+          {chapters.map((chapter, index) => (
+            <div key={itemId(chapter, `chapter-${index}`)} className="rounded-zaki-md border border-zaki-border bg-zaki-raised p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 text-xs font-semibold text-zaki-brand">Chapter {index + 1}</div>
+                  <input
+                    value={textOf(chapter.title, `Chapter ${index + 1}`)}
+                    onChange={(event) => updateChapter(index, { title: event.target.value })}
+                    className="w-full rounded-zaki-sm border border-transparent bg-transparent px-2 py-1 text-base font-semibold text-zaki-text outline-none focus:border-zaki-border"
+                  />
                 </div>
-                <ul className="mt-2 space-y-1 text-sm text-zaki-muted">
-                  {extractList(chapter, ["learning_objectives"]).map((objective, objectiveIndex) => (
-                    <li key={objectiveIndex}>- {objective}</li>
-                  ))}
-                </ul>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => moveChapter(index, -1)}
+                    disabled={index === 0}
+                    className="rounded-zaki-sm border border-zaki-border p-1 text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-30"
+                    aria-label="Move chapter up"
+                  >
+                    <ArrowUp className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveChapter(index, 1)}
+                    disabled={index === chapters.length - 1}
+                    className="rounded-zaki-sm border border-zaki-border p-1 text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-30"
+                    aria-label="Move chapter down"
+                  >
+                    <ArrowDown className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeChapter(index)}
+                    className="rounded-zaki-sm border border-rose-300/60 p-1 text-rose-600 hover:bg-rose-500/10"
+                    aria-label="Remove chapter"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            className="min-h-[520px] w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-raised p-4 font-mono text-xs text-zaki-text outline-none focus:border-zaki-brand"
-          />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs text-zaki-muted">
+                  Content type
+                  <select
+                    value={textOf(chapter.content_type, "theory")}
+                    onChange={(event) => updateChapter(index, { content_type: event.target.value })}
+                    className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  >
+                    {CHAPTER_CONTENT_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-zaki-muted">
+                  Summary
+                  <input
+                    value={textOf(chapter.summary)}
+                    onChange={(event) => updateChapter(index, { summary: event.target.value })}
+                    placeholder="Optional one-line description"
+                    className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  />
+                </label>
+              </div>
+              <label className="mt-3 block text-xs text-zaki-muted">
+                Learning objectives
+                <textarea
+                  value={extractList(chapter, ["learning_objectives"]).join("\n")}
+                  onChange={(event) =>
+                    updateChapter(index, { learning_objectives: splitLines(event.target.value) })
+                  }
+                  rows={3}
+                  className="mt-1 w-full resize-none rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                />
+              </label>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addChapter}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-zaki-md border border-dashed border-zaki-border bg-zaki-raised px-3 py-2 text-sm font-semibold text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
+          >
+            <Plus className="size-4" />
+            Add chapter
+          </button>
+          <details className="rounded-zaki-md border border-zaki-border bg-zaki-raised">
+            <summary className="cursor-pointer px-4 py-3 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+              Advanced payload
+            </summary>
+            <textarea
+              value={draft || jsonText(spine)}
+              onChange={(event) => setDraft(event.target.value)}
+              className="min-h-[280px] w-full resize-y border-t border-zaki-border bg-zaki-base p-4 font-mono text-xs text-zaki-text outline-none focus:border-zaki-brand"
+            />
+          </details>
         </div>
       </div>
     </div>
