@@ -34,6 +34,7 @@ import {
   PenLine,
   Plus,
   RefreshCw,
+  Search as SearchIcon,
   Send,
   Square,
   Sparkles,
@@ -132,6 +133,31 @@ type TutorChatMessage = {
   attachments?: LearningAttachment[];
 };
 
+type LearningSpacePickerKey =
+  | "chat_history"
+  | "books"
+  | "notebooks"
+  | "question_bank"
+  | "skills"
+  | "memory";
+
+type SelectedBookSpaceItem = {
+  id: string;
+  title: string;
+};
+
+type SelectedNotebookSpaceItem = {
+  id: string;
+  title: string;
+};
+
+type SelectedQuestionSpaceItem = {
+  id: number;
+  title: string;
+};
+
+type LearningMemoryFile = "summary" | "profile";
+
 const tabs: Array<{ id: LearningTab; label: string; icon: typeof BookOpen }> = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "agents", label: "TutorBot", icon: Bot },
@@ -192,6 +218,10 @@ function itemList(value: unknown, keys: string[]): Item[] {
 
 function isItem(value: unknown): value is Item {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function arrayOfItems(value: unknown): Item[] {
+  return Array.isArray(value) ? value.filter(isItem) : [];
 }
 
 function textOf(value: unknown, fallback = "") {
@@ -718,6 +748,10 @@ export function LearningPage() {
             kbName={kbName}
             setKbName={setKbName}
             knowledgeItems={knowledgeItems}
+            bookItems={bookItems}
+            notebookItems={notebookItems}
+            questionItems={questionItems}
+            skillItems={skillItems}
             onSelectSpace={selectLearningTab}
           />
         ) : (
@@ -1121,6 +1155,55 @@ function buildResearchConfig(cfg: DeepResearchFormConfig) {
       ? { manual_max_iterations: cfg.manual_max_iterations }
       : {}),
   };
+}
+
+function collectIdsFromArray(value: unknown, preferredKeys: string[]) {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  value.forEach((entry, index) => {
+    const record = asRecord(entry);
+    const id =
+      preferredKeys.map((key) => textOf(record[key])).find(Boolean) ||
+      textOf(record.id) ||
+      textOf(record.page_id) ||
+      textOf(record.record_id) ||
+      String(index);
+    if (id && !ids.includes(id)) ids.push(id);
+  });
+  return ids;
+}
+
+function extractBookPageIds(detail: unknown, spine: unknown) {
+  const detailRecord = asRecord(detail);
+  const spineRecord = asRecord(spine);
+  const pageIds = [
+    ...collectIdsFromArray(detailRecord.pages, ["id", "page_id"]),
+    ...collectIdsFromArray(asRecord(detailRecord.detail).pages, ["id", "page_id"]),
+    ...collectIdsFromArray(spineRecord.pages, ["id", "page_id"]),
+  ];
+
+  const chapters = [
+    ...arrayOfItems(spineRecord.chapters),
+    ...arrayOfItems(asRecord(spineRecord.spine).chapters),
+    ...arrayOfItems(asRecord(detailRecord.spine).chapters),
+  ];
+  chapters.forEach((chapter) => {
+    const rawIds: unknown[] = Array.isArray(chapter.page_ids) ? chapter.page_ids : [];
+    rawIds.forEach((raw) => {
+      const id = textOf(raw);
+      if (id && !pageIds.includes(id)) pageIds.push(id);
+    });
+  });
+
+  return pageIds;
+}
+
+function extractNotebookRecordIds(detail: unknown) {
+  const detailRecord = asRecord(detail);
+  return [
+    ...collectIdsFromArray(detailRecord.records, ["id", "record_id"]),
+    ...collectIdsFromArray(asRecord(detailRecord.notebook).records, ["id", "record_id"]),
+  ];
 }
 
 function ComposerField({
@@ -1646,15 +1729,48 @@ function LearningAttachmentChip({
   );
 }
 
+function SpaceContextChip({
+  icon: Icon,
+  label,
+  onRemove,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex max-w-[220px] items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--background)]/60 px-2 py-1 text-[11px] font-medium text-[var(--muted-foreground)]">
+      <Icon size={11} strokeWidth={1.8} className="shrink-0" />
+      <span className="truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label}`}
+        className="ml-0.5 text-[var(--muted-foreground)]/50 transition-colors hover:text-[var(--foreground)]"
+      >
+        <X size={11} />
+      </button>
+    </span>
+  );
+}
+
 function LearningChatPanel({
   kbName,
   setKbName,
   knowledgeItems,
+  bookItems,
+  notebookItems,
+  questionItems,
+  skillItems,
   onSelectSpace,
 }: {
   kbName: string;
   setKbName: (name: string) => void;
   knowledgeItems: Item[];
+  bookItems: Item[];
+  notebookItems: Item[];
+  questionItems: Item[];
+  skillItems: Item[];
   onSelectSpace: (tab: LearningTab) => void;
 }) {
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
@@ -1664,6 +1780,7 @@ function LearningChatPanel({
   const [capabilityMenuOpen, setCapabilityMenuOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
+  const [spacePickerOpen, setSpacePickerOpen] = useState<LearningSpacePickerKey | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [quizConfig, setQuizConfig] = useState<DeepQuestionFormConfig>(defaultQuizConfig);
   const [quizPdf, setQuizPdf] = useState<File | null>(null);
@@ -1678,6 +1795,12 @@ function LearningChatPanel({
     Set<LearningResearchSource>
   >(new Set(["kb", "web", "papers"]));
   const [attachments, setAttachments] = useState<LearningAttachment[]>([]);
+  const [selectedBooks, setSelectedBooks] = useState<SelectedBookSpaceItem[]>([]);
+  const [selectedNotebooks, setSelectedNotebooks] = useState<SelectedNotebookSpaceItem[]>([]);
+  const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestionSpaceItem[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillsAutoMode, setSkillsAutoMode] = useState(false);
+  const [selectedMemoryFiles, setSelectedMemoryFiles] = useState<LearningMemoryFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -1712,8 +1835,33 @@ function LearningChatPanel({
   const canSend =
     connected &&
     !streaming &&
-    Boolean(input.trim() || attachments.length || isQuizMode) &&
+    Boolean(
+      input.trim() ||
+        attachments.length ||
+        selectedBooks.length ||
+        selectedNotebooks.length ||
+        selectedQuestions.length ||
+        selectedSkills.length ||
+        skillsAutoMode ||
+        selectedMemoryFiles.length ||
+        isQuizMode,
+    ) &&
     !(isResearchMode && Object.keys(researchErrors).length > 0);
+  const spaceSelectionCounts = {
+    chatHistory: 0,
+    books: selectedBooks.length,
+    notebooks: selectedNotebooks.length,
+    questionBank: selectedQuestions.length,
+    skills: skillsAutoMode ? 1 : selectedSkills.length,
+    memory: selectedMemoryFiles.length,
+  };
+  const spaceSelectionCount =
+    spaceSelectionCounts.chatHistory +
+    spaceSelectionCounts.books +
+    spaceSelectionCounts.notebooks +
+    spaceSelectionCounts.questionBank +
+    spaceSelectionCounts.skills +
+    spaceSelectionCounts.memory;
   const knowledgeBaseNames = useMemo(() => {
     const names = new Set<string>();
     knowledgeItems.forEach((item) => {
@@ -2060,7 +2208,16 @@ function LearningChatPanel({
             : "Please use the selected context to help with this request.";
     const content =
       input.trim() ||
-      (attachments.length || isQuizMode || isMathAnimatorMode || isVisualizeMode
+      (attachments.length ||
+      selectedBooks.length ||
+      selectedNotebooks.length ||
+      selectedQuestions.length ||
+      selectedSkills.length ||
+      skillsAutoMode ||
+      selectedMemoryFiles.length ||
+      isQuizMode ||
+      isMathAnimatorMode ||
+      isVisualizeMode
         ? fallbackContent
         : "");
     const socket = socketRef.current;
@@ -2097,6 +2254,50 @@ function LearningChatPanel({
       toast.error(error instanceof Error ? error.message : "Capability settings are incomplete.");
       return;
     }
+    const [bookReferences, notebookReferences] = await Promise.all([
+      Promise.all(
+        selectedBooks.map(async (book) => {
+          const [detail, spine] = await Promise.allSettled([
+            getLearningBook(book.id),
+            getLearningBookSpine(book.id),
+          ]);
+          const pageIds = extractBookPageIds(
+            detail.status === "fulfilled" ? detail.value : null,
+            spine.status === "fulfilled" ? spine.value : null,
+          );
+          return pageIds.length ? { book_id: book.id, page_ids: pageIds } : null;
+        }),
+      ).then((items) =>
+        items.filter((item): item is { book_id: string; page_ids: string[] } =>
+          Boolean(item),
+        ),
+      ),
+      Promise.all(
+        selectedNotebooks.map(async (notebook) => {
+          try {
+            const detail = await getLearningNotebook(notebook.id);
+            const recordIds = extractNotebookRecordIds(detail);
+            return recordIds.length
+              ? { notebook_id: notebook.id, record_ids: recordIds }
+              : null;
+          } catch {
+            return null;
+          }
+        }),
+      ).then((items) =>
+        items.filter((item): item is { notebook_id: string; record_ids: string[] } =>
+          Boolean(item),
+        ),
+      ),
+    ]);
+    const unresolvedContextCount =
+      selectedBooks.length -
+      bookReferences.length +
+      selectedNotebooks.length -
+      notebookReferences.length;
+    if (unresolvedContextCount > 0) {
+      toast.warning("Some selected Space context could not be resolved for this turn.");
+    }
     setMessages((items) => [
       ...items,
       {
@@ -2109,6 +2310,12 @@ function LearningChatPanel({
     ]);
     setInput("");
     setAttachments([]);
+    setSelectedBooks([]);
+    setSelectedNotebooks([]);
+    setSelectedQuestions([]);
+    setSelectedSkills([]);
+    setSkillsAutoMode(false);
+    setSelectedMemoryFiles([]);
     setPanelCollapsed(true);
     setStreaming(true);
     activeAssistantIdRef.current = makeClientId("assistant");
@@ -2124,6 +2331,11 @@ function LearningChatPanel({
         knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
         tools: Array.from(selectedTools),
         config,
+        notebook_references: notebookReferences,
+        book_references: bookReferences,
+        question_notebook_references: selectedQuestions.map((question) => question.id),
+        skills: skillsAutoMode ? ["auto"] : selectedSkills,
+        memory_references: selectedMemoryFiles,
         attachments: sentAttachments.map((attachment) => ({
           type: attachment.type,
           filename: attachment.filename,
@@ -2326,6 +2538,71 @@ function LearningChatPanel({
                 Images, Office docs, code & text
               </span>
             </div>
+          </div>
+        ) : null}
+        {spaceSelectionCount > 0 ? (
+          <div className="flex flex-wrap gap-2 px-4 pt-3.5">
+            {selectedBooks.map((book) => (
+              <SpaceContextChip
+                key={`book-${book.id}`}
+                icon={BookOpen}
+                label={book.title}
+                onRemove={() =>
+                  setSelectedBooks((items) => items.filter((item) => item.id !== book.id))
+                }
+              />
+            ))}
+            {selectedNotebooks.map((notebook) => (
+              <SpaceContextChip
+                key={`notebook-${notebook.id}`}
+                icon={FileText}
+                label={notebook.title}
+                onRemove={() =>
+                  setSelectedNotebooks((items) =>
+                    items.filter((item) => item.id !== notebook.id),
+                  )
+                }
+              />
+            ))}
+            {selectedQuestions.map((question) => (
+              <SpaceContextChip
+                key={`question-${question.id}`}
+                icon={GraduationCap}
+                label={question.title}
+                onRemove={() =>
+                  setSelectedQuestions((items) =>
+                    items.filter((item) => item.id !== question.id),
+                  )
+                }
+              />
+            ))}
+            {skillsAutoMode ? (
+              <SpaceContextChip
+                icon={Sparkles}
+                label="Skills Auto"
+                onRemove={() => setSkillsAutoMode(false)}
+              />
+            ) : null}
+            {selectedSkills.map((skill) => (
+              <SpaceContextChip
+                key={`skill-${skill}`}
+                icon={Star}
+                label={skill}
+                onRemove={() =>
+                  setSelectedSkills((items) => items.filter((item) => item !== skill))
+                }
+              />
+            ))}
+            {selectedMemoryFiles.map((file) => (
+              <SpaceContextChip
+                key={`memory-${file}`}
+                icon={Brain}
+                label={file === "summary" ? "Memory · Summary" : "Memory · Profile"}
+                onRemove={() =>
+                  setSelectedMemoryFiles((items) => items.filter((item) => item !== file))
+                }
+              />
+            ))}
           </div>
         ) : null}
         <textarea
@@ -2568,34 +2845,65 @@ function LearningChatPanel({
                     className={cn("transition-transform", spaceMenuOpen && "rotate-180")}
                   />
                 </button>
+                {spaceSelectionCount > 0 ? (
+                  <span className="shrink-0 rounded-full bg-[var(--primary)]/10 px-1.5 py-px text-[9px] font-semibold text-[var(--primary)]">
+                    {spaceSelectionCount}
+                  </span>
+                ) : null}
                 {spaceMenuOpen ? (
-                  <div className="absolute bottom-full left-0 z-50 mb-1.5 min-w-[190px] rounded-lg border border-[var(--border)] bg-[var(--popover)] py-1 shadow-lg backdrop-blur-md">
+                  <div className="absolute bottom-full left-0 z-50 mb-1.5 w-[260px] rounded-xl border border-[var(--border)] bg-[var(--popover)] py-1.5 shadow-lg backdrop-blur-md">
                     {[
-                      { key: "chat", label: "Chat history", icon: MessageSquare, tab: "chat" },
-                      { key: "books", label: "Books", icon: BookOpen, tab: "books" },
-                      { key: "notebooks", label: "Notebooks", icon: FileText, tab: "space" },
+                      { key: "chat_history", label: "Chat history", icon: MessageSquare },
+                      { key: "books", label: "Books", icon: BookOpen },
+                      { key: "notebooks", label: "Notebooks", icon: FileText },
                       {
                         key: "question_bank",
                         label: "Question Bank",
                         icon: GraduationCap,
-                        tab: "space",
                       },
-                      { key: "skills", label: "Skills", icon: Star, tab: "space" },
-                      { key: "memory", label: "Memory", icon: Brain, tab: "space" },
+                      { key: "skills", label: "Skills", icon: Star },
+                      { key: "memory", label: "Memory", icon: Brain },
                     ].map((entry) => {
                       const Icon = entry.icon;
+                      const count =
+                        entry.key === "books"
+                          ? spaceSelectionCounts.books
+                          : entry.key === "notebooks"
+                            ? spaceSelectionCounts.notebooks
+                            : entry.key === "question_bank"
+                              ? spaceSelectionCounts.questionBank
+                              : entry.key === "skills"
+                                ? spaceSelectionCounts.skills
+                                : entry.key === "memory"
+                                  ? spaceSelectionCounts.memory
+                                  : 0;
                       return (
                         <button
                           key={entry.key}
                           type="button"
                           onClick={() => {
                             setSpaceMenuOpen(false);
-                            onSelectSpace(entry.tab as LearningTab);
+                            if (entry.key === "chat_history") {
+                              onSelectSpace("chat");
+                              return;
+                            }
+                            setSpacePickerOpen(entry.key as LearningSpacePickerKey);
                           }}
-                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]"
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--muted)]/40"
                         >
-                          <Icon size={13} strokeWidth={1.7} />
-                          <span className="flex-1 font-medium">{entry.label}</span>
+                          <Icon
+                            size={13}
+                            strokeWidth={1.7}
+                            className="shrink-0 text-[var(--muted-foreground)]"
+                          />
+                          <span className="flex-1 font-medium text-[var(--foreground)]">
+                            {entry.label}
+                          </span>
+                          {count > 0 ? (
+                            <span className="rounded-full bg-[var(--primary)]/10 px-1.5 py-px text-[9px] font-semibold text-[var(--primary)]">
+                              {count}
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}
@@ -2705,7 +3013,447 @@ function LearningChatPanel({
       </div>
         </div>
       </div>
+      <LearningSpacePickerModal
+        open={spacePickerOpen}
+        onClose={() => setSpacePickerOpen(null)}
+        bookItems={bookItems}
+        notebookItems={notebookItems}
+        questionItems={questionItems}
+        skillItems={skillItems}
+        selectedBooks={selectedBooks}
+        selectedNotebooks={selectedNotebooks}
+        selectedQuestions={selectedQuestions}
+        selectedSkills={selectedSkills}
+        skillsAutoMode={skillsAutoMode}
+        selectedMemoryFiles={selectedMemoryFiles}
+        onChangeBooks={setSelectedBooks}
+        onChangeNotebooks={setSelectedNotebooks}
+        onChangeQuestions={setSelectedQuestions}
+        onChangeSkills={setSelectedSkills}
+        onChangeSkillsAuto={setSkillsAutoMode}
+        onChangeMemory={setSelectedMemoryFiles}
+      />
     </div>
+  );
+}
+
+function LearningSpacePickerModal({
+  open,
+  onClose,
+  bookItems,
+  notebookItems,
+  questionItems,
+  skillItems,
+  selectedBooks,
+  selectedNotebooks,
+  selectedQuestions,
+  selectedSkills,
+  skillsAutoMode,
+  selectedMemoryFiles,
+  onChangeBooks,
+  onChangeNotebooks,
+  onChangeQuestions,
+  onChangeSkills,
+  onChangeSkillsAuto,
+  onChangeMemory,
+}: {
+  open: LearningSpacePickerKey | null;
+  onClose: () => void;
+  bookItems: Item[];
+  notebookItems: Item[];
+  questionItems: Item[];
+  skillItems: Item[];
+  selectedBooks: SelectedBookSpaceItem[];
+  selectedNotebooks: SelectedNotebookSpaceItem[];
+  selectedQuestions: SelectedQuestionSpaceItem[];
+  selectedSkills: string[];
+  skillsAutoMode: boolean;
+  selectedMemoryFiles: LearningMemoryFile[];
+  onChangeBooks: (items: SelectedBookSpaceItem[]) => void;
+  onChangeNotebooks: (items: SelectedNotebookSpaceItem[]) => void;
+  onChangeQuestions: (items: SelectedQuestionSpaceItem[]) => void;
+  onChangeSkills: (items: string[]) => void;
+  onChangeSkillsAuto: (value: boolean) => void;
+  onChangeMemory: (items: LearningMemoryFile[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (open) setQuery("");
+  }, [open]);
+
+  if (!open) return null;
+
+  const title =
+    open === "books"
+      ? "Select Books"
+      : open === "notebooks"
+        ? "Select Notebooks"
+        : open === "question_bank"
+          ? "Select Question Bank Entries"
+          : open === "skills"
+            ? "Select Skills"
+            : "Select Memory";
+  const eyebrow =
+    open === "books"
+      ? "Book Reference"
+      : open === "notebooks"
+        ? "Notebook Reference"
+        : open === "question_bank"
+          ? "Question Bank Reference"
+          : open === "skills"
+            ? "Skills Reference"
+            : "Memory Reference";
+  const Icon =
+    open === "books"
+      ? BookOpen
+      : open === "notebooks"
+        ? FileText
+        : open === "question_bank"
+          ? GraduationCap
+          : open === "skills"
+            ? Star
+            : Brain;
+
+  const keyword = query.trim().toLowerCase();
+  const filterItems = (items: Item[]) =>
+    keyword
+      ? items.filter((item, index) =>
+          `${itemTitle(item, String(index))} ${textOf(item.description)} ${textOf(item.question)}`
+            .toLowerCase()
+            .includes(keyword),
+        )
+      : items;
+
+  const selectedCount =
+    open === "books"
+      ? selectedBooks.length
+      : open === "notebooks"
+        ? selectedNotebooks.length
+        : open === "question_bank"
+          ? selectedQuestions.length
+          : open === "skills"
+            ? skillsAutoMode
+              ? 1
+              : selectedSkills.length
+            : selectedMemoryFiles.length;
+  const visibleBooks = open === "books" ? filterItems(bookItems) : [];
+  const visibleNotebooks = open === "notebooks" ? filterItems(notebookItems) : [];
+  const visibleQuestions = open === "question_bank" ? filterItems(questionItems) : [];
+  const visibleSkills = open === "skills" ? filterItems(skillItems) : [];
+  const emptyMessage =
+    open === "books"
+      ? "No books found."
+      : open === "notebooks"
+        ? "No notebooks found."
+        : open === "question_bank"
+          ? "No question bank entries found."
+          : open === "skills"
+            ? "No skills found."
+            : "";
+
+  const toggleBook = (item: Item, index: number) => {
+    const id = itemId(item, `book-${index}`);
+    const title = itemTitle(item, `Book ${index + 1}`);
+    onChangeBooks(
+      selectedBooks.some((entry) => entry.id === id)
+        ? selectedBooks.filter((entry) => entry.id !== id)
+        : [...selectedBooks, { id, title }],
+    );
+  };
+
+  const toggleNotebook = (item: Item, index: number) => {
+    const id = itemId(item, `notebook-${index}`);
+    const title = itemTitle(item, `Notebook ${index + 1}`);
+    onChangeNotebooks(
+      selectedNotebooks.some((entry) => entry.id === id)
+        ? selectedNotebooks.filter((entry) => entry.id !== id)
+        : [...selectedNotebooks, { id, title }],
+    );
+  };
+
+  const toggleQuestion = (item: Item, index: number) => {
+    const rawId = Number(itemId(item, String(index)));
+    const id = Number.isFinite(rawId) ? rawId : index;
+    const title = itemTitle(item, textOf(item.question, `Question ${index + 1}`));
+    onChangeQuestions(
+      selectedQuestions.some((entry) => entry.id === id)
+        ? selectedQuestions.filter((entry) => entry.id !== id)
+        : [...selectedQuestions, { id, title }],
+    );
+  };
+
+  const skillName = (item: Item, index: number) =>
+    textOf(item.name) || textOf(item.id) || itemTitle(item, `skill-${index}`);
+  const toggleSkill = (item: Item, index: number) => {
+    const name = skillName(item, index);
+    onChangeSkillsAuto(false);
+    onChangeSkills(
+      selectedSkills.includes(name)
+        ? selectedSkills.filter((entry) => entry !== name)
+        : [...selectedSkills, name],
+    );
+  };
+
+  const toggleMemory = (file: LearningMemoryFile) => {
+    onChangeMemory(
+      selectedMemoryFiles.includes(file)
+        ? selectedMemoryFiles.filter((entry) => entry !== file)
+        : [...selectedMemoryFiles, file],
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-[var(--background)]/65 p-4 backdrop-blur-md">
+      <div className="surface-card w-full max-w-4xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-[0_22px_70px_rgba(0,0,0,0.18)]">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+          <div className="min-w-0">
+            <div className="mb-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--primary)]">
+              <Icon className="h-3 w-3" />
+              {eyebrow}
+            </div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">{title}</h2>
+            <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+              Choose context to ground the next learning turn.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="bg-[var(--background)]/40 p-5">
+          {open !== "memory" ? (
+            <div className="mb-4 flex items-center gap-2">
+              <div className="relative flex-1">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2.5 pl-9 pr-3 text-[13px] text-[var(--foreground)] outline-none transition focus:border-[var(--primary)]/50 focus:ring-2 focus:ring-[var(--primary)]/15"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (open === "books") onChangeBooks([]);
+                  if (open === "notebooks") onChangeNotebooks([]);
+                  if (open === "question_bank") onChangeQuestions([]);
+                  if (open === "skills") {
+                    onChangeSkills([]);
+                    onChangeSkillsAuto(false);
+                  }
+                }}
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
+
+          {open === "skills" ? (
+            <button
+              type="button"
+              onClick={() => {
+                onChangeSkillsAuto(!skillsAutoMode);
+                if (!skillsAutoMode) onChangeSkills([]);
+              }}
+              className={cn(
+                "mb-3 flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+                skillsAutoMode
+                  ? "border-[var(--primary)]/40 bg-[var(--primary)]/8"
+                  : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/40",
+              )}
+            >
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" />
+              <div>
+                <div className="text-[14px] font-medium text-[var(--foreground)]">Auto</div>
+                <p className="mt-0.5 text-[12px] leading-5 text-[var(--muted-foreground)]">
+                  Let the model auto-select relevant skills for this turn.
+                </p>
+              </div>
+            </button>
+          ) : null}
+
+          <div className="max-h-[56vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+            <div className="divide-y divide-[var(--border)]">
+              {open === "books"
+                ? visibleBooks.map((item, index) => {
+                    const id = itemId(item, `book-${index}`);
+                    const active = selectedBooks.some((entry) => entry.id === id);
+                    return (
+                      <LearningSpacePickerRow
+                        key={id}
+                        active={active}
+                        icon={BookOpen}
+                        title={itemTitle(item, `Book ${index + 1}`)}
+                        description={textOf(item.description) || textOf(item.topic)}
+                        onClick={() => toggleBook(item, index)}
+                      />
+                    );
+                  })
+                : null}
+              {open === "notebooks"
+                ? visibleNotebooks.map((item, index) => {
+                    const id = itemId(item, `notebook-${index}`);
+                    const active = selectedNotebooks.some((entry) => entry.id === id);
+                    return (
+                      <LearningSpacePickerRow
+                        key={id}
+                        active={active}
+                        icon={FileText}
+                        title={itemTitle(item, `Notebook ${index + 1}`)}
+                        description={textOf(item.description) || textOf(item.created_at)}
+                        onClick={() => toggleNotebook(item, index)}
+                      />
+                    );
+                  })
+                : null}
+              {open === "question_bank"
+                ? visibleQuestions.map((item, index) => {
+                    const rawId = Number(itemId(item, String(index)));
+                    const id = Number.isFinite(rawId) ? rawId : index;
+                    const active = selectedQuestions.some((entry) => entry.id === id);
+                    return (
+                      <LearningSpacePickerRow
+                        key={id}
+                        active={active}
+                        icon={GraduationCap}
+                        title={itemTitle(item, textOf(item.question, `Question ${index + 1}`))}
+                        description={[textOf(item.difficulty), textOf(item.session_title)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        onClick={() => toggleQuestion(item, index)}
+                      />
+                    );
+                  })
+                : null}
+              {open === "skills"
+                ? visibleSkills.map((item, index) => {
+                    const name = skillName(item, index);
+                    const active = !skillsAutoMode && selectedSkills.includes(name);
+                    return (
+                      <LearningSpacePickerRow
+                        key={name}
+                        active={active}
+                        muted={skillsAutoMode}
+                        icon={Star}
+                        title={name}
+                        description={textOf(item.description) || arrayOfItems(item.tags).join(", ")}
+                        onClick={() => toggleSkill(item, index)}
+                      />
+                    );
+                  })
+                : null}
+              {open !== "memory" &&
+              !visibleBooks.length &&
+              !visibleNotebooks.length &&
+              !visibleQuestions.length &&
+              !visibleSkills.length ? (
+                <div className="px-4 py-10 text-center text-[13px] text-[var(--muted-foreground)]">
+                  {emptyMessage}
+                </div>
+              ) : null}
+              {open === "memory"
+                ? ([
+                    {
+                      key: "summary" as const,
+                      title: "Summary",
+                      description: "Inject the assistant's running summary of past learning sessions.",
+                      icon: Brain,
+                    },
+                    {
+                      key: "profile" as const,
+                      title: "Profile",
+                      description: "Inject the learner profile, preferences, goals, and background.",
+                      icon: FileText,
+                    },
+                  ]).map((item) => (
+                    <LearningSpacePickerRow
+                      key={item.key}
+                      active={selectedMemoryFiles.includes(item.key)}
+                      icon={item.icon}
+                      title={item.title}
+                      description={item.description}
+                      onClick={() => toggleMemory(item.key)}
+                    />
+                  ))
+                : null}
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="text-[12px] text-[var(--muted-foreground)]">
+              {selectedCount} selected
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={!selectedCount}
+              className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-[13px] font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Use Selected ({selectedCount})
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LearningSpacePickerRow({
+  active,
+  muted,
+  icon: Icon,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  muted?: boolean;
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors",
+        active ? "bg-[var(--primary)]/8" : "hover:bg-[var(--muted)]/40",
+        muted && "opacity-55",
+      )}
+    >
+      <div
+        className={cn(
+          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+          active
+            ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+            : "border-[var(--border)] text-transparent",
+        )}
+      >
+        <CheckCircle2 size={12} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-[14px] font-medium text-[var(--foreground)]">
+          <Icon size={14} strokeWidth={1.7} className="shrink-0 text-[var(--primary)]" />
+          <span className="truncate">{title}</span>
+        </div>
+        {description ? (
+          <p className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-[var(--muted-foreground)]">
+            {description}
+          </p>
+        ) : null}
+      </div>
+    </button>
   );
 }
 
