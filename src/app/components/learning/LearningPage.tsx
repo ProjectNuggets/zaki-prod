@@ -18,6 +18,7 @@ import {
   Clapperboard,
   Clock3,
   Code2,
+  Copy,
   Database,
   FileSearch,
   FileText,
@@ -126,6 +127,7 @@ type TutorChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  capability?: string;
   thinking?: string[];
   attachments?: LearningAttachment[];
 };
@@ -643,45 +645,49 @@ export function LearningPage() {
   return (
     <div className="h-full overflow-auto bg-zaki-base">
       <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6">
-        <header className="mb-5 flex flex-col gap-4 border-b border-zaki-border pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-              <StatusDot ok={healthOk} />
-              <span>{health.isError ? "Learning service unavailable" : "Learning workspace"}</span>
+        {tab !== "chat" ? (
+          <header className="mb-5 flex flex-col gap-4 border-b border-zaki-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                <StatusDot ok={healthOk} />
+                <span>{health.isError ? "Learning service unavailable" : "Learning workspace"}</span>
+              </div>
+              <h1 className="text-2xl font-semibold text-zaki-text">Learn</h1>
+              <p className="max-w-3xl text-sm text-zaki-muted">
+                Build source libraries, generate lessons, save notebooks, write with context,
+                review questions, manage tutors, and solve from documents or images.
+              </p>
             </div>
-            <h1 className="text-2xl font-semibold text-zaki-text">Learn</h1>
-            <p className="max-w-3xl text-sm text-zaki-muted">
-              Build source libraries, generate lessons, save notebooks, write with context,
-              review questions, manage tutors, and solve from documents or images.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={kbName}
-              onChange={(event) => setKbName(event.target.value)}
-              placeholder="Source library"
-              className="h-9 w-44 rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-            />
-            <button
-              type="button"
-              onClick={refreshAll}
-              className="inline-flex h-9 items-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-medium text-zaki-text hover:bg-zaki-hover"
-            >
-              <RefreshCw className="size-4" />
-              Refresh
-            </button>
-          </div>
-        </header>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={kbName}
+                onChange={(event) => setKbName(event.target.value)}
+                placeholder="Source library"
+                className="h-9 w-44 rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              />
+              <button
+                type="button"
+                onClick={refreshAll}
+                className="inline-flex h-9 items-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-medium text-zaki-text hover:bg-zaki-hover"
+              >
+                <RefreshCw className="size-4" />
+                Refresh
+              </button>
+            </div>
+          </header>
+        ) : null}
 
-        <LearningStats
-          knowledgeCount={knowledgeItems.length}
-          bookCount={bookItems.length}
-          notebookCount={notebookItems.length}
-          documentCount={documentItems.length}
-          questionCount={questionItems.length}
-          agentCount={agentItems.length}
-          solveCount={solveItems.length}
-        />
+        {tab !== "chat" ? (
+          <LearningStats
+            knowledgeCount={knowledgeItems.length}
+            bookCount={bookItems.length}
+            notebookCount={notebookItems.length}
+            documentCount={documentItems.length}
+            questionCount={questionItems.length}
+            agentCount={agentItems.length}
+            solveCount={solveItems.length}
+          />
+        ) : null}
 
         <div className="mb-5 overflow-x-auto lg:hidden">
           <div className="flex min-w-max gap-1 rounded-zaki-md border border-zaki-border bg-zaki-raised p-1">
@@ -707,16 +713,16 @@ export function LearningPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {tab === "chat" ? (
+          <LearningChatPanel
+            kbName={kbName}
+            setKbName={setKbName}
+            knowledgeItems={knowledgeItems}
+            onSelectSpace={selectLearningTab}
+          />
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
-            {tab === "chat" ? (
-              <LearningChatPanel
-                kbName={kbName}
-                setKbName={setKbName}
-                knowledgeItems={knowledgeItems}
-                onSelectSpace={selectLearningTab}
-              />
-            ) : null}
             {tab === "sources" ? (
               <SourcesPanel
                 kbName={kbName}
@@ -836,7 +842,8 @@ export function LearningPage() {
               </div>
             </div>
           </aside>
-        </div>
+          </div>
+        )}
       </div>
       <LearningDetailSheet
         selected={selectedObject}
@@ -1207,6 +1214,7 @@ function LearningChatPanel({
               id: assistantId,
               role: "assistant",
               content,
+              capability: capability || "chat",
               thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
             },
           ];
@@ -1239,6 +1247,7 @@ function LearningChatPanel({
                 id: assistantId,
                 role: "assistant",
                 content,
+                capability: capability || "chat",
                 thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
               },
             ];
@@ -1444,6 +1453,7 @@ function LearningChatPanel({
         id: makeClientId("user"),
         role: "user",
         content,
+        capability: capability || "chat",
         attachments: sentAttachments,
       },
     ]);
@@ -1495,59 +1505,158 @@ function LearningChatPanel({
     }
   };
 
+  const hasMessages = messages.length > 0 || thinking.length > 0;
+
+  const handleNewChat = () => {
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
+    setMessages([]);
+    setThinking([]);
+    setInput("");
+    setAttachments([]);
+    setSessionId(makeClientId("learn-session"));
+    activeAssistantIdRef.current = null;
+    activeTurnIdRef.current = null;
+    thinkingRef.current = [];
+  };
+
+  const handleDownloadMarkdown = () => {
+    if (!messages.length) return;
+    const markdown = messages
+      .map((message) => {
+        const speaker =
+          message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "System";
+        return `## ${speaker}\n\n${message.content}`;
+      })
+      .join("\n\n");
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${sessionId}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <Section title="Chat">
-      <div className="mb-3 min-h-[420px] rounded-zaki-lg border border-zaki-border bg-zaki-base p-4">
-        {messages.length || thinking.length ? (
-          <div className="space-y-3">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  "rounded-zaki-md border px-3 py-2 text-sm",
-                  message.role === "user"
-                    ? "ml-10 border-zaki-brand/30 bg-zaki-brand/10 text-zaki-text"
-                    : message.role === "system"
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : "mr-10 border-zaki-border bg-zaki-raised text-zaki-text",
-                )}
-              >
-                {message.thinking?.length ? (
-                  <div className="mb-2 border-l-2 border-zaki-border pl-2 text-xs text-zaki-muted">
-                    {message.thinking.slice(-4).map((entry, index) => (
-                      <p key={`${message.id}-thinking-${index}`}>{entry}</p>
-                    ))}
+    <div className="flex h-[calc(100vh-7.5rem)] min-h-[680px] flex-col overflow-hidden bg-[var(--background)]">
+      <div className="mx-auto flex w-full max-w-[960px] items-center justify-between px-6 pb-0 pt-3">
+        <span className="text-[15px] font-semibold text-[var(--foreground)]">
+          {activeCapability.label}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!messages.length}
+            className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save to Notebook
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadMarkdown}
+            disabled={!messages.length}
+            title="Download chat history as Markdown"
+            className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Download Markdown
+          </button>
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
+          >
+            New chat
+          </button>
+        </div>
+      </div>
+      <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col overflow-hidden px-6">
+        {!hasMessages ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+            <div className="text-center">
+              <h1 className="font-serif text-[36px] font-medium text-[var(--foreground)]">
+                What would you like to learn?
+              </h1>
+              <p className="mt-4 text-[15px] text-[var(--muted-foreground)]">
+                Ask anything - I'm here to help you understand.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto min-h-0 w-full flex-1 space-y-7 overflow-y-auto pr-4 [scrollbar-gutter:stable]">
+            {messages.map((message) =>
+              message.role === "user" ? (
+                <div key={message.id} className="flex justify-end">
+                  <div className="max-w-[75%] space-y-1.5">
+                    <div className="flex justify-end pr-1">
+                      <span className="text-[10px] tracking-wide text-[var(--muted-foreground)]">
+                        {learningCapabilities.find((entry) => entry.value === message.capability)
+                          ?.label ?? "Chat"}
+                      </span>
+                    </div>
+                    {message.attachments?.length ? (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {message.attachments.map((attachment) => (
+                          <LearningAttachmentChip
+                            key={attachment.id}
+                            attachment={attachment}
+                            compact
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[14px] leading-relaxed text-[var(--foreground)] shadow-sm">
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    </div>
                   </div>
-                ) : null}
-                <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                {message.attachments?.length ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {message.attachments.map((attachment) => (
-                      <LearningAttachmentChip
-                        key={attachment.id}
-                        attachment={attachment}
-                        compact
-                      />
-                    ))}
+                </div>
+              ) : (
+                <div key={message.id} className="group relative w-full">
+                  {message.thinking?.length ? (
+                    <div className="mb-2 border-l-2 border-[var(--border)] pl-2 text-xs text-[var(--muted-foreground)]">
+                      {message.thinking.slice(-4).map((entry, entryIndex) => (
+                        <p key={`${message.id}-thinking-${entryIndex}`}>{entry}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div
+                    className={cn(
+                      "prose prose-sm max-w-none whitespace-pre-wrap text-[14px] leading-relaxed text-[var(--foreground)]",
+                      message.role === "system" && "text-amber-700",
+                    )}
+                  >
+                    {message.content}
                   </div>
-                ) : null}
-              </div>
-            ))}
+                  <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard?.writeText(message.content)}
+                      className="inline-flex items-center gap-1 px-0.5 py-0.5 text-[11px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                    >
+                      <Copy className="size-3" />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
             {thinking.length ? (
-              <div className="mr-10 rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 py-2 text-xs text-zaki-muted">
+              <div className="text-xs text-[var(--muted-foreground)]">
                 {thinking.map((entry, index) => (
                   <p key={`learning-thinking-${index}`}>{entry}</p>
                 ))}
               </div>
             ) : null}
-            <div ref={bottomRef} />
+            <div ref={bottomRef} className="h-px w-full shrink-0" />
           </div>
-        ) : (
-          <EmptyLine label="Ask a learning question, attach a file, or choose a capability mode." />
         )}
-      </div>
 
-      <div
+        <div className={cn("relative z-20 mx-auto w-full shrink-0 pb-5", hasMessages && "pt-1")}>
+          {hasMessages ? (
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-transparent to-[var(--background)]/72" />
+          ) : null}
+          <div
         className={cn(
           "relative rounded-2xl border bg-[var(--card)] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-colors",
           dragging
@@ -1907,16 +2016,9 @@ function LearningChatPanel({
           />
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zaki-muted">
-        <span>{connected ? "Connected" : "Disconnected"}</span>
-        {kbName.trim() ? <span>Knowledge: {kbName.trim()}</span> : null}
-        {attachments.length ? (
-          <span>
-            {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
-          </span>
-        ) : null}
+        </div>
       </div>
-    </Section>
+    </div>
   );
 }
 
