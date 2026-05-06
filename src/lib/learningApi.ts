@@ -84,6 +84,14 @@ export function listLearningBooks() {
   return learningRequest<unknown>("/api/learning/books");
 }
 
+export function getLearningBook(bookId: string) {
+  return learningRequest<unknown>(`/api/learning/books/${encodeURIComponent(bookId)}`);
+}
+
+export function getLearningBookSpine(bookId: string) {
+  return learningRequest<unknown>(`/api/learning/books/${encodeURIComponent(bookId)}/spine`);
+}
+
 export function createLearningBook(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/books", {
     method: "POST",
@@ -93,6 +101,10 @@ export function createLearningBook(payload: LearningJson) {
 
 export function listLearningNotebooks() {
   return learningRequest<unknown>("/api/learning/notebooks");
+}
+
+export function getLearningNotebook(notebookId: string) {
+  return learningRequest<unknown>(`/api/learning/notebooks/${encodeURIComponent(notebookId)}`);
 }
 
 export function createLearningNotebook(payload: LearningJson) {
@@ -106,11 +118,27 @@ export function listLearningCoWriterDocuments() {
   return learningRequest<unknown>("/api/learning/co-writer/documents");
 }
 
+export function getLearningCoWriterDocument(documentId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/co-writer/documents/${encodeURIComponent(documentId)}`,
+  );
+}
+
 export function createLearningCoWriterDocument(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/co-writer/documents", {
     method: "POST",
     body: payload,
   });
+}
+
+export function updateLearningCoWriterDocument(documentId: string, payload: LearningJson) {
+  return learningRequest<unknown>(
+    `/api/learning/co-writer/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "PATCH",
+      body: payload,
+    },
+  );
 }
 
 export function runLearningCoWriterEdit(payload: LearningJson) {
@@ -124,8 +152,24 @@ export function listLearningQuestions() {
   return learningRequest<unknown>("/api/learning/questions/entries?limit=20");
 }
 
+export function getLearningQuestionEntry(entryId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/entries/${encodeURIComponent(entryId)}`,
+  );
+}
+
 export function listLearningTutorAgents() {
   return learningRequest<unknown>("/api/learning/tutor-agents");
+}
+
+export function getLearningTutorAgent(agentId: string) {
+  return learningRequest<unknown>(`/api/learning/tutor-agents/${encodeURIComponent(agentId)}`);
+}
+
+export function getLearningTutorAgentHistory(agentId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/history`,
+  );
 }
 
 export function createLearningTutorAgent(payload: LearningJson) {
@@ -137,6 +181,18 @@ export function createLearningTutorAgent(payload: LearningJson) {
 
 export function listLearningSolveSessions() {
   return learningRequest<unknown>("/api/learning/solve/sessions?limit=10");
+}
+
+export function getLearningSolveSession(sessionId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/solve/sessions/${encodeURIComponent(sessionId)}`,
+  );
+}
+
+export function listLearningKnowledgeFiles(kbName: string) {
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/${encodeURIComponent(kbName)}/files`,
+  );
 }
 
 export function analyzeLearningVision(payload: LearningJson) {

@@ -32,8 +32,17 @@ import {
   createLearningKnowledge,
   createLearningNotebook,
   createLearningTutorAgent,
+  getLearningBook,
+  getLearningBookSpine,
+  getLearningCoWriterDocument,
+  getLearningNotebook,
+  getLearningQuestionEntry,
+  getLearningSolveSession,
+  getLearningTutorAgent,
+  getLearningTutorAgentHistory,
   learningKeys,
   learningRequest,
+  listLearningKnowledgeFiles,
   listLearningBooks,
   listLearningCoWriterDocuments,
   listLearningKnowledge,
@@ -42,9 +51,17 @@ import {
   listLearningSolveSessions,
   listLearningTutorAgents,
   runLearningCoWriterEdit,
+  updateLearningCoWriterDocument,
   uploadLearningKnowledge,
   type LearningJson,
 } from "@/lib/learningApi";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/app/components/ui/sheet";
 
 type LearningTab =
   | "sources"
@@ -56,6 +73,20 @@ type LearningTab =
   | "workspaces";
 
 type Item = Record<string, unknown>;
+type LearningObjectType =
+  | "source"
+  | "book"
+  | "notebook"
+  | "document"
+  | "question"
+  | "agent"
+  | "solve";
+
+type SelectedLearningObject = {
+  type: LearningObjectType;
+  id: string;
+  item: Item;
+};
 
 const tabs: Array<{ id: LearningTab; label: string; icon: typeof BookOpen }> = [
   { id: "sources", label: "Sources", icon: Upload },
@@ -100,6 +131,18 @@ function itemTitle(item: Item, fallback: string) {
     textOf(item.id) ||
     textOf(item.book_id) ||
     textOf(item.session_id) ||
+    fallback
+  );
+}
+
+function itemId(item: Item, fallback = "") {
+  return (
+    textOf(item.id) ||
+    textOf(item.name) ||
+    textOf(item.book_id) ||
+    textOf(item.notebook_id) ||
+    textOf(item.session_id) ||
+    textOf(item.bot_id) ||
     fallback
   );
 }
@@ -384,6 +427,7 @@ export function LearningPage() {
   const [visionQuestion, setVisionQuestion] = useState("");
   const [visionImage, setVisionImage] = useState<File | null>(null);
   const [lastResult, setLastResult] = useState<unknown>(null);
+  const [selectedObject, setSelectedObject] = useState<SelectedLearningObject | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -568,6 +612,12 @@ export function LearningPage() {
     void queryClient.invalidateQueries({ queryKey: ["learning"] });
   };
 
+  const openObject = (type: LearningObjectType, item: Item, fallback: string) => {
+    const id = itemId(item, fallback).trim();
+    if (!id) return;
+    setSelectedObject({ type, id, item });
+  };
+
   const healthOk = health.isSuccess && asRecord(health.data).status === "ok";
 
   return (
@@ -656,6 +706,7 @@ export function LearningPage() {
                 uploadKb={uploadKb}
                 items={knowledgeItems}
                 folderInputRef={folderInputRef}
+                onOpen={(item) => openObject("source", item, "main")}
               />
             ) : null}
             {tab === "books" ? (
@@ -664,6 +715,7 @@ export function LearningPage() {
                 setBookTopic={setBookTopic}
                 createBook={createBook}
                 items={bookItems}
+                onOpen={(item) => openObject("book", item, `book-${bookItems.indexOf(item) + 1}`)}
               />
             ) : null}
             {tab === "notebooks" ? (
@@ -672,6 +724,9 @@ export function LearningPage() {
                 setNotebookName={setNotebookName}
                 createNotebook={createNotebook}
                 items={notebookItems}
+                onOpen={(item) =>
+                  openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
+                }
               />
             ) : null}
             {tab === "writer" ? (
@@ -685,9 +740,19 @@ export function LearningPage() {
                 createDocument={createDocument}
                 runWriter={runWriter}
                 items={documentItems}
+                onOpen={(item) =>
+                  openObject("document", item, `document-${documentItems.indexOf(item) + 1}`)
+                }
               />
             ) : null}
-            {tab === "review" ? <ReviewPanel items={questionItems} /> : null}
+            {tab === "review" ? (
+              <ReviewPanel
+                items={questionItems}
+                onOpen={(item) =>
+                  openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
+                }
+              />
+            ) : null}
             {tab === "agents" ? (
               <AgentsPanel
                 agentId={agentId}
@@ -698,6 +763,7 @@ export function LearningPage() {
                 setAgentPersona={setAgentPersona}
                 createAgent={createAgent}
                 items={agentItems}
+                onOpen={(item) => openObject("agent", item, `agent-${agentItems.indexOf(item) + 1}`)}
               />
             ) : null}
             {tab === "workspaces" ? (
@@ -707,6 +773,7 @@ export function LearningPage() {
                 setVisionImage={setVisionImage}
                 analyzeVision={analyzeVision}
                 solveItems={solveItems}
+                onOpen={(item) => openObject("solve", item, `solve-${solveItems.indexOf(item) + 1}`)}
               />
             ) : null}
           </div>
@@ -734,6 +801,11 @@ export function LearningPage() {
           </aside>
         </div>
       </div>
+      <LearningDetailSheet
+        selected={selectedObject}
+        onClose={() => setSelectedObject(null)}
+        onResult={setLastResult}
+      />
     </div>
   );
 }
@@ -745,6 +817,7 @@ function SourcesPanel({
   uploadKb,
   items,
   folderInputRef,
+  onOpen,
 }: {
   kbName: string;
   setKbName: (value: string) => void;
@@ -752,6 +825,7 @@ function SourcesPanel({
   uploadKb: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   items: Item[];
   folderInputRef: RefObject<HTMLInputElement>;
+  onOpen: (item: Item) => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [dropActive, setDropActive] = useState(false);
@@ -908,7 +982,12 @@ function SourcesPanel({
         </div>
       ) : null}
 
-      <ItemList items={items} empty="No source libraries returned yet." variant="source" />
+      <ItemList
+        items={items}
+        empty="No source libraries returned yet."
+        variant="source"
+        onOpen={onOpen}
+      />
     </Section>
   );
 }
@@ -918,11 +997,13 @@ function BooksPanel({
   setBookTopic,
   createBook,
   items,
+  onOpen,
 }: {
   bookTopic: string;
   setBookTopic: (value: string) => void;
   createBook: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
+  onOpen: (item: Item) => void;
 }) {
   return (
     <Section title="Lesson books" subtitle="Generate and manage structured learning paths.">
@@ -943,7 +1024,7 @@ function BooksPanel({
           Generate book
         </button>
       </div>
-      <ItemList items={items} empty="No books returned yet." variant="book" />
+      <ItemList items={items} empty="No books returned yet." variant="book" onOpen={onOpen} />
     </Section>
   );
 }
@@ -953,11 +1034,13 @@ function NotebooksPanel({
   setNotebookName,
   createNotebook,
   items,
+  onOpen,
 }: {
   notebookName: string;
   setNotebookName: (value: string) => void;
   createNotebook: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
+  onOpen: (item: Item) => void;
 }) {
   return (
     <Section title="Saved notebooks" subtitle="Organize learning outputs, summaries, and records.">
@@ -978,7 +1061,12 @@ function NotebooksPanel({
           Create notebook
         </button>
       </div>
-      <ItemList items={items} empty="No notebooks returned yet." variant="notebook" />
+      <ItemList
+        items={items}
+        empty="No notebooks returned yet."
+        variant="notebook"
+        onOpen={onOpen}
+      />
     </Section>
   );
 }
@@ -993,6 +1081,7 @@ function WriterPanel({
   createDocument,
   runWriter,
   items,
+  onOpen,
 }: {
   documentTitle: string;
   setDocumentTitle: (value: string) => void;
@@ -1003,6 +1092,7 @@ function WriterPanel({
   createDocument: UseMutationResult<unknown, Error, string, unknown>;
   runWriter: UseMutationResult<unknown, Error, void, unknown>;
   items: Item[];
+  onOpen: (item: Item) => void;
 }) {
   return (
     <Section title="Co-writer" subtitle="Draft, rewrite, expand, shorten, and save documents.">
@@ -1046,15 +1136,25 @@ function WriterPanel({
           Run edit
         </button>
       </div>
-      <ItemList items={items} empty="No co-writer documents returned yet." variant="document" />
+      <ItemList
+        items={items}
+        empty="No co-writer documents returned yet."
+        variant="document"
+        onOpen={onOpen}
+      />
     </Section>
   );
 }
 
-function ReviewPanel({ items }: { items: Item[] }) {
+function ReviewPanel({ items, onOpen }: { items: Item[]; onOpen: (item: Item) => void }) {
   return (
     <Section title="Question review" subtitle="Review saved quiz questions, attempts, bookmarks, and categories.">
-      <ItemList items={items} empty="No saved questions returned yet." variant="question" />
+      <ItemList
+        items={items}
+        empty="No saved questions returned yet."
+        variant="question"
+        onOpen={onOpen}
+      />
     </Section>
   );
 }
@@ -1068,6 +1168,7 @@ function AgentsPanel({
   setAgentPersona,
   createAgent,
   items,
+  onOpen,
 }: {
   agentId: string;
   setAgentId: (value: string) => void;
@@ -1077,6 +1178,7 @@ function AgentsPanel({
   setAgentPersona: (value: string) => void;
   createAgent: UseMutationResult<unknown, Error, void, unknown>;
   items: Item[];
+  onOpen: (item: Item) => void;
 }) {
   return (
     <Section
@@ -1112,7 +1214,12 @@ function AgentsPanel({
         <Bot className="size-4" />
         Create tutor
       </button>
-      <ItemList items={items} empty="No tutor agents returned yet." variant="agent" />
+      <ItemList
+        items={items}
+        empty="No tutor agents returned yet."
+        variant="agent"
+        onOpen={onOpen}
+      />
     </Section>
   );
 }
@@ -1123,12 +1230,14 @@ function WorkspacesPanel({
   setVisionImage,
   analyzeVision,
   solveItems,
+  onOpen,
 }: {
   visionQuestion: string;
   setVisionQuestion: (value: string) => void;
   setVisionImage: (value: File | null) => void;
   analyzeVision: UseMutationResult<unknown, Error, void, unknown>;
   solveItems: Item[];
+  onOpen: (item: Item) => void;
 }) {
   return (
     <Section
@@ -1163,8 +1272,288 @@ function WorkspacesPanel({
         Analyze
       </button>
       <h3 className="mb-3 text-sm font-semibold text-zaki-text">Recent solve sessions</h3>
-      <ItemList items={solveItems} empty="No solve sessions returned yet." variant="solve" />
+      <ItemList
+        items={solveItems}
+        empty="No solve sessions returned yet."
+        variant="solve"
+        onOpen={onOpen}
+      />
     </Section>
+  );
+}
+
+function LearningDetailSheet({
+  selected,
+  onClose,
+  onResult,
+}: {
+  selected: SelectedLearningObject | null;
+  onClose: () => void;
+  onResult: (value: unknown) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftContent, setDraftContent] = useState("");
+  const query = useQuery({
+    queryKey: ["learning", "detail", selected?.type, selected?.id],
+    enabled: Boolean(selected?.id),
+    retry: 1,
+    queryFn: async () => {
+      if (!selected) return null;
+      switch (selected.type) {
+        case "source":
+          return {
+            summary: selected.item,
+            files: await listLearningKnowledgeFiles(selected.id),
+          };
+        case "book": {
+          const [detail, spine] = await Promise.allSettled([
+            getLearningBook(selected.id),
+            getLearningBookSpine(selected.id),
+          ]);
+          return {
+            detail: detail.status === "fulfilled" ? detail.value : selected.item,
+            spine: spine.status === "fulfilled" ? spine.value : null,
+          };
+        }
+        case "notebook":
+          return getLearningNotebook(selected.id);
+        case "document":
+          return getLearningCoWriterDocument(selected.id);
+        case "question":
+          return getLearningQuestionEntry(selected.id);
+        case "agent": {
+          const [detail, history] = await Promise.allSettled([
+            getLearningTutorAgent(selected.id),
+            getLearningTutorAgentHistory(selected.id),
+          ]);
+          return {
+            detail: detail.status === "fulfilled" ? detail.value : selected.item,
+            history: history.status === "fulfilled" ? history.value : null,
+          };
+        }
+        case "solve":
+          return getLearningSolveSession(selected.id);
+        default:
+          return selected.item;
+      }
+    },
+  });
+
+  const documentRecord = asRecord(query.data);
+  const documentDetail =
+    selected?.type === "document"
+      ? Object.keys(documentRecord).length
+        ? documentRecord
+        : selected.item
+      : {};
+
+  useEffect(() => {
+    if (selected?.type !== "document") {
+      setDraftTitle("");
+      setDraftContent("");
+      return;
+    }
+    setDraftTitle(itemTitle(documentDetail, itemTitle(selected.item, "")));
+    setDraftContent(textOf(documentDetail.content) || textOf(selected.item.content));
+  }, [documentDetail, selected]);
+
+  const updateDocument = useMutation({
+    mutationFn: () => {
+      if (!selected) throw new Error("No document selected.");
+      return updateLearningCoWriterDocument(selected.id, {
+        title: draftTitle,
+        content: draftContent,
+      });
+    },
+    onSuccess: (payload) => {
+      onResult(payload);
+      toast.success("Document saved");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.coWriterDocuments });
+      void queryClient.invalidateQueries({
+        queryKey: ["learning", "detail", selected?.type, selected?.id],
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const title = selected ? itemTitle(selected.item, selected.id) : "Learning item";
+  const status = selected ? itemStatus(selected.item) : "";
+  const detailPayload = query.data ?? selected?.item ?? {};
+
+  return (
+    <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent className="w-full overflow-y-auto border-zaki-border bg-zaki-base sm:max-w-2xl">
+        <SheetHeader className="border-b border-zaki-border px-5 py-4">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+            <span className={cn("size-1.5 rounded-full", statusTone(status || "ready"))} />
+            <span>{selected?.type ?? "learning"}</span>
+          </div>
+          <SheetTitle className="text-lg text-zaki-text">{title}</SheetTitle>
+          <SheetDescription className="text-zaki-muted">
+            {status ? `Status: ${status}` : "Learning object details"}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5 px-5 pb-6">
+          {query.isLoading ? (
+            <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 text-sm text-zaki-muted">
+              Loading details...
+            </div>
+          ) : query.isError ? (
+            <div className="rounded-zaki-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Unable to load details. Showing the list summary below.
+            </div>
+          ) : null}
+
+          {selected?.type === "document" ? (
+            <div className="space-y-3">
+              <input
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                className="h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                placeholder="Document title"
+              />
+              <textarea
+                value={draftContent}
+                onChange={(event) => setDraftContent(event.target.value)}
+                className="min-h-80 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-raised p-3 text-sm leading-relaxed text-zaki-text outline-none focus:border-zaki-brand"
+                placeholder="Document content"
+              />
+              <button
+                type="button"
+                disabled={updateDocument.isPending || !draftTitle.trim()}
+                onClick={() => updateDocument.mutate()}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                <FileText className="size-4" />
+                Save changes
+              </button>
+            </div>
+          ) : null}
+
+          {selected?.type === "book" ? <BookDetailSummary value={detailPayload} /> : null}
+          {selected?.type === "source" ? <SourceDetailSummary value={detailPayload} /> : null}
+          {selected?.type === "agent" ? <AgentDetailSummary agentId={selected.id} value={detailPayload} /> : null}
+          {selected?.type === "notebook" ? <NotebookDetailSummary value={detailPayload} /> : null}
+          {selected?.type === "question" ? <QuestionDetailSummary value={detailPayload} /> : null}
+          {selected?.type === "solve" ? <SolveDetailSummary value={detailPayload} /> : null}
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-zaki-text">Raw payload</h3>
+            <JsonPreview value={detailPayload} />
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function BookDetailSummary({ value }: { value: unknown }) {
+  const record = asRecord(asRecord(value).detail ?? value);
+  const spine = asRecord(value).spine;
+  const spineItems = itemList(spine, ["chapters", "pages", "items"]);
+  return (
+    <DetailBlock
+      title="Book structure"
+      rows={[
+        ["Title", itemTitle(record, "Untitled book")],
+        ["Status", itemStatus(record)],
+        ["Chapters", displayCount(record) || String(spineItems.length)],
+      ]}
+    />
+  );
+}
+
+function SourceDetailSummary({ value }: { value: unknown }) {
+  const files = itemList(asRecord(value).files, ["files", "items"]);
+  return (
+    <DetailBlock
+      title="Source files"
+      rows={[
+        ["Files", String(files.length)],
+        ["Library", itemTitle(asRecord(asRecord(value).summary), "main")],
+      ]}
+    />
+  );
+}
+
+function AgentDetailSummary({ agentId, value }: { agentId: string; value: unknown }) {
+  const detail = asRecord(asRecord(value).detail ?? value);
+  const history = itemList(asRecord(value).history, ["messages", "items", "history"]);
+  return (
+    <DetailBlock
+      title="Tutor runtime"
+      rows={[
+        ["ID", agentId],
+        ["Name", itemTitle(detail, agentId)],
+        ["Status", itemStatus(detail)],
+        ["History", String(history.length)],
+        ["Chat stream", `/api/learning/tutor-agents/${agentId}/ws`],
+      ]}
+    />
+  );
+}
+
+function NotebookDetailSummary({ value }: { value: unknown }) {
+  const record = asRecord(value);
+  const records = itemList(record, ["records", "items"]);
+  return (
+    <DetailBlock
+      title="Notebook records"
+      rows={[
+        ["Name", itemTitle(record, "Notebook")],
+        ["Records", String(records.length)],
+        ["Updated", relativeTime(record.updated_at)],
+      ]}
+    />
+  );
+}
+
+function QuestionDetailSummary({ value }: { value: unknown }) {
+  const record = asRecord(value);
+  return (
+    <DetailBlock
+      title="Question"
+      rows={[
+        ["Type", textOf(record.question_type, "question")],
+        ["Difficulty", textOf(record.difficulty, "not set")],
+        ["Correct", textOf(record.correct_answer, "not set")],
+        ["Bookmarked", boolText(record.bookmarked) || "false"],
+      ]}
+    />
+  );
+}
+
+function SolveDetailSummary({ value }: { value: unknown }) {
+  const record = asRecord(value);
+  const messages = itemList(record, ["messages", "items"]);
+  return (
+    <DetailBlock
+      title="Solve session"
+      rows={[
+        ["Title", itemTitle(record, "Solve session")],
+        ["Messages", String(messages.length)],
+        ["Source", textOf(record.kb_name, "none")],
+        ["Stream", "/api/learning/solve/ws"],
+      ]}
+    />
+  );
+}
+
+function DetailBlock({ title, rows }: { title: string; rows: Array<[string, string]> }) {
+  return (
+    <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+      <h3 className="mb-3 text-sm font-semibold text-zaki-text">{title}</h3>
+      <div className="divide-y divide-zaki-border">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2 text-sm">
+            <div className="text-zaki-muted">{label}</div>
+            <div className="min-w-0 break-words font-medium text-zaki-text">{value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1172,10 +1561,12 @@ function ItemList({
   items,
   empty,
   variant = "generic",
+  onOpen,
 }: {
   items: Item[];
   empty: string;
   variant?: "source" | "book" | "notebook" | "document" | "question" | "agent" | "solve" | "generic";
+  onOpen?: (item: Item) => void;
 }) {
   if (!items.length) return <EmptyLine label={empty} />;
   const iconByVariant = {
@@ -1197,6 +1588,7 @@ function ItemList({
           item={item}
           fallback={`Item ${index + 1}`}
           icon={Icon}
+          onOpen={onOpen ? () => onOpen(item) : undefined}
         />
       ))}
     </div>
@@ -1207,10 +1599,12 @@ function LearningItemCard({
   item,
   fallback,
   icon: Icon,
+  onOpen,
 }: {
   item: Item;
   fallback: string;
   icon: typeof FileText;
+  onOpen?: () => void;
 }) {
   const status = itemStatus(item);
   const count = displayCount(item);
@@ -1225,7 +1619,11 @@ function LearningItemCard({
     textOf(asRecord(item.statistics).raw_documents, "Ready");
 
   return (
-    <div className="group rounded-zaki-lg border border-zaki-border bg-zaki-base p-3 transition-colors hover:border-zaki-strong hover:bg-zaki-hover">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group rounded-zaki-lg border border-zaki-border bg-zaki-base p-3 text-left transition-colors hover:border-zaki-strong hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
+    >
       <div className="flex items-start gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-raised text-zaki-brand">
           <Icon className="size-4" />
@@ -1273,6 +1671,6 @@ function LearningItemCard({
           </span>
         ) : null}
       </div>
-    </div>
+    </button>
   );
 }
