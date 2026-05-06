@@ -9682,6 +9682,21 @@ function stripLearningOperatorManagedFields(value) {
   return stripped;
 }
 
+function stripLearningOperatorManagedWsMessage(data, isBinary) {
+  if (isBinary) return { data, isBinary };
+  const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
+  if (!text.trim()) return { data, isBinary };
+  try {
+    const payload = JSON.parse(text);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return { data, isBinary };
+    }
+    return { data: JSON.stringify(stripLearningOperatorManagedFields(payload)), isBinary: false };
+  } catch {
+    return { data, isBinary };
+  }
+}
+
 function registerLearningJsonProxyRoute(method, routePath, buildTargetPath, {
   jsonLimit = "5mb",
   label = "Learning upstream request",
@@ -9870,7 +9885,7 @@ app.post(
   "/api/learning/knowledge/create",
   requireLearningContext,
   async (req, res) => {
-    await proxyLearningRawRequest(req, res, `/api/v1/knowledge/create${learningQueryString(req, ["provider"])}`, {
+    await proxyLearningRawRequest(req, res, "/api/v1/knowledge/create", {
       method: "POST",
       label: "Learning knowledge create request",
     });
@@ -9945,7 +9960,7 @@ app.post("/api/learning/knowledge/:kbName/upload", requireLearningContext, async
   await proxyLearningRawRequest(
     req,
     res,
-    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/upload${learningQueryString(req, ["provider"])}`,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/upload`,
     {
       method: "POST",
       label: "Learning knowledge upload request",
@@ -9958,7 +9973,7 @@ for (const uploadAlias of ["upload-folder", "upload-archive"]) {
     await proxyLearningRawRequest(
       req,
       res,
-      `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/upload${learningQueryString(req, ["provider"])}`,
+      `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/upload`,
       {
         method: "POST",
         label: `Learning knowledge ${uploadAlias} request`,
@@ -10919,7 +10934,8 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
 
   clientSocket.on("message", (data, isBinary) => {
     if (upstreamSocket.readyState === upstreamSocket.OPEN) {
-      upstreamSocket.send(data, { binary: isBinary });
+      const sanitized = stripLearningOperatorManagedWsMessage(data, isBinary);
+      upstreamSocket.send(sanitized.data, { binary: sanitized.isBinary });
     }
   });
 
