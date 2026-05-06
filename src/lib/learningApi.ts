@@ -67,7 +67,7 @@ export const learningKeys = {
   solveSessions: ["learning", "solve", "sessions"] as const,
 };
 
-export function listLearningSessions(limit = 50, offset = 0) {
+export function listLearningSessions(limit = 100, offset = 0) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
@@ -281,7 +281,7 @@ export function runLearningCoWriterEdit(payload: LearningJson) {
 }
 
 export function listLearningQuestions() {
-  return learningRequest<unknown>("/api/learning/questions/entries?limit=20");
+  return learningRequest<unknown>("/api/learning/questions/entries?limit=100");
 }
 
 export function getLearningQuestionEntry(entryId: string) {

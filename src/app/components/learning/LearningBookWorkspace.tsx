@@ -1044,16 +1044,41 @@ function BookSourceGroup<TId extends string | number>({
   getId: (item: Item, index: number) => TId;
   onToggle: (id: TId) => void;
 }) {
-  const visibleItems = items.slice(0, 6);
+  const [sourceQuery, setSourceQuery] = useState("");
+  const needle = sourceQuery.trim().toLowerCase();
+  const sourceEntries = items.map((item, index) => ({
+    item,
+    id: getId(item, index),
+    label: sourceLabel(item, `${label} ${index + 1}`),
+  }));
+  const visibleItems = needle
+    ? sourceEntries.filter((entry) =>
+        `${entry.label} ${String(entry.id)}`.toLowerCase().includes(needle),
+      )
+    : sourceEntries;
   return (
-    <div className="min-h-28 rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
-        {label}
+    <div className="min-h-36 rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
+          {label}
+        </div>
+        {selected.length ? (
+          <span className="rounded-full bg-zaki-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-zaki-brand">
+            {selected.length}
+          </span>
+        ) : null}
       </div>
+      {items.length > 6 ? (
+        <input
+          value={sourceQuery}
+          onChange={(event) => setSourceQuery(event.target.value)}
+          placeholder={`Search ${label.toLowerCase()}`}
+          className="mb-2 h-8 w-full rounded-zaki-sm border border-zaki-border bg-zaki-raised px-2 text-xs text-zaki-text outline-none focus:border-zaki-brand"
+        />
+      ) : null}
       {visibleItems.length ? (
-        <div className="space-y-1">
-          {visibleItems.map((item, index) => {
-            const id = getId(item, index);
+        <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+          {visibleItems.map(({ id, label: itemLabel }) => {
             const checked = selected.includes(id);
             return (
               <label
@@ -1067,7 +1092,7 @@ function BookSourceGroup<TId extends string | number>({
                   className="mt-0.5 size-3.5 rounded border-zaki-border accent-zaki-brand"
                 />
                 <span className="line-clamp-2 min-w-0">
-                  {sourceLabel(item, `${label} ${index + 1}`)}
+                  {itemLabel}
                 </span>
               </label>
             );
