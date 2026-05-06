@@ -1,6 +1,7 @@
 import { describe, expect, test, jest } from "@jest/globals";
 import {
   fetchLearningPath,
+  fetchLearningProxyPath,
   fetchLearningSession,
   fetchLearningSessions,
   getLearningBase,
@@ -106,6 +107,55 @@ describe("learning client", () => {
     );
   });
 
+  test("proxies multipart upload streams without leaking browser auth", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    const req = {
+      method: "POST",
+      headers: {
+        authorization: "Bearer browser-token",
+        cookie: "refresh=secret",
+        "content-type": "multipart/form-data; boundary=abc",
+        "x-internal-token": "evil",
+        "x-zaki-user-id": "999",
+        accept: "application/json",
+      },
+      pipe() {},
+    };
+
+    await fetchLearningProxyPath({
+      baseUrl: "http://learning:8001",
+      internalToken: "secret",
+      userId: "10",
+      requestId: "req-raw",
+      path: "/api/v1/knowledge/main/upload",
+      req,
+      fetchWithTimeout,
+      timeoutMs: 30000,
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://learning:8001/api/v1/knowledge/main/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: req,
+        duplex: "half",
+        headers: expect.objectContaining({
+          "Content-Type": "multipart/form-data; boundary=abc",
+          "X-Internal-Token": "secret",
+          "X-Zaki-User-Id": "10",
+          accept: "application/json",
+        }),
+      }),
+      30000,
+      "Learning upstream proxy request"
+    );
+    const [, options] = fetchWithTimeout.mock.calls[0];
+    expect(options.headers.authorization).toBeUndefined();
+    expect(options.headers.cookie).toBeUndefined();
+    expect(options.headers["x-internal-token"]).toBeUndefined();
+    expect(options.headers["x-zaki-user-id"]).toBeUndefined();
+  });
+
   test("throws when required config is missing", async () => {
     const fetchWithTimeout = jest.fn();
     await expect(
@@ -132,4 +182,3 @@ describe("learning client", () => {
     ).rejects.toThrow("LEARNING_ENGINE_INTERNAL_TOKEN is not configured.");
   });
 });
-

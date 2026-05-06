@@ -1,5 +1,6 @@
 import {
   buildLearningForwardHeaders,
+  buildLearningProxyHeaders,
   getLearningBase,
   sanitizeLearningPath,
 } from "./learning-bff-contract.js";
@@ -44,7 +45,51 @@ export async function fetchLearningPath({
     headers,
   };
   if (body !== undefined) {
-    options.body = typeof body === "string" || body instanceof Uint8Array ? body : JSON.stringify(body);
+    if (
+      body &&
+      typeof body === "object" &&
+      (typeof body.pipe === "function" || typeof body[Symbol.asyncIterator] === "function")
+    ) {
+      options.body = body;
+      options.duplex = "half";
+    } else {
+      options.body = typeof body === "string" || body instanceof Uint8Array ? body : JSON.stringify(body);
+    }
+  }
+  return fetchWithTimeout(`${resolvedBase}${normalizedPath}`, options, timeoutMs, label);
+}
+
+export async function fetchLearningProxyPath({
+  baseUrl,
+  internalToken,
+  userId,
+  requestId,
+  path,
+  req,
+  method = req?.method || "GET",
+  fetchWithTimeout,
+  timeoutMs,
+  label = "Learning upstream proxy request",
+  extraHeaders = {},
+}) {
+  const { resolvedBase, resolvedToken } = assertBaseAndToken(baseUrl, internalToken);
+  const normalizedPath = sanitizeLearningPath(path);
+  const contentType = req?.headers?.["content-type"]
+    ? String(req.headers["content-type"])
+    : null;
+  const options = {
+    method,
+    headers: buildLearningProxyHeaders(req, {
+      internalToken: resolvedToken,
+      userId,
+      requestId,
+      contentType,
+      extraHeaders,
+    }),
+  };
+  if (!["GET", "HEAD"].includes(String(method).toUpperCase())) {
+    options.body = req;
+    options.duplex = "half";
   }
   return fetchWithTimeout(`${resolvedBase}${normalizedPath}`, options, timeoutMs, label);
 }
@@ -100,4 +145,3 @@ export async function fetchLearningSession({
 }
 
 export { getLearningBase };
-

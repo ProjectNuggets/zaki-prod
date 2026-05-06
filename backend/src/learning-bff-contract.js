@@ -13,6 +13,7 @@ const HOP_BY_HOP_HEADERS = new Set([
 
 const STRIPPED_BROWSER_HEADERS = new Set([
   "authorization",
+  "content-type",
   "cookie",
   "host",
   "x-internal-token",

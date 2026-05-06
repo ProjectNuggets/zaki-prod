@@ -81,6 +81,7 @@ import {
 } from "./learning-bff-contract.js";
 import {
   fetchLearningPath,
+  fetchLearningProxyPath,
   fetchLearningSession,
   fetchLearningSessions,
   getLearningBase,
@@ -8560,6 +8561,41 @@ async function proxyLearningRequest(req, res, targetPath, {
   }
 }
 
+async function proxyLearningRawRequest(req, res, targetPath, {
+  method = req.method,
+  label = "Learning upstream raw request",
+} = {}) {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const upstream = await fetchLearningProxyPath({
+      baseUrl: LEARNING_ENGINE_BASE_URL,
+      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+      userId: String(req.learningUserId || ""),
+      requestId: getOrCreateRequestId(req),
+      path: targetPath,
+      req,
+      method,
+      fetchWithTimeout,
+      timeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
+      label,
+    });
+    await pipeLearningResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Raw upstream proxy error:", {
+      requestId,
+      error: error?.message || "Learning raw request failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+}
+
 // S2.7 — push a revocation to nullalis's /internal/entitlements/revoke.
 // Called by the Stripe webhook handler when an event (subscription
 // delete/update, invoice payment fail, dispute) should immediately
@@ -9590,6 +9626,326 @@ app.post(
     });
   }
 );
+
+function learningQueryString(req, allowedKeys) {
+  const qs = new URLSearchParams();
+  for (const key of allowedKeys) {
+    const value = req.query?.[key];
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) qs.append(key, String(item));
+      }
+    } else if (value !== undefined && value !== null) {
+      qs.set(key, String(value));
+    }
+  }
+  const qstr = qs.toString();
+  return qstr ? `?${qstr}` : "";
+}
+
+const bookJson5mb = express.json({ limit: "5mb" });
+
+app.get("/api/learning/books", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(req, res, "/api/v1/book/books", {
+    method: "GET",
+    label: "Learning books list request",
+  });
+});
+
+app.post("/api/learning/books", requireLearningContext, bookJson5mb, async (req, res) => {
+  await proxyLearningRequest(req, res, "/api/v1/book/books", {
+    method: "POST",
+    body: req.body,
+    label: "Learning book create request",
+  });
+});
+
+app.post(
+  "/api/learning/books/confirm-proposal",
+  requireLearningContext,
+  bookJson5mb,
+  async (req, res) => {
+    await proxyLearningRequest(req, res, "/api/v1/book/books/confirm-proposal", {
+      method: "POST",
+      body: req.body,
+      label: "Learning book proposal confirm request",
+    });
+  }
+);
+
+app.post(
+  "/api/learning/books/confirm-spine",
+  requireLearningContext,
+  bookJson5mb,
+  async (req, res) => {
+    await proxyLearningRequest(req, res, "/api/v1/book/books/confirm-spine", {
+      method: "POST",
+      body: req.body,
+      label: "Learning book spine confirm request",
+    });
+  }
+);
+
+for (const action of [
+  "compile-page",
+  "regenerate-block",
+  "insert-block",
+  "delete-block",
+  "move-block",
+  "change-block-type",
+  "deep-dive",
+  "quiz-attempt",
+  "supplement",
+  "page-chat-session",
+  "rebuild",
+]) {
+  app.post(`/api/learning/books/${action}`, requireLearningContext, bookJson5mb, async (req, res) => {
+    await proxyLearningRequest(req, res, `/api/v1/book/books/${action}`, {
+      method: "POST",
+      body: req.body,
+      label: `Learning book ${action} request`,
+    });
+  });
+}
+
+app.get("/api/learning/books/:bookId", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/book/books/${encodeURIComponent(req.params.bookId)}`,
+    {
+      method: "GET",
+      label: "Learning book detail request",
+    }
+  );
+});
+
+app.delete("/api/learning/books/:bookId", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/book/books/${encodeURIComponent(req.params.bookId)}`,
+    {
+      method: "DELETE",
+      label: "Learning book delete request",
+    }
+  );
+});
+
+app.get("/api/learning/books/:bookId/spine", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/book/books/${encodeURIComponent(req.params.bookId)}/spine`,
+    {
+      method: "GET",
+      label: "Learning book spine request",
+    }
+  );
+});
+
+app.get(
+  "/api/learning/books/:bookId/pages/:pageId",
+  requireLearningContext,
+  async (req, res) => {
+    await proxyLearningRequest(
+      req,
+      res,
+      `/api/v1/book/books/${encodeURIComponent(req.params.bookId)}/pages/${encodeURIComponent(req.params.pageId)}`,
+      {
+        method: "GET",
+        label: "Learning book page request",
+      }
+    );
+  }
+);
+
+app.get("/api/learning/books/:bookId/health", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/book/books/${encodeURIComponent(req.params.bookId)}/health`,
+    {
+      method: "GET",
+      label: "Learning book health request",
+    }
+  );
+});
+
+app.post(
+  "/api/learning/books/:bookId/refresh-fingerprints",
+  requireLearningContext,
+  async (req, res) => {
+    await proxyLearningRequest(
+      req,
+      res,
+      `/api/v1/book/books/${encodeURIComponent(req.params.bookId)}/refresh-fingerprints`,
+      {
+        method: "POST",
+        label: "Learning book fingerprint refresh request",
+      }
+    );
+  }
+);
+
+app.get("/api/learning/knowledge/supported-file-types", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(req, res, "/api/v1/knowledge/supported-file-types", {
+    method: "GET",
+    label: "Learning knowledge supported file types request",
+  });
+});
+
+app.get("/api/learning/knowledge/list", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(req, res, "/api/v1/knowledge/list", {
+    method: "GET",
+    label: "Learning knowledge list request",
+  });
+});
+
+app.post(
+  "/api/learning/knowledge/create",
+  requireLearningContext,
+  express.json({ limit: "1mb" }),
+  async (req, res) => {
+    await proxyLearningRequest(req, res, "/api/v1/knowledge/create", {
+      method: "POST",
+      body: req.body,
+      label: "Learning knowledge create request",
+    });
+  }
+);
+
+app.get("/api/learning/knowledge/tasks/:taskId/stream", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/tasks/${encodeURIComponent(req.params.taskId)}/stream`,
+    {
+      method: "GET",
+      label: "Learning knowledge task stream request",
+    }
+  );
+});
+
+app.get("/api/learning/knowledge/:kbName", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}`,
+    {
+      method: "GET",
+      label: "Learning knowledge detail request",
+    }
+  );
+});
+
+app.delete("/api/learning/knowledge/:kbName", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}`,
+    {
+      method: "DELETE",
+      label: "Learning knowledge delete request",
+    }
+  );
+});
+
+app.get("/api/learning/knowledge/:kbName/files", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/files`,
+    {
+      method: "GET",
+      label: "Learning knowledge files request",
+    }
+  );
+});
+
+app.get(
+  "/api/learning/knowledge/:kbName/files/:filename(*)",
+  requireLearningContext,
+  async (req, res) => {
+    await proxyLearningRequest(
+      req,
+      res,
+      `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/files/${encodeURIComponent(req.params.filename)}`,
+      {
+        method: "GET",
+        label: "Learning knowledge file request",
+      }
+    );
+  }
+);
+
+app.post("/api/learning/knowledge/:kbName/upload", requireLearningContext, async (req, res) => {
+  await proxyLearningRawRequest(
+    req,
+    res,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/upload${learningQueryString(req, ["provider"])}`,
+    {
+      method: "POST",
+      label: "Learning knowledge upload request",
+    }
+  );
+});
+
+for (const uploadAlias of ["upload-folder", "upload-archive"]) {
+  app.post(`/api/learning/knowledge/:kbName/${uploadAlias}`, requireLearningContext, async (req, res) => {
+    await proxyLearningRawRequest(
+      req,
+      res,
+      `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/upload${learningQueryString(req, ["provider"])}`,
+      {
+        method: "POST",
+        label: `Learning knowledge ${uploadAlias} request`,
+      }
+    );
+  });
+}
+
+app.post(
+  "/api/learning/knowledge/:kbName/reindex",
+  requireLearningContext,
+  express.json({ limit: "1mb" }),
+  async (req, res) => {
+    await proxyLearningRequest(
+      req,
+      res,
+      `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/reindex`,
+      {
+        method: "POST",
+        body: req.body,
+        label: "Learning knowledge reindex request",
+      }
+    );
+  }
+);
+
+app.get("/api/learning/knowledge/:kbName/progress", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/progress`,
+    {
+      method: "GET",
+      label: "Learning knowledge progress request",
+    }
+  );
+});
+
+app.post("/api/learning/knowledge/:kbName/progress/clear", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/progress/clear`,
+    {
+      method: "POST",
+      label: "Learning knowledge progress clear request",
+    }
+  );
+});
 
 // =============================================================================
 // SHARE CONVERSATION ROUTES
