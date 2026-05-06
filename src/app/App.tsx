@@ -75,6 +75,8 @@ export default function App() {
     
     if (path === '/about') {
       store.goToAbout();
+    } else if (path === '/learn') {
+      store.setSidebarMode("learning");
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
     } else if (spaceId && threadId) {

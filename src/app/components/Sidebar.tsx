@@ -104,6 +104,7 @@ export function Sidebar() {
     goToThread,
     goToZakiBot,
     goToZakiHome,
+    setSidebarMode,
   } = useNavigation();
   const { sidebarMode, zakiSessionKey: storedZakiSessionKey } = useNavigationStore();
   const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(sidebarMode === "zaki");
@@ -1342,6 +1343,22 @@ export function Sidebar() {
             >
               <CenterLogo className="size-4 text-zaki-brand" />
             </button>
+            <button
+              className={cn(
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                sidebarMode === "learning" ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+              )}
+              onClick={() => {
+                setSidebarMode("learning");
+                navigate("/learn");
+              }}
+              onMouseUp={blurButtonOnPointerClick}
+              type="button"
+              title={t("sidebar.learning")}
+              aria-label={t("sidebar.learning")}
+            >
+              <GraduationCap className="size-4 text-zaki-muted" />
+            </button>
           </div>
 
           <div className="mt-auto flex flex-col items-center gap-3 pt-4">
@@ -1449,6 +1466,23 @@ export function Sidebar() {
             }}
             isRtl={!!isRtl}
           />
+        ) : sidebarMode === "learning" ? (
+          <div className="rounded-zaki-md border border-zaki-border bg-zaki-raised p-3">
+            <div className={cn("mb-2 flex items-center gap-2", isRtl && "flex-row-reverse text-right")}>
+              <GraduationCap className="size-4 text-zaki-brand" />
+              <span className="text-sm font-semibold text-zaki-text">{t("sidebar.learning")}</span>
+            </div>
+            <p className={cn("text-xs leading-relaxed text-zaki-muted", isRtl && "text-right")}>
+              Sources, lessons, notebooks, writing, tutors, and problem solving are managed in the main learning workspace.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate("/learn")}
+              className="mt-3 w-full rounded-zaki-md bg-zaki-brand px-3 py-2 text-xs font-semibold text-white"
+            >
+              Open learning
+            </button>
+          </div>
         ) : (
           <>
         <div className={cn("text-zaki-muted text-xs font-medium mb-2", isRtl ? "pr-1.5 text-right" : "pl-1.5")}>{t("sidebar.section.space")}</div>

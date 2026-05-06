@@ -8,6 +8,7 @@ import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPag
 import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
 import { BrainPage } from './app/components/brain/BrainPage';
+import { LearningPage } from './app/components/learning/LearningPage';
 
 /**
  * Route structure:
@@ -71,6 +72,10 @@ export const router = createBrowserRouter([
       {
         path: 'brain',
         element: <BrainPage />,
+      },
+      {
+        path: 'learn',
+        element: <LearningPage />,
       },
     ],
   },

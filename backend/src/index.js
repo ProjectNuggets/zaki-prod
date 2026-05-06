@@ -9869,11 +9869,9 @@ app.get("/api/learning/knowledge/list", requireLearningContext, async (req, res)
 app.post(
   "/api/learning/knowledge/create",
   requireLearningContext,
-  express.json({ limit: "1mb" }),
   async (req, res) => {
-    await proxyLearningRequest(req, res, "/api/v1/knowledge/create", {
+    await proxyLearningRawRequest(req, res, `/api/v1/knowledge/create${learningQueryString(req, ["provider"])}`, {
       method: "POST",
-      body: req.body,
       label: "Learning knowledge create request",
     });
   }

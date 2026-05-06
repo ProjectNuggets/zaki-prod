@@ -1,4 +1,4 @@
-import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal, Brain } from "lucide-react";
+import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal, Brain, GraduationCap } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -47,10 +47,12 @@ export function SidebarModeSwitch({
   const location = useLocation();
   const setSidebarMode = useNavigationStore((s) => s.setSidebarMode);
 
-  // Sync store when user arrives at /brain via direct URL or browser navigation.
+  // Sync store when user arrives at direct URL pages or browser navigation.
   useEffect(() => {
     if (location.pathname === "/brain" && sidebarMode !== "brain") {
       setSidebarMode("brain");
+    } else if (location.pathname === "/learn" && sidebarMode !== "learning") {
+      setSidebarMode("learning");
     }
   }, [location.pathname, sidebarMode, setSidebarMode]);
 
@@ -168,6 +170,38 @@ export function SidebarModeSwitch({
           )}
         >
           {t("sidebar.nav.spaces")}
+        </span>
+      </button>
+
+      {/* Learning nav item */}
+      <button
+        className={cn(
+          "w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors relative",
+          isRtl ? "text-right flex-row-reverse" : "text-left",
+          sidebarMode === "learning" ? "bg-zaki-selected" : "hover:bg-zaki-hover"
+        )}
+        onClick={() => { navigate("/learn"); setSidebarMode("learning"); }}
+        type="button"
+        aria-current={sidebarMode === "learning" ? "page" : undefined}
+      >
+        {sidebarMode === "learning" && (
+          <div
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-zaki-brand rounded-r-sm",
+              isRtl ? "right-0 rounded-r-none rounded-l-sm" : "left-0"
+            )}
+          />
+        )}
+        <div className="size-5 flex items-center justify-center">
+          <GraduationCap className="size-4 text-zaki-muted" />
+        </div>
+        <span
+          className={cn(
+            "text-sm font-medium flex-1",
+            sidebarMode === "learning" ? "text-zaki-primary" : "text-zaki-secondary"
+          )}
+        >
+          {t("sidebar.learning")}
         </span>
       </button>
 

@@ -1,0 +1,147 @@
+import { backendAuthRequest, buildApiUrl, getAuthToken } from "@/lib/api";
+
+export type LearningJson = Record<string, unknown>;
+
+type LearningRequestOptions = {
+  method?: string;
+  body?: LearningJson;
+  formData?: FormData;
+};
+
+async function parseLearningResponse(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+  return response.text();
+}
+
+export async function learningRequest<T = unknown>(
+  path: string,
+  options: LearningRequestOptions = {},
+): Promise<T> {
+  const body =
+    options.formData ??
+    (options.body === undefined ? undefined : JSON.stringify(options.body));
+  const response = await backendAuthRequest(path, {
+    method: options.method ?? "GET",
+    body,
+  });
+  const payload = await parseLearningResponse(response);
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === "object" && "message" in payload
+        ? String((payload as LearningJson).message)
+        : `Learning request failed (${response.status})`;
+    throw new Error(message);
+  }
+  return payload as T;
+}
+
+export function learningWsUrl(path: string): string | null {
+  const token = getAuthToken();
+  if (!token) return null;
+  const url = new URL(buildApiUrl(path), window.location.href);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
+export const learningKeys = {
+  health: ["learning", "health"] as const,
+  knowledge: ["learning", "knowledge"] as const,
+  books: ["learning", "books"] as const,
+  notebooks: ["learning", "notebooks"] as const,
+  coWriterDocuments: ["learning", "co-writer", "documents"] as const,
+  questions: ["learning", "questions"] as const,
+  tutorAgents: ["learning", "tutor-agents"] as const,
+  solveSessions: ["learning", "solve", "sessions"] as const,
+};
+
+export function listLearningKnowledge() {
+  return learningRequest<unknown>("/api/learning/knowledge/list");
+}
+
+export function createLearningKnowledge(name: string, files: FileList | File[]) {
+  const formData = new FormData();
+  formData.set("name", name);
+  Array.from(files).forEach((file) => formData.append("files", file, file.name));
+  return learningRequest<unknown>("/api/learning/knowledge/create", {
+    method: "POST",
+    formData,
+  });
+}
+
+export function uploadLearningKnowledge(kbName: string, files: FileList | File[]) {
+  const formData = new FormData();
+  Array.from(files).forEach((file) => formData.append("files", file, file.name));
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/${encodeURIComponent(kbName)}/upload`,
+    { method: "POST", formData },
+  );
+}
+
+export function listLearningBooks() {
+  return learningRequest<unknown>("/api/learning/books");
+}
+
+export function createLearningBook(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function listLearningNotebooks() {
+  return learningRequest<unknown>("/api/learning/notebooks");
+}
+
+export function createLearningNotebook(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/notebooks", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function listLearningCoWriterDocuments() {
+  return learningRequest<unknown>("/api/learning/co-writer/documents");
+}
+
+export function createLearningCoWriterDocument(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/co-writer/documents", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function runLearningCoWriterEdit(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/co-writer/edit", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function listLearningQuestions() {
+  return learningRequest<unknown>("/api/learning/questions/entries?limit=20");
+}
+
+export function listLearningTutorAgents() {
+  return learningRequest<unknown>("/api/learning/tutor-agents");
+}
+
+export function createLearningTutorAgent(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/tutor-agents", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function listLearningSolveSessions() {
+  return learningRequest<unknown>("/api/learning/solve/sessions?limit=10");
+}
+
+export function analyzeLearningVision(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/vision/analyze", {
+    method: "POST",
+    body: payload,
+  });
+}
