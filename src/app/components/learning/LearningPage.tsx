@@ -958,6 +958,593 @@ const learningCapabilities: LearningCapabilityDef[] = [
   },
 ];
 
+type DeepQuestionMode = "custom" | "mimic";
+type DeepQuestionFormConfig = {
+  mode: DeepQuestionMode;
+  topic: string;
+  num_questions: number;
+  difficulty: string;
+  question_type: string;
+  preference: string;
+  paper_path: string;
+  max_questions: number;
+};
+
+type MathAnimatorFormConfig = {
+  output_mode: "video" | "image";
+  quality: "low" | "medium" | "high";
+  style_hint: string;
+};
+
+type VisualizeFormConfig = {
+  render_mode: "auto" | "svg" | "chartjs" | "mermaid" | "html";
+};
+
+type ResearchMode = "" | "notes" | "report" | "comparison" | "learning_path";
+type ResearchDepth = "" | "quick" | "standard" | "deep" | "manual";
+type DeepResearchFormConfig = {
+  mode: ResearchMode;
+  depth: ResearchDepth;
+  sources: LearningResearchSource[];
+  manual_subtopics?: number;
+  manual_max_iterations?: number;
+};
+
+const defaultQuizConfig: DeepQuestionFormConfig = {
+  mode: "custom",
+  topic: "",
+  num_questions: 3,
+  difficulty: "auto",
+  question_type: "auto",
+  preference: "",
+  paper_path: "",
+  max_questions: 10,
+};
+
+const defaultMathAnimatorConfig: MathAnimatorFormConfig = {
+  output_mode: "video",
+  quality: "medium",
+  style_hint: "",
+};
+
+const defaultVisualizeConfig: VisualizeFormConfig = {
+  render_mode: "auto",
+};
+
+const defaultResearchConfig: DeepResearchFormConfig = {
+  mode: "",
+  depth: "",
+  sources: ["kb", "web", "papers"],
+};
+
+const composerInputClass =
+  "h-[30px] rounded-lg border border-[var(--border)]/30 bg-[var(--background)]/50 px-2.5 text-[12px] text-[var(--foreground)] outline-none transition-colors hover:border-[var(--border)]/50 focus:border-[var(--primary)]/35 placeholder:text-[var(--muted-foreground)]/40";
+
+function titleCase(value: string) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function summarizeQuizConfig(cfg: DeepQuestionFormConfig) {
+  if (cfg.mode === "mimic") {
+    return ["Mimic Paper", cfg.paper_path.trim() || "no paper", `Max ${cfg.max_questions}`].join(
+      " · ",
+    );
+  }
+  return [
+    "Custom",
+    `${cfg.num_questions} questions`,
+    titleCase(cfg.difficulty || "auto"),
+    titleCase(cfg.question_type || "auto"),
+  ].join(" · ");
+}
+
+function buildQuizConfig(cfg: DeepQuestionFormConfig) {
+  if (cfg.mode === "mimic") {
+    return {
+      mode: "mimic",
+      paper_path: cfg.paper_path.trim(),
+      max_questions: cfg.max_questions,
+    };
+  }
+  return {
+    mode: "custom",
+    num_questions: cfg.num_questions,
+    difficulty: cfg.difficulty === "auto" ? "" : cfg.difficulty,
+    question_type: cfg.question_type === "auto" ? "" : cfg.question_type,
+    preference: cfg.preference.trim(),
+  };
+}
+
+function summarizeMathAnimatorConfig(cfg: MathAnimatorFormConfig) {
+  return [titleCase(cfg.output_mode), titleCase(cfg.quality)].join(" · ");
+}
+
+function buildMathAnimatorConfig(cfg: MathAnimatorFormConfig) {
+  return {
+    output_mode: cfg.output_mode,
+    quality: cfg.quality,
+    style_hint: cfg.style_hint.trim(),
+  };
+}
+
+function summarizeVisualizeConfig(cfg: VisualizeFormConfig) {
+  const labels: Record<VisualizeFormConfig["render_mode"], string> = {
+    auto: "Auto",
+    chartjs: "Chart.js",
+    svg: "SVG",
+    mermaid: "Mermaid",
+    html: "HTML",
+  };
+  return labels[cfg.render_mode];
+}
+
+function buildVisualizeConfig(cfg: VisualizeFormConfig) {
+  return { render_mode: cfg.render_mode };
+}
+
+function validateResearchConfig(cfg: DeepResearchFormConfig) {
+  const errors: Record<string, string> = {};
+  if (!cfg.mode) errors.mode = "Required";
+  if (!cfg.depth) errors.depth = "Required";
+  return errors;
+}
+
+function summarizeResearchConfig(cfg: DeepResearchFormConfig) {
+  if (Object.keys(validateResearchConfig(cfg)).length) return undefined;
+  const modeLabels: Record<string, string> = {
+    notes: "Study Notes",
+    report: "Report",
+    comparison: "Comparison",
+    learning_path: "Learning Path",
+  };
+  return [
+    modeLabels[cfg.mode] ?? cfg.mode,
+    titleCase(cfg.depth),
+    cfg.sources.length ? cfg.sources.join("+") : "llm-only",
+  ].join(" · ");
+}
+
+function buildResearchConfig(cfg: DeepResearchFormConfig) {
+  const errors = validateResearchConfig(cfg);
+  if (Object.keys(errors).length) {
+    throw new Error("Deep research settings are incomplete.");
+  }
+  return {
+    mode: cfg.mode,
+    depth: cfg.depth,
+    sources: [...cfg.sources],
+    ...(cfg.depth === "manual" && cfg.manual_subtopics != null
+      ? { manual_subtopics: cfg.manual_subtopics }
+      : {}),
+    ...(cfg.depth === "manual" && cfg.manual_max_iterations != null
+      ? { manual_max_iterations: cfg.manual_max_iterations }
+      : {}),
+  };
+}
+
+function ComposerField({
+  label,
+  width,
+  children,
+}: {
+  label: string;
+  width?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className={cn("flex min-w-0 flex-col", width)}>
+      <span className="mb-0.5 text-[10px] font-medium text-[var(--muted-foreground)]/60">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function CollapsibleConfigSection({
+  collapsed,
+  summary,
+  onToggleCollapsed,
+  bodyClassName,
+  children,
+}: {
+  collapsed: boolean;
+  summary?: string;
+  onToggleCollapsed: () => void;
+  bodyClassName?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggleCollapsed}
+        className="flex w-full items-center gap-1.5 px-3.5 py-1.5 text-left transition-colors hover:opacity-80"
+      >
+        <ChevronDown
+          size={10}
+          className={cn(
+            "shrink-0 text-[var(--muted-foreground)]/40 transition-transform",
+            collapsed && "-rotate-90",
+          )}
+        />
+        <span className="text-[10px] font-medium text-[var(--muted-foreground)]/55">
+          Settings
+        </span>
+        {collapsed && summary ? (
+          <span className="min-w-0 truncate text-[10px] text-[var(--muted-foreground)]/30">
+            - {summary}
+          </span>
+        ) : null}
+      </button>
+      {!collapsed ? <div className={bodyClassName ?? "px-3.5 pb-2.5"}>{children}</div> : null}
+    </div>
+  );
+}
+
+function QuizConfigPanel({
+  value,
+  onChange,
+  uploadedPdf,
+  onUploadPdf,
+  collapsed,
+  onToggleCollapsed,
+}: {
+  value: DeepQuestionFormConfig;
+  onChange: (next: DeepQuestionFormConfig) => void;
+  uploadedPdf: File | null;
+  onUploadPdf: (file: File | null) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const update = <K extends keyof DeepQuestionFormConfig>(
+    key: K,
+    next: DeepQuestionFormConfig[K],
+  ) => onChange({ ...value, [key]: next });
+
+  return (
+    <CollapsibleConfigSection
+      collapsed={collapsed}
+      summary={summarizeQuizConfig(value)}
+      onToggleCollapsed={onToggleCollapsed}
+      bodyClassName="space-y-2.5 px-3.5 pb-2.5"
+    >
+      <div className="inline-flex rounded-lg border border-[var(--border)]/25 p-0.5">
+        {(["custom", "mimic"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => update("mode", mode)}
+            className={cn(
+              "rounded-md px-3 py-1 text-[11px] font-medium transition-all",
+              value.mode === mode
+                ? "bg-[var(--muted)] text-[var(--foreground)] shadow-sm"
+                : "text-[var(--muted-foreground)]/50 hover:text-[var(--muted-foreground)]",
+            )}
+          >
+            {mode === "custom" ? "Custom" : "Mimic Paper"}
+          </button>
+        ))}
+      </div>
+
+      {value.mode === "custom" ? (
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+          <ComposerField label="Count" width="w-[60px]">
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={value.num_questions}
+              onChange={(event) =>
+                update("num_questions", Math.max(1, Number(event.target.value) || 1))
+              }
+              className={`${composerInputClass} w-full`}
+            />
+          </ComposerField>
+          <ComposerField label="Difficulty" width="w-[100px]">
+            <select
+              value={value.difficulty}
+              onChange={(event) => update("difficulty", event.target.value)}
+              className={`${composerInputClass} w-full`}
+            >
+              <option value="auto">Auto</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </ComposerField>
+          <ComposerField label="Type" width="w-[110px]">
+            <select
+              value={value.question_type}
+              onChange={(event) => update("question_type", event.target.value)}
+              className={`${composerInputClass} w-full`}
+            >
+              <option value="auto">Auto</option>
+              <option value="choice">Multiple Choice</option>
+              <option value="written">Written</option>
+              <option value="coding">Coding</option>
+            </select>
+          </ComposerField>
+          <ComposerField label="Preference" width="min-w-[140px] flex-1">
+            <input
+              type="text"
+              value={value.preference}
+              onChange={(event) => update("preference", event.target.value)}
+              placeholder="Extra constraints..."
+              className={`${composerInputClass} w-full`}
+            />
+          </ComposerField>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+          <ComposerField label="Paper" width="min-w-[180px] flex-[1.3]">
+            {uploadedPdf ? (
+              <div className="flex h-[30px] items-center gap-2 rounded-lg border border-[var(--border)]/30 bg-[var(--background)]/50 px-2.5 text-[12px]">
+                <FileText size={12} className="shrink-0 text-[var(--primary)]/60" />
+                <span className="min-w-0 truncate text-[var(--foreground)]">
+                  {uploadedPdf.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onUploadPdf(null)}
+                  className="ml-auto shrink-0 text-[var(--muted-foreground)]/40 transition-colors hover:text-[var(--foreground)]"
+                  aria-label="Remove PDF"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            ) : (
+              <label
+                className={cn(
+                  "flex h-[30px] cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed px-2.5 text-[12px] transition-colors",
+                  dragOver
+                    ? "border-[var(--primary)]/35 text-[var(--primary)]"
+                    : "border-[var(--border)]/35 text-[var(--muted-foreground)]/50 hover:border-[var(--border)]/55 hover:text-[var(--foreground)]",
+                )}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragOver(false);
+                  const file = event.dataTransfer.files[0];
+                  if (file?.type === "application/pdf") {
+                    onUploadPdf(file);
+                    update("paper_path", "");
+                  }
+                }}
+              >
+                <Upload size={11} />
+                <span>Upload PDF</span>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    if (file) {
+                      onUploadPdf(file);
+                      update("paper_path", "");
+                    }
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+          </ComposerField>
+          <ComposerField label="Parsed Dir" width="min-w-[120px] flex-1">
+            <input
+              type="text"
+              value={value.paper_path}
+              onChange={(event) => {
+                onUploadPdf(null);
+                update("paper_path", event.target.value);
+              }}
+              placeholder="e.g. 2211asm1"
+              className={`${composerInputClass} w-full`}
+            />
+          </ComposerField>
+          <ComposerField label="Max" width="w-[60px]">
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={value.max_questions}
+              onChange={(event) =>
+                update("max_questions", Math.max(1, Number(event.target.value) || 1))
+              }
+              className={`${composerInputClass} w-full`}
+            />
+          </ComposerField>
+        </div>
+      )}
+    </CollapsibleConfigSection>
+  );
+}
+
+function ResearchConfigPanel({
+  value,
+  collapsed,
+  onChange,
+  onToggleCollapsed,
+}: {
+  value: DeepResearchFormConfig;
+  collapsed: boolean;
+  onChange: (next: DeepResearchFormConfig) => void;
+  onToggleCollapsed: () => void;
+}) {
+  const update = <K extends keyof DeepResearchFormConfig>(
+    key: K,
+    next: DeepResearchFormConfig[K],
+  ) => onChange({ ...value, [key]: next });
+
+  return (
+    <CollapsibleConfigSection
+      collapsed={collapsed}
+      summary={summarizeResearchConfig(value)}
+      onToggleCollapsed={onToggleCollapsed}
+      bodyClassName="space-y-2 px-3.5 pb-2.5"
+    >
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+        <ComposerField label="Mode" width="min-w-[130px] flex-1">
+          <select
+            value={value.mode}
+            onChange={(event) => update("mode", event.target.value as ResearchMode)}
+            className={`${composerInputClass} w-full`}
+          >
+            <option value="">Select...</option>
+            <option value="notes">Study Notes</option>
+            <option value="report">Report</option>
+            <option value="comparison">Comparison</option>
+            <option value="learning_path">Learning Path</option>
+          </select>
+        </ComposerField>
+        <ComposerField label="Depth" width="min-w-[130px] flex-1">
+          <select
+            value={value.depth}
+            onChange={(event) => update("depth", event.target.value as ResearchDepth)}
+            className={`${composerInputClass} w-full`}
+          >
+            <option value="">Select...</option>
+            <option value="quick">Quick</option>
+            <option value="standard">Standard</option>
+            <option value="deep">Deep</option>
+            <option value="manual">Manual</option>
+          </select>
+        </ComposerField>
+      </div>
+      {value.depth === "manual" ? (
+        <div className="space-y-1.5 rounded-md bg-[var(--muted-foreground)]/5 px-3 py-2">
+          {[
+            { key: "manual_subtopics", label: "Sub-topics", min: 1, max: 10, fallback: 3 },
+            { key: "manual_max_iterations", label: "Iterations", min: 1, max: 8, fallback: 3 },
+          ].map((slider) => (
+            <div key={slider.key} className="flex items-center gap-2">
+              <span className="shrink-0 text-[10px] text-[var(--muted-foreground)]/60">
+                {slider.label}
+              </span>
+              <input
+                type="range"
+                min={slider.min}
+                max={slider.max}
+                step={1}
+                value={Number(value[slider.key as keyof DeepResearchFormConfig] ?? slider.fallback)}
+                onChange={(event) =>
+                  update(
+                    slider.key as keyof DeepResearchFormConfig,
+                    Number(event.target.value) as never,
+                  )
+                }
+                className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--muted-foreground)]/15 accent-[var(--primary)]"
+              />
+              <span className="w-5 text-center text-[11px] font-semibold tabular-nums text-[var(--foreground)]">
+                {Number(value[slider.key as keyof DeepResearchFormConfig] ?? slider.fallback)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </CollapsibleConfigSection>
+  );
+}
+
+function MathAnimatorConfigPanel({
+  value,
+  collapsed,
+  onChange,
+  onToggleCollapsed,
+}: {
+  value: MathAnimatorFormConfig;
+  collapsed: boolean;
+  onChange: (next: MathAnimatorFormConfig) => void;
+  onToggleCollapsed: () => void;
+}) {
+  return (
+    <CollapsibleConfigSection
+      collapsed={collapsed}
+      summary={summarizeMathAnimatorConfig(value)}
+      onToggleCollapsed={onToggleCollapsed}
+      bodyClassName="flex flex-wrap items-end gap-x-3 gap-y-2 px-3.5 pb-2.5"
+    >
+      <ComposerField label="Output" width="w-[100px]">
+        <select
+          value={value.output_mode}
+          onChange={(event) =>
+            onChange({ ...value, output_mode: event.target.value as MathAnimatorFormConfig["output_mode"] })
+          }
+          className={`${composerInputClass} w-full`}
+        >
+          <option value="video">Video</option>
+          <option value="image">Image</option>
+        </select>
+      </ComposerField>
+      <ComposerField label="Quality" width="w-[100px]">
+        <select
+          value={value.quality}
+          onChange={(event) =>
+            onChange({ ...value, quality: event.target.value as MathAnimatorFormConfig["quality"] })
+          }
+          className={`${composerInputClass} w-full`}
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </ComposerField>
+      <ComposerField label="Style Hint" width="min-w-[160px] flex-1">
+        <input
+          type="text"
+          value={value.style_hint}
+          onChange={(event) => onChange({ ...value, style_hint: event.target.value })}
+          placeholder="Style, pacing, color..."
+          className={`${composerInputClass} w-full`}
+        />
+      </ComposerField>
+    </CollapsibleConfigSection>
+  );
+}
+
+function VisualizeConfigPanel({
+  value,
+  collapsed,
+  onChange,
+  onToggleCollapsed,
+}: {
+  value: VisualizeFormConfig;
+  collapsed: boolean;
+  onChange: (next: VisualizeFormConfig) => void;
+  onToggleCollapsed: () => void;
+}) {
+  return (
+    <CollapsibleConfigSection
+      collapsed={collapsed}
+      summary={summarizeVisualizeConfig(value)}
+      onToggleCollapsed={onToggleCollapsed}
+      bodyClassName="flex flex-wrap items-end gap-x-3 gap-y-2 px-3.5 pb-2.5"
+    >
+      <ComposerField label="Render Mode" width="w-[120px]">
+        <select
+          value={value.render_mode}
+          onChange={(event) =>
+            onChange({ ...value, render_mode: event.target.value as VisualizeFormConfig["render_mode"] })
+          }
+          className={`${composerInputClass} w-full`}
+        >
+          <option value="auto">Auto</option>
+          <option value="chartjs">Chart.js</option>
+          <option value="svg">SVG</option>
+          <option value="mermaid">Mermaid</option>
+          <option value="html">HTML</option>
+        </select>
+      </ComposerField>
+    </CollapsibleConfigSection>
+  );
+}
+
 function makeClientId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -1077,6 +1664,15 @@ function LearningChatPanel({
   const [capabilityMenuOpen, setCapabilityMenuOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [quizConfig, setQuizConfig] = useState<DeepQuestionFormConfig>(defaultQuizConfig);
+  const [quizPdf, setQuizPdf] = useState<File | null>(null);
+  const [mathAnimatorConfig, setMathAnimatorConfig] =
+    useState<MathAnimatorFormConfig>(defaultMathAnimatorConfig);
+  const [visualizeConfig, setVisualizeConfig] =
+    useState<VisualizeFormConfig>(defaultVisualizeConfig);
+  const [researchConfig, setResearchConfig] =
+    useState<DeepResearchFormConfig>(defaultResearchConfig);
   const [selectedTools, setSelectedTools] = useState<Set<LearningToolName>>(new Set());
   const [selectedResearchSources, setSelectedResearchSources] = useState<
     Set<LearningResearchSource>
@@ -1105,8 +1701,19 @@ function LearningChatPanel({
     activeCapability.allowedTools.includes(tool.name),
   );
   const isResearchMode = capability === "deep_research";
+  const isQuizMode = capability === "deep_question";
+  const isMathAnimatorMode = capability === "math_animator";
+  const isVisualizeMode = capability === "visualize";
   const ragActive = selectedTools.has("rag") || isResearchMode;
-  const canSend = connected && !streaming && Boolean(input.trim() || attachments.length);
+  const researchErrors = validateResearchConfig({
+    ...researchConfig,
+    sources: Array.from(selectedResearchSources),
+  });
+  const canSend =
+    connected &&
+    !streaming &&
+    Boolean(input.trim() || attachments.length || isQuizMode) &&
+    !(isResearchMode && Object.keys(researchErrors).length > 0);
   const knowledgeBaseNames = useMemo(() => {
     const names = new Set<string>();
     knowledgeItems.forEach((item) => {
@@ -1416,6 +2023,7 @@ function LearningChatPanel({
       learningCapabilities.find((entry) => entry.value === value) ?? learningCapabilities[0]!;
     setCapability(nextCapability.value);
     setSelectedTools(new Set(nextCapability.defaultTools));
+    setPanelCollapsed(false);
     setCapabilityMenuOpen(false);
     setToolMenuOpen(false);
   };
@@ -1435,18 +2043,60 @@ function LearningChatPanel({
       const next = new Set(current);
       if (next.has(source)) next.delete(source);
       else next.add(source);
+      setResearchConfig((config) => ({ ...config, sources: Array.from(next) }));
       return next;
     });
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const fallbackContent = attachments.some((attachment) => attachment.type === "image")
       ? "Please analyze the attached image(s)."
-      : "Please use the selected context to help with this request.";
-    const content = input.trim() || (attachments.length ? fallbackContent : "");
+      : isQuizMode
+        ? "Generate quiz questions using the selected settings."
+        : isMathAnimatorMode
+          ? "Generate a math animation from the prompt and attached references."
+          : isVisualizeMode
+            ? "Create a visualization from the prompt and attached data."
+            : "Please use the selected context to help with this request.";
+    const content =
+      input.trim() ||
+      (attachments.length || isQuizMode || isMathAnimatorMode || isVisualizeMode
+        ? fallbackContent
+        : "");
     const socket = socketRef.current;
     if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
-    const sentAttachments = attachments;
+    let config: Record<string, unknown> | undefined;
+    let sentAttachments = attachments;
+    try {
+      if (isQuizMode) {
+        config = buildQuizConfig(quizConfig);
+        if (quizConfig.mode === "mimic" && quizPdf) {
+          sentAttachments = [
+            ...sentAttachments,
+            {
+              id: makeClientId("attachment"),
+              type: "file",
+              filename: quizPdf.name,
+              base64: await fileToBase64(quizPdf),
+              mime_type: quizPdf.type || "application/pdf",
+              size: quizPdf.size,
+            },
+          ];
+        }
+      } else if (isMathAnimatorMode) {
+        config = buildMathAnimatorConfig(mathAnimatorConfig);
+      } else if (isVisualizeMode) {
+        config = { ...buildVisualizeConfig(visualizeConfig) };
+      } else if (isResearchMode) {
+        config = buildResearchConfig({
+          ...researchConfig,
+          sources: Array.from(selectedResearchSources),
+        });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Capability settings are incomplete.");
+      return;
+    }
     setMessages((items) => [
       ...items,
       {
@@ -1459,6 +2109,7 @@ function LearningChatPanel({
     ]);
     setInput("");
     setAttachments([]);
+    setPanelCollapsed(true);
     setStreaming(true);
     activeAssistantIdRef.current = makeClientId("assistant");
     activeTurnIdRef.current = null;
@@ -1472,9 +2123,7 @@ function LearningChatPanel({
         session_id: sessionId,
         knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
         tools: Array.from(selectedTools),
-        config: isResearchMode
-          ? { sources: Array.from(selectedResearchSources) }
-          : undefined,
+        config,
         attachments: sentAttachments.map((attachment) => ({
           type: attachment.type,
           filename: attachment.filename,
@@ -1501,7 +2150,7 @@ function LearningChatPanel({
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      if (canSend) sendMessage();
+      if (canSend) void sendMessage();
     }
   };
 
@@ -2014,6 +2663,44 @@ function LearningChatPanel({
             className="hidden"
             onChange={handleFileInput}
           />
+          {(isQuizMode || isMathAnimatorMode || isVisualizeMode || isResearchMode) ? (
+            <div className="border-t border-[var(--border)]/15">
+              {isQuizMode ? (
+                <QuizConfigPanel
+                  value={quizConfig}
+                  onChange={setQuizConfig}
+                  uploadedPdf={quizPdf}
+                  onUploadPdf={setQuizPdf}
+                  collapsed={panelCollapsed}
+                  onToggleCollapsed={() => setPanelCollapsed((collapsed) => !collapsed)}
+                />
+              ) : isMathAnimatorMode ? (
+                <MathAnimatorConfigPanel
+                  value={mathAnimatorConfig}
+                  onChange={setMathAnimatorConfig}
+                  collapsed={panelCollapsed}
+                  onToggleCollapsed={() => setPanelCollapsed((collapsed) => !collapsed)}
+                />
+              ) : isVisualizeMode ? (
+                <VisualizeConfigPanel
+                  value={visualizeConfig}
+                  onChange={setVisualizeConfig}
+                  collapsed={panelCollapsed}
+                  onToggleCollapsed={() => setPanelCollapsed((collapsed) => !collapsed)}
+                />
+              ) : (
+                <ResearchConfigPanel
+                  value={{ ...researchConfig, sources: Array.from(selectedResearchSources) }}
+                  onChange={(next) => {
+                    setResearchConfig(next);
+                    setSelectedResearchSources(new Set(next.sources));
+                  }}
+                  collapsed={panelCollapsed}
+                  onToggleCollapsed={() => setPanelCollapsed((collapsed) => !collapsed)}
+                />
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
         </div>
