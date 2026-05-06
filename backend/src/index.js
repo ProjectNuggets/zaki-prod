@@ -78,6 +78,8 @@ import {
   isLearningEnabled,
   mapLearningUpstreamFailure,
   resolveCanonicalLearningUserId,
+  sanitizeLearningClientPayload,
+  sanitizeLearningWsClientMessage,
 } from "./learning-bff-contract.js";
 import {
   fetchLearningPath,
@@ -107,6 +109,7 @@ import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import { buildEntitlementFields } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
+  LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
   consumeDailyPromptQuota,
   getQuotaResetAtUtcIso,
@@ -362,6 +365,7 @@ const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 300_000)
 );
 const APP_CHAT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, APP_CHAT_SURFACE);
+const LEARNING_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, LEARNING_SURFACE);
 const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
 const AGENT_HISTORY_MODE_DEFAULT = "merged";
 const ZAKI_BOT_SPACE_ID = "zaki-bot";
@@ -426,6 +430,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
 
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
+  learningDailyPromptLimit: LEARNING_QUOTA_CONFIG.limit,
   zakiBotDailyPromptLimit: ZAKI_BOT_QUOTA_CONFIG.limit,
   agentPerMinuteLimit: DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE,
 };
@@ -2551,6 +2556,7 @@ const AdminMemberUpsertSchema = z.object({
 const AdminRateLimitsUpdateSchema = z
   .object({
     appChatDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    learningDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     zakiBotDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     agentPerMinuteLimit: z.coerce.number().int().min(1).max(10000).optional(),
   })
@@ -3258,6 +3264,10 @@ function sanitizeRuntimeRateLimitSettings(raw = null) {
       source.appChatDailyPromptLimit,
       APP_CHAT_QUOTA_CONFIG.limit
     ),
+    learningDailyPromptLimit: normalizeRateLimitValue(
+      source.learningDailyPromptLimit,
+      LEARNING_QUOTA_CONFIG.limit
+    ),
     zakiBotDailyPromptLimit: normalizeRateLimitValue(
       source.zakiBotDailyPromptLimit,
       ZAKI_BOT_QUOTA_CONFIG.limit
@@ -3273,6 +3283,8 @@ function buildRateLimitSettingsResponse(settings = runtimeRateLimitSettings) {
   return {
     appChatDailyPromptLimit: settings.appChatDailyPromptLimit,
     appChatDailyPromptBucket: APP_CHAT_QUOTA_CONFIG.bucket,
+    learningDailyPromptLimit: settings.learningDailyPromptLimit,
+    learningDailyPromptBucket: LEARNING_QUOTA_CONFIG.bucket,
     zakiBotDailyPromptLimit: settings.zakiBotDailyPromptLimit,
     zakiBotDailyPromptBucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
     agentPerMinuteLimit: settings.agentPerMinuteLimit,
@@ -3317,6 +3329,13 @@ async function saveRuntimeRateLimitSettings(patch = {}, updatedBy = null) {
 
 function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
   const normalizedSurface = resolveQuotaSurface(surface);
+  if (normalizedSurface === LEARNING_SURFACE) {
+    return {
+      surface: LEARNING_SURFACE,
+      bucket: LEARNING_QUOTA_CONFIG.bucket,
+      limit: runtimeRateLimitSettings.learningDailyPromptLimit,
+    };
+  }
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
     return {
       surface: ZAKI_BOT_SURFACE,
@@ -3337,7 +3356,7 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
   const status = zakiUser?.plan_status || "inactive";
   const access = getAccessStatus(zakiUser);
   const unlimited =
-    normalizedSurface === ZAKI_BOT_SURFACE
+    normalizedSurface === ZAKI_BOT_SURFACE || normalizedSurface === LEARNING_SURFACE
       ? false
       : isUnlimitedUser({
           tier,
@@ -5272,6 +5291,10 @@ app.get("/api/account/export", async (req, res) => {
           [email]
         ),
       ]);
+    const learning = await buildLearningAccountExportSnapshot({
+      zakiUser,
+      requestId: getOrCreateRequestId(req),
+    });
 
     const exportPayload = {
       exportedAt: new Date().toISOString(),
@@ -5309,6 +5332,7 @@ app.get("/api/account/export", async (req, res) => {
         confirmations: memoryConfirmations,
         conflicts: memoryConflicts,
       },
+      learning,
     };
 
     const fileDate = new Date().toISOString().slice(0, 10);
@@ -5366,6 +5390,11 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
     // Best-effort provider customer cleanup.
     await getBillingAdapter().cleanupCustomerOnDelete({ zakiUser });
 
+    const learningDeletion = await deleteLearningAccountResources({
+      zakiUser,
+      requestId: getOrCreateRequestId(req),
+    });
+
     await dbQuery("BEGIN");
     try {
       const deleteByEmail = async (table) => {
@@ -5388,10 +5417,13 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       throw err;
     }
 
-    res.status(200).json({ success: true, message: "Account deleted." });
+    res.status(200).json({ success: true, message: "Account deleted.", learningDeletion });
   } catch (error) {
     console.error("[Account] Delete error:", error);
-    res.status(500).json({ error: error?.message || "Account delete failed." });
+    res.status(error?.status || 500).json({
+      error: error?.message || "Account delete failed.",
+      details: error?.details || undefined,
+    });
   }
 });
 
@@ -5665,6 +5697,9 @@ app.patch("/api/admin/rate-limits", express.json({ limit: "50kb" }), async (req,
     const patch = {};
     if (validation.data.appChatDailyPromptLimit !== undefined) {
       patch.appChatDailyPromptLimit = validation.data.appChatDailyPromptLimit;
+    }
+    if (validation.data.learningDailyPromptLimit !== undefined) {
+      patch.learningDailyPromptLimit = validation.data.learningDailyPromptLimit;
     }
     if (validation.data.zakiBotDailyPromptLimit !== undefined) {
       patch.zakiBotDailyPromptLimit = validation.data.zakiBotDailyPromptLimit;
@@ -8505,6 +8540,250 @@ function learningClientOptions(req, label) {
   };
 }
 
+async function requireLearningQuotaForIngress(req, res, next) {
+  if (!["POST", "PUT", "PATCH"].includes(String(req.method || "").toUpperCase())) {
+    next();
+    return;
+  }
+  if (!ZAKI_LEARNING_ENABLED || !getLearningBase(LEARNING_ENGINE_BASE_URL) || !LEARNING_ENGINE_INTERNAL_TOKEN) {
+    next();
+    return;
+  }
+  if (req.learningQuotaChecked) {
+    next();
+    return;
+  }
+
+  await requireLearningContext(req, res, async () => {
+    const learningQuotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser: req.learningAuthResult?.zakiUser,
+      res,
+      surface: LEARNING_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!learningQuotaDecision.allowed) {
+      res.status(learningQuotaDecision.status).json(learningQuotaDecision.payload);
+      return;
+    }
+    req.learningQuotaChecked = true;
+    next();
+  });
+}
+
+function hasConfiguredLearningEngine() {
+  return Boolean(
+    ZAKI_LEARNING_ENABLED &&
+    getLearningBase(LEARNING_ENGINE_BASE_URL) &&
+    LEARNING_ENGINE_INTERNAL_TOKEN
+  );
+}
+
+async function fetchLearningAccountJson({ userId, requestId, path, method = "GET", body, label }) {
+  const response = await fetchLearningPath({
+    baseUrl: LEARNING_ENGINE_BASE_URL,
+    internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+    userId: String(userId || ""),
+    requestId,
+    path,
+    method,
+    body,
+    fetchWithTimeout,
+    timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+    label,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok && response.status !== 404) {
+    const err = new Error(`${label || "Learning request"} failed with ${response.status}`);
+    err.status = response.status;
+    err.payload = payload;
+    throw err;
+  }
+  return response.status === 404 ? null : payload;
+}
+
+function learningArray(payload, keys = []) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  for (const key of keys) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value;
+  }
+  for (const key of [
+    "items",
+    "data",
+    "results",
+    "sessions",
+    "books",
+    "knowledge_bases",
+    "notebooks",
+    "entries",
+    "skills",
+    "documents",
+    "agents",
+    "bots",
+    "souls",
+  ]) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+
+function learningItemString(item, keys = []) {
+  if (!item || typeof item !== "object") return "";
+  for (const key of keys) {
+    const value = item[key];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
+
+async function buildLearningAccountExportSnapshot({ zakiUser, requestId }) {
+  if (!hasConfiguredLearningEngine()) {
+    return { available: false, reason: "learning_not_configured" };
+  }
+
+  const userId = String(zakiUser?.id || "");
+  const calls = [
+    ["sessions", "/api/v1/sessions?limit=500&offset=0"],
+    ["books", "/api/v1/book/books"],
+    ["knowledgeBases", "/api/v1/knowledge/list"],
+    ["notebooks", "/api/v1/notebook/list"],
+    ["questionBank", "/api/v1/question-notebook/entries?limit=500"],
+    ["skills", "/api/v1/skills/list"],
+    ["memory", "/api/v1/memory"],
+    ["coWriterDocuments", "/api/v1/co_writer/documents"],
+    ["solveSessions", "/api/v1/solve/sessions?limit=500"],
+    ["tutorAgents", "/api/v1/tutorbot"],
+    ["tutorAgentSouls", "/api/v1/tutorbot/souls"],
+  ];
+
+  const snapshot = {
+    available: true,
+    exportedAt: new Date().toISOString(),
+    resources: {},
+    errors: [],
+  };
+
+  await Promise.all(
+    calls.map(async ([key, path]) => {
+      try {
+        snapshot.resources[key] = await fetchLearningAccountJson({
+          userId,
+          requestId,
+          path,
+          label: `Learning account export ${key}`,
+        });
+      } catch (error) {
+        snapshot.errors.push({
+          resource: key,
+          status: error?.status || null,
+          message: error?.message || "Learning export fetch failed.",
+        });
+      }
+    })
+  );
+
+  return snapshot;
+}
+
+async function deleteLearningAccountResources({ zakiUser, requestId }) {
+  if (!hasConfiguredLearningEngine()) {
+    return { attempted: false, reason: "learning_not_configured" };
+  }
+
+  const userId = String(zakiUser?.id || "");
+  const snapshot = await buildLearningAccountExportSnapshot({ zakiUser, requestId });
+  if (snapshot.errors?.length) {
+    const err = new Error("Learning account data could not be enumerated for deletion.");
+    err.status = 502;
+    err.details = snapshot.errors;
+    throw err;
+  }
+
+  const deleted = [];
+  const errors = [];
+  const remove = async (resource, path, method = "DELETE", body) => {
+    try {
+      await fetchLearningAccountJson({
+        userId,
+        requestId,
+        path,
+        method,
+        body,
+        label: `Learning account delete ${resource}`,
+      });
+      deleted.push({ resource, path });
+    } catch (error) {
+      errors.push({
+        resource,
+        path,
+        status: error?.status || null,
+        message: error?.message || "Learning delete failed.",
+      });
+    }
+  };
+
+  const resources = snapshot.resources || {};
+  const tasks = [];
+
+  for (const item of learningArray(resources.sessions, ["sessions"])) {
+    const id = learningItemString(item, ["session_id", "id"]);
+    if (id) tasks.push(remove("session", `/api/v1/sessions/${encodeURIComponent(id)}`));
+  }
+  for (const item of learningArray(resources.books, ["books"])) {
+    const id = learningItemString(item, ["book_id", "id"]);
+    if (id) tasks.push(remove("book", `/api/v1/book/books/${encodeURIComponent(id)}`));
+  }
+  for (const item of learningArray(resources.knowledgeBases, ["knowledge_bases", "items"])) {
+    const name = learningItemString(item, ["name", "kb_name", "id"]);
+    if (name) tasks.push(remove("knowledge_base", `/api/v1/knowledge/${encodeURIComponent(name)}`));
+  }
+  for (const item of learningArray(resources.notebooks, ["notebooks"])) {
+    const id = learningItemString(item, ["notebook_id", "id"]);
+    if (id) tasks.push(remove("notebook", `/api/v1/notebook/${encodeURIComponent(id)}`));
+  }
+  for (const item of learningArray(resources.questionBank, ["entries", "items"])) {
+    const id = learningItemString(item, ["id", "entry_id"]);
+    if (id) tasks.push(remove("question_entry", `/api/v1/question-notebook/entries/${encodeURIComponent(id)}`));
+  }
+  for (const item of learningArray(resources.skills, ["skills"])) {
+    const name = learningItemString(item, ["name", "id"]);
+    if (name) tasks.push(remove("skill", `/api/v1/skills/${encodeURIComponent(name)}`));
+  }
+  for (const item of learningArray(resources.coWriterDocuments, ["documents", "items"])) {
+    const id = learningItemString(item, ["document_id", "doc_id", "id"]);
+    if (id) tasks.push(remove("co_writer_document", `/api/v1/co_writer/documents/${encodeURIComponent(id)}`));
+  }
+  for (const item of learningArray(resources.solveSessions, ["sessions", "items"])) {
+    const id = learningItemString(item, ["session_id", "id"]);
+    if (id) tasks.push(remove("solve_session", `/api/v1/solve/sessions/${encodeURIComponent(id)}`));
+  }
+  for (const item of learningArray(resources.tutorAgents, ["agents", "bots", "items"])) {
+    const id = learningItemString(item, ["bot_id", "agent_id", "id"]);
+    if (id) tasks.push(remove("tutor_agent", `/api/v1/tutorbot/${encodeURIComponent(id)}/destroy`));
+  }
+  for (const item of learningArray(resources.tutorAgentSouls, ["souls", "items"])) {
+    const id = learningItemString(item, ["soul_id", "id"]);
+    if (id) tasks.push(remove("tutor_agent_soul", `/api/v1/tutorbot/souls/${encodeURIComponent(id)}`));
+  }
+
+  tasks.push(remove("memory", "/api/v1/memory/clear", "POST", {}));
+  await Promise.all(tasks);
+
+  if (errors.length) {
+    const err = new Error("Learning account data deletion failed.");
+    err.status = 502;
+    err.details = errors;
+    throw err;
+  }
+
+  return { attempted: true, deleted };
+}
+
 async function pipeLearningResponse(req, res, upstream) {
   const requestId = getOrCreateRequestId(req);
   if (!upstream.ok) {
@@ -9475,6 +9754,8 @@ app.post(
 // LEARNING ENGINE BFF
 // =============================================================================
 
+app.use("/api/learning", requireLearningQuotaForIngress);
+
 app.get("/api/internal/learning/status", async (req, res) => {
   try {
     const authResult = await requireSuperAdminUser(req, res);
@@ -9662,39 +9943,6 @@ function learningForwardQueryString(req, blockedKeys = []) {
 
 function learningPathWithForwardedQuery(req, path, blockedKeys = []) {
   return `${path}${learningForwardQueryString(req, blockedKeys)}`;
-}
-
-function stripLearningOperatorManagedFields(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const stripped = { ...value };
-  for (const key of [
-    "api_key",
-    "base_url",
-    "binding",
-    "llm_selection",
-    "model",
-    "model_id",
-    "provider",
-    "provider_config",
-  ]) {
-    delete stripped[key];
-  }
-  return stripped;
-}
-
-function stripLearningOperatorManagedWsMessage(data, isBinary) {
-  if (isBinary) return { data, isBinary };
-  const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
-  if (!text.trim()) return { data, isBinary };
-  try {
-    const payload = JSON.parse(text);
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return { data, isBinary };
-    }
-    return { data: JSON.stringify(stripLearningOperatorManagedFields(payload)), isBinary: false };
-  } catch {
-    return { data, isBinary };
-  }
 }
 
 function registerLearningJsonProxyRoute(method, routePath, buildTargetPath, {
@@ -10329,7 +10577,7 @@ registerLearningJsonProxyRoute(
 registerLearningJsonProxyRoute("POST", "/api/learning/tutor-agents", "/api/v1/tutorbot", {
   jsonLimit: "5mb",
   label: "Learning tutor agent create request",
-  sanitizeBody: stripLearningOperatorManagedFields,
+  sanitizeBody: (body) => sanitizeLearningClientPayload(body),
 });
 registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents/souls", "/api/v1/tutorbot/souls", {
   label: "Learning tutor agent souls list request",
@@ -10374,7 +10622,7 @@ registerLearningJsonProxyRoute(
   {
     jsonLimit: "5mb",
     label: "Learning tutor agent update request",
-    sanitizeBody: stripLearningOperatorManagedFields,
+    sanitizeBody: (body) => sanitizeLearningClientPayload(body),
   }
 );
 registerLearningJsonProxyRoute(
@@ -10934,7 +11182,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
 
   clientSocket.on("message", (data, isBinary) => {
     if (upstreamSocket.readyState === upstreamSocket.OPEN) {
-      const sanitized = stripLearningOperatorManagedWsMessage(data, isBinary);
+      const sanitized = sanitizeLearningWsClientMessage(data, isBinary);
       upstreamSocket.send(sanitized.data, { binary: sanitized.isBinary });
     }
   });
@@ -10971,9 +11219,16 @@ server.on("upgrade", (req, socket, head) => {
       return;
     }
     resolveLearningWsContext(req)
-      .then((context) => {
+      .then(async (context) => {
         if (context.error) {
           writeWebSocketHttpError(socket, 401, "Unauthorized");
+          return;
+        }
+        const quota = await consumePromptQuotaForUser(context.authResult?.zakiUser, {
+          surface: LEARNING_SURFACE,
+        });
+        if (!quota?.allowed) {
+          writeWebSocketHttpError(socket, 429, "Too Many Requests");
           return;
         }
         context.targetPath = learningWsTargetPath;

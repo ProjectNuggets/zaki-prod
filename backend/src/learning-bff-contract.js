@@ -22,6 +22,35 @@ const STRIPPED_BROWSER_HEADERS = new Set([
 ]);
 
 const LEARNING_PATH_SAFE_PATTERN = /^\/[A-Za-z0-9/_:.,~@?&=%+\-[\]]*$/;
+const OPERATOR_MANAGED_LEARNING_FIELDS = new Set([
+  "api_key",
+  "base_url",
+  "binding",
+  "llm_selection",
+  "model",
+  "model_id",
+  "provider",
+  "provider_config",
+]);
+const LEARNING_WS_ALLOWED_ROOT_FIELDS = new Set([
+  "attachments",
+  "book_references",
+  "capability",
+  "chat_id",
+  "config",
+  "content",
+  "history_references",
+  "knowledge_bases",
+  "language",
+  "memory_references",
+  "notebook_references",
+  "question_notebook_references",
+  "session_id",
+  "skills",
+  "tools",
+  "turn_id",
+  "type",
+]);
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -199,4 +228,43 @@ export function extractLearningWsToken(req) {
   const bearerPart = parts.find((part) => part.toLowerCase().startsWith("zaki.jwt."));
   if (!bearerPart) return null;
   return bearerPart.slice("zaki.jwt.".length).trim() || null;
+}
+
+export function sanitizeLearningClientPayload(value, { root = false } = {}) {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeLearningClientPayload(item));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const output = {};
+  const entries = Object.entries(value);
+  const knownRootPayload =
+    root &&
+    entries.some(([key]) => LEARNING_WS_ALLOWED_ROOT_FIELDS.has(String(key)));
+
+  for (const [key, nested] of entries) {
+    const normalizedKey = String(key);
+    if (OPERATOR_MANAGED_LEARNING_FIELDS.has(normalizedKey)) continue;
+    if (knownRootPayload && !LEARNING_WS_ALLOWED_ROOT_FIELDS.has(normalizedKey)) continue;
+    output[normalizedKey] = sanitizeLearningClientPayload(nested);
+  }
+  return output;
+}
+
+export function sanitizeLearningWsClientMessage(data, isBinary) {
+  if (isBinary) return { data, isBinary };
+  const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
+  if (!text.trim()) return { data, isBinary };
+  try {
+    const payload = JSON.parse(text);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return { data, isBinary };
+    }
+    return {
+      data: JSON.stringify(sanitizeLearningClientPayload(payload, { root: true })),
+      isBinary: false,
+    };
+  } catch {
+    return { data, isBinary };
+  }
 }

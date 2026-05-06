@@ -1,8 +1,11 @@
 export const APP_CHAT_SURFACE = "app_chat";
+export const LEARNING_SURFACE = "learning";
 export const ZAKI_BOT_SURFACE = "zaki_bot";
 
 export const DEFAULT_APP_CHAT_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_APP_CHAT_DAILY_PROMPT_BUCKET = APP_CHAT_SURFACE;
+export const DEFAULT_LEARNING_DAILY_PROMPT_LIMIT = 10;
+export const DEFAULT_LEARNING_DAILY_PROMPT_BUCKET = LEARNING_SURFACE;
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_BUCKET = ZAKI_BOT_SURFACE;
 
@@ -32,11 +35,26 @@ function parseEmailList(raw) {
 
 export function resolveQuotaSurface(input) {
   const normalized = String(input || "").trim().toLowerCase();
-  return normalized === ZAKI_BOT_SURFACE ? ZAKI_BOT_SURFACE : APP_CHAT_SURFACE;
+  if (normalized === ZAKI_BOT_SURFACE) return ZAKI_BOT_SURFACE;
+  if (normalized === LEARNING_SURFACE) return LEARNING_SURFACE;
+  return APP_CHAT_SURFACE;
 }
 
 export function getSurfaceQuotaConfig(env = process.env, surface = APP_CHAT_SURFACE) {
   const normalizedSurface = resolveQuotaSurface(surface);
+  if (normalizedSurface === LEARNING_SURFACE) {
+    return {
+      surface: LEARNING_SURFACE,
+      bucket: parseBucket(
+        env?.ZAKI_LEARNING_DAILY_PROMPT_BUCKET,
+        DEFAULT_LEARNING_DAILY_PROMPT_BUCKET
+      ),
+      limit: parsePositiveInteger(
+        env?.ZAKI_LEARNING_DAILY_PROMPT_LIMIT,
+        DEFAULT_LEARNING_DAILY_PROMPT_LIMIT
+      ),
+    };
+  }
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
     return {
       surface: ZAKI_BOT_SURFACE,
@@ -92,6 +110,17 @@ export function buildDailyLimitExceededPayload({
   surface = APP_CHAT_SURFACE,
 }) {
   const normalizedSurface = resolveQuotaSurface(surface);
+  if (normalizedSurface === LEARNING_SURFACE) {
+    return {
+      error: "You reached today's learning limit. Free usage resets daily.",
+      message: "You reached today's learning limit. Free usage resets daily.",
+      code: "daily_limit_reached",
+      surface: LEARNING_SURFACE,
+      limit,
+      remaining: 0,
+      resetAt,
+    };
+  }
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
     return {
       error:

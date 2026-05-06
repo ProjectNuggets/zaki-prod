@@ -29,7 +29,13 @@ parity after P0 and P1 are closed and verified against the local DeepTutor app.
   validates it for HTTP and WebSocket traffic.
 - Operator-managed provider routing: HTTP tutor-agent payloads strip provider
   fields; knowledge provider query forwarding was removed; learning WebSocket
-  messages now strip root-level provider/model fields before forwarding.
+  messages now use a tested root allowlist and recursively strip provider/model
+  fields before forwarding.
+- Learning quota gate: mutating learning BFF requests and learning WebSocket
+  upgrades consume the `learning` quota surface before forwarding.
+- Account export/delete: account export includes a learning snapshot when the
+  learning engine is configured; account deletion enumerates and removes
+  downstream learning resources before deleting the ZAKI account.
 - Unified chat: ZAKI Learn can send DeepTutor-compatible turns with attachments,
   capability config, tools, knowledge bases, book references, notebook
   references, history references, question bank references, skills, and memory.
@@ -54,49 +60,44 @@ parity after P0 and P1 are closed and verified against the local DeepTutor app.
 - Settings: user-managed learning settings and operator-managed learning config
   are conceptually separated, but the final ZAKI settings surfaces and admin
   controls are not complete.
-- Governance: quota, retention, export, account deletion, and disaster recovery
-  gates from the integration spec are not implemented end to end.
+- Governance: quota, export, and deletion now have first-pass enforcement;
+  storage caps, retention windows, backup restore, disaster recovery, and audit
+  job visibility still need production completion.
 - Tests: the port has type/build/smoke coverage, but lacks focused frontend
   tests for picker payloads, WebSocket sanitization, and parity workflows.
 
 ## Code Review Findings
 
-1. P1: `LearningSpacePickerModal` fetches details for every listed book or
-   notebook as soon as the picker opens. This is acceptable for small local test
-   data, but production tenants with many books/notebooks will create a request
-   burst and slow the picker. Move to an active-item/lazy-load model matching
-   DeepTutor's book picker.
+1. Fixed: `LearningSpacePickerModal` was split out of `LearningPage.tsx` and now
+   lazy-loads book pages/notebook records only for selected or expanded items.
 
-2. P1: WebSocket sanitization strips only root-level operator-managed fields.
-   Current ZAKI client sends root-level chat payloads, so this blocks the known
-   bypass. Before broad rollout, add tested recursive sanitization or an
-   allowlist schema per learning WebSocket route so future nested config fields
-   cannot reintroduce provider/model overrides.
+2. Fixed: learning WebSocket client payloads now use a tested root allowlist and
+   recursive operator-managed field stripping.
 
-3. P1: `LearningPage.tsx` is too large and now owns dashboard, chat, Space
-   pickers, capability forms, panels, drawers, and tutorbot UI in one module.
-   This increases regression risk. Split into `LearningChatPanel`,
-   `LearningSpacePickerModal`, `LearningBookPanel`, and API-specific hooks before
-   adding more parity UI.
+3. Partially fixed: `LearningPage.tsx` is smaller after extracting the Space
+   picker. It still needs further splits for chat, books, Co-Writer, and
+   TutorBot as product parity expands.
 
-4. P0: Production readiness gates are not complete: quotas, retention, export,
-   account deletion, and backup/restore policy are still documented but not
-   enforced.
+4. Partially fixed: learning quotas, export, and deletion have first-pass
+   enforcement. Storage caps, retention windows, backup/restore, disaster
+   recovery, and deletion audit visibility remain open production gates.
 
 ## Backlog To Final Product
 
 ### P0 - Blockers Before Internal Beta
 
 - Add automated tests for learning BFF auth, tenant header forwarding, blocked
-  provider/model fields, and WebSocket payload sanitization.
+  provider/model fields, WebSocket payload sanitization, account export, and
+  downstream deletion failure behavior.
 - Add frontend tests for Space picker payloads:
   `history_references`, `book_references`, `notebook_references`,
   `question_notebook_references`, `skills`, and `memory_references`.
-- Implement quotas before forwarding expensive learning requests: chat turns,
-  solve, book generation, upload size/storage, external search, and artifact
-  generation.
-- Define and implement account deletion for learning tenant data, with audit
-  status for async deletion.
+- Extend quotas beyond request counts: upload size/storage, generated artifact
+  storage, external search, and per-plan capability gates.
+- Add deletion/export audit status and operator-visible remediation for
+  downstream learning cleanup failures.
+- Define and implement retention windows, backup restore checks, and disaster
+  recovery runbooks for learning tenant data.
 - Add production health/readiness checks for learning engine dependency
   availability and config completeness.
 
@@ -115,7 +116,7 @@ parity after P0 and P1 are closed and verified against the local DeepTutor app.
 
 ### P2 - Hosted ZAKI Polish
 
-- Replace bulk picker detail loading with lazy loading and pagination.
+- Add pagination to lazy-loaded picker detail lists where upstream supports it.
 - Add Google Drive or similar cloud-folder source linking as hosted-safe V1.1
   replacement for DeepTutor local linked folders.
 - Add learning-specific usage analytics and operator dashboards.

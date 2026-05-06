@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 import {
   APP_CHAT_SURFACE,
+  LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
   buildDailyLimitExceededPayload,
   consumeDailyPromptQuota,
@@ -15,6 +16,7 @@ import {
 describe("daily quota helpers", () => {
   it("resolves quota surface with app_chat default", () => {
     expect(resolveQuotaSurface(APP_CHAT_SURFACE)).toBe(APP_CHAT_SURFACE);
+    expect(resolveQuotaSurface(LEARNING_SURFACE)).toBe(LEARNING_SURFACE);
     expect(resolveQuotaSurface(ZAKI_BOT_SURFACE)).toBe(ZAKI_BOT_SURFACE);
     expect(resolveQuotaSurface("unknown")).toBe(APP_CHAT_SURFACE);
     expect(resolveQuotaSurface("")).toBe(APP_CHAT_SURFACE);
@@ -24,6 +26,8 @@ describe("daily quota helpers", () => {
     const env = {
       ZAKI_APP_CHAT_DAILY_PROMPT_LIMIT: "8",
       ZAKI_APP_CHAT_DAILY_PROMPT_BUCKET: "chat_bucket",
+      ZAKI_LEARNING_DAILY_PROMPT_LIMIT: "12",
+      ZAKI_LEARNING_DAILY_PROMPT_BUCKET: "learning_bucket",
       ZAKI_BOT_DAILY_PROMPT_LIMIT: "3",
       ZAKI_BOT_DAILY_PROMPT_BUCKET: "bot_bucket",
     };
@@ -37,6 +41,11 @@ describe("daily quota helpers", () => {
       limit: 3,
       bucket: "bot_bucket",
     });
+    expect(getSurfaceQuotaConfig(env, LEARNING_SURFACE)).toEqual({
+      surface: LEARNING_SURFACE,
+      limit: 12,
+      bucket: "learning_bucket",
+    });
     expect(getSurfaceQuotaConfig({}, APP_CHAT_SURFACE)).toEqual({
       surface: APP_CHAT_SURFACE,
       limit: 10,
@@ -46,6 +55,11 @@ describe("daily quota helpers", () => {
       surface: ZAKI_BOT_SURFACE,
       limit: 10,
       bucket: "zaki_bot",
+    });
+    expect(getSurfaceQuotaConfig({}, LEARNING_SURFACE)).toEqual({
+      surface: LEARNING_SURFACE,
+      limit: 10,
+      bucket: "learning",
     });
   });
 
@@ -80,7 +94,7 @@ describe("daily quota helpers", () => {
     ).toBe(false);
   });
 
-  it("builds structured exceeded payloads for app and bot surfaces", () => {
+  it("builds structured exceeded payloads for app, learning, and bot surfaces", () => {
     expect(
       buildDailyLimitExceededPayload({
         limit: 10,
@@ -91,6 +105,20 @@ describe("daily quota helpers", () => {
       expect.objectContaining({
         code: "daily_limit_reached",
         surface: APP_CHAT_SURFACE,
+        limit: 10,
+        remaining: 0,
+      })
+    );
+    expect(
+      buildDailyLimitExceededPayload({
+        limit: 10,
+        resetAt: "2026-03-10T00:00:00.000Z",
+        surface: LEARNING_SURFACE,
+      })
+    ).toEqual(
+      expect.objectContaining({
+        code: "daily_limit_reached",
+        surface: LEARNING_SURFACE,
         limit: 10,
         remaining: 0,
       })

@@ -9,7 +9,9 @@ import {
   isLearningEnabled,
   mapLearningUpstreamFailure,
   resolveCanonicalLearningUserId,
+  sanitizeLearningClientPayload,
   sanitizeLearningPath,
+  sanitizeLearningWsClientMessage,
 } from "./learning-bff-contract.js";
 
 describe("learning BFF contract", () => {
@@ -135,5 +137,43 @@ describe("learning BFF contract", () => {
     ).toBe("access-token-2");
     expect(extractLearningWsToken({ headers: {} })).toBeNull();
   });
-});
 
+  test("sanitizes client websocket payloads through a root allowlist", () => {
+    const sanitized = sanitizeLearningClientPayload(
+      {
+        type: "start_turn",
+        content: "Explain this",
+        provider: "evil",
+        unknown_root: "drop",
+        config: {
+          mode: "standard",
+          provider_config: { api_key: "secret" },
+          nested: [{ model: "evil-model", keep: true }],
+        },
+      },
+      { root: true }
+    );
+    expect(sanitized).toEqual({
+      type: "start_turn",
+      content: "Explain this",
+      config: {
+        mode: "standard",
+        nested: [{ keep: true }],
+      },
+    });
+  });
+
+  test("sanitizes websocket message buffers without touching binary frames", () => {
+    const text = sanitizeLearningWsClientMessage(
+      Buffer.from(JSON.stringify({ content: "hello", api_key: "secret" })),
+      false
+    );
+    expect(JSON.parse(String(text.data))).toEqual({ content: "hello" });
+
+    const binary = Buffer.from("raw");
+    expect(sanitizeLearningWsClientMessage(binary, true)).toEqual({
+      data: binary,
+      isBinary: true,
+    });
+  });
+});
