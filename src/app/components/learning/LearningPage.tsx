@@ -150,11 +150,22 @@ type SelectedHistorySpaceItem = {
 type SelectedBookSpaceItem = {
   id: string;
   title: string;
+  pages: Array<{
+    id: string;
+    title: string;
+    chapterTitle?: string;
+  }>;
 };
 
 type SelectedNotebookSpaceItem = {
   id: string;
   title: string;
+  records: Array<{
+    id: string;
+    title: string;
+    summary?: string;
+    type?: string;
+  }>;
 };
 
 type SelectedQuestionSpaceItem = {
@@ -1172,53 +1183,64 @@ function buildResearchConfig(cfg: DeepResearchFormConfig) {
   };
 }
 
-function collectIdsFromArray(value: unknown, preferredKeys: string[]) {
-  if (!Array.isArray(value)) return [];
-  const ids: string[] = [];
-  value.forEach((entry, index) => {
-    const record = asRecord(entry);
-    const id =
-      preferredKeys.map((key) => textOf(record[key])).find(Boolean) ||
-      textOf(record.id) ||
-      textOf(record.page_id) ||
-      textOf(record.record_id) ||
-      String(index);
-    if (id && !ids.includes(id)) ids.push(id);
-  });
-  return ids;
-}
-
-function extractBookPageIds(detail: unknown, spine: unknown) {
+function extractBookPages(detail: unknown, spine: unknown) {
   const detailRecord = asRecord(detail);
   const spineRecord = asRecord(spine);
-  const pageIds = [
-    ...collectIdsFromArray(detailRecord.pages, ["id", "page_id"]),
-    ...collectIdsFromArray(asRecord(detailRecord.detail).pages, ["id", "page_id"]),
-    ...collectIdsFromArray(spineRecord.pages, ["id", "page_id"]),
+  const pageRecords = [
+    ...arrayOfItems(detailRecord.pages),
+    ...arrayOfItems(asRecord(detailRecord.detail).pages),
+    ...arrayOfItems(asRecord(detailRecord.book).pages),
   ];
-
+  const pageById = new Map<string, Item>();
+  pageRecords.forEach((page, index) => {
+    const id = itemId(page, `page-${index}`);
+    if (id) pageById.set(id, page);
+  });
   const chapters = [
+    ...arrayOfItems(asRecord(detailRecord.spine).chapters),
     ...arrayOfItems(spineRecord.chapters),
     ...arrayOfItems(asRecord(spineRecord.spine).chapters),
-    ...arrayOfItems(asRecord(detailRecord.spine).chapters),
   ];
+  const out: Array<{ id: string; title: string; chapterTitle?: string }> = [];
+  const pushPage = (page: Item, fallback: string, chapter?: Item) => {
+    const id = itemId(page, fallback);
+    if (!id || out.some((entry) => entry.id === id)) return;
+    out.push({
+      id,
+      title: itemTitle(page, `Page ${out.length + 1}`),
+      chapterTitle: chapter ? itemTitle(chapter, "") : undefined,
+    });
+  };
+
   chapters.forEach((chapter) => {
+    const chapterTitle = itemTitle(chapter, "");
     const rawIds: unknown[] = Array.isArray(chapter.page_ids) ? chapter.page_ids : [];
-    rawIds.forEach((raw) => {
+    rawIds.forEach((raw, index) => {
       const id = textOf(raw);
-      if (id && !pageIds.includes(id)) pageIds.push(id);
+      const page = pageById.get(id);
+      if (page) pushPage(page, id, chapter);
+      else if (id && !out.some((entry) => entry.id === id)) {
+        out.push({ id, title: chapterTitle || `Page ${index + 1}`, chapterTitle });
+      }
     });
   });
 
-  return pageIds;
+  pageRecords.forEach((page, index) => pushPage(page, `page-${index}`));
+  return out;
 }
 
-function extractNotebookRecordIds(detail: unknown) {
+function extractNotebookRecords(detail: unknown) {
   const detailRecord = asRecord(detail);
-  return [
-    ...collectIdsFromArray(detailRecord.records, ["id", "record_id"]),
-    ...collectIdsFromArray(asRecord(detailRecord.notebook).records, ["id", "record_id"]),
+  const records = [
+    ...arrayOfItems(detailRecord.records),
+    ...arrayOfItems(asRecord(detailRecord.notebook).records),
   ];
+  return records.map((record, index) => ({
+    id: itemId(record, `record-${index}`),
+    title: itemTitle(record, `Record ${index + 1}`),
+    summary: textOf(record.summary) || textOf(record.user_query) || textOf(record.output),
+    type: textOf(record.type),
+  })).filter((record) => record.id);
 }
 
 function ComposerField({
@@ -1868,8 +1890,8 @@ function LearningChatPanel({
     !(isResearchMode && Object.keys(researchErrors).length > 0);
   const spaceSelectionCounts = {
     chatHistory: selectedHistorySessions.length,
-    books: selectedBooks.length,
-    notebooks: selectedNotebooks.length,
+    books: selectedBooks.reduce((total, book) => total + book.pages.length, 0),
+    notebooks: selectedNotebooks.reduce((total, notebook) => total + notebook.records.length, 0),
     questionBank: selectedQuestions.length,
     skills: skillsAutoMode ? 1 : selectedSkills.length,
     memory: selectedMemoryFiles.length,
@@ -2274,50 +2296,18 @@ function LearningChatPanel({
       toast.error(error instanceof Error ? error.message : "Capability settings are incomplete.");
       return;
     }
-    const [bookReferences, notebookReferences] = await Promise.all([
-      Promise.all(
-        selectedBooks.map(async (book) => {
-          const [detail, spine] = await Promise.allSettled([
-            getLearningBook(book.id),
-            getLearningBookSpine(book.id),
-          ]);
-          const pageIds = extractBookPageIds(
-            detail.status === "fulfilled" ? detail.value : null,
-            spine.status === "fulfilled" ? spine.value : null,
-          );
-          return pageIds.length ? { book_id: book.id, page_ids: pageIds } : null;
-        }),
-      ).then((items) =>
-        items.filter((item): item is { book_id: string; page_ids: string[] } =>
-          Boolean(item),
-        ),
-      ),
-      Promise.all(
-        selectedNotebooks.map(async (notebook) => {
-          try {
-            const detail = await getLearningNotebook(notebook.id);
-            const recordIds = extractNotebookRecordIds(detail);
-            return recordIds.length
-              ? { notebook_id: notebook.id, record_ids: recordIds }
-              : null;
-          } catch {
-            return null;
-          }
-        }),
-      ).then((items) =>
-        items.filter((item): item is { notebook_id: string; record_ids: string[] } =>
-          Boolean(item),
-        ),
-      ),
-    ]);
-    const unresolvedContextCount =
-      selectedBooks.length -
-      bookReferences.length +
-      selectedNotebooks.length -
-      notebookReferences.length;
-    if (unresolvedContextCount > 0) {
-      toast.warning("Some selected Space context could not be resolved for this turn.");
-    }
+    const bookReferences = selectedBooks
+      .map((book) => ({
+        book_id: book.id,
+        page_ids: Array.from(new Set(book.pages.map((page) => page.id))).filter(Boolean),
+      }))
+      .filter((book) => book.page_ids.length > 0);
+    const notebookReferences = selectedNotebooks
+      .map((notebook) => ({
+        notebook_id: notebook.id,
+        record_ids: Array.from(new Set(notebook.records.map((record) => record.id))).filter(Boolean),
+      }))
+      .filter((notebook) => notebook.record_ids.length > 0);
     setMessages((items) => [
       ...items,
       {
@@ -2580,7 +2570,7 @@ function LearningChatPanel({
               <SpaceContextChip
                 key={`book-${book.id}`}
                 icon={BookOpen}
-                label={book.title}
+                label={`${book.title} · ${book.pages.length} chapters`}
                 onRemove={() =>
                   setSelectedBooks((items) => items.filter((item) => item.id !== book.id))
                 }
@@ -2590,7 +2580,7 @@ function LearningChatPanel({
               <SpaceContextChip
                 key={`notebook-${notebook.id}`}
                 icon={FileText}
-                label={notebook.title}
+                label={`${notebook.title} · ${notebook.records.length} records`}
                 onRemove={() =>
                   setSelectedNotebooks((items) =>
                     items.filter((item) => item.id !== notebook.id),
@@ -3118,10 +3108,83 @@ function LearningSpacePickerModal({
   onChangeMemory: (items: LearningMemoryFile[]) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [bookPagesById, setBookPagesById] = useState<
+    Record<string, Array<{ id: string; title: string; chapterTitle?: string }>>
+  >({});
+  const [notebookRecordsById, setNotebookRecordsById] = useState<
+    Record<string, Array<{ id: string; title: string; summary?: string; type?: string }>>
+  >({});
 
   useEffect(() => {
     if (open) setQuery("");
   }, [open]);
+
+  useEffect(() => {
+    if (open !== "books") return;
+    let mounted = true;
+    const missingBooks = bookItems
+      .map((item, index) => ({ id: itemId(item, `book-${index}`) }))
+      .filter((book) => book.id && bookPagesById[book.id] === undefined);
+    if (!missingBooks.length) return;
+
+    void Promise.allSettled(
+      missingBooks.map(async (book) => {
+        const [detail, spine] = await Promise.allSettled([
+          getLearningBook(book.id),
+          getLearningBookSpine(book.id),
+        ]);
+        return {
+          id: book.id,
+          pages: extractBookPages(
+            detail.status === "fulfilled" ? detail.value : null,
+            spine.status === "fulfilled" ? spine.value : null,
+          ),
+        };
+      }),
+    ).then((results) => {
+      if (!mounted) return;
+      setBookPagesById((current) => {
+        const next = { ...current };
+        results.forEach((result) => {
+          if (result.status === "fulfilled") next[result.value.id] = result.value.pages;
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [bookItems, bookPagesById, open]);
+
+  useEffect(() => {
+    if (open !== "notebooks") return;
+    let mounted = true;
+    const missingNotebooks = notebookItems
+      .map((item, index) => ({ id: itemId(item, `notebook-${index}`) }))
+      .filter((notebook) => notebook.id && notebookRecordsById[notebook.id] === undefined);
+    if (!missingNotebooks.length) return;
+
+    void Promise.allSettled(
+      missingNotebooks.map(async (notebook) => ({
+        id: notebook.id,
+        records: extractNotebookRecords(await getLearningNotebook(notebook.id)),
+      })),
+    ).then((results) => {
+      if (!mounted) return;
+      setNotebookRecordsById((current) => {
+        const next = { ...current };
+        results.forEach((result) => {
+          if (result.status === "fulfilled") next[result.value.id] = result.value.records;
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [notebookItems, notebookRecordsById, open]);
 
   if (!open) return null;
 
@@ -3214,24 +3277,84 @@ function LearningSpacePickerModal({
     );
   };
 
-  const toggleBook = (item: Item, index: number) => {
-    const id = itemId(item, `book-${index}`);
-    const title = itemTitle(item, `Book ${index + 1}`);
+  const setBookPages = (
+    bookId: string,
+    bookTitle: string,
+    pages: SelectedBookSpaceItem["pages"],
+  ) => {
     onChangeBooks(
-      selectedBooks.some((entry) => entry.id === id)
-        ? selectedBooks.filter((entry) => entry.id !== id)
-        : [...selectedBooks, { id, title }],
+      pages.length
+        ? [
+            ...selectedBooks.filter((entry) => entry.id !== bookId),
+            { id: bookId, title: bookTitle, pages },
+          ]
+        : selectedBooks.filter((entry) => entry.id !== bookId),
     );
   };
 
-  const toggleNotebook = (item: Item, index: number) => {
-    const id = itemId(item, `notebook-${index}`);
-    const title = itemTitle(item, `Notebook ${index + 1}`);
-    onChangeNotebooks(
-      selectedNotebooks.some((entry) => entry.id === id)
-        ? selectedNotebooks.filter((entry) => entry.id !== id)
-        : [...selectedNotebooks, { id, title }],
+  const toggleBookPage = (
+    bookId: string,
+    bookTitle: string,
+    page: SelectedBookSpaceItem["pages"][number],
+  ) => {
+    const currentPages = selectedBooks.find((book) => book.id === bookId)?.pages ?? [];
+    const nextPages = currentPages.some((entry) => entry.id === page.id)
+      ? currentPages.filter((entry) => entry.id !== page.id)
+      : [...currentPages, page];
+    setBookPages(bookId, bookTitle, nextPages);
+  };
+
+  const toggleBookAll = (
+    bookId: string,
+    bookTitle: string,
+    pages: SelectedBookSpaceItem["pages"],
+  ) => {
+    const currentPages = selectedBooks.find((book) => book.id === bookId)?.pages ?? [];
+    const allSelected = pages.length > 0 && pages.every((page) =>
+      currentPages.some((entry) => entry.id === page.id),
     );
+    setBookPages(bookId, bookTitle, allSelected ? [] : pages);
+  };
+
+  const setNotebookRecords = (
+    notebookId: string,
+    notebookTitle: string,
+    records: SelectedNotebookSpaceItem["records"],
+  ) => {
+    onChangeNotebooks(
+      records.length
+        ? [
+            ...selectedNotebooks.filter((entry) => entry.id !== notebookId),
+            { id: notebookId, title: notebookTitle, records },
+          ]
+        : selectedNotebooks.filter((entry) => entry.id !== notebookId),
+    );
+  };
+
+  const toggleNotebookRecord = (
+    notebookId: string,
+    notebookTitle: string,
+    record: SelectedNotebookSpaceItem["records"][number],
+  ) => {
+    const currentRecords =
+      selectedNotebooks.find((notebook) => notebook.id === notebookId)?.records ?? [];
+    const nextRecords = currentRecords.some((entry) => entry.id === record.id)
+      ? currentRecords.filter((entry) => entry.id !== record.id)
+      : [...currentRecords, record];
+    setNotebookRecords(notebookId, notebookTitle, nextRecords);
+  };
+
+  const toggleNotebookAll = (
+    notebookId: string,
+    notebookTitle: string,
+    records: SelectedNotebookSpaceItem["records"],
+  ) => {
+    const currentRecords =
+      selectedNotebooks.find((notebook) => notebook.id === notebookId)?.records ?? [];
+    const allSelected = records.length > 0 && records.every((record) =>
+      currentRecords.some((entry) => entry.id === record.id),
+    );
+    setNotebookRecords(notebookId, notebookTitle, allSelected ? [] : records);
   };
 
   const toggleQuestion = (item: Item, index: number) => {
@@ -3372,32 +3495,85 @@ function LearningSpacePickerModal({
               {open === "books"
                 ? visibleBooks.map((item, index) => {
                     const id = itemId(item, `book-${index}`);
-                    const active = selectedBooks.some((entry) => entry.id === id);
+                    const title = itemTitle(item, `Book ${index + 1}`);
+                    const pages = bookPagesById[id];
+                    const selectedPages = selectedBooks.find((entry) => entry.id === id)?.pages ?? [];
+                    const allSelected = Boolean(
+                      pages?.length && pages.every((page) =>
+                        selectedPages.some((entry) => entry.id === page.id),
+                      ),
+                    );
                     return (
-                      <LearningSpacePickerRow
-                        key={id}
-                        active={active}
-                        icon={BookOpen}
-                        title={itemTitle(item, `Book ${index + 1}`)}
-                        description={textOf(item.description) || textOf(item.topic)}
-                        onClick={() => toggleBook(item, index)}
-                      />
+                      <div key={id} className="divide-y divide-[var(--border)]">
+                        <LearningSpacePickerRow
+                          active={allSelected}
+                          icon={BookOpen}
+                          title={title}
+                          description={
+                            pages
+                              ? `${pages.length} chapters${textOf(item.description) ? ` · ${textOf(item.description)}` : ""}`
+                              : "Loading chapters..."
+                          }
+                          onClick={() => toggleBookAll(id, title, pages ?? [])}
+                        />
+                        {pages?.map((page) => {
+                          const active = selectedPages.some((entry) => entry.id === page.id);
+                          return (
+                            <LearningSpacePickerRow
+                              key={`${id}-${page.id}`}
+                              active={active}
+                              inset
+                              icon={FileText}
+                              title={page.title}
+                              description={page.chapterTitle}
+                              onClick={() => toggleBookPage(id, title, page)}
+                            />
+                          );
+                        })}
+                      </div>
                     );
                   })
                 : null}
               {open === "notebooks"
                 ? visibleNotebooks.map((item, index) => {
                     const id = itemId(item, `notebook-${index}`);
-                    const active = selectedNotebooks.some((entry) => entry.id === id);
+                    const title = itemTitle(item, `Notebook ${index + 1}`);
+                    const records = notebookRecordsById[id];
+                    const selectedRecords =
+                      selectedNotebooks.find((entry) => entry.id === id)?.records ?? [];
+                    const allSelected = Boolean(
+                      records?.length && records.every((record) =>
+                        selectedRecords.some((entry) => entry.id === record.id),
+                      ),
+                    );
                     return (
-                      <LearningSpacePickerRow
-                        key={id}
-                        active={active}
-                        icon={FileText}
-                        title={itemTitle(item, `Notebook ${index + 1}`)}
-                        description={textOf(item.description) || textOf(item.created_at)}
-                        onClick={() => toggleNotebook(item, index)}
-                      />
+                      <div key={id} className="divide-y divide-[var(--border)]">
+                        <LearningSpacePickerRow
+                          active={allSelected}
+                          icon={FileText}
+                          title={title}
+                          description={
+                            records
+                              ? `${records.length} records${textOf(item.description) ? ` · ${textOf(item.description)}` : ""}`
+                              : "Loading records..."
+                          }
+                          onClick={() => toggleNotebookAll(id, title, records ?? [])}
+                        />
+                        {records?.map((record) => {
+                          const active = selectedRecords.some((entry) => entry.id === record.id);
+                          return (
+                            <LearningSpacePickerRow
+                              key={`${id}-${record.id}`}
+                              active={active}
+                              inset
+                              icon={FileText}
+                              title={record.title}
+                              description={[record.type, record.summary].filter(Boolean).join(" · ")}
+                              onClick={() => toggleNotebookRecord(id, title, record)}
+                            />
+                          );
+                        })}
+                      </div>
                     );
                   })
                 : null}
@@ -3497,6 +3673,7 @@ function LearningSpacePickerModal({
 function LearningSpacePickerRow({
   active,
   muted,
+  inset,
   icon: Icon,
   title,
   description,
@@ -3504,6 +3681,7 @@ function LearningSpacePickerRow({
 }: {
   active: boolean;
   muted?: boolean;
+  inset?: boolean;
   icon: LucideIcon;
   title: string;
   description?: string;
@@ -3515,6 +3693,7 @@ function LearningSpacePickerRow({
       onClick={onClick}
       className={cn(
         "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors",
+        inset && "pl-9",
         active ? "bg-[var(--primary)]/8" : "hover:bg-[var(--muted)]/40",
         muted && "opacity-55",
       )}
