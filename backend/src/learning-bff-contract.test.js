@@ -4,11 +4,13 @@ import {
   buildLearningDisabledPayload,
   buildLearningForwardHeaders,
   buildLearningProxyHeaders,
+  checkLearningContentLength,
   extractLearningWsToken,
   getLearningBase,
   isLearningEnabled,
   mapLearningUpstreamFailure,
   resolveCanonicalLearningUserId,
+  resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
@@ -174,6 +176,31 @@ describe("learning BFF contract", () => {
     expect(sanitizeLearningWsClientMessage(binary, true)).toEqual({
       data: binary,
       isBinary: true,
+    });
+  });
+
+  test("resolves and enforces learning request byte caps", () => {
+    expect(resolveLearningMaxRequestBytes({ ZAKI_LEARNING_MAX_REQUEST_BYTES: "2048" })).toBe(2048);
+    expect(resolveLearningMaxRequestBytes({ ZAKI_LEARNING_MAX_REQUEST_BYTES: "bad" })).toBe(
+      100 * 1024 * 1024
+    );
+
+    expect(checkLearningContentLength({ "content-length": "1024" }, 2048)).toEqual({
+      allowed: true,
+      contentLength: 1024,
+      maxBytes: 2048,
+    });
+    expect(checkLearningContentLength({ "content-length": "4096" }, 2048)).toEqual({
+      allowed: false,
+      contentLength: 4096,
+      maxBytes: 2048,
+      reason: "request_too_large",
+    });
+    expect(checkLearningContentLength({ "content-length": "nope" }, 2048)).toEqual({
+      allowed: false,
+      contentLength: null,
+      maxBytes: 2048,
+      reason: "invalid_content_length",
     });
   });
 });

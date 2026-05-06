@@ -74,10 +74,12 @@ import {
   buildLearningForwardHeaders,
   buildLearningConfigErrorPayload,
   buildLearningDisabledPayload,
+  checkLearningContentLength,
   extractLearningWsToken,
   isLearningEnabled,
   mapLearningUpstreamFailure,
   resolveCanonicalLearningUserId,
+  resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
   sanitizeLearningWsClientMessage,
 } from "./learning-bff-contract.js";
@@ -286,6 +288,7 @@ const LEARNING_ENGINE_STREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.LEARNING_ENGINE_STREAM_TIMEOUT_MS || 300_000)
 );
+const ZAKI_LEARNING_MAX_REQUEST_BYTES = resolveLearningMaxRequestBytes(process.env);
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
@@ -8607,6 +8610,19 @@ async function requireLearningQuotaForIngress(req, res, next) {
     next();
     return;
   }
+  const sizeDecision = checkLearningContentLength(req.headers, ZAKI_LEARNING_MAX_REQUEST_BYTES);
+  if (!sizeDecision.allowed) {
+    res.status(413).json({
+      code: sizeDecision.reason,
+      error:
+        sizeDecision.reason === "invalid_content_length"
+          ? "Invalid learning request size."
+          : "Learning request is too large.",
+      maxBytes: sizeDecision.maxBytes,
+      contentLength: sizeDecision.contentLength,
+    });
+    return;
+  }
   if (req.learningQuotaChecked) {
     next();
     return;
@@ -9830,6 +9846,7 @@ app.get("/api/internal/learning/status", async (req, res) => {
       internalTokenConfigured: Boolean(LEARNING_ENGINE_INTERNAL_TOKEN),
       requestTimeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
       streamTimeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
+      maxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
       requestId,
     };
 

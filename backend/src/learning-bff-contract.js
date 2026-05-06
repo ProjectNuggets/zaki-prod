@@ -51,6 +51,7 @@ const LEARNING_WS_ALLOWED_ROOT_FIELDS = new Set([
   "turn_id",
   "type",
 ]);
+const DEFAULT_LEARNING_MAX_REQUEST_BYTES = 100 * 1024 * 1024;
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -267,4 +268,25 @@ export function sanitizeLearningWsClientMessage(data, isBinary) {
   } catch {
     return { data, isBinary };
   }
+}
+
+export function resolveLearningMaxRequestBytes(env = process.env) {
+  const parsed = Number(env?.ZAKI_LEARNING_MAX_REQUEST_BYTES);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_LEARNING_MAX_REQUEST_BYTES;
+  return Math.floor(parsed);
+}
+
+export function checkLearningContentLength(headers = {}, maxBytes = DEFAULT_LEARNING_MAX_REQUEST_BYTES) {
+  const raw = headers["content-length"] ?? headers["Content-Length"];
+  if (raw === undefined || raw === null || raw === "") {
+    return { allowed: true, contentLength: null, maxBytes };
+  }
+  const contentLength = Number(raw);
+  if (!Number.isFinite(contentLength) || contentLength < 0) {
+    return { allowed: false, contentLength: null, maxBytes, reason: "invalid_content_length" };
+  }
+  if (contentLength > maxBytes) {
+    return { allowed: false, contentLength, maxBytes, reason: "request_too_large" };
+  }
+  return { allowed: true, contentLength, maxBytes };
 }
