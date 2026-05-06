@@ -9643,6 +9643,70 @@ function learningQueryString(req, allowedKeys) {
   return qstr ? `?${qstr}` : "";
 }
 
+function learningForwardQueryString(req, blockedKeys = []) {
+  const blocked = new Set(blockedKeys.map((key) => String(key).toLowerCase()));
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query || {})) {
+    if (blocked.has(String(key).toLowerCase())) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) qs.append(key, String(item));
+      }
+    } else if (value !== undefined && value !== null) {
+      qs.set(key, String(value));
+    }
+  }
+  const qstr = qs.toString();
+  return qstr ? `?${qstr}` : "";
+}
+
+function learningPathWithForwardedQuery(req, path, blockedKeys = []) {
+  return `${path}${learningForwardQueryString(req, blockedKeys)}`;
+}
+
+function stripLearningOperatorManagedFields(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const stripped = { ...value };
+  for (const key of [
+    "api_key",
+    "base_url",
+    "binding",
+    "llm_selection",
+    "model",
+    "model_id",
+    "provider",
+    "provider_config",
+  ]) {
+    delete stripped[key];
+  }
+  return stripped;
+}
+
+function registerLearningJsonProxyRoute(method, routePath, buildTargetPath, {
+  jsonLimit = "5mb",
+  label = "Learning upstream request",
+  sanitizeBody = (body) => body,
+  upstreamMethod = method,
+} = {}) {
+  const verb = String(method || "GET").toLowerCase();
+  const middleware = [];
+  if (!["get", "head", "delete"].includes(verb)) {
+    middleware.push(express.json({ limit: jsonLimit }));
+  }
+  app[verb](routePath, requireLearningContext, ...middleware, async (req, res) => {
+    const targetPath = typeof buildTargetPath === "function"
+      ? buildTargetPath(req)
+      : String(buildTargetPath);
+    await proxyLearningRequest(req, res, targetPath, {
+      method: String(upstreamMethod || method).toUpperCase(),
+      body: ["get", "head", "delete"].includes(verb)
+        ? undefined
+        : sanitizeBody(req.body),
+      label,
+    });
+  });
+}
+
 const bookJson5mb = express.json({ limit: "5mb" });
 
 app.get("/api/learning/books", requireLearningContext, async (req, res) => {
@@ -9946,6 +10010,338 @@ app.post("/api/learning/knowledge/:kbName/progress/clear", requireLearningContex
     }
   );
 });
+
+// Question bank / quiz notebook.
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/questions/entries",
+  (req) => learningPathWithForwardedQuery(req, "/api/v1/question-notebook/entries"),
+  { label: "Learning question entries list request" }
+);
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/questions/entries/upsert",
+  "/api/v1/question-notebook/entries/upsert",
+  { jsonLimit: "2mb", label: "Learning question entry upsert request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/questions/entries/lookup/by-question",
+  (req) => learningPathWithForwardedQuery(req, "/api/v1/question-notebook/entries/lookup/by-question"),
+  { label: "Learning question entry lookup request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/questions/entries/:entryId",
+  (req) => `/api/v1/question-notebook/entries/${encodeURIComponent(req.params.entryId)}`,
+  { label: "Learning question entry detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PATCH",
+  "/api/learning/questions/entries/:entryId",
+  (req) => `/api/v1/question-notebook/entries/${encodeURIComponent(req.params.entryId)}`,
+  { jsonLimit: "1mb", label: "Learning question entry update request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/questions/entries/:entryId",
+  (req) => `/api/v1/question-notebook/entries/${encodeURIComponent(req.params.entryId)}`,
+  { label: "Learning question entry delete request" }
+);
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/questions/entries/:entryId/categories",
+  (req) => `/api/v1/question-notebook/entries/${encodeURIComponent(req.params.entryId)}/categories`,
+  { jsonLimit: "1mb", label: "Learning question entry category add request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/questions/entries/:entryId/categories/:categoryId",
+  (req) =>
+    `/api/v1/question-notebook/entries/${encodeURIComponent(req.params.entryId)}/categories/${encodeURIComponent(req.params.categoryId)}`,
+  { label: "Learning question entry category remove request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/questions/categories",
+  "/api/v1/question-notebook/categories",
+  { label: "Learning question categories list request" }
+);
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/questions/categories",
+  "/api/v1/question-notebook/categories",
+  { jsonLimit: "1mb", label: "Learning question category create request" }
+);
+registerLearningJsonProxyRoute(
+  "PATCH",
+  "/api/learning/questions/categories/:categoryId",
+  (req) => `/api/v1/question-notebook/categories/${encodeURIComponent(req.params.categoryId)}`,
+  { jsonLimit: "1mb", label: "Learning question category update request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/questions/categories/:categoryId",
+  (req) => `/api/v1/question-notebook/categories/${encodeURIComponent(req.params.categoryId)}`,
+  { label: "Learning question category delete request" }
+);
+
+// Notebooks and saved learning records.
+registerLearningJsonProxyRoute("GET", "/api/learning/notebooks", "/api/v1/notebook/list", {
+  label: "Learning notebooks list request",
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/notebooks/statistics", "/api/v1/notebook/statistics", {
+  label: "Learning notebook statistics request",
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/notebooks/health", "/api/v1/notebook/health", {
+  label: "Learning notebook health request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/notebooks", "/api/v1/notebook/create", {
+  jsonLimit: "1mb",
+  label: "Learning notebook create request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/notebooks/records", "/api/v1/notebook/add_record", {
+  jsonLimit: "5mb",
+  label: "Learning notebook record add request",
+});
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/notebooks/records/with-summary",
+  "/api/v1/notebook/add_record_with_summary",
+  { jsonLimit: "5mb", label: "Learning notebook record streamed add request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/notebooks/:notebookId",
+  (req) => `/api/v1/notebook/${encodeURIComponent(req.params.notebookId)}`,
+  { label: "Learning notebook detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PUT",
+  "/api/learning/notebooks/:notebookId",
+  (req) => `/api/v1/notebook/${encodeURIComponent(req.params.notebookId)}`,
+  { jsonLimit: "1mb", label: "Learning notebook update request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/notebooks/:notebookId",
+  (req) => `/api/v1/notebook/${encodeURIComponent(req.params.notebookId)}`,
+  { label: "Learning notebook delete request" }
+);
+registerLearningJsonProxyRoute(
+  "PUT",
+  "/api/learning/notebooks/:notebookId/records/:recordId",
+  (req) =>
+    `/api/v1/notebook/${encodeURIComponent(req.params.notebookId)}/records/${encodeURIComponent(req.params.recordId)}`,
+  { jsonLimit: "5mb", label: "Learning notebook record update request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/notebooks/:notebookId/records/:recordId",
+  (req) =>
+    `/api/v1/notebook/${encodeURIComponent(req.params.notebookId)}/records/${encodeURIComponent(req.params.recordId)}`,
+  { label: "Learning notebook record delete request" }
+);
+
+// Co-writer.
+registerLearningJsonProxyRoute("POST", "/api/learning/co-writer/edit", "/api/v1/co_writer/edit", {
+  jsonLimit: "5mb",
+  label: "Learning co-writer edit request",
+});
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/co-writer/edit-react",
+  "/api/v1/co_writer/edit_react",
+  { jsonLimit: "5mb", label: "Learning co-writer react edit request" }
+);
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/co-writer/edit-react/stream",
+  "/api/v1/co_writer/edit_react/stream",
+  { jsonLimit: "5mb", label: "Learning co-writer react edit stream request" }
+);
+registerLearningJsonProxyRoute("POST", "/api/learning/co-writer/automark", "/api/v1/co_writer/automark", {
+  jsonLimit: "5mb",
+  label: "Learning co-writer automark request",
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/co-writer/history", "/api/v1/co_writer/history", {
+  label: "Learning co-writer history request",
+});
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/co-writer/history/:operationId",
+  (req) => `/api/v1/co_writer/history/${encodeURIComponent(req.params.operationId)}`,
+  { label: "Learning co-writer operation request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/co-writer/tool-calls/:operationId",
+  (req) => `/api/v1/co_writer/tool_calls/${encodeURIComponent(req.params.operationId)}`,
+  { label: "Learning co-writer tool calls request" }
+);
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/co-writer/export/markdown",
+  "/api/v1/co_writer/export/markdown",
+  { jsonLimit: "10mb", label: "Learning co-writer markdown export request" }
+);
+registerLearningJsonProxyRoute("GET", "/api/learning/co-writer/documents", "/api/v1/co_writer/documents", {
+  label: "Learning co-writer documents list request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/co-writer/documents", "/api/v1/co_writer/documents", {
+  jsonLimit: "10mb",
+  label: "Learning co-writer document create request",
+});
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/co-writer/documents/:documentId",
+  (req) => `/api/v1/co_writer/documents/${encodeURIComponent(req.params.documentId)}`,
+  { label: "Learning co-writer document detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PATCH",
+  "/api/learning/co-writer/documents/:documentId",
+  (req) => `/api/v1/co_writer/documents/${encodeURIComponent(req.params.documentId)}`,
+  { jsonLimit: "10mb", label: "Learning co-writer document update request", upstreamMethod: "PUT" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/co-writer/documents/:documentId",
+  (req) => `/api/v1/co_writer/documents/${encodeURIComponent(req.params.documentId)}`,
+  { label: "Learning co-writer document delete request" }
+);
+
+// Advanced learning workspaces.
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/solve/sessions",
+  (req) => learningPathWithForwardedQuery(req, "/api/v1/solve/sessions"),
+  { label: "Learning solve sessions list request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/solve/sessions/:sessionId",
+  (req) => `/api/v1/solve/sessions/${encodeURIComponent(req.params.sessionId)}`,
+  { label: "Learning solve session detail request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/solve/sessions/:sessionId",
+  (req) => `/api/v1/solve/sessions/${encodeURIComponent(req.params.sessionId)}`,
+  { label: "Learning solve session delete request" }
+);
+registerLearningJsonProxyRoute("POST", "/api/learning/vision/analyze", "/api/v1/vision/analyze", {
+  jsonLimit: "30mb",
+  label: "Learning vision analyze request",
+});
+
+// Tutor agents. Provider/model routing remains operator-managed; user payloads
+// may configure persona/channels but cannot override upstream LLM provider fields.
+registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents", "/api/v1/tutorbot", {
+  label: "Learning tutor agents list request",
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents/recent", "/api/v1/tutorbot/recent", {
+  label: "Learning tutor agents recent request",
+});
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/channels/schema",
+  "/api/v1/tutorbot/channels/schema",
+  { label: "Learning tutor agent channel schema request" }
+);
+registerLearningJsonProxyRoute("POST", "/api/learning/tutor-agents", "/api/v1/tutorbot", {
+  jsonLimit: "5mb",
+  label: "Learning tutor agent create request",
+  sanitizeBody: stripLearningOperatorManagedFields,
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents/souls", "/api/v1/tutorbot/souls", {
+  label: "Learning tutor agent souls list request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/tutor-agents/souls", "/api/v1/tutorbot/souls", {
+  jsonLimit: "2mb",
+  label: "Learning tutor agent soul create request",
+});
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/souls/:soulId",
+  (req) => `/api/v1/tutorbot/souls/${encodeURIComponent(req.params.soulId)}`,
+  { label: "Learning tutor agent soul detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PUT",
+  "/api/learning/tutor-agents/souls/:soulId",
+  (req) => `/api/v1/tutorbot/souls/${encodeURIComponent(req.params.soulId)}`,
+  { jsonLimit: "2mb", label: "Learning tutor agent soul update request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/tutor-agents/souls/:soulId",
+  (req) => `/api/v1/tutorbot/souls/${encodeURIComponent(req.params.soulId)}`,
+  { label: "Learning tutor agent soul delete request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/:agentId",
+  (req) =>
+    learningPathWithForwardedQuery(
+      req,
+      `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}`,
+      ["include_secrets"]
+    ),
+  { label: "Learning tutor agent detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PATCH",
+  "/api/learning/tutor-agents/:agentId",
+  (req) => `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}`,
+  {
+    jsonLimit: "5mb",
+    label: "Learning tutor agent update request",
+    sanitizeBody: stripLearningOperatorManagedFields,
+  }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/tutor-agents/:agentId",
+  (req) => `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}`,
+  { label: "Learning tutor agent stop request" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/tutor-agents/:agentId/destroy",
+  (req) => `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/destroy`,
+  { label: "Learning tutor agent destroy request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/:agentId/files",
+  (req) => `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/files`,
+  { label: "Learning tutor agent files list request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/:agentId/files/:filename",
+  (req) =>
+    `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/files/${encodeURIComponent(req.params.filename)}`,
+  { label: "Learning tutor agent file detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PUT",
+  "/api/learning/tutor-agents/:agentId/files/:filename",
+  (req) =>
+    `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/files/${encodeURIComponent(req.params.filename)}`,
+  { jsonLimit: "2mb", label: "Learning tutor agent file update request" }
+);
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/:agentId/history",
+  (req) =>
+    learningPathWithForwardedQuery(
+      req,
+      `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/history`
+    ),
+  { label: "Learning tutor agent history request" }
+);
 
 // =============================================================================
 // SHARE CONVERSATION ROUTES
@@ -10260,10 +10656,33 @@ function writeWebSocketHttpError(socket, statusCode, message) {
   socket.destroy();
 }
 
-function getLearningWsUrl() {
+function getLearningWsUrl(targetPath = "/api/v1/ws") {
   const base = getLearningBase(LEARNING_ENGINE_BASE_URL);
   if (!base) return null;
-  return `${base.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:")}/api/v1/ws`;
+  const safeTargetPath = String(targetPath || "/api/v1/ws").startsWith("/")
+    ? String(targetPath || "/api/v1/ws")
+    : `/${String(targetPath || "/api/v1/ws")}`;
+  return `${base.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:")}${safeTargetPath}`;
+}
+
+function resolveLearningWsTargetPath(pathname) {
+  const staticTargets = new Map([
+    ["/api/learning/ws", "/api/v1/ws"],
+    ["/api/learning/book/ws", "/api/v1/book/ws"],
+    ["/api/learning/chat/ws", "/api/v1/chat"],
+    ["/api/learning/solve/ws", "/api/v1/solve"],
+    ["/api/learning/vision/solve/ws", "/api/v1/vision/solve"],
+    ["/api/learning/questions/mimic/ws", "/api/v1/question/mimic"],
+    ["/api/learning/questions/generate/ws", "/api/v1/question/generate"],
+  ]);
+  const staticTarget = staticTargets.get(pathname);
+  if (staticTarget) return staticTarget;
+
+  const tutorAgentMatch = pathname.match(/^\/api\/learning\/tutor-agents\/([^/]+)\/ws$/);
+  if (tutorAgentMatch) {
+    return `/api/v1/tutorbot/${encodeURIComponent(decodeURIComponent(tutorAgentMatch[1] || ""))}/ws`;
+  }
+  return null;
 }
 
 async function resolveLearningWsContext(req) {
@@ -10364,7 +10783,7 @@ agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
 });
 
 learningProxyWss.on("connection", (clientSocket, req, context) => {
-  const upstreamUrl = getLearningWsUrl();
+  const upstreamUrl = getLearningWsUrl(context.targetPath);
   if (!upstreamUrl) {
     clientSocket.close(1011, "Learning websocket base is not configured.");
     return;
@@ -10463,7 +10882,8 @@ server.on("upgrade", (req, socket, head) => {
   }
 
   const url = new URL(req.url || "", "http://localhost");
-  if (url.pathname === "/api/learning/ws") {
+  const learningWsTargetPath = resolveLearningWsTargetPath(url.pathname);
+  if (learningWsTargetPath) {
     if (!ZAKI_LEARNING_ENABLED) {
       writeWebSocketHttpError(socket, 404, "Not Found");
       return;
@@ -10478,6 +10898,7 @@ server.on("upgrade", (req, socket, head) => {
           writeWebSocketHttpError(socket, 401, "Unauthorized");
           return;
         }
+        context.targetPath = learningWsTargetPath;
         learningProxyWss.handleUpgrade(req, socket, head, (ws) => {
           learningProxyWss.emit("connection", ws, req, context);
         });
