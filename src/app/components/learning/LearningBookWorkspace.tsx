@@ -53,6 +53,7 @@ import {
   refreshLearningBookFingerprints,
   regenerateLearningBookBlock,
   setLearningBookPageChatSession,
+  type LearningJson,
 } from "@/lib/learningApi";
 import { cn } from "@/lib/utils";
 
@@ -327,16 +328,55 @@ function parseBookProgressEvent(data: unknown): LearningBookProgressEvent | null
   }
 }
 
+function sourceLabel(item: Item, fallback: string) {
+  return (
+    textOf(item.name) ||
+    textOf(item.title) ||
+    textOf(item.label) ||
+    textOf(item.id) ||
+    fallback
+  );
+}
+
+function numericSourceId(item: Item, fallback: number) {
+  const parsed = Number(item.id ?? item.question_id ?? item.entry_id);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toggleStringSelection(
+  values: string[],
+  value: string,
+  setValues: (values: string[]) => void,
+) {
+  setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+}
+
+function toggleIdSelection(
+  values: Array<string | number>,
+  value: string | number,
+  setValues: (values: Array<string | number>) => void,
+) {
+  setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+}
+
 export function LearningBookWorkspace({
   bookTopic,
   setBookTopic,
   createBook,
   items,
+  knowledgeItems,
+  sessionItems,
+  notebookItems,
+  questionItems,
 }: {
   bookTopic: string;
   setBookTopic: (value: string) => void;
-  createBook: UseMutationResult<unknown, Error, string, unknown>;
+  createBook: UseMutationResult<unknown, Error, LearningJson, unknown>;
   items: Item[];
+  knowledgeItems: Item[];
+  sessionItems: Item[];
+  notebookItems: Item[];
+  questionItems: Item[];
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
@@ -345,6 +385,11 @@ export function LearningBookWorkspace({
   const [proposalDraft, setProposalDraft] = useState("");
   const [spineDraft, setSpineDraft] = useState("");
   const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
+  const [bookLanguage, setBookLanguage] = useState("en");
+  const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([]);
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [selectedNotebooks, setSelectedNotebooks] = useState<string[]>([]);
+  const [selectedQuestions, setSelectedQuestions] = useState<Array<string | number>>([]);
   const progressRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const books = useMemo(() => items.map(normalizeBook), [items]);
@@ -458,8 +503,26 @@ export function LearningBookWorkspace({
     const topic = bookTopic.trim();
     if (!topic) return;
     try {
-      const payload = await createBook.mutateAsync(topic);
-      const root = asRecord(payload);
+      const requestPayload: LearningJson = {
+        user_intent: topic,
+        language: bookLanguage || "en",
+        knowledge_bases: selectedKnowledge,
+        notebook_refs: selectedNotebooks.map((id) => ({
+          notebook_id: id,
+          record_ids: [],
+        })),
+        question_categories: [],
+        question_entries: selectedQuestions
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id)),
+        chat_session_id: selectedSessions[0] || "",
+        chat_selections: selectedSessions.map((id) => ({
+          session_id: id,
+          message_ids: [],
+        })),
+      };
+      const response = await createBook.mutateAsync(requestPayload);
+      const root = asRecord(response);
       const book = normalizeBook(asRecord(root.book));
       if (book.id) {
         setSelectedBookId(book.id);
@@ -561,6 +624,20 @@ export function LearningBookWorkspace({
           bookTopic={bookTopic}
           setBookTopic={setBookTopic}
           creating={createBook.isPending}
+          knowledgeItems={knowledgeItems}
+          sessionItems={sessionItems}
+          notebookItems={notebookItems}
+          questionItems={questionItems}
+          selectedKnowledge={selectedKnowledge}
+          setSelectedKnowledge={setSelectedKnowledge}
+          selectedSessions={selectedSessions}
+          setSelectedSessions={setSelectedSessions}
+          selectedNotebooks={selectedNotebooks}
+          setSelectedNotebooks={setSelectedNotebooks}
+          selectedQuestions={selectedQuestions}
+          setSelectedQuestions={setSelectedQuestions}
+          language={bookLanguage}
+          setLanguage={setBookLanguage}
           onCreate={handleCreate}
           onSelect={handleSelectBook}
           onDelete={handleDeleteBook}
@@ -726,6 +803,20 @@ function BookLibraryView({
   bookTopic,
   setBookTopic,
   creating,
+  knowledgeItems,
+  sessionItems,
+  notebookItems,
+  questionItems,
+  selectedKnowledge,
+  setSelectedKnowledge,
+  selectedSessions,
+  setSelectedSessions,
+  selectedNotebooks,
+  setSelectedNotebooks,
+  selectedQuestions,
+  setSelectedQuestions,
+  language,
+  setLanguage,
   onCreate,
   onSelect,
   onDelete,
@@ -737,6 +828,20 @@ function BookLibraryView({
   bookTopic: string;
   setBookTopic: (value: string) => void;
   creating: boolean;
+  knowledgeItems: Item[];
+  sessionItems: Item[];
+  notebookItems: Item[];
+  questionItems: Item[];
+  selectedKnowledge: string[];
+  setSelectedKnowledge: (values: string[]) => void;
+  selectedSessions: string[];
+  setSelectedSessions: (values: string[]) => void;
+  selectedNotebooks: string[];
+  setSelectedNotebooks: (values: string[]) => void;
+  selectedQuestions: Array<string | number>;
+  setSelectedQuestions: (values: Array<string | number>) => void;
+  language: string;
+  setLanguage: (value: string) => void;
   onCreate: () => void;
   onSelect: (book: LearningBook) => void;
   onDelete: (book: LearningBook) => void;
@@ -747,6 +852,11 @@ function BookLibraryView({
     inProgress: allBooks.filter((book) => ["draft", "spine_ready", "compiling"].includes(book.status)).length,
     chapters: allBooks.reduce((sum, book) => sum + (book.chapter_count || 0), 0),
   };
+  const selectedSourceCount =
+    selectedKnowledge.length +
+    selectedSessions.length +
+    selectedNotebooks.length +
+    selectedQuestions.length;
 
   return (
     <div className="flex min-h-[680px] flex-col">
@@ -779,22 +889,78 @@ function BookLibraryView({
         <BookStat icon={Layers} label="Chapters" value={stats.chapters} />
       </div>
       <div className="border-b border-zaki-border p-5">
-        <div className="flex flex-col gap-3 lg:flex-row">
-          <input
-            value={bookTopic}
-            onChange={(event) => setBookTopic(event.target.value)}
-            placeholder="What should ZAKI teach?"
-            className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-          />
-          <button
-            type="button"
-            disabled={!bookTopic.trim() || creating}
-            onClick={onCreate}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            New book
-          </button>
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <input
+              value={bookTopic}
+              onChange={(event) => setBookTopic(event.target.value)}
+              placeholder="What should ZAKI teach?"
+              className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+            />
+            <select
+              value={language}
+              onChange={(event) => setLanguage(event.target.value)}
+              className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand lg:w-36"
+              aria-label="Book language"
+            >
+              <option value="en">English</option>
+              <option value="ar">Arabic</option>
+              <option value="fr">French</option>
+              <option value="es">Spanish</option>
+              <option value="de">German</option>
+            </select>
+            <button
+              type="button"
+              disabled={!bookTopic.trim() || creating}
+              onClick={onCreate}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              New book
+            </button>
+          </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Book sources
+                {selectedSourceCount ? (
+                  <span className="ml-2 rounded-full bg-zaki-brand/10 px-2 py-0.5 text-[10px] text-zaki-brand">
+                    {selectedSourceCount} selected
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid gap-2 lg:grid-cols-4">
+              <BookSourceGroup
+                label="Libraries"
+                items={knowledgeItems}
+                selected={selectedKnowledge}
+                getId={(item, index) => textOf(item.name) || itemId(item, `kb-${index}`)}
+                onToggle={(id) => toggleStringSelection(selectedKnowledge, id, setSelectedKnowledge)}
+              />
+              <BookSourceGroup
+                label="Chats"
+                items={sessionItems}
+                selected={selectedSessions}
+                getId={(item, index) => itemId(item, `session-${index}`)}
+                onToggle={(id) => toggleStringSelection(selectedSessions, id, setSelectedSessions)}
+              />
+              <BookSourceGroup
+                label="Notebooks"
+                items={notebookItems}
+                selected={selectedNotebooks}
+                getId={(item, index) => itemId(item, `notebook-${index}`)}
+                onToggle={(id) => toggleStringSelection(selectedNotebooks, id, setSelectedNotebooks)}
+              />
+              <BookSourceGroup
+                label="Questions"
+                items={questionItems}
+                selected={selectedQuestions}
+                getId={(item, index) => numericSourceId(item, index)}
+                onToggle={(id) => toggleIdSelection(selectedQuestions, id, setSelectedQuestions)}
+              />
+            </div>
+          </div>
         </div>
       </div>
       <main className="flex-1 overflow-y-auto p-5">
@@ -835,6 +1001,57 @@ function BookStat({
         {label}
       </div>
       <div className="text-xl font-semibold text-zaki-text">{value}</div>
+    </div>
+  );
+}
+
+function BookSourceGroup<TId extends string | number>({
+  label,
+  items,
+  selected,
+  getId,
+  onToggle,
+}: {
+  label: string;
+  items: Item[];
+  selected: TId[];
+  getId: (item: Item, index: number) => TId;
+  onToggle: (id: TId) => void;
+}) {
+  const visibleItems = items.slice(0, 6);
+  return (
+    <div className="min-h-28 rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
+        {label}
+      </div>
+      {visibleItems.length ? (
+        <div className="space-y-1">
+          {visibleItems.map((item, index) => {
+            const id = getId(item, index);
+            const checked = selected.includes(id);
+            return (
+              <label
+                key={String(id)}
+                className="flex cursor-pointer items-start gap-2 rounded-zaki-sm px-1.5 py-1 text-xs text-zaki-text hover:bg-zaki-hover"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(id)}
+                  className="mt-0.5 size-3.5 rounded border-zaki-border accent-zaki-brand"
+                />
+                <span className="line-clamp-2 min-w-0">
+                  {sourceLabel(item, `${label} ${index + 1}`)}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-zaki-sm border border-dashed border-zaki-border px-2 py-3 text-xs text-zaki-muted">
+          No items.
+        </div>
+      )}
     </div>
   );
 }

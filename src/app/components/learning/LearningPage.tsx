@@ -587,11 +587,7 @@ export function LearningPage() {
   });
 
   const createBook = useMutation({
-    mutationFn: (topic: string) =>
-      createLearningBook({
-        user_intent: topic,
-        knowledge_bases: kbName ? [kbName] : [],
-      }),
+    mutationFn: (payload: LearningJson) => createLearningBook(payload),
     onSuccess: (payload) => {
       setLastResult(payload);
       setBookTopic("");
@@ -798,6 +794,10 @@ export function LearningPage() {
                 setBookTopic={setBookTopic}
                 createBook={createBook}
                 items={bookItems}
+                knowledgeItems={knowledgeItems}
+                sessionItems={sessionItems}
+                notebookItems={notebookItems}
+                questionItems={questionItems}
               />
             ) : null}
             {tab === "notebooks" ? (
