@@ -35,6 +35,7 @@ import {
   type LearningBookProgressEvent,
 } from "./learningBookProgress";
 import {
+  changeLearningBookBlockType,
   compileLearningBookPage,
   confirmLearningBookProposal,
   confirmLearningBookSpine,
@@ -49,6 +50,7 @@ import {
   openLearningSocket,
   rebuildLearningBook,
   recordLearningBookQuizAttempt,
+  refreshLearningBookFingerprints,
   regenerateLearningBookBlock,
   setLearningBookPageChatSession,
 } from "@/lib/learningApi";
@@ -154,6 +156,7 @@ const STATUS_STYLES: Record<string, { label: string; className: string; dot: str
 };
 
 const INSERTABLE_TYPES: BlockType[] = [
+  "section",
   "text",
   "callout",
   "quiz",
@@ -165,6 +168,20 @@ const INSERTABLE_TYPES: BlockType[] = [
   "animation",
   "deep_dive",
   "user_note",
+];
+
+const CHANGEABLE_TYPES: BlockType[] = [
+  "text",
+  "section",
+  "callout",
+  "quiz",
+  "code",
+  "timeline",
+  "flash_cards",
+  "figure",
+  "interactive",
+  "animation",
+  "deep_dive",
 ];
 
 function asRecord(value: unknown): Item {
@@ -602,6 +619,13 @@ export function LearningBookWorkspace({
                 health={healthQuery.data}
                 loading={runBookAction.isPending}
                 onRecompile={activePage ? () => handleCompilePage(activePage, true) : undefined}
+                onRefreshFingerprints={() => {
+                  if (!activeBook) return;
+                  runBookAction.mutate({
+                    label: "Source fingerprints refreshed",
+                    action: () => refreshLearningBookFingerprints(activeBook.id),
+                  });
+                }}
                 onRegenerateBlock={(block) =>
                   handleBlockAction("Block regeneration started", block, (bookId, pageId, blockId) =>
                     regenerateLearningBookBlock({ book_id: bookId, page_id: pageId, block_id: blockId }),
@@ -624,6 +648,16 @@ export function LearningBookWorkspace({
                       page_id: pageId,
                       block_id: blockId,
                       new_position: newPosition,
+                    }),
+                  );
+                }}
+                onChangeBlockType={(block, newType) => {
+                  handleBlockAction("Block type changed", block, (bookId, pageId, blockId) =>
+                    changeLearningBookBlockType({
+                      book_id: bookId,
+                      page_id: pageId,
+                      block_id: blockId,
+                      new_type: newType,
                     }),
                   );
                 }}
@@ -1074,9 +1108,11 @@ function BookReaderView({
   health,
   loading,
   onRecompile,
+  onRefreshFingerprints,
   onRegenerateBlock,
   onDeleteBlock,
   onMoveBlock,
+  onChangeBlockType,
   onInsertBlock,
   onDeepDive,
   onQuizAttempt,
@@ -1087,9 +1123,11 @@ function BookReaderView({
   health: unknown;
   loading: boolean;
   onRecompile?: () => void;
+  onRefreshFingerprints: () => void;
   onRegenerateBlock: (block: LearningBookBlock) => void;
   onDeleteBlock: (block: LearningBookBlock) => void;
   onMoveBlock: (block: LearningBookBlock, direction: "up" | "down") => void;
+  onChangeBlockType: (block: LearningBookBlock, newType: BlockType) => void;
   onInsertBlock: (blockType: BlockType) => void;
   onDeepDive: (block: LearningBookBlock, topic?: string) => void;
   onQuizAttempt: (block: LearningBookBlock, attempt: LearningBookQuizAttempt) => void;
@@ -1157,6 +1195,14 @@ function BookReaderView({
                   <p className="mt-1 text-xs opacity-80">
                     Some source libraries changed after this book was generated. Rebuild or regenerate stale pages.
                   </p>
+                  <button
+                    type="button"
+                    onClick={onRefreshFingerprints}
+                    disabled={loading}
+                    className="mt-3 rounded-zaki-sm border border-current px-2 py-1 text-xs font-semibold disabled:opacity-60"
+                  >
+                    Refresh fingerprints
+                  </button>
                 </div>
               </div>
             </div>
@@ -1191,6 +1237,7 @@ function BookReaderView({
               onRegenerate={() => onRegenerateBlock(block)}
               onDelete={() => onDeleteBlock(block)}
               onMove={(direction) => onMoveBlock(block, direction)}
+              onChangeType={(newType) => onChangeBlockType(block, newType)}
               onDeepDive={(topic) => onDeepDive(block, topic)}
               onQuizAttempt={(attempt) => onQuizAttempt(block, attempt)}
             />
@@ -1501,6 +1548,7 @@ function BookBlock({
   onRegenerate,
   onDelete,
   onMove,
+  onChangeType,
   onDeepDive,
   onQuizAttempt,
 }: {
@@ -1511,6 +1559,7 @@ function BookBlock({
   onRegenerate: () => void;
   onDelete: () => void;
   onMove: (direction: "up" | "down") => void;
+  onChangeType: (newType: BlockType) => void;
   onDeepDive: (topic?: string) => void;
   onQuizAttempt: (attempt: LearningBookQuizAttempt) => void;
 }) {
@@ -1543,6 +1592,24 @@ function BookBlock({
           >
             Down
           </button>
+          <select
+            value={CHANGEABLE_TYPES.includes(block.type) ? block.type : ""}
+            onChange={(event) => {
+              const nextType = event.target.value;
+              if (nextType && nextType !== block.type) onChangeType(nextType);
+            }}
+            className="h-[26px] rounded-zaki-sm border border-zaki-border bg-zaki-base px-2 text-xs text-zaki-muted outline-none hover:border-zaki-brand/50 hover:text-zaki-brand"
+            aria-label="Change block type"
+          >
+            <option value="" disabled>
+              Type
+            </option>
+            {CHANGEABLE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={onRegenerate}
