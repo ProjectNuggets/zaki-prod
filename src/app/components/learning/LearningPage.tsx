@@ -97,6 +97,7 @@ import {
   SheetTitle,
 } from "@/app/components/ui/sheet";
 import { LearningSpacePickerModal } from "./LearningSpacePickerModal";
+import { buildLearningSpaceReferences } from "./learningSpaceReferences";
 
 type LearningTab =
   | "chat"
@@ -2232,18 +2233,15 @@ function LearningChatPanel({
       toast.error(error instanceof Error ? error.message : "Capability settings are incomplete.");
       return;
     }
-    const bookReferences = selectedBooks
-      .map((book) => ({
-        book_id: book.id,
-        page_ids: Array.from(new Set(book.pages.map((page) => page.id))).filter(Boolean),
-      }))
-      .filter((book) => book.page_ids.length > 0);
-    const notebookReferences = selectedNotebooks
-      .map((notebook) => ({
-        notebook_id: notebook.id,
-        record_ids: Array.from(new Set(notebook.records.map((record) => record.id))).filter(Boolean),
-      }))
-      .filter((notebook) => notebook.record_ids.length > 0);
+    const spaceReferences = buildLearningSpaceReferences({
+      selectedHistorySessions,
+      selectedBooks,
+      selectedNotebooks,
+      selectedQuestions,
+      selectedSkills,
+      skillsAutoMode,
+      selectedMemoryFiles,
+    });
     setMessages((items) => [
       ...items,
       {
@@ -2278,12 +2276,7 @@ function LearningChatPanel({
         knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
         tools: Array.from(selectedTools),
         config,
-        history_references: selectedHistorySessions.map((session) => session.id),
-        notebook_references: notebookReferences,
-        book_references: bookReferences,
-        question_notebook_references: selectedQuestions.map((question) => question.id),
-        skills: skillsAutoMode ? ["auto"] : selectedSkills,
-        memory_references: selectedMemoryFiles,
+        ...spaceReferences,
         attachments: sentAttachments.map((attachment) => ({
           type: attachment.type,
           filename: attachment.filename,
