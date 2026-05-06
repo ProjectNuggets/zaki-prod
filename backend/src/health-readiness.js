@@ -24,7 +24,29 @@ export function buildBackendHealthStatus(error = null) {
   };
 }
 
-export function buildBackendReadyStatus({ health, isDraining = false, shutdownSignal = null }) {
+function normalizeDependencies(dependencies = {}) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(dependencies || {})) {
+    normalized[key] = {
+      ok: value?.ok !== false,
+      status: value?.status || (value?.ok === false ? "not_ready" : "ready"),
+      ...value,
+    };
+  }
+  return normalized;
+}
+
+function hasBlockingDependency(dependencies = {}) {
+  return Object.values(dependencies || {}).some((dependency) => dependency?.ok === false);
+}
+
+export function buildBackendReadyStatus({
+  health,
+  isDraining = false,
+  shutdownSignal = null,
+  dependencies = {},
+}) {
+  const normalizedDependencies = normalizeDependencies(dependencies);
   if (isDraining) {
     return {
       statusCode: 503,
@@ -33,6 +55,7 @@ export function buildBackendReadyStatus({ health, isDraining = false, shutdownSi
         status: "draining",
         signal: shutdownSignal,
         retryable: true,
+        dependencies: normalizedDependencies,
       },
     };
   }
@@ -44,6 +67,21 @@ export function buildBackendReadyStatus({ health, isDraining = false, shutdownSi
         ...health.body,
         status: "not_ready",
         retryable: true,
+        dependencies: normalizedDependencies,
+      },
+    };
+  }
+
+  if (hasBlockingDependency(normalizedDependencies)) {
+    return {
+      statusCode: 503,
+      body: {
+        ok: false,
+        status: "not_ready",
+        database: "connected",
+        timestamp: health.body.timestamp,
+        retryable: true,
+        dependencies: normalizedDependencies,
       },
     };
   }
@@ -55,6 +93,7 @@ export function buildBackendReadyStatus({ health, isDraining = false, shutdownSi
       status: "ready",
       database: "connected",
       timestamp: health.body.timestamp,
+      dependencies: normalizedDependencies,
     },
   };
 }

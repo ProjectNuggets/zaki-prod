@@ -39,6 +39,7 @@ describe("health readiness helpers", () => {
         ok: true,
         status: "ready",
         database: "connected",
+        dependencies: {},
       })
     );
   });
@@ -54,7 +55,38 @@ describe("health readiness helpers", () => {
       database: "disconnected",
       error: "db offline",
       retryable: true,
+      dependencies: {},
     });
+  });
+
+  test("builds not_ready when a dependency is blocking", () => {
+    const health = buildBackendHealthStatus();
+    const ready = buildBackendReadyStatus({
+      health,
+      dependencies: {
+        learning: {
+          ok: false,
+          status: "unavailable",
+          enabled: true,
+        },
+      },
+    });
+
+    expect(ready.statusCode).toBe(503);
+    expect(ready.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        status: "not_ready",
+        retryable: true,
+        dependencies: {
+          learning: expect.objectContaining({
+            ok: false,
+            status: "unavailable",
+            enabled: true,
+          }),
+        },
+      })
+    );
   });
 
   test("builds draining payload while shutting down", () => {
@@ -71,6 +103,7 @@ describe("health readiness helpers", () => {
       status: "draining",
       signal: "SIGTERM",
       retryable: true,
+      dependencies: {},
     });
   });
 });

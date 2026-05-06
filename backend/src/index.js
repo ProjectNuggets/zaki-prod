@@ -2481,6 +2481,63 @@ async function getBackendHealthStatus() {
   }
 }
 
+async function getBackendReadinessDependencies() {
+  const learningConfigured = Boolean(
+    getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN
+  );
+  if (!ZAKI_LEARNING_ENABLED) {
+    return {
+      learning: {
+        ok: true,
+        enabled: false,
+        configured: learningConfigured,
+        status: learningConfigured ? "disabled" : "not_configured",
+      },
+    };
+  }
+  if (!learningConfigured) {
+    return {
+      learning: {
+        ok: false,
+        enabled: true,
+        configured: false,
+        status: "config_missing",
+      },
+    };
+  }
+
+  try {
+    const response = await probeLearningReady({
+      baseUrl: LEARNING_ENGINE_BASE_URL,
+      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+      userId: "system",
+      requestId: "backend-ready-learning",
+      fetchWithTimeout,
+      timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 3_000),
+      label: "Backend ready learning dependency probe",
+    });
+    return {
+      learning: {
+        ok: response.ok,
+        enabled: true,
+        configured: true,
+        status: response.ok ? "ready" : "unavailable",
+        upstreamStatus: response.status,
+      },
+    };
+  } catch (error) {
+    return {
+      learning: {
+        ok: false,
+        enabled: true,
+        configured: true,
+        status: "unavailable",
+        error: error?.message || "Learning readiness probe failed.",
+      },
+    };
+  }
+}
+
 app.get("/health", async (_, res) => {
   const health = await getBackendHealthStatus();
   res.status(health.statusCode).json(health.body);
@@ -2488,7 +2545,8 @@ app.get("/health", async (_, res) => {
 
 app.get("/ready", async (_, res) => {
   const health = await getBackendHealthStatus();
-  const ready = buildBackendReadyStatus({ health, isDraining, shutdownSignal });
+  const dependencies = await getBackendReadinessDependencies();
+  const ready = buildBackendReadyStatus({ health, isDraining, shutdownSignal, dependencies });
   res.status(ready.statusCode).json(ready.body);
 });
 
