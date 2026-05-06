@@ -1,9 +1,8 @@
-// ZAKI auth HTTP endpoints — Phase 1 (OATH-03, OATH-07, OATH-08, OATH-11)
+// ZAKI auth HTTP endpoints — Phase 1 (OATH-03, OATH-07, OATH-08)
 // Mounts as: app.use("/api/auth", buildAuthRouter())
 
 import express from "express";
 import crypto from "node:crypto";
-import rateLimit from "express-rate-limit";
 
 import { dbGet, dbQuery } from "./db.js";
 import { rotateRefreshToken, signAccessTokenForUser } from "./zaki-auth.js";
@@ -144,24 +143,13 @@ async function handleLogout(req, res) {
   }
 }
 
-/** Build the rate limiter for POST /refresh — 60 requests / 15 min / IP (OATH-11). */
-function buildRefreshLimiter() {
-  return rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "too_many_refresh_requests" },
-  });
-}
-
 /**
  * Build the express.Router for /api/auth — mounted via app.use("/api/auth", buildAuthRouter()) in index.js.
  * Returns a fresh router each call so test suites can reset rate-limit state by remounting.
  */
 export function buildAuthRouter() {
   const router = express.Router();
-  router.post("/refresh", buildRefreshLimiter(), handleRefresh);
+  router.post("/refresh", handleRefresh);
   router.post("/logout", handleLogout);
   return router;
 }

@@ -36,7 +36,7 @@ function makeApp() {
   return app;
 }
 
-describe("POST /api/auth/refresh (OATH-07, OATH-11)", () => {
+describe("POST /api/auth/refresh (OATH-07)", () => {
   it("returns 401 when no zaki_refresh cookie", async () => {
     const res = await request(makeApp()).post("/api/auth/refresh");
     expect(res.status).toBe(401);
@@ -101,21 +101,6 @@ describe("POST /api/auth/logout (OATH-08)", () => {
     const setCookie = (res.headers["set-cookie"] || []).find((c) => c.startsWith("zaki_refresh="));
     expect(setCookie).toMatch(/Max-Age=0/);
   });
-});
-
-describe("Rate limiter on /api/auth/refresh (OATH-11)", () => {
-  it("buildAuthRouter exports a refreshLimiter or installs rate limit middleware", async () => {
-    const mod = await import("./auth-endpoints.js");
-    // The router must include rate limiting; either expose it or assert behavior.
-    // We assert by sending 61 requests and expecting at least one 429.
-    const app = makeApp();
-    let saw429 = false;
-    for (let i = 0; i < 65; i++) {
-      const r = await request(app).post("/api/auth/refresh"); // 401 normally
-      if (r.status === 429) { saw429 = true; break; }
-    }
-    expect(saw429).toBe(true);
-  }, 30000);
 });
 
 describe("POST /api/auth/refresh — concurrent refresh guard (AUTH-06)", () => {
