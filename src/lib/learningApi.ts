@@ -60,6 +60,8 @@ export const learningKeys = {
   notebooks: ["learning", "notebooks"] as const,
   coWriterDocuments: ["learning", "co-writer", "documents"] as const,
   questions: ["learning", "questions"] as const,
+  skills: ["learning", "skills"] as const,
+  memory: ["learning", "memory"] as const,
   tutorAgents: ["learning", "tutor-agents"] as const,
   solveSessions: ["learning", "solve", "sessions"] as const,
 };
@@ -163,6 +165,21 @@ export function getLearningQuestionEntry(entryId: string) {
   return learningRequest<unknown>(
     `/api/learning/questions/entries/${encodeURIComponent(entryId)}`,
   );
+}
+
+export function listLearningSkills() {
+  return learningRequest<unknown>("/api/learning/skills");
+}
+
+export function getLearningMemory() {
+  return learningRequest<unknown>("/api/learning/memory");
+}
+
+export function updateLearningMemory(file: "summary" | "profile", content: string) {
+  return learningRequest<unknown>("/api/learning/memory", {
+    method: "PUT",
+    body: { file, content },
+  });
 }
 
 export function listLearningTutorAgents() {

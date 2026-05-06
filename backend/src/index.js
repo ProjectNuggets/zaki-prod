@@ -10209,6 +10209,70 @@ registerLearningJsonProxyRoute(
   { label: "Learning co-writer document delete request" }
 );
 
+// Learning space: user-managed memory and skills. Provider/model settings stay
+// outside this surface and remain operator-managed.
+registerLearningJsonProxyRoute("GET", "/api/learning/memory", "/api/v1/memory", {
+  label: "Learning memory request",
+});
+registerLearningJsonProxyRoute("PUT", "/api/learning/memory", "/api/v1/memory", {
+  jsonLimit: "2mb",
+  label: "Learning memory update request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/memory/refresh", "/api/v1/memory/refresh", {
+  jsonLimit: "1mb",
+  label: "Learning memory refresh request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/memory/clear", "/api/v1/memory/clear", {
+  jsonLimit: "1mb",
+  label: "Learning memory clear request",
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/skills", "/api/v1/skills/list", {
+  label: "Learning skills list request",
+});
+registerLearningJsonProxyRoute("GET", "/api/learning/skills/tags", "/api/v1/skills/tags/list", {
+  label: "Learning skill tags list request",
+});
+registerLearningJsonProxyRoute("POST", "/api/learning/skills", "/api/v1/skills/create", {
+  jsonLimit: "2mb",
+  label: "Learning skill create request",
+});
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/skills/:name",
+  (req) => `/api/v1/skills/${encodeURIComponent(req.params.name)}`,
+  { label: "Learning skill detail request" }
+);
+registerLearningJsonProxyRoute(
+  "PATCH",
+  "/api/learning/skills/:name",
+  (req) => `/api/v1/skills/${encodeURIComponent(req.params.name)}`,
+  { jsonLimit: "2mb", label: "Learning skill update request", upstreamMethod: "PUT" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/skills/:name",
+  (req) => `/api/v1/skills/${encodeURIComponent(req.params.name)}`,
+  { label: "Learning skill delete request" }
+);
+registerLearningJsonProxyRoute(
+  "POST",
+  "/api/learning/skills/tags",
+  "/api/v1/skills/tags/create",
+  { jsonLimit: "1mb", label: "Learning skill tag create request" }
+);
+registerLearningJsonProxyRoute(
+  "PATCH",
+  "/api/learning/skills/tags/:tag",
+  (req) => `/api/v1/skills/tags/${encodeURIComponent(req.params.tag)}`,
+  { jsonLimit: "1mb", label: "Learning skill tag update request", upstreamMethod: "PUT" }
+);
+registerLearningJsonProxyRoute(
+  "DELETE",
+  "/api/learning/skills/tags/:tag",
+  (req) => `/api/v1/skills/tags/${encodeURIComponent(req.params.tag)}`,
+  { label: "Learning skill tag delete request" }
+);
+
 // Advanced learning workspaces.
 registerLearningJsonProxyRoute(
   "GET",

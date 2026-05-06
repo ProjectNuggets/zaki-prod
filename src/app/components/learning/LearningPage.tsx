@@ -52,10 +52,13 @@ import {
   listLearningKnowledge,
   listLearningNotebooks,
   listLearningQuestions,
+  listLearningSkills,
   listLearningSolveSessions,
   listLearningTutorAgents,
   runLearningCoWriterEdit,
+  getLearningMemory,
   updateLearningCoWriterDocument,
+  updateLearningMemory,
   uploadLearningKnowledge,
   type LearningJson,
 } from "@/lib/learningApi";
@@ -431,6 +434,16 @@ export function LearningPage() {
     queryFn: listLearningQuestions,
     retry: 1,
   });
+  const skills = useQuery({
+    queryKey: learningKeys.skills,
+    queryFn: listLearningSkills,
+    retry: 1,
+  });
+  const memory = useQuery({
+    queryKey: learningKeys.memory,
+    queryFn: getLearningMemory,
+    retry: 1,
+  });
   const agents = useQuery({
     queryKey: learningKeys.tutorAgents,
     queryFn: listLearningTutorAgents,
@@ -458,6 +471,10 @@ export function LearningPage() {
   const questionItems = useMemo(
     () => itemList(questions.data, ["items", "entries", "questions"]),
     [questions.data],
+  );
+  const skillItems = useMemo(
+    () => itemList(skills.data, ["skills", "items"]),
+    [skills.data],
   );
   const agentItems = useMemo(() => itemList(agents.data, ["bots", "items"]), [agents.data]);
   const solveItems = useMemo(
@@ -570,6 +587,17 @@ export function LearningPage() {
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Analysis completed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const saveMemory = useMutation({
+    mutationFn: ({ file, content }: { file: "summary" | "profile"; content: string }) =>
+      updateLearningMemory(file, content),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Memory saved");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.memory });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -718,6 +746,9 @@ export function LearningPage() {
                 createNotebook={createNotebook}
                 notebookItems={notebookItems}
                 questionItems={questionItems}
+                skillItems={skillItems}
+                memory={memory.data}
+                saveMemory={saveMemory}
                 onOpenNotebook={(item) =>
                   openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
                 }
@@ -799,6 +830,24 @@ function makeClientId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function shouldAppendLearningContent(eventType: string, payload: Item) {
+  if (eventType !== "content") return false;
+  const metadata = asRecord(payload.metadata);
+  const callId = textOf(metadata.call_id);
+  const callKind = textOf(metadata.call_kind);
+  return !callId || callKind === "llm_final_response";
+}
+
+function learningEventText(eventType: string, payload: Item) {
+  const content = textOf(payload.content) || textOf(payload.message);
+  if (content) return content;
+  const stage = textOf(payload.stage);
+  if (eventType === "stage_start" && stage) return `Started ${stage}`;
+  if (eventType === "stage_end" && stage) return `Finished ${stage}`;
+  const metadata = asRecord(payload.metadata);
+  return textOf(metadata.label) || textOf(metadata.status);
+}
+
 function LearningChatPanel({ kbName }: { kbName: string }) {
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
@@ -809,6 +858,7 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
   const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
   const socketRef = useRef<WebSocket | null>(null);
   const thinkingRef = useRef<string[]>([]);
+  const activeAssistantIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -831,11 +881,26 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
         payload = { type: "content", content: String(event.data) };
       }
       const eventType = textOf(payload.type, "content");
-      const content = textOf(payload.content) || textOf(payload.message);
+      const content = learningEventText(eventType, payload);
       const nextSessionId = textOf(payload.session_id);
       if (nextSessionId) setSessionId(nextSessionId);
 
-      if (eventType === "thinking" || eventType === "observation" || eventType === "progress") {
+      if (eventType === "session") {
+        const metadata = asRecord(payload.metadata);
+        const metadataSessionId = textOf(metadata.session_id);
+        if (metadataSessionId) setSessionId(metadataSessionId);
+        return;
+      }
+
+      if (
+        eventType === "thinking" ||
+        eventType === "observation" ||
+        eventType === "progress" ||
+        eventType === "stage_start" ||
+        eventType === "stage_end" ||
+        eventType === "tool_call" ||
+        eventType === "tool_result"
+      ) {
         if (content) {
           thinkingRef.current = [...thinkingRef.current, content];
           setThinking(thinkingRef.current.slice(-6));
@@ -843,25 +908,76 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
         return;
       }
 
-      if (eventType === "content" || eventType === "result") {
-        if (content) {
-          const thinkingSnapshot = thinkingRef.current;
-          setMessages((items) => [
+      if (shouldAppendLearningContent(eventType, payload)) {
+        const assistantId = activeAssistantIdRef.current || makeClientId("assistant");
+        activeAssistantIdRef.current = assistantId;
+        const thinkingSnapshot = thinkingRef.current;
+        setMessages((items) => {
+          const existingIndex = items.findIndex((item) => item.id === assistantId);
+          if (existingIndex >= 0) {
+            return items.map((item, index) =>
+              index === existingIndex
+                ? {
+                    ...item,
+                    content: `${item.content}${content}`,
+                    thinking:
+                      item.thinking ??
+                      (thinkingSnapshot.length ? [...thinkingSnapshot] : undefined),
+                  }
+                : item,
+            );
+          }
+          return [
             ...items,
             {
-              id: makeClientId("assistant"),
+              id: assistantId,
               role: "assistant",
               content,
               thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
             },
-          ]);
+          ];
+        });
+        return;
+      }
+
+      if (eventType === "result") {
+        const thinkingSnapshot = thinkingRef.current;
+        const assistantId = activeAssistantIdRef.current || makeClientId("assistant");
+        if (content) {
+          setMessages((items) => {
+            const existingIndex = items.findIndex((item) => item.id === assistantId);
+            if (existingIndex >= 0) {
+              return items.map((item, index) =>
+                index === existingIndex
+                  ? {
+                      ...item,
+                      content: content.length > item.content.length ? content : item.content,
+                      thinking:
+                        item.thinking ??
+                        (thinkingSnapshot.length ? [...thinkingSnapshot] : undefined),
+                    }
+                  : item,
+              );
+            }
+            return [
+              ...items,
+              {
+                id: assistantId,
+                role: "assistant",
+                content,
+                thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
+              },
+            ];
+          });
         }
+        activeAssistantIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
         return;
       }
 
       if (eventType === "done") {
+        activeAssistantIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
         setStreaming(false);
@@ -877,6 +993,7 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
             content: content ? `Error: ${content}` : "Learning stream returned an error.",
           },
         ]);
+        activeAssistantIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
         setStreaming(false);
@@ -917,6 +1034,7 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
     ]);
     setInput("");
     setStreaming(true);
+    activeAssistantIdRef.current = makeClientId("assistant");
     thinkingRef.current = [];
     setThinking([]);
     socket.send(
@@ -1025,6 +1143,9 @@ function LearningSpacePanel({
   createNotebook,
   notebookItems,
   questionItems,
+  skillItems,
+  memory,
+  saveMemory,
   onOpenNotebook,
   onOpenQuestion,
 }: {
@@ -1033,9 +1154,26 @@ function LearningSpacePanel({
   createNotebook: UseMutationResult<unknown, Error, string, unknown>;
   notebookItems: Item[];
   questionItems: Item[];
+  skillItems: Item[];
+  memory: unknown;
+  saveMemory: UseMutationResult<
+    unknown,
+    Error,
+    { file: "summary" | "profile"; content: string },
+    unknown
+  >;
   onOpenNotebook: (item: Item) => void;
   onOpenQuestion: (item: Item) => void;
 }) {
+  const memoryRecord = asRecord(memory);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [profileDraft, setProfileDraft] = useState("");
+
+  useEffect(() => {
+    setSummaryDraft(textOf(memoryRecord.summary));
+    setProfileDraft(textOf(memoryRecord.profile));
+  }, [memoryRecord.summary, memoryRecord.profile]);
+
   return (
     <>
       <NotebooksPanel
@@ -1046,6 +1184,55 @@ function LearningSpacePanel({
         onOpen={onOpenNotebook}
       />
       <ReviewPanel items={questionItems} onOpen={onOpenQuestion} />
+      <Section title="Skills" subtitle="User-authored learning playbooks available to learning chat.">
+        <ItemList
+          items={skillItems}
+          empty="No learning skills returned yet."
+          variant="generic"
+        />
+      </Section>
+      <Section title="Memory" subtitle="Learning summary and profile memory are user-managed.">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+              Summary
+            </label>
+            <textarea
+              value={summaryDraft}
+              onChange={(event) => setSummaryDraft(event.target.value)}
+              className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              placeholder="Learning summary memory"
+            />
+            <button
+              type="button"
+              disabled={saveMemory.isPending}
+              onClick={() => saveMemory.mutate({ file: "summary", content: summaryDraft })}
+              className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Save summary
+            </button>
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+              Profile
+            </label>
+            <textarea
+              value={profileDraft}
+              onChange={(event) => setProfileDraft(event.target.value)}
+              className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              placeholder="Learning profile memory"
+            />
+            <button
+              type="button"
+              disabled={saveMemory.isPending}
+              onClick={() => saveMemory.mutate({ file: "profile", content: profileDraft })}
+              className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Save profile
+            </button>
+          </div>
+        </div>
+      </Section>
     </>
   );
 }

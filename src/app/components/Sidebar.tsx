@@ -71,12 +71,29 @@ const LEARNING_SUBNAV: LearningSubnavEntry[] = [
   { view: "space", label: "Space", icon: LayoutGrid },
 ];
 
+const LEARNING_VIEW_ALIASES: Record<string, string> = {
+  tutorbot: "agents",
+  "co-writer": "writer",
+  book: "books",
+  knowledge: "sources",
+  notebooks: "space",
+  questions: "space",
+  review: "space",
+  solve: "chat",
+};
+
+function normalizeLearningView(value: string | null) {
+  const normalized = String(value || "chat").trim().toLowerCase();
+  return LEARNING_VIEW_ALIASES[normalized] || normalized || "chat";
+}
+
 export function Sidebar() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const location = useLocation();
-  const activeLearningView =
-    new URLSearchParams(location.search).get("view") || "chat";
+  const activeLearningView = normalizeLearningView(
+    new URLSearchParams(location.search).get("view")
+  );
   const fileStatusTone = {
     embedded: {
       chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
