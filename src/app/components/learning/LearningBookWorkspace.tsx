@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   BookOpen,
   CheckCircle2,
-  Code2,
   Layers,
   Loader2,
   MessageSquare,
@@ -19,8 +18,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
+import {
+  LearningBookBlockContent,
+  type LearningBookQuizAttempt,
+} from "./LearningBookBlockContent";
 import { LearningBookProgressTimeline } from "./LearningBookProgressTimeline";
 import {
   emptyLearningBookProgress,
@@ -266,14 +268,6 @@ function formatRelative(seconds?: number) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function extractText(payload: Item, keys: string[]) {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
 }
 
 function extractList(payload: Item, keys: string[]) {
@@ -646,10 +640,14 @@ export function LearningBookWorkspace({
                       }),
                   });
                 }}
-                onDeepDive={(block) => {
+                onDeepDive={(block, requestedTopic) => {
                   if (!activeBook || !activePage) return;
                   const topic =
-                    textOf(block.params?.topic) || textOf(block.title) || activePage.title || "this topic";
+                    requestedTopic ||
+                    textOf(block.params?.topic) ||
+                    textOf(block.title) ||
+                    activePage.title ||
+                    "this topic";
                   runBookAction.mutate({
                     label: "Deep dive page created",
                     action: () =>
@@ -662,7 +660,7 @@ export function LearningBookWorkspace({
                       }),
                   });
                 }}
-                onQuizCorrect={(block, isCorrect) => {
+                onQuizAttempt={(block, attempt) => {
                   if (!activeBook || !activePage) return;
                   runBookAction.mutate({
                     label: "Quiz attempt recorded",
@@ -671,7 +669,9 @@ export function LearningBookWorkspace({
                         book_id: activeBook.id,
                         page_id: activePage.id,
                         block_id: block.id,
-                        is_correct: isCorrect,
+                        question_id: attempt.questionId,
+                        user_answer: attempt.userAnswer,
+                        is_correct: attempt.isCorrect,
                       }),
                   });
                 }}
@@ -1079,7 +1079,7 @@ function BookReaderView({
   onMoveBlock,
   onInsertBlock,
   onDeepDive,
-  onQuizCorrect,
+  onQuizAttempt,
 }: {
   book: LearningBook;
   page: LearningBookPage | null;
@@ -1091,8 +1091,8 @@ function BookReaderView({
   onDeleteBlock: (block: LearningBookBlock) => void;
   onMoveBlock: (block: LearningBookBlock, direction: "up" | "down") => void;
   onInsertBlock: (blockType: BlockType) => void;
-  onDeepDive: (block: LearningBookBlock) => void;
-  onQuizCorrect: (block: LearningBookBlock, isCorrect: boolean) => void;
+  onDeepDive: (block: LearningBookBlock, topic?: string) => void;
+  onQuizAttempt: (block: LearningBookBlock, attempt: LearningBookQuizAttempt) => void;
 }) {
   const [insertOpen, setInsertOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -1191,8 +1191,8 @@ function BookReaderView({
               onRegenerate={() => onRegenerateBlock(block)}
               onDelete={() => onDeleteBlock(block)}
               onMove={(direction) => onMoveBlock(block, direction)}
-              onDeepDive={() => onDeepDive(block)}
-              onQuizCorrect={(isCorrect) => onQuizCorrect(block, isCorrect)}
+              onDeepDive={(topic) => onDeepDive(block, topic)}
+              onQuizAttempt={(attempt) => onQuizAttempt(block, attempt)}
             />
           ))}
           {!page.blocks.length ? (
@@ -1502,7 +1502,7 @@ function BookBlock({
   onDelete,
   onMove,
   onDeepDive,
-  onQuizCorrect,
+  onQuizAttempt,
 }: {
   block: LearningBookBlock;
   index: number;
@@ -1511,8 +1511,8 @@ function BookBlock({
   onRegenerate: () => void;
   onDelete: () => void;
   onMove: (direction: "up" | "down") => void;
-  onDeepDive: () => void;
-  onQuizCorrect: (isCorrect: boolean) => void;
+  onDeepDive: (topic?: string) => void;
+  onQuizAttempt: (attempt: LearningBookQuizAttempt) => void;
 }) {
   return (
     <section className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
@@ -1559,20 +1559,24 @@ function BookBlock({
           </button>
         </div>
       </div>
-      <BlockContent block={block} />
+      <LearningBookBlockContent
+        block={block}
+        onQuizAttempt={onQuizAttempt}
+        onDeepDiveTopic={onDeepDive}
+      />
       <div className="mt-4 flex flex-wrap gap-2">
         {block.type === "quiz" ? (
           <>
             <button
               type="button"
-              onClick={() => onQuizCorrect(true)}
+              onClick={() => onQuizAttempt({ isCorrect: true })}
               className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
             >
               Mark correct
             </button>
             <button
               type="button"
-              onClick={() => onQuizCorrect(false)}
+              onClick={() => onQuizAttempt({ isCorrect: false })}
               className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
             >
               Mark needs review
@@ -1581,56 +1585,12 @@ function BookBlock({
         ) : null}
         <button
           type="button"
-          onClick={onDeepDive}
+          onClick={() => onDeepDive()}
           className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
         >
           Deep dive
         </button>
       </div>
     </section>
-  );
-}
-
-function BlockContent({ block }: { block: LearningBookBlock }) {
-  const payload = block.payload || {};
-  const params = block.params || {};
-  const markdown =
-    extractText(payload, ["markdown", "content", "text", "body", "summary", "explanation"]) ||
-    extractText(params, ["markdown", "content", "text", "body", "prompt"]);
-  if (markdown) {
-    return (
-      <div className="prose prose-sm max-w-none text-zaki-text dark:prose-invert">
-        <ReactMarkdown>{markdown}</ReactMarkdown>
-      </div>
-    );
-  }
-  const code = extractText(payload, ["code", "source"]);
-  if (code) {
-    return (
-      <pre className="overflow-x-auto rounded-zaki-md bg-zaki-base p-4 text-xs text-zaki-text">
-        <code>{code}</code>
-      </pre>
-    );
-  }
-  const items = extractList(payload, ["items", "bullets", "cards", "steps"]);
-  if (items.length) {
-    return (
-      <ul className="space-y-2 text-sm text-zaki-text">
-        {items.map((item, index) => (
-          <li key={index} className="rounded-zaki-md bg-zaki-base px-3 py-2">
-            {item}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  return (
-    <div className="rounded-zaki-md border border-dashed border-zaki-border bg-zaki-base p-4">
-      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-        <Code2 className="size-3.5" />
-        Raw block payload
-      </div>
-      <pre className="max-h-72 overflow-auto text-xs text-zaki-muted">{jsonText(payload)}</pre>
-    </div>
   );
 }
