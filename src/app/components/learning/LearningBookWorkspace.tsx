@@ -21,6 +21,17 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
+import { LearningBookProgressTimeline } from "./LearningBookProgressTimeline";
+import {
+  emptyLearningBookProgress,
+  getLearningBookProgressEventBookId,
+  learningBookProgressEventShouldRefresh,
+  learningBookProgressHasActivity,
+  learningBookProgressIsComplete,
+  reduceLearningBookProgressEvent,
+  type LearningBookProgress,
+  type LearningBookProgressEvent,
+} from "./learningBookProgress";
 import {
   compileLearningBookPage,
   confirmLearningBookProposal,
@@ -294,6 +305,17 @@ function getBookPageChatSession(book: LearningBook, pageId: string) {
   return textOf(sessions[pageId]);
 }
 
+function parseBookProgressEvent(data: unknown): LearningBookProgressEvent | null {
+  try {
+    const payload = JSON.parse(String(data)) as unknown;
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as LearningBookProgressEvent)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function LearningBookWorkspace({
   bookTopic,
   setBookTopic,
@@ -311,6 +333,8 @@ export function LearningBookWorkspace({
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [proposalDraft, setProposalDraft] = useState("");
   const [spineDraft, setSpineDraft] = useState("");
+  const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
+  const progressRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const books = useMemo(() => items.map(normalizeBook), [items]);
   const filteredBooks = useMemo(() => {
@@ -332,6 +356,11 @@ export function LearningBookWorkspace({
   const activeBook = detail?.book || selectedBookFromList;
   const activePage =
     detail?.pages.find((page) => page.id === selectedPageId) || detail?.pages[0] || null;
+  const visibleProgress =
+    learningBookProgressHasActivity(bookProgress) &&
+    (!learningBookProgressIsComplete(bookProgress) || activeBook?.status === "compiling")
+      ? bookProgress
+      : null;
 
   const healthQuery = useQuery({
     queryKey: [...learningKeys.books, "health", selectedBookId, activeBook?.updated_at],
@@ -346,6 +375,58 @@ export function LearningBookWorkspace({
       await queryClient.invalidateQueries({ queryKey: [...learningKeys.books, "health", selectedBookId] });
     }
   };
+
+  useEffect(() => {
+    setBookProgress(emptyLearningBookProgress());
+  }, [selectedBookId]);
+
+  useEffect(() => {
+    if (!selectedBookId) return undefined;
+    const socket = openLearningSocket("/api/learning/book/ws");
+    if (!socket) return undefined;
+
+    const scheduleRefresh = () => {
+      if (progressRefreshTimerRef.current) return;
+      progressRefreshTimerRef.current = setTimeout(() => {
+        progressRefreshTimerRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: learningKeys.books });
+        void queryClient.invalidateQueries({
+          queryKey: [...learningKeys.books, "detail", selectedBookId],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: [...learningKeys.books, "health", selectedBookId],
+        });
+      }, 500);
+    };
+
+    socket.onmessage = (event) => {
+      const payload = parseBookProgressEvent(event.data);
+      if (!payload) return;
+      const eventBookId = getLearningBookProgressEventBookId(payload);
+      if (eventBookId && eventBookId !== selectedBookId) return;
+      setBookProgress((current) => reduceLearningBookProgressEvent(current, payload));
+      if (learningBookProgressEventShouldRefresh(payload)) {
+        scheduleRefresh();
+      }
+    };
+    socket.onerror = () => {
+      setBookProgress((current) =>
+        reduceLearningBookProgressEvent(current, {
+          type: "error",
+          content: "Book progress connection failed.",
+          metadata: { book_id: selectedBookId },
+        }),
+      );
+    };
+
+    return () => {
+      socket.close();
+      if (progressRefreshTimerRef.current) {
+        clearTimeout(progressRefreshTimerRef.current);
+        progressRefreshTimerRef.current = null;
+      }
+    };
+  }, [queryClient, selectedBookId]);
 
   const runBookAction = useMutation({
     mutationFn: async ({
@@ -504,6 +585,7 @@ export function LearningBookWorkspace({
             ) : detail.book.status === "draft" ? (
               <BookProposalView
                 book={detail.book}
+                progress={visibleProgress}
                 draft={proposalDraft || jsonText(detail.book.proposal || {})}
                 setDraft={setProposalDraft}
                 loading={runBookAction.isPending}
@@ -512,6 +594,7 @@ export function LearningBookWorkspace({
             ) : detail.book.status === "spine_ready" && detail.spine ? (
               <BookSpineView
                 spine={detail.spine}
+                progress={visibleProgress}
                 draft={spineDraft || jsonText(detail.spine)}
                 setDraft={setSpineDraft}
                 loading={runBookAction.isPending}
@@ -521,6 +604,7 @@ export function LearningBookWorkspace({
               <BookReaderView
                 book={detail.book}
                 page={activePage}
+                progress={visibleProgress}
                 health={healthQuery.data}
                 loading={runBookAction.isPending}
                 onRecompile={activePage ? () => handleCompilePage(activePage, true) : undefined}
@@ -852,12 +936,14 @@ function BookSidebarView({
 
 function BookProposalView({
   book,
+  progress,
   draft,
   setDraft,
   loading,
   onConfirm,
 }: {
   book: LearningBook;
+  progress?: LearningBookProgress | null;
   draft: string;
   setDraft: (value: string) => void;
   loading: boolean;
@@ -883,6 +969,7 @@ function BookProposalView({
             <ProposalField label="Chapters" value={textOf(proposal.estimated_chapters, "Auto")} />
           </div>
         </div>
+        {progress ? <LearningBookProgressTimeline progress={progress} className="mb-5" /> : null}
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -915,12 +1002,14 @@ function ProposalField({ label, value }: { label: string; value: string }) {
 
 function BookSpineView({
   spine,
+  progress,
   draft,
   setDraft,
   loading,
   onConfirm,
 }: {
   spine: Item;
+  progress?: LearningBookProgress | null;
   draft: string;
   setDraft: (value: string) => void;
   loading: boolean;
@@ -950,6 +1039,7 @@ function BookSpineView({
             Confirm outline
           </button>
         </div>
+        {progress ? <LearningBookProgressTimeline progress={progress} className="mb-5" /> : null}
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-3">
             {chapters.map((chapter, index) => (
@@ -980,6 +1070,7 @@ function BookSpineView({
 function BookReaderView({
   book,
   page,
+  progress,
   health,
   loading,
   onRecompile,
@@ -992,6 +1083,7 @@ function BookReaderView({
 }: {
   book: LearningBook;
   page: LearningBookPage | null;
+  progress?: LearningBookProgress | null;
   health: unknown;
   loading: boolean;
   onRecompile?: () => void;
@@ -1032,6 +1124,7 @@ function BookReaderView({
                 ))}
               </ul>
             ) : null}
+            {progress ? <LearningBookProgressTimeline progress={progress} compact className="mt-4" /> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span className="rounded-full bg-zaki-hover px-2.5 py-1 text-[11px] uppercase tracking-normal text-zaki-muted">
