@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { DragEvent, ReactNode, RefObject } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
   BookOpen,
   Bot,
+  Brain,
   CheckCircle2,
   Clock3,
   FileText,
@@ -14,6 +16,7 @@ import {
   GraduationCap,
   Image,
   Layers,
+  MessageSquare,
   PenLine,
   Plus,
   RefreshCw,
@@ -65,12 +68,14 @@ import {
 } from "@/app/components/ui/sheet";
 
 type LearningTab =
+  | "chat"
   | "sources"
   | "books"
   | "notebooks"
   | "writer"
   | "review"
   | "agents"
+  | "space"
   | "workspaces";
 
 type Item = Record<string, unknown>;
@@ -97,14 +102,46 @@ type TutorChatMessage = {
 };
 
 const tabs: Array<{ id: LearningTab; label: string; icon: typeof BookOpen }> = [
-  { id: "sources", label: "Sources", icon: Upload },
-  { id: "books", label: "Books", icon: BookOpen },
-  { id: "notebooks", label: "Notebooks", icon: FileText },
-  { id: "writer", label: "Co-writer", icon: PenLine },
-  { id: "review", label: "Review", icon: GraduationCap },
-  { id: "agents", label: "Tutors", icon: Bot },
-  { id: "workspaces", label: "Solve", icon: Layers },
+  { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "agents", label: "TutorBot", icon: Bot },
+  { id: "writer", label: "Co-Writer", icon: PenLine },
+  { id: "books", label: "Book", icon: BookOpen },
+  { id: "sources", label: "Knowledge", icon: Upload },
+  { id: "space", label: "Space", icon: Layers },
 ];
+
+const viewToLearningTab: Record<string, LearningTab> = {
+  chat: "chat",
+  tutorbot: "agents",
+  agents: "agents",
+  writer: "writer",
+  "co-writer": "writer",
+  books: "books",
+  book: "books",
+  sources: "sources",
+  knowledge: "sources",
+  space: "space",
+  notebooks: "notebooks",
+  review: "review",
+  questions: "review",
+  solve: "workspaces",
+};
+
+const tabToView: Record<LearningTab, string> = {
+  chat: "chat",
+  agents: "agents",
+  writer: "writer",
+  books: "books",
+  sources: "sources",
+  space: "space",
+  notebooks: "space",
+  review: "space",
+  workspaces: "chat",
+};
+
+function normalizeLearningTab(value: string | null): LearningTab {
+  return viewToLearningTab[String(value || "chat").trim().toLowerCase()] || "chat";
+}
 
 function asRecord(value: unknown): Item {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -328,101 +365,11 @@ function LearningStats({
   );
 }
 
-function LearningRail({
-  activeTab,
-  setTab,
-  books,
-  documents,
-  agents,
-  questions,
-}: {
-  activeTab: LearningTab;
-  setTab: (tab: LearningTab) => void;
-  books: Item[];
-  documents: Item[];
-  agents: Item[];
-  questions: Item[];
-}) {
-  return (
-    <aside className="hidden min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-2 xl:block">
-      <div className="px-2 pb-2 pt-1">
-        <div className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-          Learning
-        </div>
-      </div>
-      <nav className="space-y-1">
-        {tabs.map((entry) => {
-          const Icon = entry.icon;
-          const active = activeTab === entry.id;
-          return (
-            <button
-              key={entry.id}
-              type="button"
-              onClick={() => setTab(entry.id)}
-              className={cn(
-                "group flex w-full items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
-                active
-                  ? "bg-zaki-selected font-medium text-zaki-text"
-                  : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-left">{entry.label}</span>
-              {active ? <span className="size-1.5 rounded-full bg-zaki-brand" /> : null}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="mt-4 border-t border-zaki-border pt-3">
-        <RailGroup title="Recent books" items={books} empty="No books" />
-        <RailGroup title="Drafts" items={documents} empty="No drafts" />
-        <RailGroup title="Tutors" items={agents} empty="No tutors" />
-        <RailGroup title="Review queue" items={questions} empty="No questions" />
-      </div>
-    </aside>
-  );
-}
-
-function RailGroup({ title, items, empty }: { title: string; items: Item[]; empty: string }) {
-  return (
-    <div className="mb-4 last:mb-0">
-      <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
-        {title}
-      </div>
-      <div className="border-l border-zaki-border py-1">
-        {items.length ? (
-          items.slice(0, 4).map((item, index) => {
-            const status = itemStatus(item);
-            const time = relativeTime(item.updated_at ?? item.created_at ?? item.last_active);
-            return (
-              <div
-                key={`${title}-${itemTitle(item, "item")}-${index}`}
-                className="group flex items-center gap-2 rounded-r-zaki-md py-1.5 pl-3 pr-2 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
-              >
-                <span className={cn("size-1.5 shrink-0 rounded-full", statusTone(status))} />
-                <span className="min-w-0 flex-1 truncate text-[13px]">
-                  {itemTitle(item, `Item ${index + 1}`)}
-                </span>
-                {time ? (
-                  <span className="shrink-0 text-[10px] tabular-nums text-zaki-muted">
-                    {time}
-                  </span>
-                ) : null}
-              </div>
-            );
-          })
-        ) : (
-          <div className="py-1.5 pl-3 pr-2 text-[12px] text-zaki-muted">{empty}</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function LearningPage() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<LearningTab>("sources");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const [tab, setTab] = useState<LearningTab>(() => normalizeLearningTab(requestedView));
   const [kbName, setKbName] = useState("main");
   const [bookTopic, setBookTopic] = useState("");
   const [notebookName, setNotebookName] = useState("");
@@ -442,6 +389,17 @@ export function LearningPage() {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
     folderInputRef.current?.setAttribute("directory", "");
   }, []);
+
+  useEffect(() => {
+    setTab(normalizeLearningTab(requestedView));
+  }, [requestedView]);
+
+  const selectLearningTab = (nextTab: LearningTab) => {
+    setTab(nextTab);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("view", tabToView[nextTab]);
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const health = useQuery({
     queryKey: learningKeys.health,
@@ -679,7 +637,7 @@ export function LearningPage() {
                 <button
                   key={entry.id}
                   type="button"
-                  onClick={() => setTab(entry.id)}
+                  onClick={() => selectLearningTab(entry.id)}
                   className={cn(
                     "inline-flex h-9 items-center gap-2 rounded-zaki-md px-3 text-sm font-medium transition-colors",
                     tab === entry.id
@@ -695,17 +653,9 @@ export function LearningPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)_360px]">
-          <LearningRail
-            activeTab={tab}
-            setTab={setTab}
-            books={bookItems}
-            documents={documentItems}
-            agents={agentItems}
-            questions={questionItems}
-          />
-
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
+            {tab === "chat" ? <LearningChatPanel kbName={kbName} /> : null}
             {tab === "sources" ? (
               <SourcesPanel
                 kbName={kbName}
@@ -757,6 +707,21 @@ export function LearningPage() {
               <ReviewPanel
                 items={questionItems}
                 onOpen={(item) =>
+                  openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
+                }
+              />
+            ) : null}
+            {tab === "space" ? (
+              <LearningSpacePanel
+                notebookName={notebookName}
+                setNotebookName={setNotebookName}
+                createNotebook={createNotebook}
+                notebookItems={notebookItems}
+                questionItems={questionItems}
+                onOpenNotebook={(item) =>
+                  openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
+                }
+                onOpenQuestion={(item) =>
                   openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
                 }
               />
@@ -815,6 +780,273 @@ export function LearningPage() {
         onResult={setLastResult}
       />
     </div>
+  );
+}
+
+const learningCapabilities = [
+  { value: "", label: "Chat", icon: MessageSquare },
+  { value: "deep_solve", label: "Deep Solve", icon: Brain },
+  { value: "deep_question", label: "Quiz Generation", icon: GraduationCap },
+  { value: "deep_research", label: "Deep Research", icon: Star },
+  { value: "math_animator", label: "Math Animator", icon: Activity },
+  { value: "visualize", label: "Visualize", icon: Image },
+];
+
+function makeClientId(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function LearningChatPanel({ kbName }: { kbName: string }) {
+  const [messages, setMessages] = useState<TutorChatMessage[]>([]);
+  const [thinking, setThinking] = useState<string[]>([]);
+  const [input, setInput] = useState("");
+  const [capability, setCapability] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
+  const socketRef = useRef<WebSocket | null>(null);
+  const thinkingRef = useRef<string[]>([]);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, thinking]);
+
+  useEffect(() => {
+    const socket = openLearningSocket("/api/learning/ws");
+    socketRef.current = socket;
+    if (!socket) {
+      setConnected(false);
+      return undefined;
+    }
+    socket.onopen = () => setConnected(true);
+    socket.onmessage = (event) => {
+      let payload: Item = {};
+      try {
+        payload = JSON.parse(String(event.data)) as Item;
+      } catch {
+        payload = { type: "content", content: String(event.data) };
+      }
+      const eventType = textOf(payload.type, "content");
+      const content = textOf(payload.content) || textOf(payload.message);
+      const nextSessionId = textOf(payload.session_id);
+      if (nextSessionId) setSessionId(nextSessionId);
+
+      if (eventType === "thinking" || eventType === "observation" || eventType === "progress") {
+        if (content) {
+          thinkingRef.current = [...thinkingRef.current, content];
+          setThinking(thinkingRef.current.slice(-6));
+        }
+        return;
+      }
+
+      if (eventType === "content" || eventType === "result") {
+        if (content) {
+          const thinkingSnapshot = thinkingRef.current;
+          setMessages((items) => [
+            ...items,
+            {
+              id: makeClientId("assistant"),
+              role: "assistant",
+              content,
+              thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
+            },
+          ]);
+        }
+        thinkingRef.current = [];
+        setThinking([]);
+        return;
+      }
+
+      if (eventType === "done") {
+        thinkingRef.current = [];
+        setThinking([]);
+        setStreaming(false);
+        return;
+      }
+
+      if (eventType === "error") {
+        setMessages((items) => [
+          ...items,
+          {
+            id: makeClientId("error"),
+            role: "system",
+            content: content ? `Error: ${content}` : "Learning stream returned an error.",
+          },
+        ]);
+        thinkingRef.current = [];
+        setThinking([]);
+        setStreaming(false);
+      }
+    };
+    socket.onerror = () => {
+      setMessages((items) => [
+        ...items,
+        {
+          id: makeClientId("socket-error"),
+          role: "system",
+          content: "Learning chat connection failed.",
+        },
+      ]);
+      setStreaming(false);
+    };
+    socket.onclose = () => {
+      setConnected(false);
+      setStreaming(false);
+    };
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, []);
+
+  const sendMessage = () => {
+    const content = input.trim();
+    const socket = socketRef.current;
+    if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+    setMessages((items) => [
+      ...items,
+      {
+        id: makeClientId("user"),
+        role: "user",
+        content,
+      },
+    ]);
+    setInput("");
+    setStreaming(true);
+    thinkingRef.current = [];
+    setThinking([]);
+    socket.send(
+      JSON.stringify({
+        type: "message",
+        content,
+        capability: capability || null,
+        session_id: sessionId,
+        knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
+      }),
+    );
+  };
+
+  return (
+    <Section title="Chat" subtitle="DeepTutor-style learning conversation with capability modes.">
+      <div className="mb-4 flex gap-1 overflow-x-auto rounded-zaki-md border border-zaki-border bg-zaki-base p-1">
+        {learningCapabilities.map((entry) => {
+          const Icon = entry.icon;
+          const active = capability === entry.value;
+          return (
+            <button
+              key={entry.label}
+              type="button"
+              onClick={() => setCapability(entry.value)}
+              className={cn(
+                "inline-flex h-9 shrink-0 items-center gap-2 rounded-zaki-md px-3 text-xs font-semibold transition-colors",
+                active
+                  ? "bg-zaki-brand text-white"
+                  : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text",
+              )}
+            >
+              <Icon className="size-4" />
+              {entry.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mb-3 min-h-[420px] rounded-zaki-lg border border-zaki-border bg-zaki-base p-4">
+        {messages.length || thinking.length ? (
+          <div className="space-y-3">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "rounded-zaki-md border px-3 py-2 text-sm",
+                  message.role === "user"
+                    ? "ml-10 border-zaki-brand/30 bg-zaki-brand/10 text-zaki-text"
+                    : message.role === "system"
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "mr-10 border-zaki-border bg-zaki-raised text-zaki-text",
+                )}
+              >
+                {message.thinking?.length ? (
+                  <div className="mb-2 border-l-2 border-zaki-border pl-2 text-xs text-zaki-muted">
+                    {message.thinking.slice(-4).map((entry, index) => (
+                      <p key={`${message.id}-thinking-${index}`}>{entry}</p>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              </div>
+            ))}
+            {thinking.length ? (
+              <div className="mr-10 rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 py-2 text-xs text-zaki-muted">
+                {thinking.map((entry, index) => (
+                  <p key={`learning-thinking-${index}`}>{entry}</p>
+                ))}
+              </div>
+            ) : null}
+            <div ref={bottomRef} />
+          </div>
+        ) : (
+          <EmptyLine label="Ask a learning question or choose a capability mode." />
+        )}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              sendMessage();
+            }
+          }}
+          placeholder="Ask about your study material..."
+          className="h-11 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+        />
+        <button
+          type="button"
+          disabled={!connected || !input.trim() || streaming}
+          onClick={sendMessage}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          <Send className="size-4" />
+          Send
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+function LearningSpacePanel({
+  notebookName,
+  setNotebookName,
+  createNotebook,
+  notebookItems,
+  questionItems,
+  onOpenNotebook,
+  onOpenQuestion,
+}: {
+  notebookName: string;
+  setNotebookName: (value: string) => void;
+  createNotebook: UseMutationResult<unknown, Error, string, unknown>;
+  notebookItems: Item[];
+  questionItems: Item[];
+  onOpenNotebook: (item: Item) => void;
+  onOpenQuestion: (item: Item) => void;
+}) {
+  return (
+    <>
+      <NotebooksPanel
+        notebookName={notebookName}
+        setNotebookName={setNotebookName}
+        createNotebook={createNotebook}
+        items={notebookItems}
+        onOpen={onOpenNotebook}
+      />
+      <ReviewPanel items={questionItems} onOpen={onOpenQuestion} />
+    </>
   );
 }
 

@@ -2,11 +2,11 @@ import {
   LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   apiRequest,
   approveAgentSession,
@@ -56,9 +56,27 @@ import {
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 const APP_VERSION = "1.5.69";
 
+type LearningSubnavEntry = {
+  view: string;
+  label: string;
+  icon: LucideIcon;
+};
+
+const LEARNING_SUBNAV: LearningSubnavEntry[] = [
+  { view: "chat", label: "Chat", icon: MessageSquare },
+  { view: "agents", label: "TutorBot", icon: Bot },
+  { view: "writer", label: "Co-Writer", icon: PenLine },
+  { view: "books", label: "Book", icon: Library },
+  { view: "sources", label: "Knowledge", icon: BookOpen },
+  { view: "space", label: "Space", icon: LayoutGrid },
+];
+
 export function Sidebar() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
+  const location = useLocation();
+  const activeLearningView =
+    new URLSearchParams(location.search).get("view") || "chat";
   const fileStatusTone = {
     embedded: {
       chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
@@ -1467,21 +1485,42 @@ export function Sidebar() {
             isRtl={!!isRtl}
           />
         ) : sidebarMode === "learning" ? (
-          <div className="rounded-zaki-md border border-zaki-border bg-zaki-raised p-3">
-            <div className={cn("mb-2 flex items-center gap-2", isRtl && "flex-row-reverse text-right")}>
-              <GraduationCap className="size-4 text-zaki-brand" />
-              <span className="text-sm font-semibold text-zaki-text">{t("sidebar.learning")}</span>
-            </div>
-            <p className={cn("text-xs leading-relaxed text-zaki-muted", isRtl && "text-right")}>
-              Sources, lessons, notebooks, writing, tutors, and problem solving are managed in the main learning workspace.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate("/learn")}
-              className="mt-3 w-full rounded-zaki-md bg-zaki-brand px-3 py-2 text-xs font-semibold text-white"
-            >
-              Open learning
-            </button>
+          <div className="flex flex-col gap-1">
+            {LEARNING_SUBNAV.map((item) => {
+              const Icon = item.icon;
+              const active = activeLearningView === item.view;
+              return (
+                <button
+                  key={item.view}
+                  type="button"
+                  onClick={() => {
+                    navigate(`/learn?view=${item.view}`);
+                    window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
+                  }}
+                  className={cn(
+                    "relative flex w-full items-center gap-2 rounded-lg p-1.5 text-sm font-medium transition-colors",
+                    isRtl ? "flex-row-reverse text-right" : "text-left",
+                    active
+                      ? "bg-zaki-hover text-zaki-primary"
+                      : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary"
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {active && (
+                    <div
+                      className={cn(
+                        "absolute top-1/2 h-[60%] w-[3px] -translate-y-1/2 rounded-r-sm bg-zaki-brand",
+                        isRtl ? "right-0 rounded-l-sm rounded-r-none" : "left-0"
+                      )}
+                    />
+                  )}
+                  <span className="flex size-5 items-center justify-center">
+                    <Icon className="size-4 text-zaki-muted" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <>
