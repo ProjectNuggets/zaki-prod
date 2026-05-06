@@ -46,6 +46,13 @@ export function learningWsUrl(path: string): string | null {
   return url.toString();
 }
 
+export function openLearningSocket(path: string): WebSocket | null {
+  const token = getAuthToken();
+  const url = learningWsUrl(path);
+  if (!token || !url) return null;
+  return new WebSocket(url, ["zaki.learning.v1", `zaki.jwt.${token}`]);
+}
+
 export const learningKeys = {
   health: ["learning", "health"] as const,
   knowledge: ["learning", "knowledge"] as const,

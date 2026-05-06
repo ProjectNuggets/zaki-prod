@@ -42,6 +42,7 @@ import {
   getLearningTutorAgentHistory,
   learningKeys,
   learningRequest,
+  openLearningSocket,
   listLearningKnowledgeFiles,
   listLearningBooks,
   listLearningCoWriterDocuments,
@@ -86,6 +87,13 @@ type SelectedLearningObject = {
   type: LearningObjectType;
   id: string;
   item: Item;
+};
+
+type TutorChatMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  thinking?: string[];
 };
 
 const tabs: Array<{ id: LearningTab; label: string; icon: typeof BookOpen }> = [
@@ -1482,16 +1490,258 @@ function AgentDetailSummary({ agentId, value }: { agentId: string; value: unknow
   const detail = asRecord(asRecord(value).detail ?? value);
   const history = itemList(asRecord(value).history, ["messages", "items", "history"]);
   return (
-    <DetailBlock
-      title="Tutor runtime"
-      rows={[
-        ["ID", agentId],
-        ["Name", itemTitle(detail, agentId)],
-        ["Status", itemStatus(detail)],
-        ["History", String(history.length)],
-        ["Chat stream", `/api/learning/tutor-agents/${agentId}/ws`],
-      ]}
-    />
+    <div className="space-y-4">
+      <DetailBlock
+        title="Tutor runtime"
+        rows={[
+          ["ID", agentId],
+          ["Name", itemTitle(detail, agentId)],
+          ["Status", itemStatus(detail)],
+          ["History", String(history.length)],
+          ["Chat stream", `/api/learning/tutor-agents/${agentId}/ws`],
+        ]}
+      />
+      <TutorAgentChatPanel agentId={agentId} history={history} />
+    </div>
+  );
+}
+
+function normalizeTutorHistoryMessage(item: Item, index: number): TutorChatMessage | null {
+  const roleRaw = textOf(item.role, "assistant").toLowerCase();
+  const role = roleRaw === "user" ? "user" : roleRaw === "system" ? "system" : "assistant";
+  const content =
+    textOf(item.content) ||
+    textOf(item.message) ||
+    textOf(item.text) ||
+    textOf(item.response);
+  if (!content) return null;
+  return {
+    id: textOf(item.id, `history-${index}`),
+    role,
+    content,
+  };
+}
+
+function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: Item[] }) {
+  const [messages, setMessages] = useState<TutorChatMessage[]>([]);
+  const [thinking, setThinking] = useState<string[]>([]);
+  const [input, setInput] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const thinkingRef = useRef<string[]>([]);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const historyKey = history
+    .map((item, index) => textOf(item.id) || textOf(item.created_at) || String(index))
+    .join("|");
+  const initialMessages = useMemo(
+    () =>
+      history
+        .map((item, index) => normalizeTutorHistoryMessage(item, index))
+        .filter((item): item is TutorChatMessage => Boolean(item))
+        .slice(-8),
+    [historyKey],
+  );
+
+  useEffect(() => {
+    setMessages(initialMessages);
+    setThinking([]);
+    thinkingRef.current = [];
+    setInput("");
+  }, [agentId, initialMessages]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, thinking]);
+
+  useEffect(() => {
+    const socket = openLearningSocket(
+      `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/ws`,
+    );
+    socketRef.current = socket;
+    if (!socket) {
+      setConnected(false);
+      return undefined;
+    }
+
+    socket.onopen = () => setConnected(true);
+    socket.onmessage = (event) => {
+      let data: Item = {};
+      try {
+        data = JSON.parse(String(event.data)) as Item;
+      } catch {
+        data = { type: "content", content: String(event.data) };
+      }
+      const eventType = textOf(data.type, "content");
+      const content = textOf(data.content) || textOf(data.message);
+
+      if (eventType === "thinking") {
+        if (content) {
+          thinkingRef.current = [...thinkingRef.current, content];
+          setThinking(thinkingRef.current);
+        }
+        return;
+      }
+      if (eventType === "content" || eventType === "proactive") {
+        const thinkingSnapshot = thinkingRef.current;
+        if (content) {
+          setMessages((items) => [
+            ...items,
+            {
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              content,
+              thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
+            },
+          ]);
+        }
+        thinkingRef.current = [];
+        setThinking([]);
+        return;
+      }
+      if (eventType === "done") {
+        setStreaming(false);
+        thinkingRef.current = [];
+        setThinking([]);
+        return;
+      }
+      if (eventType === "error") {
+        setMessages((items) => [
+          ...items,
+          {
+            id: `error-${Date.now()}`,
+            role: "system",
+            content: content ? `Error: ${content}` : "Tutor stream returned an error.",
+          },
+        ]);
+        thinkingRef.current = [];
+        setThinking([]);
+        setStreaming(false);
+      }
+    };
+    socket.onerror = () => {
+      setMessages((items) => [
+        ...items,
+        {
+          id: `socket-error-${Date.now()}`,
+          role: "system",
+          content: "Tutor stream connection failed.",
+        },
+      ]);
+      setStreaming(false);
+    };
+    socket.onclose = () => {
+      setConnected(false);
+      setStreaming(false);
+    };
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, [agentId]);
+
+  const sendMessage = () => {
+    const content = input.trim();
+    const socket = socketRef.current;
+    if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+    setMessages((items) => [
+      ...items,
+      {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content,
+      },
+    ]);
+    setInput("");
+    thinkingRef.current = [];
+    setThinking([]);
+    setStreaming(true);
+    socket.send(JSON.stringify({ content, chat_id: "web" }));
+  };
+
+  return (
+    <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised">
+      <div className="flex items-center justify-between border-b border-zaki-border px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zaki-text">Tutor chat</h3>
+          <p className="text-xs text-zaki-muted">
+            {connected ? "Connected" : "Connecting"} through the ZAKI learning gateway
+          </p>
+        </div>
+        <span
+          className={cn(
+            "rounded-zaki-sm px-2 py-1 text-[11px] font-semibold",
+            connected
+              ? "bg-emerald-500/10 text-emerald-700"
+              : "bg-amber-500/10 text-amber-700",
+          )}
+        >
+          {streaming ? "Thinking" : connected ? "Live" : "Offline"}
+        </span>
+      </div>
+      <div className="max-h-80 space-y-3 overflow-auto p-4">
+        {messages.length || thinking.length ? (
+          <>
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "rounded-zaki-md border px-3 py-2 text-sm",
+                  message.role === "user"
+                    ? "ml-8 border-zaki-brand/30 bg-zaki-brand/10 text-zaki-text"
+                    : message.role === "system"
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "mr-8 border-zaki-border bg-zaki-base text-zaki-text",
+                )}
+              >
+                {message.thinking?.length ? (
+                  <div className="mb-2 border-l-2 border-zaki-border pl-2 text-xs text-zaki-muted">
+                    {message.thinking.slice(-3).map((entry, index) => (
+                      <p key={`${message.id}-thinking-${index}`}>{entry}</p>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              </div>
+            ))}
+            {thinking.length ? (
+              <div className="mr-8 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-xs text-zaki-muted">
+                {thinking.slice(-3).map((entry, index) => (
+                  <p key={`active-thinking-${index}`}>{entry}</p>
+                ))}
+              </div>
+            ) : null}
+            <div ref={bottomRef} />
+          </>
+        ) : (
+          <EmptyLine label="Send a message to start this tutor conversation." />
+        )}
+      </div>
+      <div className="flex gap-2 border-t border-zaki-border p-3">
+        <input
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              sendMessage();
+            }
+          }}
+          placeholder="Ask this tutor..."
+          className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+        />
+        <button
+          type="button"
+          disabled={!connected || !input.trim() || streaming}
+          onClick={sendMessage}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          <Send className="size-4" />
+          Send
+        </button>
+      </div>
+    </div>
   );
 }
 
