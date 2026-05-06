@@ -6,28 +6,41 @@ import { useSearchParams } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
+  ArrowUp,
+  AtSign,
+  BarChart3,
   BookOpen,
   Bot,
   Brain,
+  BrainCircuit,
   ChevronDown,
   CheckCircle2,
+  Clapperboard,
   Clock3,
+  Code2,
+  Database,
+  FileSearch,
   FileText,
   FolderUp,
   GraduationCap,
+  Globe,
   Image,
   Layers,
+  Lightbulb,
   MessageSquare,
+  Microscope,
   Paperclip,
   PenLine,
   Plus,
   RefreshCw,
   Send,
   Square,
+  Sparkles,
   Star,
   Trash2,
   Upload,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -696,7 +709,14 @@ export function LearningPage() {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
-            {tab === "chat" ? <LearningChatPanel kbName={kbName} /> : null}
+            {tab === "chat" ? (
+              <LearningChatPanel
+                kbName={kbName}
+                setKbName={setKbName}
+                knowledgeItems={knowledgeItems}
+                onSelectSpace={selectLearningTab}
+              />
+            ) : null}
             {tab === "sources" ? (
               <SourcesPanel
                 kbName={kbName}
@@ -827,13 +847,108 @@ export function LearningPage() {
   );
 }
 
-const learningCapabilities = [
-  { value: "", label: "Chat", icon: MessageSquare },
-  { value: "deep_solve", label: "Deep Solve", icon: Brain },
-  { value: "deep_question", label: "Quiz Generation", icon: GraduationCap },
-  { value: "deep_research", label: "Deep Research", icon: Star },
-  { value: "math_animator", label: "Math Animator", icon: Activity },
-  { value: "visualize", label: "Visualize", icon: Image },
+type LearningToolName =
+  | "brainstorm"
+  | "rag"
+  | "web_search"
+  | "code_execution"
+  | "reason"
+  | "paper_search";
+
+type LearningToolDef = {
+  name: LearningToolName;
+  label: string;
+  icon: LucideIcon;
+};
+
+type LearningResearchSource = "kb" | "web" | "papers";
+
+type LearningResearchSourceDef = {
+  name: LearningResearchSource;
+  label: string;
+  icon: LucideIcon;
+};
+
+type LearningCapabilityDef = {
+  value: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  allowedTools: LearningToolName[];
+  defaultTools: LearningToolName[];
+};
+
+const learningTools: LearningToolDef[] = [
+  { name: "brainstorm", label: "Brainstorm", icon: Lightbulb },
+  { name: "rag", label: "RAG", icon: Database },
+  { name: "web_search", label: "Web Search", icon: Globe },
+  { name: "code_execution", label: "Code", icon: Code2 },
+  { name: "reason", label: "Reason", icon: Sparkles },
+  { name: "paper_search", label: "Arxiv Search", icon: FileSearch },
+];
+
+const learningResearchSources: LearningResearchSourceDef[] = [
+  { name: "kb", label: "Knowledge Base", icon: Database },
+  { name: "web", label: "Web", icon: Globe },
+  { name: "papers", label: "Papers", icon: FileSearch },
+];
+
+const learningCapabilities: LearningCapabilityDef[] = [
+  {
+    value: "",
+    label: "Chat",
+    description: "Flexible conversation with any tool",
+    icon: MessageSquare,
+    allowedTools: [
+      "brainstorm",
+      "rag",
+      "web_search",
+      "code_execution",
+      "reason",
+      "paper_search",
+    ],
+    defaultTools: [],
+  },
+  {
+    value: "deep_solve",
+    label: "Deep Solve",
+    description: "Multi-step reasoning & problem solving",
+    icon: BrainCircuit,
+    allowedTools: ["rag", "web_search", "code_execution", "reason"],
+    defaultTools: ["rag", "web_search", "code_execution", "reason"],
+  },
+  {
+    value: "deep_question",
+    label: "Quiz Generation",
+    description: "Auto-validated question generation",
+    icon: PenLine,
+    allowedTools: ["rag", "web_search", "code_execution"],
+    defaultTools: ["rag", "web_search", "code_execution"],
+  },
+  {
+    value: "deep_research",
+    label: "Deep Research",
+    description: "Comprehensive multi-agent research",
+    icon: Microscope,
+    allowedTools: [],
+    defaultTools: [],
+  },
+  {
+    value: "math_animator",
+    label: "Math Animator",
+    description: "Generate math videos or storyboard images",
+    icon: Clapperboard,
+    allowedTools: [],
+    defaultTools: [],
+  },
+  {
+    value: "visualize",
+    label: "Visualize",
+    description: "Generate SVG, Chart.js, or Mermaid visualizations",
+    icon: BarChart3,
+    allowedTools: [],
+    defaultTools: [],
+  },
 ];
 
 function makeClientId(prefix: string) {
@@ -937,12 +1052,28 @@ function LearningAttachmentChip({
   );
 }
 
-function LearningChatPanel({ kbName }: { kbName: string }) {
+function LearningChatPanel({
+  kbName,
+  setKbName,
+  knowledgeItems,
+  onSelectSpace,
+}: {
+  kbName: string;
+  setKbName: (name: string) => void;
+  knowledgeItems: Item[];
+  onSelectSpace: (tab: LearningTab) => void;
+}) {
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [capability, setCapability] = useState("");
   const [capabilityMenuOpen, setCapabilityMenuOpen] = useState(false);
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
+  const [selectedTools, setSelectedTools] = useState<Set<LearningToolName>>(new Set());
+  const [selectedResearchSources, setSelectedResearchSources] = useState<
+    Set<LearningResearchSource>
+  >(new Set(["kb", "web", "papers"]));
   const [attachments, setAttachments] = useState<LearningAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -951,7 +1082,6 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
   const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
   const socketRef = useRef<WebSocket | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const dragCounterRef = useRef(0);
   const attachmentErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachmentsRef = useRef<LearningAttachment[]>([]);
@@ -964,7 +1094,21 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
     learningCapabilities.find((entry) => entry.value === capability) ??
     learningCapabilities[0]!;
   const ActiveCapabilityIcon = activeCapability.icon;
+  const visibleTools = learningTools.filter((tool) =>
+    activeCapability.allowedTools.includes(tool.name),
+  );
+  const isResearchMode = capability === "deep_research";
+  const ragActive = selectedTools.has("rag") || isResearchMode;
   const canSend = connected && !streaming && Boolean(input.trim() || attachments.length);
+  const knowledgeBaseNames = useMemo(() => {
+    const names = new Set<string>();
+    knowledgeItems.forEach((item) => {
+      const name = textOf(item.name) || textOf(item.title);
+      if (name) names.add(name);
+    });
+    if (kbName.trim()) names.add(kbName.trim());
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [knowledgeItems, kbName]);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -977,13 +1121,6 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, thinking]);
-
-  useEffect(() => {
-    const folderInput = folderInputRef.current;
-    if (!folderInput) return;
-    folderInput.setAttribute("webkitdirectory", "");
-    folderInput.setAttribute("directory", "");
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -1265,6 +1402,34 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
     });
   };
 
+  const selectCapability = (value: string) => {
+    const nextCapability =
+      learningCapabilities.find((entry) => entry.value === value) ?? learningCapabilities[0]!;
+    setCapability(nextCapability.value);
+    setSelectedTools(new Set(nextCapability.defaultTools));
+    setCapabilityMenuOpen(false);
+    setToolMenuOpen(false);
+  };
+
+  const toggleTool = (toolName: LearningToolName) => {
+    if (!activeCapability.allowedTools.includes(toolName)) return;
+    setSelectedTools((current) => {
+      const next = new Set(current);
+      if (next.has(toolName)) next.delete(toolName);
+      else next.add(toolName);
+      return next;
+    });
+  };
+
+  const toggleResearchSource = (source: LearningResearchSource) => {
+    setSelectedResearchSources((current) => {
+      const next = new Set(current);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  };
+
   const sendMessage = () => {
     const fallbackContent = attachments.some((attachment) => attachment.type === "image")
       ? "Please analyze the attached image(s)."
@@ -1296,6 +1461,10 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
         capability: capability || null,
         session_id: sessionId,
         knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
+        tools: Array.from(selectedTools),
+        config: isResearchMode
+          ? { sources: Array.from(selectedResearchSources) }
+          : undefined,
         attachments: sentAttachments.map((attachment) => ({
           type: attachment.type,
           filename: attachment.filename,
@@ -1380,8 +1549,10 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
 
       <div
         className={cn(
-          "relative rounded-zaki-lg border bg-zaki-base transition-colors",
-          dragging ? "border-zaki-brand bg-zaki-brand/5" : "border-zaki-border",
+          "relative rounded-2xl border bg-[var(--card)] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-colors",
+          dragging
+            ? "border-[var(--primary)] bg-[var(--primary)]/[0.03]"
+            : "border-[var(--border)]",
         )}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -1389,8 +1560,14 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
         onDrop={handleDrop}
       >
         {dragging ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-zaki-lg border border-dashed border-zaki-brand bg-zaki-brand/10 text-sm font-semibold text-zaki-brand">
-            Drop files to attach
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/[0.04]">
+            <div className="flex flex-col items-center gap-1 text-[var(--primary)]">
+              <Paperclip size={22} strokeWidth={1.6} />
+              <span className="text-[13px] font-medium">Drop files here</span>
+              <span className="text-[11px] text-[var(--primary)]/70">
+                Images, Office docs, code & text
+              </span>
+            </div>
           </div>
         ) : null}
         <textarea
@@ -1398,9 +1575,16 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
           onChange={(event) => setInput(event.target.value)}
           onPaste={handlePaste}
           onKeyDown={handleComposerKeyDown}
-          placeholder="Ask about your study material..."
-          rows={3}
-          className="min-h-[96px] w-full resize-none rounded-t-zaki-lg bg-transparent px-4 py-3 text-sm text-zaki-text outline-none placeholder:text-zaki-muted"
+          placeholder={
+            capability === "math_animator"
+              ? "Describe the math animation or storyboard you want..."
+              : capability === "visualize"
+                ? "Describe the chart or diagram you want to visualize..."
+                : "How can I help you today?"
+          }
+          rows={1}
+          className="w-full resize-none overflow-hidden bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-relaxed text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+          style={{ minHeight: 48 }}
         />
         {attachments.length ? (
           <div className="flex flex-wrap gap-2 px-4 pb-3">
@@ -1416,50 +1600,302 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
         {attachmentError ? (
           <div className="px-4 pb-2 text-xs text-red-600">{attachmentError}</div>
         ) : null}
-        <div className="flex items-center gap-2 border-t border-zaki-border px-3 py-2">
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setCapabilityMenuOpen((open) => !open)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-2 text-xs font-semibold text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text"
-            >
-              <ActiveCapabilityIcon className="size-4" />
-              {activeCapability.label}
-              <ChevronDown
-                className={cn("size-3 transition-transform", capabilityMenuOpen && "rotate-180")}
-              />
-            </button>
-            {capabilityMenuOpen ? (
-              <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[220px] rounded-zaki-md border border-zaki-border bg-zaki-raised py-1 shadow-lg">
-                {learningCapabilities.map((entry) => {
-                  const Icon = entry.icon;
-                  const active = capability === entry.value;
-                  return (
-                    <button
-                      key={entry.label}
-                      type="button"
-                      onClick={() => {
-                        setCapability(entry.value);
-                        setCapabilityMenuOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs font-semibold transition-colors",
-                        active
-                          ? "text-zaki-brand"
-                          : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                      <span className="flex-1">{entry.label}</span>
-                      {active ? <span className="h-1.5 w-1.5 rounded-full bg-zaki-brand" /> : null}
-                    </button>
-                  );
-                })}
+        <div className="border-t border-[var(--border)]/35 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setCapabilityMenuOpen((open) => !open)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 px-1 py-1.5 text-[12px] transition-colors",
+                  capabilityMenuOpen
+                    ? "text-[var(--foreground)]"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                )}
+              >
+                <ActiveCapabilityIcon size={14} strokeWidth={1.6} />
+                <span className="font-medium">{activeCapability.label}</span>
+                <ChevronDown
+                  size={11}
+                  className={cn("transition-transform", capabilityMenuOpen && "rotate-180")}
+                />
+              </button>
+              {capabilityMenuOpen ? (
+                <div className="absolute bottom-full left-0 z-50 mb-1.5 w-[280px] rounded-xl border border-[var(--border)] bg-[var(--popover)] py-1.5 shadow-lg backdrop-blur-md">
+                  {learningCapabilities.map((entry) => {
+                    const Icon = entry.icon;
+                    const selected = capability === entry.value;
+                    return (
+                      <button
+                        key={entry.value}
+                        type="button"
+                        onClick={() => selectCapability(entry.value)}
+                        className={cn(
+                          "flex w-full items-center gap-3 px-3.5 py-2 text-left transition-colors",
+                          selected ? "bg-[var(--muted)]" : "hover:bg-[var(--muted)]/50",
+                        )}
+                      >
+                        <Icon
+                          size={16}
+                          strokeWidth={1.6}
+                          className={cn(
+                            "shrink-0",
+                            selected
+                              ? "text-[var(--primary)]"
+                              : "text-[var(--muted-foreground)]",
+                          )}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-medium text-[var(--foreground)]">
+                            {entry.label}
+                          </div>
+                          <div className="truncate text-[11px] text-[var(--muted-foreground)]">
+                            {entry.description}
+                          </div>
+                        </div>
+                        {selected ? (
+                          <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--primary)]" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="h-3.5 w-px bg-[var(--border)]/30" />
+
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              {isResearchMode ? (
+                <div className="relative flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setToolMenuOpen((open) => !open)}
+                    className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                  >
+                    <Layers size={12} strokeWidth={1.7} />
+                    Sources
+                    <ChevronDown
+                      size={10}
+                      className={cn("transition-transform", toolMenuOpen && "rotate-180")}
+                    />
+                  </button>
+                  {selectedResearchSources.size > 0 ? (
+                    <div className="flex items-center gap-[3px] overflow-hidden">
+                      {learningResearchSources
+                        .filter((source) => selectedResearchSources.has(source.name))
+                        .map((source, index) => (
+                          <span
+                            key={source.name}
+                            className="shrink-0 text-[10px] text-[var(--muted-foreground)]/35"
+                          >
+                            {index > 0 ? (
+                              <span className="text-[12px] leading-none">·</span>
+                            ) : null}
+                            {source.label}
+                          </span>
+                        ))}
+                    </div>
+                  ) : null}
+                  {toolMenuOpen ? (
+                    <div className="absolute bottom-full left-0 z-50 mb-1.5 min-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--popover)] py-1 shadow-lg backdrop-blur-md">
+                      {learningResearchSources.map((source) => {
+                        const active = selectedResearchSources.has(source.name);
+                        const Icon = source.icon;
+                        return (
+                          <button
+                            key={source.name}
+                            type="button"
+                            onClick={() => toggleResearchSource(source.name)}
+                            className={cn(
+                              "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--muted)]/40",
+                              active
+                                ? "text-[var(--primary)]"
+                                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                            )}
+                          >
+                            <Icon size={13} strokeWidth={1.7} />
+                            <span className="flex-1 font-medium">{source.label}</span>
+                            {active ? (
+                              <div className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : visibleTools.length > 0 ? (
+                <div className="relative flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setToolMenuOpen((open) => !open)}
+                    className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                  >
+                    <Sparkles size={12} strokeWidth={1.7} />
+                    Tools
+                    <ChevronDown
+                      size={10}
+                      className={cn("transition-transform", toolMenuOpen && "rotate-180")}
+                    />
+                  </button>
+                  {selectedTools.size > 0 ? (
+                    <div className="flex items-center gap-[3px] overflow-hidden">
+                      {visibleTools
+                        .filter((tool) => selectedTools.has(tool.name))
+                        .map((tool, index) => (
+                          <span
+                            key={tool.name}
+                            className="shrink-0 text-[10px] text-[var(--muted-foreground)]/35"
+                          >
+                            {index > 0 ? (
+                              <span className="text-[12px] leading-none">·</span>
+                            ) : null}
+                            {tool.label}
+                          </span>
+                        ))}
+                    </div>
+                  ) : null}
+                  {toolMenuOpen ? (
+                    <div className="absolute bottom-full left-0 z-50 mb-1.5 min-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--popover)] py-1 shadow-lg backdrop-blur-md">
+                      {visibleTools.map((tool) => {
+                        const active = selectedTools.has(tool.name);
+                        const Icon = tool.icon;
+                        return (
+                          <button
+                            key={tool.name}
+                            type="button"
+                            onClick={() => toggleTool(tool.name)}
+                            className={cn(
+                              "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--muted)]/40",
+                              active
+                                ? "text-[var(--primary)]"
+                                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                            )}
+                          >
+                            <Icon size={13} strokeWidth={1.7} />
+                            <span className="flex-1 font-medium">{tool.label}</span>
+                            {active ? (
+                              <div className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Attach files"
+                aria-label="Attach files"
+                className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+              >
+                <Paperclip size={12} strokeWidth={1.7} />
+                Attach
+              </button>
+
+              <div className="relative flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSpaceMenuOpen((open) => !open)}
+                  className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                >
+                  <AtSign size={12} strokeWidth={1.7} />
+                  Space
+                  <ChevronDown
+                    size={10}
+                    className={cn("transition-transform", spaceMenuOpen && "rotate-180")}
+                  />
+                </button>
+                {spaceMenuOpen ? (
+                  <div className="absolute bottom-full left-0 z-50 mb-1.5 min-w-[190px] rounded-lg border border-[var(--border)] bg-[var(--popover)] py-1 shadow-lg backdrop-blur-md">
+                    {[
+                      { key: "chat", label: "Chat history", icon: MessageSquare, tab: "chat" },
+                      { key: "books", label: "Books", icon: BookOpen, tab: "books" },
+                      { key: "notebooks", label: "Notebooks", icon: FileText, tab: "space" },
+                      {
+                        key: "question_bank",
+                        label: "Question Bank",
+                        icon: GraduationCap,
+                        tab: "space",
+                      },
+                      { key: "skills", label: "Skills", icon: Star, tab: "space" },
+                      { key: "memory", label: "Memory", icon: Brain, tab: "space" },
+                    ].map((entry) => {
+                      const Icon = entry.icon;
+                      return (
+                        <button
+                          key={entry.key}
+                          type="button"
+                          onClick={() => {
+                            setSpaceMenuOpen(false);
+                            onSelectSpace(entry.tab as LearningTab);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]"
+                        >
+                          <Icon size={13} strokeWidth={1.7} />
+                          <span className="flex-1 font-medium">{entry.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-          <div className="min-w-0 flex-1 truncate text-xs text-zaki-muted">
-            {kbName.trim() ? kbName.trim() : ""}
+            </div>
+
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <select
+                value={kbName}
+                onChange={(event) => setKbName(event.target.value)}
+                disabled={!ragActive}
+                title={ragActive ? "Select Knowledge Base" : "Enable Knowledge Base source first"}
+                className={cn(
+                  "h-[28px] appearance-none rounded-full border bg-transparent py-0 pl-2.5 pr-5 text-[11px] outline-none transition-colors",
+                  ragActive
+                    ? "cursor-pointer border-[var(--border)]/40 text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]"
+                    : "cursor-not-allowed border-transparent text-[var(--border)]",
+                )}
+                style={{
+                  backgroundImage: ragActive
+                    ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")"
+                    : "none",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 6px center",
+                }}
+              >
+                <option value="">{ragActive ? "No KB" : "-"}</option>
+                {knowledgeBaseNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              {streaming ? (
+                <button
+                  type="button"
+                  onClick={cancelStreaming}
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                  className="group relative inline-flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-white shadow-[0_4px_12px_rgba(195,90,44,0.18)] transition-[background-color,box-shadow] hover:bg-[var(--primary)]/90 hover:shadow-[0_6px_16px_rgba(195,90,44,0.28)]"
+                >
+                  <span className="pointer-events-none absolute inset-0 animate-spin rounded-full border-[1.5px] border-white/30 border-t-white/85 opacity-90 transition-opacity group-hover:opacity-40" />
+                  <Square size={9} strokeWidth={2.6} className="relative z-10 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={sendMessage}
+                  disabled={!canSend}
+                  aria-label="Send"
+                  className="rounded-full bg-[var(--primary)] p-[7px] text-white shadow-[0_4px_12px_rgba(195,90,44,0.15)] transition-[transform,opacity,box-shadow] hover:shadow-[0_6px_16px_rgba(195,90,44,0.22)] disabled:opacity-25 disabled:shadow-none"
+                >
+                  <ArrowUp size={15} strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
           </div>
           <input
             ref={fileInputRef}
@@ -1469,49 +1905,6 @@ function LearningChatPanel({ kbName }: { kbName: string }) {
             className="hidden"
             onChange={handleFileInput}
           />
-          <input
-            ref={folderInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleFileInput}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach files"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text"
-          >
-            <Paperclip className="size-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => folderInputRef.current?.click()}
-            title="Attach folder"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text"
-          >
-            <FolderUp className="size-4" />
-          </button>
-          {streaming ? (
-            <button
-              type="button"
-              onClick={cancelStreaming}
-              title="Stop"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-text text-zaki-base"
-            >
-              <Square className="size-3.5 fill-current" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={!canSend}
-              onClick={sendMessage}
-              title="Send"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-brand text-white disabled:opacity-50"
-            >
-              <Send className="size-4" />
-            </button>
-          )}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zaki-muted">
