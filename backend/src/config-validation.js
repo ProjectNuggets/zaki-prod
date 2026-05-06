@@ -53,6 +53,9 @@ export function validateRuntimeConfig(env = process.env) {
   const stripePriceStudentYearly = normalize(env.STRIPE_PRICE_STUDENT_YEARLY);
   const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
   const stripePriceAccessCodeMonthly = normalize(env.STRIPE_PRICE_ACCESS_CODE_MONTHLY);
+  const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
+  const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
+  const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
 
   const errors = [];
   const warnings = [];
@@ -123,6 +126,34 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "STRIPE_PRICE_ACCESS_CODE_MONTHLY",
       "STRIPE_PRICE_ACCESS_CODE_MONTHLY is not set. Access-code purchase checkout will be unavailable."
+    );
+  }
+  if (learningEnabled) {
+    if (!learningBaseUrl) {
+      pushIssue(
+        errors,
+        "LEARNING_ENGINE_BASE_URL",
+        "LEARNING_ENGINE_BASE_URL is required when ZAKI_LEARNING_ENABLED=true."
+      );
+    } else if (!hasHttpUrl(learningBaseUrl)) {
+      pushIssue(
+        errors,
+        "LEARNING_ENGINE_BASE_URL",
+        "LEARNING_ENGINE_BASE_URL must start with http:// or https://."
+      );
+    }
+    if (!learningInternalToken) {
+      pushIssue(
+        errors,
+        "LEARNING_ENGINE_INTERNAL_TOKEN",
+        "LEARNING_ENGINE_INTERNAL_TOKEN is required when ZAKI_LEARNING_ENABLED=true."
+      );
+    }
+  } else if (learningBaseUrl || learningInternalToken) {
+    pushIssue(
+      warnings,
+      "ZAKI_LEARNING_ENABLED",
+      "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
     );
   }
 

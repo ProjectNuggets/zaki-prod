@@ -99,4 +99,49 @@ describe("runtime config validation", () => {
     const { errors } = validateRuntimeConfig(env);
     expect(errors.find((e) => e.key === "ZAKI_JWT_SIGNING_KEY")).toBeUndefined();
   });
+
+  it("requires learning engine base and token when learning is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_LEARNING_ENABLED: "true",
+        LEARNING_ENGINE_BASE_URL: "",
+        LEARNING_ENGINE_INTERNAL_TOKEN: "",
+      })
+    );
+
+    expect(report.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "LEARNING_ENGINE_BASE_URL" }),
+        expect.objectContaining({ key: "LEARNING_ENGINE_INTERNAL_TOKEN" }),
+      ])
+    );
+  });
+
+  it("accepts learning engine config when enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_LEARNING_ENABLED: "true",
+        LEARNING_ENGINE_BASE_URL: "http://learning:8001",
+        LEARNING_ENGINE_INTERNAL_TOKEN: "secret",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "LEARNING_ENGINE_BASE_URL")).toBeUndefined();
+    expect(report.errors.find((e) => e.key === "LEARNING_ENGINE_INTERNAL_TOKEN")).toBeUndefined();
+  });
+
+  it("warns when learning config is present but disabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_LEARNING_ENABLED: "false",
+        LEARNING_ENGINE_BASE_URL: "http://learning:8001",
+        LEARNING_ENGINE_INTERNAL_TOKEN: "secret",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "LEARNING_ENGINE_BASE_URL")).toBeUndefined();
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "ZAKI_LEARNING_ENABLED" })])
+    );
+  });
 });

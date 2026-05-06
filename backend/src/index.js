@@ -71,6 +71,22 @@ import {
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
+  buildLearningForwardHeaders,
+  buildLearningConfigErrorPayload,
+  buildLearningDisabledPayload,
+  extractLearningWsToken,
+  isLearningEnabled,
+  mapLearningUpstreamFailure,
+  resolveCanonicalLearningUserId,
+} from "./learning-bff-contract.js";
+import {
+  fetchLearningPath,
+  fetchLearningSession,
+  fetchLearningSessions,
+  getLearningBase,
+  probeLearningReady,
+} from "./learning-client.js";
+import {
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
   registerBotBffAliases,
@@ -251,6 +267,21 @@ const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
     .toLowerCase()
     .trim() === "true";
+const LEARNING_ENGINE_BASE_URL = (process.env.LEARNING_ENGINE_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+const LEARNING_ENGINE_INTERNAL_TOKEN = (
+  process.env.LEARNING_ENGINE_INTERNAL_TOKEN || ""
+).trim();
+const ZAKI_LEARNING_ENABLED = isLearningEnabled(process.env.ZAKI_LEARNING_ENABLED);
+const LEARNING_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
+  1_000,
+  Number(process.env.LEARNING_ENGINE_REQUEST_TIMEOUT_MS || 30_000)
+);
+const LEARNING_ENGINE_STREAM_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.LEARNING_ENGINE_STREAM_TIMEOUT_MS || 300_000)
+);
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
@@ -8419,6 +8450,116 @@ async function requireAgentContext(req, res, next) {
   next();
 }
 
+async function requireLearningContext(req, res, next) {
+  const existingUserId = String(req.learningUserId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return;
+
+  const userId = resolveCanonicalLearningUserId(authResult);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    return;
+  }
+
+  req.learningAuthResult = authResult;
+  req.learningUserId = userId;
+  next();
+}
+
+function assertLearningRouteEnabled(req, res) {
+  const requestId = getOrCreateRequestId(req);
+  if (!ZAKI_LEARNING_ENABLED) {
+    res.status(404).json(buildLearningDisabledPayload(requestId));
+    return false;
+  }
+  if (!getLearningBase(LEARNING_ENGINE_BASE_URL)) {
+    res
+      .status(500)
+      .json(buildLearningConfigErrorPayload("LEARNING_ENGINE_BASE_URL is not configured.", requestId));
+    return false;
+  }
+  if (!LEARNING_ENGINE_INTERNAL_TOKEN) {
+    res
+      .status(500)
+      .json(buildLearningConfigErrorPayload("LEARNING_ENGINE_INTERNAL_TOKEN is not configured.", requestId));
+    return false;
+  }
+  return true;
+}
+
+function learningClientOptions(req, label) {
+  return {
+    baseUrl: LEARNING_ENGINE_BASE_URL,
+    internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+    userId: String(req.learningUserId || ""),
+    requestId: getOrCreateRequestId(req),
+    fetchWithTimeout,
+    timeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
+    label,
+  };
+}
+
+async function pipeLearningResponse(req, res, upstream) {
+  const requestId = getOrCreateRequestId(req);
+  if (!upstream.ok) {
+    const mapped = mapLearningUpstreamFailure(upstream.status, requestId);
+    if (mapped) {
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+  }
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  Readable.fromWeb(upstream.body).pipe(res);
+}
+
+async function proxyLearningRequest(req, res, targetPath, {
+  method = req.method,
+  body = undefined,
+  label = "Learning upstream request",
+} = {}) {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const upstream = await fetchLearningPath({
+      ...learningClientOptions(req, label),
+      path: targetPath,
+      method,
+      body,
+    });
+    await pipeLearningResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    if (
+      error?.message === "LEARNING_ENGINE_BASE_URL is not configured." ||
+      error?.message === "LEARNING_ENGINE_INTERNAL_TOKEN is not configured."
+    ) {
+      res.status(500).json(buildLearningConfigErrorPayload(error.message, requestId));
+      return;
+    }
+    console.error("[Learning] Upstream proxy error:", {
+      requestId,
+      error: error?.message || "Learning request failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+}
+
 // S2.7 — push a revocation to nullalis's /internal/entitlements/revoke.
 // Called by the Stripe webhook handler when an event (subscription
 // delete/update, invoice payment fail, dispute) should immediately
@@ -9295,6 +9436,162 @@ app.post(
 );
 
 // =============================================================================
+// LEARNING ENGINE BFF
+// =============================================================================
+
+app.get("/api/internal/learning/status", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const userId = resolveCanonicalLearningUserId(authResult);
+    const configured = Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN);
+    const body = {
+      ok: false,
+      enabled: ZAKI_LEARNING_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(LEARNING_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
+      streamTimeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
+      requestId,
+    };
+
+    if (!ZAKI_LEARNING_ENABLED || !configured || !userId) {
+      return res.status(200).json(body);
+    }
+
+    const upstream = await probeLearningReady({
+      baseUrl: LEARNING_ENGINE_BASE_URL,
+      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+    });
+
+    return res.status(200).json({
+      ...body,
+      ok: upstream.ok,
+      upstreamStatus: upstream.status,
+    });
+  } catch (error) {
+    console.error("[Learning] Internal status error:", error);
+    res.status(500).json({ error: error?.message || "Learning status failed." });
+  }
+});
+
+app.get("/api/learning/health", requireLearningContext, async (req, res) => {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const upstream = await probeLearningReady(learningClientOptions(req, "Learning ready probe"));
+    await pipeLearningResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Health proxy error:", {
+      requestId,
+      error: error?.message || "Learning health failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+});
+
+app.get("/api/learning/sessions", requireLearningContext, async (req, res) => {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const upstream = await fetchLearningSessions({
+      ...learningClientOptions(req, "Learning sessions request"),
+      limit,
+      offset,
+    });
+    await pipeLearningResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Sessions proxy error:", {
+      requestId,
+      error: error?.message || "Learning sessions failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning sessions are temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+});
+
+app.get("/api/learning/sessions/:sessionId", requireLearningContext, async (req, res) => {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const upstream = await fetchLearningSession({
+      ...learningClientOptions(req, "Learning session request"),
+      sessionId: req.params.sessionId,
+    });
+    await pipeLearningResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Session proxy error:", {
+      requestId,
+      sessionId: req.params.sessionId,
+      error: error?.message || "Learning session failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning session is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+});
+
+app.patch(
+  "/api/learning/sessions/:sessionId",
+  requireLearningContext,
+  express.json({ limit: "1mb" }),
+  async (req, res) => {
+    const targetPath = `/api/v1/sessions/${encodeURIComponent(req.params.sessionId)}`;
+    await proxyLearningRequest(req, res, targetPath, {
+      method: "PATCH",
+      body: req.body,
+      label: "Learning session update request",
+    });
+  }
+);
+
+app.delete("/api/learning/sessions/:sessionId", requireLearningContext, async (req, res) => {
+  const targetPath = `/api/v1/sessions/${encodeURIComponent(req.params.sessionId)}`;
+  await proxyLearningRequest(req, res, targetPath, {
+    method: "DELETE",
+    label: "Learning session delete request",
+  });
+});
+
+app.post(
+  "/api/learning/sessions/:sessionId/quiz-results",
+  requireLearningContext,
+  express.json({ limit: "5mb" }),
+  async (req, res) => {
+    const targetPath = `/api/v1/sessions/${encodeURIComponent(req.params.sessionId)}/quiz-results`;
+    await proxyLearningRequest(req, res, targetPath, {
+      method: "POST",
+      body: req.body,
+      label: "Learning quiz results request",
+    });
+  }
+);
+
+// =============================================================================
 // SHARE CONVERSATION ROUTES
 // =============================================================================
 
@@ -9577,6 +9874,7 @@ app.all("*", async (req, res) => {
 
 const server = http.createServer(app);
 const agentProxyWss = new WebSocketServer({ noServer: true });
+const learningProxyWss = new WebSocketServer({ noServer: true });
 
 function isValidWebSocketCloseCode(code) {
   return (
@@ -9597,6 +9895,37 @@ function normalizeWebSocketCloseReason(reason, fallback = "normal_closure") {
   return Buffer.byteLength(text, "utf8") <= 123
     ? text
     : Buffer.from(text, "utf8").subarray(0, 123).toString("utf8");
+}
+
+function writeWebSocketHttpError(socket, statusCode, message) {
+  socket.write(
+    `HTTP/1.1 ${statusCode} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
+  );
+  socket.destroy();
+}
+
+function getLearningWsUrl() {
+  const base = getLearningBase(LEARNING_ENGINE_BASE_URL);
+  if (!base) return null;
+  return `${base.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:")}/api/v1/ws`;
+}
+
+async function resolveLearningWsContext(req) {
+  const token = extractLearningWsToken(req);
+  if (!token) return { error: "auth_required" };
+  const decoded = tryDecodeJwtPayload(token);
+  const legacyAuthHeader = req.headers.authorization || `Bearer ${token}`;
+  const result = decoded?.iss === "zaki"
+    ? await _resolveZakiUser(token)
+    : await _resolveLegacyUser(
+        legacyAuthHeader,
+        req,
+        { setHeader() {} }
+      );
+  if (!result.ok) return { error: result.error || "invalid_token" };
+  const userId = resolveCanonicalLearningUserId({ zakiUser: result.zakiUser });
+  if (!userId) return { error: "invalid_user_id" };
+  return { userId, authResult: result };
 }
 
 agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
@@ -9678,6 +10007,98 @@ agentProxyWss.on("connection", (clientSocket, req, invocationId) => {
   });
 });
 
+learningProxyWss.on("connection", (clientSocket, req, context) => {
+  const upstreamUrl = getLearningWsUrl();
+  if (!upstreamUrl) {
+    clientSocket.close(1011, "Learning websocket base is not configured.");
+    return;
+  }
+
+  const requestId = getOrCreateRequestId(req);
+  const upstreamSocket = new UpstreamWebSocket(upstreamUrl, {
+    headers: buildLearningForwardHeaders({
+      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+      userId: context.userId,
+      requestId,
+      contentType: null,
+    }),
+  });
+
+  const closeClient = (code = 1011, reason = "Learning websocket proxy failed.") => {
+    if (
+      clientSocket.readyState === clientSocket.OPEN ||
+      clientSocket.readyState === clientSocket.CONNECTING
+    ) {
+      clientSocket.close(
+        normalizeWebSocketCloseCode(code, 1011),
+        normalizeWebSocketCloseReason(reason, "learning_proxy_failed")
+      );
+    }
+  };
+
+  const closeUpstream = (code = 1000, reason = "client_closed") => {
+    if (
+      upstreamSocket.readyState === upstreamSocket.OPEN ||
+      upstreamSocket.readyState === upstreamSocket.CONNECTING
+    ) {
+      upstreamSocket.close(
+        normalizeWebSocketCloseCode(code, 1000),
+        normalizeWebSocketCloseReason(reason, "client_closed")
+      );
+    }
+  };
+
+  upstreamSocket.on("open", () => {
+    if (clientSocket.readyState !== clientSocket.OPEN) {
+      closeUpstream();
+    }
+  });
+
+  upstreamSocket.on("message", (data, isBinary) => {
+    if (clientSocket.readyState === clientSocket.OPEN) {
+      clientSocket.send(data, { binary: isBinary });
+    }
+  });
+
+  upstreamSocket.on("error", (error) => {
+    console.error("[LearningProxy] Upstream websocket error:", {
+      requestId,
+      error: error?.message || "upstream websocket failed",
+    });
+    closeClient(1011, "Learning upstream connection failed.");
+  });
+
+  upstreamSocket.on("close", (code, reason) => {
+    if (
+      clientSocket.readyState === clientSocket.OPEN ||
+      clientSocket.readyState === clientSocket.CONNECTING
+    ) {
+      clientSocket.close(
+        normalizeWebSocketCloseCode(code, 1000),
+        normalizeWebSocketCloseReason(reason?.toString(), "upstream_closed")
+      );
+    }
+  });
+
+  clientSocket.on("message", (data, isBinary) => {
+    if (upstreamSocket.readyState === upstreamSocket.OPEN) {
+      upstreamSocket.send(data, { binary: isBinary });
+    }
+  });
+
+  clientSocket.on("error", (error) => {
+    console.error("[LearningProxy] Client websocket error:", {
+      requestId,
+      error: error?.message || "client websocket failed",
+    });
+    closeUpstream(1011, "client_error");
+  });
+
+  clientSocket.on("close", () => {
+    closeUpstream();
+  });
+});
+
 server.on("upgrade", (req, socket, head) => {
   if (isDraining) {
     socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
@@ -9686,6 +10107,32 @@ server.on("upgrade", (req, socket, head) => {
   }
 
   const url = new URL(req.url || "", "http://localhost");
+  if (url.pathname === "/api/learning/ws") {
+    if (!ZAKI_LEARNING_ENABLED) {
+      writeWebSocketHttpError(socket, 404, "Not Found");
+      return;
+    }
+    if (!getLearningBase(LEARNING_ENGINE_BASE_URL) || !LEARNING_ENGINE_INTERNAL_TOKEN) {
+      writeWebSocketHttpError(socket, 503, "Service Unavailable");
+      return;
+    }
+    resolveLearningWsContext(req)
+      .then((context) => {
+        if (context.error) {
+          writeWebSocketHttpError(socket, 401, "Unauthorized");
+          return;
+        }
+        learningProxyWss.handleUpgrade(req, socket, head, (ws) => {
+          learningProxyWss.emit("connection", ws, req, context);
+        });
+      })
+      .catch((error) => {
+        console.error("[LearningProxy] Websocket auth error:", error);
+        writeWebSocketHttpError(socket, 401, "Unauthorized");
+      });
+    return;
+  }
+
   const match = url.pathname.match(/^\/api\/agent-invocation\/([^/]+)$/);
   if (!match) {
     socket.destroy();
@@ -9725,6 +10172,9 @@ function beginGracefulShutdown(signal) {
   console.log(`[Shutdown] Received ${signal}. Draining zaki-api before exit.`);
 
   for (const client of agentProxyWss.clients) {
+    client.close(1001, "server_shutdown");
+  }
+  for (const client of learningProxyWss.clients) {
     client.close(1001, "server_shutdown");
   }
 
