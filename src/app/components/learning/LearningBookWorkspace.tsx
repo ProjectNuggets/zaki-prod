@@ -25,6 +25,7 @@ import {
   LearningBookBlockContent,
   type LearningBookQuizAttempt,
 } from "./LearningBookBlockContent";
+import { buildLearningBookCreatePayload } from "./learningBookCreatePayload";
 import { LearningBookProgressTimeline } from "./LearningBookProgressTimeline";
 import {
   emptyLearningBookProgress,
@@ -529,24 +530,14 @@ export function LearningBookWorkspace({
     const topic = bookTopic.trim();
     if (!topic) return;
     try {
-      const requestPayload: LearningJson = {
-        user_intent: topic,
-        language: bookLanguage || "en",
-        knowledge_bases: selectedKnowledge,
-        notebook_refs: selectedNotebooks.map((id) => ({
-          notebook_id: id,
-          record_ids: [],
-        })),
-        question_categories: [],
-        question_entries: selectedQuestions
-          .map((id) => Number(id))
-          .filter((id) => Number.isFinite(id)),
-        chat_session_id: selectedSessions[0] || "",
-        chat_selections: selectedSessions.map((id) => ({
-          session_id: id,
-          message_ids: [],
-        })),
-      };
+      const requestPayload = buildLearningBookCreatePayload({
+        topic,
+        language: bookLanguage,
+        selectedKnowledge,
+        selectedSessions,
+        selectedNotebooks,
+        selectedQuestions,
+      });
       const response = await createBook.mutateAsync(requestPayload);
       const root = asRecord(response);
       const book = normalizeBook(asRecord(root.book));
