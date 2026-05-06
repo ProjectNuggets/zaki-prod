@@ -110,11 +110,125 @@ export function getLearningBookSpine(bookId: string) {
   return learningRequest<unknown>(`/api/learning/books/${encodeURIComponent(bookId)}/spine`);
 }
 
+export function getLearningBookPage(bookId: string, pageId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/books/${encodeURIComponent(bookId)}/pages/${encodeURIComponent(pageId)}`,
+  );
+}
+
 export function createLearningBook(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/books", {
     method: "POST",
     body: payload,
   });
+}
+
+export function deleteLearningBook(bookId: string) {
+  return learningRequest<unknown>(`/api/learning/books/${encodeURIComponent(bookId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function confirmLearningBookProposal(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/confirm-proposal", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function confirmLearningBookSpine(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/confirm-spine", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function compileLearningBookPage(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/compile-page", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function regenerateLearningBookBlock(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/regenerate-block", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function insertLearningBookBlock(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/insert-block", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function deleteLearningBookBlock(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/delete-block", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function moveLearningBookBlock(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/move-block", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function changeLearningBookBlockType(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/change-block-type", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function createLearningBookDeepDive(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/deep-dive", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function recordLearningBookQuizAttempt(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/quiz-attempt", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function createLearningBookSupplement(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/supplement", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function setLearningBookPageChatSession(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/page-chat-session", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function rebuildLearningBook(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/books/rebuild", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function getLearningBookHealth(bookId: string) {
+  return learningRequest<unknown>(`/api/learning/books/${encodeURIComponent(bookId)}/health`);
+}
+
+export function refreshLearningBookFingerprints(bookId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/books/${encodeURIComponent(bookId)}/refresh-fingerprints`,
+    { method: "POST" },
+  );
 }
 
 export function listLearningNotebooks() {

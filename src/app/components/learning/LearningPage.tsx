@@ -97,6 +97,7 @@ import {
   SheetTitle,
 } from "@/app/components/ui/sheet";
 import { LearningSpacePickerModal } from "./LearningSpacePickerModal";
+import { LearningBookWorkspace } from "./LearningBookWorkspace";
 import { buildLearningSpaceReferences } from "./learningSpaceReferences";
 
 type LearningTab =
@@ -589,7 +590,7 @@ export function LearningPage() {
     mutationFn: (topic: string) =>
       createLearningBook({
         user_intent: topic,
-        kb_name: kbName || undefined,
+        knowledge_bases: kbName ? [kbName] : [],
       }),
     onSuccess: (payload) => {
       setLastResult(payload);
@@ -778,8 +779,8 @@ export function LearningPage() {
             skillItems={skillItems}
           />
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
+          <div className={cn("grid gap-5", tab !== "books" && "xl:grid-cols-[minmax(0,1fr)_360px]")}>
+          <div className={cn("min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised", tab !== "books" && "px-4")}>
             {tab === "sources" ? (
               <SourcesPanel
                 kbName={kbName}
@@ -792,12 +793,11 @@ export function LearningPage() {
               />
             ) : null}
             {tab === "books" ? (
-              <BooksPanel
+              <LearningBookWorkspace
                 bookTopic={bookTopic}
                 setBookTopic={setBookTopic}
                 createBook={createBook}
                 items={bookItems}
-                onOpen={(item) => openObject("book", item, `book-${bookItems.indexOf(item) + 1}`)}
               />
             ) : null}
             {tab === "notebooks" ? (
@@ -878,6 +878,7 @@ export function LearningPage() {
             ) : null}
           </div>
 
+          {tab !== "books" ? (
           <aside className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
             <div className="mb-3 flex items-center gap-2">
               <Activity className="size-4 text-zaki-brand" />
@@ -899,6 +900,7 @@ export function LearningPage() {
               </div>
             </div>
           </aside>
+          ) : null}
           </div>
         )}
       </div>
@@ -3269,43 +3271,6 @@ function SourcesPanel({
         variant="source"
         onOpen={onOpen}
       />
-    </Section>
-  );
-}
-
-function BooksPanel({
-  bookTopic,
-  setBookTopic,
-  createBook,
-  items,
-  onOpen,
-}: {
-  bookTopic: string;
-  setBookTopic: (value: string) => void;
-  createBook: UseMutationResult<unknown, Error, string, unknown>;
-  items: Item[];
-  onOpen: (item: Item) => void;
-}) {
-  return (
-    <Section title="Lesson books" subtitle="Generate and manage structured learning paths.">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row">
-        <input
-          value={bookTopic}
-          onChange={(event) => setBookTopic(event.target.value)}
-          placeholder="What should ZAKI teach?"
-          className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <button
-          type="button"
-          disabled={!bookTopic.trim() || createBook.isPending}
-          onClick={() => createBook.mutate(bookTopic.trim())}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <BookOpen className="size-4" />
-          Generate book
-        </button>
-      </div>
-      <ItemList items={items} empty="No books returned yet." variant="book" onOpen={onOpen} />
     </Section>
   );
 }
