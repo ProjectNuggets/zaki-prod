@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
-import type { ReactNode, RefObject } from "react";
+import type { DragEvent, ReactNode, RefObject } from "react";
 import {
   Activity,
+  AlertTriangle,
   BookOpen,
   Bot,
+  CheckCircle2,
+  Clock3,
   FileText,
   FolderUp,
   GraduationCap,
@@ -15,7 +18,10 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Star,
+  Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -98,6 +104,69 @@ function itemTitle(item: Item, fallback: string) {
   );
 }
 
+function numericOf(value: unknown, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function boolText(value: unknown) {
+  if (typeof value === "boolean") return value ? "running" : "stopped";
+  return "";
+}
+
+function itemStatus(item: Item) {
+  return (
+    textOf(item.status) ||
+    textOf(item.state) ||
+    textOf(item.phase) ||
+    boolText(item.running) ||
+    "ready"
+  );
+}
+
+function statusTone(status: string) {
+  const normalized = status.toLowerCase();
+  if (["ready", "healthy", "completed", "done", "running"].includes(normalized)) {
+    return "bg-emerald-500";
+  }
+  if (["generating", "processing", "planning", "partial", "queued"].includes(normalized)) {
+    return "bg-amber-500";
+  }
+  if (["error", "failed"].includes(normalized)) return "bg-rose-500";
+  return "bg-zaki-muted";
+}
+
+function relativeTime(value: unknown): string {
+  const raw = typeof value === "string" || typeof value === "number" ? value : "";
+  if (!raw) return "";
+  const seconds = typeof raw === "number" && raw < 10_000_000_000 ? raw : null;
+  const millis = seconds ? seconds * 1000 : new Date(raw).getTime();
+  if (!Number.isFinite(millis)) return "";
+  const diffMs = Date.now() - millis;
+  if (diffMs < 60_000) return "now";
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+function displayCount(item: Item) {
+  const raw =
+    item.chapter_count ??
+    item.page_count ??
+    item.record_count ??
+    item.entry_count ??
+    item.message_count ??
+    asRecord(item.statistics).raw_documents;
+  const count = numericOf(raw, -1);
+  return count >= 0 ? String(count) : "";
+}
+
 function JsonPreview({ value }: { value: unknown }) {
   return (
     <pre className="max-h-48 overflow-auto rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-xs leading-relaxed text-zaki-secondary">
@@ -155,6 +224,149 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Unable to read image."));
     reader.readAsDataURL(file);
   });
+}
+
+function LearningStats({
+  knowledgeCount,
+  bookCount,
+  notebookCount,
+  documentCount,
+  questionCount,
+  agentCount,
+  solveCount,
+}: {
+  knowledgeCount: number;
+  bookCount: number;
+  notebookCount: number;
+  documentCount: number;
+  questionCount: number;
+  agentCount: number;
+  solveCount: number;
+}) {
+  const stats = [
+    { label: "Sources", value: knowledgeCount, icon: Upload },
+    { label: "Books", value: bookCount, icon: BookOpen },
+    { label: "Notes", value: notebookCount, icon: FileText },
+    { label: "Drafts", value: documentCount, icon: PenLine },
+    { label: "Review", value: questionCount, icon: GraduationCap },
+    { label: "Tutors", value: agentCount, icon: Bot },
+    { label: "Solve", value: solveCount, icon: Layers },
+  ];
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+      {stats.map((stat) => {
+        const Icon = stat.icon;
+        return (
+          <div
+            key={stat.label}
+            className="flex min-h-20 items-center gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-3 py-3"
+          >
+            <div className="flex size-9 items-center justify-center rounded-zaki-md bg-zaki-hover text-zaki-brand">
+              <Icon className="size-4" />
+            </div>
+            <div>
+              <div className="text-lg font-semibold leading-none text-zaki-text">
+                {stat.value}
+              </div>
+              <div className="mt-1 text-xs text-zaki-muted">{stat.label}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LearningRail({
+  activeTab,
+  setTab,
+  books,
+  documents,
+  agents,
+  questions,
+}: {
+  activeTab: LearningTab;
+  setTab: (tab: LearningTab) => void;
+  books: Item[];
+  documents: Item[];
+  agents: Item[];
+  questions: Item[];
+}) {
+  return (
+    <aside className="hidden min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-2 xl:block">
+      <div className="px-2 pb-2 pt-1">
+        <div className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+          Learning
+        </div>
+      </div>
+      <nav className="space-y-1">
+        {tabs.map((entry) => {
+          const Icon = entry.icon;
+          const active = activeTab === entry.id;
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setTab(entry.id)}
+              className={cn(
+                "group flex w-full items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
+                active
+                  ? "bg-zaki-selected font-medium text-zaki-text"
+                  : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+              )}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">{entry.label}</span>
+              {active ? <span className="size-1.5 rounded-full bg-zaki-brand" /> : null}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="mt-4 border-t border-zaki-border pt-3">
+        <RailGroup title="Recent books" items={books} empty="No books" />
+        <RailGroup title="Drafts" items={documents} empty="No drafts" />
+        <RailGroup title="Tutors" items={agents} empty="No tutors" />
+        <RailGroup title="Review queue" items={questions} empty="No questions" />
+      </div>
+    </aside>
+  );
+}
+
+function RailGroup({ title, items, empty }: { title: string; items: Item[]; empty: string }) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
+        {title}
+      </div>
+      <div className="border-l border-zaki-border py-1">
+        {items.length ? (
+          items.slice(0, 4).map((item, index) => {
+            const status = itemStatus(item);
+            const time = relativeTime(item.updated_at ?? item.created_at ?? item.last_active);
+            return (
+              <div
+                key={`${title}-${itemTitle(item, "item")}-${index}`}
+                className="group flex items-center gap-2 rounded-r-zaki-md py-1.5 pl-3 pr-2 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+              >
+                <span className={cn("size-1.5 shrink-0 rounded-full", statusTone(status))} />
+                <span className="min-w-0 flex-1 truncate text-[13px]">
+                  {itemTitle(item, `Item ${index + 1}`)}
+                </span>
+                {time ? (
+                  <span className="shrink-0 text-[10px] tabular-nums text-zaki-muted">
+                    {time}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <div className="py-1.5 pl-3 pr-2 text-[12px] text-zaki-muted">{empty}</div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function LearningPage() {
@@ -360,7 +572,7 @@ export function LearningPage() {
 
   return (
     <div className="h-full overflow-auto bg-zaki-base">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6">
         <header className="mb-5 flex flex-col gap-4 border-b border-zaki-border pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
@@ -391,7 +603,17 @@ export function LearningPage() {
           </div>
         </header>
 
-        <div className="mb-5 overflow-x-auto">
+        <LearningStats
+          knowledgeCount={knowledgeItems.length}
+          bookCount={bookItems.length}
+          notebookCount={notebookItems.length}
+          documentCount={documentItems.length}
+          questionCount={questionItems.length}
+          agentCount={agentItems.length}
+          solveCount={solveItems.length}
+        />
+
+        <div className="mb-5 overflow-x-auto lg:hidden">
           <div className="flex min-w-max gap-1 rounded-zaki-md border border-zaki-border bg-zaki-raised p-1">
             {tabs.map((entry) => {
               const Icon = entry.icon;
@@ -415,7 +637,16 @@ export function LearningPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)_360px]">
+          <LearningRail
+            activeTab={tab}
+            setTab={setTab}
+            books={bookItems}
+            documents={documentItems}
+            agents={agentItems}
+            questions={questionItems}
+          />
+
           <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
             {tab === "sources" ? (
               <SourcesPanel
@@ -522,47 +753,54 @@ function SourcesPanel({
   items: Item[];
   folderInputRef: RefObject<HTMLInputElement>;
 }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [dropActive, setDropActive] = useState(false);
+  const readyBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const handlePicked = (picked: FileList | File[]) => {
+    const incoming = Array.from(picked);
+    if (!incoming.length) return;
+    const byKey = new Map(files.map((file) => [`${file.name}:${file.size}`, file]));
+    incoming.forEach((file) => byKey.set(`${file.name}:${file.size}`, file));
+    setFiles(Array.from(byKey.values()));
+  };
+  const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropActive(false);
+    handlePicked(event.dataTransfer.files);
+  };
+  const commitUpload = (mode: "create" | "upload") => {
+    if (!files.length || !kbName.trim()) return;
+    const payload = { name: kbName.trim(), files };
+    if (mode === "create") {
+      createKb.mutate(payload);
+    } else {
+      uploadKb.mutate(payload);
+    }
+    setFiles([]);
+  };
+
   return (
     <Section
       title="Source library"
       subtitle="Upload documents, images, archives, or browser-selected folders into a tenant-scoped learning library."
     >
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row">
         <input
           value={kbName}
           onChange={(event) => setKbName(event.target.value)}
           placeholder="main"
           className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
         />
-        <label
-          className={cn(
-            "inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white",
-            (!kbName.trim() || createKb.isPending) && "pointer-events-none opacity-60",
-          )}
-        >
-          <Plus className="size-4" />
-          Create from files
-          <input
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              if (!event.target.files?.length || !kbName.trim()) return;
-              createKb.mutate({ name: kbName.trim(), files: event.target.files });
-              event.target.value = "";
-            }}
-          />
-        </label>
         <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover">
           <Upload className="size-4" />
-          Upload files
+          Pick files
           <input
             type="file"
             multiple
             className="hidden"
             onChange={(event) => {
-              if (!event.target.files?.length) return;
-              uploadKb.mutate({ name: kbName || "main", files: event.target.files });
+              if (event.target.files?.length) handlePicked(event.target.files);
               event.target.value = "";
             }}
           />
@@ -576,14 +814,101 @@ function SourcesPanel({
             multiple
             className="hidden"
             onChange={(event) => {
-              if (!event.target.files?.length) return;
-              uploadKb.mutate({ name: kbName || "main", files: event.target.files });
+              if (event.target.files?.length) handlePicked(event.target.files);
               event.target.value = "";
             }}
           />
         </label>
       </div>
-      <ItemList items={items} empty="No source libraries returned yet." />
+
+      <button
+        type="button"
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDropActive(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDropActive(true);
+        }}
+        onDragLeave={() => setDropActive(false)}
+        onDrop={handleDrop}
+        className={cn(
+          "mb-4 flex w-full flex-col items-center justify-center rounded-zaki-lg border border-dashed px-5 py-7 text-center transition-colors",
+          dropActive
+            ? "border-zaki-brand bg-zaki-hover"
+            : "border-zaki-border bg-zaki-base hover:border-zaki-strong hover:bg-zaki-hover",
+        )}
+      >
+        <Upload className="mb-2 size-5 text-zaki-brand" />
+        <div className="text-sm font-semibold text-zaki-text">
+          {files.length ? `${files.length} files ready` : "Drop files here"}
+        </div>
+        <div className="mt-1 text-xs text-zaki-muted">
+          {files.length
+            ? `${Math.round(readyBytes / 1024)} KB selected`
+            : "Documents, images, archives, and browser-selected folders"}
+        </div>
+      </button>
+
+      {files.length ? (
+        <div className="mb-5 rounded-zaki-lg border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-zaki-text">
+              <CheckCircle2 className="size-4 text-emerald-600" />
+              Ready to send
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiles([])}
+              className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:bg-zaki-base hover:text-zaki-text"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="mb-3 grid gap-2 sm:grid-cols-2">
+            {files.slice(0, 6).map((file) => (
+              <div
+                key={`${file.name}:${file.size}`}
+                className="flex items-center gap-2 rounded-zaki-md border border-white/70 bg-white/70 px-2 py-2 text-xs text-zaki-secondary dark:border-white/10 dark:bg-white/5"
+              >
+                <FileText className="size-3.5 shrink-0 text-zaki-brand" />
+                <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setFiles((prev) => prev.filter((item) => item !== file))}
+                  className="rounded p-1 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              disabled={!kbName.trim() || createKb.isPending}
+              onClick={() => commitUpload("create")}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              <Plus className="size-4" />
+              Create library from selection
+            </button>
+            <button
+              type="button"
+              disabled={!kbName.trim() || uploadKb.isPending}
+              onClick={() => commitUpload("upload")}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+            >
+              <Upload className="size-4" />
+              Upload to existing library
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <ItemList items={items} empty="No source libraries returned yet." variant="source" />
     </Section>
   );
 }
@@ -618,7 +943,7 @@ function BooksPanel({
           Generate book
         </button>
       </div>
-      <ItemList items={items} empty="No books returned yet." />
+      <ItemList items={items} empty="No books returned yet." variant="book" />
     </Section>
   );
 }
@@ -653,7 +978,7 @@ function NotebooksPanel({
           Create notebook
         </button>
       </div>
-      <ItemList items={items} empty="No notebooks returned yet." />
+      <ItemList items={items} empty="No notebooks returned yet." variant="notebook" />
     </Section>
   );
 }
@@ -721,7 +1046,7 @@ function WriterPanel({
           Run edit
         </button>
       </div>
-      <ItemList items={items} empty="No co-writer documents returned yet." />
+      <ItemList items={items} empty="No co-writer documents returned yet." variant="document" />
     </Section>
   );
 }
@@ -729,7 +1054,7 @@ function WriterPanel({
 function ReviewPanel({ items }: { items: Item[] }) {
   return (
     <Section title="Question review" subtitle="Review saved quiz questions, attempts, bookmarks, and categories.">
-      <ItemList items={items} empty="No saved questions returned yet." />
+      <ItemList items={items} empty="No saved questions returned yet." variant="question" />
     </Section>
   );
 }
@@ -787,7 +1112,7 @@ function AgentsPanel({
         <Bot className="size-4" />
         Create tutor
       </button>
-      <ItemList items={items} empty="No tutor agents returned yet." />
+      <ItemList items={items} empty="No tutor agents returned yet." variant="agent" />
     </Section>
   );
 }
@@ -838,37 +1163,116 @@ function WorkspacesPanel({
         Analyze
       </button>
       <h3 className="mb-3 text-sm font-semibold text-zaki-text">Recent solve sessions</h3>
-      <ItemList items={solveItems} empty="No solve sessions returned yet." />
+      <ItemList items={solveItems} empty="No solve sessions returned yet." variant="solve" />
     </Section>
   );
 }
 
-function ItemList({ items, empty }: { items: Item[]; empty: string }) {
+function ItemList({
+  items,
+  empty,
+  variant = "generic",
+}: {
+  items: Item[];
+  empty: string;
+  variant?: "source" | "book" | "notebook" | "document" | "question" | "agent" | "solve" | "generic";
+}) {
   if (!items.length) return <EmptyLine label={empty} />;
+  const iconByVariant = {
+    source: Upload,
+    book: BookOpen,
+    notebook: FileText,
+    document: PenLine,
+    question: GraduationCap,
+    agent: Bot,
+    solve: Layers,
+    generic: FileText,
+  };
+  const Icon = iconByVariant[variant];
   return (
-    <div className="divide-y divide-zaki-border rounded-zaki-md border border-zaki-border">
+    <div className="grid gap-3 sm:grid-cols-2">
       {items.slice(0, 12).map((item, index) => (
-        <div key={`${itemTitle(item, "item")}-${index}`} className="p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-zaki-text">
-                {itemTitle(item, `Item ${index + 1}`)}
-              </div>
-              <div className="mt-1 line-clamp-2 text-xs text-zaki-muted">
-                {textOf(item.description) ||
-                  textOf(item.summary) ||
-                  textOf(item.preview) ||
-                  textOf(item.status) ||
-                  textOf(item.created_at) ||
-                  "Ready"}
-              </div>
-            </div>
-            <span className="shrink-0 rounded-zaki-md border border-zaki-border px-2 py-1 text-[11px] text-zaki-muted">
-              {textOf(item.type) || textOf(item.record_type) || textOf(item.running, "item")}
-            </span>
-          </div>
-        </div>
+        <LearningItemCard
+          key={`${itemTitle(item, "item")}-${index}`}
+          item={item}
+          fallback={`Item ${index + 1}`}
+          icon={Icon}
+        />
       ))}
+    </div>
+  );
+}
+
+function LearningItemCard({
+  item,
+  fallback,
+  icon: Icon,
+}: {
+  item: Item;
+  fallback: string;
+  icon: typeof FileText;
+}) {
+  const status = itemStatus(item);
+  const count = displayCount(item);
+  const updated = relativeTime(item.updated_at ?? item.created_at ?? item.last_active);
+  const isDefault = Boolean(item.is_default);
+  const subtitle =
+    textOf(item.description) ||
+    textOf(item.summary) ||
+    textOf(item.preview) ||
+    textOf(item.explanation) ||
+    textOf(item.last_message) ||
+    textOf(asRecord(item.statistics).raw_documents, "Ready");
+
+  return (
+    <div className="group rounded-zaki-lg border border-zaki-border bg-zaki-base p-3 transition-colors hover:border-zaki-strong hover:bg-zaki-hover">
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-raised text-zaki-brand">
+          <Icon className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {isDefault ? (
+              <Star className="size-3.5 shrink-0 fill-amber-500 text-amber-500" />
+            ) : null}
+            <div className="min-w-0 flex-1 truncate text-sm font-semibold text-zaki-text">
+              {itemTitle(item, fallback)}
+            </div>
+          </div>
+          <p className="mt-1 line-clamp-2 min-h-8 text-xs leading-relaxed text-zaki-muted">
+            {subtitle}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-zaki-muted">
+        <span className="inline-flex items-center gap-1 rounded-zaki-md border border-zaki-border px-2 py-1">
+          <span className={cn("size-1.5 rounded-full", statusTone(status))} />
+          {status}
+        </span>
+        {count ? (
+          <span className="rounded-zaki-md border border-zaki-border px-2 py-1">
+            {count}
+          </span>
+        ) : null}
+        {updated ? (
+          <span className="inline-flex items-center gap-1 rounded-zaki-md border border-zaki-border px-2 py-1">
+            <Clock3 className="size-3" />
+            {updated}
+          </span>
+        ) : null}
+        {item.needs_reindex ? (
+          <span className="inline-flex items-center gap-1 rounded-zaki-md border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+            <AlertTriangle className="size-3" />
+            reindex
+          </span>
+        ) : null}
+        {item.deleted ? (
+          <span className="inline-flex items-center gap-1 rounded-zaki-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700">
+            <Trash2 className="size-3" />
+            deleted
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
