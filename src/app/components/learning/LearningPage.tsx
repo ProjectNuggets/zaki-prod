@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, ReactNode, RefObject } from "react";
@@ -104,6 +104,7 @@ import {
   listLearningSkills,
   listLearningSolveSessions,
   listLearningTutorAgents,
+  listLearningTutorAgentRecent,
   listLearningTutorAgentSouls,
   getLearningMemory,
   getLearningSkill,
@@ -111,6 +112,7 @@ import {
   refreshLearningMemory,
   runLearningCoWriterAutoMark,
   runLearningCoWriterEdit,
+  stopLearningTutorAgent,
   updateLearningSkill,
   updateLearningCoWriterDocument,
   updateLearningMemory,
@@ -525,6 +527,11 @@ export function LearningPage() {
     queryFn: listLearningTutorAgents,
     retry: 1,
   });
+  const recentAgents = useQuery({
+    queryKey: learningKeys.tutorAgentRecent,
+    queryFn: () => listLearningTutorAgentRecent(3),
+    retry: 1,
+  });
   const agentSouls = useQuery({
     queryKey: learningKeys.tutorAgentSouls,
     queryFn: listLearningTutorAgentSouls,
@@ -567,6 +574,10 @@ export function LearningPage() {
     [skills.data],
   );
   const agentItems = useMemo(() => itemList(agents.data, ["bots", "items"]), [agents.data]);
+  const recentAgentItems = useMemo(
+    () => itemList(recentAgents.data, ["bots", "items"]),
+    [recentAgents.data],
+  );
   const agentSoulItems = useMemo(
     () => itemList(agentSouls.data, ["souls", "items", "templates"]),
     [agentSouls.data],
@@ -689,6 +700,7 @@ export function LearningPage() {
       setAgentPersona("");
       toast.success("Tutor created");
       void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -699,6 +711,18 @@ export function LearningPage() {
       setLastResult(payload);
       toast.success("Tutor deleted");
       void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const stopAgent = useMutation({
+    mutationFn: (nextAgentId: string) => stopLearningTutorAgent(nextAgentId),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Tutor stopped");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -829,8 +853,10 @@ export function LearningPage() {
             agentPersona={agentPersona}
             setAgentPersona={setAgentPersona}
             createAgent={createAgent}
+            stopAgent={stopAgent}
             destroyAgent={destroyAgent}
             items={agentItems}
+            recentItems={recentAgentItems}
             souls={agentSoulItems}
             channelsSchema={agentChannelsSchema.data}
             notebookItems={notebookItems}
@@ -4899,8 +4925,10 @@ function AgentsPanel({
   agentPersona,
   setAgentPersona,
   createAgent,
+  stopAgent,
   destroyAgent,
   items,
+  recentItems,
   souls,
   channelsSchema,
   notebookItems,
@@ -4913,8 +4941,10 @@ function AgentsPanel({
   agentPersona: string;
   setAgentPersona: (value: string) => void;
   createAgent: UseMutationResult<unknown, Error, void, unknown>;
+  stopAgent: UseMutationResult<unknown, Error, string, unknown>;
   destroyAgent: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
+  recentItems: Item[];
   souls: Item[];
   channelsSchema: unknown;
   notebookItems: Item[];
@@ -4979,6 +5009,37 @@ function AgentsPanel({
 
         {activeTab === "bots" ? (
           <div className="space-y-5">
+            {recentItems.length ? (
+              <section className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
+                  <Clock3 className="size-3.5" />
+                  Recent tutors
+                </div>
+                <div className="space-y-1">
+                  {recentItems.map((item, index) => {
+                    const id = tutorAgentId(item, `recent-agent-${index + 1}`);
+                    const updated = textOf(item.updated_at) || textOf(item.last_active_at);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setSelectedAgentId(id)}
+                        className="flex w-full items-center gap-2 rounded-zaki-md px-2 py-1.5 text-left text-[13px] text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-text"
+                      >
+                        <span className={cn("size-1.5 rounded-full", statusTone(itemStatus(item)))} />
+                        <span className="min-w-0 flex-1 truncate">{itemTitle(item, id)}</span>
+                        {updated ? (
+                          <span className="shrink-0 text-[10px] tabular-nums text-zaki-muted">
+                            {relativeTime(updated)}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
             <section className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <Plus className="size-4 text-zaki-muted" />
@@ -5028,6 +5089,8 @@ function AgentsPanel({
                   const id = tutorAgentId(item, `agent-${index + 1}`);
                   const pendingDelete = pendingDeleteId === id;
                   const deleting = destroyAgent.isPending && destroyAgent.variables === id;
+                  const running = Boolean(item.running) || itemStatus(item) === "running";
+                  const stopping = stopAgent.isPending && stopAgent.variables === id;
                   return (
                     <div
                       key={id}
@@ -5056,6 +5119,21 @@ function AgentsPanel({
                         >
                           Chat
                         </button>
+                        {running ? (
+                          <button
+                            type="button"
+                            disabled={stopAgent.isPending}
+                            title="Stop tutor"
+                            onClick={() => stopAgent.mutate(id)}
+                            className="rounded-zaki-md p-1 text-zaki-muted opacity-0 transition-colors hover:bg-zaki-base hover:text-zaki-text disabled:opacity-50 group-hover:opacity-100"
+                          >
+                            {stopping ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Square className="size-3.5" />
+                            )}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           disabled={destroyAgent.isPending}
@@ -5185,6 +5263,7 @@ function TutorAgentChatWorkspace({
   const queryClient = useQueryClient();
   const [notebookId, setNotebookId] = useState(() => itemId(notebookItems[0] || {}));
   const [exportStatus, setExportStatus] = useState("");
+  const [chatMessages, setChatMessages] = useState<TutorChatMessage[]>([]);
   const detail = useQuery({
     queryKey: ["learning", "tutor-agent", agentId],
     queryFn: () => getLearningTutorAgent(agentId),
@@ -5206,9 +5285,10 @@ function TutorAgentChatWorkspace({
     }
   }, [notebookId, notebookItems]);
 
-  const messagesForExport = historyItems
+  const restoredMessages = historyItems
     .map((item, index) => normalizeTutorHistoryMessage(item, index))
     .filter((item): item is TutorChatMessage => Boolean(item));
+  const messagesForExport = chatMessages.length ? chatMessages : restoredMessages;
 
   const transcriptMarkdown = messagesForExport
     .map((message) => `## ${message.role}\n\n${message.content}`)
@@ -5255,6 +5335,14 @@ function TutorAgentChatWorkspace({
     link.remove();
     URL.revokeObjectURL(url);
   };
+
+  const handleTutorTurnComplete = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["learning", "tutor-agent", agentId, "history"],
+    });
+    void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+    void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
+  }, [agentId, queryClient]);
 
   return (
     <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
@@ -5319,7 +5407,12 @@ function TutorAgentChatWorkspace({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
         <div className="mx-auto max-w-[760px]">
-          <TutorAgentChatPanel agentId={agentId} history={historyItems} />
+          <TutorAgentChatPanel
+            agentId={agentId}
+            history={historyItems}
+            onMessagesChange={setChatMessages}
+            onTurnComplete={handleTutorTurnComplete}
+          />
         </div>
       </div>
     </div>
@@ -5671,7 +5764,17 @@ function normalizeTutorHistoryMessage(item: Item, index: number): TutorChatMessa
   };
 }
 
-function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: Item[] }) {
+function TutorAgentChatPanel({
+  agentId,
+  history,
+  onMessagesChange,
+  onTurnComplete,
+}: {
+  agentId: string;
+  history: Item[];
+  onMessagesChange?: (messages: TutorChatMessage[]) => void;
+  onTurnComplete?: () => void;
+}) {
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
   const [input, setInput] = useState("");
@@ -5688,8 +5791,7 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
     () =>
       history
         .map((item, index) => normalizeTutorHistoryMessage(item, index))
-        .filter((item): item is TutorChatMessage => Boolean(item))
-        .slice(-8),
+        .filter((item): item is TutorChatMessage => Boolean(item)),
     [historyKey],
   );
 
@@ -5699,6 +5801,10 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
     thinkingRef.current = [];
     setInput("");
   }, [agentId, initialMessages]);
+
+  useEffect(() => {
+    onMessagesChange?.(messages);
+  }, [messages, onMessagesChange]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -5765,6 +5871,7 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
         setStreaming(false);
         thinkingRef.current = [];
         setThinking([]);
+        onTurnComplete?.();
         return;
       }
       if (eventType === "error") {
@@ -5801,7 +5908,7 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
       socket.close();
       socketRef.current = null;
     };
-  }, [agentId, socketAuthReady]);
+  }, [agentId, onTurnComplete, socketAuthReady]);
 
   const sendMessage = () => {
     const content = input.trim();

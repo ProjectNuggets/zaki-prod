@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: learn
 milestone_name: ZAKI Learn DeepTutor Parity
-status: planning
+status: executing
 last_updated: "2026-05-07"
 last_activity: 2026-05-07
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 28
-  completed_plans: 13
-  percent: 46
+  completed_plans: 14
+  percent: 50
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 03 Capability Parity Completion
-Plan: 03-01 Tutor chat and session parity
-Status: Phase 02 complete; ready to execute 03-01
-Last activity: 2026-05-07 - completed Phase 02 security verification with backend auth/quota/BFF tests, frontend learning tests, typecheck, and diff hygiene passing.
+Plan: 03-02 Book/lesson reader and block action parity
+Status: 03-01 complete; ready to execute 03-02
+Last activity: 2026-05-07 - completed TutorBot chat/session parity with recent tutors, stop/delete lifecycle split, full history restore, live transcript export state, browser WebSocket check, frontend tests, typecheck, and diff hygiene passing.
 
 ## Locked Decisions
 
@@ -64,7 +64,8 @@ Last activity: 2026-05-07 - completed Phase 02 security verification with backen
 - 02-04: Generated HTML renderer safety.
 - 02-05: User/operator settings split.
 - 02-06: Backend security test pass.
+- 03-01: Tutor chat and session parity.
 
 ## Next Command
 
-Execute Phase 03 Plan 03-01: tutor chat and session parity.
+Execute Phase 03 Plan 03-02: book/lesson reader and block action parity.
