@@ -4,7 +4,6 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, ReactNode, RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Activity,
   AlertTriangle,
   ArrowUp,
   AtSign,
@@ -28,13 +27,15 @@ import {
   Image,
   Layers,
   Lightbulb,
+  Loader2,
   MessageSquare,
   Microscope,
   Paperclip,
   PenLine,
   Plus,
-  RefreshCw,
+  Search,
   Send,
+  Settings,
   Square,
   Sparkles,
   Star,
@@ -52,6 +53,7 @@ import {
   createLearningKnowledge,
   createLearningNotebook,
   createLearningTutorAgent,
+  deleteLearningCoWriterDocument,
   getLearningBook,
   getLearningBookSpine,
   getLearningCoWriterDocument,
@@ -61,7 +63,6 @@ import {
   getLearningTutorAgent,
   getLearningTutorAgentHistory,
   learningKeys,
-  learningRequest,
   openLearningSocket,
   listLearningKnowledgeFiles,
   listLearningBooks,
@@ -73,7 +74,6 @@ import {
   listLearningSkills,
   listLearningSolveSessions,
   listLearningTutorAgents,
-  runLearningCoWriterEdit,
   getLearningMemory,
   updateLearningCoWriterDocument,
   updateLearningMemory,
@@ -112,6 +112,7 @@ type LearningTab =
   | "workspaces";
 
 type Item = Record<string, unknown>;
+type CoWriterCreateDraft = { title: string; content: string };
 type LearningObjectType =
   | "source"
   | "book"
@@ -177,14 +178,21 @@ type SelectedQuestionSpaceItem = {
 
 type LearningMemoryFile = "summary" | "profile";
 
-const tabs: Array<{ id: LearningTab; label: string; icon: typeof BookOpen }> = [
-  { id: "chat", label: "Chat", icon: MessageSquare },
-  { id: "agents", label: "TutorBot", icon: Bot },
-  { id: "writer", label: "Co-Writer", icon: PenLine },
-  { id: "books", label: "Book", icon: BookOpen },
-  { id: "sources", label: "Knowledge", icon: Upload },
-  { id: "space", label: "Space", icon: Layers },
-];
+const CO_WRITER_SAMPLE_TEMPLATE = `# Learning Draft
+
+> A structured markdown workspace for notes, reports, tutorials, and AI-assisted drafts.
+
+## Outline
+
+- Context
+- Key ideas
+- Examples
+- Questions to review
+
+## Notes
+
+Start writing here.
+`;
 
 const viewToLearningTab: Record<string, LearningTab> = {
   chat: "chat",
@@ -201,18 +209,6 @@ const viewToLearningTab: Record<string, LearningTab> = {
   review: "review",
   questions: "review",
   solve: "workspaces",
-};
-
-const tabToView: Record<LearningTab, string> = {
-  chat: "chat",
-  agents: "agents",
-  writer: "writer",
-  books: "books",
-  sources: "sources",
-  space: "space",
-  notebooks: "space",
-  review: "space",
-  workspaces: "chat",
 };
 
 function normalizeLearningTab(value: string | null): LearningTab {
@@ -339,17 +335,6 @@ function JsonPreview({ value }: { value: unknown }) {
   );
 }
 
-function StatusDot({ ok }: { ok: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-block size-2 rounded-full",
-        ok ? "bg-emerald-500" : "bg-amber-500",
-      )}
-    />
-  );
-}
-
 function EmptyLine({ label }: { label: string }) {
   return (
     <div className="rounded-zaki-md border border-dashed border-zaki-border px-4 py-6 text-center text-sm text-zaki-muted">
@@ -390,74 +375,22 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function LearningStats({
-  knowledgeCount,
-  bookCount,
-  notebookCount,
-  documentCount,
-  questionCount,
-  agentCount,
-  solveCount,
-}: {
-  knowledgeCount: number;
-  bookCount: number;
-  notebookCount: number;
-  documentCount: number;
-  questionCount: number;
-  agentCount: number;
-  solveCount: number;
-}) {
-  const stats = [
-    { label: "Sources", value: knowledgeCount, icon: Upload },
-    { label: "Books", value: bookCount, icon: BookOpen },
-    { label: "Notes", value: notebookCount, icon: FileText },
-    { label: "Drafts", value: documentCount, icon: PenLine },
-    { label: "Review", value: questionCount, icon: GraduationCap },
-    { label: "Tutors", value: agentCount, icon: Bot },
-    { label: "Solve", value: solveCount, icon: Layers },
-  ];
-  return (
-    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
-      {stats.map((stat) => {
-        const Icon = stat.icon;
-        return (
-          <div
-            key={stat.label}
-            className="flex min-h-20 items-center gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-3 py-3"
-          >
-            <div className="flex size-9 items-center justify-center rounded-zaki-md bg-zaki-hover text-zaki-brand">
-              <Icon className="size-4" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold leading-none text-zaki-text">
-                {stat.value}
-              </div>
-              <div className="mt-1 text-xs text-zaki-muted">{stat.label}</div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function LearningPage() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const [tab, setTab] = useState<LearningTab>(() => normalizeLearningTab(requestedView));
   const [kbName, setKbName] = useState("main");
   const [bookTopic, setBookTopic] = useState("");
   const [notebookName, setNotebookName] = useState("");
   const [documentTitle, setDocumentTitle] = useState("");
-  const [writerText, setWriterText] = useState("");
-  const [writerInstruction, setWriterInstruction] = useState("");
+  const [, setWriterText] = useState("");
   const [agentId, setAgentId] = useState("");
   const [agentName, setAgentName] = useState("");
   const [agentPersona, setAgentPersona] = useState("");
   const [visionQuestion, setVisionQuestion] = useState("");
   const [visionImage, setVisionImage] = useState<File | null>(null);
-  const [lastResult, setLastResult] = useState<unknown>(null);
+  const [, setLastResult] = useState<unknown>(null);
   const [selectedObject, setSelectedObject] = useState<SelectedLearningObject | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -470,18 +403,6 @@ export function LearningPage() {
     setTab(normalizeLearningTab(requestedView));
   }, [requestedView]);
 
-  const selectLearningTab = (nextTab: LearningTab) => {
-    setTab(nextTab);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("view", tabToView[nextTab]);
-    setSearchParams(nextParams, { replace: true });
-  };
-
-  const health = useQuery({
-    queryKey: learningKeys.health,
-    queryFn: () => learningRequest<unknown>("/api/learning/health"),
-    retry: 1,
-  });
   const knowledge = useQuery({
     queryKey: learningKeys.knowledge,
     queryFn: listLearningKnowledge,
@@ -610,28 +531,24 @@ export function LearningPage() {
   });
 
   const createDocument = useMutation({
-    mutationFn: (title: string) =>
-      createLearningCoWriterDocument({ title, content: writerText }),
+    mutationFn: ({ title, content }: CoWriterCreateDraft) =>
+      createLearningCoWriterDocument({ title, content }),
     onSuccess: (payload) => {
       setLastResult(payload);
       setDocumentTitle("");
+      setWriterText("");
       toast.success("Document created");
       void queryClient.invalidateQueries({ queryKey: learningKeys.coWriterDocuments });
     },
     onError: (error) => toast.error(error.message),
   });
 
-  const runWriter = useMutation({
-    mutationFn: () =>
-      runLearningCoWriterEdit({
-        text: writerText,
-        instruction: writerInstruction,
-        action: "rewrite",
-        kb_name: kbName || undefined,
-      }),
+  const deleteDocument = useMutation({
+    mutationFn: (documentId: string) => deleteLearningCoWriterDocument(documentId),
     onSuccess: (payload) => {
       setLastResult(payload);
-      toast.success("Edit completed");
+      toast.success("Document deleted");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.coWriterDocuments });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -680,91 +597,15 @@ export function LearningPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  const refreshAll = () => {
-    void queryClient.invalidateQueries({ queryKey: ["learning"] });
-  };
-
   const openObject = (type: LearningObjectType, item: Item, fallback: string) => {
     const id = itemId(item, fallback).trim();
     if (!id) return;
     setSelectedObject({ type, id, item });
   };
 
-  const healthOk = health.isSuccess && asRecord(health.data).status === "ok";
-
   return (
-    <div className="h-full overflow-auto bg-zaki-base">
-      <div className={cn(tab === "books" ? "h-full" : "mx-auto max-w-[1480px] px-4 py-6 sm:px-6")}>
-        {tab !== "chat" && tab !== "books" ? (
-          <header className="mb-5 flex flex-col gap-4 border-b border-zaki-border pb-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-                <StatusDot ok={healthOk} />
-                <span>{health.isError ? "Learning service unavailable" : "Learning workspace"}</span>
-              </div>
-              <h1 className="text-2xl font-semibold text-zaki-text">Learn</h1>
-              <p className="max-w-3xl text-sm text-zaki-muted">
-                Build source libraries, generate lessons, save notebooks, write with context,
-                review questions, manage tutors, and solve from documents or images.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={kbName}
-                onChange={(event) => setKbName(event.target.value)}
-                placeholder="Source library"
-                className="h-9 w-44 rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-              />
-              <button
-                type="button"
-                onClick={refreshAll}
-                className="inline-flex h-9 items-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-medium text-zaki-text hover:bg-zaki-hover"
-              >
-                <RefreshCw className="size-4" />
-                Refresh
-              </button>
-            </div>
-          </header>
-        ) : null}
-
-        {tab !== "chat" && tab !== "books" ? (
-          <LearningStats
-            knowledgeCount={knowledgeItems.length}
-            bookCount={bookItems.length}
-            notebookCount={notebookItems.length}
-            documentCount={documentItems.length}
-            questionCount={questionItems.length}
-            agentCount={agentItems.length}
-            solveCount={solveItems.length}
-          />
-        ) : null}
-
-        {tab !== "books" ? (
-        <div className="mb-5 overflow-x-auto lg:hidden">
-          <div className="flex min-w-max gap-1 rounded-zaki-md border border-zaki-border bg-zaki-raised p-1">
-            {tabs.map((entry) => {
-              const Icon = entry.icon;
-              return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => selectLearningTab(entry.id)}
-                  className={cn(
-                    "inline-flex h-9 items-center gap-2 rounded-zaki-md px-3 text-sm font-medium transition-colors",
-                    tab === entry.id
-                      ? "bg-zaki-brand text-white"
-                      : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-text",
-                  )}
-                >
-                  <Icon className="size-4" />
-                  {entry.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        ) : null}
-
+    <div className="h-full overflow-hidden bg-zaki-base">
+      <div className="h-full">
         {tab === "books" ? (
           <LearningBookWorkspace
             bookTopic={bookTopic}
@@ -787,121 +628,83 @@ export function LearningPage() {
             questionItems={questionItems}
             skillItems={skillItems}
           />
-        ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
-            {tab === "sources" ? (
-              <SourcesPanel
-                kbName={kbName}
-                setKbName={setKbName}
-                createKb={createKb}
-                uploadKb={uploadKb}
-                items={knowledgeItems}
-                folderInputRef={folderInputRef}
-                onOpen={(item) => openObject("source", item, "main")}
-              />
-            ) : null}
-            {tab === "notebooks" ? (
-              <NotebooksPanel
-                notebookName={notebookName}
-                setNotebookName={setNotebookName}
-                createNotebook={createNotebook}
-                items={notebookItems}
-                onOpen={(item) =>
-                  openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
-                }
-              />
-            ) : null}
-            {tab === "writer" ? (
-              <WriterPanel
-                documentTitle={documentTitle}
-                setDocumentTitle={setDocumentTitle}
-                writerText={writerText}
-                setWriterText={setWriterText}
-                writerInstruction={writerInstruction}
-                setWriterInstruction={setWriterInstruction}
-                createDocument={createDocument}
-                runWriter={runWriter}
-                items={documentItems}
-                onOpen={(item) =>
-                  openObject("document", item, `document-${documentItems.indexOf(item) + 1}`)
-                }
-              />
-            ) : null}
-            {tab === "review" ? (
-              <ReviewPanel
-                items={questionItems}
-                onOpen={(item) =>
-                  openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
-                }
-              />
-            ) : null}
-            {tab === "space" ? (
-              <LearningSpacePanel
-                notebookName={notebookName}
-                setNotebookName={setNotebookName}
-                createNotebook={createNotebook}
-                notebookItems={notebookItems}
-                questionItems={questionItems}
-                skillItems={skillItems}
-                memory={memory.data}
-                saveMemory={saveMemory}
-                onOpenNotebook={(item) =>
-                  openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
-                }
-                onOpenQuestion={(item) =>
-                  openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
-                }
-              />
-            ) : null}
-            {tab === "agents" ? (
-              <AgentsPanel
-                agentId={agentId}
-                setAgentId={setAgentId}
-                agentName={agentName}
-                setAgentName={setAgentName}
-                agentPersona={agentPersona}
-                setAgentPersona={setAgentPersona}
-                createAgent={createAgent}
-                items={agentItems}
-                onOpen={(item) => openObject("agent", item, `agent-${agentItems.indexOf(item) + 1}`)}
-              />
-            ) : null}
-            {tab === "workspaces" ? (
-              <WorkspacesPanel
-                visionQuestion={visionQuestion}
-                setVisionQuestion={setVisionQuestion}
-                setVisionImage={setVisionImage}
-                analyzeVision={analyzeVision}
-                solveItems={solveItems}
-                onOpen={(item) => openObject("solve", item, `solve-${solveItems.indexOf(item) + 1}`)}
-              />
-            ) : null}
-          </div>
-
-          <aside className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Activity className="size-4 text-zaki-brand" />
-              <h2 className="text-sm font-semibold text-zaki-text">Last response</h2>
-            </div>
-            {lastResult ? (
-              <JsonPreview value={lastResult} />
-            ) : (
-              <EmptyLine label="Run an action to inspect the service response." />
-            )}
-            <div className="mt-5 border-t border-zaki-border pt-4">
-              <h3 className="mb-2 text-sm font-semibold text-zaki-text">Live streams</h3>
-              <div className="space-y-2 text-xs text-zaki-muted">
-                <p>Chat: /api/learning/ws</p>
-                <p>Book progress: /api/learning/book/ws</p>
-                <p>Solve: /api/learning/solve/ws</p>
-                <p>Vision: /api/learning/vision/solve/ws</p>
-                <p>Question generation: /api/learning/questions/generate/ws</p>
-              </div>
-            </div>
-          </aside>
-          </div>
-        )}
+        ) : tab === "sources" ? (
+          <SourcesPanel
+            kbName={kbName}
+            setKbName={setKbName}
+            createKb={createKb}
+            uploadKb={uploadKb}
+            items={knowledgeItems}
+            folderInputRef={folderInputRef}
+            onOpen={(item) => openObject("source", item, "main")}
+          />
+        ) : tab === "notebooks" ? (
+          <NotebooksPanel
+            notebookName={notebookName}
+            setNotebookName={setNotebookName}
+            createNotebook={createNotebook}
+            items={notebookItems}
+            onOpen={(item) =>
+              openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
+            }
+          />
+        ) : tab === "writer" ? (
+          <WriterPanel
+            documentTitle={documentTitle}
+            setDocumentTitle={setDocumentTitle}
+            createDocument={createDocument}
+            deleteDocument={deleteDocument}
+            items={documentItems}
+            onOpen={(item) =>
+              openObject("document", item, `document-${documentItems.indexOf(item) + 1}`)
+            }
+          />
+        ) : tab === "review" ? (
+          <ReviewPanel
+            items={questionItems}
+            onOpen={(item) =>
+              openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
+            }
+          />
+        ) : tab === "space" ? (
+          <LearningSpacePanel
+            notebookName={notebookName}
+            setNotebookName={setNotebookName}
+            createNotebook={createNotebook}
+            notebookItems={notebookItems}
+            questionItems={questionItems}
+            skillItems={skillItems}
+            memory={memory.data}
+            saveMemory={saveMemory}
+            onOpenNotebook={(item) =>
+              openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
+            }
+            onOpenQuestion={(item) =>
+              openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
+            }
+          />
+        ) : tab === "agents" ? (
+          <AgentsPanel
+            agentId={agentId}
+            setAgentId={setAgentId}
+            agentName={agentName}
+            setAgentName={setAgentName}
+            agentPersona={agentPersona}
+            setAgentPersona={setAgentPersona}
+            createAgent={createAgent}
+            items={agentItems}
+            onOpen={(item) => openObject("agent", item, `agent-${agentItems.indexOf(item) + 1}`)}
+          />
+        ) : tab === "workspaces" ? (
+          <WorkspacesPanel
+            visionQuestion={visionQuestion}
+            setVisionQuestion={setVisionQuestion}
+            setVisionImage={setVisionImage}
+            analyzeVision={analyzeVision}
+            solveItems={solveItems}
+            onOpen={(item) => openObject("solve", item, `solve-${solveItems.indexOf(item) + 1}`)}
+          />
+        ) : null}
       </div>
       <LearningDetailSheet
         selected={selectedObject}
@@ -3111,7 +2914,36 @@ function SourcesPanel({
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [dropActive, setDropActive] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [section, setSection] = useState<"files" | "add" | "settings">("files");
   const readyBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const filteredItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return items;
+    return items.filter((item) => itemTitle(item, "source").toLowerCase().includes(normalized));
+  }, [items, query]);
+  const selectedItem = useMemo(() => {
+    if (selectedName) {
+      const matched = items.find((item) => itemId(item) === selectedName);
+      if (matched) return matched;
+    }
+    return items[0] ?? null;
+  }, [items, selectedName]);
+  const effectiveName = selectedItem ? itemId(selectedItem) : selectedName;
+  const selectedFiles = useQuery({
+    queryKey: ["learning", "knowledge", effectiveName, "files"],
+    queryFn: () => listLearningKnowledgeFiles(effectiveName || ""),
+    enabled: Boolean(effectiveName && section === "files"),
+  });
+  const sourceFileItems = itemList(selectedFiles.data, ["files", "items", "documents"]);
+
+  useEffect(() => {
+    if (!selectedName && items[0]) {
+      setSelectedName(itemId(items[0]));
+    }
+  }, [items, selectedName]);
+
   const handlePicked = (picked: FileList | File[]) => {
     const incoming = Array.from(picked);
     if (!incoming.length) return;
@@ -3137,140 +2969,326 @@ function SourcesPanel({
   };
 
   return (
-    <Section
-      title="Source library"
-      subtitle="Upload documents, images, archives, or browser-selected folders into a tenant-scoped learning library."
-    >
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row">
-        <input
-          value={kbName}
-          onChange={(event) => setKbName(event.target.value)}
-          placeholder="main"
-          className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover">
-          <Upload className="size-4" />
-          Pick files
-          <input
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              if (event.target.files?.length) handlePicked(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover">
-          <FolderUp className="size-4" />
-          Upload folder
-          <input
-            ref={folderInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              if (event.target.files?.length) handlePicked(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>
-      </div>
-
-      <button
-        type="button"
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDropActive(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-          setDropActive(true);
-        }}
-        onDragLeave={() => setDropActive(false)}
-        onDrop={handleDrop}
-        className={cn(
-          "mb-4 flex w-full flex-col items-center justify-center rounded-zaki-lg border border-dashed px-5 py-7 text-center transition-colors",
-          dropActive
-            ? "border-zaki-brand bg-zaki-hover"
-            : "border-zaki-border bg-zaki-base hover:border-zaki-strong hover:bg-zaki-hover",
-        )}
-      >
-        <Upload className="mb-2 size-5 text-zaki-brand" />
-        <div className="text-sm font-semibold text-zaki-text">
-          {files.length ? `${files.length} files ready` : "Drop files here"}
-        </div>
-        <div className="mt-1 text-xs text-zaki-muted">
-          {files.length
-            ? `${Math.round(readyBytes / 1024)} KB selected`
-            : "Documents, images, archives, and browser-selected folders"}
-        </div>
-      </button>
-
-      {files.length ? (
-        <div className="mb-5 rounded-zaki-lg border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-zaki-text">
-              <CheckCircle2 className="size-4 text-emerald-600" />
-              Ready to send
+    <div className="flex h-full min-h-0 bg-zaki-base">
+      <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-zaki-border bg-zaki-raised">
+        <div className="space-y-2.5 px-3 pb-2 pt-3">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[13px] font-semibold text-zaki-text">Knowledge Bases</h2>
+              <span className="rounded-full bg-zaki-hover px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                {items.length}
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setFiles([])}
-              className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:bg-zaki-base hover:text-zaki-text"
-            >
-              Clear
-            </button>
           </div>
-          <div className="mb-3 grid gap-2 sm:grid-cols-2">
-            {files.slice(0, 6).map((file) => (
-              <div
-                key={`${file.name}:${file.size}`}
-                className="flex items-center gap-2 rounded-zaki-md border border-white/70 bg-white/70 px-2 py-2 text-xs text-zaki-secondary dark:border-white/10 dark:bg-white/5"
-              >
-                <FileText className="size-3.5 shrink-0 text-zaki-brand" />
-                <span className="min-w-0 flex-1 truncate">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setFiles((prev) => prev.filter((item) => item !== file))}
-                  className="rounded p-1 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              disabled={!kbName.trim() || createKb.isPending}
-              onClick={() => commitUpload("create")}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              <Plus className="size-4" />
-              Create library from selection
-            </button>
-            <button
-              type="button"
-              disabled={!kbName.trim() || uploadKb.isPending}
-              onClick={() => commitUpload("upload")}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
-            >
-              <Upload className="size-4" />
-              Upload to existing library
-            </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSection("add");
+              setSelectedName(null);
+            }}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-zaki-lg bg-zaki-brand px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90"
+          >
+            <Plus className="size-3.5" />
+            New knowledge base
+          </button>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zaki-muted" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search knowledge bases..."
+              className="w-full rounded-zaki-lg border border-zaki-border bg-zaki-base py-1.5 pl-8 pr-3 text-[12px] text-zaki-text outline-none transition-colors placeholder:text-zaki-muted focus:border-zaki-strong"
+            />
           </div>
         </div>
-      ) : null}
 
-      <ItemList
-        items={items}
-        empty="No source libraries returned yet."
-        variant="source"
-        onOpen={onOpen}
-      />
-    </Section>
+        <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+          {filteredItems.map((item, index) => {
+            const name = itemId(item, `source-${index + 1}`);
+            const selected = effectiveName === name;
+            const status = itemStatus(item);
+            const isDefault = Boolean(item.is_default) || name === "main";
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => {
+                  setSelectedName(name);
+                  setKbName(name);
+                  setSection("files");
+                }}
+                className={cn(
+                  "group relative flex w-full items-start gap-2.5 rounded-zaki-lg px-2.5 py-2 text-left transition-colors",
+                  selected
+                    ? "bg-zaki-hover text-zaki-text"
+                    : "text-zaki-muted hover:bg-zaki-hover/70 hover:text-zaki-text",
+                )}
+              >
+                {selected ? (
+                  <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-zaki-brand" />
+                ) : null}
+                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-zaki-md border border-zaki-border bg-zaki-base">
+                  {isDefault ? (
+                    <Star className="size-3.5 text-amber-500" fill="currentColor" />
+                  ) : (
+                    <Database className="size-3.5" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium">{name}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-zaki-muted">
+                    <span className={cn("size-1.5 rounded-full", statusTone(status))} />
+                    {status}
+                    {displayCount(item) ? ` · ${displayCount(item)} files` : ""}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+          {!filteredItems.length ? (
+            <div className="rounded-zaki-lg border border-dashed border-zaki-border px-4 py-8 text-center">
+              <Database className="mx-auto mb-2 size-5 text-zaki-muted" />
+              <div className="text-[12.5px] font-medium text-zaki-text">
+                {items.length ? "No matches" : "No knowledge bases yet"}
+              </div>
+              {!items.length ? (
+                <p className="mt-1 text-[11px] leading-relaxed text-zaki-muted">
+                  Create one to get started.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </aside>
+
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-zaki-base">
+        <div className="border-b border-zaki-border bg-zaki-raised px-6 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-[18px] font-semibold tracking-tight text-zaki-text">
+                  {effectiveName || "No knowledge base selected"}
+                </h1>
+                {effectiveName === "main" ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    <Star className="size-3" fill="currentColor" />
+                    Default
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-[12px] text-zaki-muted">
+                {effectiveName
+                  ? "Files, uploads, and library settings."
+                  : "Pick a knowledge base from the list, or create a new one to get started."}
+              </p>
+            </div>
+            {selectedItem ? (
+              <button
+                type="button"
+                onClick={() => onOpen(selectedItem)}
+                className="rounded-zaki-md border border-zaki-border px-2.5 py-1.5 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+              >
+                Details
+              </button>
+            ) : null}
+          </div>
+
+          <nav className="-mb-3 mt-3 flex gap-1 overflow-x-auto">
+            {[
+              { key: "files" as const, label: "Files", Icon: FileText },
+              { key: "add" as const, label: "Add documents", Icon: Upload },
+              { key: "settings" as const, label: "Settings", Icon: Settings },
+            ].map(({ key, label, Icon }) => {
+              const active = section === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSection(key)}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-t-zaki-md border-b-2 px-3 py-2 text-[12.5px] font-medium transition-colors",
+                    active
+                      ? "border-zaki-brand text-zaki-text"
+                      : "border-transparent text-zaki-muted hover:text-zaki-text",
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                  {label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {section === "files" ? (
+            selectedFiles.isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-20 text-sm text-zaki-muted">
+                <Loader2 className="size-4 animate-spin" />
+                Loading files...
+              </div>
+            ) : sourceFileItems.length ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {sourceFileItems.map((item, index) => (
+                  <LearningItemCard
+                    key={`${itemTitle(item, "file")}-${index}`}
+                    item={item}
+                    fallback={`File ${index + 1}`}
+                    icon={FileText}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyLine label={effectiveName ? "No files yet. Add one using the Add documents tab." : "No knowledge base selected."} />
+            )
+          ) : section === "add" ? (
+            <div className="mx-auto max-w-3xl">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+                <input
+                  value={kbName}
+                  onChange={(event) => setKbName(event.target.value)}
+                  placeholder="Knowledge base name"
+                  className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                />
+                <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover">
+                  <Upload className="size-4" />
+                  Pick files
+                  <input
+                    type="file"
+                    multiple
+                    accept={LEARNING_ATTACHMENT_ACCEPT}
+                    className="hidden"
+                    onChange={(event) => {
+                      if (event.target.files?.length) handlePicked(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover">
+                  <FolderUp className="size-4" />
+                  Upload folder
+                  <input
+                    ref={folderInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      if (event.target.files?.length) handlePicked(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setDropActive(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                  setDropActive(true);
+                }}
+                onDragLeave={() => setDropActive(false)}
+                onDrop={handleDrop}
+                className={cn(
+                  "mb-4 flex w-full flex-col items-center justify-center rounded-zaki-lg border border-dashed px-5 py-7 text-center transition-colors",
+                  dropActive
+                    ? "border-zaki-brand bg-zaki-hover"
+                    : "border-zaki-border bg-zaki-base hover:border-zaki-strong hover:bg-zaki-hover",
+                )}
+              >
+                <Upload className="mb-2 size-5 text-zaki-brand" />
+                <div className="text-sm font-semibold text-zaki-text">
+                  {files.length ? `${files.length} files ready` : "Choose files..."}
+                </div>
+                <div className="mt-1 text-xs text-zaki-muted">
+                  {files.length
+                    ? formatLearningBytes(readyBytes)
+                    : "Click to browse supported documents, or drop files here."}
+                </div>
+              </button>
+
+              {files.length ? (
+                <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-zaki-text">
+                      <CheckCircle2 className="size-4 text-emerald-600" />
+                      Ready to send
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFiles([])}
+                      className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:bg-zaki-base hover:text-zaki-text"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                    {files.slice(0, 6).map((file) => (
+                      <div
+                        key={`${file.name}:${file.size}`}
+                        className="flex items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-2 text-xs text-zaki-secondary"
+                      >
+                        <FileText className="size-3.5 shrink-0 text-zaki-brand" />
+                        <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiles((prev) => prev.filter((item) => item !== file))}
+                          className="rounded p-1 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={!kbName.trim() || createKb.isPending}
+                      onClick={() => commitUpload("create")}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      <Plus className="size-4" />
+                      Create library from selection
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!kbName.trim() || uploadKb.isPending}
+                      onClick={() => commitUpload("upload")}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                    >
+                      <Upload className="size-4" />
+                      Upload to existing library
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mx-auto max-w-3xl space-y-4">
+              {selectedItem ? (
+                <DetailBlock
+                  title="Knowledge base settings"
+                  rows={[
+                    ["Name", itemTitle(selectedItem, "Knowledge base")],
+                    ["Status", itemStatus(selectedItem)],
+                    ["Files", displayCount(selectedItem) || "0"],
+                    ["Default", String(Boolean(selectedItem.is_default) || effectiveName === "main")],
+                  ]}
+                />
+              ) : (
+                <EmptyLine label="No knowledge base selected." />
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
 
@@ -3319,75 +3337,171 @@ function NotebooksPanel({
 function WriterPanel({
   documentTitle,
   setDocumentTitle,
-  writerText,
-  setWriterText,
-  writerInstruction,
-  setWriterInstruction,
   createDocument,
-  runWriter,
+  deleteDocument,
   items,
   onOpen,
 }: {
   documentTitle: string;
   setDocumentTitle: (value: string) => void;
-  writerText: string;
-  setWriterText: (value: string) => void;
-  writerInstruction: string;
-  setWriterInstruction: (value: string) => void;
-  createDocument: UseMutationResult<unknown, Error, string, unknown>;
-  runWriter: UseMutationResult<unknown, Error, void, unknown>;
+  createDocument: UseMutationResult<unknown, Error, CoWriterCreateDraft, unknown>;
+  deleteDocument: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
   onOpen: (item: Item) => void;
 }) {
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const createDraft = (content = "") => {
+    const title = documentTitle.trim() || "Untitled draft";
+    createDocument.mutate({ title, content });
+  };
+
   return (
-    <Section title="Co-writer" subtitle="Draft, rewrite, expand, shorten, and save documents.">
-      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_220px]">
-        <input
-          value={documentTitle}
-          onChange={(event) => setDocumentTitle(event.target.value)}
-          placeholder="Document title"
-          className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <button
-          type="button"
-          disabled={!documentTitle.trim() || createDocument.isPending}
-          onClick={() => createDocument.mutate(documentTitle.trim())}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
-        >
-          <FileText className="size-4" />
-          Save document
-        </button>
-      </div>
-      <textarea
-        value={writerText}
-        onChange={(event) => setWriterText(event.target.value)}
-        placeholder="Paste a draft or selection..."
-        className="mb-3 min-h-36 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-      />
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row">
-        <input
-          value={writerInstruction}
-          onChange={(event) => setWriterInstruction(event.target.value)}
-          placeholder="Rewrite instruction"
-          className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <button
-          type="button"
-          disabled={!writerText.trim() || !writerInstruction.trim() || runWriter.isPending}
-          onClick={() => runWriter.mutate()}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <PenLine className="size-4" />
-          Run edit
-        </button>
-      </div>
-      <ItemList
-        items={items}
-        empty="No co-writer documents returned yet."
-        variant="document"
-        onOpen={onOpen}
-      />
-    </Section>
+    <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
+      <header className="flex shrink-0 items-center justify-between border-b border-zaki-border px-6 py-3">
+        <div className="flex items-center gap-3">
+          <PenLine className="size-[18px] text-zaki-muted" />
+          <div>
+            <div className="text-sm font-semibold text-zaki-text">Co-Writer</div>
+            <div className="text-xs text-zaki-muted">Manage your markdown drafts and projects.</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={documentTitle}
+            onChange={(event) => setDocumentTitle(event.target.value)}
+            placeholder="Untitled draft"
+            className="hidden h-8 w-44 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2.5 text-xs text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand sm:block"
+          />
+          <button
+            type="button"
+            onClick={() => createDraft(CO_WRITER_SAMPLE_TEMPLATE)}
+            disabled={createDocument.isPending}
+            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border px-3 text-xs font-medium text-zaki-text transition-colors hover:bg-zaki-hover disabled:opacity-60"
+          >
+            <FileText className="size-3.5" />
+            From template
+          </button>
+          <button
+            type="button"
+            onClick={() => createDraft()}
+            disabled={createDocument.isPending}
+            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {createDocument.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Plus className="size-3.5" />
+            )}
+            New draft
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-y-auto px-6 py-6">
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 rounded-zaki-lg border border-dashed border-zaki-border bg-zaki-base px-8 py-16 text-center">
+            <PenLine className="size-7 text-zaki-muted" />
+            <div>
+              <p className="text-base font-medium text-zaki-text">No drafts yet</p>
+              <p className="mt-1 text-sm text-zaki-muted">Start a new markdown draft to begin writing.</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => createDraft()}
+                disabled={createDocument.isPending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+              >
+                {createDocument.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Plus className="size-4" />
+                )}
+                New draft
+              </button>
+              <button
+                type="button"
+                onClick={() => createDraft(CO_WRITER_SAMPLE_TEMPLATE)}
+                disabled={createDocument.isPending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-zaki-md border border-zaki-border px-3 text-sm font-medium text-zaki-text transition-colors hover:bg-zaki-hover disabled:opacity-60"
+              >
+                <FileText className="size-4" />
+                From template
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {items.map((item, index) => {
+              const id = itemId(item, `document-${index + 1}`);
+              const isPendingDelete = pendingDeleteId === id;
+              const isDeleting = deleteDocument.isPending && deleteDocument.variables === id;
+              return (
+                <div
+                  key={id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onOpen(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpen(item);
+                    }
+                  }}
+                  className="group relative flex h-44 cursor-pointer flex-col rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 text-left transition-colors hover:border-zaki-brand/40 hover:bg-zaki-hover hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <FileText className="mt-0.5 size-3.5 shrink-0 text-zaki-muted" />
+                      <div className="min-w-0">
+                        <div
+                          className="truncate text-sm font-medium text-zaki-text"
+                          title={itemTitle(item, "Untitled draft")}
+                        >
+                          {itemTitle(item, "Untitled draft")}
+                        </div>
+                        <div className="text-[10px] text-zaki-muted/80">
+                          Updated {relativeTime(item.updated_at ?? item.created_at) || "unknown"}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!id || deleteDocument.isPending) return;
+                        if (isPendingDelete) {
+                          deleteDocument.mutate(id);
+                        } else {
+                          setPendingDeleteId(id);
+                        }
+                      }}
+                      disabled={deleteDocument.isPending}
+                      title={isPendingDelete ? "Click again to confirm" : "Delete draft"}
+                      className={cn(
+                        "shrink-0 rounded-zaki-md p-1 transition-colors disabled:opacity-50",
+                        isPendingDelete
+                          ? "bg-rose-500/15 text-rose-600"
+                          : "text-zaki-muted/70 opacity-0 hover:bg-rose-500/10 hover:text-rose-600 group-hover:opacity-100",
+                      )}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="mt-3 line-clamp-4 flex-1 text-xs leading-relaxed text-zaki-muted">
+                    {textOf(item.preview) || textOf(item.summary) || textOf(item.content) || "Empty draft"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
 

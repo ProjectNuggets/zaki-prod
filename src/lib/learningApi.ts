@@ -277,6 +277,15 @@ export function updateLearningCoWriterDocument(documentId: string, payload: Lear
   );
 }
 
+export function deleteLearningCoWriterDocument(documentId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/co-writer/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export function runLearningCoWriterEdit(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/co-writer/edit", {
     method: "POST",
