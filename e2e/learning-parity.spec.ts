@@ -184,6 +184,63 @@ async function mockLearning(page: Page) {
       startedTurns.push(payload);
       ws.send(JSON.stringify({ type: "session", session_id: payload.session_id || "session-e2e" }));
       ws.send(JSON.stringify({ type: "content", content: "Notebook-ready answer." }));
+      if (payload.capability === "deep_research") {
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            metadata: {
+              topic: payload.content,
+              sub_topics: [
+                {
+                  title: "Fourier basis",
+                  overview: "Explain sinusoidal basis functions.",
+                },
+              ],
+              research_config: payload.config,
+            },
+          }),
+        );
+      }
+      if (payload.capability === "visualize") {
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            metadata: {
+              response: "Visualization ready.",
+              render_type: "mermaid",
+              code: {
+                language: "mermaid",
+                content: "flowchart TD\\n  A[Start] --> B[Update weights]",
+              },
+              analysis: {
+                description: "Gradient descent process flow.",
+              },
+            },
+          }),
+        );
+      }
+      if (payload.capability === "math_animator") {
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            metadata: {
+              response: "Storyboard ready.",
+              output_mode: "image",
+              code: { language: "python", content: "class Square(Scene): pass" },
+              artifacts: [
+                {
+                  type: "image",
+                  url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+                  filename: "frame.gif",
+                  label: "Frame preview",
+                },
+              ],
+              timings: {},
+              render: { quality: "high" },
+            },
+          }),
+        );
+      }
       ws.send(JSON.stringify({ type: "done" }));
     });
   });
@@ -484,6 +541,8 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.getByPlaceholder("How can I help you today?").fill("Research Fourier transforms.");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => learning.startedTurns.length).toBe(2);
+    await expect(page.getByText("Research Outline")).toBeVisible();
+    await expect(page.getByText("Fourier basis")).toBeVisible();
     expect(learning.startedTurns[1]).toMatchObject({
       type: "start_turn",
       capability: "deep_research",
@@ -502,6 +561,8 @@ test.describe("ZAKI Learn parity wiring", () => {
       .fill("Make a flowchart for gradient descent.");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => learning.startedTurns.length).toBe(3);
+    await expect(page.getByText("Visualization ready.")).toBeVisible();
+    await expect(page.getByText("flowchart TD")).toBeVisible();
     expect(learning.startedTurns[2]).toMatchObject({
       type: "start_turn",
       capability: "visualize",
@@ -518,6 +579,9 @@ test.describe("ZAKI Learn parity wiring", () => {
       .fill("Animate completing the square.");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => learning.startedTurns.length).toBe(4);
+    await expect(page.getByText("Storyboard ready.")).toBeVisible();
+    await expect(page.getByText("Frame preview")).toBeVisible();
+    await expect(page.getByText("View Manim Code")).toBeVisible();
     expect(learning.startedTurns[3]).toMatchObject({
       type: "start_turn",
       capability: "math_animator",

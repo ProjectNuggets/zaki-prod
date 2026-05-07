@@ -72,6 +72,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import { buildApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   addLearningNotebookRecordManual,
@@ -233,6 +234,7 @@ type TutorChatMessage = {
   content: string;
   capability?: string;
   thinking?: string[];
+  events?: Item[];
   attachments?: LearningAttachment[];
 };
 
@@ -1762,6 +1764,143 @@ function learningEventText(eventType: string, payload: Item) {
   return textOf(metadata.label) || textOf(metadata.status);
 }
 
+function latestLearningResultEvent(message: TutorChatMessage) {
+  return [...(message.events ?? [])].reverse().find((event) => textOf(event.type) === "result");
+}
+
+function learningResultMetadata(message: TutorChatMessage) {
+  return asRecord(latestLearningResultEvent(message)?.metadata);
+}
+
+function learningRecords(value: unknown): Item[] {
+  return Array.isArray(value) ? value.filter(isItem) : [];
+}
+
+function learningAssetUrl(url: string, type: string) {
+  if (!url) return "";
+  if (/^data:/i.test(url)) {
+    if (type === "image" && /^data:image\//i.test(url)) return url;
+    if (type === "video" && /^data:video\//i.test(url)) return url;
+    return "";
+  }
+  if (/^(https?:|blob:|data:)/i.test(url)) return url;
+  return buildApiUrl(url);
+}
+
+function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage }) {
+  const metadata = learningResultMetadata(message);
+  if (!Object.keys(metadata).length) return null;
+
+  if (message.capability === "deep_research") {
+    const outlinePreview = asRecord(metadata.outline_preview);
+    const subTopics = learningRecords(metadata.sub_topics).length
+      ? learningRecords(metadata.sub_topics)
+      : learningRecords(outlinePreview.sub_topics);
+    if (!subTopics.length) return null;
+    const topic = textOf(metadata.topic) || textOf(outlinePreview.topic) || "Research Outline";
+    return (
+      <section className="mt-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zaki-text">
+          <Microscope className="size-3.5 text-zaki-muted" />
+          Research Outline
+          <span className="truncate font-normal text-zaki-muted">{topic}</span>
+        </div>
+        <ol className="space-y-2">
+          {subTopics.map((item, index) => (
+            <li key={`${topic}-${index}`} className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2">
+              <div className="text-xs font-semibold text-zaki-text">
+                {textOf(item.title, `Sub-topic ${index + 1}`)}
+              </div>
+              {textOf(item.overview) ? (
+                <div className="mt-1 text-xs leading-5 text-zaki-muted">{textOf(item.overview)}</div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </section>
+    );
+  }
+
+  if (message.capability === "visualize") {
+    const renderType = textOf(metadata.render_type, "visualization");
+    const code = asRecord(metadata.code);
+    const content = textOf(code.content);
+    const analysis = asRecord(metadata.analysis);
+    if (!content && !textOf(metadata.response)) return null;
+    return (
+      <section className="mt-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zaki-text">
+          <BarChart3 className="size-3.5 text-zaki-muted" />
+          Visualization
+          <span className="rounded-zaki-sm bg-zaki-hover px-1.5 py-0.5 font-mono text-[10px] text-zaki-muted">
+            {renderType}
+          </span>
+        </div>
+        {textOf(metadata.response) ? (
+          <p className="mb-2 text-xs leading-5 text-zaki-muted">{textOf(metadata.response)}</p>
+        ) : null}
+        {textOf(analysis.description) ? (
+          <p className="mb-2 text-xs leading-5 text-zaki-muted">{textOf(analysis.description)}</p>
+        ) : null}
+        {content ? (
+          <pre className="max-h-[360px] overflow-auto rounded-zaki-md bg-zaki-base p-3 text-xs leading-5 text-zaki-text">
+            <code>{content}</code>
+          </pre>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (message.capability === "math_animator") {
+    const artifacts = learningRecords(metadata.artifacts);
+    const code = asRecord(metadata.code);
+    const response = textOf(metadata.response);
+    const source = textOf(code.content);
+    if (!artifacts.length && !source && !response) return null;
+    return (
+      <section className="mt-3 space-y-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-3">
+        <div className="flex items-center gap-2 text-xs font-semibold text-zaki-text">
+          <Clapperboard className="size-3.5 text-zaki-muted" />
+          Math Animator
+        </div>
+        {response ? <p className="text-xs leading-5 text-zaki-muted">{response}</p> : null}
+        {artifacts.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {artifacts.map((artifact, index) => {
+              const type = textOf(artifact.type);
+              const url = learningAssetUrl(textOf(artifact.url), type);
+              const label = textOf(artifact.label) || textOf(artifact.filename, `Artifact ${index + 1}`);
+              if (!url) return null;
+              return (
+                <figure key={`${url}-${index}`} className="rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
+                  {type === "video" ? (
+                    <video src={url} controls playsInline preload="metadata" className="aspect-video w-full rounded-zaki-sm bg-black object-contain" />
+                  ) : (
+                    <img src={url} alt={label} className="max-h-[280px] w-full rounded-zaki-sm object-contain" />
+                  )}
+                  <figcaption className="mt-1 truncate text-[11px] text-zaki-muted">{label}</figcaption>
+                </figure>
+              );
+            })}
+          </div>
+        ) : null}
+        {source ? (
+          <details className="rounded-zaki-md border border-zaki-border bg-zaki-base">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-zaki-text">
+              View Manim Code
+            </summary>
+            <pre className="max-h-[320px] overflow-auto border-t border-zaki-border p-3 text-xs leading-5 text-zaki-text">
+              <code>{source}</code>
+            </pre>
+          </details>
+        ) : null}
+      </section>
+    );
+  }
+
+  return null;
+}
+
 function LearningAttachmentChip({
   attachment,
   onRemove,
@@ -2129,34 +2268,34 @@ function LearningChatPanel({
       if (eventType === "result") {
         const thinkingSnapshot = thinkingRef.current;
         const assistantId = activeAssistantIdRef.current || makeClientId("assistant");
-        if (content) {
-          setMessages((items) => {
-            const existingIndex = items.findIndex((item) => item.id === assistantId);
-            if (existingIndex >= 0) {
-              return items.map((item, index) =>
-                index === existingIndex
-                  ? {
-                      ...item,
-                      content: content.length > item.content.length ? content : item.content,
-                      thinking:
-                        item.thinking ??
-                        (thinkingSnapshot.length ? [...thinkingSnapshot] : undefined),
-                    }
-                  : item,
-              );
-            }
-            return [
-              ...items,
-              {
-                id: assistantId,
-                role: "assistant",
-                content,
-                capability: capability || "chat",
-                thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
-              },
-            ];
-          });
-        }
+        setMessages((items) => {
+          const existingIndex = items.findIndex((item) => item.id === assistantId);
+          if (existingIndex >= 0) {
+            return items.map((item, index) =>
+              index === existingIndex
+                ? {
+                    ...item,
+                    content: content && content.length > item.content.length ? content : item.content,
+                    events: [...(item.events ?? []), payload],
+                    thinking:
+                      item.thinking ??
+                      (thinkingSnapshot.length ? [...thinkingSnapshot] : undefined),
+                  }
+                : item,
+            );
+          }
+          return [
+            ...items,
+            {
+              id: assistantId,
+              role: "assistant",
+              content,
+              capability: capability || "chat",
+              events: [payload],
+              thinking: thinkingSnapshot.length ? [...thinkingSnapshot] : undefined,
+            },
+          ];
+        });
         activeAssistantIdRef.current = null;
         activeTurnIdRef.current = null;
         thinkingRef.current = [];
@@ -2642,6 +2781,7 @@ function LearningChatPanel({
                   >
                     {message.content}
                   </div>
+                  <LearningAdvancedResultBlock message={message} />
                   <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
