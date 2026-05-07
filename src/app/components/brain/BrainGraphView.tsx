@@ -109,6 +109,39 @@ function edgeStyle(type: BrainGraphEdge["type"]) {
   }
 }
 
+// V1.11 hotfix (2026-05-07) — per-edge relevance score (0..1) drives
+// `idealEdgeLength` so node distance reflects how related two nodes are
+// in Nova's words: "if two nodes are closer to each other that means
+// they are more relevant to each other."
+//
+// Hierarchy of edge meaning, strongest first:
+//   1.0 typed      — explicit predicate (RELATES_TO, IS, SUPERSEDES). The
+//                    extractor asserted a specific semantic claim. Tightest
+//                    pull because these are first-class facts.
+//   0.65 reference — a memory cites another by key. Authorial intent.
+//   0.45 semantic  — cosine-similarity nearest-neighbor. Real but noisy
+//                    (the threshold lets through some weak pairs).
+//   0.20 session   — co-occurred in the same conversation. Loose: two
+//                    facts mentioned in one chat aren't necessarily related.
+//
+// runLayout maps relevance → idealEdgeLength via:
+//   length = base * (1.5 - relevance)
+//   relevance 1.0 → 0.5×base (tight)
+//   relevance 0.0 → 1.5×base (loose)
+function edgeRelevance(type: BrainGraphEdge["type"]): number {
+  switch (type) {
+    case "typed":
+      return 1.0;
+    case "reference":
+      return 0.65;
+    case "semantic":
+      return 0.45;
+    case "session":
+    default:
+      return 0.2;
+  }
+}
+
 function fetchOptsFromFilters(f: BrainGraphFilters): BrainGraphFetchOpts {
   return {
     max_nodes: f.maxNodes,
@@ -217,6 +250,9 @@ function buildElementsFromGlobal(
         lineStyle: s.line,
         edgeWeight: s.width * linkThickness,
         predicate: (e as { predicate?: string }).predicate ?? null,
+        // V1.11 (2026-05-07) — per-edge relevance for relevance-weighted
+        // layout. Read by runLayout's idealEdgeLength callback.
+        relevance: edgeRelevance(e.type),
       },
     });
   }
@@ -273,6 +309,7 @@ function buildElementsFromLocal(
         lineStyle: s.line,
         edgeWeight: s.width * linkThickness,
         predicate: e.predicate ?? null,
+        relevance: edgeRelevance(t),
       },
     });
   }
@@ -759,33 +796,66 @@ export function BrainGraphView({
 }
 
 function runLayout(cy: Core, f: BrainGraphFilters) {
-  const layout = cy.layout({
+  // V1.11 hotfix-3 (2026-05-07) — per-edge relevance-weighted layout.
+  //
+  // Nova: "node distance should show relevance. if two nodes are closer
+  // to each other that means they are more relevant to each other."
+  //
+  // The earlier hotfix-2 comment claimed cose-bilkent rejects function
+  // values for idealEdgeLength. That diagnosis was wrong — the real
+  // cause of "Invalid array length" was NaN propagating from node
+  // importance into radius/opacity arrays. With NaN clamped at the
+  // source (buildElementsFromGlobal line ~164), function-based
+  // idealEdgeLength is safe.
+  //
+  // Mapping:
+  //   length = base * (1.5 - relevance)
+  //   typed predicate (relevance 1.0) → 0.5 × base (tight pull)
+  //   reference        (0.65)         → 0.85 × base
+  //   semantic         (0.45)         → 1.05 × base
+  //   session          (0.20)         → 1.30 × base (loose)
+  //
+  // Try/catch wraps the function call: if a future cose-bilkent build
+  // tightens the type, we fall back to the slider-driven constant rather
+  // than crash the graph.
+  const baseOpts: Record<string, unknown> = {
     name: "cose-bilkent",
     animate: true,
     animationDuration: 600,
     animationEasing: "ease-out",
     randomize: true,
-    // V1.11 hotfix-2 (2026-05-07) — nodeRepulsion is a number for
-    // cose-bilkent. The earlier hotfix-1 passed a function (Obsidian-style
-    // organic distance via per-node repulsion); cose-bilkent's documented
-    // API only accepts a number for nodeRepulsion as well. Function
-    // values fail at mount with "Invalid array length" the same way
-    // idealEdgeLength did. Reverted to the slider value. Hierarchy
-    // still reads via:
-    //   - 6× radius range (importanceToRadius: 6 + 30*i)
-    //   - importance-opacity (0.45-1.0 per node)
-    // Both apply at the cytoscape stylesheet level (no layout math).
-    // Per-edge organic distance lands V1.12 when we evaluate fcose
-    // or d3-force which natively support per-edge length functions.
     nodeRepulsion: f.nodeRepulsion,
-    idealEdgeLength: f.idealEdgeLength,
     edgeElasticity: f.edgeElasticity,
     gravity: f.gravity,
     numIter: 2500,
     fit: true,
     padding: 30,
-  } as cytoscape.LayoutOptions);
-  layout.run();
+  };
+  const fnOpts = {
+    ...baseOpts,
+    idealEdgeLength: (edge: { data: (k: string) => unknown }) => {
+      const r = edge.data("relevance");
+      const rel =
+        typeof r === "number" && Number.isFinite(r)
+          ? Math.max(0, Math.min(1, r))
+          : 0.5;
+      return Math.max(20, f.idealEdgeLength * (1.5 - rel));
+    },
+  };
+  try {
+    cy.layout(fnOpts as unknown as cytoscape.LayoutOptions).run();
+  } catch (err) {
+    // Fallback: rejected — use constant.
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[brain] cose-bilkent rejected per-edge idealEdgeLength; falling back to constant",
+      err,
+    );
+    cy.layout({
+      ...baseOpts,
+      idealEdgeLength: f.idealEdgeLength,
+    } as unknown as cytoscape.LayoutOptions).run();
+  }
 }
 
 // ── Hover tooltip ─────────────────────────────────────────────
