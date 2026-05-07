@@ -158,6 +158,12 @@ import {
 } from "@/app/components/ui/sheet";
 import { LearningSpacePickerModal } from "./LearningSpacePickerModal";
 import { LearningBookWorkspace } from "./LearningBookWorkspace";
+import {
+  learningNotebookExportFilename,
+  learningNotebookMarkdown,
+  learningNotebookRecordExportFilename,
+  learningNotebookRecordMarkdown,
+} from "./learningNotebookExport";
 import { buildLearningSpaceReferences } from "./learningSpaceReferences";
 
 type LearningTab =
@@ -4510,6 +4516,31 @@ function NotebooksPanel({
   const selectedDetail = asRecord(detailQuery.data ?? selectedSummary ?? {});
   const records = itemList(selectedDetail, ["records", "items"]);
 
+  const downloadMarkdownFile = (filename: string, markdown: string) => {
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadNotebook = () => {
+    if (!Object.keys(selectedDetail).length) return;
+    downloadMarkdownFile(
+      learningNotebookExportFilename(selectedDetail),
+      learningNotebookMarkdown(selectedDetail, records),
+    );
+  };
+
+  const downloadRecord = (record: Item, index: number) => {
+    downloadMarkdownFile(
+      learningNotebookRecordExportFilename(selectedDetail, record, index),
+      learningNotebookRecordMarkdown(record, index),
+    );
+  };
+
   const deleteNotebook = useMutation({
     mutationFn: (notebookId: string) => deleteLearningNotebook(notebookId),
     onSuccess: (_, notebookId) => {
@@ -4670,7 +4701,7 @@ function NotebooksPanel({
               </div>
             ) : selectedId && Object.keys(selectedDetail).length ? (
               <div className="flex min-h-0 flex-1 flex-col">
-                <div className="mb-3 flex shrink-0 items-center justify-between gap-4 pb-3">
+                <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 pb-3">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <div
                       className="size-2.5 shrink-0 rounded-full"
@@ -4685,9 +4716,20 @@ function NotebooksPanel({
                       </span>
                     ) : null}
                   </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-zaki-muted">
-                    {records.length} records
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-[11px] tabular-nums text-zaki-muted">
+                      {records.length} records
+                    </span>
+                    <button
+                      type="button"
+                      onClick={downloadNotebook}
+                      aria-label="Download notebook as Markdown"
+                      className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                    >
+                      <Download className="size-3.5" />
+                      Download Markdown
+                    </button>
+                  </div>
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -4753,6 +4795,15 @@ function NotebooksPanel({
                                       <ArrowRight className="size-3.5" />
                                     </button>
                                   ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadRecord(record, index)}
+                                    aria-label={`Download ${itemTitle(record, "record")} as Markdown`}
+                                    className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                                  >
+                                    <Download className="size-3.5" />
+                                    Download
+                                  </button>
                                   <button
                                     type="button"
                                     disabled={deleteRecord.isPending}
