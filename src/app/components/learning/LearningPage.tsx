@@ -83,6 +83,8 @@ import {
   createLearningQuestionCategory,
   createLearningSkill,
   createLearningTutorAgent,
+  createLearningTutorAgentSoul,
+  deleteLearningTutorAgentSoul,
   deleteLearningNotebook,
   deleteLearningNotebookRecord,
   deleteLearningQuestionCategory,
@@ -129,6 +131,7 @@ import {
   updateLearningSkill,
   updateLearningCoWriterDocument,
   updateLearningTutorAgent,
+  updateLearningTutorAgentSoul,
   updateLearningMemory,
   uploadLearningKnowledge,
   uploadLearningKnowledgeArchive,
@@ -397,6 +400,14 @@ function defaultLearningChannelValue(schema: LearningChannelJsonSchema): unknown
 
 function humanizeLearningChannelKey(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function learningSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function itemTitle(item: Item, fallback: string) {
@@ -6313,6 +6324,328 @@ function TutorChannelsPanel({
   );
 }
 
+function TutorSoulsPanel({ souls }: { souls: Item[] }) {
+  const queryClient = useQueryClient();
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newContent, setNewContent] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editContent, setEditContent] = useState("");
+
+  const soulIds = useMemo(
+    () => new Set(souls.map((soul, index) => itemId(soul, `soul-${index + 1}`))),
+    [souls],
+  );
+  const newSoulId = learningSlug(newName);
+
+  const invalidateSouls = () => {
+    void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentSouls });
+  };
+
+  const createSoul = useMutation({
+    mutationFn: (payload: LearningJson) => createLearningTutorAgentSoul(payload),
+    onSuccess: () => {
+      toast.success("Soul template created");
+      setCreating(false);
+      setNewName("");
+      setNewContent("");
+      invalidateSouls();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const updateSoul = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: LearningJson }) =>
+      updateLearningTutorAgentSoul(id, payload),
+    onSuccess: () => {
+      toast.success("Soul template saved");
+      setEditingId(null);
+      setEditName("");
+      setEditContent("");
+      invalidateSouls();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteSoul = useMutation({
+    mutationFn: (id: string) => deleteLearningTutorAgentSoul(id),
+    onSuccess: () => {
+      toast.success("Soul template deleted");
+      setPendingDeleteId(null);
+      setEditingId(null);
+      invalidateSouls();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const startEdit = (soul: Item, fallback: string) => {
+    setCreating(false);
+    setPendingDeleteId(null);
+    setEditingId(itemId(soul, fallback));
+    setEditName(itemTitle(soul, fallback));
+    setEditContent(textOf(soul.content) || textOf(soul.description));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
+    setEditContent("");
+  };
+
+  const startCreate = () => {
+    setCreating(true);
+    setEditingId(null);
+    setPendingDeleteId(null);
+    setNewName("");
+    setNewContent("");
+  };
+
+  const submitCreate = () => {
+    const name = newName.trim();
+    if (!name || !newSoulId) return;
+    if (soulIds.has(newSoulId)) {
+      toast.error(`Soul ID "${newSoulId}" already exists`);
+      return;
+    }
+    createSoul.mutate({ id: newSoulId, name, content: newContent });
+  };
+
+  const submitEdit = () => {
+    if (!editingId || !editName.trim()) return;
+    updateSoul.mutate({
+      id: editingId,
+      payload: { name: editName.trim(), content: editContent },
+    });
+  };
+
+  const handleTextareaSave = (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+    save: () => void,
+  ) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+      event.preventDefault();
+      save();
+    }
+  };
+
+  const busy = createSoul.isPending || updateSoul.isPending || deleteSoul.isPending;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-zaki-muted">
+          Reusable soul templates for creating and updating TutorBot profiles.
+        </p>
+        <button
+          type="button"
+          onClick={startCreate}
+          className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border px-3 text-[12px] font-medium text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          <Plus className="size-3" />
+          New Soul
+        </button>
+      </div>
+
+      {creating ? (
+        <section className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[15px] font-semibold text-zaki-text">New Soul</h2>
+            <button
+              type="button"
+              onClick={() => setCreating(false)}
+              className="rounded-zaki-md p-1 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="grid gap-3">
+            <label className="block text-[12px] font-medium text-zaki-muted">
+              Name
+              <input
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder="e.g. Creative Writer"
+                className="mt-1 h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+              />
+              {newSoulId ? (
+                <span className="mt-1 block text-[11px] font-normal text-zaki-muted">
+                  ID: {newSoulId}
+                </span>
+              ) : null}
+            </label>
+            <label className="block text-[12px] font-medium text-zaki-muted">
+              Content
+              <textarea
+                value={newContent}
+                onChange={(event) => setNewContent(event.target.value)}
+                onKeyDown={(event) => handleTextareaSave(event, submitCreate)}
+                placeholder="Define the soul in markdown..."
+                rows={10}
+                spellCheck={false}
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 font-mono text-[13px] leading-6 text-zaki-text outline-none focus:border-zaki-brand"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCreating(false)}
+                className="rounded-zaki-md px-3 py-1.5 text-[12px] text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitCreate}
+                disabled={busy || !newName.trim() || !newSoulId}
+                className="inline-flex items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
+              >
+                {createSoul.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                Create
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {!souls.length && !creating ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center rounded-zaki-lg border border-dashed border-zaki-border text-center">
+          <div className="mb-3 rounded-zaki-lg bg-zaki-hover p-2.5 text-zaki-muted">
+            <Heart className="size-4" />
+          </div>
+          <p className="text-sm font-medium text-zaki-text">No souls yet</p>
+          <p className="mt-1.5 max-w-xs text-[13px] text-zaki-muted">
+            Create your first reusable TutorBot soul template.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {souls.map((soul, index) => {
+            const id = itemId(soul, `soul-${index + 1}`);
+            const isEditing = editingId === id;
+            const pendingDelete = pendingDeleteId === id;
+            const deleting = deleteSoul.isPending && deleteSoul.variables === id;
+            const title = itemTitle(soul, `Soul template ${index + 1}`);
+            const content = textOf(soul.content) || textOf(soul.description);
+
+            if (isEditing) {
+              return (
+                <section
+                  key={id}
+                  className="rounded-zaki-lg border border-zaki-brand bg-zaki-raised p-5"
+                >
+                  <div className="grid gap-3">
+                    <label className="block text-[12px] font-medium text-zaki-muted">
+                      Name
+                      <input
+                        value={editName}
+                        onChange={(event) => setEditName(event.target.value)}
+                        className="mt-1 h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+                      />
+                    </label>
+                    <label className="block text-[12px] font-medium text-zaki-muted">
+                      Content
+                      <textarea
+                        value={editContent}
+                        onChange={(event) => setEditContent(event.target.value)}
+                        onKeyDown={(event) => handleTextareaSave(event, submitEdit)}
+                        rows={12}
+                        spellCheck={false}
+                        className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 font-mono text-[13px] leading-6 text-zaki-text outline-none focus:border-zaki-brand"
+                      />
+                    </label>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="rounded-zaki-md px-3 py-1.5 text-[12px] text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitEdit}
+                        disabled={busy || !editName.trim()}
+                        className="inline-flex items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
+                      >
+                        {updateSoul.isPending ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Save className="size-3.5" />
+                        )}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              );
+            }
+
+            return (
+              <section
+                key={id}
+                className="group flex items-start justify-between gap-4 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-5 py-4 transition-colors hover:border-zaki-brand/40 hover:bg-zaki-hover"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Heart className="size-3.5 shrink-0 text-zaki-muted" />
+                    <h2 className="truncate text-sm font-semibold text-zaki-text">{title}</h2>
+                    <span className="shrink-0 text-[11px] text-zaki-muted">{id}</span>
+                  </div>
+                  <p className="mt-1.5 line-clamp-2 pl-6 text-[12px] leading-5 text-zaki-muted">
+                    {content.replace(/^#.*\n+/g, "").slice(0, 240) || "No template content returned."}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={`Edit ${title}`}
+                    title={`Edit ${title}`}
+                    onClick={() => startEdit(soul, id)}
+                    className="inline-flex size-8 items-center justify-center rounded-zaki-md border border-zaki-border text-zaki-muted transition-colors hover:bg-zaki-base hover:text-zaki-text"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={pendingDelete ? `Confirm delete ${title}` : `Delete ${title}`}
+                    title={pendingDelete ? "Click again to confirm" : `Delete ${title}`}
+                    disabled={deleteSoul.isPending}
+                    onClick={() => {
+                      if (pendingDelete) {
+                        deleteSoul.mutate(id);
+                      } else {
+                        setPendingDeleteId(id);
+                      }
+                    }}
+                    className={cn(
+                      "inline-flex size-8 items-center justify-center rounded-zaki-md border transition-colors disabled:opacity-50",
+                      pendingDelete
+                        ? "border-rose-500/40 bg-rose-500/10 text-rose-600"
+                        : "border-zaki-border text-zaki-muted hover:bg-rose-500/10 hover:text-rose-600",
+                    )}
+                  >
+                    {deleting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                  </button>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentsPanel({
   agentId,
   setAgentId,
@@ -6595,28 +6928,7 @@ function AgentsPanel({
         ) : activeTab === "channels" ? (
           <TutorChannelsPanel bots={items} channelsSchema={channelsSchema} />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {souls.length ? (
-              souls.map((item, index) => (
-                <div
-                  key={itemId(item, `soul-${index + 1}`)}
-                  className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4"
-                >
-                  <div className="flex items-center gap-2">
-                    <Heart className="size-4 text-zaki-muted" />
-                    <h2 className="truncate text-sm font-semibold text-zaki-text">
-                      {itemTitle(item, `Soul template ${index + 1}`)}
-                    </h2>
-                  </div>
-                  <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-zaki-muted">
-                    {textOf(item.content) || textOf(item.description) || "No template content returned."}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <EmptyLine label="No soul templates returned yet." />
-            )}
-          </div>
+          <TutorSoulsPanel souls={souls} />
         )}
       </div>
     </div>

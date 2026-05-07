@@ -462,13 +462,25 @@ export function shouldConsumeLearningIngressQuota(req = {}) {
   if (method === "POST" && learningPath === "/notebooks") return false;
   if (method === "POST" && learningPath === "/notebooks/records/manual") return false;
   if (method === "POST" && learningPath === "/tutor-agents") return false;
+  if (method === "POST" && learningPath === "/tutor-agents/souls") return false;
 
   if (method === "PUT") {
     const notebookPattern = new RegExp(`^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
     const recordPattern = new RegExp(
       `^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}/records/${LEARNING_NOTEBOOK_ID_SEGMENT}$`
     );
-    if (notebookPattern.test(learningPath) || recordPattern.test(learningPath)) return false;
+    const tutorSoulPattern = new RegExp(`^/tutor-agents/souls/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
+    const tutorFilePattern = new RegExp(
+      `^/tutor-agents/${LEARNING_NOTEBOOK_ID_SEGMENT}/files/${LEARNING_NOTEBOOK_ID_SEGMENT}$`
+    );
+    if (
+      notebookPattern.test(learningPath) ||
+      recordPattern.test(learningPath) ||
+      tutorSoulPattern.test(learningPath) ||
+      tutorFilePattern.test(learningPath)
+    ) {
+      return false;
+    }
   }
 
   if (method === "PATCH") {

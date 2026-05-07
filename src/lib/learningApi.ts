@@ -532,6 +532,30 @@ export function listLearningTutorAgentSouls() {
   return learningRequest<unknown>("/api/learning/tutor-agents/souls");
 }
 
+export function createLearningTutorAgentSoul(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/tutor-agents/souls", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function updateLearningTutorAgentSoul(soulId: string, payload: LearningJson) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/souls/${encodeURIComponent(soulId)}`,
+    {
+      method: "PUT",
+      body: payload,
+    },
+  );
+}
+
+export function deleteLearningTutorAgentSoul(soulId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/souls/${encodeURIComponent(soulId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export function getLearningTutorAgentChannelsSchema() {
   return learningRequest<unknown>("/api/learning/tutor-agents/channels/schema");
 }

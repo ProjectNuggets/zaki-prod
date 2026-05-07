@@ -270,6 +270,24 @@ describe("learning BFF contract", () => {
     ).toBe(false);
     expect(
       shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/tutor-agents/souls",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "PUT",
+        originalUrl: "/api/learning/tutor-agents/souls/mentor",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "PUT",
+        originalUrl: "/api/learning/tutor-agents/bot-1/files/SOUL.md",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
         method: "PATCH",
         originalUrl: "/api/learning/tutor-agents/bot-1",
       })
