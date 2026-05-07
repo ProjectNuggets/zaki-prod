@@ -171,11 +171,17 @@ async function mockLearning(page: Page) {
     ],
   ]);
   const savedNotebookRecords: unknown[] = [];
+  const startedTurns: Array<Record<string, unknown>> = [];
 
   await page.routeWebSocket("**/api/learning/ws", async (ws) => {
     ws.onMessage((message) => {
-      const payload = JSON.parse(String(message)) as { type?: string; content?: string; session_id?: string };
+      const payload = JSON.parse(String(message)) as {
+        type?: string;
+        content?: string;
+        session_id?: string;
+      } & Record<string, unknown>;
       if (payload.type !== "start_turn") return;
+      startedTurns.push(payload);
       ws.send(JSON.stringify({ type: "session", session_id: payload.session_id || "session-e2e" }));
       ws.send(JSON.stringify({ type: "content", content: "Notebook-ready answer." }));
       ws.send(JSON.stringify({ type: "done" }));
@@ -369,7 +375,7 @@ async function mockLearning(page: Page) {
     await json(route, {});
   });
 
-  return { savedNotebookRecords };
+  return { savedNotebookRecords, startedTurns };
 }
 
 test.describe("ZAKI Learn parity wiring", () => {
@@ -455,5 +461,71 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.goto("/learn?view=notebooks");
     await page.getByText("Energy Notes").click();
     await expect(page.getByText("Explain work-energy theorem.")).toBeVisible();
+  });
+
+  test("routes advanced capability presets with their hosted configs", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=solve");
+    await expect(page.getByText("Deep Solve").first()).toBeVisible();
+    await page.getByPlaceholder("How can I help you today?").fill("Solve x^2 - 4 = 0.");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect.poll(() => learning.startedTurns.length).toBe(1);
+    expect(learning.startedTurns[0]).toMatchObject({
+      type: "start_turn",
+      capability: "deep_solve",
+      content: "Solve x^2 - 4 = 0.",
+    });
+
+    await page.goto("/learn?view=research");
+    await expect(page.getByText("Deep Research").first()).toBeVisible();
+    await page.getByLabel("Mode").selectOption("report");
+    await page.getByLabel("Depth").selectOption("quick");
+    await page.getByPlaceholder("How can I help you today?").fill("Research Fourier transforms.");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect.poll(() => learning.startedTurns.length).toBe(2);
+    expect(learning.startedTurns[1]).toMatchObject({
+      type: "start_turn",
+      capability: "deep_research",
+      config: {
+        mode: "report",
+        depth: "quick",
+        sources: ["kb", "web", "papers"],
+      },
+    });
+
+    await page.goto("/learn?view=visualize");
+    await expect(page.getByText("Visualize").first()).toBeVisible();
+    await page.getByLabel("Render Mode").selectOption("mermaid");
+    await page
+      .getByPlaceholder("Describe the chart or diagram you want to visualize...")
+      .fill("Make a flowchart for gradient descent.");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect.poll(() => learning.startedTurns.length).toBe(3);
+    expect(learning.startedTurns[2]).toMatchObject({
+      type: "start_turn",
+      capability: "visualize",
+      config: { render_mode: "mermaid" },
+    });
+
+    await page.goto("/learn?view=math-animation");
+    await expect(page.getByText("Math Animator").first()).toBeVisible();
+    await page.getByLabel("Output").selectOption("image");
+    await page.getByLabel("Quality").selectOption("high");
+    await page.getByLabel("Style Hint").fill("clean blackboard style");
+    await page
+      .getByPlaceholder("Describe the math animation or storyboard you want...")
+      .fill("Animate completing the square.");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect.poll(() => learning.startedTurns.length).toBe(4);
+    expect(learning.startedTurns[3]).toMatchObject({
+      type: "start_turn",
+      capability: "math_animator",
+      config: {
+        output_mode: "image",
+        quality: "high",
+        style_hint: "clean blackboard style",
+      },
+    });
   });
 });
