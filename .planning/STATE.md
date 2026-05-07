@@ -30,6 +30,8 @@ Last activity: 2026-05-07 - completed operator deployment readiness gate: super-
 - Port/adapt upstream UI shape into ZAKI shell.
 - Keep raw provider/model/API-key settings operator-managed.
 - Keep all local commits local until explicit push approval.
+- Treat `/api/learning/*` as the native ZAKI Learn product API; the downstream learning-engine `/api/v1/*` surface is an internal implementation contract.
+- Use Together.ai as the cost-first Learn launch provider only through operator-managed routing; normal users must never receive provider keys or raw model controls.
 
 ## Recent Browser Truth
 

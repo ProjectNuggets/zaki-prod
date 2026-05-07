@@ -30,6 +30,11 @@ Browser
   -> zaki-learning-engine /api/v1/*
 ```
 
+The browser-facing API contract is documented in
+`docs/zaki-learning-api-contract.md`. That contract is the ZAKI product API;
+the downstream `/api/v1/*` routes are implementation detail and can change
+behind the BFF as long as the ZAKI contract remains compatible.
+
 ## Non-Negotiables
 
 - Browser clients never call the learning engine directly.

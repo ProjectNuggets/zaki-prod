@@ -22,6 +22,7 @@ Blocking gates:
 - `zaki_image_immutable`: ZAKI app/backend image uses a digest or git-SHA style tag.
 - `learning_engine_image_immutable`: learning engine image uses a digest or git-SHA style tag.
 - `learning_source_mirror_pinned`: ZAKI records the mirrored learning-engine repository and exact source commit.
+- `operator_ai_stack_configured`: learning LLM, embedding, and search routing are recorded as operator-managed deployment config.
 - `retention_policy_enabled`: hosted retention cleanup remains enabled.
 - `disaster_recovery_ready`: backup target, tenant root, immutable learning image, and fresh restore drill evidence are ready.
 
@@ -67,6 +68,33 @@ Quota remains operator-owned until unit economics are finalized:
 ```bash
 ZAKI_LEARNING_DAILY_PROMPT_LIMIT=<plan-calibrated limit>
 ZAKI_LEARNING_MAX_REQUEST_BYTES=<absolute hosted cap>
+```
+
+Operator AI stack record, used by the deployment-readiness gate:
+
+```bash
+ZAKI_LEARNING_LLM_PROVIDER=together
+ZAKI_LEARNING_LLM_MODEL=moonshotai/Kimi-K2.5
+ZAKI_LEARNING_EMBEDDING_PROVIDER=together
+ZAKI_LEARNING_EMBEDDING_MODEL=intfloat/multilingual-e5-large-instruct
+ZAKI_LEARNING_SEARCH_PROVIDER=brave
+```
+
+Learning engine provider runtime, kept inside the downstream service only:
+
+```bash
+LLM_BINDING=together
+LLM_HOST=https://api.together.xyz/v1
+LLM_MODEL=moonshotai/Kimi-K2.5
+LLM_API_KEY=<operator-secret>
+
+EMBEDDING_BINDING=together
+EMBEDDING_HOST=https://api.together.xyz/v1/embeddings
+EMBEDDING_MODEL=intfloat/multilingual-e5-large-instruct
+EMBEDDING_API_KEY=<operator-secret>
+
+SEARCH_PROVIDER=brave
+SEARCH_API_KEY=<operator-secret>
 ```
 
 ## Final User Setup

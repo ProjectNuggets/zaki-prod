@@ -46,6 +46,26 @@ export function resolveLearningDeploymentPolicy(env = process.env) {
     normalizeString(env?.ZAKI_TENANT_DATA_ROOT);
   const sourceRepository = normalizeString(env?.ZAKI_LEARNING_ENGINE_SOURCE_REPOSITORY);
   const sourceCommit = normalizeString(env?.ZAKI_LEARNING_ENGINE_SOURCE_COMMIT);
+  const llmProvider =
+    normalizeString(env?.ZAKI_LEARNING_LLM_PROVIDER) ||
+    normalizeString(env?.LEARNING_ENGINE_LLM_BINDING) ||
+    normalizeString(env?.LLM_BINDING);
+  const llmModel =
+    normalizeString(env?.ZAKI_LEARNING_LLM_MODEL) ||
+    normalizeString(env?.LEARNING_ENGINE_LLM_MODEL) ||
+    normalizeString(env?.LLM_MODEL);
+  const embeddingProvider =
+    normalizeString(env?.ZAKI_LEARNING_EMBEDDING_PROVIDER) ||
+    normalizeString(env?.LEARNING_ENGINE_EMBEDDING_BINDING) ||
+    normalizeString(env?.EMBEDDING_BINDING);
+  const embeddingModel =
+    normalizeString(env?.ZAKI_LEARNING_EMBEDDING_MODEL) ||
+    normalizeString(env?.LEARNING_ENGINE_EMBEDDING_MODEL) ||
+    normalizeString(env?.EMBEDDING_MODEL);
+  const searchProvider =
+    normalizeString(env?.ZAKI_LEARNING_SEARCH_PROVIDER) ||
+    normalizeString(env?.LEARNING_ENGINE_SEARCH_PROVIDER) ||
+    normalizeString(env?.SEARCH_PROVIDER);
 
   return {
     zakiImageRefConfigured: Boolean(zakiImageRef),
@@ -58,6 +78,25 @@ export function resolveLearningDeploymentPolicy(env = process.env) {
     tenantDataRootConfigured: Boolean(tenantDataRoot),
     sourceRepositoryConfigured: Boolean(sourceRepository),
     sourceCommitPinned: /^[a-f0-9]{40,64}$/i.test(sourceCommit),
+    aiStackConfigured: Boolean(
+      llmProvider &&
+        llmModel &&
+        embeddingProvider &&
+        embeddingModel &&
+        searchProvider
+    ),
+    aiStack: {
+      llmProviderConfigured: Boolean(llmProvider),
+      llmModelConfigured: Boolean(llmModel),
+      embeddingProviderConfigured: Boolean(embeddingProvider),
+      embeddingModelConfigured: Boolean(embeddingModel),
+      searchProviderConfigured: Boolean(searchProvider),
+      llmProvider: llmProvider || "",
+      llmModel: llmModel || "",
+      embeddingProvider: embeddingProvider || "",
+      embeddingModel: embeddingModel || "",
+      searchProvider: searchProvider || "",
+    },
   };
 }
 
@@ -111,6 +150,12 @@ export function buildLearningDeploymentReadinessStatus({
       "Learning engine mirror repository and exact source commit must be recorded before rollout."
     ),
     buildGate(
+      "operator_ai_stack_configured",
+      !learningEnabled || policy.aiStackConfigured,
+      "Learning LLM, embedding, and search routing must be explicitly recorded as operator-managed deployment config.",
+      { aiStack: policy.aiStack }
+    ),
+    buildGate(
       "retention_policy_enabled",
       retentionEnabled,
       "Learning retention cleanup policy must remain enabled for hosted production."
@@ -142,6 +187,7 @@ export function buildLearningDeploymentReadinessStatus({
       ],
       operatorManagedSettings: [
         "LLM/model/provider routing",
+        "embedding and search provider routing",
         "learning engine internal token",
         "quota policy and unit-economics caps",
         "retention and backup policy",

@@ -40,6 +40,7 @@ describe("learning deployment readiness", () => {
       "zaki_image_immutable",
       "learning_engine_image_immutable",
       "learning_source_mirror_pinned",
+      "operator_ai_stack_configured",
       "disaster_recovery_ready",
     ]);
     expect(status.finalUserSetup.operatorManagedSettings).toContain("LLM/model/provider routing");
@@ -57,6 +58,11 @@ describe("learning deployment readiness", () => {
       ZAKI_LEARNING_ENGINE_SOURCE_REPOSITORY:
         "github.com/projectnuggets/zaki-learning-engine",
       ZAKI_LEARNING_ENGINE_SOURCE_COMMIT: "c".repeat(40),
+      ZAKI_LEARNING_LLM_PROVIDER: "together",
+      ZAKI_LEARNING_LLM_MODEL: "moonshotai/Kimi-K2.5",
+      ZAKI_LEARNING_EMBEDDING_PROVIDER: "together",
+      ZAKI_LEARNING_EMBEDDING_MODEL: "intfloat/multilingual-e5-large-instruct",
+      ZAKI_LEARNING_SEARCH_PROVIDER: "brave",
     };
 
     const status = buildLearningDeploymentReadinessStatus({
@@ -79,6 +85,7 @@ describe("learning deployment readiness", () => {
       learningImageRefImmutable: true,
       sourceRepositoryConfigured: true,
       sourceCommitPinned: true,
+      aiStackConfigured: true,
     });
   });
 
@@ -93,6 +100,11 @@ describe("learning deployment readiness", () => {
       ZAKI_LEARNING_ENGINE_SOURCE_REPOSITORY:
         "github.com/projectnuggets/zaki-learning-engine",
       ZAKI_LEARNING_ENGINE_SOURCE_COMMIT: "c".repeat(40),
+      ZAKI_LEARNING_LLM_PROVIDER: "together",
+      ZAKI_LEARNING_LLM_MODEL: "moonshotai/Kimi-K2.5",
+      ZAKI_LEARNING_EMBEDDING_PROVIDER: "together",
+      ZAKI_LEARNING_EMBEDDING_MODEL: "intfloat/multilingual-e5-large-instruct",
+      ZAKI_LEARNING_SEARCH_PROVIDER: "brave",
     };
 
     const status = buildLearningDeploymentReadinessStatus({
