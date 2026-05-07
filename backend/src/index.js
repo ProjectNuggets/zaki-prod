@@ -249,6 +249,13 @@ function normalizeEmailValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function parseEmailList(value) {
+  return String(value || "")
+    .split(",")
+    .map(normalizeEmailValue)
+    .filter(Boolean);
+}
+
 const app = express();
 app.set("trust proxy", TRUST_PROXY_SETTING);
 const billingHealth = createBillingHealthTracker();
@@ -439,7 +446,11 @@ const ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED =
   String(process.env.ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED || "true")
     .toLowerCase()
     .trim() !== "false";
-const superAdminEmailSet = new Set(["as@novanuggets.com"]);
+const superAdminEmailSet = new Set(
+  parseEmailList(process.env.ZAKI_SUPER_ADMIN_EMAILS).length > 0
+    ? parseEmailList(process.env.ZAKI_SUPER_ADMIN_EMAILS)
+    : ["as@novanuggets.com"]
+);
 const allowedOrigins = Array.from(
   new Set(
     [
