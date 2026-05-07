@@ -1838,6 +1838,12 @@ export type BrainGraphEdge =
       type: "typed";
       source: string;
       target: string;
+      // V1.11 (2026-05-07) — gateway now emits real per-edge confidence
+      // (LLM extractor's certainty, 0..1) and weight (vote count from
+      // re-extractions / community detection). Layout uses these as the
+      // relevance signal: tight pull on confident, multi-attestation
+      // edges; loose pull on weak ones.
+      confidence?: number;
       weight?: number;
       predicate?: string;
       label?: string;

@@ -303,7 +303,7 @@ export function BrainPage() {
               />
               <PanelToggle
                 icon={CircleDot}
-                label={t("brain.panel.orphans", { defaultValue: "Orphans" })}
+                label={t("brain.panel.orphans", { defaultValue: "Loose facts" })}
                 active={activePanel === "orphans"}
                 onClick={() =>
                   setActivePanel(activePanel === "orphans" ? null : "orphans")

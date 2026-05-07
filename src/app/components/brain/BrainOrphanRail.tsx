@@ -1,6 +1,14 @@
 // BrainOrphanRail — vertical list of brain-visible facts with no edges.
-// Consumes /brain/orphans. Click to drill into local-graph (with that orphan
-// as center, which will likely just show itself + nearest hits if any).
+// Consumes /brain/orphans. Click to drill into local-graph (with that
+// fact as center).
+//
+// V1.11 (2026-05-07) — UI label flipped from "Orphans" to "Loose facts"
+// per Nova: orphan is a programmer word that sounds broken/sad. The
+// fact isn't broken — the extractor just hasn't connected it to anything
+// else yet. "Loose" is honest about the state and inviting (the user
+// can drill in and tell ZAKI how it relates). Endpoint name +
+// component name + hook name kept as-is to avoid scope creep; only
+// user-visible strings change.
 
 import { formatDistanceToNowStrict } from "date-fns";
 import { useTranslation } from "react-i18next";
@@ -28,7 +36,7 @@ export function BrainOrphanRail({ userId, onPick }: Props) {
     >
       <header className="flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-white/55">
-          {t("brain.orphanRail.title", { defaultValue: "Orphans" })}
+          {t("brain.orphanRail.title", { defaultValue: "Loose facts" })}
         </h3>
         <span className="text-xs text-white/55">{orphansQuery.data?.stats.orphans ?? 0}</span>
       </header>
@@ -41,7 +49,7 @@ export function BrainOrphanRail({ userId, onPick }: Props) {
 
       {!orphansQuery.isLoading && list.length === 0 && (
         <p className="text-xs text-white/55">
-          {t("brain.orphanRail.empty", { defaultValue: "No orphan notes." })}
+          {t("brain.orphanRail.empty", { defaultValue: "No loose facts — every memory is connected." })}
         </p>
       )}
 
