@@ -82,10 +82,11 @@ const LEARNING_WS_QUOTA_FREE_TYPES = new Set([
 ]);
 const LEARNING_NOTEBOOK_ID_SEGMENT = "[^/?#]+";
 export const LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST = [
-  "email",
   "whatsapp",
   "telegram",
   "discord",
+  "email",
+  "slack",
 ];
 const LEARNING_TUTOR_AGENT_CHANNEL_SET = new Set(LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST);
 const LEARNING_TUTOR_AGENT_CHANNEL_GLOBAL_KEYS = new Set([

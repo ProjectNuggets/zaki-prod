@@ -309,10 +309,11 @@ describe("learning BFF contract", () => {
     ).toEqual({
       send_progress: true,
       send_tool_hints: false,
+      whatsapp: { enabled: true },
       telegram: { enabled: true },
       discord: { enabled: true },
-      whatsapp: { enabled: true },
       email: { enabled: true },
+      slack: { enabled: true },
     });
 
     expect(
@@ -329,10 +330,11 @@ describe("learning BFF contract", () => {
       })
     ).toEqual({
       channels: {
-        email: { display_name: "Email" },
         whatsapp: { display_name: "WhatsApp" },
         telegram: { display_name: "Telegram" },
         discord: { display_name: "Discord" },
+        email: { display_name: "Email" },
+        slack: { display_name: "Slack" },
       },
       global: { json_schema: {} },
     });
@@ -354,6 +356,7 @@ describe("learning BFF contract", () => {
       bot_id: "bot-1",
       channels: {
         telegram: { enabled: true, token: "secret" },
+        slack: { enabled: true, bot_token: "secret" },
         send_progress: true,
       },
     });
@@ -384,6 +387,7 @@ describe("learning BFF contract", () => {
     ).toEqual({
       telegram: { enabled: true, token: "old-telegram", allow_from: ["1"] },
       email: { enabled: true, smtp_password: "old-smtp", imap_password: "new-imap" },
+      slack: { enabled: true, bot_token: "old-slack" },
       send_progress: false,
     });
   });
