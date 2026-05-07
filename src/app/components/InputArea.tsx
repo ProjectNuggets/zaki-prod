@@ -1,4 +1,4 @@
-import { Plus, ArrowUp, Sparkles, Paperclip, Search, GraduationCap, File as FileIcon, FileText, X, Zap, Check, Mic, Square } from "lucide-react";
+import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -131,13 +131,15 @@ export function InputArea({
     typeof zakiContextPressurePercent === "number" &&
     zakiContextPressurePercent > 0;
   const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
-  // M3: tiered color by pressure: ≤50% green, ≤75% amber, >75% brand red
+  // M3: tiered color by pressure, brand-coherent: ≤50% teal (success),
+  // ≤75% amber (warning), >75% red (brand). Resolves via CSS variables so
+  // theme changes propagate.
   const pressureColor =
     zakiContextValue <= 50
-      ? "#22c55e"   // green
+      ? "var(--zaki-success)"
       : zakiContextValue <= 75
-        ? "#f59e0b" // amber
-        : "#f10202"; // red (brand)
+        ? "var(--zaki-warning)"
+        : "var(--zaki-brand)";
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -758,49 +760,6 @@ export function InputArea({
                       <Paperclip className="size-4 text-zaki-muted" />
                       {t("input.menu.uploadFile")}
                     </button>
-                    <button
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        if (!isOnboardingControlsLocked) {
-                          setMenuOpen(false);
-                        }
-                        toast.info(t("input.menu.comingSoonToast"));
-                      }}
-                      data-onboarding-id="chat-control-study-learn"
-                    >
-                      <GraduationCap className="size-4 text-zaki-muted" />
-                      <span className="flex-1 text-left rtl:text-right">{t("input.menu.studyLearn")}</span>
-                      <span className={cn(
-                        "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
-                        isRtl ? "mr-auto" : "ml-auto"
-                      )}>
-                        {t("input.menu.comingSoonPill")}
-                      </span>
-                    </button>
-                    <div className="my-1 h-px bg-zaki-subtle" />
-                    <button
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary transition-colors hover:bg-zaki-hover"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        if (!isOnboardingControlsLocked) {
-                          setMenuOpen(false);
-                        }
-                        toast.info(t("input.menu.comingSoonToast"));
-                      }}
-                      data-onboarding-id="chat-control-generate-image"
-                    >
-                      <Sparkles className="size-4 text-zaki-muted" />
-                      <span className="flex-1 text-left rtl:text-right">{t("input.menu.generateImage")}</span>
-                      <span className={cn(
-                        "inline-flex shrink-0 items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted",
-                        isRtl ? "mr-auto" : "ml-auto"
-                      )}>
-                        {t("input.menu.comingSoonPill")}
-                      </span>
-                    </button>
                   </>
                 )}
               </div>
@@ -994,9 +953,9 @@ export function InputArea({
             className={cn(
               "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
               quotaBadge.tone === "danger"
-                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300"
+                ? "border-zaki-strong bg-zaki-error text-zaki-error"
                 : quotaBadge.tone === "warning"
-                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
+                  ? "border-zaki-warning bg-zaki-warning text-zaki-warning"
                   : "border-zaki-strong bg-zaki-elevated text-zaki-muted"
             )}
           >

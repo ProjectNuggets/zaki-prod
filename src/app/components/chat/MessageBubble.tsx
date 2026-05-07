@@ -150,7 +150,7 @@ export function MessageBubble({
                       isRtl ? "rounded-bl-md" : "rounded-br-md"
                     )
                   : isAssistantError
-                    ? "zaki-assistant-bubble w-full rounded-zaki-xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
+                    ? "zaki-assistant-bubble w-full rounded-zaki-xl border border-zaki-strong bg-zaki-error px-4 py-3 text-zaki-error"
                     : "zaki-assistant-bubble w-full bg-transparent px-0 py-0 text-zaki-primary"
               )}
             >

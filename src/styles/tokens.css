@@ -117,7 +117,7 @@
   --zaki-error: var(--zaki-primary-700);
   --zaki-error-bg: rgba(241, 2, 2, 0.08);
   --zaki-warning: #f59e0b;
-  --zaki-warning-bg: #fffbeb;
+  --zaki-warning-bg: rgba(245, 158, 11, 0.12);
   --zaki-info: var(--zaki-secondary-700);
   --zaki-info-bg: rgba(41, 195, 154, 0.08);
   --zaki-info-border: rgba(41, 195, 154, 0.20);
@@ -409,6 +409,9 @@ code, pre, kbd, samp {
 .hover\:bg-zaki-accent-hover:hover { background-color: var(--zaki-accent-hover); }
 .bg-zaki-error { background-color: var(--zaki-error-bg); }
 .bg-zaki-success { background-color: var(--zaki-success-bg); }
+.bg-zaki-warning { background-color: var(--zaki-warning-bg); }
+.text-zaki-warning { color: var(--zaki-warning); }
+.border-zaki-warning { border-color: var(--zaki-warning); }
 .bg-zaki-bubble-user { background-color: var(--zaki-bubble-user); }
 .text-zaki-bubble-user { color: var(--zaki-bubble-user-text); }
 
