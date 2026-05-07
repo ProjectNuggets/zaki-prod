@@ -295,11 +295,45 @@ export function createLearningNotebook(payload: LearningJson) {
   });
 }
 
+export function updateLearningNotebook(notebookId: string, payload: LearningJson) {
+  return learningRequest<unknown>(`/api/learning/notebooks/${encodeURIComponent(notebookId)}`, {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export function deleteLearningNotebook(notebookId: string) {
+  return learningRequest<unknown>(`/api/learning/notebooks/${encodeURIComponent(notebookId)}`, {
+    method: "DELETE",
+  });
+}
+
 export function addLearningNotebookRecord(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/notebooks/records", {
     method: "POST",
     body: payload,
   });
+}
+
+export function updateLearningNotebookRecord(
+  notebookId: string,
+  recordId: string,
+  payload: LearningJson,
+) {
+  return learningRequest<unknown>(
+    `/api/learning/notebooks/${encodeURIComponent(notebookId)}/records/${encodeURIComponent(recordId)}`,
+    {
+      method: "PUT",
+      body: payload,
+    },
+  );
+}
+
+export function deleteLearningNotebookRecord(notebookId: string, recordId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/notebooks/${encodeURIComponent(notebookId)}/records/${encodeURIComponent(recordId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function listLearningCoWriterDocuments() {

@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   AtSign,
   BarChart3,
@@ -16,6 +17,7 @@ import {
   Brain,
   BrainCircuit,
   ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Clapperboard,
   ClipboardList,
@@ -25,6 +27,7 @@ import {
   Database,
   Download,
   Eraser,
+  ExternalLink,
   FileSearch,
   FileText,
   FolderOpen,
@@ -80,6 +83,8 @@ import {
   createLearningQuestionCategory,
   createLearningSkill,
   createLearningTutorAgent,
+  deleteLearningNotebook,
+  deleteLearningNotebookRecord,
   deleteLearningQuestionCategory,
   deleteLearningQuestionEntry,
   deleteLearningKnowledge,
@@ -160,6 +165,7 @@ type LearningTab =
   | "workspaces";
 
 type Item = Record<string, unknown>;
+type NotebookCreateDraft = { name: string; description: string };
 type CoWriterCreateDraft = { title?: string; content: string };
 type LearningObjectType =
   | "source"
@@ -660,8 +666,13 @@ export function LearningPage() {
   });
 
   const createNotebook = useMutation({
-    mutationFn: (name: string) =>
-      createLearningNotebook({ name, description: "", color: "#f10202", icon: "book" }),
+    mutationFn: ({ name, description }: NotebookCreateDraft) =>
+      createLearningNotebook({
+        name,
+        description,
+        color: "#f10202",
+        icon: "book",
+      }),
     onSuccess: (payload) => {
       setLastResult(payload);
       setNotebookName("");
@@ -812,9 +823,6 @@ export function LearningPage() {
             setNotebookName={setNotebookName}
             createNotebook={createNotebook}
             items={notebookItems}
-            onOpen={(item) =>
-              openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
-            }
           />
         ) : tab === "writer" ? (
           <WriterPanel
@@ -845,9 +853,6 @@ export function LearningPage() {
             skillItems={skillItems}
             memory={memory.data}
             saveMemory={saveMemory}
-            onOpenNotebook={(item) =>
-              openObject("notebook", item, `notebook-${notebookItems.indexOf(item) + 1}`)
-            }
             onOpenQuestion={(item) =>
               openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
             }
@@ -1768,6 +1773,8 @@ function LearningChatPanel({
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [skillsAutoMode, setSkillsAutoMode] = useState(false);
   const [selectedMemoryFiles, setSelectedMemoryFiles] = useState<LearningMemoryFile[]>([]);
+  const [saveNotebookOpen, setSaveNotebookOpen] = useState(false);
+  const [saveNotebookIds, setSaveNotebookIds] = useState<string[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [socketAuthReady, setSocketAuthReady] = useState(false);
@@ -1784,6 +1791,7 @@ function LearningChatPanel({
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!capabilityPreset) {
@@ -1856,6 +1864,12 @@ function LearningChatPanel({
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
+
+  useEffect(() => {
+    if (!saveNotebookOpen || saveNotebookIds.length || !notebookItems.length) return;
+    const firstId = itemId(notebookItems[0]!, "notebook-1");
+    if (firstId) setSaveNotebookIds([firstId]);
+  }, [notebookItems, saveNotebookIds.length, saveNotebookOpen]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -2324,6 +2338,51 @@ function LearningChatPanel({
 
   const hasMessages = messages.length > 0 || thinking.length > 0;
 
+  const buildChatMarkdown = () =>
+    messages
+      .map((message) => {
+        const speaker =
+          message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "System";
+        return `## ${speaker}\n\n${message.content}`;
+      })
+      .join("\n\n");
+
+  const notebookRecordType = (): "solve" | "question" | "research" | "chat" => {
+    if (capability === "deep_solve") return "solve";
+    if (capability === "deep_question") return "question";
+    if (capability === "deep_research") return "research";
+    return "chat";
+  };
+
+  const saveChatToNotebook = useMutation({
+    mutationFn: () => {
+      if (!saveNotebookIds.length) throw new Error("Choose at least one notebook.");
+      const firstUserMessage = messages.find((message) => message.role === "user");
+      const titleSource = textOf(firstUserMessage?.content, activeCapability.label);
+      return addLearningNotebookRecord({
+        notebook_ids: saveNotebookIds,
+        record_type: notebookRecordType(),
+        title: titleSource.slice(0, 120),
+        summary: "",
+        user_query: textOf(firstUserMessage?.content, titleSource),
+        output: buildChatMarkdown(),
+        metadata: {
+          source: "zaki_learn",
+          session_id: sessionId,
+          capability,
+          capability_label: activeCapability.label,
+        },
+        kb_name: kbName || null,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Saved to notebook");
+      setSaveNotebookOpen(false);
+      void queryClient.invalidateQueries({ queryKey: learningKeys.notebooks });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const handleNewChat = () => {
     attachments.forEach((attachment) => {
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
@@ -2340,13 +2399,7 @@ function LearningChatPanel({
 
   const handleDownloadMarkdown = () => {
     if (!messages.length) return;
-    const markdown = messages
-      .map((message) => {
-        const speaker =
-          message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "System";
-        return `## ${speaker}\n\n${message.content}`;
-      })
-      .join("\n\n");
+    const markdown = buildChatMarkdown();
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -2365,6 +2418,7 @@ function LearningChatPanel({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setSaveNotebookOpen(true)}
             disabled={!messages.length}
             className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -2979,6 +3033,110 @@ function LearningChatPanel({
       </div>
         </div>
       </div>
+      {saveNotebookOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-base shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-zaki-border px-5 py-4">
+              <div>
+                <h2 className="text-sm font-semibold text-zaki-text">Save to Notebook</h2>
+                <p className="mt-1 text-xs leading-relaxed text-zaki-muted">
+                  Choose one or more notebooks. A summary will be generated by the learning engine.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSaveNotebookOpen(false)}
+                className="rounded-zaki-md p-1 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                title="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto px-5 py-4">
+              {notebookItems.length ? (
+                <div className="space-y-2">
+                  {notebookItems.map((notebook, index) => {
+                    const id = itemId(notebook, `notebook-${index + 1}`);
+                    const selected = saveNotebookIds.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setSaveNotebookIds((current) =>
+                            current.includes(id)
+                              ? current.filter((value) => value !== id)
+                              : [...current, id],
+                          );
+                        }}
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-zaki-lg border p-3 text-left transition-colors",
+                          selected
+                            ? "border-zaki-brand/50 bg-zaki-brand/10"
+                            : "border-zaki-border bg-zaki-raised hover:bg-zaki-hover",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded border",
+                            selected
+                              ? "border-zaki-brand bg-zaki-brand text-white"
+                              : "border-zaki-border bg-zaki-base",
+                          )}
+                        >
+                          {selected ? <CheckCircle2 className="size-3" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-zaki-text">
+                            {itemTitle(notebook, id)}
+                          </span>
+                          <span className="mt-1 line-clamp-2 block text-xs leading-relaxed text-zaki-muted">
+                            {textOf(notebook.description) || "No description."}
+                          </span>
+                          <span className="mt-2 block text-[11px] text-zaki-muted">
+                            {displayCount(notebook) || "0"} records
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-zaki-lg border border-dashed border-zaki-border px-6 py-10 text-center text-sm text-zaki-muted">
+                  Create a notebook first, then return here to save this chat.
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-zaki-border px-5 py-4">
+              <span className="text-xs text-zaki-muted">
+                {saveNotebookIds.length} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSaveNotebookOpen(false)}
+                  className="h-9 rounded-zaki-md border border-zaki-border px-3 text-sm font-medium text-zaki-text hover:bg-zaki-hover"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!messages.length || !saveNotebookIds.length || saveChatToNotebook.isPending}
+                  onClick={() => saveChatToNotebook.mutate()}
+                  className="inline-flex h-9 items-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {saveChatToNotebook.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <NotebookPen className="size-4" />
+                  )}
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <LearningSpacePickerModal
         open={spacePickerOpen}
         onClose={() => setSpacePickerOpen(null)}
@@ -3016,12 +3174,11 @@ function LearningSpacePanel({
   skillItems,
   memory,
   saveMemory,
-  onOpenNotebook,
   onOpenQuestion,
 }: {
   notebookName: string;
   setNotebookName: (value: string) => void;
-  createNotebook: UseMutationResult<unknown, Error, string, unknown>;
+  createNotebook: UseMutationResult<unknown, Error, NotebookCreateDraft, unknown>;
   sessionItems: Item[];
   notebookItems: Item[];
   questionItems: Item[];
@@ -3033,7 +3190,6 @@ function LearningSpacePanel({
     { file: "summary" | "profile"; content: string },
     unknown
   >;
-  onOpenNotebook: (item: Item) => void;
   onOpenQuestion: (item: Item) => void;
 }) {
   const memoryRecord = asRecord(memory);
@@ -3301,7 +3457,6 @@ function LearningSpacePanel({
               setNotebookName={setNotebookName}
               createNotebook={createNotebook}
               items={notebookItems}
-              onOpen={onOpenNotebook}
             />
           </SpaceContentBlock>
         ) : activeSection === "question_bank" ? (
@@ -4178,41 +4333,378 @@ function NotebooksPanel({
   setNotebookName,
   createNotebook,
   items,
-  onOpen,
 }: {
   notebookName: string;
   setNotebookName: (value: string) => void;
-  createNotebook: UseMutationResult<unknown, Error, string, unknown>;
+  createNotebook: UseMutationResult<unknown, Error, NotebookCreateDraft, unknown>;
   items: Item[];
-  onOpen: (item: Item) => void;
 }) {
-  return (
-    <Section title="Saved notebooks" subtitle="Organize learning outputs, summaries, and records.">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row">
-        <input
-          value={notebookName}
-          onChange={(event) => setNotebookName(event.target.value)}
-          placeholder="Notebook name"
-          className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <button
-          type="button"
-          disabled={!notebookName.trim() || createNotebook.isPending}
-          onClick={() => createNotebook.mutate(notebookName.trim())}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <Plus className="size-4" />
-          Create notebook
-        </button>
-      </div>
-      <ItemList
-        items={items}
-        empty="No notebooks returned yet."
-        variant="notebook"
-        onOpen={onOpen}
-      />
-    </Section>
+  const queryClient = useQueryClient();
+  const [notebookDescription, setNotebookDescription] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedId && items.some((item, index) => itemId(item, `notebook-${index + 1}`) === selectedId)) {
+      return;
+    }
+    const first = items[0];
+    setSelectedId(first ? itemId(first, "notebook-1") : "");
+    setExpandedRecordId(null);
+  }, [items, selectedId]);
+
+  const selectedSummary = useMemo(
+    () => items.find((item, index) => itemId(item, `notebook-${index + 1}`) === selectedId) ?? null,
+    [items, selectedId],
   );
+
+  const detailQuery = useQuery({
+    queryKey: ["learning", "notebook", selectedId],
+    enabled: Boolean(selectedId),
+    queryFn: () => getLearningNotebook(selectedId),
+    retry: 1,
+  });
+
+  const selectedDetail = asRecord(detailQuery.data ?? selectedSummary ?? {});
+  const records = itemList(selectedDetail, ["records", "items"]);
+
+  const deleteNotebook = useMutation({
+    mutationFn: (notebookId: string) => deleteLearningNotebook(notebookId),
+    onSuccess: (_, notebookId) => {
+      if (selectedId === notebookId) {
+        setSelectedId("");
+        setExpandedRecordId(null);
+      }
+      toast.success("Notebook deleted");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.notebooks });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteRecord = useMutation({
+    mutationFn: ({ notebookId, recordId }: { notebookId: string; recordId: string }) =>
+      deleteLearningNotebookRecord(notebookId, recordId),
+    onSuccess: () => {
+      setExpandedRecordId(null);
+      toast.success("Record removed");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.notebooks });
+      void queryClient.invalidateQueries({ queryKey: ["learning", "notebook", selectedId] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleCreate = () => {
+    const name = notebookName.trim();
+    if (!name) return;
+    createNotebook.mutate(
+      { name, description: notebookDescription.trim() },
+      {
+        onSuccess: () => setNotebookDescription(""),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <Plus className="size-4 text-zaki-muted" />
+          <h2 className="text-sm font-semibold text-zaki-text">Create notebook</h2>
+          <span className="ml-1 text-xs text-zaki-muted">Give it a name and short description.</span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+          <input
+            value={notebookName}
+            onChange={(event) => setNotebookName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && notebookName.trim()) handleCreate();
+            }}
+            placeholder="Notebook name"
+            className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand"
+          />
+          <input
+            value={notebookDescription}
+            onChange={(event) => setNotebookDescription(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && notebookName.trim()) handleCreate();
+            }}
+            placeholder="Description"
+            className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand"
+          />
+          <button
+            type="button"
+            disabled={!notebookName.trim() || createNotebook.isPending}
+            onClick={handleCreate}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {createNotebook.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            Create
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <NotebookPen className="size-4 text-zaki-muted" />
+            <h2 className="text-sm font-semibold text-zaki-text">Your notebooks</h2>
+            <span className="rounded-full bg-zaki-hover px-1.5 py-0.5 text-[10px] text-zaki-muted">
+              {items.length}
+            </span>
+          </div>
+          <span className="text-xs text-zaki-muted">Click a notebook to inspect its records.</span>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="space-y-2 overflow-y-auto pr-1 xl:sticky xl:top-8 xl:max-h-[calc(100vh-12rem)]">
+            {items.length ? (
+              items.map((notebook, index) => {
+                const id = itemId(notebook, `notebook-${index + 1}`);
+                const active = selectedId === id;
+                const name = itemTitle(notebook, id);
+                return (
+                  <div
+                    key={id}
+                    className={cn(
+                      "group relative w-full rounded-zaki-lg border p-3.5 text-left transition-colors",
+                      active
+                        ? "border-zaki-brand/40 bg-zaki-brand/10 shadow-sm"
+                        : "border-zaki-border bg-zaki-raised hover:bg-zaki-hover",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(id);
+                        setExpandedRecordId(null);
+                      }}
+                      className="block w-full text-left"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div
+                          className="mt-1.5 size-2.5 shrink-0 rounded-full ring-2 ring-zaki-base"
+                          style={{ backgroundColor: textOf(notebook.color, "#f10202") }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-zaki-text">{name}</div>
+                          <p className="mt-0.5 line-clamp-1 min-h-[1.1em] text-xs leading-relaxed text-zaki-muted">
+                            {textOf(notebook.description) || <span className="italic opacity-70">No description.</span>}
+                          </p>
+                          <div className="mt-2 flex items-center justify-between gap-2 text-[10.5px] tabular-nums text-zaki-muted">
+                            <span>{displayCount(notebook) || "0"} records</span>
+                            <span className="truncate text-right">
+                              {relativeTime(notebook.updated_at) || ""}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleteNotebook.isPending}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (window.confirm(`Delete notebook "${name}"?`)) deleteNotebook.mutate(id);
+                      }}
+                      title="Delete"
+                      className="absolute right-1.5 top-1.5 rounded-zaki-md p-1.5 text-zaki-muted opacity-0 transition-opacity hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-40 group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded-zaki-lg border border-dashed border-zaki-border px-6 py-10 text-center text-sm text-zaki-muted">
+                No notebooks yet. Create one to organize outputs.
+              </div>
+            )}
+          </div>
+
+          <div className="flex min-h-[560px] flex-col overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 xl:h-[calc(100vh-12rem)]">
+            {detailQuery.isLoading ? (
+              <div className="flex min-h-[320px] items-center justify-center">
+                <Loader2 className="size-5 animate-spin text-zaki-muted" />
+              </div>
+            ) : selectedId && Object.keys(selectedDetail).length ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="mb-3 flex shrink-0 items-center justify-between gap-4 pb-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: textOf(selectedDetail.color, "#f10202") }}
+                    />
+                    <h3 className="truncate text-[15px] font-semibold text-zaki-text">
+                      {itemTitle(selectedDetail, itemTitle(selectedSummary ?? {}, "Notebook"))}
+                    </h3>
+                    {textOf(selectedDetail.description) ? (
+                      <span className="hidden truncate text-xs text-zaki-muted md:inline">
+                        {textOf(selectedDetail.description)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="shrink-0 text-[11px] tabular-nums text-zaki-muted">
+                    {records.length} records
+                  </span>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="divide-y divide-zaki-border">
+                    {records.length ? (
+                      records.map((record, index) => {
+                        const id = itemId(record, `record-${index + 1}`);
+                        const type = textOf(record.type, "record");
+                        const badge = notebookRecordBadge(type);
+                        const BadgeIcon = badge.icon;
+                        const expanded = expandedRecordId === id;
+                        const metadata = asRecord(record.metadata);
+                        const sessionId = textOf(metadata.session_id);
+                        return (
+                          <div key={id} className="group">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRecordId(expanded ? null : id)}
+                              className="flex w-full items-center gap-3 px-1 py-3.5 text-left transition-colors hover:bg-zaki-hover/70"
+                            >
+                              <span className="shrink-0 text-zaki-muted">
+                                {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                              </span>
+                              <span
+                                className={cn(
+                                  "inline-flex shrink-0 items-center gap-1 rounded-zaki-md px-2 py-0.5 text-[11px] font-medium",
+                                  badge.className,
+                                )}
+                              >
+                                <BadgeIcon className="size-3" />
+                                {badge.label}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-zaki-text">
+                                {itemTitle(record, "Untitled record")}
+                              </span>
+                              <span className="shrink-0 text-[11px] tabular-nums text-zaki-muted">
+                                {relativeTime(record.created_at) || ""}
+                              </span>
+                            </button>
+
+                            {expanded ? (
+                              <div className="pb-4 pl-8 pr-1">
+                                {textOf(record.summary) ? (
+                                  <p className="mb-3 text-sm leading-6 text-zaki-text/85">
+                                    {textOf(record.summary)}
+                                  </p>
+                                ) : null}
+                                {type !== "chat" && textOf(record.user_query) ? (
+                                  <div className="mb-3 flex items-baseline gap-2 text-xs">
+                                    <span className="shrink-0 font-medium text-zaki-muted">Query:</span>
+                                    <span className="text-zaki-text/70">{textOf(record.user_query)}</span>
+                                  </div>
+                                ) : null}
+                                <div className="mb-3 flex flex-wrap items-center gap-2">
+                                  {type === "chat" && sessionId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const params = new URLSearchParams(window.location.search);
+                                        params.set("view", "chat");
+                                        params.set("session", sessionId);
+                                        window.history.pushState(null, "", `/learn?${params.toString()}`);
+                                      }}
+                                      className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                                    >
+                                      <ExternalLink className="size-3.5" />
+                                      Open chat session
+                                      <ArrowRight className="size-3.5" />
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    disabled={deleteRecord.isPending}
+                                    onClick={() => {
+                                      if (window.confirm("Remove this record?")) {
+                                        deleteRecord.mutate({ notebookId: selectedId, recordId: id });
+                                      }
+                                    }}
+                                    className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-rose-200 px-3 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                    Remove
+                                  </button>
+                                </div>
+                                <div className="learning-markdown max-h-[320px] overflow-y-auto rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-xs leading-5 text-zaki-text">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {textOf(record.output) || "_No output saved._"}
+                                  </ReactMarkdown>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="px-6 py-12 text-center text-sm text-zaki-muted">
+                        This notebook is empty for now.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-h-[320px] items-center justify-center rounded-zaki-lg border border-dashed border-zaki-border text-sm text-zaki-muted">
+                Select a notebook to inspect its saved records.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function notebookRecordBadge(type: string): { label: string; className: string; icon: LucideIcon } {
+  switch (type) {
+    case "chat":
+      return {
+        label: "Chat",
+        className: "bg-sky-100 text-sky-700",
+        icon: MessageSquare,
+      };
+    case "tutorbot":
+      return {
+        label: "TutorBot",
+        className: "bg-violet-100 text-violet-700",
+        icon: Bot,
+      };
+    case "research":
+      return {
+        label: "Research",
+        className: "bg-emerald-100 text-emerald-700",
+        icon: Search,
+      };
+    case "co_writer":
+      return {
+        label: "Co-Writer",
+        className: "bg-amber-100 text-amber-700",
+        icon: Pencil,
+      };
+    case "solve":
+      return {
+        label: "Solve",
+        className: "bg-blue-100 text-blue-700",
+        icon: BrainCircuit,
+      };
+    case "question":
+      return {
+        label: "Question",
+        className: "bg-rose-100 text-rose-700",
+        icon: ClipboardList,
+      };
+    default:
+      return {
+        label: type,
+        className: "bg-zaki-hover text-zaki-muted",
+        icon: NotebookPen,
+      };
+  }
 }
 
 function WriterPanel({
