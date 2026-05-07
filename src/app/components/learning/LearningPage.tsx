@@ -15,6 +15,7 @@ import {
   ChevronDown,
   CheckCircle2,
   Clapperboard,
+  ClipboardList,
   Clock3,
   Code2,
   Copy,
@@ -25,12 +26,14 @@ import {
   GraduationCap,
   Globe,
   Heart,
+  History,
   Image,
   Layers,
   Lightbulb,
   Loader2,
   MessageSquare,
   Microscope,
+  NotebookPen,
   Paperclip,
   PenLine,
   Plus,
@@ -42,6 +45,7 @@ import {
   Star,
   Trash2,
   Upload,
+  Wand2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -699,6 +703,7 @@ export function LearningPage() {
             notebookName={notebookName}
             setNotebookName={setNotebookName}
             createNotebook={createNotebook}
+            sessionItems={sessionItems}
             notebookItems={notebookItems}
             questionItems={questionItems}
             skillItems={skillItems}
@@ -2830,6 +2835,7 @@ function LearningSpacePanel({
   notebookName,
   setNotebookName,
   createNotebook,
+  sessionItems,
   notebookItems,
   questionItems,
   skillItems,
@@ -2841,6 +2847,7 @@ function LearningSpacePanel({
   notebookName: string;
   setNotebookName: (value: string) => void;
   createNotebook: UseMutationResult<unknown, Error, string, unknown>;
+  sessionItems: Item[];
   notebookItems: Item[];
   questionItems: Item[];
   skillItems: Item[];
@@ -2855,8 +2862,48 @@ function LearningSpacePanel({
   onOpenQuestion: (item: Item) => void;
 }) {
   const memoryRecord = asRecord(memory);
+  const [activeSection, setActiveSection] = useState<
+    "chat_history" | "notebooks" | "question_bank" | "skills" | "memory"
+  >("notebooks");
   const [summaryDraft, setSummaryDraft] = useState("");
   const [profileDraft, setProfileDraft] = useState("");
+  const spaceItems = [
+    {
+      key: "chat_history" as const,
+      label: "Chat History",
+      description: "Review and reopen previous conversations.",
+      icon: History,
+      count: sessionItems.length,
+    },
+    {
+      key: "notebooks" as const,
+      label: "Notebooks",
+      description: "Organize saved outputs from chat, research, Co-Writer, and more.",
+      icon: NotebookPen,
+      count: notebookItems.length,
+    },
+    {
+      key: "question_bank" as const,
+      label: "Question Bank",
+      description: "Review and organize quiz questions across sessions.",
+      icon: ClipboardList,
+      count: questionItems.length,
+    },
+    {
+      key: "skills" as const,
+      label: "Skills",
+      description: "Behavior playbooks that guide chat responses.",
+      icon: Wand2,
+      count: skillItems.length,
+    },
+    {
+      key: "memory" as const,
+      label: "Memory",
+      description: "Long-form memory the assistant carries across sessions.",
+      icon: Brain,
+      count: 2,
+    },
+  ];
 
   useEffect(() => {
     setSummaryDraft(textOf(memoryRecord.summary));
@@ -2864,65 +2911,205 @@ function LearningSpacePanel({
   }, [memoryRecord.summary, memoryRecord.profile]);
 
   return (
-    <>
-      <NotebooksPanel
-        notebookName={notebookName}
-        setNotebookName={setNotebookName}
-        createNotebook={createNotebook}
-        items={notebookItems}
-        onOpen={onOpenNotebook}
-      />
-      <ReviewPanel items={questionItems} onOpen={onOpenQuestion} />
-      <Section title="Skills" subtitle="User-authored learning playbooks available to learning chat.">
-        <ItemList
-          items={skillItems}
-          empty="No learning skills returned yet."
-          variant="generic"
-        />
-      </Section>
-      <Section title="Memory" subtitle="Learning summary and profile memory are user-managed.">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-              Summary
-            </label>
-            <textarea
-              value={summaryDraft}
-              onChange={(event) => setSummaryDraft(event.target.value)}
-              className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-              placeholder="Learning summary memory"
-            />
-            <button
-              type="button"
-              disabled={saveMemory.isPending}
-              onClick={() => saveMemory.mutate({ file: "summary", content: summaryDraft })}
-              className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              Save summary
-            </button>
-          </div>
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-              Profile
-            </label>
-            <textarea
-              value={profileDraft}
-              onChange={(event) => setProfileDraft(event.target.value)}
-              className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-              placeholder="Learning profile memory"
-            />
-            <button
-              type="button"
-              disabled={saveMemory.isPending}
-              onClick={() => saveMemory.mutate({ file: "profile", content: profileDraft })}
-              className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              Save profile
-            </button>
+    <div className="flex h-full min-h-0 bg-zaki-base">
+      <aside className="flex h-full w-[224px] shrink-0 flex-col border-r border-zaki-border bg-zaki-raised">
+        <div className="flex items-center gap-2.5 border-b border-zaki-border px-4 py-4">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-zaki-lg border border-zaki-border bg-zaki-base text-zaki-text">
+            <Layers className="size-3.5" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-[15px] font-semibold leading-tight tracking-tight text-zaki-text">
+              Space
+            </h1>
+            <p className="mt-0.5 line-clamp-1 text-[10.5px] leading-snug text-zaki-muted">
+              Your personal learning library.
+            </p>
           </div>
         </div>
-      </Section>
-    </>
+
+        <nav className="flex-1 space-y-0.5 px-2 py-3">
+          {spaceItems.map(({ key, label, description, icon: Icon, count }) => {
+            const active = activeSection === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                title={description}
+                onClick={() => setActiveSection(key)}
+                className={cn(
+                  "group flex h-12 w-full items-center gap-2.5 rounded-zaki-lg px-2.5 text-left transition-colors",
+                  active
+                    ? "bg-zaki-hover text-zaki-text"
+                    : "text-zaki-muted hover:bg-zaki-hover/70 hover:text-zaki-text",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-7 shrink-0 items-center justify-center rounded-zaki-lg border transition-colors",
+                    active
+                      ? "border-zaki-border bg-zaki-base text-zaki-text shadow-sm"
+                      : "border-zaki-border bg-zaki-base/60 text-zaki-muted group-hover:text-zaki-text",
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight tracking-tight">
+                  {label}
+                </span>
+                <span className="rounded-full bg-zaki-base px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                  {count}
+                </span>
+                {active ? (
+                  <span className="h-4 w-0.5 shrink-0 rounded-full bg-zaki-brand" />
+                ) : null}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+        {activeSection === "chat_history" ? (
+          <SpaceContentBlock
+            icon={History}
+            title="Chat History"
+            description="Browse and reopen previous conversations from your learning space."
+            count={`${sessionItems.length} conversations`}
+          >
+            <ItemList
+              items={sessionItems}
+              empty="No conversations yet."
+              variant="generic"
+            />
+          </SpaceContentBlock>
+        ) : activeSection === "notebooks" ? (
+          <SpaceContentBlock
+            icon={NotebookPen}
+            title="Notebooks"
+            description="Save and organize outputs from chat, research, and Co-Writer sessions into a personal library."
+            count={`${notebookItems.length} notebooks`}
+          >
+            <NotebooksPanel
+              notebookName={notebookName}
+              setNotebookName={setNotebookName}
+              createNotebook={createNotebook}
+              items={notebookItems}
+              onOpen={onOpenNotebook}
+            />
+          </SpaceContentBlock>
+        ) : activeSection === "question_bank" ? (
+          <SpaceContentBlock
+            icon={ClipboardList}
+            title="Question Bank"
+            description="Review and organize quiz questions across sessions."
+            count={`${questionItems.length} questions`}
+          >
+            <ReviewPanel items={questionItems} onOpen={onOpenQuestion} />
+          </SpaceContentBlock>
+        ) : activeSection === "skills" ? (
+          <SpaceContentBlock
+            icon={Wand2}
+            title="Skills"
+            description="Behavior playbooks that guide chat responses."
+            count={`${skillItems.length} skills`}
+          >
+            <ItemList
+              items={skillItems}
+              empty="No learning skills returned yet."
+              variant="generic"
+            />
+          </SpaceContentBlock>
+        ) : (
+          <SpaceContentBlock
+            icon={Brain}
+            title="Memory"
+            description="Long-form memory the assistant carries across sessions."
+            count="2 files"
+          >
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                  Summary
+                </label>
+                <textarea
+                  value={summaryDraft}
+                  onChange={(event) => setSummaryDraft(event.target.value)}
+                  className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  placeholder="Learning summary memory"
+                />
+                <button
+                  type="button"
+                  disabled={saveMemory.isPending}
+                  onClick={() => saveMemory.mutate({ file: "summary", content: summaryDraft })}
+                  className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Save summary
+                </button>
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                  Profile
+                </label>
+                <textarea
+                  value={profileDraft}
+                  onChange={(event) => setProfileDraft(event.target.value)}
+                  className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  placeholder="Learning profile memory"
+                />
+                <button
+                  type="button"
+                  disabled={saveMemory.isPending}
+                  onClick={() => saveMemory.mutate({ file: "profile", content: profileDraft })}
+                  className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Save profile
+                </button>
+              </div>
+            </div>
+          </SpaceContentBlock>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function SpaceContentBlock({
+  icon: Icon,
+  title,
+  description,
+  count,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  count: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-4 border-b border-zaki-border pb-5 md:flex-row md:items-end md:justify-between">
+        <div className="flex items-start gap-3.5">
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-zaki-lg border border-zaki-border bg-zaki-raised text-zaki-text shadow-sm">
+            <Icon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[19px] font-semibold leading-tight tracking-tight text-zaki-text">
+                {title}
+              </h1>
+              <span className="rounded-full border border-zaki-border bg-zaki-raised px-2 py-0.5 text-[10.5px] font-medium text-zaki-muted">
+                {count}
+              </span>
+            </div>
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-zaki-muted">
+              {description}
+            </p>
+          </div>
+        </div>
+      </header>
+      {children}
+    </div>
   );
 }
 
