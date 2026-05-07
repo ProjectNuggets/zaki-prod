@@ -39,9 +39,9 @@ Last updated: 2026-05-07
 - [x] 02-03: Move WebSocket payload handling to allowlist schemas and consume quota only on mutating/prompt messages.
 - [x] 02-04: Gate unsafe generated HTML rendering behind operator policy and safe defaults.
 - [x] 02-05: Split user-managed settings from operator-managed settings.
-- [ ] 02-06: Backend security test pass.
+- [x] 02-06: Backend security test pass.
 
-**Status:** In progress.
+**Status:** Complete.
 
 ## Phase 03: Capability Parity Completion
 
@@ -58,7 +58,7 @@ Last updated: 2026-05-07
 - [ ] 03-05: Deep research, deep solve, visualization, and math animation parity.
 - [ ] 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
 
-**Status:** Pending.
+**Status:** In progress.
 
 ## Phase 04: Governance, Quota, Retention, Export
 

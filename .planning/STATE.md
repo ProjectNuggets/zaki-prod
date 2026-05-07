@@ -7,20 +7,20 @@ last_updated: "2026-05-07"
 last_activity: 2026-05-07
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 2
   total_plans: 28
-  completed_plans: 7
-  percent: 25
+  completed_plans: 13
+  percent: 46
 ---
 
 # ZAKI Learn State
 
 ## Current Position
 
-Phase: 02 BFF Security And Multi-User Hardening
-Plan: 02-06 Backend security test pass
-Status: 02-05 complete; ready to execute 02-06
-Last activity: 2026-05-07 - redacted user-visible knowledge provider and embedding labels and verified learning setting surfaces keep provider/model routing operator-managed.
+Phase: 03 Capability Parity Completion
+Plan: 03-01 Tutor chat and session parity
+Status: Phase 02 complete; ready to execute 03-01
+Last activity: 2026-05-07 - completed Phase 02 security verification with backend auth/quota/BFF tests, frontend learning tests, typecheck, and diff hygiene passing.
 
 ## Locked Decisions
 
@@ -63,7 +63,8 @@ Last activity: 2026-05-07 - redacted user-visible knowledge provider and embeddi
 - 02-03: WebSocket schema and quota hardening.
 - 02-04: Generated HTML renderer safety.
 - 02-05: User/operator settings split.
+- 02-06: Backend security test pass.
 
 ## Next Command
 
-Execute Phase 02 Plan 02-06: backend security test pass.
+Execute Phase 03 Plan 03-01: tutor chat and session parity.
