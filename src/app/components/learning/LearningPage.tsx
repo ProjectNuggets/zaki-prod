@@ -304,6 +304,10 @@ function itemId(item: Item, fallback = "") {
   );
 }
 
+function tutorAgentId(item: Item, fallback = "") {
+  return textOf(item.bot_id) || textOf(item.agent_id) || textOf(item.id) || itemId(item, fallback);
+}
+
 function numericOf(value: unknown, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -805,7 +809,8 @@ export function LearningPage() {
             items={agentItems}
             souls={agentSoulItems}
             channelsSchema={agentChannelsSchema.data}
-            onOpen={(item) => openObject("agent", item, `agent-${agentItems.indexOf(item) + 1}`)}
+            notebookItems={notebookItems}
+            onResult={setLastResult}
           />
         ) : tab === "workspaces" ? (
           <WorkspacesPanel
@@ -4859,7 +4864,8 @@ function AgentsPanel({
   items,
   souls,
   channelsSchema,
-  onOpen,
+  notebookItems,
+  onResult,
 }: {
   agentId: string;
   setAgentId: (value: string) => void;
@@ -4872,10 +4878,12 @@ function AgentsPanel({
   items: Item[];
   souls: Item[];
   channelsSchema: unknown;
-  onOpen: (item: Item) => void;
+  notebookItems: Item[];
+  onResult: (value: unknown) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"bots" | "profiles" | "channels" | "souls">("bots");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
   const channelEntries = Object.entries(asRecord(asRecord(channelsSchema).channels));
   const tabs = [
     { key: "bots" as const, label: "Bots", icon: Bot },
@@ -4883,6 +4891,17 @@ function AgentsPanel({
     { key: "channels" as const, label: "Channels", icon: Settings },
     { key: "souls" as const, label: "Soul Templates", icon: Heart },
   ];
+
+  if (selectedAgentId) {
+    return (
+      <TutorAgentChatWorkspace
+        agentId={selectedAgentId}
+        notebookItems={notebookItems}
+        onBack={() => setSelectedAgentId("")}
+        onResult={onResult}
+      />
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-zaki-base">
@@ -4967,7 +4986,7 @@ function AgentsPanel({
             {items.length ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {items.map((item, index) => {
-                  const id = itemId(item, `agent-${index + 1}`);
+                  const id = tutorAgentId(item, `agent-${index + 1}`);
                   const pendingDelete = pendingDeleteId === id;
                   const deleting = destroyAgent.isPending && destroyAgent.variables === id;
                   return (
@@ -4978,7 +4997,7 @@ function AgentsPanel({
                       <div className="flex items-start justify-between gap-3">
                         <button
                           type="button"
-                          onClick={() => onOpen(item)}
+                          onClick={() => setSelectedAgentId(id)}
                           className="min-w-0 flex-1 text-left"
                         >
                           <div className="flex items-center gap-2">
@@ -4990,6 +5009,13 @@ function AgentsPanel({
                           <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-zaki-muted">
                             {textOf(item.description) || textOf(item.persona) || "No persona returned."}
                           </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAgentId(id)}
+                          className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs font-semibold text-zaki-text opacity-0 transition-opacity hover:bg-zaki-base group-hover:opacity-100"
+                        >
+                          Chat
                         </button>
                         <button
                           type="button"
@@ -5034,9 +5060,9 @@ function AgentsPanel({
             {items.length ? (
               items.map((item, index) => (
                 <button
-                  key={itemId(item, `profile-${index + 1}`)}
+                  key={tutorAgentId(item, `profile-${index + 1}`)}
                   type="button"
-                  onClick={() => onOpen(item)}
+                  onClick={() => setSelectedAgentId(tutorAgentId(item, `profile-${index + 1}`))}
                   className="flex w-full items-center justify-between gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 text-left hover:bg-zaki-hover"
                 >
                   <span className="min-w-0">
@@ -5101,6 +5127,161 @@ function AgentsPanel({
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function TutorAgentChatWorkspace({
+  agentId,
+  notebookItems,
+  onBack,
+  onResult,
+}: {
+  agentId: string;
+  notebookItems: Item[];
+  onBack: () => void;
+  onResult: (value: unknown) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [notebookId, setNotebookId] = useState(() => itemId(notebookItems[0] || {}));
+  const [exportStatus, setExportStatus] = useState("");
+  const detail = useQuery({
+    queryKey: ["learning", "tutor-agent", agentId],
+    queryFn: () => getLearningTutorAgent(agentId),
+    retry: 1,
+  });
+  const history = useQuery({
+    queryKey: ["learning", "tutor-agent", agentId, "history"],
+    queryFn: () => getLearningTutorAgentHistory(agentId),
+    retry: 1,
+  });
+  const detailRecord = asRecord(detail.data);
+  const historyItems = itemList(history.data, ["messages", "items", "history"]);
+  const title = itemTitle(detailRecord, agentId);
+  const running = Boolean(detailRecord.running) || itemStatus(detailRecord) === "running";
+
+  useEffect(() => {
+    if (!notebookId && notebookItems[0]) {
+      setNotebookId(itemId(notebookItems[0]));
+    }
+  }, [notebookId, notebookItems]);
+
+  const messagesForExport = historyItems
+    .map((item, index) => normalizeTutorHistoryMessage(item, index))
+    .filter((item): item is TutorChatMessage => Boolean(item));
+
+  const transcriptMarkdown = messagesForExport
+    .map((message) => `## ${message.role}\n\n${message.content}`)
+    .join("\n\n");
+
+  const saveToNotebook = useMutation({
+    mutationFn: () => {
+      if (!notebookId) throw new Error("Choose a notebook first.");
+      return addLearningNotebookRecord({
+        notebook_ids: [notebookId],
+        record_type: "tutorbot",
+        title: title || agentId,
+        summary: "",
+        user_query: "TutorBot chat",
+        output: transcriptMarkdown || "No messages yet.",
+        metadata: {
+          source: "zaki_learn_tutorbot",
+          bot_id: agentId,
+          bot_name: title,
+          total_message_count: messagesForExport.length,
+        },
+        kb_name: null,
+      });
+    },
+    onSuccess: (payload) => {
+      onResult(payload);
+      setExportStatus("Saved to notebook");
+      toast.success("Tutor chat saved");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.notebooks });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const downloadMarkdown = () => {
+    const blob = new Blob([transcriptMarkdown || `# ${title || agentId}\n\nNo messages yet.`], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(title || agentId).replace(/[^a-z0-9-_]+/gi, "-")}-tutorbot.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
+      <header className="flex shrink-0 items-center gap-3 border-b border-zaki-border px-5 py-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-zaki-md p-1.5 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-text"
+          title="Back to bots"
+        >
+          <ArrowLeft className="size-4" />
+        </button>
+        <Bot className="size-4 text-zaki-muted" />
+        <span className="truncate text-sm font-medium text-zaki-text">
+          {detail.isLoading ? "Loading tutor..." : title}
+        </span>
+        {running ? <span className="size-2 rounded-full bg-emerald-500" /> : null}
+        {exportStatus ? <span className="text-[10px] text-zaki-muted">{exportStatus}</span> : null}
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          <select
+            value={notebookId}
+            onChange={(event) => setNotebookId(event.target.value)}
+            disabled={!notebookItems.length}
+            className="hidden h-8 max-w-52 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 text-xs text-zaki-text outline-none focus:border-zaki-brand disabled:opacity-60 sm:block"
+          >
+            {notebookItems.length ? (
+              notebookItems.map((item, index) => {
+                const id = itemId(item, `notebook-${index + 1}`);
+                return (
+                  <option key={id} value={id}>
+                    {itemTitle(item, id)}
+                  </option>
+                );
+              })
+            ) : (
+              <option value="">No notebooks</option>
+            )}
+          </select>
+          <button
+            type="button"
+            disabled={!notebookId || saveToNotebook.isPending}
+            onClick={() => saveToNotebook.mutate()}
+            className="rounded-zaki-md border border-zaki-border px-3 py-1.5 text-xs font-medium text-zaki-muted transition-colors hover:border-zaki-border hover:text-zaki-text disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save to Notebook
+          </button>
+          <button
+            type="button"
+            onClick={downloadMarkdown}
+            className="rounded-zaki-md border border-zaki-border px-3 py-1.5 text-xs font-medium text-zaki-muted transition-colors hover:border-zaki-border hover:text-zaki-text"
+          >
+            Download Markdown
+          </button>
+        </div>
+      </header>
+
+      {detail.isError || history.isError ? (
+        <div className="mx-auto mt-8 max-w-xl rounded-zaki-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Some tutor details could not be loaded. Chat can still connect if the WebSocket is available.
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
+        <div className="mx-auto max-w-[760px]">
+          <TutorAgentChatPanel agentId={agentId} history={historyItems} />
+        </div>
       </div>
     </div>
   );

@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 28
-  completed_plans: 4
-  percent: 14
+  completed_plans: 5
+  percent: 18
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 01 Learn UI Parity And Route Truth
-Plan: 01-05 TutorBot management and chat surfaces
-Status: 01-04 complete; ready to execute 01-05
-Last activity: 2026-05-07 - completed Space upstream-section parity pass.
+Plan: 01-06 Advanced workspace entry points
+Status: 01-05 complete; ready to execute 01-06
+Last activity: 2026-05-07 - completed TutorBot management/chat parity pass with local BFF and learning engine running.
 
 ## Locked Decisions
 
@@ -38,6 +38,7 @@ Last activity: 2026-05-07 - completed Space upstream-section parity pass.
 - `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
 - `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
+- `/learn?view=tutorbot` can create a temporary TutorBot, open the full ZAKI Learn chat surface, connect over authenticated WebSocket, send a message, receive upstream error payloads, and delete the temporary bot. Current local provider/model routing returns `404`, which is operator configuration outside the user surface.
 
 ## Completed Plans
 
@@ -45,7 +46,8 @@ Last activity: 2026-05-07 - completed Space upstream-section parity pass.
 - 01-02: Sources/Knowledge page shape.
 - 01-03: Co-Writer page shape.
 - 01-04: Space page sections.
+- 01-05: TutorBot management and chat surfaces.
 
 ## Next Command
 
-Execute Phase 01 Plan 01-05: port/adapt TutorBot management and chat surfaces from upstream.
+Execute Phase 01 Plan 01-06: normalize advanced workspace entry points for solve, research, quiz, visualize, and math animation.
