@@ -618,6 +618,22 @@ content into the audit ledger. Account deletion records a `started` event before
 destructive cleanup and records success or failure after the learning-engine
 delete attempt.
 
+Hosted retention policy:
+
+| Data class | Retention | Cleanup owner |
+| --- | --- | --- |
+| Uploaded source files and indexes | Account lifetime | Learning account deletion |
+| Generated books, notebooks, sessions, tutor state, and memory | Account lifetime | Learning account deletion |
+| Generated artifacts referenced by saved sessions/books/notebooks | Account lifetime | Learning account deletion |
+| Transient generated artifacts not attached to saved learning records | 90 days by default | Operator cleanup policy |
+| Stale background task/progress state | 30 days by default | Operator cleanup policy |
+| Learning export/delete audit events | 730 days by default | ZAKI backend scheduled cleanup |
+
+The exact quota numbers remain provisional until unit economics are validated
+for personal users. The retention policy is intentionally separate from quota:
+active-account learning content is not deleted merely because a user hits a
+quota cap.
+
 ## Operator Dependencies
 
 The learning engine may require:

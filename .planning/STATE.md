@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 28
-  completed_plans: 21
-  percent: 75
+  completed_plans: 22
+  percent: 79
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 04 Governance, Quota, Retention, Export
-Plan: 04-03 Retention and cleanup policies
-Status: Phase 04 in progress; 04-02 data deletion/export audit state complete
-Last activity: 2026-05-07 - completed learning export/delete audit state: persistent non-PII audit table, current-user audit endpoint, export success/error/failure audit events, deletion started/succeeded/failed audit events, summary-only audit details, lint, and full backend Jest suite passing.
+Plan: 04-04 Backup/restore drill and disaster recovery runbook
+Status: Phase 04 in progress; 04-03 retention and cleanup policies complete
+Last activity: 2026-05-07 - completed Learn retention policy: account-lifetime retention for active learning content, deletion-on-account-delete cleanup model, scheduled audit-event cleanup, super-admin retention status/manual cleanup endpoints, spec retention matrix, quota unit-economics caveat, focused backend tests, and lint passing.
 
 ## Locked Decisions
 
@@ -75,7 +75,8 @@ Last activity: 2026-05-07 - completed learning export/delete audit state: persis
 - 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
 - 04-01: Quota model and enforcement matrix.
 - 04-02: Data deletion/export implementation and audit state.
+- 04-03: Retention and cleanup policies.
 
 ## Next Command
 
-Execute Phase 04 Plan 04-03: retention and cleanup policies.
+Execute Phase 04 Plan 04-04: backup/restore drill and disaster recovery runbook.

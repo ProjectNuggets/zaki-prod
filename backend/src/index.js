@@ -144,6 +144,10 @@ import {
   summarizeLearningExportSnapshot,
 } from "./learning-governance-audit.js";
 import {
+  cleanupLearningRetention,
+  resolveLearningRetentionPolicy,
+} from "./learning-retention.js";
+import {
   getAccessStatus,
   getEffectiveEntitlementState,
   isPaidActive,
@@ -456,6 +460,7 @@ let runtimeRateLimitSettings = {
   zakiBotDailyPromptLimit: ZAKI_BOT_QUOTA_CONFIG.limit,
   agentPerMinuteLimit: DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE,
 };
+let runtimeLearningRetentionPolicy = resolveLearningRetentionPolicy(process.env);
 
 const configReport = validateRuntimeConfig(process.env);
 if (configReport.warnings.length > 0) {
@@ -5332,6 +5337,19 @@ async function recordLearningAccountAuditEventBestEffort(args) {
   }
 }
 
+async function runLearningRetentionCleanup() {
+  const result = await cleanupLearningRetention({
+    dbQuery,
+    policy: runtimeLearningRetentionPolicy,
+  });
+  if (result.enabled && result.deletedAuditEvents > 0) {
+    console.log(
+      `[LearningRetention] deleted ${result.deletedAuditEvents} expired audit event(s)`
+    );
+  }
+  return result;
+}
+
 app.get("/api/account/learning/audit", async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
@@ -5346,6 +5364,32 @@ app.get("/api/account/learning/audit", async (req, res) => {
   } catch (error) {
     console.error("[Account] Learning audit list error:", error);
     res.status(500).json({ error: error?.message || "Learning audit lookup failed." });
+  }
+});
+
+app.get("/api/internal/learning/retention", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+    res.status(200).json({
+      success: true,
+      policy: runtimeLearningRetentionPolicy,
+    });
+  } catch (error) {
+    console.error("[LearningRetention] Status error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load learning retention policy." });
+  }
+});
+
+app.post("/api/internal/learning/retention/cleanup", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+    const result = await runLearningRetentionCleanup();
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    console.error("[LearningRetention] Cleanup error:", error);
+    res.status(500).json({ error: error?.message || "Learning retention cleanup failed." });
   }
 });
 
@@ -11705,4 +11749,19 @@ server.listen(PORT, () => {
       );
     }, SESSION_CLEANUP_INTERVAL_MS);
   }, 30_000);
+
+  if (runtimeLearningRetentionPolicy.enabled) {
+    const LEARNING_RETENTION_CLEANUP_INTERVAL_MS =
+      runtimeLearningRetentionPolicy.cleanupIntervalHours * 60 * 60 * 1000;
+    setTimeout(() => {
+      runLearningRetentionCleanup().catch((err) =>
+        console.warn("[LearningRetention] cleanup failed:", err?.message)
+      );
+      setInterval(() => {
+        runLearningRetentionCleanup().catch((err) =>
+          console.warn("[LearningRetention] cleanup failed:", err?.message)
+        );
+      }, LEARNING_RETENTION_CLEANUP_INTERVAL_MS);
+    }, 60_000);
+  }
 });
