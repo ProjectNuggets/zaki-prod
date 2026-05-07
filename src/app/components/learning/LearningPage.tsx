@@ -24,6 +24,7 @@ import {
   FolderUp,
   GraduationCap,
   Globe,
+  Heart,
   Image,
   Layers,
   Lightbulb,
@@ -61,6 +62,7 @@ import {
   getLearningQuestionEntry,
   getLearningSolveSession,
   getLearningTutorAgent,
+  getLearningTutorAgentChannelsSchema,
   getLearningTutorAgentHistory,
   learningKeys,
   openLearningSocket,
@@ -74,7 +76,9 @@ import {
   listLearningSkills,
   listLearningSolveSessions,
   listLearningTutorAgents,
+  listLearningTutorAgentSouls,
   getLearningMemory,
+  destroyLearningTutorAgent,
   updateLearningCoWriterDocument,
   updateLearningMemory,
   uploadLearningKnowledge,
@@ -448,6 +452,16 @@ export function LearningPage() {
     queryFn: listLearningTutorAgents,
     retry: 1,
   });
+  const agentSouls = useQuery({
+    queryKey: learningKeys.tutorAgentSouls,
+    queryFn: listLearningTutorAgentSouls,
+    retry: 1,
+  });
+  const agentChannelsSchema = useQuery({
+    queryKey: learningKeys.tutorAgentChannelsSchema,
+    queryFn: getLearningTutorAgentChannelsSchema,
+    retry: 1,
+  });
   const solveSessions = useQuery({
     queryKey: learningKeys.solveSessions,
     queryFn: listLearningSolveSessions,
@@ -480,6 +494,10 @@ export function LearningPage() {
     [skills.data],
   );
   const agentItems = useMemo(() => itemList(agents.data, ["bots", "items"]), [agents.data]);
+  const agentSoulItems = useMemo(
+    () => itemList(agentSouls.data, ["souls", "items", "templates"]),
+    [agentSouls.data],
+  );
   const solveItems = useMemo(
     () => itemList(solveSessions.data, ["sessions", "items"]),
     [solveSessions.data],
@@ -566,6 +584,16 @@ export function LearningPage() {
       setAgentName("");
       setAgentPersona("");
       toast.success("Tutor created");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const destroyAgent = useMutation({
+    mutationFn: (nextAgentId: string) => destroyLearningTutorAgent(nextAgentId),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Tutor deleted");
       void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
     },
     onError: (error) => toast.error(error.message),
@@ -692,7 +720,10 @@ export function LearningPage() {
             agentPersona={agentPersona}
             setAgentPersona={setAgentPersona}
             createAgent={createAgent}
+            destroyAgent={destroyAgent}
             items={agentItems}
+            souls={agentSoulItems}
+            channelsSchema={agentChannelsSchema.data}
             onOpen={(item) => openObject("agent", item, `agent-${agentItems.indexOf(item) + 1}`)}
           />
         ) : tab === "workspaces" ? (
@@ -3526,7 +3557,10 @@ function AgentsPanel({
   agentPersona,
   setAgentPersona,
   createAgent,
+  destroyAgent,
   items,
+  souls,
+  channelsSchema,
   onOpen,
 }: {
   agentId: string;
@@ -3536,50 +3570,241 @@ function AgentsPanel({
   agentPersona: string;
   setAgentPersona: (value: string) => void;
   createAgent: UseMutationResult<unknown, Error, void, unknown>;
+  destroyAgent: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
+  souls: Item[];
+  channelsSchema: unknown;
   onOpen: (item: Item) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<"bots" | "profiles" | "channels" | "souls">("bots");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const channelEntries = Object.entries(asRecord(asRecord(channelsSchema).channels));
+  const tabs = [
+    { key: "bots" as const, label: "Bots", icon: Bot },
+    { key: "profiles" as const, label: "Profiles", icon: FileText },
+    { key: "channels" as const, label: "Channels", icon: Settings },
+    { key: "souls" as const, label: "Soul Templates", icon: Heart },
+  ];
+
   return (
-    <Section
-      title="Tutor agents"
-      subtitle="Create specialized tutors. Provider and model routing stay operator-managed."
-    >
-      <div className="mb-4 grid gap-3 lg:grid-cols-2">
-        <input
-          value={agentId}
-          onChange={(event) => setAgentId(event.target.value)}
-          placeholder="tutor id"
-          className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <input
-          value={agentName}
-          onChange={(event) => setAgentName(event.target.value)}
-          placeholder="Display name"
-          className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
+    <div className="h-full overflow-y-auto bg-zaki-base">
+      <div className="mx-auto max-w-[960px] px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-[24px] font-semibold tracking-tight text-zaki-text">
+            TutorBot Agents
+          </h1>
+          <p className="mt-1 text-[13px] text-zaki-muted">
+            Manage your in-process TutorBot instances.
+          </p>
+        </div>
+
+        <div className="mb-6 flex items-center gap-1 border-b border-zaki-border pb-3">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-zaki-lg px-3 py-1.5 text-[13px] transition-colors",
+                  active
+                    ? "bg-zaki-hover font-medium text-zaki-text"
+                    : "text-zaki-muted hover:text-zaki-text",
+                )}
+              >
+                <Icon className="size-3.5" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === "bots" ? (
+          <div className="space-y-5">
+            <section className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <Plus className="size-4 text-zaki-muted" />
+                <h2 className="text-[13.5px] font-semibold text-zaki-text">Create bot</h2>
+                <span className="ml-1 text-[11.5px] text-zaki-muted">
+                  Persona and channel settings are user-managed; provider routing is operator-managed.
+                </span>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <input
+                  value={agentId}
+                  onChange={(event) => setAgentId(event.target.value)}
+                  placeholder="Bot id"
+                  className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                />
+                <input
+                  value={agentName}
+                  onChange={(event) => setAgentName(event.target.value)}
+                  placeholder="Display name"
+                  className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                />
+              </div>
+              <textarea
+                value={agentPersona}
+                onChange={(event) => setAgentPersona(event.target.value)}
+                placeholder="Persona and teaching style"
+                className="mt-3 min-h-28 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+              />
+              <button
+                type="button"
+                disabled={!agentId.trim() || createAgent.isPending}
+                onClick={() => createAgent.mutate()}
+                className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {createAgent.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Bot className="size-4" />
+                )}
+                Create bot
+              </button>
+            </section>
+
+            {items.length ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {items.map((item, index) => {
+                  const id = itemId(item, `agent-${index + 1}`);
+                  const pendingDelete = pendingDeleteId === id;
+                  const deleting = destroyAgent.isPending && destroyAgent.variables === id;
+                  return (
+                    <div
+                      key={id}
+                      className="group rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 transition-colors hover:border-zaki-brand/40 hover:bg-zaki-hover"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpen(item)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Bot className="size-4 shrink-0 text-zaki-muted" />
+                            <span className="truncate text-sm font-semibold text-zaki-text">
+                              {itemTitle(item, id)}
+                            </span>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-zaki-muted">
+                            {textOf(item.description) || textOf(item.persona) || "No persona returned."}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={destroyAgent.isPending}
+                          title={pendingDelete ? "Click again to confirm" : "Delete bot"}
+                          onClick={() => {
+                            if (pendingDelete) {
+                              destroyAgent.mutate(id);
+                            } else {
+                              setPendingDeleteId(id);
+                            }
+                          }}
+                          className={cn(
+                            "rounded-zaki-md p-1 transition-colors disabled:opacity-50",
+                            pendingDelete
+                              ? "bg-rose-500/15 text-rose-600"
+                              : "text-zaki-muted opacity-0 hover:bg-rose-500/10 hover:text-rose-600 group-hover:opacity-100",
+                          )}
+                        >
+                          {deleting ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 text-[11px] text-zaki-muted">
+                        <span className={cn("size-1.5 rounded-full", statusTone(itemStatus(item)))} />
+                        {itemStatus(item)}
+                        {textOf(item.started_at) ? ` · started ${relativeTime(item.started_at)}` : ""}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyLine label="No bots yet." />
+            )}
+          </div>
+        ) : activeTab === "profiles" ? (
+          <div className="space-y-3">
+            {items.length ? (
+              items.map((item, index) => (
+                <button
+                  key={itemId(item, `profile-${index + 1}`)}
+                  type="button"
+                  onClick={() => onOpen(item)}
+                  className="flex w-full items-center justify-between gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 text-left hover:bg-zaki-hover"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-zaki-text">
+                      {itemTitle(item, `Profile ${index + 1}`)}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-zaki-muted">
+                      {textOf(item.bot_id) || textOf(item.id)}
+                    </span>
+                  </span>
+                  <FileText className="size-4 shrink-0 text-zaki-muted" />
+                </button>
+              ))
+            ) : (
+              <EmptyLine label="No profiles yet." />
+            )}
+          </div>
+        ) : activeTab === "channels" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {channelEntries.length ? (
+              channelEntries.map(([name, value]) => {
+                const channel = asRecord(value);
+                return (
+                  <div key={name} className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+                    <div className="flex items-center gap-2">
+                      <Settings className="size-4 text-zaki-muted" />
+                      <h2 className="text-sm font-semibold text-zaki-text">
+                        {textOf(channel.display_name, name)}
+                      </h2>
+                    </div>
+                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-zaki-muted">
+                      {textOf(asRecord(channel.json_schema).description) || "Channel configuration schema available."}
+                    </p>
+                  </div>
+                );
+              })
+            ) : (
+              <EmptyLine label="No channel schemas returned yet." />
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {souls.length ? (
+              souls.map((item, index) => (
+                <div
+                  key={itemId(item, `soul-${index + 1}`)}
+                  className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <Heart className="size-4 text-zaki-muted" />
+                    <h2 className="truncate text-sm font-semibold text-zaki-text">
+                      {itemTitle(item, `Soul template ${index + 1}`)}
+                    </h2>
+                  </div>
+                  <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-zaki-muted">
+                    {textOf(item.content) || textOf(item.description) || "No template content returned."}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <EmptyLine label="No soul templates returned yet." />
+            )}
+          </div>
+        )}
       </div>
-      <textarea
-        value={agentPersona}
-        onChange={(event) => setAgentPersona(event.target.value)}
-        placeholder="Persona and teaching style"
-        className="mb-3 min-h-28 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-      />
-      <button
-        type="button"
-        disabled={!agentId.trim() || createAgent.isPending}
-        onClick={() => createAgent.mutate()}
-        className="mb-5 inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-      >
-        <Bot className="size-4" />
-        Create tutor
-      </button>
-      <ItemList
-        items={items}
-        empty="No tutor agents returned yet."
-        variant="agent"
-        onOpen={onOpen}
-      />
-    </Section>
+    </div>
   );
 }
 

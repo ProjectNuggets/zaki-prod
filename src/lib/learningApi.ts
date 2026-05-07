@@ -64,6 +64,8 @@ export const learningKeys = {
   memory: ["learning", "memory"] as const,
   sessions: ["learning", "sessions"] as const,
   tutorAgents: ["learning", "tutor-agents"] as const,
+  tutorAgentSouls: ["learning", "tutor-agents", "souls"] as const,
+  tutorAgentChannelsSchema: ["learning", "tutor-agents", "channels", "schema"] as const,
   solveSessions: ["learning", "solve", "sessions"] as const,
 };
 
@@ -322,6 +324,14 @@ export function listLearningTutorAgents() {
   return learningRequest<unknown>("/api/learning/tutor-agents");
 }
 
+export function listLearningTutorAgentSouls() {
+  return learningRequest<unknown>("/api/learning/tutor-agents/souls");
+}
+
+export function getLearningTutorAgentChannelsSchema() {
+  return learningRequest<unknown>("/api/learning/tutor-agents/channels/schema");
+}
+
 export function getLearningTutorAgent(agentId: string) {
   return learningRequest<unknown>(`/api/learning/tutor-agents/${encodeURIComponent(agentId)}`);
 }
@@ -337,6 +347,13 @@ export function createLearningTutorAgent(payload: LearningJson) {
     method: "POST",
     body: payload,
   });
+}
+
+export function destroyLearningTutorAgent(agentId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/destroy`,
+    { method: "DELETE" },
+  );
 }
 
 export function listLearningSolveSessions() {
