@@ -249,6 +249,11 @@ const viewToLearningTab: Record<string, LearningTab> = {
   solve: "workspaces",
   workspaces: "workspaces",
   vision: "workspaces",
+  research: "workspaces",
+  quiz: "workspaces",
+  visualize: "workspaces",
+  "math-animation": "workspaces",
+  "math-animator": "workspaces",
 };
 
 function normalizeLearningTab(value: string | null): LearningTab {
@@ -424,7 +429,9 @@ export function LearningPage() {
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const requestedDocumentId = searchParams.get("doc") || "";
+  const requestedCapability = searchParams.get("capability") || "";
   const [tab, setTab] = useState<LearningTab>(() => normalizeLearningTab(requestedView));
+  const [chatCapabilityPreset, setChatCapabilityPreset] = useState(requestedCapability);
   const [kbName, setKbName] = useState("main");
   const [bookTopic, setBookTopic] = useState("");
   const [notebookName, setNotebookName] = useState("");
@@ -448,6 +455,10 @@ export function LearningPage() {
   useEffect(() => {
     setTab(normalizeLearningTab(requestedView));
   }, [requestedView]);
+
+  useEffect(() => {
+    setChatCapabilityPreset(requestedCapability);
+  }, [requestedCapability]);
 
   useEffect(() => {
     if (normalizeLearningTab(requestedView) !== "writer") {
@@ -730,6 +741,7 @@ export function LearningPage() {
           <LearningChatPanel
             kbName={kbName}
             setKbName={setKbName}
+            capabilityPreset={chatCapabilityPreset}
             knowledgeItems={knowledgeItems}
             sessionItems={sessionItems}
             bookItems={bookItems}
@@ -819,6 +831,15 @@ export function LearningPage() {
             setVisionImage={setVisionImage}
             analyzeVision={analyzeVision}
             solveItems={solveItems}
+            onOpenCapability={(capability) => {
+              setChatCapabilityPreset(capability);
+              setTab("chat");
+              const params = new URLSearchParams(window.location.search);
+              params.set("view", "chat");
+              if (capability) params.set("capability", capability);
+              else params.delete("capability");
+              window.history.pushState(null, "", `/learn?${params.toString()}`);
+            }}
             onOpen={(item) => openObject("solve", item, `solve-${solveItems.indexOf(item) + 1}`)}
           />
         ) : null}
@@ -1652,6 +1673,7 @@ function SpaceContextChip({
 function LearningChatPanel({
   kbName,
   setKbName,
+  capabilityPreset,
   knowledgeItems,
   sessionItems,
   bookItems,
@@ -1661,6 +1683,7 @@ function LearningChatPanel({
 }: {
   kbName: string;
   setKbName: (name: string) => void;
+  capabilityPreset: string;
   knowledgeItems: Item[];
   sessionItems: Item[];
   bookItems: Item[];
@@ -1715,6 +1738,14 @@ function LearningChatPanel({
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!capabilityPreset) return;
+    if (!learningCapabilities.some((entry) => entry.value === capabilityPreset)) return;
+    setCapability(capabilityPreset);
+    setCapabilityMenuOpen(false);
+  }, [capabilityPreset]);
+
   const activeCapability =
     learningCapabilities.find((entry) => entry.value === capability) ??
     learningCapabilities[0]!;
@@ -5293,6 +5324,7 @@ function WorkspacesPanel({
   setVisionImage,
   analyzeVision,
   solveItems,
+  onOpenCapability,
   onOpen,
 }: {
   visionQuestion: string;
@@ -5300,13 +5332,67 @@ function WorkspacesPanel({
   setVisionImage: (value: File | null) => void;
   analyzeVision: UseMutationResult<unknown, Error, void, unknown>;
   solveItems: Item[];
+  onOpenCapability: (capability: string) => void;
   onOpen: (item: Item) => void;
 }) {
+  const workspaceEntries = [
+    {
+      capability: "deep_solve",
+      title: "Deep Solve",
+      description: "Multi-step reasoning and problem solving with tools.",
+      Icon: BrainCircuit,
+    },
+    {
+      capability: "deep_research",
+      title: "Deep Research",
+      description: "Comprehensive multi-agent research with source controls.",
+      Icon: Microscope,
+    },
+    {
+      capability: "deep_question",
+      title: "Quiz Generation",
+      description: "Generate custom or paper-mimic quiz questions.",
+      Icon: PenLine,
+    },
+    {
+      capability: "visualize",
+      title: "Visualize",
+      description: "Create SVG, Chart.js, Mermaid, or HTML visualizations.",
+      Icon: BarChart3,
+    },
+    {
+      capability: "math_animator",
+      title: "Math Animator",
+      description: "Generate math videos or storyboard images.",
+      Icon: Clapperboard,
+    },
+  ];
+
   return (
     <Section
-      title="Solve and vision"
-      subtitle="Analyze problems from text or image. Full solve streams are available through the learning WebSocket aliases."
+      title="Advanced workspaces"
+      subtitle="Open upstream learning modes through the ZAKI-hosted chat gateway."
     >
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {workspaceEntries.map(({ capability, title, description, Icon }) => (
+          <button
+            key={capability}
+            type="button"
+            onClick={() => onOpenCapability(capability)}
+            className="group flex min-h-32 flex-col rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 text-left transition-colors hover:border-zaki-brand/50 hover:bg-zaki-hover"
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex size-8 items-center justify-center rounded-zaki-md bg-zaki-base text-zaki-muted group-hover:text-zaki-brand">
+                <Icon className="size-4" />
+              </span>
+              <h3 className="text-sm font-semibold text-zaki-text">{title}</h3>
+            </div>
+            <p className="text-xs leading-relaxed text-zaki-muted">{description}</p>
+          </button>
+        ))}
+      </div>
+
+      <h3 className="mb-3 text-sm font-semibold text-zaki-text">Image solve</h3>
       <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_220px]">
         <input
           value={visionQuestion}
