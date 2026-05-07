@@ -11,9 +11,12 @@ import {
   ChevronRight,
   ChevronUp,
   CheckCircle2,
+  Clock3,
   ClipboardList,
   Database,
+  FileText,
   Layers,
+  Library,
   Loader2,
   MessageSquare,
   NotebookPen,
@@ -495,6 +498,7 @@ export function LearningBookWorkspace({
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [proposalDraft, setProposalDraft] = useState("");
   const [spineDraft, setSpineDraft] = useState("");
+  const [bookView, setBookView] = useState<"library" | "creator">("library");
   const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
   const [bookLanguage, setBookLanguage] = useState("en");
   const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([]);
@@ -627,6 +631,7 @@ export function LearningBookWorkspace({
       const book = normalizeBook(asRecord(root.book));
       if (book.id) {
         setSelectedBookId(book.id);
+        setBookView("library");
         setProposalDraft(jsonText(asRecord(book.proposal || root.proposal)));
       }
     } catch (error) {
@@ -715,13 +720,19 @@ export function LearningBookWorkspace({
   };
 
   return (
-    <div className="min-h-[calc(100vh-15rem)] overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-raised">
-      {!selectedBookId ? (
+    <div className="h-full min-h-[calc(100vh-4rem)] overflow-hidden bg-zaki-base">
+      {!selectedBookId && bookView === "library" ? (
         <BookLibraryView
           query={query}
           setQuery={setQuery}
           books={filteredBooks}
           allBooks={books}
+          onNewBook={() => setBookView("creator")}
+          onSelect={handleSelectBook}
+          onDelete={handleDeleteBook}
+        />
+      ) : !selectedBookId ? (
+        <BookCreatorView
           bookTopic={bookTopic}
           setBookTopic={setBookTopic}
           creating={createBook.isPending}
@@ -740,11 +751,10 @@ export function LearningBookWorkspace({
           language={bookLanguage}
           setLanguage={setBookLanguage}
           onCreate={handleCreate}
-          onSelect={handleSelectBook}
-          onDelete={handleDeleteBook}
+          onBack={() => setBookView("library")}
         />
       ) : (
-        <div className="flex h-[calc(100vh-15rem)] min-h-[680px]">
+        <div className="flex h-full min-h-[680px]">
           <BookSidebarView
             book={activeBook}
             pages={detail?.pages || []}
@@ -901,6 +911,116 @@ function BookLibraryView({
   setQuery,
   books,
   allBooks,
+  onNewBook,
+  onSelect,
+  onDelete,
+}: {
+  query: string;
+  setQuery: (value: string) => void;
+  books: LearningBook[];
+  allBooks: LearningBook[];
+  onNewBook: () => void;
+  onSelect: (book: LearningBook) => void;
+  onDelete: (book: LearningBook) => void;
+}) {
+  const stats = {
+    total: allBooks.length,
+    ready: allBooks.filter((book) => book.status === "ready").length,
+    inProgress: allBooks.filter((book) => ["draft", "spine_ready", "compiling"].includes(book.status)).length,
+    chapters: allBooks.reduce((sum, book) => sum + (book.chapter_count || 0), 0),
+  };
+  const matchingCopy = query.trim() ? ` matching "${query.trim()}"` : "";
+
+  return (
+    <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-zaki-border px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <Library className="size-4 shrink-0 text-zaki-muted" />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-zaki-text">Books</div>
+            <div className="text-xs text-zaki-muted">
+              Generate, browse and study your AI-authored books.
+            </div>
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zaki-muted" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search books"
+              className="h-8 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised pl-9 pr-3 text-xs text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={onNewBook}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-xs font-medium text-white hover:bg-zaki-brand/90"
+          >
+            <Plus className="size-3.5" />
+            New book
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <BookStat icon={BookOpen} label="Total books" value={stats.total} />
+          <BookStat icon={Sparkles} label="Ready" value={stats.ready} accent="text-emerald-600" />
+          <BookStat icon={Loader2} label="In progress" value={stats.inProgress} accent="text-violet-600" />
+          <BookStat icon={Layers} label="Chapters" value={stats.chapters} />
+        </div>
+
+        <div className="mb-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
+            My library
+          </div>
+          <div className="text-xs text-zaki-muted">
+            {books.length} of {allBooks.length} books{matchingCopy}
+          </div>
+        </div>
+
+        {allBooks.length === 0 ? (
+          <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-zaki-lg border border-dashed border-zaki-border bg-zaki-base px-8 py-16 text-center">
+            <BookOpen className="size-7 text-zaki-muted" />
+            <div>
+              <p className="text-base font-medium text-zaki-text">No books yet</p>
+              <p className="mt-1 text-sm text-zaki-muted">
+                Create your first AI-generated book from a knowledge base, chat selections or simply a topic.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onNewBook}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-sm font-medium text-white hover:bg-zaki-brand/90"
+            >
+              <Plus className="size-4" />
+              New book
+            </button>
+          </div>
+        ) : books.length === 0 ? (
+          <div className="rounded-zaki-lg border border-dashed border-zaki-border bg-zaki-base px-6 py-12 text-center text-sm text-zaki-muted">
+            No books match "{query.trim()}".
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {books.map((book) => (
+              <BookCard
+                key={book.id}
+                book={book}
+                onSelect={() => onSelect(book)}
+                onDelete={() => onDelete(book)}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function BookCreatorView({
   bookTopic,
   setBookTopic,
   creating,
@@ -919,13 +1039,8 @@ function BookLibraryView({
   language,
   setLanguage,
   onCreate,
-  onSelect,
-  onDelete,
+  onBack,
 }: {
-  query: string;
-  setQuery: (value: string) => void;
-  books: LearningBook[];
-  allBooks: LearningBook[];
   bookTopic: string;
   setBookTopic: (value: string) => void;
   creating: boolean;
@@ -944,17 +1059,10 @@ function BookLibraryView({
   language: string;
   setLanguage: (value: string) => void;
   onCreate: () => void;
-  onSelect: (book: LearningBook) => void;
-  onDelete: (book: LearningBook) => void;
+  onBack: () => void;
 }) {
   const [sourceTab, setSourceTab] = useState<BookCreatorSourceTab>("knowledge");
   const [creatorCollapsed, setCreatorCollapsed] = useState(false);
-  const stats = {
-    total: allBooks.length,
-    ready: allBooks.filter((book) => book.status === "ready").length,
-    inProgress: allBooks.filter((book) => ["draft", "spine_ready", "compiling"].includes(book.status)).length,
-    chapters: allBooks.reduce((sum, book) => sum + (book.chapter_count || 0), 0),
-  };
   const selectedSourceCount =
     selectedKnowledge.length +
     selectionCount(selectedSessions) +
@@ -974,37 +1082,25 @@ function BookLibraryView({
   const summaryChips = sourceTabs.filter((tab) => tab.count > 0);
 
   return (
-    <div className="flex min-h-[680px] flex-col">
-      <header className="flex shrink-0 flex-col gap-4 border-b border-zaki-border px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-semibold text-zaki-text">
-            <BookOpen className="size-4 text-zaki-brand" />
-            Books
-          </div>
-          <p className="mt-1 text-xs text-zaki-muted">
-            Generate, browse, and study structured learning books.
+    <div className="h-full overflow-y-auto bg-zaki-base px-6 py-6">
+      <div className="mx-auto max-w-3xl">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-5 inline-flex items-center gap-1.5 rounded-zaki-sm px-2 py-1 text-xs font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          <ArrowLeft className="size-3.5" />
+          All books
+        </button>
+
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-zaki-text">Create a new book</h1>
+          <p className="mt-1 text-sm text-zaki-muted">
+            Describe what you want to learn, then choose the sources that should ground the book.
           </p>
         </div>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-          <div className="relative min-w-0 sm:w-64">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zaki-muted" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search books"
-              className="h-9 w-full rounded-zaki-md border border-zaki-border bg-zaki-base pl-9 pr-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-            />
-          </div>
-        </div>
-      </header>
-      <div className="grid gap-3 border-b border-zaki-border px-5 py-4 sm:grid-cols-4">
-        <BookStat icon={BookOpen} label="Total books" value={stats.total} />
-        <BookStat icon={CheckCircle2} label="Ready" value={stats.ready} />
-        <BookStat icon={Sparkles} label="In progress" value={stats.inProgress} />
-        <BookStat icon={Layers} label="Chapters" value={stats.chapters} />
-      </div>
-      <div className="border-b border-zaki-border px-5 py-5">
-        <div className="mx-auto max-w-3xl overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-base shadow-sm">
+
+        <div className="overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-raised shadow-sm">
           <button
             type="button"
             onClick={() => setCreatorCollapsed((value) => !value)}
@@ -1174,24 +1270,6 @@ function BookLibraryView({
           ) : null}
         </div>
       </div>
-      <main className="flex-1 overflow-y-auto p-5">
-        {books.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {books.map((book) => (
-              <BookCard
-                key={book.id}
-                book={book}
-                onSelect={() => onSelect(book)}
-                onDelete={() => onDelete(book)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-zaki-lg border border-dashed border-zaki-border p-10 text-center text-sm text-zaki-muted">
-            No books returned yet.
-          </div>
-        )}
-      </main>
     </div>
   );
 }
@@ -1200,18 +1278,20 @@ function BookStat({
   icon: Icon,
   label,
   value,
+  accent,
 }: {
   icon: typeof BookOpen;
   label: string;
   value: number;
+  accent?: string;
 }) {
   return (
-    <div className="rounded-zaki-md border border-zaki-border bg-zaki-base p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs text-zaki-muted">
-        <Icon className="size-3.5" />
+    <div className="rounded-zaki-lg border border-zaki-border bg-zaki-base px-4 py-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zaki-muted">
+        <Icon className={cn("size-3.5", accent)} />
         {label}
       </div>
-      <div className="text-xl font-semibold text-zaki-text">{value}</div>
+      <div className={cn("mt-1 text-xl font-semibold", accent || "text-zaki-text")}>{value}</div>
     </div>
   );
 }
@@ -1484,40 +1564,75 @@ function BookTreeSourceGroup<TChild extends string | number>({
 
 function BookCard({ book, onSelect, onDelete }: { book: LearningBook; onSelect: () => void; onDelete: () => void }) {
   const status = STATUS_STYLES[book.status] ?? STATUS_STYLES.draft!;
+  const [confirmDelete, setConfirmDelete] = useState(false);
   return (
-    <div className="group overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-base transition-colors hover:border-zaki-brand/50">
-      <button type="button" onClick={onSelect} className="block w-full p-4 text-left">
-        <div className="mb-4 flex h-28 items-end rounded-zaki-md bg-[linear-gradient(135deg,#eef5ff_0%,#cfe1f7_55%,#9ec0e8_100%)] p-3 shadow-inner">
-          <div className="line-clamp-2 text-base font-semibold text-slate-900">{book.title}</div>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium", status.className)}>
-            <span className={cn("size-1.5 rounded-full", status.dot)} />
-            {status.label}
-          </span>
-          <span className="text-[11px] text-zaki-muted">{formatRelative(book.updated_at)}</span>
-        </div>
-        {book.description ? (
-          <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-zaki-muted">{book.description}</p>
-        ) : (
-          <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-zaki-muted">
-            Structured learning book.
-          </p>
-        )}
-        <div className="mt-4 flex items-center gap-3 text-xs text-zaki-muted">
-          <span>{book.chapter_count || 0} chapters</span>
-          <span>{book.page_count || 0} pages</span>
-        </div>
-      </button>
-      <div className="flex justify-end border-t border-zaki-border px-3 py-2">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-base transition-all hover:-translate-y-0.5 hover:border-zaki-brand/50 hover:shadow-md"
+    >
+      <div className="relative h-28 w-full overflow-hidden bg-[linear-gradient(135deg,#eef5ff_0%,#cfe1f7_55%,#9ec0e8_100%)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_25%,rgba(150,196,255,0.55)_0%,transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-2 bg-[linear-gradient(180deg,rgba(43,89,156,0.55)_0%,transparent_100%)]" />
+        <div className="pointer-events-none absolute inset-y-3 left-3.5 w-px bg-blue-900/30" />
+        <BookOpen className="absolute bottom-3 right-3 size-5 text-blue-800/45" />
+        <span className={cn("absolute left-4 top-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider", status.className)}>
+          <span className={cn("size-1.5 rounded-full", status.dot)} />
+          {status.label}
+        </span>
         <button
           type="button"
-          onClick={onDelete}
-          className="inline-flex items-center gap-1 rounded-zaki-sm px-2 py-1 text-xs text-zaki-muted hover:bg-red-500/10 hover:text-red-600"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (confirmDelete) {
+              onDelete();
+              setConfirmDelete(false);
+            } else {
+              setConfirmDelete(true);
+            }
+          }}
+          title={confirmDelete ? "Click again to confirm" : "Delete book"}
+          className={cn(
+            "absolute right-2 top-2 rounded-zaki-md p-1.5 transition-colors",
+            confirmDelete
+              ? "bg-red-500/15 text-red-600"
+              : "bg-white/70 text-zaki-muted opacity-0 backdrop-blur-sm hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100",
+          )}
         >
           <Trash2 className="size-3.5" />
-          Delete
         </button>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <div className="line-clamp-2 text-sm font-semibold text-zaki-text" title={book.title || "Untitled book"}>
+          {book.title || "Untitled book"}
+        </div>
+        <p className="line-clamp-3 flex-1 text-xs leading-relaxed text-zaki-muted">
+          {book.description || "No description yet. Open the book to view its outline."}
+        </p>
+        <div className="mt-auto flex items-center justify-between text-[10px] text-zaki-muted">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              <Layers className="size-3" />
+              {book.chapter_count || 0} ch
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <FileText className="size-3" />
+              {book.page_count || 0} pages
+            </span>
+          </div>
+          <span className="inline-flex items-center gap-1">
+            <Clock3 className="size-3" />
+            {formatRelative(book.updated_at) || "-"}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -694,8 +694,8 @@ export function LearningPage() {
 
   return (
     <div className="h-full overflow-auto bg-zaki-base">
-      <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6">
-        {tab !== "chat" ? (
+      <div className={cn(tab === "books" ? "h-full" : "mx-auto max-w-[1480px] px-4 py-6 sm:px-6")}>
+        {tab !== "chat" && tab !== "books" ? (
           <header className="mb-5 flex flex-col gap-4 border-b border-zaki-border pb-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
@@ -727,7 +727,7 @@ export function LearningPage() {
           </header>
         ) : null}
 
-        {tab !== "chat" ? (
+        {tab !== "chat" && tab !== "books" ? (
           <LearningStats
             knowledgeCount={knowledgeItems.length}
             bookCount={bookItems.length}
@@ -739,6 +739,7 @@ export function LearningPage() {
           />
         ) : null}
 
+        {tab !== "books" ? (
         <div className="mb-5 overflow-x-auto lg:hidden">
           <div className="flex min-w-max gap-1 rounded-zaki-md border border-zaki-border bg-zaki-raised p-1">
             {tabs.map((entry) => {
@@ -762,8 +763,20 @@ export function LearningPage() {
             })}
           </div>
         </div>
+        ) : null}
 
-        {tab === "chat" ? (
+        {tab === "books" ? (
+          <LearningBookWorkspace
+            bookTopic={bookTopic}
+            setBookTopic={setBookTopic}
+            createBook={createBook}
+            items={bookItems}
+            knowledgeItems={knowledgeItems}
+            sessionItems={sessionItems}
+            notebookItems={notebookItems}
+            questionItems={questionItems}
+          />
+        ) : tab === "chat" ? (
           <LearningChatPanel
             kbName={kbName}
             setKbName={setKbName}
@@ -775,8 +788,8 @@ export function LearningPage() {
             skillItems={skillItems}
           />
         ) : (
-          <div className={cn("grid gap-5", tab !== "books" && "xl:grid-cols-[minmax(0,1fr)_360px]")}>
-          <div className={cn("min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised", tab !== "books" && "px-4")}>
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4">
             {tab === "sources" ? (
               <SourcesPanel
                 kbName={kbName}
@@ -786,18 +799,6 @@ export function LearningPage() {
                 items={knowledgeItems}
                 folderInputRef={folderInputRef}
                 onOpen={(item) => openObject("source", item, "main")}
-              />
-            ) : null}
-            {tab === "books" ? (
-              <LearningBookWorkspace
-                bookTopic={bookTopic}
-                setBookTopic={setBookTopic}
-                createBook={createBook}
-                items={bookItems}
-                knowledgeItems={knowledgeItems}
-                sessionItems={sessionItems}
-                notebookItems={notebookItems}
-                questionItems={questionItems}
               />
             ) : null}
             {tab === "notebooks" ? (
@@ -878,7 +879,6 @@ export function LearningPage() {
             ) : null}
           </div>
 
-          {tab !== "books" ? (
           <aside className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
             <div className="mb-3 flex items-center gap-2">
               <Activity className="size-4 text-zaki-brand" />
@@ -900,7 +900,6 @@ export function LearningPage() {
               </div>
             </div>
           </aside>
-          ) : null}
           </div>
         )}
       </div>
