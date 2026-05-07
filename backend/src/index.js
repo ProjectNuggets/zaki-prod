@@ -10554,6 +10554,36 @@ app.post(
   }
 );
 
+app.get("/api/learning/dashboard/recent", requireLearningContext, async (req, res) => {
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
+  const type = String(req.query.type || "").trim();
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (/^[a-zA-Z0-9_-]{1,64}$/.test(type)) qs.set("type", type);
+  await proxyLearningRequest(req, res, `/api/v1/dashboard/recent?${qs.toString()}`, {
+    method: "GET",
+    label: "Learning dashboard recent request",
+  });
+});
+
+app.get("/api/learning/dashboard/:entryId", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/dashboard/${encodeURIComponent(req.params.entryId)}`,
+    {
+      method: "GET",
+      label: "Learning dashboard entry request",
+    }
+  );
+});
+
+app.get("/api/learning/plugins/list", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(req, res, "/api/v1/plugins/list", {
+    method: "GET",
+    label: "Learning plugin catalog request",
+  });
+});
+
 function learningQueryString(req, allowedKeys) {
   const qs = new URLSearchParams();
   for (const key of allowedKeys) {

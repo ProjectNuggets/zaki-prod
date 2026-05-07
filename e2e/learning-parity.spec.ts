@@ -294,6 +294,32 @@ async function mockLearning(page: Page) {
       return;
     }
 
+    if (path === "/api/learning/dashboard/recent") {
+      await json(route, [
+        {
+          id: "session-1",
+          type: "chat",
+          capability: "chat",
+          title: "Momentum lesson",
+          summary: "Explains conservation of momentum.",
+          timestamp: "2026-05-07T10:00:00.000Z",
+          session_ref: "sessions/session-1",
+          message_count: 2,
+          status: "idle",
+        },
+      ]);
+      return;
+    }
+
+    if (path === "/api/learning/plugins/list") {
+      await json(route, {
+        tools: [{ name: "rag", description: "Search a knowledge base", parameters: [] }],
+        capabilities: [{ name: "chat", description: "General tutoring", tools_used: ["rag"] }],
+        plugins: [],
+      });
+      return;
+    }
+
     if (path.startsWith("/api/learning/knowledge/default/") && method === "PUT") {
       const name = decodeURIComponent(path.split("/").pop() || "");
       defaultKnowledgeUpdates.push(name);
@@ -537,6 +563,10 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByRole("button", { name: /Save to Notebook/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Download Markdown/i })).toBeVisible();
 
+    await page.goto("/learn?view=space");
+    await expect(page.getByText("Recent Activity").first()).toBeVisible();
+    await expect(page.getByText("Momentum lesson")).toBeVisible();
+
     await page.goto("/learn?view=agents");
     await expect(page.getByText("TutorBot Agents")).toBeVisible();
     await page.getByRole("button", { name: /^Channels$/ }).click();
@@ -588,7 +618,7 @@ test.describe("ZAKI Learn parity wiring", () => {
       {
         view: "space",
         visibleText: "Your personal learning library.",
-        functionEntries: [/Chat History/i, /^Notebooks$/, /Question Bank/i, /^Skills$/, /^Memory$/],
+        functionEntries: [/Recent Activity/i, /Chat History/i, /^Notebooks$/, /Question Bank/i, /^Skills$/, /^Memory$/],
       },
       {
         view: "review",

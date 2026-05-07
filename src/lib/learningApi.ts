@@ -75,6 +75,8 @@ export const learningKeys = {
   skills: ["learning", "skills"] as const,
   memory: ["learning", "memory"] as const,
   sessions: ["learning", "sessions"] as const,
+  dashboardRecent: ["learning", "dashboard", "recent"] as const,
+  pluginCatalog: ["learning", "plugins", "catalog"] as const,
   tutorAgents: ["learning", "tutor-agents"] as const,
   tutorAgentRecent: ["learning", "tutor-agents", "recent"] as const,
   tutorAgentSouls: ["learning", "tutor-agents", "souls"] as const,
@@ -92,6 +94,20 @@ export function listLearningSessions(limit = 100, offset = 0) {
 
 export function getLearningSession(sessionId: string) {
   return learningRequest<unknown>(`/api/learning/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function listLearningDashboardRecent(limit = 50, type = "") {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (type.trim()) params.set("type", type.trim());
+  return learningRequest<unknown>(`/api/learning/dashboard/recent?${params.toString()}`);
+}
+
+export function getLearningDashboardEntry(entryId: string) {
+  return learningRequest<unknown>(`/api/learning/dashboard/${encodeURIComponent(entryId)}`);
+}
+
+export function getLearningPluginCatalog() {
+  return learningRequest<unknown>("/api/learning/plugins/list");
 }
 
 export function listLearningKnowledge() {

@@ -112,6 +112,7 @@ import {
   listLearningBooks,
   listLearningCoWriterDocuments,
   listLearningKnowledge,
+  listLearningDashboardRecent,
   listLearningSessions,
   listLearningNotebooks,
   listLearningQuestionCategories,
@@ -633,6 +634,11 @@ export function LearningPage() {
     queryFn: () => listLearningSessions(100),
     retry: 1,
   });
+  const dashboardRecent = useQuery({
+    queryKey: learningKeys.dashboardRecent,
+    queryFn: () => listLearningDashboardRecent(50),
+    retry: 1,
+  });
   const books = useQuery({
     queryKey: learningKeys.books,
     queryFn: listLearningBooks,
@@ -696,6 +702,10 @@ export function LearningPage() {
   const sessionItems = useMemo(
     () => itemList(sessions.data, ["sessions", "items"]),
     [sessions.data],
+  );
+  const dashboardRecentItems = useMemo(
+    () => itemList(dashboardRecent.data, ["items", "activities", "recent"]),
+    [dashboardRecent.data],
   );
   const bookItems = useMemo(() => itemList(books.data, ["books", "items"]), [books.data]);
   const notebookItems = useMemo(
@@ -1028,6 +1038,7 @@ export function LearningPage() {
             skillItems={skillItems}
             memory={memory.data}
             saveMemory={saveMemory}
+            recentActivityItems={dashboardRecentItems}
             onOpenChatSession={openLearningChatSession}
             onOpenQuestion={(item) =>
               openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
@@ -3617,6 +3628,7 @@ function LearningSpacePanel({
   skillItems,
   memory,
   saveMemory,
+  recentActivityItems,
   onOpenChatSession,
   onOpenQuestion,
 }: {
@@ -3634,13 +3646,14 @@ function LearningSpacePanel({
     { file: "summary" | "profile"; content: string },
     unknown
   >;
+  recentActivityItems: Item[];
   onOpenChatSession: (sessionId: string) => void;
   onOpenQuestion: (item: Item) => void;
 }) {
   const memoryRecord = asRecord(memory);
   const [activeSection, setActiveSection] = useState<
-    "chat_history" | "notebooks" | "question_bank" | "skills" | "memory"
-  >("chat_history");
+    "recent_activity" | "chat_history" | "notebooks" | "question_bank" | "skills" | "memory"
+  >("recent_activity");
   const [summaryDraft, setSummaryDraft] = useState("");
   const [profileDraft, setProfileDraft] = useState("");
   const [chatQuery, setChatQuery] = useState("");
@@ -3669,6 +3682,13 @@ function LearningSpacePanel({
     );
   }, [chatQuery, sessionItems]);
   const spaceItems = [
+    {
+      key: "recent_activity" as const,
+      label: "Recent Activity",
+      description: "Review the latest learning activity across chat, research, solve, and generation flows.",
+      icon: Clock3,
+      count: recentActivityItems.length,
+    },
     {
       key: "chat_history" as const,
       label: "Chat History",
@@ -3799,6 +3819,14 @@ function LearningSpacePanel({
     onError: (error) => toast.error(error.message),
   });
 
+  const openRecentActivity = (item: Item) => {
+    const sessionRef = textOf(item.session_ref);
+    const sessionId = sessionRef.startsWith("sessions/")
+      ? sessionRef.slice("sessions/".length)
+      : textOf(item.session_id) || textOf(item.id);
+    if (sessionId) onOpenChatSession(sessionId);
+  };
+
   return (
     <div className="flex h-full min-h-0 bg-zaki-base">
       <aside className="flex h-full w-[224px] shrink-0 flex-col border-r border-zaki-border bg-zaki-raised">
@@ -3858,7 +3886,21 @@ function LearningSpacePanel({
       </aside>
 
       <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
-        {activeSection === "chat_history" ? (
+        {activeSection === "recent_activity" ? (
+          <SpaceContentBlock
+            icon={Clock3}
+            title="Recent Activity"
+            description="Browse the latest learning activity returned by the learning engine dashboard feed."
+            count={`${recentActivityItems.length} activities`}
+          >
+            <ItemList
+              items={recentActivityItems}
+              empty="No recent learning activity yet."
+              variant="generic"
+              onOpen={openRecentActivity}
+            />
+          </SpaceContentBlock>
+        ) : activeSection === "chat_history" ? (
           <SpaceContentBlock
             icon={History}
             title="Chat History"
