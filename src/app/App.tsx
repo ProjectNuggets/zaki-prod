@@ -43,6 +43,7 @@ export default function App() {
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
   const isZakiBotRoute = isZakiBotSpaceId(params.spaceId);
+  const isLearningRoute = location.pathname === "/learn";
   
   // Auth state from Zustand
   const { token, user, isHydrating, setToken, setUser, setHydrating, logout } = useAuthStore();
@@ -365,8 +366,8 @@ export default function App() {
         </div>
         
         <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 zaki-shell-surface">
-          <div className="zaki-main-shell">
-            <div className="zaki-main-panel">
+          <div className={isLearningRoute ? "zaki-main-shell zaki-main-shell--workspace" : "zaki-main-shell"}>
+            <div className={isLearningRoute ? "zaki-main-panel zaki-main-panel--workspace" : "zaki-main-panel"}>
               <div className="zaki-main-inner">
                 <ErrorBoundary>
                   <Outlet />
