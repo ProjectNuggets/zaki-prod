@@ -1,145 +1,91 @@
-# ZAKI Web — Roadmap
+# ZAKI Learn Roadmap
 
-## Active Milestone: V1.5 Frontend
+Last updated: 2026-05-07
 
-**Goal:** Surface the V1.5 backend capabilities to users. Close all frontend audit findings. Ship Brain page (memory graph + timeline + compose), fix all broken/invisible features, and wire the agent posture HUD.
+## Active Milestone: learn ZAKI Learn DeepTutor Parity
 
-**Ship target:** 2026-05-05
+**Goal:** Bring ZAKI Learn to DeepTutor capability parity as a hosted, multi-user SaaS surface with ZAKI auth, ZAKI BFF security, upstream-shaped UI, and operator-managed dependencies.
 
----
+**Spec:** `docs/zaki-learning-integration-spec.md`
 
-## Phase v1.5-frontend: V1.5 Frontend — Brain Page + Audit Fixes
+## Phase 01: Learn UI Parity And Route Truth
 
-**Goal:** Implement the Brain page (memory graph, timeline, compose flow), fix all 7 critical + 14 high audit findings, complete WS2–WS5 wiring gaps, and ship a clean agent posture HUD. All V1.5 backend endpoints become user-visible.
+**Goal:** Make each visible Learn route match the upstream DeepTutor surface shape inside the ZAKI shell. Remove dashboard wrappers and route fallbacks that hide upstream surfaces.
 
-**Workstreams:**
-1. Brain page + dashboard + sidebar entry (WS1) — new /brain route, graph view, timeline, compose
-2. Compaction gauge + notice fixes (WS2) — C3, C4, C5, M3 from audit
-3. Agent runtime polish (WS3) — C2, H7, H8, sandbox badge, y/n shortcuts, i18n
-4. Session list wiring (WS4) — H1, H2, H3, H4, H5, mode/live/channel/approvals
-5. Unlock value (WS5) — valid_to deprecated visual, compose badges
-6. Quick fixes — C6, H9, H14, L1
-7. Debt cleanup — C1, H6, H10, H11, H13, M9, M10
+**Requirements:** LEARN-PARITY-001 through LEARN-PARITY-010, LEARN-UX-001 through LEARN-UX-007
 
-**Requirements:** REQ-V15-001 through REQ-V15-025 (all listed in REQUIREMENTS.md)
+**Plans:**
 
-**Plans:** 13/13 plans complete
+- [x] 01-01: Build route parity manifest and browser audit for every Learn view.
+- [ ] 01-02: Port/adapt Sources/Knowledge page shape from upstream.
+- [ ] 01-03: Port/adapt Co-Writer page shape from upstream.
+- [ ] 01-04: Port/adapt Space page sections from upstream.
+- [ ] 01-05: Port/adapt TutorBot management and chat surfaces from upstream.
+- [ ] 01-06: Normalize advanced workspace entry points for solve, research, quiz, visualize, and math animation.
+- [ ] 01-07: Browser parity verification and UI code review.
 
-Plans:
-- [x] v1.5-frontend-01-PLAN.md — Quick fixes + debt cleanup (C1, C6, H5, H6, H10, H11, H14, L1)
-- [x] v1.5-frontend-02-PLAN.md — Brain API types + fetch wrappers + 3 query hooks
-- [x] v1.5-frontend-03-PLAN.md — WS2 fixes (C3 SSE, C4 ContextGauge, C5 SystemNoticesStack, M3 conic gradient)
-- [x] v1.5-frontend-04-PLAN.md — WS3 fixes (C2 SandboxBadge, H7 y/n shortcuts, H8 ApprovalRequiredCard i18n)
-- [x] v1.5-frontend-05-PLAN.md — WS4 fixes (H1+H2+H3 ZakiSessionList, H4 SessionManagementSheet metadata)
-- [x] v1.5-frontend-06-PLAN.md — Brain skeleton + empty + degraded banner + BrainPage shell + /brain route
-- [x] v1.5-frontend-07-PLAN.md — BrainTimelineView (infinite scroll, cursor, deprecated visual)
-- [x] v1.5-frontend-08-PLAN.md — BrainGraphView (SVG spring physics, multi-select, mobile fallback)
-- [x] v1.5-frontend-09-PLAN.md — BrainComposeModal slide-up panel + POST /brain/compose
-- [x] v1.5-frontend-10-PLAN.md — Sidebar Brain entry + Dashboard Brain card
-- [x] v1.5-frontend-11-PLAN.md — i18n debt (H9 requiresTelegram, L6 voice, L10 task)
-- [x] v1.5-frontend-12-PLAN.md — Final debt (H13 dead helpers, M9 Telegram, M10 ThumbsDown, M4 mode pills, M8 SSE warn, L4 gauge fallback)
-- [x] v1.5-frontend-13-PLAN.md — Verification gate (typecheck + tests + requirements coverage report)
+**Status:** In progress.
 
-**Wave structure:**
-- Wave 1 (parallel): plans 01, 02, 03, 04, 05
-- Wave 2: plan 06
-- Wave 3 (parallel): plans 07, 08
-- Wave 4 (sequential as needed): plans 09, 10, 11→12
-- Wave 5: plan 13
+## Phase 02: BFF Security And Multi-User Hardening
 
-**Status:** Complete
+**Goal:** Make every learning backend route and WebSocket SaaS-safe by construction.
 
----
+**Requirements:** LEARN-SEC-001 through LEARN-SEC-010, LEARN-SET-001 through LEARN-SET-004
 
-## Active Milestone: ZAKI-owned Oath
+**Plans:**
 
-**Goal:** Remove NOVA.TYP from the auth critical path. ZAKI issues its own HS256 JWTs. TYP becomes a downstream adapter. Every downstream service speaks X-Internal-Token + X-Zaki-User-Id. Zero user-visible disruption throughout.
+- [ ] 02-01: Convert learning mutation proxying to route allowlists or recursive schema sanitizers.
+- [ ] 02-02: Enforce byte limits for raw and chunked uploads before proxying.
+- [ ] 02-03: Move WebSocket payload handling to allowlist schemas and consume quota only on mutating/prompt messages.
+- [ ] 02-04: Gate unsafe generated HTML rendering behind operator policy and safe defaults.
+- [ ] 02-05: Split user-managed settings from operator-managed settings.
+- [ ] 02-06: Backend security test pass.
 
-**Migration window:** 60 days (TYP token TTL 30 days × 2 safety margin)
+**Status:** Pending.
 
----
+## Phase 03: Capability Parity Completion
 
-## Phase 01-zaki-mints-sessions: ZAKI mints sessions
+**Goal:** Ensure every upstream learning-relevant capability is reachable, wired, and tested in ZAKI.
 
-**Goal:** Backend issues ZAKI-owned JWTs and HttpOnly refresh cookies on login. Zero user-visible change. TYP token stored server-side only.
+**Requirements:** LEARN-PARITY-001 through LEARN-PARITY-010
 
-**Requirements:** OATH-01, OATH-02, OATH-03, OATH-04, OATH-05, OATH-06, OATH-07, OATH-08, OATH-09, OATH-10, OATH-11, OATH-12
+**Plans:**
 
-**Plans:** 4/4 plans complete
+- [ ] 03-01: Tutor chat and session parity.
+- [ ] 03-02: Book/lesson reader and block action parity.
+- [ ] 03-03: Quiz, review, question bank, weak-area loop parity.
+- [ ] 03-04: Notebooks and save/export flows.
+- [ ] 03-05: Deep research, deep solve, visualization, and math animation parity.
+- [ ] 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
 
-Plans:
-- [x] 01-01-PLAN.md — Wave 0: RED test stubs (zaki-auth, auth-endpoints, login-zaki integration)
-- [x] 01-02-PLAN.md — Wave 1: zaki-auth.js (6 exports) + db.js zaki_sessions table + config-validation.js ZAKI_JWT_SIGNING_KEY
-- [x] 01-03-PLAN.md — Wave 2: auth-endpoints.js (/refresh + /logout) + index.js wiring + CORS X-Zaki-Session-Upgrade
-- [x] 01-04-PLAN.md — Wave 3: login-handler.js extracted + ZAKI session mint + best-effort TYP 5s timeout
+**Status:** Pending.
 
-**Status:** Complete — VERIFICATION.md PASS 6/6
+## Phase 04: Governance, Quota, Retention, Export
 
----
+**Goal:** Close production governance gates for paid multi-user rollout.
 
-## Phase 02-replace-requireauthuser: Replace requireAuthUser (dual-auth window)
+**Requirements:** LEARN-GOV-001 through LEARN-GOV-006
 
-**Goal:** Replace requireAuthUser with ZAKI-first logic: verify locally if iss==="zaki", fall back to TYP call with 5s timeout otherwise. Mint ZAKI session on legacy path. Add concurrent refresh guard, audit logging, revokeAllSessionsForUser on password change.
+**Plans:**
 
-**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08
+- [ ] 04-01: Quota model and enforcement matrix.
+- [ ] 04-02: Data deletion/export implementation and audit state.
+- [ ] 04-03: Retention and cleanup policies.
+- [ ] 04-04: Backup/restore drill and disaster recovery runbook.
+- [ ] 04-05: Operator deployment checklist with immutable image tags.
 
-**Plans:** 3/3 plans complete
+**Status:** Pending.
 
-Plans:
-- [x] 02-01-PLAN.md — Wave 1: RED test stubs for AUTH-01..08 (require-auth-user.test.js + auth-endpoints/zaki-auth/login-handler test extensions)
-- [x] 02-02-PLAN.md — Wave 2: requireAuthUser + requireBotBffContext dual-auth replacement (extracted module + index.js wiring) [AUTH-01..05]
-- [x] 02-03-PLAN.md — Wave 3: Concurrent refresh guard + audit logs + password-change revokeAllSessions [AUTH-06, AUTH-07, AUTH-08]
+## Phase 05: Final Parity Audit And Release Gate
 
-**Wave structure:**
-- Wave 1: 02-01 (RED tests, no production code)
-- Wave 2: 02-02 (require-auth-user.js + index.js auth wiring) [AUTH-01..05]
-- Wave 3: 02-03 (auth-endpoints.js + zaki-auth.js + login-handler.js + index.js password-reset wiring) [AUTH-06..08] — sequential after 02-02 because both modify index.js
+**Goal:** Prove ZAKI Learn is ready for limited production rollout.
 
-**Status:** Plans complete — pending execution
+**Plans:**
 
----
+- [ ] 05-01: Full upstream-vs-ZAKI feature matrix.
+- [ ] 05-02: Browser walkthrough for all Learn surfaces.
+- [ ] 05-03: Backend BFF contract test sweep.
+- [ ] 05-04: Multi-user isolation smoke.
+- [ ] 05-05: Final code review and release-readiness verdict.
 
-## Phase 03-frontend-token-memory: Frontend moves to memory
-
-**Goal:** api.ts reads access token from Zustand store (not localStorage). On app boot, POST /api/auth/refresh to hydrate token. Watch X-Zaki-Session-Upgrade on every response and silently swap token in-memory.
-
-**Requirements:** FE-01, FE-02, FE-03, FE-04
-
-**Plans:** 2/2 plans complete
-
-**Status:** Not started
-
----
-
-## Phase 04-typ-adapter: TYP becomes an adapter
-
-**Goal:** Remove TYP /request-token call from loginHandler. Workspace routes resolve workspace access via server-side novaAdminRequest with nova_user_id (no client token forwarding). Drop typ_session_token column. Browser never touches TYP tokens.
-
-**Requirements:** TYP-01, TYP-02, TYP-03, TYP-04
-
-**Plans:** 4/4 plans complete
-
-Plans:
-- [x] 04-01-PLAN.md — Wave 1: typ-client.js adapter module (fetchTypWorkspaces, fetchTypWorkspaceSlugs, requestTypChatStream) [TYP-04]
-- [x] 04-02-PLAN.md — Wave 1: login-handler.js TYP removal (bestEffortTypFetch, novaUserId block, typ_session_token UPDATE) + test updates [TYP-01]
-- [x] 04-03-PLAN.md — Wave 2: Wire workspace routes + streamChatHandler to typ-client.js using zakiUser.nova_user_id [TYP-02]
-- [x] 04-04-PLAN.md — Wave 3: Drop typ_session_token column (db.js + migration SQL + full codebase sweep) [TYP-03]
-
-**Wave structure:**
-- Wave 1 (parallel): 04-01, 04-02
-- Wave 2: 04-03 (depends on 04-01 — needs typ-client.js to exist)
-- Wave 3: 04-04 (depends on 04-01 + 04-02 + 04-03 — all code refs must be gone before column drop)
-
-**Status:** Not started
-
----
-
-## Phase 05-legacy-sunset: Legacy sunset (Day 60 gate)
-
-**Goal:** After 45-day checkpoint confirms zero legacy path usage, add ZAKI_LEGACY_TYP_AUTH_CUTOFF env var. After cutoff date, legacy path returns 401 session_expired. Remove legacy code path.
-
-**Requirements:** SUN-01, SUN-02, SUN-03
-
-**Plans:** 0/? plans
-
-**Status:** Not started
+**Status:** Pending.

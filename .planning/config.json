@@ -1,0 +1,37 @@
+{
+  "mode": "interactive",
+  "milestone": "learn",
+  "milestone_name": "ZAKI Learn DeepTutor Parity",
+  "source_spec": "docs/zaki-learning-integration-spec.md",
+  "upstream_reference_repo": "/Users/nova/Desktop/zaki-learning-engine",
+  "commit_docs": true,
+  "branching_strategy": "none",
+  "parallelization": true,
+  "text_mode": false,
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "nyquist_validation": true,
+    "ui_phase": true,
+    "ui_safety_gate": true,
+    "context_coverage_gate": true
+  },
+  "quality_gates": {
+    "typecheck": "npm run typecheck",
+    "frontend_tests": "npm test -- --runTestsByPath src/app/components/learning/learningBookCreatePayload.test.ts src/lib/api.test.ts",
+    "build": "npm run build",
+    "browser": "verify affected /learn?view=* route in the in-app browser",
+    "code_review": "review backend trust boundary, frontend parity, and tests before commit"
+  },
+  "operator_managed": [
+    "learning engine base URL",
+    "internal service token",
+    "provider credentials",
+    "model routing",
+    "embedding/search/image/math providers",
+    "quota policy",
+    "upload and retention limits",
+    "feature flags"
+  ]
+}

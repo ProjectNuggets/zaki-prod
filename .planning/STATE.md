@@ -1,55 +1,46 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: milestone
-status: Milestone complete
-last_updated: "2026-05-03T00:32:29.436Z"
-last_activity: 2026-05-03
+milestone: learn
+milestone_name: ZAKI Learn DeepTutor Parity
+status: planning
+last_updated: "2026-05-07"
+last_activity: 2026-05-07
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 23
-  percent: 100
+  completed_phases: 0
+  total_plans: 28
+  completed_plans: 0
+  percent: 0
 ---
 
-# ZAKI Web — Project State
+# ZAKI Learn State
 
-**Project:** zaki-prod (ZAKI web backend + frontend)
-**Stack:** Node.js + Express + PostgreSQL (backend), Vite + React 18 + TypeScript + Tailwind + Zustand + TanStack Query (frontend)
-**Current milestone:** ZAKI-owned Oath (central auth takeover — 5-phase migration)
-**Last activity:** 2026-05-03
-**Last session stopped at:** Phase 1 all 4 plans executed, awaiting gsd-verifier
+## Current Position
 
-## Phase Status
+Phase: 01 Learn UI Parity And Route Truth
+Plan: 01-02 Sources/Knowledge page shape
+Status: 01-01 complete; ready to execute 01-02
+Last activity: 2026-05-07 - created Learn-only GSD track and route parity manifest.
 
-| Phase | Name | Status |
-|-------|------|--------|
-| 01-zaki-mints-sessions | ZAKI mints sessions (backend only, zero user impact) | Plans complete — pending verification |
-| 02-replace-requireauthuser | Replace requireAuthUser (dual-auth window) | Not started |
-| 03-frontend-token-memory | Frontend moves to memory store | Not started |
-| 04-typ-adapter | TYP becomes an adapter | Not started |
-| 05-legacy-sunset | Legacy sunset (Day 60 gate) | Not started |
+## Locked Decisions
 
-## Key Decisions (locked)
+- Use `docs/zaki-learning-integration-spec.md` as product/security truth.
+- Use `/Users/nova/Desktop/zaki-learning-engine` as upstream UI and backend capability reference.
+- Do not invent a new Learn dashboard around upstream sections.
+- Port/adapt upstream UI shape into ZAKI shell.
+- Keep raw provider/model/API-key settings operator-managed.
+- Keep all local commits local until explicit push approval.
 
-- API calls use `apiRequest()` from src/lib/api.ts — never `fetch + authHeaders()` (authHeaders doesn't exist)
-- AgentSessionMode = "plan" | "execute" | "review" (NOT "fast" | "balanced" | "deep")
-- SidebarModeSwitch.tsx = ZAKI/Spaces nav toggle (NOT agent mode selector)
-- New types/functions extend src/lib/api.ts — never create src/lib/api/ directory
-- Brain graph renderer: SVG + custom spring physics (no new deps unless d3-force approved)
-- Brain entry navigates to /brain route (not a ChatArea view state)
-- Compose flow: in-place panel slides up from bottom of graph (not modal/sheet)
-- userId: `String(useAuthStore().user?.id ?? "")`
-- Timeline hook: useInfiniteQuery (NOT useQuery)
-- All user-facing strings through useTranslation() + i18n files
+## Recent Browser Truth
 
-## Architecture Notes
+- `/learn?view=books` renders DeepTutor-style book library and `New book` opens creator flow.
+- `/learn?view=workspaces` now routes to Solve/Vision panel instead of falling back to Chat.
+- `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 
-- Routes: src/routes.tsx — Brain route is a direct child (not through ChatArea)
-- Components: src/app/components/{brain,chat,sidebar,agent,...}
-- Stores: src/stores/ (Zustand)
-- Queries: src/queries/ (TanStack Query)
-- Skeletons: src/app/components/ui/skeleton.tsx (existing file, extend it)
-- ErrorBoundary already wraps Outlet in App.tsx
-- Brain icon already imported in Sidebar.tsx
+## Completed Plans
+
+- 01-01: Route parity manifest and browser audit.
+
+## Next Command
+
+Execute Phase 01 Plan 01-02: port/adapt Sources/Knowledge page shape from upstream.

@@ -1,139 +1,108 @@
-# ZAKI — Project
+# ZAKI Learn DeepTutor Parity
 
-**Project:** zaki-prod
-**Stack:** Node.js + Express (backend) · Vite + React 18 + TypeScript + Tailwind + Zustand + TanStack Query (frontend) · PostgreSQL (DigitalOcean managed) · DOKS fra1 (Kubernetes) · Cloudflare → nginx ingress
-**Repo:** /Users/nova/Desktop/zaki-prod
+Last updated: 2026-05-07
 
----
+## Source Of Truth
 
-## What This Is
+- Product and security spec: `docs/zaki-learning-integration-spec.md`
+- Upstream implementation reference: `/Users/nova/Desktop/zaki-learning-engine`
+- ZAKI production repo: `/Users/nova/Desktop/zaki-prod`
+- Learning engine downstream service: `ProjectNuggets/zaki-learning-engine`
 
-ZAKI is an AI assistant platform. Users interact with AI agents through a web frontend. The backend is a Node.js/Express BFF that orchestrates identity, billing, memory, and downstream AI services (Nullalis agent backend, NOVA.TYP workspace/knowledge service, DeepTutor).
+## Goal
 
-**Core value:** A user logs in, talks to the AI, the AI remembers context and executes tasks.
+Make ZAKI Learn a hosted, multi-user, production-safe learning product with all learning-relevant upstream capabilities available through ZAKI-owned surfaces.
 
----
+The integration must adapt DeepTutor capabilities into ZAKI without exposing DeepTutor branding, direct engine APIs, internal service tokens, raw provider settings, or local-server filesystem linking.
 
-## Current Milestone: v2.0 — ZAKI-owned Oath
+## Non-Negotiables
 
-**Goal:** Remove NOVA.TYP from the auth critical path. ZAKI becomes the identity provider, issues its own JWTs, and standardizes the internal service contract across all downstream services.
+- Browser clients only call ZAKI backend `/api/learning/*`.
+- Browser clients never receive or send `X-Internal-Token`.
+- ZAKI central auth is the only browser-facing auth path.
+- ZAKI backend derives the canonical user id and injects `X-Zaki-User-Id`.
+- Learning data remains tenant-scoped by authenticated ZAKI user id.
+- Raw provider/model/API-key/base-url settings are operator-managed only.
+- Hosted production does not expose arbitrary server-local folder paths.
+- All upstream learning-relevant modules become ZAKI offerings, even if they overlap existing ZAKI features.
+- UI should port/adapt the upstream DeepTutor shape inside the ZAKI shell; do not invent dashboard wrappers around upstream surfaces.
+- No user-facing production copy mentions DeepTutor.
 
-**Target features:**
-- ZAKI session layer (zaki-auth.js + zaki_sessions table, jose JWT)
-- ZAKI JWT issuance on login (iss:"zaki", 15-min access + 30-day HttpOnly refresh cookie)
-- Dual-auth requireAuthUser: ZAKI-first local validation, 60-day legacy TYP fallback
-- Frontend token moves from localStorage to in-memory Zustand
-- TYP fully behind server-side adapter (browser never sees TYP token)
-- Legacy TYP auth sunset at Day 60 gate
+## Hosted Adaptation Rules
 
-**Key constraints:**
-- Zero user-visible disruption throughout all 5 phases
-- requireAuthUser return shape `{ email, zakiUser, sessionUser }` unchanged
-- 60-day migration window (TYP token TTL = 30 days, 2x safety margin)
-- jose (npm) is the only new dependency
-- SameSite=Strict cookie viable (app.chatzaki.com + api.chatzaki.com share eTLD+1)
-- No ALTER TABLE on existing tables in Phase 1 (CREATE TABLE only — doadmin confirmed)
-- Nullalis: zero changes (already on X-Internal-Token + X-Zaki-User-Id contract)
-- TYP pod: zero changes
+Local DeepTutor can assume a trusted local machine. Hosted ZAKI cannot.
 
----
+Allowed hosted source transports:
 
-## Active Requirements
+- browser file upload
+- image upload
+- mixed document/image attachments
+- browser folder upload where supported
+- drag-and-drop folder upload where supported
+- zipped folder upload with safe extraction
+- connector-backed folder linking in V1.1, starting with Google Drive if approved
 
-See REQUIREMENTS.md — SUN category (Phase 5 legacy sunset).
+Disallowed hosted transport:
 
-## Validated Requirements (v2.0 Phases 1-4)
+- arbitrary server-local filesystem path linking exposed to normal users
 
-- **OATH-01..12** — ZAKI session mint: zaki-auth.js, zaki_sessions table, jose JWT, /api/auth/refresh, /api/auth/logout (Phase 1)
-- **AUTH-01..08** — Dual-auth requireAuthUser: ZAKI-first local verify, TYP fallback, concurrent refresh guard, audit logs, revokeAllSessions on password change (Phase 2)
-- **FE-01..04** — Frontend token in Zustand memory: authStore (no localStorage), api.ts reads store, boot hydration via POST /api/auth/refresh, X-Zaki-Session-Upgrade interceptor (Phase 3)
-- **TYP-01..04** — TYP adapter: typ-client.js (admin key only), login stripped of TYP call, workspace routes wired to nova_user_id, typ_session_token column dropped (Phase 4)
+## Current Code Truth
 
----
+Frontend:
 
-## Validated Requirements (v1.5 Frontend)
+- `src/routes.tsx`
+- `src/stores/navigationStore.ts`
+- `src/lib/api.ts`
+- `src/lib/learningApi.ts`
+- `src/app/components/learning/LearningPage.tsx`
+- `src/app/components/learning/LearningBookWorkspace.tsx`
+- `src/app/components/learning/LearningBookBlockContent.tsx`
+- `src/app/components/learning/LearningSpacePickerModal.tsx`
 
-All REQ-V15-001 through REQ-V15-025 shipped and verified:
-- Brain page (graph, timeline, compose, empty state, degraded banner)
-- Sidebar Brain entry + Dashboard Brain card
-- Compaction SSE, ContextGauge, SystemNoticesStack
-- SandboxBadge, y/n shortcuts, ApprovalRequiredCard i18n
-- ZakiSessionList + SessionManagementSheet wiring
-- Dead code removal (chatStore, dead components, unused API helpers)
-- ThumbsDown feedback, all i18n strings, full typecheck + test pass
+Backend:
 
----
+- `backend/src/index.js`
+- `backend/src/require-auth-user.js`
+- `backend/src/learning-client.js`
+- `backend/src/learning-bff-contract.js`
+- `backend/src/learning-quota.js`
+- `backend/src/learning-upload-limits.js`
+- `backend/src/learning-ws-policy.js`
 
-## Out of Scope (deferred)
+Upstream reference:
 
-- OAuth providers (Google, GitHub SSO) — after v2.0 Oath is stable
-- MFA / TOTP — after v2.0 session layer is in place
-- External IdP (ZITADEL, Keycloak) — not the right fit; ZAKI owns this layer
-- DeepTutor multi-user integration — enters on the v2.0 service contract after Phase 4
-- Code splitting / bundle optimization — tracked in post-release.md
-- Voice input end-to-end, global search, conversation branching — post-release.md
+- `web/app/(workspace)/chat/[[...sessionId]]/page.tsx`
+- `web/app/(workspace)/book/page.tsx`
+- `web/app/(workspace)/book/components/*`
+- `web/components/knowledge/KnowledgePage.tsx`
+- `web/app/(workspace)/co-writer/page.tsx`
+- `web/app/(workspace)/agents/page.tsx`
+- `web/components/space/*`
+- `web/components/research/ResearchConfigPanel.tsx`
+- `web/components/visualize/VisualizeConfigPanel.tsx`
+- `web/components/math-animator/MathAnimatorConfigPanel.tsx`
 
----
+## Operating Model
 
-## Key Decisions (locked)
+GSD drives this work page by page and capability by capability:
 
-**Auth architecture:**
-- ZAKI issues HS256 JWTs; discriminator is `iss === "zaki"` (TYP tokens have no iss claim)
-- Refresh token stored as SHA-256 hash in zaki_sessions; delivered as HttpOnly Strict cookie
-- Token stored in Zustand memory (not localStorage) after Phase 3
-- Internal service contract: X-Internal-Token + X-Zaki-User-Id + X-Request-Id (Nullalis already on this)
-- jose (npm) for JWT signing/verification — no external IdP
+1. Compare ZAKI route against upstream reference.
+2. Record exact parity gaps.
+3. Patch only the affected surface and BFF contract.
+4. Validate with typecheck, targeted tests, browser verification, and code review.
+5. Commit locally only.
 
-**Frontend:**
-- API calls use `apiRequest()` from src/lib/api.ts
-- AgentSessionMode = "plan" | "execute" | "review"
-- New types/functions extend src/lib/api.ts — never create src/lib/api/ directory
-- All user-facing strings through useTranslation() + i18n files
+## Definition Of Done
 
-**Infrastructure:**
-- Secrets in k8s Secrets (zaki namespace) — rotation requires rolling restart
-- ZAKI_JWT_SIGNING_KEY: 256-bit hex, kid header for zero-downtime rotation
-- Cookie domain: Domain=.chatzaki.com (same eTLD+1, SameSite=Strict works)
-- Cloudflare → nginx → DOKS; Express must have trust proxy set
+ZAKI Learn is ready when:
 
----
-
-## Architecture
-
-```
-[Browser]
-  Zustand memory (access JWT, 15 min)
-  HttpOnly cookie (refresh token, 30 day, Path=/api/auth/refresh)
-       ↓ Authorization: Bearer <ZAKI JWT>
-[zaki-prod backend — api.chatzaki.com]
-  requireAuthUser():
-    iss==="zaki" → jose.jwtVerify() local, <1ms, no network
-    else         → legacy TYP /system/refresh-user (migration window only)
-       ↓ { email, zakiUser, sessionUser }
-  requireAgentContext() → resolveCanonicalAgentUserId()
-       ↓ X-Internal-Token + X-Zaki-User-Id + X-Request-Id
-[Nullalis — nullclaw-router.zaki.svc.cluster.local]
-[TYP — typ:3001 (cluster-internal adapter only)]
-```
-
----
-
-## Evolution
-
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition:**
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-
-**After each milestone:**
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Architecture with current state
-
----
-
-*Last updated: 2026-05-03 — Phase 4 (typ-adapter) complete. TYP is now fully behind server-side adapter. Browser never touches TYP tokens.*
+- every upstream learning-relevant capability is reachable in ZAKI
+- every capability is tenant-safe and auth-gated
+- every mutating route strips or rejects operator-managed fields
+- uploads are size/type bounded even with chunked transfer
+- WebSockets consume quota only on real mutating/prompt messages
+- generated/LLM HTML cannot run arbitrary scripts by default
+- retention/export/delete/backup behavior is implemented or explicitly gated
+- route-level browser verification confirms UI parity against upstream shape
+- contract tests cover BFF trust boundaries
+- no direct learning-engine browser URL remains
