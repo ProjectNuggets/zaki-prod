@@ -64,7 +64,14 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
 
   return (
     <aside
-      className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-zaki-lg border border-zaki-border bg-zaki-raised/60 p-4 text-sm text-zaki-text"
+      // V1.11 hotfix (2026-05-07) — bg switched from zaki-raised/60
+      // (60% opacity → translucent over dark canvas, hard to read per
+      // Nova's "lists are not really visible when opened" feedback)
+      // to solid #181818 matching Obsidian's filter panel from frame 45
+      // of Nova's video. Solid dark panel reads cleanly against the
+      // #0a0a0a canvas; the graph is still visible behind everywhere
+      // the panel doesn't cover.
+      className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-zaki-lg border border-white/10 bg-[#181818] p-4 text-sm text-zaki-text"
       data-testid="brain-filter-panel"
     >
       <Section title={t("brain.filterPanel.filters", { defaultValue: "Filters" })}>
