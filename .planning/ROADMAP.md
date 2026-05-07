@@ -52,7 +52,7 @@ Last updated: 2026-05-07
 **Plans:**
 
 - [x] 03-01: Tutor chat and session parity.
-- [ ] 03-02: Book/lesson reader and block action parity.
+- [x] 03-02: Book/lesson reader and block action parity.
 - [ ] 03-03: Quiz, review, question bank, weak-area loop parity.
 - [ ] 03-04: Notebooks and save/export flows.
 - [ ] 03-05: Deep research, deep solve, visualization, and math animation parity.

@@ -3,8 +3,8 @@ import {
   AlertTriangle,
   BookmarkCheck,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
+  ChevronLeft,
   Code2,
   Compass,
   Eye,
@@ -42,7 +42,8 @@ export type LearningBookQuizAttempt = {
 type LearningBookBlockContentProps = {
   block: LearningBookContentBlock;
   onQuizAttempt?: (args: LearningBookQuizAttempt) => void;
-  onDeepDiveTopic?: (topic: string) => void;
+  onDeepDiveTopic?: (topic: string) => void | Promise<void>;
+  pendingDeepDiveTopic?: string | null;
 };
 
 type QuizQuestion = {
@@ -178,6 +179,7 @@ export function LearningBookBlockContent({
   block,
   onQuizAttempt,
   onDeepDiveTopic,
+  pendingDeepDiveTopic,
 }: LearningBookBlockContentProps) {
   const payload = block.payload || {};
   const bridgeText = textOf(payload.bridge_text);
@@ -219,6 +221,7 @@ export function LearningBookBlockContent({
         block={block}
         onQuizAttempt={onQuizAttempt}
         onDeepDiveTopic={onDeepDiveTopic}
+        pendingDeepDiveTopic={pendingDeepDiveTopic}
       />
     </div>
   );
@@ -228,6 +231,7 @@ function TypedBlock({
   block,
   onQuizAttempt,
   onDeepDiveTopic,
+  pendingDeepDiveTopic,
 }: LearningBookBlockContentProps) {
   switch (block.type) {
     case "text":
@@ -253,7 +257,13 @@ function TypedBlock({
     case "flash_cards":
       return <FlashCardsBlock block={block} />;
     case "deep_dive":
-      return <DeepDiveBlock block={block} onDeepDiveTopic={onDeepDiveTopic} />;
+      return (
+        <DeepDiveBlock
+          block={block}
+          onDeepDiveTopic={onDeepDiveTopic}
+          pendingDeepDiveTopic={pendingDeepDiveTopic}
+        />
+      );
     case "concept_graph":
       return <ConceptGraphBlock block={block} />;
     default:
@@ -667,11 +677,15 @@ function AnimationBlock({ block }: { block: LearningBookContentBlock }) {
 function DeepDiveBlock({
   block,
   onDeepDiveTopic,
+  pendingDeepDiveTopic,
 }: {
   block: LearningBookContentBlock;
-  onDeepDiveTopic?: (topic: string) => void;
+  onDeepDiveTopic?: (topic: string) => void | Promise<void>;
+  pendingDeepDiveTopic?: string | null;
 }) {
   const suggestions = arrayOfRecords(block.payload?.suggestions) as DeepDiveSuggestion[];
+  const linkedPageId = textOf(block.metadata?.deep_dive_page_id);
+  const [busyTopic, setBusyTopic] = useState<string | null>(null);
   if (!suggestions.length) return <FallbackBlock block={block} />;
   return (
     <div className="rounded-zaki-lg border border-zaki-brand/30 bg-zaki-brand/5 p-4">
@@ -684,23 +698,42 @@ function DeepDiveBlock({
       <ul className="space-y-2">
         {suggestions.map((suggestion, index) => {
           const topic = suggestion.topic || "";
+          const pending = busyTopic === topic || pendingDeepDiveTopic === topic;
           return (
             <li key={index}>
               <button
                 type="button"
-                onClick={() => topic && onDeepDiveTopic?.(topic)}
-                disabled={!topic}
-                className="w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-left hover:border-zaki-brand/40 disabled:opacity-60"
+                onClick={() => {
+                  if (!topic || !onDeepDiveTopic) return;
+                  setBusyTopic(topic);
+                  void Promise.resolve(onDeepDiveTopic(topic)).finally(() => {
+                    setBusyTopic(null);
+                  });
+                }}
+                disabled={!topic || pending || Boolean(linkedPageId)}
+                className="group flex w-full items-start justify-between gap-3 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-left transition-colors hover:border-zaki-brand/40 disabled:opacity-60"
               >
-                <div className="text-sm font-semibold text-zaki-text">{topic}</div>
-                {suggestion.rationale ? (
-                  <div className="mt-0.5 text-xs leading-5 text-zaki-muted">{suggestion.rationale}</div>
-                ) : null}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-zaki-text">{topic}</span>
+                  {suggestion.rationale ? (
+                    <span className="mt-0.5 block text-xs leading-5 text-zaki-muted">
+                      {suggestion.rationale}
+                    </span>
+                  ) : null}
+                </span>
+                {pending ? (
+                  <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-zaki-brand" />
+                ) : (
+                  <ChevronRight className="mt-0.5 size-4 shrink-0 text-zaki-muted transition-transform group-hover:translate-x-0.5 group-hover:text-zaki-brand" />
+                )}
               </button>
             </li>
           );
         })}
       </ul>
+      {linkedPageId ? (
+        <p className="mt-2 text-[11px] text-zaki-muted">Linked sub-page already exists.</p>
+      ) : null}
     </div>
   );
 }

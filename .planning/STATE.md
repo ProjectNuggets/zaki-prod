@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 28
-  completed_plans: 14
-  percent: 50
+  completed_plans: 15
+  percent: 54
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 03 Capability Parity Completion
-Plan: 03-02 Book/lesson reader and block action parity
-Status: 03-01 complete; ready to execute 03-02
-Last activity: 2026-05-07 - completed TutorBot chat/session parity with recent tutors, stop/delete lifecycle split, full history restore, live transcript export state, browser WebSocket check, frontend tests, typecheck, and diff hygiene passing.
+Plan: 03-03 Quiz, review, question bank, weak-area loop parity
+Status: 03-02 complete; ready to execute 03-03
+Last activity: 2026-05-07 - completed book/lesson reader parity with hover block toolbar, Deep Dive pending/sub-page selection, collapsible chapter sidebar, live book proposal browser smoke, frontend tests, typecheck, and diff hygiene passing.
 
 ## Locked Decisions
 
@@ -65,7 +65,8 @@ Last activity: 2026-05-07 - completed TutorBot chat/session parity with recent t
 - 02-05: User/operator settings split.
 - 02-06: Backend security test pass.
 - 03-01: Tutor chat and session parity.
+- 03-02: Book/lesson reader and block action parity.
 
 ## Next Command
 
-Execute Phase 03 Plan 03-02: book/lesson reader and block action parity.
+Execute Phase 03 Plan 03-03: quiz, review, question bank, weak-area loop parity.

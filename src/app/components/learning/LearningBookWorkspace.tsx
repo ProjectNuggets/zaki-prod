@@ -8,11 +8,13 @@ import {
   ArrowUp,
   BookOpen,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   CheckCircle2,
   Clock3,
   ClipboardList,
+  Compass,
   Database,
   FileText,
   Layers,
@@ -23,6 +25,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Replace,
   RotateCcw,
   Search,
   Send,
@@ -523,6 +526,7 @@ export function LearningBookWorkspace({
   const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
   const [progressSocketAuthReady, setProgressSocketAuthReady] = useState(false);
   const [bookLanguage, setBookLanguage] = useState("en");
+  const [pendingDeepDiveTopic, setPendingDeepDiveTopic] = useState<string | null>(null);
   const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([]);
   const [selectedSessions, setSelectedSessions] = useState<BookSourceSelection<number>>(() => new Map());
   const [selectedNotebooks, setSelectedNotebooks] = useState<BookSourceSelection<string>>(() => new Map());
@@ -640,13 +644,16 @@ export function LearningBookWorkspace({
     mutationFn: async ({
       label,
       action,
+      afterSuccess,
     }: {
       label: string;
       action: () => Promise<unknown>;
-    }) => action().then((payload) => ({ label, payload })),
-    onSuccess: async ({ label }) => {
+      afterSuccess?: (payload: unknown) => void | Promise<void>;
+    }) => action().then((payload) => ({ label, payload, afterSuccess })),
+    onSuccess: async ({ label, payload, afterSuccess }) => {
       toast.success(label);
       await refreshDetail();
+      await afterSuccess?.(payload);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -907,18 +914,29 @@ export function LearningBookWorkspace({
                     textOf(block.title) ||
                     activePage.title ||
                     "this topic";
+                  setPendingDeepDiveTopic(topic);
                   runBookAction.mutate({
                     label: "Deep dive page created",
-                    action: () =>
-                      createLearningBookDeepDive({
-                        book_id: activeBook.id,
-                        parent_page_id: activePage.id,
-                        topic,
-                        block_id: block.id,
-                        content_type: "concept",
-                      }),
+                    action: async () => {
+                      try {
+                        return await createLearningBookDeepDive({
+                          book_id: activeBook.id,
+                          parent_page_id: activePage.id,
+                          topic,
+                          block_id: block.id,
+                          content_type: "concept",
+                        });
+                      } finally {
+                        setPendingDeepDiveTopic(null);
+                      }
+                    },
+                    afterSuccess: (payload) => {
+                      const pageId = itemId(asRecord(asRecord(payload).page));
+                      if (pageId) setSelectedPageId(pageId);
+                    },
                   });
                 }}
+                pendingDeepDiveTopic={pendingDeepDiveTopic}
                 onQuizAttempt={(block, attempt) => {
                   if (!activeBook || !activePage) return;
                   runBookAction.mutate({
@@ -1694,20 +1712,77 @@ function BookSidebarView({
   onSelectPage: (page: LearningBookPage) => void;
   onRebuild: () => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return (
+      <aside className="flex h-full w-14 shrink-0 flex-col items-center gap-3 border-r border-zaki-border bg-zaki-raised px-2 py-4">
+        <button
+          type="button"
+          onClick={onBack}
+          title="All books"
+          className="inline-flex size-8 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          <ArrowLeft className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          title="Expand chapters"
+          className="inline-flex size-8 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+        <div className="h-px w-8 bg-zaki-border" />
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">
+          {pages.map((page, index) => {
+            const active = page.id === selectedPageId;
+            return (
+              <button
+                key={page.id}
+                type="button"
+                onClick={() => onSelectPage(page)}
+                title={page.title || "Untitled"}
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-zaki-md text-[11px] font-semibold",
+                  active
+                    ? "bg-zaki-brand/15 text-zaki-text"
+                    : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                )}
+              >
+                {page.content_type === "overview" ? <Compass className="size-3.5" /> : index + 1}
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex h-full w-[250px] shrink-0 flex-col border-r border-zaki-border bg-zaki-raised px-3 py-4">
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-4 inline-flex items-center gap-1.5 self-start rounded-zaki-sm px-2 py-1 text-xs font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
-      >
-        <ArrowLeft className="size-3.5" />
-        All books
-      </button>
+    <aside className="flex h-full w-[232px] shrink-0 flex-col gap-3 border-r border-zaki-border bg-zaki-raised px-3 py-4">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 rounded-zaki-sm px-2 py-1 text-xs font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          <ArrowLeft className="size-3.5" />
+          All books
+        </button>
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          title="Collapse chapters"
+          className="inline-flex size-7 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          <ChevronLeft className="size-3.5" />
+        </button>
+      </div>
       {book ? (
-        <div className="mb-4 px-1">
+        <div className="px-1">
           <div className="line-clamp-2 text-sm font-semibold text-zaki-text">{book.title}</div>
-          <div className="mt-1 text-[10px] uppercase tracking-normal text-zaki-muted">
+          <div className="mt-0.5 text-[10px] uppercase tracking-normal text-zaki-muted">
             {book.status} / {book.chapter_count || pages.length} chapters
           </div>
         </div>
@@ -1717,7 +1792,7 @@ function BookSidebarView({
           type="button"
           onClick={onRebuild}
           disabled={rebuilding}
-          className="mb-4 inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border text-xs font-semibold text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-60"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border text-xs font-semibold text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-60"
         >
           {rebuilding ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
           Rebuild book
@@ -1730,9 +1805,14 @@ function BookSidebarView({
             Loading chapters
           </div>
         ) : pages.length ? (
+          <>
+          <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
+            Chapters
+          </div>
           <div className="space-y-1">
             {pages.map((page) => {
               const active = page.id === selectedPageId;
+              const isOverview = page.content_type === "overview";
               return (
                 <button
                   key={page.id}
@@ -1743,9 +1823,13 @@ function BookSidebarView({
                     active
                       ? "bg-zaki-brand/12 text-zaki-text"
                       : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                    isOverview && "border border-dashed border-zaki-border",
                   )}
                 >
-                  <span className="line-clamp-2 min-w-0">{page.title}</span>
+                  <span className="flex min-w-0 items-start gap-1.5">
+                    {isOverview ? <Compass className="mt-px size-3 shrink-0 text-zaki-brand" /> : null}
+                    <span className="line-clamp-2">{page.title}</span>
+                  </span>
                   <span className="shrink-0 rounded-full bg-zaki-hover px-1.5 py-0.5 text-[9px] uppercase">
                     {page.status}
                   </span>
@@ -1753,6 +1837,7 @@ function BookSidebarView({
               );
             })}
           </div>
+          </>
         ) : (
           <div className="rounded-zaki-md border border-dashed border-zaki-border p-3 text-xs text-zaki-muted">
             Chapters appear after the outline is confirmed.
@@ -2098,6 +2183,7 @@ function BookReaderView({
   onChangeBlockType,
   onInsertBlock,
   onDeepDive,
+  pendingDeepDiveTopic,
   onQuizAttempt,
 }: {
   book: LearningBook;
@@ -2113,6 +2199,7 @@ function BookReaderView({
   onChangeBlockType: (block: LearningBookBlock, newType: BlockType) => void;
   onInsertBlock: (blockType: BlockType) => void;
   onDeepDive: (block: LearningBookBlock, topic?: string) => void;
+  pendingDeepDiveTopic?: string | null;
   onQuizAttempt: (block: LearningBookBlock, attempt: LearningBookQuizAttempt) => void;
 }) {
   const [insertOpen, setInsertOpen] = useState(false);
@@ -2222,6 +2309,7 @@ function BookReaderView({
               onMove={(direction) => onMoveBlock(block, direction)}
               onChangeType={(newType) => onChangeBlockType(block, newType)}
               onDeepDive={(topic) => onDeepDive(block, topic)}
+              pendingDeepDiveTopic={pendingDeepDiveTopic}
               onQuizAttempt={(attempt) => onQuizAttempt(block, attempt)}
             />
           ))}
@@ -2584,6 +2672,7 @@ function BookBlock({
   onMove,
   onChangeType,
   onDeepDive,
+  pendingDeepDiveTopic,
   onQuizAttempt,
 }: {
   block: LearningBookBlock;
@@ -2595,103 +2684,84 @@ function BookBlock({
   onMove: (direction: "up" | "down") => void;
   onChangeType: (newType: BlockType) => void;
   onDeepDive: (topic?: string) => void;
+  pendingDeepDiveTopic?: string | null;
   onQuizAttempt: (attempt: LearningBookQuizAttempt) => void;
 }) {
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const hasActions = Boolean(onRegenerate || onDelete || onMove || onChangeType);
   return (
-    <section id={`book-block-${block.id}`} className="scroll-mt-6 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-zaki-brand/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-zaki-brand">
-              {block.type}
-            </span>
-            <span className="text-[11px] text-zaki-muted">{block.status}</span>
-          </div>
-          {block.title ? <h3 className="mt-2 text-base font-semibold text-zaki-text">{block.title}</h3> : null}
-        </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+    <section id={`book-block-${block.id}`} className="group relative scroll-mt-6">
+      {hasActions ? (
+        <div className="pointer-events-none absolute -top-3 right-2 z-10 flex translate-y-1 items-center gap-1 rounded-zaki-md border border-zaki-border bg-zaki-raised px-1 py-0.5 text-zaki-muted opacity-0 shadow-sm transition group-hover:translate-y-0 group-hover:opacity-100">
           <button
             type="button"
             onClick={() => onMove("up")}
             disabled={!canMoveUp}
-            className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-40"
+            className="pointer-events-auto rounded-zaki-sm p-1 hover:bg-zaki-base hover:text-zaki-text disabled:opacity-30"
+            title="Move up"
           >
-            Up
+            <ArrowUp className="size-3.5" />
           </button>
           <button
             type="button"
             onClick={() => onMove("down")}
             disabled={!canMoveDown}
-            className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-40"
+            className="pointer-events-auto rounded-zaki-sm p-1 hover:bg-zaki-base hover:text-zaki-text disabled:opacity-30"
+            title="Move down"
           >
-            Down
+            <ArrowDown className="size-3.5" />
           </button>
-          <select
-            value={CHANGEABLE_TYPES.includes(block.type) ? block.type : ""}
-            onChange={(event) => {
-              const nextType = event.target.value;
-              if (nextType && nextType !== block.type) onChangeType(nextType);
-            }}
-            className="h-[26px] rounded-zaki-sm border border-zaki-border bg-zaki-base px-2 text-xs text-zaki-muted outline-none hover:border-zaki-brand/50 hover:text-zaki-brand"
-            aria-label="Change block type"
-          >
-            <option value="" disabled>
-              Type
-            </option>
-            {CHANGEABLE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+          <div className="pointer-events-auto relative">
+            <button
+              type="button"
+              onClick={() => setTypeMenuOpen((open) => !open)}
+              className="rounded-zaki-sm p-1 hover:bg-zaki-base hover:text-zaki-text"
+              title="Change type"
+            >
+              <Replace className="size-3.5" />
+            </button>
+            {typeMenuOpen ? (
+              <div className="absolute right-0 top-full mt-1 max-h-60 w-44 overflow-y-auto rounded-zaki-md border border-zaki-border bg-zaki-raised p-1 shadow-lg">
+                {CHANGEABLE_TYPES.filter((type) => type !== block.type).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setTypeMenuOpen(false);
+                      onChangeType(type);
+                    }}
+                    className="block w-full rounded-zaki-sm px-2 py-1 text-left text-xs text-zaki-text hover:bg-zaki-base"
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onRegenerate}
-            className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
+            className="pointer-events-auto rounded-zaki-sm p-1 hover:bg-zaki-base hover:text-zaki-text"
+            title="Regenerate"
           >
-            Retry
+            <RefreshCw className="size-3.5" />
           </button>
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-red-600 hover:border-red-500/50 hover:bg-red-500/10"
+            className="pointer-events-auto rounded-zaki-sm p-1 hover:bg-red-500/10 hover:text-red-600"
+            title="Delete"
           >
-            Delete
+            <Trash2 className="size-3.5" />
           </button>
         </div>
-      </div>
+      ) : null}
       <LearningBookBlockContent
         block={block}
         onQuizAttempt={onQuizAttempt}
         onDeepDiveTopic={onDeepDive}
+        pendingDeepDiveTopic={pendingDeepDiveTopic}
       />
-      <div className="mt-4 flex flex-wrap gap-2">
-        {block.type === "quiz" ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onQuizAttempt({ isCorrect: true })}
-              className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
-            >
-              Mark correct
-            </button>
-            <button
-              type="button"
-              onClick={() => onQuizAttempt({ isCorrect: false })}
-              className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
-            >
-              Mark needs review
-            </button>
-          </>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => onDeepDive()}
-          className="rounded-zaki-sm border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
-        >
-          Deep dive
-        </button>
-      </div>
     </section>
   );
 }
