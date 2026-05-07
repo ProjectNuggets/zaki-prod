@@ -10788,6 +10788,7 @@ app.patch(
     const body = sanitizeLearningTutorAgentPayload(req.body);
 
     if (body?.channels && typeof body.channels === "object" && !Array.isArray(body.channels)) {
+      const requestId = getOrCreateRequestId(req);
       try {
         const [detailResponse, schemaResponse] = await Promise.all([
           fetchLearningPath({
@@ -10801,20 +10802,49 @@ app.patch(
             method: "GET",
           }),
         ]);
-        const detail = detailResponse.ok ? await detailResponse.json().catch(() => null) : null;
-        const schema = schemaResponse.ok
-          ? filterLearningTutorAgentChannelsSchema(await schemaResponse.json().catch(() => null))
-          : null;
+
+        if (!detailResponse.ok || !schemaResponse.ok) {
+          const failedResponse = !detailResponse.ok ? detailResponse : schemaResponse;
+          const mapped = mapLearningUpstreamFailure(failedResponse.status, requestId);
+          if (mapped) {
+            res.status(mapped.status).json(mapped.body);
+            return;
+          }
+          res.status(503).json({
+            code: "learning_tutor_channel_secret_merge_unavailable",
+            error: "Learning tutor channel secrets could not be preserved.",
+            message: "Learning is temporarily unable to save channel settings safely.",
+            retryable: true,
+            requestId,
+          });
+          return;
+        }
+
+        const detail = await detailResponse.json().catch(() => null);
+        const schema = filterLearningTutorAgentChannelsSchema(
+          await schemaResponse.json().catch(() => null)
+        );
+        if (!detail || typeof detail !== "object" || !schema || typeof schema !== "object") {
+          throw new Error("invalid_tutor_channel_secret_merge_payload");
+        }
         body.channels = mergeLearningTutorAgentChannelSecrets(
           body.channels,
           detail?.channels,
           schema
         );
       } catch (error) {
-        console.warn("[Learning] Tutor agent channel secret merge skipped:", {
-          requestId: getOrCreateRequestId(req),
+        console.warn("[Learning] Tutor agent channel secret merge failed closed:", {
+          requestId,
           error: error?.message || "Unable to read existing tutor channel secrets.",
         });
+        res.status(503).json({
+          code: "learning_tutor_channel_secret_merge_unavailable",
+          error: "Learning tutor channel secrets could not be preserved.",
+          message: "Learning is temporarily unable to save channel settings safely.",
+          retryable: true,
+          requestId,
+        });
+        return;
       }
     }
 

@@ -6361,6 +6361,7 @@ function TutorProfilesPanel({ bots, souls }: { bots: Item[]; souls: Item[] }) {
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveMode, setSaveMode] = useState<"file_only" | "update_template" | "new_template">("file_only");
   const [newTemplateName, setNewTemplateName] = useState("");
+  const loadedProfileKeyRef = useRef("");
 
   useEffect(() => {
     if (!selectedBot && bots[0]) setSelectedBot(tutorAgentId(bots[0], "agent-1"));
@@ -6396,24 +6397,30 @@ function TutorProfilesPanel({ bots, souls }: { bots: Item[]; souls: Item[] }) {
     [soulTemplates],
   );
 
+  const hasChanges = editor !== (files[activeFile] ?? "");
+
   useEffect(() => {
+    if (!selectedBot || !filesQuery.data) return;
     const record = asRecord(filesQuery.data);
     const next: Record<string, string> = {};
     for (const [key, value] of Object.entries(record)) {
       next[key] = textOf(value);
     }
     setFiles(next);
-    const nextEditor = next[activeFile] ?? "";
-    setEditor(nextEditor);
-    if (activeFile === "SOUL.md") {
-      const matched = matchSoulId(next["SOUL.md"] ?? "");
-      setSelectedSoulId(matched);
-      setSourceSoulId(matched === "_custom" ? null : matched);
+    const profileKey = `${selectedBot}:${activeFile}`;
+    if (loadedProfileKeyRef.current !== profileKey) {
+      setEditor(next[activeFile] ?? "");
+      setActiveView("edit");
+      loadedProfileKeyRef.current = profileKey;
     }
-    setActiveView("edit");
-  }, [activeFile, filesQuery.data, matchSoulId]);
+  }, [activeFile, filesQuery.data, selectedBot]);
 
-  const hasChanges = editor !== (files[activeFile] ?? "");
+  useEffect(() => {
+    if (activeFile !== "SOUL.md" || hasChanges) return;
+    const matched = matchSoulId(files["SOUL.md"] ?? "");
+    setSelectedSoulId(matched);
+    setSourceSoulId(matched === "_custom" ? null : matched);
+  }, [activeFile, files, hasChanges, matchSoulId]);
 
   const applySoulSelection = useCallback(
     (nextId: string) => {
