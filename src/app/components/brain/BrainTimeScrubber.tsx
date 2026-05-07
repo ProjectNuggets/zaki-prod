@@ -137,7 +137,7 @@ interface DiffColumnProps {
 }
 
 function DiffColumn({ title, tone, items, onPick }: DiffColumnProps) {
-  const dot = tone === "positive" ? "bg-emerald-500" : "bg-amber-500";
+  const dot = tone === "positive" ? "bg-zaki-success" : "bg-zaki-warning";
   return (
     <div>
       <div className="mb-1 flex items-center gap-1.5 text-xs text-white/55">

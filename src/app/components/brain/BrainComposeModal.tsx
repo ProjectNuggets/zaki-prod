@@ -145,7 +145,7 @@ export function BrainComposeModal({
           </label>
 
           {error && (
-            <div className="mb-2 text-xs text-red-500">{error}</div>
+            <div className="mb-2 text-xs text-zaki-error">{error}</div>
           )}
 
           <div className="flex items-center justify-between">

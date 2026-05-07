@@ -1098,7 +1098,7 @@ function DetailPanel({
           {t("brain.graph.detail.showLocal", { defaultValue: "Show local graph" })}
         </button>
         {isDeprecated && (
-          <div className="mt-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-center text-[10px] font-semibold text-amber-400">
+          <div className="mt-2 rounded-full bg-zaki-warning px-2 py-0.5 text-center text-[10px] font-semibold text-zaki-warning">
             {t("brain.graph.superseded", { defaultValue: "Superseded" })}
           </div>
         )}

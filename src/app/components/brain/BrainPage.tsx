@@ -417,6 +417,7 @@ interface FloatingOverlayProps {
 }
 
 function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
+  const { t } = useTranslation();
   // V1.11 hotfix (2026-05-07) — overlay polish to match the Obsidian
   // Filters panel from Nova's video (Screen Recording 2026-05-07
   // 14:05, frames 25 + 45):
@@ -431,7 +432,7 @@ function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
       <button
         type="button"
         onClick={onClose}
-        aria-label="Close panel"
+        aria-label={t("brain.panel.close", { defaultValue: "Close panel" })}
         className="absolute right-2 top-2 z-30 flex size-6 items-center justify-center rounded-full bg-black/40 text-white/60 transition-colors hover:bg-black/60 hover:text-white"
       >
         <X className="size-3" />

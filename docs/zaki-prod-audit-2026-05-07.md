@@ -203,7 +203,56 @@ Filing this as a cross-cutting Phase 2 prep task: extend token coverage so utili
 
 ### Brain page — `/brain`
 
-_(audit pending — handoff doc says don't refactor for taste; will audit accessibility + URL deep-linking + mobile)_
+Files (12, 2,889 lines total): `BrainPage.tsx` (460), `BrainGraphView.tsx` (1,108 — incl. `DetailPanel` + `HoverTooltip` inline), `BrainFilterPanel.tsx` (310), `BrainTimelineView.tsx` (225), `BrainComposeModal.tsx` (174), `BrainTimeScrubber.tsx` (167), `brainColors.ts` (155), `BrainCommunityLegend.tsx` (141), `BrainOrphanRail.tsx` (92), `BrainSemanticDegradedBanner.tsx` (28), `BrainEmptyState.tsx` (23), `index.ts` (6).
+
+Nova's authority lifted the V1.11 "don't refactor for taste" guard — but the V1.11 invariants (NaN clamping, dark-locked overlay panel colors, importance-driven node sizing, per-edge relevance-weighted layout) stay. Hotfix comments documenting them are excellent and stay too.
+
+**Strengths.** This is the cleanest surface in the audit. BrainPage uses a single-source `activePanel` state (Obsidian Graph View pattern). Heavy V1.11 hotfix comments document every non-obvious decision (the "why" comments DESIGN.md asked for). i18n via `t()` consistent throughout. Source attribution rendering in DetailPanel is the Pillar 1 trust-builder ("I can see exactly where ZAKI learned this"). Per-edge relevance-weighted layout fixes "important things sit close together."
+
+**P0 — atomic ship-ready (small token migration + a11y)**
+
+- **Off-brand `text-red-500` error in `BrainComposeModal:148`** → `text-zaki-error`.
+- **Off-brand `bg-amber-500/15 text-amber-400` Superseded badge in `BrainGraphView:1101`** → `bg-zaki-warning text-zaki-warning` (using new utilities I just shipped).
+- **Off-brand `border-amber-400/60 bg-amber-50 text-amber-900` in `BrainSemanticDegradedBanner:11`** plus dark variants → `border-zaki-warning bg-zaki-warning text-zaki-warning`. Single utility set works in both modes now that `--zaki-warning-bg` is translucent rgba.
+- **Off-brand `bg-emerald-500` / `bg-amber-500` tone dots in `BrainTimeScrubber:140`** → `bg-zaki-success` / `bg-zaki-warning`. Emerald is not in the brand; teal substitution is brand-coherent.
+- **Hardcoded English `aria-label="Close panel"` in `BrainPage.tsx:434`** → `t("brain.panel.close", { defaultValue: "Close panel" })`.
+- **TabButton (Timeline / Graph) has no tab semantics**: missing `role="tablist"` on container, `role="tab"`, `aria-selected`, `aria-controls`. Screen readers don't announce tab state. Add proper Radix Tabs primitive (already a dep) or inline ARIA.
+- **`#f10202` hex literal used 8+ times across `BrainPage.tsx` and `BrainGraphView.tsx`** instead of the `--zaki-brand` token / `text-zaki-brand` utility. Examples: focus border (`BrainPage:187`), compose-from-N button (`BrainPage:347`), PanelToggle active state (`BrainPage:400`), TabButton active border (`BrainPage:453`), depth slider accent (`BrainGraphView:757`), selected count chip (`BrainGraphView:776`), importance fill bar (`BrainGraphView:975`), Show Local button (`BrainGraphView:1095`), title field focus (`BrainComposeModal:131,143`), submit button (`BrainComposeModal:163`), success label (`BrainComposeModal:153`). Brand-canvas exception explicitly does NOT extend to brand red — that's a token. Migrate all to `var(--zaki-brand)` (inline styles) or `bg-zaki-brand` / `text-zaki-brand` / `border-zaki-brand` utilities.
+- **Inline `<svg>` for search + clear icons in `BrainPage:166-179, 200-214`** instead of Lucide `Search` / `X` (already imported `X` at line 4). Inconsistency.
+
+**P1 — Day 4 polish per V1.11 handoff doc, deferred but ready to ship**
+
+These were called out as "post-summit / V1.12" but Nova's lift means we can pull them forward. They compound for marketing:
+
+- **URL deep-linking:** `/brain?center=<key>&panel=clusters&q=<search>` should restore state. Today: refresh loses everything. Critical for the Pillar 1 "post your brain to Twitter" beat — sharing the URL needs to land the recipient on the same view.
+- **Keyboard shortcuts:** `f` toggle filters panel, `c` toggle clusters, `o` toggle loose facts, `Esc` close active panel, `/` focus search. Linear/Obsidian-grade affordance. None today.
+- **Copy-key button** next to the memory key in DetailPanel. Today: must triple-click + copy. Quick paperclip icon button + tooltip.
+- **Supersede chain stepper.** Today: prior versions render as a flat list. Should be a stepper showing valid_from → valid_to ranges with a "current" pin. The chain is ZAKI's V1.10 truth-maintenance differentiator; surfacing it visually matters.
+- **Empty state revamp.** `BrainEmptyState.tsx` is 23 lines. The brief says "Obsidian-style 'your brain starts here' illustration." First-time user moment.
+- **Mobile responsive.** Floating overlay panels collapse to bottom-sheet under 768px. Today: probably broken at narrow widths (panels fixed at right-3 + width assumptions).
+- **DetailPanel RTL flipping.** `inset-y-0 right-0` hardcoded LTR. In Arabic/RTL, the panel should sit on the left. Today: stays right.
+- **Panel collision check.** When DetailPanel is open AND user toggles Filters, both right-anchored surfaces. Need stacking rule (DetailPanel takes precedence, OR panels nest, OR panels relocate).
+
+**P1 — taste / structural improvements (Nova's call before shipping)**
+
+These are the things I'd want to change beyond the polish list. Each is a discussion, not a unilateral fix:
+
+1. **BrainComposeModal slides up from canvas bottom (line 95: `absolute inset-x-0 bottom-0`).** Steals canvas viewport. Two alternatives: (a) corner-anchored card (top-right under the PanelToggle cluster), (b) true full-overlay above canvas. I'd pick (a) — keeps canvas visible while composing. Your call.
+2. **`Compose from N` button is `fixed bottom-6 right-6` (line 343).** Outside the canvas, anchored to viewport. May overlap with sidebar collapse / mobile UI. Should probably move inside the canvas (bottom-right of canvas instead of bottom-right of viewport).
+3. **Search bar has no `⌘K` / `/` shortcut affordance.** Most users won't discover the keyboard shortcut. Inline `⌘K` chip on the search input's right side, like Linear / Cron. Cheap, big discoverability win.
+4. **First-time-on-brain-page tutorial.** A user with 50 nodes seeing them for the first time has no idea what to do. A 3-step coachmark sequence (hover for tooltip → click for detail → drag/scroll to navigate) would be a 30-second onboarding. Optional first-load flag in localStorage.
+5. **The DetailPanel `Show local graph` button enters local mode but the visual transition is abrupt.** Brief animation (200ms ease) on canvas swap would feel premium.
+6. **Importance bar in DetailPanel is a thin red bar** (line 973-979). Could be smarter — small histogram showing this node's importance vs the corpus distribution. "You're in the top 5% by importance."
+7. **Compose modal references chips have no remove affordance.** Once a node is added, can't remove without going back to canvas. Add `×` to each chip.
+
+**P2 — defer**
+
+- BrainComposeModal `textarea rows={3}` — auto-resize would help.
+- BrainComposeModal markdown live-preview pane.
+- BrainComposeModal Cmd+Enter to submit.
+- DetailPanel "captured timestamp" → "X days ago" + absolute on hover.
+- DetailPanel `historyOpen` toggle has no animation.
+- Linked memories `line-clamp-2` truncation — hover to expand.
 
 ### Pricing page — `/pricing`
 
