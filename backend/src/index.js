@@ -76,9 +76,12 @@ import {
   buildLearningDisabledPayload,
   checkLearningContentLength,
   createLearningByteLimitTransform,
+  extractLearningTelegramUpdateSender,
   extractLearningWsToken,
   filterLearningTutorAgentChannelsSchema,
   findLearningRequestSizeError,
+  isLearningTelegramQuotaFreeUpdate,
+  isLearningTelegramSenderAllowed,
   isLearningEnabled,
   mapLearningUpstreamFailure,
   mergeLearningTutorAgentChannelSecrets,
@@ -9065,8 +9068,7 @@ function hostedLearningTelegramIsEnabled(channels) {
   );
 }
 
-function prepareLearningTutorAgentPayload(req, rawBody) {
-  const body = sanitizeLearningTutorAgentPayload(rawBody);
+function injectLearningHostedTelegramConfig(req, body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
   if (!hostedLearningTelegramIsEnabled(body.channels)) return body;
 
@@ -9090,6 +9092,27 @@ function prepareLearningTutorAgentPayload(req, rawBody) {
     },
   };
   return body;
+}
+
+function prepareLearningTutorAgentPayload(req, rawBody) {
+  return injectLearningHostedTelegramConfig(req, sanitizeLearningTutorAgentPayload(rawBody));
+}
+
+async function getLearningTelegramAllowFromForWebhook(req, agentId, requestId) {
+  const upstream = await fetchLearningPath({
+    ...learningClientOptions(req, "Learning tutor agent Telegram webhook ACL request"),
+    path: `/api/v1/tutorbot/${encodeURIComponent(agentId)}`,
+    method: "GET",
+  });
+  if (!upstream.ok) return { ok: false, status: upstream.status, allowFrom: [] };
+  const payload = await upstream.json().catch(() => null);
+  const allowFrom = payload?.channels?.telegram?.allow_from;
+  return {
+    ok: true,
+    status: upstream.status,
+    allowFrom: Array.isArray(allowFrom) ? allowFrom : [],
+    requestId,
+  };
 }
 
 function createLearningByteLimitedStream(req, maxBytes) {
@@ -10674,6 +10697,13 @@ app.get("/api/learning/knowledge/list", requireLearningContext, async (req, res)
   });
 });
 
+app.get("/api/learning/knowledge/default", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(req, res, "/api/v1/knowledge/default", {
+    method: "GET",
+    label: "Learning default knowledge request",
+  });
+});
+
 app.post(
   "/api/learning/knowledge/create",
   requireLearningContext,
@@ -10684,6 +10714,18 @@ app.post(
     });
   }
 );
+
+app.put("/api/learning/knowledge/default/:kbName", requireLearningContext, async (req, res) => {
+  await proxyLearningRequest(
+    req,
+    res,
+    `/api/v1/knowledge/default/${encodeURIComponent(req.params.kbName)}`,
+    {
+      method: "PUT",
+      label: "Learning set default knowledge request",
+    }
+  );
+});
 
 app.get("/api/learning/knowledge/tasks/:taskId/stream", requireLearningContext, async (req, res) => {
   await proxyLearningRequest(
@@ -11297,6 +11339,7 @@ app.patch(
           detail?.channels,
           schema
         );
+        injectLearningHostedTelegramConfig(req, body);
       } catch (error) {
         console.warn("[Learning] Tutor agent channel secret merge failed closed:", {
           requestId,
@@ -11362,19 +11405,62 @@ app.post(
       return;
     }
 
-    const quotaDecision = await enforcePromptQuotaForIngress({
-      zakiUser,
-      res,
-      surface: LEARNING_SURFACE,
-      consumePromptQuotaForUser,
-      setPromptQuotaHeaders,
-    });
-    if (!quotaDecision.allowed) {
-      res.status(quotaDecision.status).json(quotaDecision.payload);
+    req.learningUserId = userId;
+
+    let allowFrom = [];
+    try {
+      const acl = await getLearningTelegramAllowFromForWebhook(req, agentId, requestId);
+      if (!acl.ok) {
+        const mapped = mapLearningUpstreamFailure(acl.status, requestId);
+        if (mapped) {
+          res.status(mapped.status).json(mapped.body);
+          return;
+        }
+        res.status(503).json({
+          code: "learning_telegram_webhook_acl_unavailable",
+          error: "Learning tutor Telegram allowlist could not be checked.",
+          message: "Learning is temporarily unable to check Telegram access safely.",
+          retryable: true,
+          requestId,
+        });
+        return;
+      }
+      allowFrom = acl.allowFrom;
+    } catch (error) {
+      console.warn("[Learning] Telegram webhook ACL check failed closed:", {
+        requestId,
+        error: error?.message || "Unable to read tutor Telegram allowlist.",
+      });
+      res.status(503).json({
+        code: "learning_telegram_webhook_acl_unavailable",
+        error: "Learning tutor Telegram allowlist could not be checked.",
+        message: "Learning is temporarily unable to check Telegram access safely.",
+        retryable: true,
+        requestId,
+      });
       return;
     }
 
-    req.learningUserId = userId;
+    const sender = extractLearningTelegramUpdateSender(req.body);
+    if (!isLearningTelegramSenderAllowed(allowFrom, sender.senderKey)) {
+      res.status(200).json({ ok: true, ignored: true });
+      return;
+    }
+
+    if (!isLearningTelegramQuotaFreeUpdate(req.body)) {
+      const quotaDecision = await enforcePromptQuotaForIngress({
+        zakiUser,
+        res,
+        surface: LEARNING_SURFACE,
+        consumePromptQuotaForUser,
+        setPromptQuotaHeaders,
+      });
+      if (!quotaDecision.allowed) {
+        res.status(quotaDecision.status).json(quotaDecision.payload);
+        return;
+      }
+    }
+
     await proxyLearningRequest(
       req,
       res,

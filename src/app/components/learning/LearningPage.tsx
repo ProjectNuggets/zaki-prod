@@ -129,6 +129,7 @@ import {
   runLearningCoWriterAutoMark,
   runLearningCoWriterEdit,
   stopLearningTutorAgent,
+  setDefaultLearningKnowledge,
   removeLearningQuestionEntryCategory,
   renameLearningQuestionCategory,
   updateLearningQuestionEntry,
@@ -781,6 +782,16 @@ export function LearningPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const setDefaultKb = useMutation({
+    mutationFn: (name: string) => setDefaultLearningKnowledge(name),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Default source library updated");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.knowledge });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const deleteKb = useMutation({
     mutationFn: (name: string) => deleteLearningKnowledge(name),
     onSuccess: (payload) => {
@@ -973,6 +984,7 @@ export function LearningPage() {
             uploadKbFolder={uploadKbFolder}
             uploadKbArchive={uploadKbArchive}
             reindexKb={reindexKb}
+            setDefaultKb={setDefaultKb}
             deleteKb={deleteKb}
             items={knowledgeItems}
             uploadPolicy={knowledgeUploadPolicy.data}
@@ -4205,6 +4217,7 @@ function SourcesPanel({
   uploadKbFolder,
   uploadKbArchive,
   reindexKb,
+  setDefaultKb,
   deleteKb,
   items,
   uploadPolicy,
@@ -4218,6 +4231,7 @@ function SourcesPanel({
   uploadKbFolder: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   uploadKbArchive: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   reindexKb: UseMutationResult<unknown, Error, string, unknown>;
+  setDefaultKb: UseMutationResult<unknown, Error, string, unknown>;
   deleteKb: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
   uploadPolicy?: LearningKnowledgeUploadPolicy;
@@ -4263,6 +4277,7 @@ function SourcesPanel({
   const lastIndexedLabel =
     relativeTime(metadata.last_indexed_at) ||
     relativeTime(selectedItem?.last_indexed_at);
+  const selectedIsDefault = Boolean(selectedItem?.is_default) || effectiveName === "main";
 
   useEffect(() => {
     if (!selectedName && items[0]) {
@@ -4350,6 +4365,10 @@ function SourcesPanel({
   const handleReindex = () => {
     if (!effectiveName || reindexKb.isPending) return;
     reindexKb.mutate(effectiveName);
+  };
+  const handleSetDefault = () => {
+    if (!effectiveName || selectedIsDefault || setDefaultKb.isPending) return;
+    setDefaultKb.mutate(effectiveName);
   };
   const handleDelete = () => {
     if (!effectiveName || deleteKb.isPending) return;
@@ -4465,7 +4484,7 @@ function SourcesPanel({
                 <h1 className="truncate text-[18px] font-semibold tracking-tight text-zaki-text">
                   {effectiveName || "No knowledge base selected"}
                 </h1>
-                {effectiveName === "main" ? (
+                {selectedIsDefault ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                     <Star className="size-3" fill="currentColor" />
                     Default
@@ -4783,7 +4802,7 @@ function SourcesPanel({
                       ["Name", itemTitle(selectedItem, "Knowledge base")],
                       ["Status", itemStatus(selectedItem)],
                       ["Files", displayCount(selectedItem) || "0"],
-                      ["Default", String(Boolean(selectedItem.is_default) || effectiveName === "main")],
+                      ["Default", String(selectedIsDefault)],
                       ["Indexing", "Managed by ZAKI"],
                     ]}
                   />
@@ -4793,6 +4812,19 @@ function SourcesPanel({
                       User-safe library actions. Provider routing and external dependencies remain operator-managed.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={!effectiveName || selectedIsDefault || setDefaultKb.isPending}
+                        onClick={handleSetDefault}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                      >
+                        {setDefaultKb.isPending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Star className="size-4" />
+                        )}
+                        Set default
+                      </button>
                       <button
                         type="button"
                         disabled={!effectiveName || reindexKb.isPending}

@@ -170,6 +170,13 @@ export function deleteLearningKnowledge(kbName: string) {
   );
 }
 
+export function setDefaultLearningKnowledge(kbName: string) {
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/default/${encodeURIComponent(kbName)}`,
+    { method: "PUT" },
+  );
+}
+
 export function listLearningBooks() {
   return learningRequest<unknown>("/api/learning/books");
 }

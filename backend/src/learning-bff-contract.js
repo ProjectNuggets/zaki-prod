@@ -511,6 +511,63 @@ export function mergeLearningTutorAgentChannelSecrets(nextChannels, existingChan
   return output;
 }
 
+export function extractLearningTelegramUpdateSender(update) {
+  const message =
+    update && typeof update === "object"
+      ? update.message ||
+        update.edited_message ||
+        update.channel_post ||
+        update.edited_channel_post ||
+        update.callback_query?.message
+      : null;
+  const sender =
+    update && typeof update === "object"
+      ? update.message?.from ||
+        update.edited_message?.from ||
+        update.callback_query?.from ||
+        update.channel_post?.sender_chat ||
+        update.edited_channel_post?.sender_chat
+      : null;
+  const chat = message && typeof message === "object" ? message.chat : null;
+  const senderId = sender?.id === undefined || sender?.id === null ? "" : String(sender.id);
+  const username = typeof sender?.username === "string" ? sender.username.trim() : "";
+  const senderKey = senderId && username ? `${senderId}|${username}` : senderId;
+  return {
+    senderId,
+    username,
+    senderKey,
+    chatId: chat?.id === undefined || chat?.id === null ? "" : String(chat.id),
+    text:
+      typeof message?.text === "string"
+        ? message.text
+        : typeof message?.caption === "string"
+          ? message.caption
+          : "",
+  };
+}
+
+export function isLearningTelegramSenderAllowed(allowFrom, senderKey) {
+  const allowList = Array.isArray(allowFrom)
+    ? allowFrom.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!allowList.length) return false;
+  if (allowList.includes("*")) return true;
+  const key = String(senderKey || "").trim();
+  if (!key) return false;
+  if (allowList.includes(key)) return true;
+  if (key.includes("|")) {
+    const [id, username] = key.split("|", 2);
+    return allowList.includes(id) || Boolean(username && allowList.includes(username));
+  }
+  return false;
+}
+
+export function isLearningTelegramQuotaFreeUpdate(update) {
+  const { text } = extractLearningTelegramUpdateSender(update);
+  const command = String(text || "").trim().split(/\s+/, 1)[0].toLowerCase();
+  return ["/start", "/help", "/stop", "/new", "/restart"].includes(command);
+}
+
 export function sanitizeLearningWsClientMessage(data, isBinary) {
   if (isBinary) return { data, isBinary };
   const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");

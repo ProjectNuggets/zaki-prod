@@ -184,6 +184,7 @@ async function mockLearning(page: Page) {
     },
   ];
   const knowledgeUploads: Array<{ path: string; body: string }> = [];
+  const defaultKnowledgeUpdates: string[] = [];
 
   await page.routeWebSocket("**/api/learning/ws", async (ws) => {
     ws.onMessage((message) => {
@@ -282,6 +283,16 @@ async function mockLearning(page: Page) {
       return;
     }
 
+    if (path.startsWith("/api/learning/knowledge/default/") && method === "PUT") {
+      const name = decodeURIComponent(path.split("/").pop() || "");
+      defaultKnowledgeUpdates.push(name);
+      knowledgeBases.forEach((item) => {
+        item.is_default = item.name === name;
+      });
+      await json(route, { status: "success", default_kb: name });
+      return;
+    }
+
     if (path === "/api/learning/knowledge/create" && method === "POST") {
       const body = route.request().postDataBuffer()?.toString("utf8") || "";
       knowledgeUploads.push({ path, body });
@@ -297,6 +308,11 @@ async function mockLearning(page: Page) {
 
     if (path === "/api/learning/knowledge/main/files") {
       await json(route, { files: [] });
+      return;
+    }
+
+    if (path === "/api/learning/knowledge/biology/files") {
+      await json(route, { files: [{ name: "cell.md", size: 16, status: "ready" }] });
       return;
     }
 
@@ -479,7 +495,7 @@ async function mockLearning(page: Page) {
     await json(route, {});
   });
 
-  return { savedNotebookRecords, startedTurns, knowledgeUploads };
+  return { savedNotebookRecords, startedTurns, knowledgeUploads, defaultKnowledgeUpdates };
 }
 
 test.describe("ZAKI Learn parity wiring", () => {
@@ -746,6 +762,11 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect.poll(() => learning.knowledgeUploads.length).toBe(3);
     expect(learning.knowledgeUploads[2].path).toBe("/api/learning/knowledge/biology/upload-archive");
     expect(learning.knowledgeUploads[2].body).toContain("bundle.zip");
+
+    await page.getByRole("button", { name: /biology/i }).click();
+    await page.getByRole("button", { name: /Settings/i }).click();
+    await page.getByRole("button", { name: /Set default/i }).click();
+    await expect.poll(() => learning.defaultKnowledgeUpdates.includes("biology")).toBe(true);
   });
 
   test("routes advanced capability presets with their hosted configs", async ({ page }) => {

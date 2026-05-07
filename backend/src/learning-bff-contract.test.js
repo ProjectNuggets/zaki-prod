@@ -9,11 +9,14 @@ import {
   buildLearningProxyHeaders,
   checkLearningContentLength,
   createLearningByteLimitTransform,
+  extractLearningTelegramUpdateSender,
   extractLearningWsToken,
   filterLearningTutorAgentChannelsConfig,
   filterLearningTutorAgentChannelsSchema,
   findLearningRequestSizeError,
   getLearningBase,
+  isLearningTelegramQuotaFreeUpdate,
+  isLearningTelegramSenderAllowed,
   isLearningEnabled,
   mapLearningUpstreamFailure,
   mergeLearningTutorAgentChannelSecrets,
@@ -502,6 +505,36 @@ describe("learning BFF contract", () => {
         discord: { enabled: true, token: "old-discord" },
         send_progress: false,
       });
+  });
+
+  test("extracts and authorizes Telegram webhook senders before quota is consumed", () => {
+    const update = {
+      update_id: 1,
+      message: {
+        text: "Explain entropy",
+        chat: { id: 999 },
+        from: { id: 123, username: "learner" },
+      },
+    };
+
+    expect(extractLearningTelegramUpdateSender(update)).toEqual({
+      senderId: "123",
+      username: "learner",
+      senderKey: "123|learner",
+      chatId: "999",
+      text: "Explain entropy",
+    });
+    expect(isLearningTelegramSenderAllowed(["123"], "123|learner")).toBe(true);
+    expect(isLearningTelegramSenderAllowed(["learner"], "123|learner")).toBe(true);
+    expect(isLearningTelegramSenderAllowed(["123|learner"], "123|learner")).toBe(true);
+    expect(isLearningTelegramSenderAllowed(["456"], "123|learner")).toBe(false);
+    expect(isLearningTelegramSenderAllowed([], "123|learner")).toBe(false);
+    expect(isLearningTelegramQuotaFreeUpdate(update)).toBe(false);
+    expect(
+      isLearningTelegramQuotaFreeUpdate({
+        message: { text: "/start", chat: { id: 999 }, from: { id: 123 } },
+      })
+    ).toBe(true);
   });
 
   test("resolves and enforces learning request byte caps", () => {
