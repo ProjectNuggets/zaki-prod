@@ -26,7 +26,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useBrainGraph, useBrainLocalGraph, useBrainMemory } from "@/queries";
 import type {
   BrainGraphEdge,
@@ -948,7 +948,6 @@ function DetailPanel({
   onShowLocal: (key: string) => void;
   t: ReturnType<typeof useTranslation>["t"];
 }) {
-  const [historyOpen, setHistoryOpen] = useState(false);
   const isDeprecated = node.valid_to !== null && node.valid_to !== undefined;
   const content = detail?.content ?? node.summary;
   const importance =
@@ -1058,32 +1057,60 @@ function DetailPanel({
           </div>
         )}
 
-        {history.length > 0 && (
+        {/*
+          Audit (2026-05-07) — Supersede chain stepper. Replaces the
+          collapsible flat list of prior versions. The supersede chain
+          is the V1.10 truth-maintenance differentiator made visible:
+          "tell ZAKI he's wrong, watch him learn." Stepper pattern with
+          a vertical timeline rail makes the chain feel like a journey,
+          not a backlog. Always-expanded so the differentiator is the
+          first thing the user notices on a corrected memory.
+        */}
+        {(history.length > 0 || isDeprecated) && (
           <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((o) => !o)}
-              className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-white/40 hover:text-white/60"
-            >
-              {t("brain.graph.detail.priorVersions", {
-                defaultValue: "Prior versions",
-                count: history.length,
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              {t("brain.graph.detail.supersedeChain", {
+                defaultValue: "Supersede chain",
+                count: history.length + 1,
               })}
-              {historyOpen ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-            </button>
-            {historyOpen && (
-              <div className="mt-2 space-y-2">
-                {history.map((h, i) => (
-                  <div key={i} className="rounded-zaki-md border border-white/10 bg-white/5 px-2.5 py-2">
-                    <p className="mb-1 text-[10px] text-white/40">
-                      {new Date(h.valid_from * 1000).toLocaleDateString()}
-                      {h.valid_to ? ` → ${new Date(h.valid_to * 1000).toLocaleDateString()}` : ""}
-                    </p>
-                    <p className="text-[11px] text-white/60">{h.content}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            </p>
+            <ol className="relative space-y-3">
+              <span
+                className="absolute left-1 top-1 bottom-1 w-px bg-white/10"
+                aria-hidden="true"
+              />
+              <li className="relative pl-5">
+                <span
+                  className="absolute left-0 top-1.5 size-2 rounded-full bg-zaki-brand ring-2 ring-zaki-brand/30"
+                  aria-hidden="true"
+                />
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-zaki-brand">
+                  {isDeprecated
+                    ? t("brain.graph.detail.superseded", { defaultValue: "Superseded" })
+                    : t("brain.graph.detail.current", { defaultValue: "Current" })}
+                  {node.created_at
+                    ? ` · ${new Date(node.created_at * 1000).toLocaleDateString()}`
+                    : ""}
+                  {node.valid_to
+                    ? ` → ${new Date(node.valid_to * 1000).toLocaleDateString()}`
+                    : ""}
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-white/80">{content}</p>
+              </li>
+              {history.map((h, i) => (
+                <li key={i} className="relative pl-5">
+                  <span
+                    className="absolute left-0 top-1.5 size-2 rounded-full border border-white/30 bg-black"
+                    aria-hidden="true"
+                  />
+                  <p className="text-[10px] text-white/40">
+                    {new Date(h.valid_from * 1000).toLocaleDateString()}
+                    {h.valid_to ? ` → ${new Date(h.valid_to * 1000).toLocaleDateString()}` : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-white/60">{h.content}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
       </div>
