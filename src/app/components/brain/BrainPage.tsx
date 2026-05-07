@@ -14,6 +14,7 @@ import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFil
 import { BrainOrphanRail } from "./BrainOrphanRail";
 import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
+import { KIND_COLOR, KIND_LABEL } from "./brainColors";
 
 type BrainTab = "timeline" | "graph";
 
@@ -309,23 +310,44 @@ export function BrainPage() {
             ZAKI has remembered total. Pillar 1 visible-memory beat:
             users SEE the brain accreting over time.
           */}
-          <div className="mb-3 flex items-baseline justify-between gap-3 px-1 text-xs text-zaki-muted">
+          {/*
+            Audit (2026-05-07) — counter strip + kind legend. Counter
+            stays as the Pillar-1 accretion beat ("Showing N of M
+            memories"). Legend chips translate the internal node-kind
+            vocabulary (core / daily / conversation) into life
+            categories the user can read at a glance ("About you",
+            "Daily life", "Conversations"). Each chip shows the
+            color it paints in the canvas, so users connect color to
+            meaning without opening the filter panel. Counts come from
+            the visible node set; chips with zero nodes hide.
+          */}
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3 px-1 text-xs text-zaki-muted">
             <div>
               {t("brain.counterStrip.showing", {
                 defaultValue: "Showing {{visible}} of {{total}} memories",
                 visible: initialGraphQuery.data?.nodes?.length ?? 0,
                 total: totalNodes,
               })}
-              {(initialGraphQuery.data?.edges?.length ?? 0) > 0 ? (
-                <>
-                  {" · "}
-                  {t("brain.counterStrip.edges", {
-                    defaultValue: "{{count}} edges",
-                    count: initialGraphQuery.data?.edges?.length ?? 0,
-                  })}
-                </>
-              ) : null}
+              {(() => {
+                const allEdges = initialGraphQuery.data?.edges ?? [];
+                const visibleEdgeCount = filters.showSemanticEdges
+                  ? allEdges.length
+                  : allEdges.filter((e) => e.type !== "semantic").length;
+                if (visibleEdgeCount === 0) return null;
+                return (
+                  <>
+                    {" · "}
+                    {t("brain.counterStrip.edges", {
+                      defaultValue: "{{count}} edges",
+                      count: visibleEdgeCount,
+                    })}
+                  </>
+                );
+              })()}
             </div>
+            {filters.colorPreset === "kind" ? (
+              <KindLegend nodes={initialGraphQuery.data?.nodes ?? []} />
+            ) : null}
           </div>
 
           {/* Time scrubber row */}
@@ -554,5 +576,41 @@ function TabButton({ active, onClick, children }: TabButtonProps) {
     >
       {children}
     </button>
+  );
+}
+
+// Audit (2026-05-07) — Kind legend chips. Translates internal node-kind
+// vocabulary (core / daily / conversation) into life categories. The
+// color dot mirrors what the canvas paints, so users connect color to
+// meaning at a glance. Order is fixed (core first because it's the
+// "you" identity layer); kinds with zero visible nodes hide so the
+// strip stays compact on narrow viewports.
+function KindLegend({ nodes }: { nodes: Array<{ kind?: string }> }) {
+  const counts: Record<string, number> = {};
+  for (const n of nodes) {
+    const k = String(n.kind || "");
+    if (!k) continue;
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  const order = ["core", "daily", "conversation"];
+  const visible = order.filter((k) => (counts[k] ?? 0) > 0);
+  if (visible.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {visible.map((k) => (
+        <span
+          key={k}
+          className="inline-flex items-center gap-1.5 rounded-full border border-zaki-border bg-zaki-raised/60 px-2 py-0.5"
+        >
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: KIND_COLOR[k] ?? "#6b7280" }}
+            aria-hidden="true"
+          />
+          <span className="text-zaki-text">{KIND_LABEL[k] ?? k}</span>
+          <span className="font-mono-ui text-zaki-muted">{counts[k]}</span>
+        </span>
+      ))}
+    </div>
   );
 }

@@ -69,6 +69,7 @@ export interface BrainGraphFilters {
   search: string;
   maxNodes: number;
   colorPreset: ColorPreset;
+  showSemanticEdges: boolean;
   nodeRepulsion: number;
   idealEdgeLength: number;
   gravity: number;
@@ -173,9 +174,21 @@ function buildElementsFromGlobal(
   linkThickness: number,
   highlightSet: Set<string>,
   filterCommunityId: number | null,
+  showSemanticEdges: boolean,
 ): ElementDefinition[] {
   const els: ElementDefinition[] = [];
+  // Audit (2026-05-07) — default-hide semantic edges. With the test
+  // corpus, 99% of edges were vector-similarity ("semantic") and the
+  // other 1% (typed predicates, session co-occurrence) drowned in noise.
+  // Keep the original list for the degree fallback so node sizes don't
+  // collapse when semantic edges are hidden — the data is still real,
+  // just not painted.
+  const visibleEdges = showSemanticEdges
+    ? edges
+    : edges.filter((e) => e.type !== "semantic");
   // Build degree map for fallback importance + filter pass
+  // Use the full edge set so importance fallback stays meaningful even
+  // when semantic edges are hidden visually.
   const degree = new Map<string, number>();
   for (const e of edges) {
     degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
@@ -250,7 +263,7 @@ function buildElementsFromGlobal(
     });
   }
 
-  for (const e of edges) {
+  for (const e of visibleEdges) {
     if (!visible.has(e.source) || !visible.has(e.target)) continue;
     const s = edgeStyle(e.type);
     els.push({
@@ -285,6 +298,7 @@ function buildElementsFromLocal(
   preset: ColorPreset,
   sizeScale: number,
   linkThickness: number,
+  showSemanticEdges: boolean,
 ): ElementDefinition[] {
   const els: ElementDefinition[] = [];
   for (const n of resp.nodes) {
@@ -318,6 +332,7 @@ function buildElementsFromLocal(
   }
   for (const e of resp.edges) {
     const t: BrainGraphEdge["type"] = e.predicate ? "typed" : "semantic";
+    if (!showSemanticEdges && t === "semantic") continue;
     const s = edgeStyle(t);
     // Local-graph endpoint doesn't yet emit confidence/weight; synthesize
     // a typed-edge object for edgeRelevance to inspect.
@@ -507,6 +522,7 @@ export function BrainGraphView({
         filters.colorPreset,
         filters.nodeSizeScale,
         filters.linkThickness,
+        filters.showSemanticEdges,
       );
     }
     if (!globalQuery.data) return null;
@@ -518,6 +534,7 @@ export function BrainGraphView({
       filters.linkThickness,
       highlightSet,
       selectedCommunityId,
+      filters.showSemanticEdges,
     );
   }, [
     centerKey,
@@ -526,6 +543,7 @@ export function BrainGraphView({
     filters.colorPreset,
     filters.nodeSizeScale,
     filters.linkThickness,
+    filters.showSemanticEdges,
     highlightSet,
     selectedCommunityId,
   ]);

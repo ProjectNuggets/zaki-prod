@@ -48,10 +48,26 @@ export const LINK_TYPE_COLOR: Record<string, string> = {
   episode: "#6b7280",
 };
 
+// Audit (2026-05-07) — brand-coherent palette + user-language semantics.
+// `core` = facts about you (brand red, sparing — these are identity).
+// `daily` = recent activity (brand teal — accent).
+// `conversation` = excerpts pulled from chats (warm desert neutral).
+// Replaces a stock-Tailwind palette (#22c55e green / #6b7280 gray) that
+// didn't read as a coherent system. Each color now appears elsewhere
+// in the brand, so legend chips reuse the same tokens visually.
 export const KIND_COLOR: Record<string, string> = {
   core: "#f10202",
-  daily: "#22c55e",
-  conversation: "#6b7280",
+  daily: "#219171",
+  conversation: "#B09472",
+};
+
+// User-facing labels for kinds. The internal vocabulary (core / daily /
+// conversation) is opaque to a first-time user; these read as life
+// categories. Used by the canvas legend chip strip.
+export const KIND_LABEL: Record<string, string> = {
+  core: "About you",
+  daily: "Daily life",
+  conversation: "Conversations",
 };
 
 export const EDGE_COLOR: Record<string, string> = {

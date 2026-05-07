@@ -15,6 +15,12 @@ export interface BrainFilters {
   search: string;
   maxNodes: number;
   colorPreset: ColorPreset;
+  // Audit (2026-05-07) — semantic-similarity edges flood the graph.
+  // 99% of edges in the test corpus were type "semantic" (vector
+  // similarity), drowning the 1% typed/session edges that carry actual
+  // meaning. Default-hide with an opt-in toggle so the graph reads as
+  // a sparse meaningful network instead of a complete mesh.
+  showSemanticEdges: boolean;
   // forces
   nodeRepulsion: number; // cose-bilkent
   idealEdgeLength: number;
@@ -31,11 +37,14 @@ export const DEFAULT_FILTERS: BrainFilters = {
   linkTypes: [],
   search: "",
   maxNodes: 300,
-  // V1.11 (2026-05-07): default flipped from "community" to "mono".
-  // Obsidian-aesthetic visual restraint — every node renders muted gray;
-  // border styles (selected, highlighted, center) carry emphasis. Users
-  // who want the 12-color community palette can switch preset.
-  colorPreset: "mono",
+  // Audit (2026-05-07) — flipped default from "mono" to "kind". Mono is
+  // Obsidian-style visual restraint, but Obsidian users have manually
+  // organized vaults; ZAKI users haven't organized anything. Color by
+  // kind gives them organization for free — facts about you (red),
+  // recent activity (teal), conversation excerpts (warm neutral). The
+  // mono preset is still available as a deliberate aesthetic choice.
+  colorPreset: "kind",
+  showSemanticEdges: false,
   nodeRepulsion: 8000,
   idealEdgeLength: 120,
   gravity: 0.4,
@@ -79,6 +88,11 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           label={t("brain.filterPanel.excludeOrphans", { defaultValue: "Hide orphans" })}
           value={filters.excludeOrphans}
           onChange={(v) => set("excludeOrphans", v)}
+        />
+        <ToggleRow
+          label={t("brain.filterPanel.showSemanticEdges", { defaultValue: "Show similarity links" })}
+          value={filters.showSemanticEdges}
+          onChange={(v) => set("showSemanticEdges", v)}
         />
         <NumberRow
           label={t("brain.filterPanel.maxNodes", { defaultValue: "Max nodes" })}
