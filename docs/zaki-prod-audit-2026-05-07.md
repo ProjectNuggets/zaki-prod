@@ -88,7 +88,34 @@ User journey: unauthenticated landing → tabs (Sign in / Create / Reset) → fo
 
 ### Home view — `/` (post-login)
 
-_(audit pending)_
+File: `src/app/components/chat/views/ZakiHomeView.tsx` (577 lines). Renders for `view === "home"` inside ChatArea (`/` and `/spaces` paths land here when no space is selected).
+
+Composed of: hero (welcome + headline + memory CTA + menu), QuickStartGrid (3-card prompts), MissionCard (4-slide rotating mission), CapabilitiesCard (capabilities + limitations bullet lists), MemoryPopover (modal-ish overlay for memory clarity).
+
+**Strengths up front.** This file uses `t()` consistently with `returnObjects: true` for arrays — this is the right i18n pattern, not the `AUTH_COPY` / `sidebarCopy` anti-pattern. Other components should match this.
+
+**P0**
+
+- **Mission slides auto-rotate every 30s with no pause mechanism** (line 454-457). WCAG 2.2.2: auto-advancing content lasting more than 5s must offer pause/stop/hide. Today: only manual selection dots. Doesn't respect `prefers-reduced-motion`. Cheap fix: wrap `setInterval` in a `useEffect` that bails when the user prefers reduced motion, and pause on hover or while a dot has focus.
+- **MemoryPopover lacks dialog semantics** (line 196). Visually a modal: dim trigger, fixed-positioned, escape-closes, click-outside-closes. Functionally not announced as a dialog: no `role="dialog"`, no `aria-modal="true"`, no `aria-labelledby`, no focus trap, no return-focus-to-trigger. Screen-reader users get a confusing experience.
+- **`stageClasses` array uses 8 hex literals per visual theme × 4 stage tones = 16+ off-brand color tokens** (lines 188-193). Five color families (blue, yellow-cream, terracotta, green, plus borders) — none from the ZAKI palette (red + teal + warm desert). Visually inconsistent and brand-disrespectful. **Fix:** map each stage to an existing semantic token (`--zaki-info`, `--zaki-warning`, `--zaki-error`, `--zaki-success`).
+- **Stale brand color `#ffb38f`** in dark-mode override on the memory CTA (line 484) and stage label icon (line 226). Peach/salmon — not in the palette. Brand red is `#f10202`. Same lineage as the "Orange" logo. **Fix:** map to `--zaki-brand` or a brand-tinted dark token.
+
+**P1**
+
+- **MemoryPopover positioning is 60+ lines of manual viewport math** (line 350-412). Hand-rolled flip + clamp logic. Should use `@floating-ui/react` or Radix's positioning primitives. Maintenance + edge-case bugs (e.g., not handling viewport zoom, RTL flipping).
+- **`bg-white/80` and `bg-white/85` literals without dark-mode overrides** (lines 477, 511) and partial overrides (`bg-white/85 dark:bg-[#15100f]` line 484, line 215). Visual breakage in dark mode.
+- **Quick start cards use `dark:!bg-[#0c0a09]`** with `!important` (lines 48, 80). `!` flag indicates a fight with another rule — investigate why and remove the override.
+- **Dead props.** `primarySpace`, `onGoToThread`, `onDeleteThread` are typed in props but `void`-ed at lines 303-305 (i.e., never used). Dead code from a previous design. Remove from prop signature.
+- **MissionCard auto-rotate even when reduced.** No pause-on-hover, no pause-on-focus. Even after the WCAG fix, this is visually distracting on a screen the user may be reading. Replace 30s interval with: rotate-on-click only, or rotate-on-blur only.
+- **`fixed z-[120]`** popover with arbitrary z-index (line 200) — should use `--zaki-z-modal` (50) or `--zaki-z-tooltip` (70). Inventing a new layer.
+- **Hero h1 mixes `LogoArabicOrange` icon with text headline** (lines 466-471). The "Orange" logo (stale name + stale color) on the brand-defining surface.
+
+**P2**
+
+- **MemoryPopover stage icons are arbitrary** (lines 187, 231): cycles through Brain, CalendarClock, AlertTriangle, CheckCircle2. AlertTriangle is an error icon used decoratively — misleading semantically.
+- **Hero menu has only 2 items** ("About ZAKI" → external chatzaki.com, "About Nova Nuggets" → external novanuggets.com). Both `target="_blank"` to public sites. Reasonable, but the menu trigger feels heavyweight for two static external links — could be simpler footer or "About" tab.
+- **`MetaLabel`** with `<Sparkles className="text-zaki-brand">` (line 52) — uses brand red for the meta-label icon. Consistent with brand discipline but check if it's overused (brand red should be sparing per DESIGN.md).
 
 ### Sidebar — desktop nav
 

@@ -312,6 +312,11 @@ export function ZakiHomeView({
   const [activeSlide, setActiveSlide] = useState(0);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [conflictCount, setConflictCount] = useState(0);
+  const [missionPaused, setMissionPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
   const menuRef = useRef<HTMLDivElement>(null);
   const memoryPanelRef = useRef<HTMLDivElement>(null);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
@@ -450,12 +455,21 @@ export function ZakiHomeView({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = () => setReducedMotion(media.matches);
+    media.addEventListener("change", handler);
+    return () => media.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
     if (zakiMissionSlides.length <= 1) return;
+    if (reducedMotion || missionPaused) return;
     const interval = window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % zakiMissionSlides.length);
     }, 30000);
     return () => window.clearInterval(interval);
-  }, [zakiMissionSlides.length]);
+  }, [zakiMissionSlides.length, reducedMotion, missionPaused]);
   return (
     <div className="px-4 sm:px-6 md:px-10 py-10 md:py-12 min-h-full flex flex-col max-w-6xl mx-auto w-full">
       <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-10">
@@ -554,14 +568,21 @@ export function ZakiHomeView({
         onSendExample={onSendExample}
       />
 
-      <MissionCard
-        label={t("home.missionLabel")}
-        slides={zakiMissionSlides}
-        activeSlide={activeSlide}
-        onSelect={(index) => setActiveSlide(index)}
-        icon={<CenterLogo className="size-4" />}
-        getSlideAriaLabel={(index) => t("home.missionSlideAria", { index })}
-      />
+      <div
+        onMouseEnter={() => setMissionPaused(true)}
+        onMouseLeave={() => setMissionPaused(false)}
+        onFocusCapture={() => setMissionPaused(true)}
+        onBlurCapture={() => setMissionPaused(false)}
+      >
+        <MissionCard
+          label={t("home.missionLabel")}
+          slides={zakiMissionSlides}
+          activeSlide={activeSlide}
+          onSelect={(index) => setActiveSlide(index)}
+          icon={<CenterLogo className="size-4" />}
+          getSlideAriaLabel={(index) => t("home.missionSlideAria", { index })}
+        />
+      </div>
 
       <div>
         <CapabilitiesCard
