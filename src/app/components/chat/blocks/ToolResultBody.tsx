@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { hasAnsi, stripAnsi } from "@/lib/ansi";
 import { AnsiText } from "./AnsiText";
+import { ImageBlock } from "../rendering/blocks/ImageBlock";
 
 type ToolFamily =
   | "shell"
@@ -13,6 +14,7 @@ type ToolFamily =
   | "fetch"
   | "schedule"
   | "memory"
+  | "image"
   | "generic";
 
 export function toolFamily(tool?: string | null): ToolFamily {
@@ -26,7 +28,26 @@ export function toolFamily(tool?: string | null): ToolFamily {
   if (name === "web_fetch" || name === "fetch" || name === "http") return "fetch";
   if (name === "schedule" || name === "cron_create" || name === "scheduled_task") return "schedule";
   if (name === "memory_store" || name === "memory_recall" || name === "remember") return "memory";
+  if (name === "image_generate") return "image";
   return "generic";
+}
+
+// Tool-result body emitted by image_generate (see nullalis/src/tools/image_generate.zig
+// formatAndSave): a metadata header followed by markdown image lines and matching
+// "Saved:" / "Download:" sentinels. We pull the first image URL out for an inline
+// preview and treat the metadata above it as a dim caption. The "Saved:" /
+// "Download:" lines are dropped because the inline ImageBlock now exposes its
+// own download affordance.
+const TOOL_IMAGE_MARKDOWN_RE = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/;
+
+function parseToolImageOutput(text: string): { caption: string; url: string; alt: string } | null {
+  if (!text) return null;
+  const match = text.match(TOOL_IMAGE_MARKDOWN_RE);
+  if (!match || !match[2]) return null;
+  const fullMatch = match[0];
+  const idx = text.indexOf(fullMatch);
+  const caption = idx > 0 ? text.slice(0, idx).trim() : "";
+  return { caption, url: match[2], alt: match[1] || "generated image" };
 }
 
 function tryParseJson(raw: string | null | undefined): unknown | null {
@@ -429,6 +450,32 @@ export function ToolResultBody({
           <MemoryQuote text={stripAnsi(outputBody)} />
         </div>
       );
+    }
+
+    if (family === "image") {
+      const parsed = parseToolImageOutput(outputBody);
+      if (parsed) {
+        return (
+          <div>
+            {header}
+            {parsed.caption ? (
+              <div className="mb-1.5 whitespace-pre-wrap text-[12px] leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                {parsed.caption}
+              </div>
+            ) : null}
+            <ImageBlock
+              block={{
+                id: "tool-image-generate",
+                type: "image",
+                url: parsed.url,
+                alt: parsed.alt,
+              }}
+            />
+          </div>
+        );
+      }
+      // Parse failure (e.g. failed call, non-standard payload): fall through to
+      // the generic CodeBlock so the user still sees the raw error/output.
     }
 
     return (
