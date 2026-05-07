@@ -365,6 +365,30 @@ export function listLearningSkills() {
   return learningRequest<unknown>("/api/learning/skills");
 }
 
+export function getLearningSkill(name: string) {
+  return learningRequest<unknown>(`/api/learning/skills/${encodeURIComponent(name)}`);
+}
+
+export function createLearningSkill(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/skills", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function updateLearningSkill(name: string, payload: LearningJson) {
+  return learningRequest<unknown>(`/api/learning/skills/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function deleteLearningSkill(name: string) {
+  return learningRequest<unknown>(`/api/learning/skills/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+}
+
 export function getLearningMemory() {
   return learningRequest<unknown>("/api/learning/memory");
 }
@@ -373,6 +397,20 @@ export function updateLearningMemory(file: "summary" | "profile", content: strin
   return learningRequest<unknown>("/api/learning/memory", {
     method: "PUT",
     body: { file, content },
+  });
+}
+
+export function refreshLearningMemory(payload: LearningJson = {}) {
+  return learningRequest<unknown>("/api/learning/memory/refresh", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function clearLearningMemory(file: "summary" | "profile") {
+  return learningRequest<unknown>("/api/learning/memory/clear", {
+    method: "POST",
+    body: { file },
   });
 }
 

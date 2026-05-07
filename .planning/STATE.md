@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 28
-  completed_plans: 3
-  percent: 11
+  completed_plans: 4
+  percent: 14
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 01 Learn UI Parity And Route Truth
-Plan: 01-04 Space page sections
-Status: 01-03 complete; ready to execute 01-04
-Last activity: 2026-05-07 - completed Co-Writer upstream-shape parity pass.
+Plan: 01-05 TutorBot management and chat surfaces
+Status: 01-04 complete; ready to execute 01-05
+Last activity: 2026-05-07 - completed Space upstream-section parity pass.
 
 ## Locked Decisions
 
@@ -37,13 +37,15 @@ Last activity: 2026-05-07 - completed Co-Writer upstream-shape parity pass.
 - `/learn?view=workspaces` now routes to Solve/Vision panel instead of falling back to Chat.
 - `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
+- `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
 
 ## Completed Plans
 
 - 01-01: Route parity manifest and browser audit.
 - 01-02: Sources/Knowledge page shape.
 - 01-03: Co-Writer page shape.
+- 01-04: Space page sections.
 
 ## Next Command
 
-Execute Phase 01 Plan 01-04: port/adapt Space page sections from upstream.
+Execute Phase 01 Plan 01-05: port/adapt TutorBot management and chat surfaces from upstream.

@@ -9,6 +9,7 @@ import {
   ArrowUp,
   AtSign,
   BarChart3,
+  Bookmark,
   BookOpen,
   Bot,
   Bold,
@@ -44,17 +45,21 @@ import {
   Microscope,
   NotebookPen,
   Paperclip,
+  Pencil,
   PenLine,
   Plus,
   Quote,
   Search,
   Send,
   Settings,
+  Save,
   Square,
   Sparkles,
   Star,
   Trash2,
   Upload,
+  RefreshCw,
+  User,
   Wand2,
   X,
   type LucideIcon,
@@ -66,13 +71,16 @@ import { cn } from "@/lib/utils";
 import {
   addLearningNotebookRecord,
   analyzeLearningVision,
+  clearLearningMemory,
   createLearningBook,
   createLearningCoWriterDocument,
   createLearningKnowledge,
   createLearningNotebook,
+  createLearningSkill,
   createLearningTutorAgent,
   deleteLearningKnowledge,
   deleteLearningCoWriterDocument,
+  deleteLearningSkill,
   getLearningBook,
   getLearningBookSpine,
   getLearningCoWriterDocument,
@@ -98,9 +106,12 @@ import {
   listLearningTutorAgents,
   listLearningTutorAgentSouls,
   getLearningMemory,
+  getLearningSkill,
   destroyLearningTutorAgent,
+  refreshLearningMemory,
   runLearningCoWriterAutoMark,
   runLearningCoWriterEdit,
+  updateLearningSkill,
   updateLearningCoWriterDocument,
   updateLearningMemory,
   uploadLearningKnowledge,
@@ -2942,9 +2953,44 @@ function LearningSpacePanel({
   const memoryRecord = asRecord(memory);
   const [activeSection, setActiveSection] = useState<
     "chat_history" | "notebooks" | "question_bank" | "skills" | "memory"
-  >("notebooks");
+  >("chat_history");
   const [summaryDraft, setSummaryDraft] = useState("");
   const [profileDraft, setProfileDraft] = useState("");
+  const [chatQuery, setChatQuery] = useState("");
+  const [questionFilter, setQuestionFilter] = useState<"all" | "bookmarked" | "wrong">("all");
+  const [memoryFile, setMemoryFile] = useState<LearningMemoryFile>("summary");
+  const [memoryView, setMemoryView] = useState<"edit" | "preview">("edit");
+  const [skillOriginalName, setSkillOriginalName] = useState("");
+  const [skillName, setSkillName] = useState("");
+  const [skillDescription, setSkillDescription] = useState("");
+  const [skillContent, setSkillContent] = useState("");
+  const [skillTags, setSkillTags] = useState("");
+  const [skillError, setSkillError] = useState("");
+  const queryClient = useQueryClient();
+  const activeMemoryDraft = memoryFile === "summary" ? summaryDraft : profileDraft;
+  const activeMemoryUpdated =
+    textOf(memoryRecord[`${memoryFile}_updated_at`]) ||
+    textOf(memoryRecord.updated_at) ||
+    "Not updated yet";
+  const filteredSessions = useMemo(() => {
+    const needle = chatQuery.trim().toLowerCase();
+    if (!needle) return sessionItems;
+    return sessionItems.filter((item) =>
+      [itemTitle(item, ""), textOf(item.last_message), textOf(item.preview), textOf(item.summary)]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [chatQuery, sessionItems]);
+  const filteredQuestions = useMemo(() => {
+    if (questionFilter === "bookmarked") {
+      return questionItems.filter((item) => Boolean(item.bookmarked));
+    }
+    if (questionFilter === "wrong") {
+      return questionItems.filter((item) => item.is_correct === false);
+    }
+    return questionItems;
+  }, [questionFilter, questionItems]);
   const spaceItems = [
     {
       key: "chat_history" as const,
@@ -2987,6 +3033,94 @@ function LearningSpacePanel({
     setSummaryDraft(textOf(memoryRecord.summary));
     setProfileDraft(textOf(memoryRecord.profile));
   }, [memoryRecord.summary, memoryRecord.profile]);
+
+  const refreshMemory = useMutation({
+    mutationFn: () => refreshLearningMemory({}),
+    onSuccess: (payload) => {
+      toast.success("Memory refreshed");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.memory });
+      const record = asRecord(payload);
+      if (textOf(record.summary)) setSummaryDraft(textOf(record.summary));
+      if (textOf(record.profile)) setProfileDraft(textOf(record.profile));
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const clearMemory = useMutation({
+    mutationFn: () => clearLearningMemory(memoryFile),
+    onSuccess: () => {
+      if (memoryFile === "summary") setSummaryDraft("");
+      if (memoryFile === "profile") setProfileDraft("");
+      toast.success("Memory cleared");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.memory });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const loadSkillForEdit = async (name: string) => {
+    setSkillError("");
+    setSkillOriginalName(name);
+    setSkillName(name);
+    setSkillDescription("");
+    setSkillContent("");
+    setSkillTags("");
+    try {
+      const detail = asRecord(await getLearningSkill(name));
+      setSkillName(textOf(detail.name, name));
+      setSkillDescription(textOf(detail.description));
+      setSkillContent(textOf(detail.content));
+      const tags = Array.isArray(detail.tags) ? detail.tags.map((tag) => textOf(tag)).filter(Boolean) : [];
+      setSkillTags(tags.join(", "));
+    } catch (error) {
+      setSkillError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const resetSkillEditor = () => {
+    setSkillOriginalName("");
+    setSkillName("");
+    setSkillDescription("");
+    setSkillContent("");
+    setSkillTags("");
+    setSkillError("");
+  };
+
+  const saveSkill = useMutation({
+    mutationFn: () => {
+      const name = skillName.trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+        throw new Error("Skill name must use lowercase letters, numbers, and hyphens.");
+      }
+      const tags = skillTags
+        .split(",")
+        .map((tag) => tag.trim().toLowerCase())
+        .filter(Boolean);
+      const payload = {
+        name,
+        description: skillDescription,
+        content: skillContent,
+        tags,
+        rename_to: skillOriginalName && name !== skillOriginalName ? name : undefined,
+      };
+      return skillOriginalName ? updateLearningSkill(skillOriginalName, payload) : createLearningSkill(payload);
+    },
+    onSuccess: () => {
+      toast.success("Skill saved");
+      resetSkillEditor();
+      void queryClient.invalidateQueries({ queryKey: learningKeys.skills });
+    },
+    onError: (error) => setSkillError(error.message),
+  });
+
+  const deleteSkill = useMutation({
+    mutationFn: (name: string) => deleteLearningSkill(name),
+    onSuccess: () => {
+      toast.success("Skill deleted");
+      resetSkillEditor();
+      void queryClient.invalidateQueries({ queryKey: learningKeys.skills });
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   return (
     <div className="flex h-full min-h-0 bg-zaki-base">
@@ -3051,11 +3185,30 @@ function LearningSpacePanel({
           <SpaceContentBlock
             icon={History}
             title="Chat History"
-            description="Browse and reopen previous conversations from your learning space."
+            description="Browse, search, and reopen previous conversations from your learning space."
             count={`${sessionItems.length} conversations`}
           >
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-muted focus-within:border-zaki-brand">
+                <Search className="size-4" />
+                <input
+                  value={chatQuery}
+                  onChange={(event) => setChatQuery(event.target.value)}
+                  placeholder="Search chat history..."
+                  className="min-w-0 flex-1 bg-transparent text-zaki-text outline-none placeholder:text-zaki-muted"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => queryClient.invalidateQueries({ queryKey: learningKeys.sessions })}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover"
+              >
+                <RefreshCw className="size-4" />
+                Refresh
+              </button>
+            </div>
             <ItemList
-              items={sessionItems}
+              items={filteredSessions}
               empty="No conversations yet."
               variant="generic"
             />
@@ -3079,70 +3232,291 @@ function LearningSpacePanel({
           <SpaceContentBlock
             icon={ClipboardList}
             title="Question Bank"
-            description="Review and organize quiz questions across sessions."
+            description="Review and organize quiz questions across sessions. Filter bookmarked and wrong answers."
             count={`${questionItems.length} questions`}
           >
-            <ReviewPanel items={questionItems} onOpen={onOpenQuestion} />
+            <div className="mb-4 flex flex-wrap items-center gap-1">
+              {[
+                ["all", "All"],
+                ["bookmarked", "Bookmarked"],
+                ["wrong", "Wrong Only"],
+              ].map(([value, label]) => {
+                const active = questionFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setQuestionFilter(value as "all" | "bookmarked" | "wrong")}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-3 text-xs font-medium transition-colors",
+                      active ? "bg-zaki-hover text-zaki-text" : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                    )}
+                  >
+                    {value === "bookmarked" ? <Bookmark className="size-3.5" /> : null}
+                    {value === "wrong" ? <AlertTriangle className="size-3.5" /> : null}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <ReviewPanel items={filteredQuestions} onOpen={onOpenQuestion} />
           </SpaceContentBlock>
         ) : activeSection === "skills" ? (
           <SpaceContentBlock
             icon={Wand2}
             title="Skills"
-            description="Behavior playbooks that guide chat responses."
+            description="Behavior playbooks that guide chat responses. Create, edit, tag, and delete user-managed skills."
             count={`${skillItems.length} skills`}
           >
-            <ItemList
-              items={skillItems}
-              empty="No learning skills returned yet."
-              variant="generic"
-            />
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="space-y-2">
+                {skillItems.length ? (
+                  skillItems.map((item, index) => {
+                    const name = itemTitle(item, `skill-${index + 1}`);
+                    const tags = Array.isArray(item.tags)
+                      ? item.tags.map((tag) => textOf(tag)).filter(Boolean)
+                      : [];
+                    return (
+                      <div
+                        key={name}
+                        className="group rounded-zaki-lg border border-zaki-border bg-zaki-base p-4 transition-colors hover:bg-zaki-hover"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold text-zaki-text">{name}</h3>
+                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zaki-muted">
+                              {textOf(item.description) || "No description returned."}
+                            </p>
+                            {tags.length ? (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {tags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="rounded-full bg-zaki-raised px-2 py-0.5 text-[10px] font-medium text-zaki-muted"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void loadSkillForEdit(name)}
+                              className="inline-flex size-8 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-zaki-base hover:text-zaki-text"
+                              title="Edit skill"
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deleteSkill.isPending}
+                              onClick={() => {
+                                if (!window.confirm(`Delete skill "${name}"?`)) return;
+                                deleteSkill.mutate(name);
+                              }}
+                              className="inline-flex size-8 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-rose-50 hover:text-rose-600 disabled:opacity-60"
+                              title="Delete skill"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <EmptyLine label="No learning skills returned yet." />
+                )}
+              </div>
+              <div className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zaki-text">
+                      {skillOriginalName ? "Edit skill" : "Create skill"}
+                    </h3>
+                    <p className="mt-1 text-xs text-zaki-muted">
+                      User-managed behavior only. Provider and model routing stay operator-managed.
+                    </p>
+                  </div>
+                  {skillOriginalName ? (
+                    <button
+                      type="button"
+                      onClick={resetSkillEditor}
+                      className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                    >
+                      New
+                    </button>
+                  ) : null}
+                </div>
+                <div className="space-y-3">
+                  <input
+                    value={skillName}
+                    onChange={(event) => setSkillName(event.target.value)}
+                    placeholder="skill-name"
+                    className="h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  />
+                  <input
+                    value={skillDescription}
+                    onChange={(event) => setSkillDescription(event.target.value)}
+                    placeholder="Description"
+                    className="h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  />
+                  <input
+                    value={skillTags}
+                    onChange={(event) => setSkillTags(event.target.value)}
+                    placeholder="tags, comma-separated"
+                    className="h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                  />
+                  <textarea
+                    value={skillContent}
+                    onChange={(event) => setSkillContent(event.target.value)}
+                    placeholder="# My Skill&#10;&#10;Describe how the assistant should behave when this skill is active."
+                    className="min-h-56 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-raised p-3 font-mono text-sm leading-relaxed text-zaki-text outline-none focus:border-zaki-brand"
+                  />
+                  {skillError ? <p className="text-xs text-rose-600">{skillError}</p> : null}
+                  <button
+                    type="button"
+                    disabled={saveSkill.isPending || !skillName.trim() || !skillContent.trim()}
+                    onClick={() => saveSkill.mutate()}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {saveSkill.isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Save skill
+                  </button>
+                </div>
+              </div>
+            </div>
           </SpaceContentBlock>
         ) : (
           <SpaceContentBlock
             icon={Brain}
             title="Memory"
-            description="Long-form memory the assistant carries across sessions."
+            description="Long-form memory the assistant carries across sessions: your running summary and learner profile."
             count="2 files"
           >
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-                  Summary
-                </label>
-                <textarea
-                  value={summaryDraft}
-                  onChange={(event) => setSummaryDraft(event.target.value)}
-                  className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-                  placeholder="Learning summary memory"
-                />
-                <button
-                  type="button"
-                  disabled={saveMemory.isPending}
-                  onClick={() => saveMemory.mutate({ file: "summary", content: summaryDraft })}
-                  className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  Save summary
-                </button>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 border-b border-zaki-border pb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-1">
+                  {([
+                    ["summary", "Summary", BookOpen],
+                    ["profile", "Profile", User],
+                  ] as Array<[LearningMemoryFile, string, LucideIcon]>).map(([value, label, Icon]) => {
+                    const active = memoryFile === value;
+                    const MemoryIcon = Icon as LucideIcon;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setMemoryFile(value as LearningMemoryFile)}
+                        className={cn(
+                          "inline-flex h-9 items-center gap-2 rounded-zaki-md px-3 text-sm font-medium transition-colors",
+                          active ? "bg-zaki-hover text-zaki-text" : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                        )}
+                      >
+                        <MemoryIcon className="size-4" />
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    {(["edit", "preview"] as const).map((view) => (
+                      <button
+                        key={view}
+                        type="button"
+                        onClick={() => setMemoryView(view)}
+                        className={cn(
+                          "h-8 rounded-zaki-md px-3 text-xs font-medium capitalize transition-colors",
+                          memoryView === view ? "bg-zaki-hover text-zaki-text" : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                        )}
+                      >
+                        {view}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-xs text-zaki-muted">Updated: {activeMemoryUpdated}</span>
+                </div>
               </div>
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-                  Profile
-                </label>
-                <textarea
-                  value={profileDraft}
-                  onChange={(event) => setProfileDraft(event.target.value)}
-                  className="min-h-44 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-                  placeholder="Learning profile memory"
-                />
-                <button
-                  type="button"
-                  disabled={saveMemory.isPending}
-                  onClick={() => saveMemory.mutate({ file: "profile", content: profileDraft })}
-                  className="mt-2 inline-flex h-9 items-center justify-center rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  Save profile
-                </button>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="max-w-xl text-xs leading-relaxed text-zaki-muted">
+                  {memoryFile === "summary"
+                    ? "Running summary of the learning journey. Auto-updated after conversations and editable here."
+                    : "User identity, preferences, learning style, and knowledge levels. Auto-updated after conversations and editable here."}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saveMemory.isPending}
+                    onClick={() =>
+                      saveMemory.mutate({
+                        file: memoryFile,
+                        content: memoryFile === "summary" ? summaryDraft : profileDraft,
+                      })
+                    }
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                  >
+                    {saveMemory.isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    disabled={refreshMemory.isPending}
+                    onClick={() => refreshMemory.mutate()}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                  >
+                    {refreshMemory.isPending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    disabled={clearMemory.isPending}
+                    onClick={() => {
+                      if (!window.confirm(`Clear ${memoryFile} memory?`)) return;
+                      clearMemory.mutate();
+                    }}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                  >
+                    {clearMemory.isPending ? <Loader2 className="size-4 animate-spin" /> : <Eraser className="size-4" />}
+                    Clear
+                  </button>
+                </div>
               </div>
+
+              {memoryView === "edit" ? (
+                <div>
+                  <textarea
+                    value={activeMemoryDraft}
+                    onChange={(event) => {
+                      if (memoryFile === "summary") setSummaryDraft(event.target.value);
+                      else setProfileDraft(event.target.value);
+                    }}
+                    spellCheck={false}
+                    className="min-h-[480px] w-full resize-y rounded-zaki-lg border border-zaki-border bg-zaki-base p-4 font-mono text-sm leading-7 text-zaki-text outline-none focus:border-zaki-brand"
+                    placeholder={
+                      memoryFile === "summary"
+                        ? "## Current Focus\n- ...\n\n## Accomplishments\n- ...\n\n## Open Questions\n- ..."
+                        : "## Identity\n- ...\n\n## Learning Style\n- ...\n\n## Knowledge Level\n- ...\n\n## Preferences\n- ..."
+                    }
+                  />
+                  <p className="mt-2 text-[11px] text-zaki-muted">Markdown supported</p>
+                </div>
+              ) : activeMemoryDraft.trim() ? (
+                <div className="learning-markdown rounded-zaki-lg border border-zaki-border bg-zaki-base px-6 py-5 text-sm leading-relaxed text-zaki-text">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeMemoryDraft}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="flex min-h-80 flex-col items-center justify-center rounded-zaki-lg border border-dashed border-zaki-border text-center">
+                  <Brain className="mb-3 size-6 text-zaki-muted" />
+                  <p className="text-sm font-medium text-zaki-text">No {memoryFile} yet</p>
+                  <p className="mt-1 max-w-xs text-xs text-zaki-muted">
+                    Refresh from a session or write directly in the editor.
+                  </p>
+                </div>
+              )}
             </div>
           </SpaceContentBlock>
         )}

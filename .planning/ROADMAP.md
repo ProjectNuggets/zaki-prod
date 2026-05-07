@@ -19,7 +19,7 @@ Last updated: 2026-05-07
 - [x] 01-01: Build route parity manifest and browser audit for every Learn view.
 - [x] 01-02: Port/adapt Sources/Knowledge page shape from upstream.
 - [x] 01-03: Port/adapt Co-Writer page shape from upstream.
-- [ ] 01-04: Port/adapt Space page sections from upstream.
+- [x] 01-04: Port/adapt Space page sections from upstream.
 - [ ] 01-05: Port/adapt TutorBot management and chat surfaces from upstream.
 - [ ] 01-06: Normalize advanced workspace entry points for solve, research, quiz, visualize, and math animation.
 - [ ] 01-07: Browser parity verification and UI code review.
