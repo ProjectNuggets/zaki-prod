@@ -82,10 +82,10 @@ Last updated: 2026-05-07
 
 **Plans:**
 
-- [ ] 05-01: Full upstream-vs-ZAKI feature matrix.
+- [x] 05-01: Full upstream-vs-ZAKI feature matrix.
 - [ ] 05-02: Browser walkthrough for all Learn surfaces.
 - [ ] 05-03: Backend BFF contract test sweep.
 - [ ] 05-04: Multi-user isolation smoke.
 - [ ] 05-05: Final code review and release-readiness verdict.
 
-**Status:** In progress. Current plan: 05-01 Full upstream-vs-ZAKI feature matrix.
+**Status:** In progress. Current plan: 05-02 Browser walkthrough for all Learn surfaces.

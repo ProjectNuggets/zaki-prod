@@ -35,6 +35,10 @@ The browser-facing API contract is documented in
 the downstream `/api/v1/*` routes are implementation detail and can change
 behind the BFF as long as the ZAKI contract remains compatible.
 
+The upstream-vs-ZAKI feature parity matrix is documented in
+`docs/zaki-learning-upstream-parity-matrix.md` and must be updated before
+closing release-gate audits.
+
 ## Non-Negotiables
 
 - Browser clients never call the learning engine directly.

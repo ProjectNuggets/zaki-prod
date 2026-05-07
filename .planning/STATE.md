@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 05 Final Parity Audit And Release Gate
-Plan: 05-01 Full upstream-vs-ZAKI feature matrix
-Status: Phase 04 complete; Phase 05 starting
-Last activity: 2026-05-07 - completed operator deployment readiness gate: super-admin deployment readiness endpoint, immutable ZAKI and learning-engine image checks, learning-engine mirror/source commit pinning, final-user setup runbook, route/function user-test plan, popup outside-click/Escape fix, full Learn parity E2E, typecheck, backend governance tests, and backend syntax checks passing.
+Plan: 05-02 Browser walkthrough for all Learn surfaces
+Status: Phase 05 in progress; 05-01 complete
+Last activity: 2026-05-07 - verified local ZAKI frontend/backend/learning-engine health, passed backend learning tests, learning-engine Together/provider runtime tests, typecheck, and full Learn parity E2E; added native API contract, Together.ai operator stack gate, first-class Together provider routing, and upstream-vs-ZAKI parity matrix.
 
 ## Locked Decisions
 
@@ -56,6 +56,8 @@ Last activity: 2026-05-07 - completed operator deployment readiness gate: super-
 - E2E: every ZAKI Learn route now has route/function smoke coverage in `e2e/learning-parity.spec.ts`.
 - UI: Learn composer Capability, Tools/Sources, and Space popups close on outside click and Escape without navigating away from Learn.
 - BFF: `GET /api/internal/learning/deployment-readiness` reports paid-user deployment gates for central auth, learning config, tenant root, immutable image refs, source mirror pinning, retention, and DR readiness.
+- Docs: `docs/zaki-learning-api-contract.md` defines `/api/learning/*` as the ZAKI-native product API.
+- Docs: `docs/zaki-learning-upstream-parity-matrix.md` records upstream feature parity, hosted adaptations, operator-only surfaces, V1.1 connector folder linking, and remaining release blockers.
 
 ## Completed Plans
 
@@ -86,4 +88,4 @@ Last activity: 2026-05-07 - completed operator deployment readiness gate: super-
 
 ## Next Command
 
-Execute Phase 05 Plan 05-01: full upstream-vs-ZAKI feature matrix.
+Execute Phase 05 Plan 05-02: browser walkthrough for all Learn surfaces.
