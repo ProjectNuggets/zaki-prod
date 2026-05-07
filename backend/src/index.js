@@ -9392,6 +9392,50 @@ async function proxyLearningRequest(req, res, targetPath, {
   }
 }
 
+function encodeLearningRelativePath(rawPath) {
+  const value = String(rawPath || "").replace(/^\/+/, "");
+  const parts = value.split("/").filter(Boolean);
+  if (!parts.length || parts.some((part) => part === "." || part === "..")) {
+    return null;
+  }
+  return parts.map((part) => encodeURIComponent(part)).join("/");
+}
+
+function sendInvalidLearningAssetPath(res, requestId) {
+  res.status(400).json({
+    code: "invalid_learning_asset_path",
+    error: "Invalid learning asset path.",
+    message: "The requested learning asset path is invalid.",
+    requestId,
+  });
+}
+
+async function proxyLearningAssetRequest(req, res, targetPath, label) {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const upstream = await fetchLearningPath({
+      ...learningClientOptions(req, label),
+      path: targetPath,
+      method: "GET",
+      contentType: null,
+    });
+    await pipeLearningResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Asset proxy error:", {
+      requestId,
+      error: error?.message || "Learning asset request failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning asset is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+}
+
 async function proxyLearningRawRequest(req, res, targetPath, {
   method = req.method,
   label = "Learning upstream raw request",
@@ -10387,6 +10431,40 @@ app.get("/api/learning/health", requireLearningContext, async (req, res) => {
     });
   }
 });
+
+app.get("/api/learning/outputs/:outputPath(*)", requireLearningContext, async (req, res) => {
+  const outputPath = encodeLearningRelativePath(req.params.outputPath);
+  if (!outputPath) {
+    sendInvalidLearningAssetPath(res, getOrCreateRequestId(req));
+    return;
+  }
+  await proxyLearningAssetRequest(
+    req,
+    res,
+    `/api/outputs/${outputPath}`,
+    "Learning output asset request"
+  );
+});
+
+app.get(
+  "/api/learning/attachments/:sessionId/:attachmentId/:filename(*)",
+  requireLearningContext,
+  async (req, res) => {
+    const sessionId = encodeLearningRelativePath(req.params.sessionId);
+    const attachmentId = encodeLearningRelativePath(req.params.attachmentId);
+    const filename = encodeLearningRelativePath(req.params.filename);
+    if (!sessionId || !attachmentId || !filename) {
+      sendInvalidLearningAssetPath(res, getOrCreateRequestId(req));
+      return;
+    }
+    await proxyLearningAssetRequest(
+      req,
+      res,
+      `/api/attachments/${sessionId}/${attachmentId}/${filename}`,
+      "Learning attachment asset request"
+    );
+  }
+);
 
 app.get("/api/learning/sessions", requireLearningContext, async (req, res) => {
   if (!assertLearningRouteEnabled(req, res)) return;

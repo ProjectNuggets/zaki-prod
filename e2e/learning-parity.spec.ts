@@ -185,6 +185,7 @@ async function mockLearning(page: Page) {
   ];
   const knowledgeUploads: Array<{ path: string; body: string }> = [];
   const defaultKnowledgeUpdates: string[] = [];
+  const assetRequests: string[] = [];
 
   await page.routeWebSocket("**/api/learning/ws", async (ws) => {
     ws.onMessage((message) => {
@@ -243,7 +244,7 @@ async function mockLearning(page: Page) {
               artifacts: [
                 {
                   type: "image",
-                  url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+                  url: "/api/outputs/math/frame.gif",
                   filename: "frame.gif",
                   label: "Frame preview",
                 },
@@ -265,6 +266,16 @@ async function mockLearning(page: Page) {
 
     if (path === "/api/learning/health") {
       await json(route, { ok: true, mode: "hosted" });
+      return;
+    }
+
+    if (path.startsWith("/api/learning/outputs/")) {
+      assetRequests.push(path);
+      await route.fulfill({
+        status: 200,
+        contentType: "image/gif",
+        body: Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
+      });
       return;
     }
 
@@ -495,7 +506,13 @@ async function mockLearning(page: Page) {
     await json(route, {});
   });
 
-  return { savedNotebookRecords, startedTurns, knowledgeUploads, defaultKnowledgeUpdates };
+  return {
+    savedNotebookRecords,
+    startedTurns,
+    knowledgeUploads,
+    defaultKnowledgeUpdates,
+    assetRequests,
+  };
 }
 
 test.describe("ZAKI Learn parity wiring", () => {
@@ -843,6 +860,11 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect.poll(() => learning.startedTurns.length).toBe(4);
     await expect(page.getByText("Storyboard ready.")).toBeVisible();
     await expect(page.getByText("Frame preview")).toBeVisible();
+    await expect(page.getByAltText("Frame preview")).toHaveAttribute(
+      "src",
+      /\/api\/learning\/outputs\/math\/frame\.gif/,
+    );
+    await expect.poll(() => learning.assetRequests.includes("/api/learning/outputs/math/frame.gif")).toBe(true);
     await expect(page.getByText("View Manim Code")).toBeVisible();
     expect(learning.startedTurns[3]).toMatchObject({
       type: "start_turn",

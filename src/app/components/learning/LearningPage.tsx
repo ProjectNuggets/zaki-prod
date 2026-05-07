@@ -1817,6 +1817,15 @@ function learningAssetUrl(url: string, type: string) {
     return "";
   }
   if (/^(https?:|blob:|data:)/i.test(url)) return url;
+  if (url.startsWith("/api/outputs/")) {
+    return buildApiUrl(`/api/learning/outputs/${url.slice("/api/outputs/".length)}`);
+  }
+  if (url.startsWith("/api/attachments/")) {
+    return buildApiUrl(`/api/learning/attachments/${url.slice("/api/attachments/".length)}`);
+  }
+  if (url.startsWith("/api/v1/")) {
+    return buildApiUrl(`/api/learning/${url.slice("/api/v1/".length)}`);
+  }
   return buildApiUrl(url);
 }
 
