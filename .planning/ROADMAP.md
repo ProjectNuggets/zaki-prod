@@ -56,9 +56,9 @@ Last updated: 2026-05-07
 - [x] 03-03: Quiz, review, question bank, weak-area loop parity.
 - [x] 03-04: Notebooks and save/export flows.
 - [x] 03-05: Deep research, deep solve, visualization, and math animation parity.
-- [ ] 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
+- [x] 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
 
-**Status:** In progress. Current plan: 03-06 Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
+**Status:** Complete.
 
 ## Phase 04: Governance, Quota, Retention, Export
 
@@ -74,7 +74,7 @@ Last updated: 2026-05-07
 - [ ] 04-04: Backup/restore drill and disaster recovery runbook.
 - [ ] 04-05: Operator deployment checklist with immutable image tags.
 
-**Status:** Pending.
+**Status:** In progress. Current plan: 04-01 Quota model and enforcement matrix.
 
 ## Phase 05: Final Parity Audit And Release Gate
 

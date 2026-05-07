@@ -7,20 +7,20 @@ last_updated: "2026-05-07"
 last_activity: 2026-05-07
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 28
-  completed_plans: 18
-  percent: 64
+  completed_plans: 19
+  percent: 68
 ---
 
 # ZAKI Learn State
 
 ## Current Position
 
-Phase: 03 Capability Parity Completion
-Plan: 03-06 Source upload, image upload, browser folder upload, archive upload, and connector-ready seams
-Status: 03-05 complete; ready to execute 03-06
-Last activity: 2026-05-07 - completed advanced capability parity for Deep Solve, Deep Research, Visualize, and Math Animator with hosted-safe result rendering, artifact display, Markdown export preservation, E2E payload/result coverage, typecheck, and notebook export tests passing.
+Phase: 04 Governance, Quota, Retention, Export
+Plan: 04-01 Quota model and enforcement matrix
+Status: Phase 03 complete; ready to execute 04-01
+Last activity: 2026-05-07 - completed source ingestion parity with policy-driven ZAKI uploads, normal file/image/folder/archive routing, safe archive expansion in the learning engine, browser E2E coverage, typecheck, frontend unit tests, and targeted learning-engine pytest coverage passing.
 
 ## Locked Decisions
 
@@ -72,7 +72,8 @@ Last activity: 2026-05-07 - completed advanced capability parity for Deep Solve,
 - 03-03: Quiz, review, question bank, weak-area loop parity.
 - 03-04: Notebooks and save/export flows.
 - 03-05: Deep research, deep solve, visualization, and math animation parity.
+- 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
 
 ## Next Command
 
-Execute Phase 03 Plan 03-06: source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
+Execute Phase 04 Plan 04-01: quota model and enforcement matrix.
