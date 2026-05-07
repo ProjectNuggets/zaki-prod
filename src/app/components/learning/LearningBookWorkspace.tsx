@@ -214,11 +214,31 @@ const CHANGEABLE_TYPES: BlockType[] = [
 ];
 
 const CHAPTER_CONTENT_TYPES = [
-  { value: "theory", label: "Theory" },
-  { value: "derivation", label: "Derivation" },
-  { value: "history", label: "History" },
-  { value: "practice", label: "Practice" },
-  { value: "concept", label: "Concept" },
+  {
+    value: "theory",
+    label: "Theory",
+    description: "Long-form explanation with diagrams, flash cards, and a quiz.",
+  },
+  {
+    value: "derivation",
+    label: "Derivation",
+    description: "Step-by-step derivation, often with animation and verifying code.",
+  },
+  {
+    value: "history",
+    label: "History",
+    description: "Narrative, timeline, period image, and a recap quiz.",
+  },
+  {
+    value: "practice",
+    label: "Practice",
+    description: "Quiz-heavy chapter with a runnable code scaffold and explanation.",
+  },
+  {
+    value: "concept",
+    label: "Concept",
+    description: "Definition, figure, flash cards, and common-pitfall callout.",
+  },
 ];
 
 function asRecord(value: unknown): Item {
@@ -1744,22 +1764,27 @@ function BookProposalView({
   const baseProposal = asRecord(book.proposal);
   const proposal = parseJsonDraftOrFallback(draft, baseProposal);
   const updateProposal = (patch: Item) => setDraft(jsonText({ ...proposal, ...patch }));
+  const selectedKbs = Array.isArray(book.knowledge_bases) ? book.knowledge_bases : [];
   return (
     <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-5 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
-          <div className="mb-1 text-xs font-semibold uppercase tracking-normal text-zaki-brand">
-            Draft proposal
+      <div className="mx-auto max-w-3xl space-y-4">
+        {progress ? <LearningBookProgressTimeline progress={progress} /> : null}
+        <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5 shadow-sm">
+          <div>
+            <h2 className="text-base font-semibold text-zaki-text">Proposal</h2>
+            <p className="text-xs text-zaki-muted">
+              Edit anything below, then confirm to generate the chapter spine.
+            </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
+            <label className="mt-4 block sm:col-span-2">
               <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
                 Title
               </span>
               <input
                 value={textOf(proposal.title, book.title)}
                 onChange={(event) => updateProposal({ title: event.target.value })}
-                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-lg font-semibold text-zaki-text outline-none focus:border-zaki-brand"
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
             </label>
             <label className="block sm:col-span-2">
@@ -1770,7 +1795,7 @@ function BookProposalView({
                 value={textOf(proposal.description, book.description || "")}
                 onChange={(event) => updateProposal({ description: event.target.value })}
                 rows={3}
-                className="mt-1 w-full resize-none rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm leading-6 text-zaki-text outline-none focus:border-zaki-brand"
+                className="mt-1 w-full resize-none rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
             </label>
             <label className="block">
@@ -1780,7 +1805,7 @@ function BookProposalView({
               <input
                 value={textOf(proposal.scope)}
                 onChange={(event) => updateProposal({ scope: event.target.value })}
-                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
             </label>
             <label className="block">
@@ -1790,7 +1815,7 @@ function BookProposalView({
               <input
                 value={textOf(proposal.target_level)}
                 onChange={(event) => updateProposal({ target_level: event.target.value })}
-                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
             </label>
             <label className="block">
@@ -1805,7 +1830,7 @@ function BookProposalView({
                 onChange={(event) =>
                   updateProposal({ estimated_chapters: Number(event.target.value) || 0 })
                 }
-                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
             </label>
             <label className="block">
@@ -1815,32 +1840,42 @@ function BookProposalView({
               <input
                 value={textOf(proposal.language, book.language || "")}
                 onChange={(event) => updateProposal({ language: event.target.value })}
-                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
             </label>
+            <div className="block sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                Knowledge bases used
+              </span>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {selectedKbs.length ? (
+                  selectedKbs.map((kb) => (
+                    <span
+                      key={kb}
+                      className="inline-flex items-center rounded-full border border-zaki-border bg-zaki-hover px-2.5 py-0.5 text-[11px] text-zaki-text"
+                    >
+                      {kb}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs italic text-zaki-muted">
+                    No knowledge bases selected. The book will rely on general knowledge.
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-        {progress ? <LearningBookProgressTimeline progress={progress} className="mb-5" /> : null}
-        <details className="rounded-zaki-md border border-zaki-border bg-zaki-raised">
-          <summary className="cursor-pointer px-4 py-3 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-            Advanced payload
-          </summary>
-          <textarea
-            value={draft || jsonText(baseProposal)}
-            onChange={(event) => setDraft(event.target.value)}
-            className="min-h-[220px] w-full resize-y border-t border-zaki-border bg-zaki-base p-4 font-mono text-xs text-zaki-text outline-none focus:border-zaki-brand"
-          />
-        </details>
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onConfirm}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            Confirm proposal
-          </button>
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onConfirm}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-lg bg-zaki-brand px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+              Confirm proposal & build spine
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1902,39 +1937,30 @@ function BookSpineView({
     ]);
   };
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-5 flex items-start justify-between gap-4 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
-          <div>
-            <div className="mb-1 text-xs font-semibold uppercase tracking-normal text-zaki-brand">
-              Outline
-            </div>
-            <h2 className="text-2xl font-semibold text-zaki-text">Review chapters</h2>
-            <p className="mt-2 text-sm text-zaki-muted">
-              Confirm the chapter structure to start compiling the book.
-            </p>
+    <div className="flex h-full flex-col">
+      <header className="border-b border-zaki-border bg-zaki-raised/60 px-6 py-4">
+        <h2 className="text-lg font-semibold text-zaki-text">Review the chapter spine</h2>
+        <p className="mt-1 text-sm text-zaki-muted">
+          Reorder, rename, or remove chapters before the book starts compiling.
+        </p>
+      </header>
+      {progress ? (
+        <div className="border-b border-zaki-border px-6 py-3">
+          <div className="mx-auto max-w-3xl">
+            <LearningBookProgressTimeline progress={progress} />
           </div>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onConfirm}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-            Confirm outline
-          </button>
         </div>
-        {progress ? <LearningBookProgressTimeline progress={progress} className="mb-5" /> : null}
-        <div className="space-y-3">
+      ) : null}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
           {chapters.map((chapter, index) => (
-            <div key={itemId(chapter, `chapter-${index}`)} className="rounded-zaki-md border border-zaki-border bg-zaki-raised p-4">
+            <div key={itemId(chapter, `chapter-${index}`)} className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="mb-1 text-xs font-semibold text-zaki-brand">Chapter {index + 1}</div>
                   <input
                     value={textOf(chapter.title, `Chapter ${index + 1}`)}
                     onChange={(event) => updateChapter(index, { title: event.target.value })}
-                    className="w-full rounded-zaki-sm border border-transparent bg-transparent px-2 py-1 text-base font-semibold text-zaki-text outline-none focus:border-zaki-border"
+                    className="w-full rounded-zaki-md border border-transparent bg-transparent px-2 py-1 text-base font-semibold text-zaki-text outline-none focus:border-zaki-border"
                   />
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -1942,7 +1968,7 @@ function BookSpineView({
                     type="button"
                     onClick={() => moveChapter(index, -1)}
                     disabled={index === 0}
-                    className="rounded-zaki-sm border border-zaki-border p-1 text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-30"
+                    className="rounded-zaki-md border border-zaki-border p-1 text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-30"
                     aria-label="Move chapter up"
                   >
                     <ArrowUp className="size-3.5" />
@@ -1951,7 +1977,7 @@ function BookSpineView({
                     type="button"
                     onClick={() => moveChapter(index, 1)}
                     disabled={index === chapters.length - 1}
-                    className="rounded-zaki-sm border border-zaki-border p-1 text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-30"
+                    className="rounded-zaki-md border border-zaki-border p-1 text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand disabled:opacity-30"
                     aria-label="Move chapter down"
                   >
                     <ArrowDown className="size-3.5" />
@@ -1959,7 +1985,7 @@ function BookSpineView({
                   <button
                     type="button"
                     onClick={() => removeChapter(index)}
-                    className="rounded-zaki-sm border border-rose-300/60 p-1 text-rose-600 hover:bg-rose-500/10"
+                    className="rounded-zaki-md border border-rose-300/60 p-1 text-rose-600 hover:bg-rose-500/10"
                     aria-label="Remove chapter"
                   >
                     <Trash2 className="size-3.5" />
@@ -1968,11 +1994,19 @@ function BookSpineView({
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="text-xs text-zaki-muted">
-                  Content type
+                  <span className="flex items-center gap-1">
+                    Content type
+                    <span
+                      className="cursor-help text-[10px] opacity-60"
+                      title="Hint that drives the chapter block plan."
+                    >
+                      i
+                    </span>
+                  </span>
                   <select
                     value={textOf(chapter.content_type, "theory")}
                     onChange={(event) => updateChapter(index, { content_type: event.target.value })}
-                    className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                    className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
                   >
                     {CHAPTER_CONTENT_TYPES.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1980,6 +2014,10 @@ function BookSpineView({
                       </option>
                     ))}
                   </select>
+                  <span className="mt-1 block text-[11px] leading-snug text-zaki-muted/80">
+                    {CHAPTER_CONTENT_TYPES.find((option) => option.value === textOf(chapter.content_type, "theory"))?.description ||
+                      "Hint for the architect about what blocks to plan."}
+                  </span>
                 </label>
                 <label className="text-xs text-zaki-muted">
                   Summary
@@ -1987,12 +2025,12 @@ function BookSpineView({
                     value={textOf(chapter.summary)}
                     onChange={(event) => updateChapter(index, { summary: event.target.value })}
                     placeholder="Optional one-line description"
-                    className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+                    className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-2 py-1.5 text-sm text-zaki-text outline-none focus:border-zaki-brand"
                   />
                 </label>
               </div>
               <label className="mt-3 block text-xs text-zaki-muted">
-                Learning objectives
+                Learning objectives (one per line)
                 <textarea
                   value={extractList(chapter, ["learning_objectives"]).join("\n")}
                   onChange={(event) =>
@@ -2010,20 +2048,21 @@ function BookSpineView({
             className="inline-flex w-full items-center justify-center gap-2 rounded-zaki-md border border-dashed border-zaki-border bg-zaki-raised px-3 py-2 text-sm font-semibold text-zaki-muted hover:border-zaki-brand/50 hover:text-zaki-brand"
           >
             <Plus className="size-4" />
-            Add chapter
-          </button>
-          <details className="rounded-zaki-md border border-zaki-border bg-zaki-raised">
-            <summary className="cursor-pointer px-4 py-3 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-              Advanced payload
-            </summary>
-            <textarea
-              value={draft || jsonText(spine)}
-              onChange={(event) => setDraft(event.target.value)}
-              className="min-h-[280px] w-full resize-y border-t border-zaki-border bg-zaki-base p-4 font-mono text-xs text-zaki-text outline-none focus:border-zaki-brand"
-            />
-          </details>
+              Add chapter
+            </button>
         </div>
       </div>
+      <footer className="flex items-center justify-end gap-3 border-t border-zaki-border bg-zaki-raised/60 px-6 py-3">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={loading}
+          className="inline-flex h-10 items-center gap-2 rounded-zaki-lg bg-zaki-brand px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+          Confirm spine & start compiling
+        </button>
+      </footer>
     </div>
   );
 }
