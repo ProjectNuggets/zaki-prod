@@ -138,6 +138,12 @@ import {
   resolveLearningQuotaPolicy,
 } from "./learning-quota.js";
 import {
+  listLearningAccountAuditEvents,
+  recordLearningAccountAuditEvent,
+  summarizeLearningDeletionResult,
+  summarizeLearningExportSnapshot,
+} from "./learning-governance-audit.js";
+import {
   getAccessStatus,
   getEffectiveEntitlementState,
   isPaidActive,
@@ -5317,11 +5323,40 @@ app.get("/api/usage/quota", async (req, res) => {
 // -----------------------------------------------------------------------------
 // Account: export + irreversible account deletion
 // -----------------------------------------------------------------------------
+async function recordLearningAccountAuditEventBestEffort(args) {
+  try {
+    return await recordLearningAccountAuditEvent(args);
+  } catch (error) {
+    console.warn("[Account] Learning audit event failed:", error?.message || error);
+    return null;
+  }
+}
+
+app.get("/api/account/learning/audit", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const limit = typeof req.query.limit === "string" ? req.query.limit : 50;
+    const events = await listLearningAccountAuditEvents({
+      dbQuery,
+      zakiUser: authResult.zakiUser,
+      limit,
+    });
+    res.status(200).json({ success: true, events });
+  } catch (error) {
+    console.error("[Account] Learning audit list error:", error);
+    res.status(500).json({ error: error?.message || "Learning audit lookup failed." });
+  }
+});
+
 app.get("/api/account/export", async (req, res) => {
+  const requestId = getOrCreateRequestId(req);
+  let auditUser = null;
   try {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { email, zakiUser } = authResult;
+    auditUser = zakiUser;
 
     const loadOptionalRows = async (sql, params = []) => {
       try {
@@ -5374,7 +5409,16 @@ app.get("/api/account/export", async (req, res) => {
       ]);
     const learning = await buildLearningAccountExportSnapshot({
       zakiUser,
-      requestId: getOrCreateRequestId(req),
+      requestId,
+    });
+    const learningAudit = summarizeLearningExportSnapshot(learning);
+    await recordLearningAccountAuditEvent({
+      dbQuery,
+      zakiUser,
+      action: "export",
+      status: learningAudit.errorCount > 0 ? "completed_with_errors" : "succeeded",
+      requestId,
+      details: learningAudit,
     });
 
     const exportPayload = {
@@ -5424,15 +5468,31 @@ app.get("/api/account/export", async (req, res) => {
     res.status(200).json({ success: true, export: exportPayload });
   } catch (error) {
     console.error("[Account] Export error:", error);
+    if (auditUser) {
+      await recordLearningAccountAuditEventBestEffort({
+        dbQuery,
+        zakiUser: auditUser,
+        action: "export",
+        status: "failed",
+        requestId,
+        details: {
+          message: error?.message || "Account export failed.",
+          status: error?.status || null,
+        },
+      });
+    }
     res.status(500).json({ error: error?.message || "Account export failed." });
   }
 });
 
 app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, res) => {
+  const requestId = getOrCreateRequestId(req);
+  let auditUser = null;
   try {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { email, zakiUser } = authResult;
+    auditUser = zakiUser;
 
     const validation = validateInput(DeleteAccountSchema, req.body || {});
     if (!validation.valid) {
@@ -5451,6 +5511,15 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       });
       return;
     }
+
+    await recordLearningAccountAuditEvent({
+      dbQuery,
+      zakiUser,
+      action: "delete",
+      status: "started",
+      requestId,
+      details: { confirmationMatched: true },
+    });
 
     // Best-effort cleanup in NOVA.TYP (non-blocking; local deletion remains source of truth).
     if (zakiUser.nova_user_id) {
@@ -5473,7 +5542,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
 
     const learningDeletion = await deleteLearningAccountResources({
       zakiUser,
-      requestId: getOrCreateRequestId(req),
+      requestId,
     });
 
     await dbQuery("BEGIN");
@@ -5498,9 +5567,31 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       throw err;
     }
 
+    await recordLearningAccountAuditEventBestEffort({
+      dbQuery,
+      zakiUser,
+      action: "delete",
+      status: "succeeded",
+      requestId,
+      details: summarizeLearningDeletionResult(learningDeletion),
+    });
     res.status(200).json({ success: true, message: "Account deleted.", learningDeletion });
   } catch (error) {
     console.error("[Account] Delete error:", error);
+    if (auditUser) {
+      await recordLearningAccountAuditEventBestEffort({
+        dbQuery,
+        zakiUser: auditUser,
+        action: "delete",
+        status: "failed",
+        requestId,
+        details: {
+          message: error?.message || "Account delete failed.",
+          status: error?.status || null,
+          detailsCount: Array.isArray(error?.details) ? error.details.length : 0,
+        },
+      });
+    }
     res.status(error?.status || 500).json({
       error: error?.message || "Account delete failed.",
       details: error?.details || undefined,

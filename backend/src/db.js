@@ -232,6 +232,24 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_learning_account_audit_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT,
+      subject_hash TEXT NOT NULL,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      request_id TEXT,
+      details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_learning_account_audit_subject
+    ON zaki_learning_account_audit_events(subject_hash, created_at DESC, id DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

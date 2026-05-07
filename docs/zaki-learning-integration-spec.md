@@ -610,6 +610,14 @@ ZAKI must define:
 Account deletion must include learning data deletion or a documented async
 deletion job with audit status.
 
+ZAKI records learning export/delete governance events in
+`zaki_learning_account_audit_events`. Audit rows store request ids, action,
+status, non-PII subject hash, resource counts, deleted resource types, and error
+counts. They must not copy exported source, notebook, lesson, memory, or tutor
+content into the audit ledger. Account deletion records a `started` event before
+destructive cleanup and records success or failure after the learning-engine
+delete attempt.
+
 ## Operator Dependencies
 
 The learning engine may require:
