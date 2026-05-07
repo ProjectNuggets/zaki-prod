@@ -384,16 +384,21 @@ interface PanelToggleProps {
 }
 
 function PanelToggle({ icon: Icon, label, active, onClick }: PanelToggleProps) {
+  // V1.11 hotfix (2026-05-07) — dropped backdrop-blur. On the deep
+  // black canvas the blur created a faint translucent halo around
+  // each button that read as misalignment. Solid `bg-zaki-raised/90`
+  // matches the Obsidian-video gear button: clean dark chip, no
+  // blur shimmer.
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`pointer-events-auto flex size-9 items-center justify-center rounded-zaki-md border backdrop-blur-md transition-colors ${
+      className={`pointer-events-auto flex size-9 items-center justify-center rounded-zaki-md border transition-colors ${
         active
-          ? "border-[#f10202] bg-[#f10202]/15 text-[#f10202]"
-          : "border-white/10 bg-black/40 text-white/70 hover:border-white/20 hover:text-white"
+          ? "border-[#f10202]/60 bg-[#f10202]/15 text-[#f10202]"
+          : "border-white/10 bg-zaki-raised/90 text-white/60 hover:border-white/20 hover:text-white"
       }`}
     >
       <Icon className="size-4" />
@@ -412,19 +417,26 @@ interface FloatingOverlayProps {
 }
 
 function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
+  // V1.11 hotfix (2026-05-07) — overlay polish to match the Obsidian
+  // Filters panel from Nova's video (Screen Recording 2026-05-07
+  // 14:05, frames 25 + 45):
+  //   - Panel sits flush against the right edge with small inset
+  //   - Close button is INSIDE the panel's top-right corner, not
+  //     floating outside (the prior `-top-1 right-1` was negative-
+  //     positioned, looked detached and misaligned)
+  //   - Solid shadow-2xl gives the panel proper elevation against
+  //     the dark canvas without blur shimmer
   return (
-    <div className="absolute right-3 top-14 bottom-3 z-20 flex max-h-[calc(100%-4rem)] flex-col">
-      <div className="absolute -top-1 right-1 z-30">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close panel"
-          className="flex size-6 items-center justify-center rounded-full border border-white/10 bg-black/60 text-white/70 backdrop-blur transition-colors hover:border-white/20 hover:text-white"
-        >
-          <X className="size-3" />
-        </button>
-      </div>
-      <div className="flex h-full min-h-0 overflow-hidden rounded-zaki-lg shadow-2xl">
+    <div className="absolute right-3 top-14 bottom-3 z-20 flex max-h-[calc(100%-4.5rem)] flex-col rounded-zaki-lg shadow-2xl">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close panel"
+        className="absolute right-2 top-2 z-30 flex size-6 items-center justify-center rounded-full bg-black/40 text-white/60 transition-colors hover:bg-black/60 hover:text-white"
+      >
+        <X className="size-3" />
+      </button>
+      <div className="flex h-full min-h-0 overflow-hidden rounded-zaki-lg">
         {children}
       </div>
     </div>

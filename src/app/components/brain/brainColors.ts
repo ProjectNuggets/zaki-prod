@@ -103,16 +103,27 @@ export function nodeColor(
 
 // Importance (0..1) -> radius.
 //
-// V1.11 (2026-05-07) — range widened 8-24px (3×) → 6-36px (6×) for
-// stronger visual hierarchy. The prior 3× ratio was too subtle on
-// the dark canvas — hubs and leaves read as roughly the same size,
-// and the size-only signal couldn't carry the eye to important
-// nodes. 6× gives Obsidian-like contrast: hubs dominate, leaves
-// recede. Combined with the V1.11 importance-opacity (0.45-1.0),
-// the eye gets two stacked anchors for the same hierarchy.
+// V1.11 hotfix (2026-05-07) — calibrated against Nova's Obsidian video
+// (Screen Recording 2026-05-07 14:05). Obsidian renders nodes at
+// roughly 3-10px on a typical vault — leaves are tiny dots, hubs
+// are slightly bigger. The earlier V1.11 attempt (6-36px) was 3-4×
+// too large; nodes felt like blobs.
+//
+// New range: 4-14px (3.5× ratio). Tight Obsidian-style dots without
+// going so small that ZAKI's smaller node-counts (39 visible after
+// orphan-filter, vs Obsidian's hundreds) feel sparse.
+//
+// History:
+//   pre-V1.11:  8 + 16*i  (range  8-24px, 3×)
+//   V1.11 a:    6 + 30*i  (range  6-36px, 6×)  — too big, Nova feedback
+//   V1.11 b:    4 + 10*i  (range 4-14px, 3.5×) — Obsidian-calibrated
+//
+// Combined with the V1.11 importance-opacity (0.45-1.0 per node),
+// the eye still gets two stacked hierarchy anchors at the smaller
+// scale.
 export function importanceToRadius(importance: number | undefined): number {
   const i = typeof importance === "number" ? Math.max(0, Math.min(1, importance)) : 0.3;
-  return 6 + 30 * i;
+  return 4 + 10 * i;
 }
 
 // V1.11 (2026-05-07) — Per-edge ideal length used by cose-bilkent.
