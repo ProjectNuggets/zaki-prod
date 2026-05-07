@@ -9,10 +9,15 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   CheckCircle2,
+  ClipboardList,
+  Database,
   Layers,
   Loader2,
   MessageSquare,
+  NotebookPen,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -133,6 +138,7 @@ type BookSourceChild<TChild extends string | number> = {
 };
 
 type BookSourceSelection<TChild extends string | number> = Map<string, ParentSelection<TChild>>;
+type BookCreatorSourceTab = "knowledge" | "notebooks" | "questions" | "chats";
 
 type BookChatMessage = {
   id: string;
@@ -941,6 +947,8 @@ function BookLibraryView({
   onSelect: (book: LearningBook) => void;
   onDelete: (book: LearningBook) => void;
 }) {
+  const [sourceTab, setSourceTab] = useState<BookCreatorSourceTab>("knowledge");
+  const [creatorCollapsed, setCreatorCollapsed] = useState(false);
   const stats = {
     total: allBooks.length,
     ready: allBooks.filter((book) => book.status === "ready").length,
@@ -952,6 +960,18 @@ function BookLibraryView({
     selectionCount(selectedSessions) +
     selectionCount(selectedNotebooks) +
     selectedQuestions.length;
+  const sourceTabs: Array<{
+    key: BookCreatorSourceTab;
+    label: string;
+    icon: typeof Database;
+    count: number;
+  }> = [
+    { key: "knowledge", label: "Libraries", icon: Database, count: selectedKnowledge.length },
+    { key: "notebooks", label: "Notebooks", icon: NotebookPen, count: selectionCount(selectedNotebooks) },
+    { key: "questions", label: "Questions", icon: ClipboardList, count: selectedQuestions.length },
+    { key: "chats", label: "Chats", icon: MessageSquare, count: selectionCount(selectedSessions) },
+  ];
+  const summaryChips = sourceTabs.filter((tab) => tab.count > 0);
 
   return (
     <div className="flex min-h-[680px] flex-col">
@@ -977,87 +997,181 @@ function BookLibraryView({
           </div>
         </div>
       </header>
-      <div className="grid gap-3 border-b border-zaki-border p-5 sm:grid-cols-4">
+      <div className="grid gap-3 border-b border-zaki-border px-5 py-4 sm:grid-cols-4">
         <BookStat icon={BookOpen} label="Total books" value={stats.total} />
         <BookStat icon={CheckCircle2} label="Ready" value={stats.ready} />
         <BookStat icon={Sparkles} label="In progress" value={stats.inProgress} />
         <BookStat icon={Layers} label="Chapters" value={stats.chapters} />
       </div>
-      <div className="border-b border-zaki-border p-5">
-        <div className="space-y-3">
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <input
-              value={bookTopic}
-              onChange={(event) => setBookTopic(event.target.value)}
-              placeholder="What should ZAKI teach?"
-              className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-            />
-            <select
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand lg:w-36"
-              aria-label="Book language"
-            >
-              <option value="en">English</option>
-              <option value="ar">Arabic</option>
-              <option value="fr">French</option>
-              <option value="es">Spanish</option>
-              <option value="de">German</option>
-            </select>
-            <button
-              type="button"
-              disabled={!bookTopic.trim() || creating}
-              onClick={onCreate}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              New book
-            </button>
-          </div>
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
-                Book sources
-                {selectedSourceCount ? (
-                  <span className="ml-2 rounded-full bg-zaki-brand/10 px-2 py-0.5 text-[10px] text-zaki-brand">
-                    {selectedSourceCount} selected
-                  </span>
+      <div className="border-b border-zaki-border px-5 py-5">
+        <div className="mx-auto max-w-3xl overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-base shadow-sm">
+          <button
+            type="button"
+            onClick={() => setCreatorCollapsed((value) => !value)}
+            className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left hover:bg-zaki-hover"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-zaki-text">
+                  {creatorCollapsed ? "Inputs" : "Configure inputs"}
+                </span>
+                {creatorCollapsed && bookTopic.trim() ? (
+                  <span className="truncate text-xs text-zaki-muted">/ {bookTopic.trim()}</span>
                 ) : null}
               </div>
+              {creatorCollapsed ? (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {summaryChips.length ? (
+                    summaryChips.map((chip) => (
+                      <span
+                        key={chip.key}
+                        className="inline-flex items-center gap-1 rounded-full bg-zaki-brand/10 px-2 py-0.5 text-[11px] font-medium text-zaki-brand"
+                      >
+                        <chip.icon className="size-3" />
+                        {chip.count} {chip.label}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[11px] text-zaki-muted">No sources selected</span>
+                  )}
+                </div>
+              ) : null}
             </div>
-            <div className="grid gap-2 lg:grid-cols-4">
-              <BookSourceGroup
-                label="Libraries"
-                items={knowledgeItems}
-                selected={selectedKnowledge}
-                getId={(item, index) => textOf(item.name) || itemId(item, `kb-${index}`)}
-                onToggle={(id) => toggleStringSelection(selectedKnowledge, id, setSelectedKnowledge)}
-              />
-              <BookTreeSourceGroup
-                label="Chats"
-                items={sessionItems}
-                selected={selectedSessions}
-                getId={(item, index) => itemId(item, `session-${index}`)}
-                loadChildren={async (id) => extractSessionMessageChildren(await getLearningSession(id))}
-                onChange={setSelectedSessions}
-              />
-              <BookTreeSourceGroup
-                label="Notebooks"
-                items={notebookItems}
-                selected={selectedNotebooks}
-                getId={(item, index) => itemId(item, `notebook-${index}`)}
-                loadChildren={async (id) => extractNotebookRecordChildren(await getLearningNotebook(id))}
-                onChange={setSelectedNotebooks}
-              />
-              <BookSourceGroup
-                label="Questions"
-                items={questionItems}
-                selected={selectedQuestions}
-                getId={(item, index) => numericSourceId(item, index)}
-                onToggle={(id) => toggleIdSelection(selectedQuestions, id, setSelectedQuestions)}
-              />
+            <span className="inline-flex items-center gap-1 rounded-zaki-md px-2 py-1 text-[11px] text-zaki-muted">
+              {creatorCollapsed ? (
+                <>
+                  <Pencil className="size-3" />
+                  Edit
+                </>
+              ) : (
+                <ChevronUp className="size-3.5" />
+              )}
+            </span>
+          </button>
+
+          {!creatorCollapsed ? (
+            <div className="space-y-4 px-5 pb-5">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                  Learning intent
+                </span>
+                <textarea
+                  value={bookTopic}
+                  onChange={(event) => setBookTopic(event.target.value)}
+                  rows={5}
+                  placeholder="e.g. Build intuition for transformer attention with derivations and exercises."
+                  className="mt-1.5 w-full resize-none rounded-zaki-lg border border-zaki-border bg-zaki-raised px-3 py-2 text-sm leading-6 text-zaki-text outline-none focus:border-zaki-brand"
+                />
+              </label>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold uppercase tracking-normal text-zaki-muted">
+                    Knowledge sources
+                    {selectedSourceCount ? (
+                      <span className="ml-2 rounded-full bg-zaki-brand/10 px-2 py-0.5 text-[10px] text-zaki-brand">
+                        {selectedSourceCount} selected
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="inline-flex w-full rounded-zaki-md border border-zaki-border bg-zaki-raised p-0.5">
+                  {sourceTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setSourceTab(tab.key)}
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-zaki-sm px-2 py-1.5 text-[12px] font-medium transition-colors",
+                        sourceTab === tab.key
+                          ? "bg-zaki-base text-zaki-text shadow-sm"
+                          : "text-zaki-muted hover:text-zaki-text",
+                      )}
+                    >
+                      <tab.icon className="size-3.5 shrink-0" />
+                      <span className="truncate">{tab.label}</span>
+                      {tab.count ? (
+                        <span className="ml-0.5 rounded-full bg-zaki-brand/10 px-1.5 text-[10px] font-semibold text-zaki-brand">
+                          {tab.count}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="max-h-72 overflow-y-auto rounded-zaki-lg border border-zaki-border bg-zaki-raised p-1.5">
+                  {sourceTab === "knowledge" ? (
+                    <BookSourceGroup
+                      label="Libraries"
+                      items={knowledgeItems}
+                      selected={selectedKnowledge}
+                      getId={(item, index) => textOf(item.name) || itemId(item, `kb-${index}`)}
+                      onToggle={(id) => toggleStringSelection(selectedKnowledge, id, setSelectedKnowledge)}
+                      embedded
+                    />
+                  ) : null}
+                  {sourceTab === "notebooks" ? (
+                    <BookTreeSourceGroup
+                      label="Notebooks"
+                      items={notebookItems}
+                      selected={selectedNotebooks}
+                      getId={(item, index) => itemId(item, `notebook-${index}`)}
+                      loadChildren={async (id) => extractNotebookRecordChildren(await getLearningNotebook(id))}
+                      onChange={setSelectedNotebooks}
+                      embedded
+                    />
+                  ) : null}
+                  {sourceTab === "questions" ? (
+                    <BookSourceGroup
+                      label="Questions"
+                      items={questionItems}
+                      selected={selectedQuestions}
+                      getId={(item, index) => numericSourceId(item, index)}
+                      onToggle={(id) => toggleIdSelection(selectedQuestions, id, setSelectedQuestions)}
+                      embedded
+                    />
+                  ) : null}
+                  {sourceTab === "chats" ? (
+                    <BookTreeSourceGroup
+                      label="Chats"
+                      items={sessionItems}
+                      selected={selectedSessions}
+                      getId={(item, index) => itemId(item, `session-${index}`)}
+                      loadChildren={async (id) => extractSessionMessageChildren(await getLearningSession(id))}
+                      onChange={setSelectedSessions}
+                      embedded
+                    />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="text-xs text-zaki-muted">
+                  Language
+                  <select
+                    value={language}
+                    onChange={(event) => setLanguage(event.target.value)}
+                    className="ml-2 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 py-1 text-xs text-zaki-text outline-none focus:border-zaki-brand"
+                    aria-label="Book language"
+                  >
+                    <option value="en">English</option>
+                    <option value="ar">Arabic</option>
+                    <option value="fr">French</option>
+                    <option value="es">Spanish</option>
+                    <option value="de">German</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={!bookTopic.trim() || creating}
+                  onClick={onCreate}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-lg bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {creating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                  Generate proposal
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
       <main className="flex-1 overflow-y-auto p-5">
@@ -1108,12 +1222,14 @@ function BookSourceGroup<TId extends string | number>({
   selected,
   getId,
   onToggle,
+  embedded = false,
 }: {
   label: string;
   items: Item[];
   selected: TId[];
   getId: (item: Item, index: number) => TId;
   onToggle: (id: TId) => void;
+  embedded?: boolean;
 }) {
   const [sourceQuery, setSourceQuery] = useState("");
   const needle = sourceQuery.trim().toLowerCase();
@@ -1128,8 +1244,8 @@ function BookSourceGroup<TId extends string | number>({
       )
     : sourceEntries;
   return (
-    <div className="min-h-36 rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className={cn(!embedded && "min-h-36 rounded-zaki-md border border-zaki-border bg-zaki-base p-2")}>
+      {!embedded ? <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
           {label}
         </div>
@@ -1138,7 +1254,7 @@ function BookSourceGroup<TId extends string | number>({
             {selected.length}
           </span>
         ) : null}
-      </div>
+      </div> : null}
       {items.length > 6 ? (
         <input
           value={sourceQuery}
@@ -1185,6 +1301,7 @@ function BookTreeSourceGroup<TChild extends string | number>({
   getId,
   loadChildren,
   onChange,
+  embedded = false,
 }: {
   label: string;
   items: Item[];
@@ -1192,6 +1309,7 @@ function BookTreeSourceGroup<TChild extends string | number>({
   getId: (item: Item, index: number) => string;
   loadChildren: (id: string) => Promise<BookSourceChild<TChild>[]>;
   onChange: (selection: BookSourceSelection<TChild>) => void;
+  embedded?: boolean;
 }) {
   const [sourceQuery, setSourceQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -1260,8 +1378,8 @@ function BookTreeSourceGroup<TChild extends string | number>({
   };
 
   return (
-    <div className="min-h-36 rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className={cn(!embedded && "min-h-36 rounded-zaki-md border border-zaki-border bg-zaki-base p-2")}>
+      {!embedded ? <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
           {label}
         </div>
@@ -1270,7 +1388,7 @@ function BookTreeSourceGroup<TChild extends string | number>({
             {selectedCount}
           </span>
         ) : null}
-      </div>
+      </div> : null}
       {items.length > 6 ? (
         <input
           value={sourceQuery}
@@ -1877,7 +1995,7 @@ function BookReaderView({
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className={cn("grid h-full", chatOpen && "xl:grid-cols-[minmax(0,1fr)_360px]")}>
+        <div className={cn("grid h-full", chatOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-[minmax(0,1fr)_260px]")}>
         <div className="overflow-y-auto px-8 py-8">
         <article className="mx-auto flex w-full max-w-[82ch] flex-col gap-5">
           {hasDrift ? (
@@ -1976,7 +2094,9 @@ function BookReaderView({
             page={page}
             onClose={() => setChatOpen(false)}
           />
-        ) : null}
+        ) : (
+          <PageBlockOutline page={page} />
+        )}
         </div>
       </div>
       {!chatOpen ? (
@@ -1990,6 +2110,42 @@ function BookReaderView({
         </button>
       ) : null}
     </div>
+  );
+}
+
+function PageBlockOutline({ page }: { page: LearningBookPage }) {
+  const visibleBlocks = page.blocks.filter((block) => block.type !== "section" || block.title);
+  if (!visibleBlocks.length) return null;
+  return (
+    <aside className="hidden min-h-0 border-l border-zaki-border bg-zaki-raised px-3 py-4 xl:flex xl:flex-col">
+      <div className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
+        Page outline
+      </div>
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+        {visibleBlocks.map((block, index) => {
+          const label = block.title || textOf(block.params?.topic) || `${block.type} ${index + 1}`;
+          return (
+            <button
+              key={block.id}
+              type="button"
+              onClick={() => {
+                document.getElementById(`book-block-${block.id}`)?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              }}
+              className="flex w-full items-center gap-2 rounded-zaki-sm px-2 py-1.5 text-left text-xs text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+            >
+              <span className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                block.status === "error" ? "bg-rose-500" : block.status === "ready" ? "bg-emerald-500" : "bg-zaki-muted",
+              )} />
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </aside>
   );
 }
 
@@ -2258,7 +2414,7 @@ function BookBlock({
   onQuizAttempt: (attempt: LearningBookQuizAttempt) => void;
 }) {
   return (
-    <section className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
+    <section id={`book-block-${block.id}`} className="scroll-mt-6 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
