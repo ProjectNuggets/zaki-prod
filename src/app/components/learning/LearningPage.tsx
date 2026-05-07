@@ -3060,7 +3060,7 @@ function LearningChatPanel({
           <div className="px-4 pb-2 text-xs text-red-600">{attachmentError}</div>
         ) : null}
         <div className="border-t border-[var(--border)]/35 px-3 py-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-sm:flex-wrap">
             <div ref={capabilityMenuRef} className="relative shrink-0">
               <button
                 type="button"
@@ -3129,7 +3129,7 @@ function LearningChatPanel({
 
             <div className="h-3.5 w-px bg-[var(--border)]/30" />
 
-            <div className="flex min-w-0 flex-1 items-center gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1 max-sm:min-w-[calc(100%-48px)] max-sm:overflow-hidden">
               {isResearchMode ? (
                 <div ref={toolMenuRef} className="relative flex items-center gap-0.5">
                   <button
@@ -3354,7 +3354,7 @@ function LearningChatPanel({
               </div>
             </div>
 
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 max-sm:ml-0">
               <select
                 value={kbName}
                 onChange={(event) => setKbName(event.target.value)}

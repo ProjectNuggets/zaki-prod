@@ -520,7 +520,7 @@ test.describe("ZAKI Learn parity wiring", () => {
     const routeChecks: Array<{
       view: string;
       visibleText: string | RegExp;
-      functionEntries: Array<string | RegExp>;
+      functionEntries: Array<string | RegExp | { role: "button"; name: string | RegExp }>;
     }> = [
       {
         view: "books",
@@ -549,7 +549,7 @@ test.describe("ZAKI Learn parity wiring", () => {
       },
       {
         view: "writer",
-        visibleText: "Co-Writer",
+        visibleText: "Manage your markdown drafts and projects.",
         functionEntries: [/New draft/i, /From template/i],
       },
       {
@@ -570,7 +570,7 @@ test.describe("ZAKI Learn parity wiring", () => {
       {
         view: "solve",
         visibleText: "Deep Solve",
-        functionEntries: [/Tools/i, /Space/i],
+        functionEntries: [/Tools/i, { role: "button", name: "Learning space context menu" }],
       },
       {
         view: "research",
@@ -598,7 +598,11 @@ test.describe("ZAKI Learn parity wiring", () => {
       await page.goto(`/learn?view=${check.view}`);
       await expect(page.getByText(check.visibleText).first()).toBeVisible();
       for (const entry of check.functionEntries) {
-        await expect(page.getByText(entry).first()).toBeVisible();
+        if (typeof entry === "object" && "role" in entry) {
+          await expect(page.getByRole(entry.role, { name: entry.name })).toBeVisible();
+        } else {
+          await expect(page.getByText(entry).first()).toBeVisible();
+        }
       }
     }
   });
@@ -609,12 +613,12 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.goto("/learn?view=chat");
     await page.getByRole("button", { name: "Learning capability menu" }).click();
     await expect(page.getByText("Flexible conversation with any tool")).toBeVisible();
-    await page.getByText("What would you like to learn?").click();
+    await page.mouse.click(12, 12);
     await expect(page.getByText("Flexible conversation with any tool")).toBeHidden();
 
     await page.getByRole("button", { name: "Learning tools menu" }).click();
     await expect(page.getByRole("button", { name: /Brainstorm/i })).toBeVisible();
-    await page.getByText("What would you like to learn?").click();
+    await page.mouse.click(12, 12);
     await expect(page.getByRole("button", { name: /Brainstorm/i })).toBeHidden();
 
     await page.getByRole("button", { name: "Learning space context menu" }).click();
@@ -625,7 +629,7 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.goto("/learn?view=research");
     await page.getByRole("button", { name: "Learning sources menu" }).click();
     await expect(page.getByRole("button", { name: /Papers/i })).toBeVisible();
-    await page.getByText("Deep Research").first().click();
+    await page.mouse.click(12, 12);
     await expect(page.getByRole("button", { name: /Papers/i })).toBeHidden();
   });
 

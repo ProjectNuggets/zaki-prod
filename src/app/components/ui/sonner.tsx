@@ -9,10 +9,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={isDark ? "dark" : "light"}
-      className="toaster group"
+      className="toaster group pointer-events-none"
       toastOptions={{
         classNames: {
-          toast: "group toast bg-white dark:bg-zaki-primary border-zaki dark:border-zaki-dark shadow-lg",
+          toast: "group toast pointer-events-none bg-white dark:bg-zaki-primary border-zaki dark:border-zaki-dark shadow-lg",
           title: "text-zaki-primary dark:text-zaki-primary font-medium",
           description: "text-zaki-secondary dark:text-zaki-dark-muted",
           success: "!bg-zaki-success !border-zaki-strong !text-zaki-success",
