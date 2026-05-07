@@ -121,6 +121,7 @@ import {
   listLearningTutorAgents,
   listLearningTutorAgentRecent,
   listLearningTutorAgentSouls,
+  getLearningKnowledgeSupportedFileTypes,
   getLearningMemory,
   getLearningSkill,
   destroyLearningTutorAgent,
@@ -139,6 +140,8 @@ import {
   updateLearningMemory,
   uploadLearningKnowledge,
   uploadLearningKnowledgeArchive,
+  uploadLearningKnowledgeFolder,
+  type LearningKnowledgeUploadPolicy,
   type LearningJson,
 } from "@/lib/learningApi";
 import {
@@ -619,6 +622,11 @@ export function LearningPage() {
     queryFn: listLearningKnowledge,
     retry: 1,
   });
+  const knowledgeUploadPolicy = useQuery({
+    queryKey: learningKeys.knowledgeUploadPolicy,
+    queryFn: getLearningKnowledgeSupportedFileTypes,
+    retry: 1,
+  });
   const sessions = useQuery({
     queryKey: learningKeys.sessions,
     queryFn: () => listLearningSessions(100),
@@ -736,6 +744,17 @@ export function LearningPage() {
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Upload started");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.knowledge });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const uploadKbFolder = useMutation({
+    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) =>
+      uploadLearningKnowledgeFolder(name, files),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Folder upload started");
       void queryClient.invalidateQueries({ queryKey: learningKeys.knowledge });
     },
     onError: (error) => toast.error(error.message),
@@ -951,10 +970,12 @@ export function LearningPage() {
             setKbName={setKbName}
             createKb={createKb}
             uploadKb={uploadKb}
+            uploadKbFolder={uploadKbFolder}
             uploadKbArchive={uploadKbArchive}
             reindexKb={reindexKb}
             deleteKb={deleteKb}
             items={knowledgeItems}
+            uploadPolicy={knowledgeUploadPolicy.data}
             folderInputRef={folderInputRef}
             onOpen={(item) => openObject("source", item, "main")}
           />
@@ -4123,10 +4144,12 @@ function SourcesPanel({
   setKbName,
   createKb,
   uploadKb,
+  uploadKbFolder,
   uploadKbArchive,
   reindexKb,
   deleteKb,
   items,
+  uploadPolicy,
   folderInputRef,
   onOpen,
 }: {
@@ -4134,21 +4157,26 @@ function SourcesPanel({
   setKbName: (value: string) => void;
   createKb: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   uploadKb: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
+  uploadKbFolder: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   uploadKbArchive: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   reindexKb: UseMutationResult<unknown, Error, string, unknown>;
   deleteKb: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
+  uploadPolicy?: LearningKnowledgeUploadPolicy;
   folderInputRef: RefObject<HTMLInputElement>;
   onOpen: (item: Item) => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [filesUploadMode, setFilesUploadMode] = useState<"files" | "folder">("files");
   const [archiveFiles, setArchiveFiles] = useState<File[]>([]);
   const [dropActive, setDropActive] = useState(false);
+  const [selectionError, setSelectionError] = useState("");
   const [query, setQuery] = useState("");
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [section, setSection] = useState<"files" | "add" | "versions" | "settings">("files");
   const readyBytes = files.reduce((sum, file) => sum + file.size, 0);
   const archiveReadyBytes = archiveFiles.reduce((sum, file) => sum + file.size, 0);
+  const sourceAccept = uploadPolicy?.accept?.trim() || LEARNING_ATTACHMENT_ACCEPT;
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return items;
@@ -4184,12 +4212,52 @@ function SourcesPanel({
     }
   }, [items, selectedName]);
 
-  const handlePicked = (picked: FileList | File[]) => {
+  const fileExtensionAllowed = (filename: string) => {
+    const allowed = new Set((uploadPolicy?.extensions || []).map((ext) => ext.toLowerCase()));
+    if (!allowed.size) return true;
+    const cleanName = filename.split(/[\\/]/).pop() || filename;
+    const dot = cleanName.lastIndexOf(".");
+    if (dot < 0) return false;
+    return allowed.has(cleanName.slice(dot).toLowerCase());
+  };
+  const validateSelection = (picked: File[], mode: "files" | "archive") => {
+    const maxBytes = Math.max(
+      1,
+      Number(uploadPolicy?.max_file_size_bytes || LEARNING_MAX_ATTACHMENT_BYTES),
+    );
+    const archiveExts = new Set([".zip", ".tar", ".tgz", ".gz"]);
+    const errors: string[] = [];
+    picked.forEach((file) => {
+      const cleanName = file.name.split(/[\\/]/).pop() || file.name;
+      const dot = cleanName.lastIndexOf(".");
+      const ext = dot >= 0 ? cleanName.slice(dot).toLowerCase() : "";
+      if (mode === "archive") {
+        const archiveName = cleanName.toLowerCase();
+        if (!archiveExts.has(ext) && !archiveName.endsWith(".tar.gz")) {
+          errors.push(`${cleanName}: unsupported archive type`);
+        }
+      } else if (!fileExtensionAllowed(cleanName)) {
+        errors.push(`${cleanName}: unsupported file type`);
+      }
+      if (file.size > maxBytes) {
+        errors.push(`${cleanName}: exceeds ${formatLearningBytes(maxBytes)}`);
+      }
+    });
+    return errors;
+  };
+  const handlePicked = (picked: FileList | File[], mode: "files" | "folder" = "files") => {
     const incoming = Array.from(picked);
     if (!incoming.length) return;
+    const errors = validateSelection(incoming, "files");
+    if (errors.length) {
+      setSelectionError(errors.slice(0, 3).join("; "));
+      return;
+    }
+    setSelectionError("");
     const byKey = new Map(files.map((file) => [`${file.name}:${file.size}`, file]));
     incoming.forEach((file) => byKey.set(`${file.name}:${file.size}`, file));
     setFiles(Array.from(byKey.values()));
+    setFilesUploadMode(mode);
   };
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -4202,13 +4270,22 @@ function SourcesPanel({
     const payload = { name: kbName.trim(), files };
     if (mode === "create") {
       createKb.mutate(payload);
+    } else if (filesUploadMode === "folder") {
+      uploadKbFolder.mutate(payload);
     } else {
       uploadKb.mutate(payload);
     }
     setFiles([]);
+    setFilesUploadMode("files");
   };
   const commitArchiveUpload = () => {
     if (!archiveFiles.length || !kbName.trim()) return;
+    const errors = validateSelection(archiveFiles, "archive");
+    if (errors.length) {
+      setSelectionError(errors.slice(0, 3).join("; "));
+      return;
+    }
+    setSelectionError("");
     uploadKbArchive.mutate({ name: kbName.trim(), files: archiveFiles });
     setArchiveFiles([]);
   };
@@ -4426,10 +4503,10 @@ function SourcesPanel({
                   <input
                     type="file"
                     multiple
-                    accept={LEARNING_ATTACHMENT_ACCEPT}
+                    accept={sourceAccept}
                     className="hidden"
                     onChange={(event) => {
-                      if (event.target.files?.length) handlePicked(event.target.files);
+                      if (event.target.files?.length) handlePicked(event.target.files, "files");
                       event.target.value = "";
                     }}
                   />
@@ -4443,7 +4520,7 @@ function SourcesPanel({
                     multiple
                     className="hidden"
                     onChange={(event) => {
-                      if (event.target.files?.length) handlePicked(event.target.files);
+                      if (event.target.files?.length) handlePicked(event.target.files, "folder");
                       event.target.value = "";
                     }}
                   />
@@ -4457,7 +4534,16 @@ function SourcesPanel({
                     accept=".zip,.tar,.tgz,.tar.gz"
                     className="hidden"
                     onChange={(event) => {
-                      if (event.target.files?.length) setArchiveFiles(Array.from(event.target.files));
+                      if (event.target.files?.length) {
+                        const picked = Array.from(event.target.files);
+                        const errors = validateSelection(picked, "archive");
+                        if (errors.length) {
+                          setSelectionError(errors.slice(0, 3).join("; "));
+                        } else {
+                          setSelectionError("");
+                          setArchiveFiles(picked);
+                        }
+                      }
                       event.target.value = "";
                     }}
                   />
@@ -4467,6 +4553,11 @@ function SourcesPanel({
               <div className="mb-4 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-3 py-2 text-[12px] leading-relaxed text-zaki-muted">
                 Hosted ZAKI accepts browser files, images, browser folder selections, and archives. Server-local folder paths are intentionally not exposed in multi-user production.
               </div>
+              {selectionError ? (
+                <div className="mb-4 rounded-zaki-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] leading-relaxed text-red-700">
+                  {selectionError}
+                </div>
+              ) : null}
 
               <button
                 type="button"
@@ -4490,7 +4581,9 @@ function SourcesPanel({
               >
                 <Upload className="mb-2 size-5 text-zaki-brand" />
                 <div className="text-sm font-semibold text-zaki-text">
-                  {files.length ? `${files.length} files ready` : "Choose files..."}
+                  {files.length
+                    ? `${files.length} ${filesUploadMode === "folder" ? "folder " : ""}files ready`
+                    : "Choose files..."}
                 </div>
                 <div className="mt-1 text-xs text-zaki-muted">
                   {files.length
@@ -4549,7 +4642,7 @@ function SourcesPanel({
                       className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
                     >
                       <Upload className="size-4" />
-                      Upload to existing library
+                      {filesUploadMode === "folder" ? "Upload folder to existing library" : "Upload to existing library"}
                     </button>
                   </div>
                 </div>

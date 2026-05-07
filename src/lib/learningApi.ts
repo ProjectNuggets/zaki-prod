@@ -67,6 +67,7 @@ export async function prepareLearningSocketAuth(): Promise<string | null> {
 export const learningKeys = {
   health: ["learning", "health"] as const,
   knowledge: ["learning", "knowledge"] as const,
+  knowledgeUploadPolicy: ["learning", "knowledge", "upload-policy"] as const,
   books: ["learning", "books"] as const,
   notebooks: ["learning", "notebooks"] as const,
   coWriterDocuments: ["learning", "co-writer", "documents"] as const,
@@ -97,7 +98,20 @@ export function listLearningKnowledge() {
   return learningRequest<unknown>("/api/learning/knowledge/list");
 }
 
-function learningUploadFileName(file: File) {
+export type LearningKnowledgeUploadPolicy = {
+  extensions?: string[];
+  accept?: string;
+  max_file_size_bytes?: number;
+  max_pdf_size_bytes?: number;
+};
+
+export function getLearningKnowledgeSupportedFileTypes() {
+  return learningRequest<LearningKnowledgeUploadPolicy>(
+    "/api/learning/knowledge/supported-file-types",
+  );
+}
+
+export function learningUploadFileName(file: File) {
   const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
   return relativePath?.trim() || file.name;
 }
@@ -117,6 +131,15 @@ export function uploadLearningKnowledge(kbName: string, files: FileList | File[]
   Array.from(files).forEach((file) => formData.append("files", file, learningUploadFileName(file)));
   return learningRequest<unknown>(
     `/api/learning/knowledge/${encodeURIComponent(kbName)}/upload`,
+    { method: "POST", formData },
+  );
+}
+
+export function uploadLearningKnowledgeFolder(kbName: string, files: FileList | File[]) {
+  const formData = new FormData();
+  Array.from(files).forEach((file) => formData.append("files", file, learningUploadFileName(file)));
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/${encodeURIComponent(kbName)}/upload-folder`,
     { method: "POST", formData },
   );
 }

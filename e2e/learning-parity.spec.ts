@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const AUTH_TOKEN_KEY = "zaki.auth.token";
@@ -172,6 +174,16 @@ async function mockLearning(page: Page) {
   ]);
   const savedNotebookRecords: unknown[] = [];
   const startedTurns: Array<Record<string, unknown>> = [];
+  const knowledgeBases: Array<Record<string, unknown>> = [
+    {
+      name: "main",
+      is_default: true,
+      status: "ready",
+      metadata: { last_updated: "2026-05-07T10:00:00.000Z" },
+      statistics: { files_count: 0 },
+    },
+  ];
+  const knowledgeUploads: Array<{ path: string; body: string }> = [];
 
   await page.routeWebSocket("**/api/learning/ws", async (ws) => {
     ws.onMessage((message) => {
@@ -256,7 +268,42 @@ async function mockLearning(page: Page) {
     }
 
     if (path === "/api/learning/knowledge/list") {
-      await json(route, { knowledge_bases: [] });
+      await json(route, { knowledge_bases: knowledgeBases });
+      return;
+    }
+
+    if (path === "/api/learning/knowledge/supported-file-types") {
+      await json(route, {
+        extensions: [".md", ".pdf", ".png", ".jpg", ".txt"],
+        accept: ".md,.pdf,.png,.jpg,.txt",
+        max_file_size_bytes: 100 * 1024 * 1024,
+        max_pdf_size_bytes: 50 * 1024 * 1024,
+      });
+      return;
+    }
+
+    if (path === "/api/learning/knowledge/create" && method === "POST") {
+      const body = route.request().postDataBuffer()?.toString("utf8") || "";
+      knowledgeUploads.push({ path, body });
+      knowledgeBases.push({
+        name: "biology",
+        status: "initializing",
+        metadata: { last_updated: "2026-05-07T12:00:00.000Z" },
+        statistics: { files_count: 1 },
+      });
+      await json(route, { message: "created", name: "biology", files: ["cell.md"], task_id: "task-create" });
+      return;
+    }
+
+    if (path === "/api/learning/knowledge/main/files") {
+      await json(route, { files: [] });
+      return;
+    }
+
+    if (path.startsWith("/api/learning/knowledge/biology/") && method === "POST") {
+      const body = route.request().postDataBuffer()?.toString("utf8") || "";
+      knowledgeUploads.push({ path, body });
+      await json(route, { message: "uploaded", files: ["ok"], task_id: `task-${knowledgeUploads.length}` });
       return;
     }
 
@@ -432,7 +479,7 @@ async function mockLearning(page: Page) {
     await json(route, {});
   });
 
-  return { savedNotebookRecords, startedTurns };
+  return { savedNotebookRecords, startedTurns, knowledgeUploads };
 }
 
 test.describe("ZAKI Learn parity wiring", () => {
@@ -518,6 +565,41 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.goto("/learn?view=notebooks");
     await page.getByText("Energy Notes").click();
     await expect(page.getByText("Explain work-energy theorem.")).toBeVisible();
+  });
+
+  test("creates and uploads source files, browser folders, and archives", async ({ page }) => {
+    const learning = await mockLearning(page);
+    const dir = await mkdtemp(join(tmpdir(), "zaki-learn-upload-"));
+    const docPath = join(dir, "cell.md");
+    const imagePath = join(dir, "diagram.png");
+    const archivePath = join(dir, "bundle.zip");
+    await writeFile(docPath, "# Cell biology");
+    await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await writeFile(archivePath, "fake zip for request routing");
+
+    await page.goto("/learn?view=sources");
+    await page.getByRole("button", { name: /New knowledge base/i }).click();
+    await page.getByPlaceholder("Knowledge base name").fill("biology");
+
+    await page.locator('input[type="file"]').nth(0).setInputFiles(docPath);
+    await expect(page.getByText("1 files ready")).toBeVisible();
+    await page.getByRole("button", { name: /Create library from selection/i }).click();
+    await expect.poll(() => learning.knowledgeUploads.length).toBe(1);
+    expect(learning.knowledgeUploads[0].path).toBe("/api/learning/knowledge/create");
+    expect(learning.knowledgeUploads[0].body).toContain("cell.md");
+
+    await page.locator('input[type="file"]').nth(1).setInputFiles(imagePath);
+    await expect(page.getByText("1 folder files ready")).toBeVisible();
+    await page.getByRole("button", { name: /Upload folder to existing library/i }).click();
+    await expect.poll(() => learning.knowledgeUploads.length).toBe(2);
+    expect(learning.knowledgeUploads[1].path).toBe("/api/learning/knowledge/biology/upload-folder");
+    expect(learning.knowledgeUploads[1].body).toContain("diagram.png");
+
+    await page.locator('input[type="file"]').nth(2).setInputFiles(archivePath);
+    await page.getByRole("button", { name: /Upload archive to existing library/i }).click();
+    await expect.poll(() => learning.knowledgeUploads.length).toBe(3);
+    expect(learning.knowledgeUploads[2].path).toBe("/api/learning/knowledge/biology/upload-archive");
+    expect(learning.knowledgeUploads[2].body).toContain("bundle.zip");
   });
 
   test("routes advanced capability presets with their hosted configs", async ({ page }) => {
