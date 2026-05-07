@@ -146,12 +146,24 @@ function buildElementsFromGlobal(
       continue;
     }
     visible.add(n.id);
-    const importance =
+    // V1.11 hotfix (2026-05-07) — clamp importance to a finite [0, 1].
+    // typeof NaN === "number", so the prior type-guard let NaN values
+    // pass through (from malformed API rows or 0/0 fallback paths).
+    // NaN propagates into radius (6 + 30*NaN = NaN) AND opacity
+    // (0.45 + 0.55*NaN = NaN); cytoscape allocates internal arrays
+    // sized by those values, throwing "Invalid array length" at mount.
+    // Fixed at the source: a single safe finite-clamp here means every
+    // downstream consumer (radius, opacity, importance data binding)
+    // gets a clean number.
+    const rawImportance =
       typeof n.importance === "number"
         ? n.importance
         : typeof n.importance_score === "number"
         ? n.importance_score
         : (degree.get(n.id) ?? 0) / maxDeg;
+    const importance = Number.isFinite(rawImportance)
+      ? Math.max(0, Math.min(1, rawImportance))
+      : 0.3;
     const radius = importanceToRadius(importance) * sizeScale;
     const color = nodeColor(preset, n);
     const label = n.display_label ?? "";
@@ -753,28 +765,19 @@ function runLayout(cy: Core, f: BrainGraphFilters) {
     animationDuration: 600,
     animationEasing: "ease-out",
     randomize: true,
-    // V1.11 hotfix (2026-05-07) — Obsidian-style organic distance via
-    // node-level repulsion instead of per-edge length.
-    //
-    // Background: an earlier Day 3c attempt passed `idealEdgeLength` as
-    // a function so semantic / reference / session edge types could each
-    // get their own resting length. cose-bilkent (a different layout
-    // package than cytoscape's stock `cose`) only accepts a NUMBER for
-    // idealEdgeLength; it propagated the function value into an internal
-    // array-allocation site and threw "Invalid array length" at mount.
-    //
-    // The pragmatic V1.11 substitute: scale node repulsion by node
-    // importance. Heavy hubs push neighbors further away; lightweight
-    // leaves cluster tightly around their connections. The eye reads
-    // the same hierarchy story — strong-relationship clusters tight,
-    // loose connections drift outward — without depending on a layout
-    // option cose-bilkent doesn't expose. Per-edge ideal-length lands
-    // V1.12 when we evaluate switching to fcose / d3-force.
-    nodeRepulsion: (node: cytoscape.NodeSingular) => {
-      const importance = (node.data("importance") as number | undefined) ?? 0.3;
-      const clamped = Math.max(0, Math.min(1, importance));
-      return f.nodeRepulsion * (0.6 + 0.9 * clamped);
-    },
+    // V1.11 hotfix-2 (2026-05-07) — nodeRepulsion is a number for
+    // cose-bilkent. The earlier hotfix-1 passed a function (Obsidian-style
+    // organic distance via per-node repulsion); cose-bilkent's documented
+    // API only accepts a number for nodeRepulsion as well. Function
+    // values fail at mount with "Invalid array length" the same way
+    // idealEdgeLength did. Reverted to the slider value. Hierarchy
+    // still reads via:
+    //   - 6× radius range (importanceToRadius: 6 + 30*i)
+    //   - importance-opacity (0.45-1.0 per node)
+    // Both apply at the cytoscape stylesheet level (no layout math).
+    // Per-edge organic distance lands V1.12 when we evaluate fcose
+    // or d3-force which natively support per-edge length functions.
+    nodeRepulsion: f.nodeRepulsion,
     idealEdgeLength: f.idealEdgeLength,
     edgeElasticity: f.edgeElasticity,
     gravity: f.gravity,
