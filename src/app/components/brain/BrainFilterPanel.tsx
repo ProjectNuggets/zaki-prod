@@ -17,10 +17,14 @@ export interface BrainFilters {
   colorPreset: ColorPreset;
   // Audit (2026-05-07) — semantic-similarity edges flood the graph.
   // 99% of edges in the test corpus were type "semantic" (vector
-  // similarity), drowning the 1% typed/session edges that carry actual
-  // meaning. Default-hide with an opt-in toggle so the graph reads as
-  // a sparse meaningful network instead of a complete mesh.
-  showSemanticEdges: boolean;
+  // similarity above ~0.72 cosine), drowning the typed/session edges
+  // that carry actual meaning. A binary on/off toggle was the wrong
+  // tool — semantic edges aren't pure noise, they just need a
+  // tighter threshold than the agent uses for storage. The slider
+  // filters semantic edges by weight: 0.0 shows all, 1.0 shows none,
+  // default 0.85 (= top quartile of typical similarity scores) shows
+  // only the strongest cross-conversation connections.
+  semanticEdgeThreshold: number;
   // forces
   nodeRepulsion: number; // cose-bilkent
   idealEdgeLength: number;
@@ -44,7 +48,7 @@ export const DEFAULT_FILTERS: BrainFilters = {
   // recent activity (teal), conversation excerpts (warm neutral). The
   // mono preset is still available as a deliberate aesthetic choice.
   colorPreset: "kind",
-  showSemanticEdges: false,
+  semanticEdgeThreshold: 0.85,
   nodeRepulsion: 8000,
   idealEdgeLength: 120,
   gravity: 0.4,
@@ -89,10 +93,13 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           value={filters.excludeOrphans}
           onChange={(v) => set("excludeOrphans", v)}
         />
-        <ToggleRow
-          label={t("brain.filterPanel.showSemanticEdges", { defaultValue: "Show similarity links" })}
-          value={filters.showSemanticEdges}
-          onChange={(v) => set("showSemanticEdges", v)}
+        <SliderRow
+          label={t("brain.filterPanel.semanticThreshold", { defaultValue: "Similarity link cutoff" })}
+          min={0}
+          max={1}
+          step={0.05}
+          value={filters.semanticEdgeThreshold}
+          onChange={(v) => set("semanticEdgeThreshold", v)}
         />
         <NumberRow
           label={t("brain.filterPanel.maxNodes", { defaultValue: "Max nodes" })}

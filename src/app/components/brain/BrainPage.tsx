@@ -330,9 +330,12 @@ export function BrainPage() {
               })}
               {(() => {
                 const allEdges = initialGraphQuery.data?.edges ?? [];
-                const visibleEdgeCount = filters.showSemanticEdges
-                  ? allEdges.length
-                  : allEdges.filter((e) => e.type !== "semantic").length;
+                const threshold = filters.semanticEdgeThreshold;
+                const visibleEdgeCount = allEdges.filter((e) => {
+                  if (e.type !== "semantic") return true;
+                  const w = (e as { weight?: number }).weight;
+                  return typeof w === "number" && w >= threshold;
+                }).length;
                 if (visibleEdgeCount === 0) return null;
                 return (
                   <>

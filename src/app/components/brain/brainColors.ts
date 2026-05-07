@@ -117,29 +117,63 @@ export function nodeColor(
   return colorForKind(node.kind);
 }
 
-// Importance (0..1) -> radius.
-//
-// V1.11 hotfix (2026-05-07) — calibrated against Nova's Obsidian video
-// (Screen Recording 2026-05-07 14:05). Obsidian renders nodes at
-// roughly 3-10px on a typical vault — leaves are tiny dots, hubs
-// are slightly bigger. The earlier V1.11 attempt (6-36px) was 3-4×
-// too large; nodes felt like blobs.
-//
-// New range: 4-14px (3.5× ratio). Tight Obsidian-style dots without
-// going so small that ZAKI's smaller node-counts (39 visible after
-// orphan-filter, vs Obsidian's hundreds) feel sparse.
+// Importance percentile (0..1) -> radius.
 //
 // History:
 //   pre-V1.11:  8 + 16*i  (range  8-24px, 3×)
 //   V1.11 a:    6 + 30*i  (range  6-36px, 6×)  — too big, Nova feedback
 //   V1.11 b:    4 + 10*i  (range 4-14px, 3.5×) — Obsidian-calibrated
+//   audit (2026-05-07): 5 + 13*i (range 5-18px, 3.6×)
 //
-// Combined with the V1.11 importance-opacity (0.45-1.0 per node),
-// the eye still gets two stacked hierarchy anchors at the smaller
-// scale.
-export function importanceToRadius(importance: number | undefined): number {
-  const i = typeof importance === "number" ? Math.max(0, Math.min(1, importance)) : 0.3;
-  return 4 + 10 * i;
+// Audit (2026-05-07) — input is now percentile rank, not raw value.
+// Real ZAKI corpora cluster importance values tightly (test corpus
+// spanned 0.65–0.91, range 0.26). With linear remap of raw values
+// the radius range was wasted on importance < 0.65 (no nodes there)
+// and the visible spread collapsed to ~2.6px — every node looked
+// the same size. By feeding percentile rank (computed from the
+// sorted corpus), the smallest 10% always paint at 5px and the
+// largest 10% at ~17–18px regardless of how the underlying scoring
+// distributes. Hubs are visibly hubs; leaves visibly leaves.
+//
+// Range bumped 4-14 → 5-18 (3.6× ratio, slightly more headroom for
+// hubs without making leaves feel too small). Combined with the
+// importance-opacity (0.45-1.0 per node, also percentile-rank
+// driven now), the eye gets two stacked hierarchy anchors that
+// always span their full range.
+export function importanceToRadius(importancePercentile: number | undefined): number {
+  const i = typeof importancePercentile === "number"
+    ? Math.max(0, Math.min(1, importancePercentile))
+    : 0.3;
+  return 5 + 13 * i;
+}
+
+// Compute percentile rank (0..1) for each value against the population.
+// Ties get the average rank. NaN / non-finite values map to 0.5.
+// Returns a Map keyed by stable id so callers can look up per-node.
+export function importancePercentileRanks<T>(
+  items: readonly T[],
+  getId: (item: T) => string,
+  getValue: (item: T) => number | undefined | null,
+): Map<string, number> {
+  const valid: Array<{ id: string; value: number }> = [];
+  for (const item of items) {
+    const v = getValue(item);
+    if (typeof v === "number" && Number.isFinite(v)) {
+      valid.push({ id: getId(item), value: v });
+    }
+  }
+  const ranks = new Map<string, number>();
+  if (valid.length === 0) return ranks;
+  if (valid.length === 1) {
+    ranks.set(valid[0]!.id, 0.5);
+    return ranks;
+  }
+  // Sort ascending by value; rank = index / (n - 1)
+  valid.sort((a, b) => a.value - b.value);
+  for (let i = 0; i < valid.length; i++) {
+    ranks.set(valid[i]!.id, i / (valid.length - 1));
+  }
+  return ranks;
 }
 
 // V1.11 (2026-05-07) — Per-edge ideal length used by cose-bilkent.

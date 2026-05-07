@@ -37,6 +37,7 @@ import type {
 } from "@/lib/api";
 import {
   EDGE_COLOR,
+  importancePercentileRanks,
   importanceToRadius,
   nodeColor,
   type ColorPreset,
@@ -69,7 +70,7 @@ export interface BrainGraphFilters {
   search: string;
   maxNodes: number;
   colorPreset: ColorPreset;
-  showSemanticEdges: boolean;
+  semanticEdgeThreshold: number;
   nodeRepulsion: number;
   idealEdgeLength: number;
   gravity: number;
@@ -174,18 +175,24 @@ function buildElementsFromGlobal(
   linkThickness: number,
   highlightSet: Set<string>,
   filterCommunityId: number | null,
-  showSemanticEdges: boolean,
+  semanticEdgeThreshold: number,
 ): ElementDefinition[] {
   const els: ElementDefinition[] = [];
-  // Audit (2026-05-07) — default-hide semantic edges. With the test
-  // corpus, 99% of edges were vector-similarity ("semantic") and the
-  // other 1% (typed predicates, session co-occurrence) drowned in noise.
+  // Audit (2026-05-07) — semantic-edge threshold. 99% of edges in the
+  // test corpus were type "semantic" (vector similarity above the
+  // agent's storage threshold ~0.72). At that bar everything connects
+  // to everything; visually a clique. The threshold here filters
+  // semantic edges by weight: only show pairs above the user-chosen
+  // similarity. Default 0.85 keeps the strong cross-conversation
+  // connections, drops the noise. Typed/session/reference edges are
+  // always shown — they carry explicit meaning regardless of weight.
   // Keep the original list for the degree fallback so node sizes don't
-  // collapse when semantic edges are hidden — the data is still real,
-  // just not painted.
-  const visibleEdges = showSemanticEdges
-    ? edges
-    : edges.filter((e) => e.type !== "semantic");
+  // collapse when semantic edges are hidden.
+  const visibleEdges = edges.filter((e) => {
+    if (e.type !== "semantic") return true;
+    const w = (e as { weight?: number }).weight;
+    return typeof w === "number" && w >= semanticEdgeThreshold;
+  });
   // Build degree map for fallback importance + filter pass
   // Use the full edge set so importance fallback stays meaningful even
   // when semantic edges are hidden visually.
@@ -195,6 +202,26 @@ function buildElementsFromGlobal(
     degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
   }
   const maxDeg = Math.max(1, ...degree.values());
+
+  // Audit (2026-05-07) — percentile remap for importance. Real ZAKI
+  // corpora cluster importance values tightly; raw linear remap to
+  // 5–18px collapsed visual variance. Compute percentile rank across
+  // the visible nodes once, feed it to importanceToRadius. Smallest
+  // 10% always paint at 5px, largest 10% at ~17–18px regardless of
+  // the underlying distribution.
+  const percentileRanks = importancePercentileRanks(
+    nodes,
+    (n) => n.id,
+    (n) => {
+      const raw =
+        typeof n.importance === "number"
+          ? n.importance
+          : typeof n.importance_score === "number"
+          ? n.importance_score
+          : (degree.get(n.id) ?? 0) / maxDeg;
+      return Number.isFinite(raw) ? raw : null;
+    },
+  );
 
   const visible = new Set<string>();
   for (const n of nodes) {
@@ -224,7 +251,8 @@ function buildElementsFromGlobal(
     const importance = Number.isFinite(rawImportance)
       ? Math.max(0, Math.min(1, rawImportance))
       : 0.3;
-    const radius = importanceToRadius(importance) * sizeScale;
+    const percentile = percentileRanks.get(n.id) ?? 0.5;
+    const radius = importanceToRadius(percentile) * sizeScale;
     const color = nodeColor(preset, n);
     const label = n.display_label ?? "";
     const isArchived = n.valid_to !== null;
@@ -298,7 +326,7 @@ function buildElementsFromLocal(
   preset: ColorPreset,
   sizeScale: number,
   linkThickness: number,
-  showSemanticEdges: boolean,
+  semanticEdgeThreshold: number,
 ): ElementDefinition[] {
   const els: ElementDefinition[] = [];
   for (const n of resp.nodes) {
@@ -332,7 +360,13 @@ function buildElementsFromLocal(
   }
   for (const e of resp.edges) {
     const t: BrainGraphEdge["type"] = e.predicate ? "typed" : "semantic";
-    if (!showSemanticEdges && t === "semantic") continue;
+    // Local-graph edges don't carry weight; fall back to 1.0 so they
+    // pass any reasonable threshold. The user's threshold still gates
+    // global semantic edges; local view stays whole.
+    if (t === "semantic") {
+      const w = (e as { weight?: number }).weight ?? 1.0;
+      if (w < semanticEdgeThreshold) continue;
+    }
     const s = edgeStyle(t);
     // Local-graph endpoint doesn't yet emit confidence/weight; synthesize
     // a typed-edge object for edgeRelevance to inspect.
@@ -522,7 +556,7 @@ export function BrainGraphView({
         filters.colorPreset,
         filters.nodeSizeScale,
         filters.linkThickness,
-        filters.showSemanticEdges,
+        filters.semanticEdgeThreshold,
       );
     }
     if (!globalQuery.data) return null;
@@ -534,7 +568,7 @@ export function BrainGraphView({
       filters.linkThickness,
       highlightSet,
       selectedCommunityId,
-      filters.showSemanticEdges,
+      filters.semanticEdgeThreshold,
     );
   }, [
     centerKey,
@@ -543,7 +577,7 @@ export function BrainGraphView({
     filters.colorPreset,
     filters.nodeSizeScale,
     filters.linkThickness,
-    filters.showSemanticEdges,
+    filters.semanticEdgeThreshold,
     highlightSet,
     selectedCommunityId,
   ]);
