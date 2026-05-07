@@ -96,10 +96,15 @@ export function listLearningKnowledge() {
   return learningRequest<unknown>("/api/learning/knowledge/list");
 }
 
+function learningUploadFileName(file: File) {
+  const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  return relativePath?.trim() || file.name;
+}
+
 export function createLearningKnowledge(name: string, files: FileList | File[]) {
   const formData = new FormData();
   formData.set("name", name);
-  Array.from(files).forEach((file) => formData.append("files", file, file.name));
+  Array.from(files).forEach((file) => formData.append("files", file, learningUploadFileName(file)));
   return learningRequest<unknown>("/api/learning/knowledge/create", {
     method: "POST",
     formData,
@@ -108,10 +113,36 @@ export function createLearningKnowledge(name: string, files: FileList | File[]) 
 
 export function uploadLearningKnowledge(kbName: string, files: FileList | File[]) {
   const formData = new FormData();
-  Array.from(files).forEach((file) => formData.append("files", file, file.name));
+  Array.from(files).forEach((file) => formData.append("files", file, learningUploadFileName(file)));
   return learningRequest<unknown>(
     `/api/learning/knowledge/${encodeURIComponent(kbName)}/upload`,
     { method: "POST", formData },
+  );
+}
+
+export function uploadLearningKnowledgeArchive(kbName: string, files: FileList | File[]) {
+  const formData = new FormData();
+  Array.from(files).forEach((file) => formData.append("files", file, learningUploadFileName(file)));
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/${encodeURIComponent(kbName)}/upload-archive`,
+    { method: "POST", formData },
+  );
+}
+
+export function reindexLearningKnowledge(kbName: string) {
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/${encodeURIComponent(kbName)}/reindex`,
+    {
+      method: "POST",
+      body: {},
+    },
+  );
+}
+
+export function deleteLearningKnowledge(kbName: string) {
+  return learningRequest<unknown>(
+    `/api/learning/knowledge/${encodeURIComponent(kbName)}`,
+    { method: "DELETE" },
   );
 }
 

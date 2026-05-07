@@ -58,6 +58,7 @@ import {
   createLearningKnowledge,
   createLearningNotebook,
   createLearningTutorAgent,
+  deleteLearningKnowledge,
   deleteLearningCoWriterDocument,
   getLearningBook,
   getLearningBookSpine,
@@ -71,6 +72,7 @@ import {
   learningKeys,
   openLearningSocket,
   prepareLearningSocketAuth,
+  reindexLearningKnowledge,
   listLearningKnowledgeFiles,
   listLearningBooks,
   listLearningCoWriterDocuments,
@@ -87,6 +89,7 @@ import {
   updateLearningCoWriterDocument,
   updateLearningMemory,
   uploadLearningKnowledge,
+  uploadLearningKnowledgeArchive,
   type LearningJson,
 } from "@/lib/learningApi";
 import {
@@ -532,6 +535,37 @@ export function LearningPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const uploadKbArchive = useMutation({
+    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) =>
+      uploadLearningKnowledgeArchive(name, files),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Archive upload started");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.knowledge });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const reindexKb = useMutation({
+    mutationFn: (name: string) => reindexLearningKnowledge(name),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Reindex started");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.knowledge });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteKb = useMutation({
+    mutationFn: (name: string) => deleteLearningKnowledge(name),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Knowledge base deleted");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.knowledge });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const createBook = useMutation({
     mutationFn: (payload: LearningJson) => createLearningBook(payload),
     onSuccess: (payload) => {
@@ -669,6 +703,9 @@ export function LearningPage() {
             setKbName={setKbName}
             createKb={createKb}
             uploadKb={uploadKb}
+            uploadKbArchive={uploadKbArchive}
+            reindexKb={reindexKb}
+            deleteKb={deleteKb}
             items={knowledgeItems}
             folderInputRef={folderInputRef}
             onOpen={(item) => openObject("source", item, "main")}
@@ -3134,6 +3171,9 @@ function SourcesPanel({
   setKbName,
   createKb,
   uploadKb,
+  uploadKbArchive,
+  reindexKb,
+  deleteKb,
   items,
   folderInputRef,
   onOpen,
@@ -3142,16 +3182,21 @@ function SourcesPanel({
   setKbName: (value: string) => void;
   createKb: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
   uploadKb: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
+  uploadKbArchive: UseMutationResult<unknown, Error, { name: string; files: FileList | File[] }, unknown>;
+  reindexKb: UseMutationResult<unknown, Error, string, unknown>;
+  deleteKb: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
   folderInputRef: RefObject<HTMLInputElement>;
   onOpen: (item: Item) => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [archiveFiles, setArchiveFiles] = useState<File[]>([]);
   const [dropActive, setDropActive] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [section, setSection] = useState<"files" | "add" | "settings">("files");
+  const [section, setSection] = useState<"files" | "add" | "versions" | "settings">("files");
   const readyBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const archiveReadyBytes = archiveFiles.reduce((sum, file) => sum + file.size, 0);
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return items;
@@ -3171,6 +3216,21 @@ function SourcesPanel({
     enabled: Boolean(effectiveName && section === "files"),
   });
   const sourceFileItems = itemList(selectedFiles.data, ["files", "items", "documents"]);
+  const metadata = asRecord(selectedItem?.metadata);
+  const statistics = asRecord(selectedItem?.statistics);
+  const provider = textOf(statistics.rag_provider) || textOf(metadata.rag_provider) || "llamaindex";
+  const embeddingLabel =
+    textOf(metadata.embedding_model) ||
+    textOf(statistics.embedding_model) ||
+    "Default embedding";
+  const updatedLabel =
+    relativeTime(metadata.last_updated) ||
+    relativeTime(selectedItem?.updated_at) ||
+    relativeTime(selectedItem?.created_at) ||
+    "unknown";
+  const lastIndexedLabel =
+    relativeTime(metadata.last_indexed_at) ||
+    relativeTime(selectedItem?.last_indexed_at);
 
   useEffect(() => {
     if (!selectedName && items[0]) {
@@ -3200,6 +3260,25 @@ function SourcesPanel({
       uploadKb.mutate(payload);
     }
     setFiles([]);
+  };
+  const commitArchiveUpload = () => {
+    if (!archiveFiles.length || !kbName.trim()) return;
+    uploadKbArchive.mutate({ name: kbName.trim(), files: archiveFiles });
+    setArchiveFiles([]);
+  };
+  const handleReindex = () => {
+    if (!effectiveName || reindexKb.isPending) return;
+    reindexKb.mutate(effectiveName);
+  };
+  const handleDelete = () => {
+    if (!effectiveName || deleteKb.isPending) return;
+    if (!window.confirm(`Delete knowledge base "${effectiveName}"?`)) return;
+    deleteKb.mutate(effectiveName, {
+      onSuccess: () => {
+        setSelectedName(null);
+        setSection("files");
+      },
+    });
   };
 
   return (
@@ -3311,10 +3390,18 @@ function SourcesPanel({
                     Default
                   </span>
                 ) : null}
+                {selectedItem ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-zaki-hover px-2 py-0.5 text-[10px] font-medium text-zaki-secondary">
+                    <span className={cn("size-1.5 rounded-full", statusTone(itemStatus(selectedItem)))} />
+                    {itemStatus(selectedItem)}
+                  </span>
+                ) : null}
               </div>
               <p className="mt-1 text-[12px] text-zaki-muted">
                 {effectiveName
-                  ? "Files, uploads, and library settings."
+                  ? `${provider} · ${embeddingLabel} · Updated ${updatedLabel}${
+                      lastIndexedLabel ? ` · Last indexed ${lastIndexedLabel}` : ""
+                    }`
                   : "Pick a knowledge base from the list, or create a new one to get started."}
               </p>
             </div>
@@ -3333,6 +3420,7 @@ function SourcesPanel({
             {[
               { key: "files" as const, label: "Files", Icon: FileText },
               { key: "add" as const, label: "Add documents", Icon: Upload },
+              { key: "versions" as const, label: "Index versions", Icon: Layers },
               { key: "settings" as const, label: "Settings", Icon: Settings },
             ].map(({ key, label, Icon }) => {
               const active = section === key;
@@ -3414,6 +3502,24 @@ function SourcesPanel({
                     }}
                   />
                 </label>
+                <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-4 text-sm font-semibold text-zaki-text hover:bg-zaki-hover">
+                  <Layers className="size-4" />
+                  Pick archive
+                  <input
+                    type="file"
+                    multiple
+                    accept=".zip,.tar,.tgz,.tar.gz"
+                    className="hidden"
+                    onChange={(event) => {
+                      if (event.target.files?.length) setArchiveFiles(Array.from(event.target.files));
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="mb-4 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-3 py-2 text-[12px] leading-relaxed text-zaki-muted">
+                Hosted ZAKI accepts browser files, images, browser folder selections, and archives. Server-local folder paths are intentionally not exposed in multi-user production.
               </div>
 
               <button
@@ -3502,19 +3608,117 @@ function SourcesPanel({
                   </div>
                 </div>
               ) : null}
+              {archiveFiles.length ? (
+                <div className="mt-4 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-zaki-text">
+                        <Layers className="size-4 text-zaki-brand" />
+                        Archive ready
+                      </div>
+                      <p className="mt-1 text-xs text-zaki-muted">
+                        {archiveFiles.length} archive file{archiveFiles.length === 1 ? "" : "s"} · {formatLearningBytes(archiveReadyBytes)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setArchiveFiles([])}
+                      className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs text-zaki-muted hover:bg-zaki-base hover:text-zaki-text"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!kbName.trim() || uploadKbArchive.isPending}
+                    onClick={commitArchiveUpload}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                  >
+                    <Upload className="size-4" />
+                    Upload archive to existing library
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : section === "versions" ? (
+            <div className="mx-auto max-w-3xl space-y-4">
+              <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-zaki-text">Index versions</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-zaki-muted">
+                      Review index state and start a hosted-safe reindex job for this knowledge base.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!effectiveName || reindexKb.isPending}
+                    onClick={handleReindex}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {reindexKb.isPending ? <Loader2 className="size-4 animate-spin" /> : <Layers className="size-4" />}
+                    Reindex
+                  </button>
+                </div>
+              </div>
+              {selectedItem ? (
+                <DetailBlock
+                  title="Index state"
+                  rows={[
+                    ["Provider", provider],
+                    ["Embedding", embeddingLabel],
+                    ["Updated", updatedLabel],
+                    ["Last indexed", lastIndexedLabel || "not returned"],
+                    ["Raw documents", displayCount(selectedItem) || "0"],
+                    ["Needs reindex", String(Boolean(selectedItem.needs_reindex))],
+                  ]}
+                />
+              ) : (
+                <EmptyLine label="No knowledge base selected." />
+              )}
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-4">
               {selectedItem ? (
-                <DetailBlock
-                  title="Knowledge base settings"
-                  rows={[
-                    ["Name", itemTitle(selectedItem, "Knowledge base")],
-                    ["Status", itemStatus(selectedItem)],
-                    ["Files", displayCount(selectedItem) || "0"],
-                    ["Default", String(Boolean(selectedItem.is_default) || effectiveName === "main")],
-                  ]}
-                />
+                <>
+                  <DetailBlock
+                    title="Knowledge base settings"
+                    rows={[
+                      ["Name", itemTitle(selectedItem, "Knowledge base")],
+                      ["Status", itemStatus(selectedItem)],
+                      ["Files", displayCount(selectedItem) || "0"],
+                      ["Default", String(Boolean(selectedItem.is_default) || effectiveName === "main")],
+                      ["Provider", provider],
+                      ["Embedding", embeddingLabel],
+                    ]}
+                  />
+                  <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+                    <h2 className="text-sm font-semibold text-zaki-text">Actions</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-zaki-muted">
+                      User-safe library actions. Provider routing and external dependencies remain operator-managed.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={!effectiveName || reindexKb.isPending}
+                        onClick={handleReindex}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+                      >
+                        <Layers className="size-4" />
+                        Reindex
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!effectiveName || deleteKb.isPending}
+                        onClick={handleDelete}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-rose-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                      >
+                        <Trash2 className="size-4" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <EmptyLine label="No knowledge base selected." />
               )}

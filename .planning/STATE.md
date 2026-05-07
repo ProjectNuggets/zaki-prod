@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 01 Learn UI Parity And Route Truth
-Plan: 01-02 Sources/Knowledge page shape
-Status: 01-01 complete; ready to execute 01-02
-Last activity: 2026-05-07 - created Learn-only GSD track and route parity manifest.
+Plan: 01-03 Co-Writer page shape
+Status: 01-02 complete; ready to execute 01-03
+Last activity: 2026-05-07 - completed Sources/Knowledge upstream-shape parity pass.
 
 ## Locked Decisions
 
@@ -40,7 +40,8 @@ Last activity: 2026-05-07 - created Learn-only GSD track and route parity manife
 ## Completed Plans
 
 - 01-01: Route parity manifest and browser audit.
+- 01-02: Sources/Knowledge page shape.
 
 ## Next Command
 
-Execute Phase 01 Plan 01-02: port/adapt Sources/Knowledge page shape from upstream.
+Execute Phase 01 Plan 01-03: port/adapt Co-Writer page shape from upstream.
