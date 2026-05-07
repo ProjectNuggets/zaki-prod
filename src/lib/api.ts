@@ -797,9 +797,65 @@ export type AdminStudentVerificationUser = {
 export type AdminRateLimitSettings = {
   appChatDailyPromptLimit: number;
   appChatDailyPromptBucket: string;
+  learningDailyPromptLimit?: number;
+  learningDailyPromptBucket?: string;
   zakiBotDailyPromptLimit: number;
   zakiBotDailyPromptBucket: string;
   agentPerMinuteLimit: number;
+};
+
+export type AdminLearningAiStack = {
+  llmProviderConfigured?: boolean;
+  llmModelConfigured?: boolean;
+  embeddingProviderConfigured?: boolean;
+  embeddingModelConfigured?: boolean;
+  searchProviderConfigured?: boolean;
+  llmProvider?: string;
+  llmModel?: string;
+  embeddingProvider?: string;
+  embeddingModel?: string;
+  searchProvider?: string;
+};
+
+export type AdminLearningDeploymentGate = {
+  id: string;
+  ok: boolean;
+  message: string;
+};
+
+export type AdminLearningAiStackStatus = {
+  operatorManaged?: boolean;
+  status?: {
+    ok?: boolean;
+    enabled?: boolean;
+    configured?: boolean;
+    baseUrlConfigured?: boolean;
+    internalTokenConfigured?: boolean;
+    upstreamStatus?: number;
+    requestTimeoutMs?: number;
+    streamTimeoutMs?: number;
+    maxRequestBytes?: number;
+    requestId?: string;
+  };
+  aiStack?: AdminLearningAiStack;
+  deploymentReadiness?: {
+    ready?: boolean;
+    generatedAt?: string;
+    gates?: AdminLearningDeploymentGate[];
+  };
+};
+
+export type AdminLearningAiStackTestService = "llm" | "embeddings" | "search";
+
+export type AdminLearningAiStackTestResult = {
+  service: AdminLearningAiStackTestService;
+  ok: boolean;
+  upstreamStatus?: number;
+  success?: boolean;
+  message?: string;
+  model?: string;
+  responseTimeMs?: number | null;
+  error?: string | null;
 };
 
 export async function listAdminMembers() {
@@ -917,6 +973,7 @@ export async function getAdminRateLimits() {
 
 export async function updateAdminRateLimits(payload: {
   appChatDailyPromptLimit?: number;
+  learningDailyPromptLimit?: number;
   zakiBotDailyPromptLimit?: number;
   agentPerMinuteLimit?: number;
 }) {
@@ -927,6 +984,37 @@ export async function updateAdminRateLimits(payload: {
   const data = await parseApiJson<{
     success?: boolean;
     settings?: AdminRateLimitSettings;
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function getAdminLearningAiStack() {
+  const response = await backendAuthRequest("/api/internal/learning/ai-stack", {
+    method: "GET",
+  });
+  const data = await parseApiJson<{
+    success?: boolean;
+    operatorManaged?: boolean;
+    status?: AdminLearningAiStackStatus["status"];
+    aiStack?: AdminLearningAiStack;
+    deploymentReadiness?: AdminLearningAiStackStatus["deploymentReadiness"];
+    error?: string | null;
+  }>(response);
+  return { response, data };
+}
+
+export async function testAdminLearningAiStackService(service: AdminLearningAiStackTestService) {
+  const response = await backendAuthRequest(
+    `/api/internal/learning/ai-stack/test/${encodeURIComponent(service)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    }
+  );
+  const data = await parseApiJson<{
+    success?: boolean;
+    result?: AdminLearningAiStackTestResult;
     error?: string | null;
   }>(response);
   return { response, data };

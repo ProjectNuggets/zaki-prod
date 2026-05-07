@@ -4,15 +4,20 @@ import { toast } from "sonner";
 import {
   addAdminMember,
   AdminAccessCode,
+  AdminLearningAiStackStatus,
+  AdminLearningAiStackTestResult,
+  AdminLearningAiStackTestService,
   AdminRateLimitSettings,
   AdminMember,
   AdminStudentVerificationUser,
   createAdminAccessCodes,
+  getAdminLearningAiStack,
   getAdminRateLimits,
   getAdminStudentVerification,
   listAdminMembers,
   listAdminAccessCodes,
   removeAdminMember,
+  testAdminLearningAiStackService,
   updateAdminRateLimits,
   updateAdminStudentVerification,
   updateAdminAccessCode,
@@ -24,6 +29,15 @@ import {
 import { useAuthStore } from "@/stores";
 
 type ActiveFilter = "all" | "active" | "inactive";
+
+const LEARNING_AI_STACK_TESTS: Array<{
+  service: AdminLearningAiStackTestService;
+  label: string;
+}> = [
+  { service: "llm", label: "LLM" },
+  { service: "embeddings", label: "Embeddings" },
+  { service: "search", label: "Search" },
+];
 
 function formatTimestamp(value: string | null) {
   if (!value) return "Never";
@@ -67,6 +81,14 @@ export function AdminAccessCodesPage() {
   const [appChatDailyLimitInput, setAppChatDailyLimitInput] = useState("");
   const [zakiBotDailyLimitInput, setZakiBotDailyLimitInput] = useState("");
   const [agentPerMinuteLimitInput, setAgentPerMinuteLimitInput] = useState("");
+  const [learningAiStack, setLearningAiStack] = useState<AdminLearningAiStackStatus | null>(null);
+  const [learningAiStackError, setLearningAiStackError] = useState<string | null>(null);
+  const [isLearningAiStackLoading, setIsLearningAiStackLoading] = useState(false);
+  const [learningAiStackTests, setLearningAiStackTests] = useState<
+    Partial<Record<AdminLearningAiStackTestService, AdminLearningAiStackTestResult>>
+  >({});
+  const [testingLearningService, setTestingLearningService] =
+    useState<AdminLearningAiStackTestService | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -191,6 +213,39 @@ export function AdminAccessCodesPage() {
     }
   }, [hydrateRateLimitInputs, isSuperAdmin]);
 
+  const loadLearningAiStack = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setLearningAiStack(null);
+      setLearningAiStackError(null);
+      setIsLearningAiStackLoading(false);
+      return;
+    }
+    setIsLearningAiStackLoading(true);
+    setLearningAiStackError(null);
+    try {
+      const { response, data } = await getAdminLearningAiStack();
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Unable to load Learn AI stack.");
+      }
+      setLearningAiStack({
+        operatorManaged: data.operatorManaged,
+        status: data.status,
+        aiStack: data.aiStack,
+        deploymentReadiness: data.deploymentReadiness,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load Learn AI stack.";
+      setLearningAiStackError(message);
+      toast.error(message);
+    } finally {
+      setIsLearningAiStackLoading(false);
+    }
+  }, [isSuperAdmin]);
+
   useEffect(() => {
     void loadCodes(false);
   }, [loadCodes]);
@@ -205,9 +260,17 @@ export function AdminAccessCodesPage() {
   }, [isSuperAdmin, loadRateLimits]);
 
   useEffect(() => {
+    if (!isSuperAdmin) return;
+    void loadLearningAiStack();
+  }, [isSuperAdmin, loadLearningAiStack]);
+
+  useEffect(() => {
     if (isSuperAdmin) return;
     setRateLimits(null);
     setRateLimitsError(null);
+    setLearningAiStack(null);
+    setLearningAiStackError(null);
+    setLearningAiStackTests({});
   }, [isSuperAdmin]);
 
   useEffect(() => {
@@ -464,6 +527,38 @@ export function AdminAccessCodesPage() {
     }
   };
 
+  const testLearningAiStack = async (service: AdminLearningAiStackTestService) => {
+    if (!isSuperAdmin || testingLearningService) return;
+
+    setTestingLearningService(service);
+    setLearningAiStackError(null);
+    try {
+      const { response, data } = await testAdminLearningAiStackService(service);
+      if (response.status === 403) {
+        toast.error("Only super admin can test the Learn AI stack.");
+        return;
+      }
+      if (!response.ok || !data.success || !data.result) {
+        throw new Error(data.error ?? `Unable to test ${service}.`);
+      }
+      setLearningAiStackTests((current) => ({
+        ...current,
+        [service]: data.result,
+      }));
+      if (data.result.ok) {
+        toast.success(`${service} test passed.`);
+      } else {
+        toast.error(data.result.message || `${service} test failed.`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Unable to test ${service}.`;
+      setLearningAiStackError(message);
+      toast.error(message);
+    } finally {
+      setTestingLearningService(null);
+    }
+  };
+
   const setStudentVerification = async (verified: boolean) => {
     const email = studentRecord?.email || studentEmailInput.trim().toLowerCase();
     if (!email) {
@@ -608,6 +703,150 @@ export function AdminAccessCodesPage() {
           {rateLimitsError ? (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
               {rateLimitsError}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">Learn Operator</div>
+              <h2 className="mt-2 text-xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                AI Stack
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+                Superadmin-only status for Learn provider routing. API keys stay in deployment
+                secrets and are never returned to the browser.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!isSuperAdmin || isLearningAiStackLoading}
+              className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                void loadLearningAiStack();
+              }}
+            >
+              {isLearningAiStackLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+
+          {!isSuperAdmin ? (
+            <div className="mt-4 rounded-xl border border-zaki-subtle bg-zaki-hover px-4 py-3 text-sm text-zaki-secondary dark:bg-zaki-dark-bg/40 dark:text-zaki-dark-subtle">
+              Only super admin can view Learn operator controls.
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-xl border border-zaki-subtle bg-zaki-hover px-4 py-4 dark:bg-zaki-dark-bg/40">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    Configured stack
+                  </div>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs ${
+                      learningAiStack?.deploymentReadiness?.ready
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300"
+                        : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
+                    }`}
+                  >
+                    {learningAiStack?.deploymentReadiness?.ready ? "Ready" : "Not ready"}
+                  </span>
+                </div>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-zaki-muted">LLM</dt>
+                    <dd className="mt-1 text-zaki-primary dark:text-zaki-dark-primary">
+                      {learningAiStack?.aiStack?.llmProvider || "Not set"}
+                      {learningAiStack?.aiStack?.llmModel
+                        ? ` · ${learningAiStack.aiStack.llmModel}`
+                        : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-zaki-muted">Embeddings</dt>
+                    <dd className="mt-1 text-zaki-primary dark:text-zaki-dark-primary">
+                      {learningAiStack?.aiStack?.embeddingProvider || "Not set"}
+                      {learningAiStack?.aiStack?.embeddingModel
+                        ? ` · ${learningAiStack.aiStack.embeddingModel}`
+                        : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-zaki-muted">Search</dt>
+                    <dd className="mt-1 text-zaki-primary dark:text-zaki-dark-primary">
+                      {learningAiStack?.aiStack?.searchProvider || "Not set"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-zaki-muted">Engine</dt>
+                    <dd className="mt-1 text-zaki-primary dark:text-zaki-dark-primary">
+                      {learningAiStack?.status?.enabled ? "Enabled" : "Disabled"} ·{" "}
+                      {learningAiStack?.status?.configured ? "Configured" : "Missing config"}
+                      {learningAiStack?.status?.upstreamStatus
+                        ? ` · upstream ${learningAiStack.status.upstreamStatus}`
+                        : ""}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-4 rounded-lg border border-zaki-subtle bg-white px-3 py-2 text-xs text-zaki-secondary dark:bg-zaki-dark-card dark:text-zaki-dark-subtle">
+                  To rotate Together, update the learning-engine deployment secret and restart or
+                  reload the engine. This panel validates the live runtime without exposing the key.
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zaki-subtle bg-white px-4 py-4 dark:bg-zaki-dark-card">
+                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                  Runtime tests
+                </div>
+                <div className="mt-3 flex flex-col gap-3">
+                  {LEARNING_AI_STACK_TESTS.map(({ service, label }) => {
+                    const result = learningAiStackTests[service];
+                    const isTesting = testingLearningService === service;
+                    return (
+                      <div
+                        key={service}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zaki-subtle px-3 py-2"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
+                            {label}
+                          </div>
+                          <div
+                            className={`mt-1 text-xs ${
+                              result?.ok
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : result
+                                  ? "text-red-700 dark:text-red-300"
+                                  : "text-zaki-secondary dark:text-zaki-dark-subtle"
+                            }`}
+                          >
+                            {result
+                              ? result.message || (result.ok ? "Passed" : "Failed")
+                              : "Not tested"}
+                            {result?.responseTimeMs ? ` · ${result.responseTimeMs}ms` : ""}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={Boolean(testingLearningService)}
+                          className="zaki-btn zaki-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => {
+                            void testLearningAiStack(service);
+                          }}
+                        >
+                          {isTesting ? "Testing..." : "Test"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {learningAiStackError ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+              {learningAiStackError}
             </div>
           ) : null}
         </section>

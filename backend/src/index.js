@@ -150,6 +150,10 @@ import {
 import { buildLearningDisasterRecoveryStatus } from "./learning-disaster-recovery.js";
 import { buildLearningDeploymentReadinessStatus } from "./learning-deployment-readiness.js";
 import {
+  normalizeLearningOperatorTestResult,
+  redactLearningOperatorPayload,
+} from "./learning-operator-ai-stack.js";
+import {
   getAccessStatus,
   getEffectiveEntitlementState,
   isPaidActive,
@@ -5434,6 +5438,151 @@ app.get("/api/internal/learning/deployment-readiness", async (req, res) => {
   } catch (error) {
     console.error("[LearningDeploy] Readiness error:", error);
     res.status(500).json({ error: error?.message || "Unable to load learning deployment readiness." });
+  }
+});
+
+const LEARNING_OPERATOR_TEST_ROUTES = new Map([
+  ["llm", "/api/v1/system/test/llm"],
+  ["embeddings", "/api/v1/system/test/embeddings"],
+  ["search", "/api/v1/system/test/search"],
+]);
+
+app.get("/api/internal/learning/ai-stack", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const configured = Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN);
+    const disasterRecovery = buildLearningDisasterRecoveryStatus({
+      learningEnabled: ZAKI_LEARNING_ENABLED,
+      learningConfigured: configured,
+    });
+    const deploymentReadiness = buildLearningDeploymentReadinessStatus({
+      learningEnabled: ZAKI_LEARNING_ENABLED,
+      learningConfigured: configured,
+      retentionPolicy: runtimeLearningRetentionPolicy,
+      disasterRecoveryStatus: disasterRecovery,
+    });
+    const body = {
+      ok: false,
+      enabled: ZAKI_LEARNING_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(LEARNING_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
+      streamTimeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
+      maxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+      requestId,
+    };
+
+    if (!ZAKI_LEARNING_ENABLED || !configured) {
+      return res.status(200).json({
+        success: true,
+        operatorManaged: true,
+        status: body,
+        aiStack: deploymentReadiness.policy.aiStack,
+        deploymentReadiness,
+      });
+    }
+
+    const userId = resolveCanonicalLearningUserId(authResult);
+    if (!userId) {
+      return res.status(200).json({
+        success: true,
+        operatorManaged: true,
+        status: body,
+        aiStack: deploymentReadiness.policy.aiStack,
+        deploymentReadiness,
+      });
+    }
+
+    const upstream = await probeLearningReady({
+      baseUrl: LEARNING_ENGINE_BASE_URL,
+      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+    });
+
+    res.status(200).json({
+      success: true,
+      operatorManaged: true,
+      status: {
+        ...body,
+        ok: upstream.ok,
+        upstreamStatus: upstream.status,
+      },
+      aiStack: deploymentReadiness.policy.aiStack,
+      deploymentReadiness,
+    });
+  } catch (error) {
+    console.error("[LearningAIStack] Status error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load learning AI stack status." });
+  }
+});
+
+app.post("/api/internal/learning/ai-stack/test/:service", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const service = String(req.params.service || "").trim().toLowerCase();
+    const upstreamPath = LEARNING_OPERATOR_TEST_ROUTES.get(service);
+    if (!upstreamPath) {
+      return res.status(400).json({
+        success: false,
+        error: "Unsupported learning AI stack test service.",
+      });
+    }
+
+    if (!ZAKI_LEARNING_ENABLED || !getLearningBase(LEARNING_ENGINE_BASE_URL) || !LEARNING_ENGINE_INTERNAL_TOKEN) {
+      return res.status(503).json({
+        success: false,
+        error: "Learning engine is not configured.",
+      });
+    }
+
+    const userId = resolveCanonicalLearningUserId(authResult);
+    if (!userId) {
+      return res.status(403).json({
+        success: false,
+        error: "Super admin user is missing a canonical ZAKI user id.",
+      });
+    }
+
+    const requestId = getOrCreateRequestId(req);
+    const upstream = await fetchLearningPath({
+      baseUrl: LEARNING_ENGINE_BASE_URL,
+      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      path: upstreamPath,
+      method: "POST",
+      body: {},
+      fetchWithTimeout,
+      timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 30_000),
+      label: `Learning ${service} operator test`,
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    const result = normalizeLearningOperatorTestResult({
+      service,
+      upstreamStatus: upstream.status,
+      payload,
+    });
+
+    res.status(200).json({
+      success: true,
+      result: redactLearningOperatorPayload(result),
+      requestId,
+    });
+  } catch (error) {
+    console.error("[LearningAIStack] Test error:", error);
+    res.status(500).json({
+      success: false,
+      error: redactLearningOperatorPayload(error?.message || "Learning AI stack test failed."),
+    });
   }
 });
 
