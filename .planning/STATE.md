@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 02 BFF Security And Multi-User Hardening
-Plan: 02-05 User/operator settings split
-Status: 02-04 complete; ready to execute 02-05
-Last activity: 2026-05-07 - verified generated interactive HTML renders without script privileges and added a frontend regression test.
+Plan: 02-06 Backend security test pass
+Status: 02-05 complete; ready to execute 02-06
+Last activity: 2026-05-07 - redacted user-visible knowledge provider and embedding labels and verified learning setting surfaces keep provider/model routing operator-managed.
 
 ## Locked Decisions
 
@@ -43,6 +43,7 @@ Last activity: 2026-05-07 - verified generated interactive HTML renders without 
 - BFF: Raw learning uploads use a byte-counting stream limiter before proxying, including chunked requests without `Content-Length`.
 - BFF: Learning WebSocket JSON messages are strict-root allowlisted and recursively sanitized before quota checks and upstream forwarding.
 - UI: Generated interactive HTML blocks render with script-disabled sandbox, restrictive CSP, and sanitizer coverage.
+- UI: User-facing learning settings expose behavior/source/tutor/content settings only; provider/model infrastructure labels are redacted.
 - `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
 - `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
@@ -61,7 +62,8 @@ Last activity: 2026-05-07 - verified generated interactive HTML renders without 
 - 02-02: Raw upload byte limits.
 - 02-03: WebSocket schema and quota hardening.
 - 02-04: Generated HTML renderer safety.
+- 02-05: User/operator settings split.
 
 ## Next Command
 
-Execute Phase 02 Plan 02-05: split user-managed settings from operator-managed settings.
+Execute Phase 02 Plan 02-06: backend security test pass.

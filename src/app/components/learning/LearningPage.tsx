@@ -3668,12 +3668,6 @@ function SourcesPanel({
   });
   const sourceFileItems = itemList(selectedFiles.data, ["files", "items", "documents"]);
   const metadata = asRecord(selectedItem?.metadata);
-  const statistics = asRecord(selectedItem?.statistics);
-  const provider = textOf(statistics.rag_provider) || textOf(metadata.rag_provider) || "llamaindex";
-  const embeddingLabel =
-    textOf(metadata.embedding_model) ||
-    textOf(statistics.embedding_model) ||
-    "Default embedding";
   const updatedLabel =
     relativeTime(metadata.last_updated) ||
     relativeTime(selectedItem?.updated_at) ||
@@ -3850,7 +3844,7 @@ function SourcesPanel({
               </div>
               <p className="mt-1 text-[12px] text-zaki-muted">
                 {effectiveName
-                  ? `${provider} · ${embeddingLabel} · Updated ${updatedLabel}${
+                  ? `Indexing managed by ZAKI · Updated ${updatedLabel}${
                       lastIndexedLabel ? ` · Last indexed ${lastIndexedLabel}` : ""
                     }`
                   : "Pick a knowledge base from the list, or create a new one to get started."}
@@ -4116,8 +4110,7 @@ function SourcesPanel({
                 <DetailBlock
                   title="Index state"
                   rows={[
-                    ["Provider", provider],
-                    ["Embedding", embeddingLabel],
+                    ["Indexing", "Managed by ZAKI"],
                     ["Updated", updatedLabel],
                     ["Last indexed", lastIndexedLabel || "not returned"],
                     ["Raw documents", displayCount(selectedItem) || "0"],
@@ -4139,8 +4132,7 @@ function SourcesPanel({
                       ["Status", itemStatus(selectedItem)],
                       ["Files", displayCount(selectedItem) || "0"],
                       ["Default", String(Boolean(selectedItem.is_default) || effectiveName === "main")],
-                      ["Provider", provider],
-                      ["Embedding", embeddingLabel],
+                      ["Indexing", "Managed by ZAKI"],
                     ]}
                   />
                   <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
