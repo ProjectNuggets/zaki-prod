@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
+import { readFileSync } from "node:fs";
 import {
   buildLearningConfigErrorPayload,
   buildLearningDisabledPayload,
@@ -164,6 +165,42 @@ describe("learning BFF contract", () => {
         nested: [{ keep: true }],
       },
     });
+  });
+
+  test("recursively strips provider routing variants from learning payloads", () => {
+    const sanitized = sanitizeLearningClientPayload({
+      topic: "linear algebra",
+      apiKey: "secret",
+      baseURL: "https://evil.example",
+      modelName: "evil-model",
+      providerSettings: {
+        provider: "evil",
+      },
+      nested: [
+        {
+          provider_config: { api_key: "secret" },
+          llmSelection: "evil-provider",
+          keep: true,
+        },
+      ],
+    });
+
+    expect(sanitized).toEqual({
+      topic: "linear algebra",
+      nested: [{ keep: true }],
+    });
+  });
+
+  test("learning mutation proxies do not forward raw request bodies", () => {
+    const source = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+    const learningStart = source.indexOf("// LEARNING ENGINE BFF");
+    const learningEnd = source.indexOf("// SHARE CONVERSATION ROUTES");
+    expect(learningStart).toBeGreaterThan(-1);
+    expect(learningEnd).toBeGreaterThan(learningStart);
+
+    const learningSection = source.slice(learningStart, learningEnd);
+    expect(learningSection).not.toMatch(/body:\s*req\.body/);
+    expect(learningSection).not.toMatch(/sanitizeBody:\s*\(?\s*body\s*\)?\s*=>\s*body\b/);
   });
 
   test("sanitizes websocket message buffers without touching binary frames", () => {

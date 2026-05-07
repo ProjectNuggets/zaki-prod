@@ -23,14 +23,18 @@ const STRIPPED_BROWSER_HEADERS = new Set([
 
 const LEARNING_PATH_SAFE_PATTERN = /^\/[A-Za-z0-9/_:.,~@?&=%+\-[\]]*$/;
 const OPERATOR_MANAGED_LEARNING_FIELDS = new Set([
-  "api_key",
-  "base_url",
+  "apikey",
+  "baseurl",
   "binding",
-  "llm_selection",
+  "llmselection",
   "model",
-  "model_id",
+  "modelid",
+  "modelname",
   "provider",
-  "provider_config",
+  "providerconfig",
+  "providerid",
+  "providername",
+  "providersettings",
 ]);
 const LEARNING_WS_ALLOWED_ROOT_FIELDS = new Set([
   "attachments",
@@ -254,11 +258,19 @@ export function sanitizeLearningClientPayload(value, { root = false } = {}) {
 
   for (const [key, nested] of entries) {
     const normalizedKey = String(key);
-    if (OPERATOR_MANAGED_LEARNING_FIELDS.has(normalizedKey)) continue;
+    if (isOperatorManagedLearningField(normalizedKey)) continue;
     if (knownRootPayload && !LEARNING_WS_ALLOWED_ROOT_FIELDS.has(normalizedKey)) continue;
     output[normalizedKey] = sanitizeLearningClientPayload(nested);
   }
   return output;
+}
+
+function normalizeLearningPayloadKey(key) {
+  return String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isOperatorManagedLearningField(key) {
+  return OPERATOR_MANAGED_LEARNING_FIELDS.has(normalizeLearningPayloadKey(key));
 }
 
 export function sanitizeLearningWsClientMessage(data, isBinary) {

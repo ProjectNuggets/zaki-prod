@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 02 BFF Security And Multi-User Hardening
-Plan: 02-01 Mutation proxy sanitization
-Status: Phase 01 complete; ready to execute 02-01
-Last activity: 2026-05-07 - completed browser parity verification and direct capability alias fixes for Learn UI parity.
+Plan: 02-02 Raw upload byte limits
+Status: 02-01 complete; ready to execute 02-02
+Last activity: 2026-05-07 - hardened recursive learning payload sanitization and added BFF regression tests against raw request body forwarding.
 
 ## Locked Decisions
 
@@ -38,6 +38,8 @@ Last activity: 2026-05-07 - completed browser parity verification and direct cap
 - Browser: Deep Research entry opens `/learn?view=chat&capability=deep_research` behavior inside the shared chat area with Sources, KB selector, Settings, Mode, and Depth controls visible.
 - Browser: `/learn?view=solve`, `/learn?view=research`, `/learn?view=quiz`, `/learn?view=visualize`, and `/learn?view=math-animation` now open the matching chat capability directly.
 - Browser: `/learn?view=chat`, `/tutorbot`, `/books`, `/knowledge`, `/writer`, `/space`, `/workspaces`, `/solve`, `/research`, `/quiz`, `/visualize`, and `/math-animation` passed route truth checks with no DeepTutor branding and no learning-disabled blocker.
+- BFF: Learning JSON mutation proxy routes sanitize request bodies before forwarding.
+- BFF: Learning payload sanitizer strips snake_case, camelCase, and mixed-case provider/model/API-key/base URL variants recursively.
 - `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
 - `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
@@ -52,7 +54,8 @@ Last activity: 2026-05-07 - completed browser parity verification and direct cap
 - 01-05: TutorBot management and chat surfaces.
 - 01-06: Advanced workspace entry points.
 - 01-07: Browser parity verification and UI code review.
+- 02-01: Mutation proxy sanitization.
 
 ## Next Command
 
-Execute Phase 02 Plan 02-01: convert learning mutation proxying to route allowlists or recursive schema sanitizers.
+Execute Phase 02 Plan 02-02: enforce byte limits for raw and chunked uploads before proxying.
