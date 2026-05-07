@@ -560,24 +560,35 @@ prefer review/confirmation over automatic save.
 
 ## Billing and Quota
 
-Learning must have an explicit quota model before broad rollout.
+Learning uses a separate `learning` quota surface. It is not counted under
+`zaki_bot` because Learn has different cost drivers: uploads, source indexing,
+generated books, notebooks, research, solve, visualization, and tutor agents.
 
-Options:
+All learning-relevant hosted capabilities remain available to users unless the
+capability is unsafe for SaaS. Limits scale by ZAKI entitlement tier. Provider,
+model, API-key, base URL, and external dependency settings remain
+operator-managed.
 
-- separate `learning` surface
-- included under `zaki_bot`
-- tier-gated premium capability
+Initial hosted quota matrix:
 
-The implementation must define:
+| Dimension | Free | Student | Personal / access code | State |
+| --- | ---: | ---: | ---: | --- |
+| Daily prompt/mutating turns | Runtime setting | Runtime setting | Runtime setting | Enforced |
+| Max learning request/upload bytes | 25 MB | 100 MB | 100 MB | Enforced |
+| Max files per request | 20 | 100 | 250 | Surfaced; parser-level counter next |
+| Image upload | Enabled | Enabled | Enabled | Enforced by route availability |
+| Browser folder upload | Enabled | Enabled | Enabled | Enforced by route availability |
+| Archive upload | Enabled | Enabled | Enabled | Enforced by route availability |
+| Cloud folder connectors | V1.1 | V1.1 | V1.1 | Not hosted in V1 |
+| Tenant source storage | 250 MB | 2 GB | 10 GB | Planned |
+| Artifact storage | 100 MB | 1 GB | 5 GB | Planned |
+| Generated books/day | 1 | 5 | 20 | Planned |
+| External searches/day | 3 | 25 | 100 | Planned |
+| Concurrent learning sessions | 1 | 3 | 5 | Planned |
 
-- daily/monthly request caps
-- streaming/session caps
-- upload/storage caps
-- book generation caps
-- expensive external search caps
-- per-plan feature availability
-
-Backend quota checks happen before forwarding to the learning engine.
+Backend quota checks happen before forwarding to the learning engine. The BFF
+first applies the operator global request cap, then applies the authenticated
+plan-specific Learn cap.
 
 ## Data and Retention
 
@@ -813,7 +824,6 @@ Phase 8: full upstream offering coverage
 
 ## Open Decisions
 
-- Should learning quota be its own `learning` surface or part of `zaki_bot`?
 - Should first rollout include generated books, or start with tutor chat plus
   quiz?
 - Which file types are enabled for production day one?

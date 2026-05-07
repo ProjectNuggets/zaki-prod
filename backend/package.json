@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "lint": "node --check src/index.js && node --check src/db.js && node --check src/agent-bff-contract.js && node --check src/agent-client.js && node --check src/bot-bff.js && node --check src/effective-entitlements.js && node --check src/health-readiness.js && node --check src/memory/operations.js && node --check src/memory/routes.js && node --check src/memory-extraction.js && node --check scripts/create-access-code.js",
+    "lint": "node --check src/index.js && node --check src/db.js && node --check src/agent-bff-contract.js && node --check src/agent-client.js && node --check src/bot-bff.js && node --check src/effective-entitlements.js && node --check src/learning-quota.js && node --check src/health-readiness.js && node --check src/memory/operations.js && node --check src/memory/routes.js && node --check src/memory-extraction.js && node --check scripts/create-access-code.js",
     "config:check": "node scripts/validate-runtime-config.js",
     "migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.js",
     "access-code:create": "node scripts/create-access-code.js",

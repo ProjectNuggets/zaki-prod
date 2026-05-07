@@ -68,13 +68,13 @@ Last updated: 2026-05-07
 
 **Plans:**
 
-- [ ] 04-01: Quota model and enforcement matrix.
+- [x] 04-01: Quota model and enforcement matrix.
 - [ ] 04-02: Data deletion/export implementation and audit state.
 - [ ] 04-03: Retention and cleanup policies.
 - [ ] 04-04: Backup/restore drill and disaster recovery runbook.
 - [ ] 04-05: Operator deployment checklist with immutable image tags.
 
-**Status:** In progress. Current plan: 04-01 Quota model and enforcement matrix.
+**Status:** In progress. Current plan: 04-02 Data deletion/export implementation and audit state.
 
 ## Phase 05: Final Parity Audit And Release Gate
 

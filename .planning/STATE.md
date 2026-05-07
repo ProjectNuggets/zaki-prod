@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 28
-  completed_plans: 19
-  percent: 68
+  completed_plans: 20
+  percent: 71
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 04 Governance, Quota, Retention, Export
-Plan: 04-01 Quota model and enforcement matrix
-Status: Phase 03 complete; ready to execute 04-01
-Last activity: 2026-05-07 - completed source ingestion parity with policy-driven ZAKI uploads, normal file/image/folder/archive routing, safe archive expansion in the learning engine, browser E2E coverage, typecheck, frontend unit tests, and targeted learning-engine pytest coverage passing.
+Plan: 04-02 Data deletion/export implementation and audit state
+Status: Phase 04 in progress; 04-01 quota model and enforcement matrix complete
+Last activity: 2026-05-07 - completed Learn quota policy and enforcement matrix: separate `learning` quota surface, entitlement-aware hosted policy, `/api/usage/quota?surface=learning` policy output, plan-specific request/upload byte caps, raw/chunked upload limiter using the authenticated policy cap, spec updates, and targeted backend verification passing.
 
 ## Locked Decisions
 
@@ -73,7 +73,8 @@ Last activity: 2026-05-07 - completed source ingestion parity with policy-driven
 - 03-04: Notebooks and save/export flows.
 - 03-05: Deep research, deep solve, visualization, and math animation parity.
 - 03-06: Source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
+- 04-01: Quota model and enforcement matrix.
 
 ## Next Command
 
-Execute Phase 04 Plan 04-01: quota model and enforcement matrix.
+Execute Phase 04 Plan 04-02: data deletion/export implementation and audit state.

@@ -132,6 +132,12 @@ import {
   enforcePromptQuotaForIngress,
 } from "./quota-route-handlers.js";
 import {
+  buildLearningQuotaStatus,
+  buildLearningRequestTooLargePayload,
+  checkLearningQuotaContentLength,
+  resolveLearningQuotaPolicy,
+} from "./learning-quota.js";
+import {
   getAccessStatus,
   getEffectiveEntitlementState,
   isPaidActive,
@@ -3500,7 +3506,7 @@ function getAppUrl() {
 
 // AUTH-01..05: ZAKI dual-auth — ZAKI-first local verify, legacy TYP fallback.
 // SELECT list excludes password_hash (AUTH-03). Legacy path mints a ZAKI session on success (AUTH-05).
-const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, legal_consent_version, legal_consent_at, full_name";
+const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, legal_consent_version, legal_consent_at, full_name, access_expires_at, access_code_campaign, student_verified";
 const _LEGACY_TYP_CUTOFF_MS = (() => {
   const v = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
   if (!v) return null;
@@ -5294,6 +5300,13 @@ app.get("/api/usage/quota", async (req, res) => {
       resolveSurfaceQuotaConfig,
       dbGet,
     });
+    if (surface === LEARNING_SURFACE) {
+      payload.learning = buildLearningQuotaStatus({
+        zakiUser,
+        promptQuota: payload,
+        absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+      });
+    }
     res.status(200).json(payload);
   } catch (error) {
     console.error("[Usage] Quota endpoint error:", error);
@@ -8620,19 +8633,9 @@ async function requireLearningQuotaForIngress(req, res, next) {
   }
   const sizeDecision = checkLearningContentLength(req.headers, ZAKI_LEARNING_MAX_REQUEST_BYTES);
   if (!sizeDecision.allowed) {
-    res.status(413).json({
-      code: sizeDecision.reason,
-      error:
-        sizeDecision.reason === "invalid_content_length"
-          ? "Invalid learning request size."
-          : "Learning request is too large.",
-      maxBytes: sizeDecision.maxBytes,
-      contentLength: sizeDecision.contentLength,
-    });
-    return;
-  }
-  if (!shouldConsumeLearningIngressQuota(req)) {
-    next();
+    res
+      .status(413)
+      .json(buildLearningRequestTooLargePayload(sizeDecision, getOrCreateRequestId(req)));
     return;
   }
   if (req.learningQuotaChecked) {
@@ -8641,6 +8644,28 @@ async function requireLearningQuotaForIngress(req, res, next) {
   }
 
   await requireLearningContext(req, res, async () => {
+    const learningPolicy = resolveLearningQuotaPolicy(req.learningAuthResult?.zakiUser, {
+      absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+    });
+    req.learningQuotaPolicy = learningPolicy;
+    const planSizeDecision = checkLearningQuotaContentLength(req.headers, learningPolicy);
+    if (!planSizeDecision.allowed) {
+      res
+        .status(413)
+        .json(
+          buildLearningRequestTooLargePayload(
+            planSizeDecision,
+            getOrCreateRequestId(req),
+            learningPolicy
+          )
+        );
+      return;
+    }
+    if (!shouldConsumeLearningIngressQuota(req)) {
+      req.learningQuotaChecked = true;
+      next();
+      return;
+    }
     const learningQuotaDecision = await enforcePromptQuotaForIngress({
       zakiUser: req.learningAuthResult?.zakiUser,
       res,
@@ -8943,7 +8968,9 @@ async function proxyLearningRawRequest(req, res, targetPath, {
   label = "Learning upstream raw request",
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
-  const limitedBody = createLearningByteLimitedStream(req, ZAKI_LEARNING_MAX_REQUEST_BYTES);
+  const maxRequestBytes =
+    req.learningQuotaPolicy?.uploads?.maxRequestBytes || ZAKI_LEARNING_MAX_REQUEST_BYTES;
+  const limitedBody = createLearningByteLimitedStream(req, maxRequestBytes);
   try {
     const upstream = await fetchLearningProxyPath({
       baseUrl: LEARNING_ENGINE_BASE_URL,
@@ -8966,7 +8993,7 @@ async function proxyLearningRawRequest(req, res, targetPath, {
       res.status(413).json({
         code: "request_too_large",
         error: "Learning request is too large.",
-        maxBytes: sizeError.maxBytes || ZAKI_LEARNING_MAX_REQUEST_BYTES,
+        maxBytes: sizeError.maxBytes || maxRequestBytes,
         contentLength: sizeError.contentLength || null,
         requestId,
       });
