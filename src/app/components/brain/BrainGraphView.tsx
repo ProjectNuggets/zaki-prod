@@ -176,6 +176,16 @@ function buildElementsFromGlobal(
         valid_to: n.valid_to,
         link_type: n.link_type ?? null,
         display_label: n.display_label ?? null,
+        // V1.11 (2026-05-07) — per-node base opacity scaled by importance.
+        // The pre-V1.11 graph rendered all mono-mode nodes at full opacity,
+        // and the size-only hierarchy (8-24px radius) was hard to read on
+        // a dark canvas because every node painted at the same brightness.
+        // Opacity 0.45 (low importance) → 1.0 (high) gives the eye anchor
+        // points without changing color. High-importance hubs naturally
+        // dominate; leaves recede. Works across all color presets, not
+        // just mono. Override classes (.dimmed, .archived, .focus) win
+        // via stylesheet specificity.
+        opacity: Math.max(0.45, Math.min(1, 0.45 + 0.55 * (importance ?? 0.3))),
       },
       classes: classes.join(" "),
     });
@@ -272,6 +282,12 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
         // removing the information — hover any node and its label +
         // neighbors' labels appear.
         label: "",
+        // V1.11 (2026-05-07) — per-node opacity reflects importance.
+        // Hubs paint at full brightness, leaves at ~45%. The eye gets
+        // anchor points instead of a uniform mass. Specificity-wins
+        // overrides for .dimmed (0.18), .archived (0.5), and .focus
+        // (1.0) below.
+        opacity: "data(opacity)",
         color: "#e5e7eb",
         "font-size": 10,
         "text-outline-width": 2,
@@ -286,8 +302,13 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
     {
       // V1.11 — labels appear on focused neighborhood (hover or click),
       // selected nodes, time-highlighted nodes, and the local-graph center.
+      // Force full opacity so emphasis-worthy nodes pop regardless of
+      // their importance-based base opacity.
       selector: "node.focus, node.center, node.highlighted, node:selected",
-      css: { label: "data(label)" } as Record<string, unknown>,
+      css: {
+        label: "data(label)",
+        opacity: 1,
+      } as Record<string, unknown>,
     },
     {
       selector: "node.archived",

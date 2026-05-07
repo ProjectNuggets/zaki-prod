@@ -92,7 +92,19 @@ export function BrainPage() {
   };
 
   return (
-    <div className="py-8">
+    /*
+      V1.11 (2026-05-07) — Scroll fix. Pre-V1.11 the outer wrapper was
+      `<div className="py-8">` with no height/overflow context, so the
+      page clipped at the AppShell viewport boundary and inner content
+      (large graph canvas, long timeline list) couldn't scroll. Now:
+       - `flex flex-col h-full min-h-0`: claim full parent height,
+         allow shrink so child scroll containers compute correctly
+       - `overflow-y-auto`: scroll vertically when content exceeds
+       - existing `py-8` preserved for vertical breathing room
+      Same pattern Obsidian-class panels use: outer flex column with
+      explicit min-h-0 to defeat default flex-min-content sizing.
+    */
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto py-8">
       <div className="mx-auto max-w-7xl px-6">
         <header className="mb-6">
           <h1 className="text-xl font-semibold text-zaki-text">{t("brain.title")}</h1>
