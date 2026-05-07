@@ -51,6 +51,7 @@ import {
   Paperclip,
   Pencil,
   PenLine,
+  Play,
   Plus,
   Quote,
   Search,
@@ -855,6 +856,17 @@ export function LearningPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const startAgent = useMutation({
+    mutationFn: (nextAgentId: string) => createLearningTutorAgent({ bot_id: nextAgentId }),
+    onSuccess: (payload) => {
+      setLastResult(payload);
+      toast.success("Tutor started");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const analyzeVision = useMutation({
     mutationFn: async () => {
       const image_base64 = visionImage ? await fileToBase64(visionImage) : undefined;
@@ -989,6 +1001,7 @@ export function LearningPage() {
             agentPersona={agentPersona}
             setAgentPersona={setAgentPersona}
             createAgent={createAgent}
+            startAgent={startAgent}
             stopAgent={stopAgent}
             destroyAgent={destroyAgent}
             items={agentItems}
@@ -7079,6 +7092,7 @@ function AgentsPanel({
   agentPersona,
   setAgentPersona,
   createAgent,
+  startAgent,
   stopAgent,
   destroyAgent,
   items,
@@ -7095,6 +7109,7 @@ function AgentsPanel({
   agentPersona: string;
   setAgentPersona: (value: string) => void;
   createAgent: UseMutationResult<unknown, Error, void, unknown>;
+  startAgent: UseMutationResult<unknown, Error, string, unknown>;
   stopAgent: UseMutationResult<unknown, Error, string, unknown>;
   destroyAgent: UseMutationResult<unknown, Error, string, unknown>;
   items: Item[];
@@ -7107,12 +7122,35 @@ function AgentsPanel({
   const [activeTab, setActiveTab] = useState<"bots" | "profiles" | "channels" | "souls">("bots");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [selectedCreateSoulId, setSelectedCreateSoulId] = useState("_custom");
+  const createSoulTemplates = useMemo(
+    () =>
+      souls.map((soul, index) => ({
+        id: itemId(soul, `soul-${index + 1}`),
+        name: itemTitle(soul, `Soul template ${index + 1}`),
+        content: textOf(soul.content) || textOf(soul.description),
+      })),
+    [souls],
+  );
   const tabs = [
     { key: "bots" as const, label: "Bots", icon: Bot },
     { key: "profiles" as const, label: "Profiles", icon: FileText },
     { key: "channels" as const, label: "Channels", icon: Settings },
     { key: "souls" as const, label: "Soul Templates", icon: Heart },
   ];
+
+  const selectCreateSoul = (nextSoulId: string) => {
+    setSelectedCreateSoulId(nextSoulId);
+    if (nextSoulId === "_custom") return;
+    const soul = createSoulTemplates.find((template) => template.id === nextSoulId);
+    if (soul) setAgentPersona(soul.content);
+  };
+
+  useEffect(() => {
+    if (!agentId && !agentName && !agentPersona) {
+      setSelectedCreateSoulId("_custom");
+    }
+  }, [agentId, agentName, agentPersona]);
 
   if (selectedAgentId) {
     return (
@@ -7215,9 +7253,46 @@ function AgentsPanel({
                   className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
                 />
               </div>
+              <div className="mt-3">
+                <label className="mb-1 block text-[12px] font-medium text-zaki-muted">
+                  Soul
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => selectCreateSoul("_custom")}
+                    className={cn(
+                      "rounded-zaki-md px-2.5 py-1 text-[12px] transition-colors",
+                      selectedCreateSoulId === "_custom"
+                        ? "bg-zaki-brand text-white"
+                        : "bg-zaki-hover text-zaki-muted hover:text-zaki-text",
+                    )}
+                  >
+                    Custom
+                  </button>
+                  {createSoulTemplates.map((soul) => (
+                    <button
+                      key={soul.id}
+                      type="button"
+                      onClick={() => selectCreateSoul(soul.id)}
+                      className={cn(
+                        "rounded-zaki-md px-2.5 py-1 text-[12px] transition-colors",
+                        selectedCreateSoulId === soul.id
+                          ? "bg-zaki-brand text-white"
+                          : "bg-zaki-hover text-zaki-muted hover:text-zaki-text",
+                      )}
+                    >
+                      {soul.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <textarea
                 value={agentPersona}
-                onChange={(event) => setAgentPersona(event.target.value)}
+                onChange={(event) => {
+                  setAgentPersona(event.target.value);
+                  setSelectedCreateSoulId("_custom");
+                }}
                 placeholder="Persona and teaching style"
                 className="mt-3 min-h-28 w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base p-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
               />
@@ -7244,6 +7319,7 @@ function AgentsPanel({
                   const deleting = destroyAgent.isPending && destroyAgent.variables === id;
                   const running = Boolean(item.running) || itemStatus(item) === "running";
                   const stopping = stopAgent.isPending && stopAgent.variables === id;
+                  const starting = startAgent.isPending && startAgent.variables === id;
                   return (
                     <div
                       key={id}
@@ -7286,7 +7362,21 @@ function AgentsPanel({
                               <Square className="size-3.5" />
                             )}
                           </button>
-                        ) : null}
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={startAgent.isPending}
+                            title="Start tutor"
+                            onClick={() => startAgent.mutate(id)}
+                            className="rounded-zaki-md p-1 text-zaki-muted opacity-0 transition-colors hover:bg-zaki-base hover:text-zaki-text disabled:opacity-50 group-hover:opacity-100"
+                          >
+                            {starting ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Play className="size-3.5" />
+                            )}
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={destroyAgent.isPending}
