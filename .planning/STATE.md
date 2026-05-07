@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 28
-  completed_plans: 22
-  percent: 79
+  completed_plans: 23
+  percent: 82
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 04 Governance, Quota, Retention, Export
-Plan: 04-04 Backup/restore drill and disaster recovery runbook
-Status: Phase 04 in progress; 04-03 retention and cleanup policies complete
-Last activity: 2026-05-07 - completed Learn retention policy: account-lifetime retention for active learning content, deletion-on-account-delete cleanup model, scheduled audit-event cleanup, super-admin retention status/manual cleanup endpoints, spec retention matrix, quota unit-economics caveat, focused backend tests, and lint passing.
+Plan: 04-05 Operator deployment checklist with immutable image tags
+Status: Phase 04 in progress; 04-04 backup/restore DR gate complete
+Last activity: 2026-05-07 - completed Learn backup/restore and DR gate: disaster recovery policy, super-admin DR status endpoint, explicit readiness gates for tenant root/backups/target/immutable image/restore drill evidence, backup/restore runbook, spec updates, focused tests, lint, and full backend suite passing.
 
 ## Locked Decisions
 
@@ -76,7 +76,8 @@ Last activity: 2026-05-07 - completed Learn retention policy: account-lifetime r
 - 04-01: Quota model and enforcement matrix.
 - 04-02: Data deletion/export implementation and audit state.
 - 04-03: Retention and cleanup policies.
+- 04-04: Backup/restore drill and disaster recovery runbook.
 
 ## Next Command
 
-Execute Phase 04 Plan 04-04: backup/restore drill and disaster recovery runbook.
+Execute Phase 04 Plan 04-05: operator deployment checklist with immutable image tags.

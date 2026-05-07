@@ -147,6 +147,7 @@ import {
   cleanupLearningRetention,
   resolveLearningRetentionPolicy,
 } from "./learning-retention.js";
+import { buildLearningDisasterRecoveryStatus } from "./learning-disaster-recovery.js";
 import {
   getAccessStatus,
   getEffectiveEntitlementState,
@@ -5390,6 +5391,24 @@ app.post("/api/internal/learning/retention/cleanup", async (req, res) => {
   } catch (error) {
     console.error("[LearningRetention] Cleanup error:", error);
     res.status(500).json({ error: error?.message || "Learning retention cleanup failed." });
+  }
+});
+
+app.get("/api/internal/learning/disaster-recovery", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+    const configured = Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN);
+    res.status(200).json({
+      success: true,
+      disasterRecovery: buildLearningDisasterRecoveryStatus({
+        learningEnabled: ZAKI_LEARNING_ENABLED,
+        learningConfigured: configured,
+      }),
+    });
+  } catch (error) {
+    console.error("[LearningDR] Status error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load learning DR status." });
   }
 });
 

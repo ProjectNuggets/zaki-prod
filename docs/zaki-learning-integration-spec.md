@@ -634,6 +634,16 @@ for personal users. The retention policy is intentionally separate from quota:
 active-account learning content is not deleted merely because a user hits a
 quota cap.
 
+Backup and disaster recovery are gated by
+`GET /api/internal/learning/disaster-recovery` and the operator runbook in
+`docs/zaki-learning-backup-restore-runbook.md`. Paid-user rollout requires:
+
+- explicit tenant data root configuration
+- backups enabled with a target outside the application host
+- immutable learning-engine image tag
+- restore drill evidence inside the configured drill window
+- account export/delete audit tables included in database backups
+
 ## Operator Dependencies
 
 The learning engine may require:
