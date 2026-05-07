@@ -81,6 +81,17 @@ const LEARNING_WS_QUOTA_FREE_TYPES = new Set([
   "unsubscribe",
 ]);
 const LEARNING_NOTEBOOK_ID_SEGMENT = "[^/?#]+";
+export const LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST = [
+  "email",
+  "whatsapp",
+  "telegram",
+  "discord",
+];
+const LEARNING_TUTOR_AGENT_CHANNEL_SET = new Set(LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST);
+const LEARNING_TUTOR_AGENT_CHANNEL_GLOBAL_KEYS = new Set([
+  "send_progress",
+  "send_tool_hints",
+]);
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -286,6 +297,113 @@ function isOperatorManagedLearningField(key) {
   return OPERATOR_MANAGED_LEARNING_FIELDS.has(normalizeLearningPayloadKey(key));
 }
 
+export function filterLearningTutorAgentChannelsConfig(channels) {
+  if (!channels || typeof channels !== "object" || Array.isArray(channels)) return channels;
+  const output = {};
+  for (const [key, value] of Object.entries(channels)) {
+    const normalizedKey = String(key).trim().toLowerCase();
+    if (
+      LEARNING_TUTOR_AGENT_CHANNEL_SET.has(normalizedKey) ||
+      LEARNING_TUTOR_AGENT_CHANNEL_GLOBAL_KEYS.has(normalizedKey)
+    ) {
+      output[normalizedKey] = value;
+    }
+  }
+  return output;
+}
+
+export function sanitizeLearningTutorAgentPayload(value) {
+  const sanitized = sanitizeLearningClientPayload(value);
+  if (!sanitized || typeof sanitized !== "object" || Array.isArray(sanitized)) return sanitized;
+  if ("channels" in sanitized) {
+    return {
+      ...sanitized,
+      channels: filterLearningTutorAgentChannelsConfig(sanitized.channels),
+    };
+  }
+  return sanitized;
+}
+
+export function filterLearningTutorAgentChannelsSchema(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const payload = { ...value };
+  const channels = value.channels;
+  if (!channels || typeof channels !== "object" || Array.isArray(channels)) {
+    return payload;
+  }
+
+  const filteredChannels = {};
+  for (const key of LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST) {
+    if (Object.prototype.hasOwnProperty.call(channels, key)) {
+      filteredChannels[key] = channels[key];
+    }
+  }
+
+  return {
+    ...payload,
+    channels: filteredChannels,
+  };
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function getDotPath(value, path) {
+  let current = value;
+  for (const part of String(path || "").split(".").filter(Boolean)) {
+    if (!isPlainObject(current)) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function setDotPath(value, path, nextValue) {
+  const parts = String(path || "").split(".").filter(Boolean);
+  if (!parts.length || !isPlainObject(value)) return value;
+  let current = value;
+  for (const part of parts.slice(0, -1)) {
+    if (!isPlainObject(current[part])) current[part] = {};
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = nextValue;
+  return value;
+}
+
+function shouldPreserveExistingSecret(nextValue, existingValue) {
+  if (existingValue === undefined || existingValue === null || existingValue === "") return false;
+  return nextValue === undefined || nextValue === null || nextValue === "" || nextValue === "***";
+}
+
+export function mergeLearningTutorAgentChannelSecrets(nextChannels, existingChannels, schemaPayload) {
+  const filtered = filterLearningTutorAgentChannelsConfig(nextChannels);
+  if (!isPlainObject(filtered) || !isPlainObject(existingChannels)) return filtered;
+  const schemaChannels = isPlainObject(schemaPayload?.channels) ? schemaPayload.channels : {};
+  const output = {};
+
+  for (const [key, value] of Object.entries(filtered)) {
+    if (!LEARNING_TUTOR_AGENT_CHANNEL_SET.has(key) || !isPlainObject(value)) {
+      output[key] = value;
+      continue;
+    }
+
+    const merged = structuredClone(value);
+    const existing = isPlainObject(existingChannels[key]) ? existingChannels[key] : {};
+    const schema = isPlainObject(schemaChannels[key]) ? schemaChannels[key] : {};
+    const secretFields = Array.isArray(schema.secret_fields) ? schema.secret_fields : [];
+    for (const secretPath of secretFields) {
+      const nextValue = getDotPath(merged, secretPath);
+      const existingValue = getDotPath(existing, secretPath);
+      if (shouldPreserveExistingSecret(nextValue, existingValue)) {
+        setDotPath(merged, secretPath, existingValue);
+      }
+    }
+    output[key] = merged;
+  }
+
+  return output;
+}
+
 export function sanitizeLearningWsClientMessage(data, isBinary) {
   if (isBinary) return { data, isBinary };
   const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
@@ -342,6 +460,7 @@ export function shouldConsumeLearningIngressQuota(req = {}) {
 
   if (method === "POST" && learningPath === "/notebooks") return false;
   if (method === "POST" && learningPath === "/notebooks/records/manual") return false;
+  if (method === "POST" && learningPath === "/tutor-agents") return false;
 
   if (method === "PUT") {
     const notebookPattern = new RegExp(`^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
@@ -349,6 +468,11 @@ export function shouldConsumeLearningIngressQuota(req = {}) {
       `^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}/records/${LEARNING_NOTEBOOK_ID_SEGMENT}$`
     );
     if (notebookPattern.test(learningPath) || recordPattern.test(learningPath)) return false;
+  }
+
+  if (method === "PATCH") {
+    const tutorAgentPattern = new RegExp(`^/tutor-agents/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
+    if (tutorAgentPattern.test(learningPath)) return false;
   }
 
   return true;

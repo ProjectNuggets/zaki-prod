@@ -77,12 +77,15 @@ import {
   checkLearningContentLength,
   createLearningByteLimitTransform,
   extractLearningWsToken,
+  filterLearningTutorAgentChannelsSchema,
   findLearningRequestSizeError,
   isLearningEnabled,
   mapLearningUpstreamFailure,
+  mergeLearningTutorAgentChannelSecrets,
   resolveCanonicalLearningUserId,
   resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
+  sanitizeLearningTutorAgentPayload,
   sanitizeLearningWsClientMessage,
   shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
@@ -10701,16 +10704,42 @@ registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents", "/api/v1/tut
 registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents/recent", "/api/v1/tutorbot/recent", {
   label: "Learning tutor agents recent request",
 });
-registerLearningJsonProxyRoute(
-  "GET",
-  "/api/learning/tutor-agents/channels/schema",
-  "/api/v1/tutorbot/channels/schema",
-  { label: "Learning tutor agent channel schema request" }
-);
+app.get("/api/learning/tutor-agents/channels/schema", requireLearningContext, async (req, res) => {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const upstream = await fetchLearningPath({
+      ...learningClientOptions(req, "Learning tutor agent channel schema request"),
+      path: "/api/v1/tutorbot/channels/schema",
+      method: "GET",
+    });
+    if (!upstream.ok) {
+      const mapped = mapLearningUpstreamFailure(upstream.status, getOrCreateRequestId(req));
+      if (mapped) {
+        res.status(mapped.status).json(mapped.body);
+        return;
+      }
+    }
+    const payload = await upstream.json().catch(() => null);
+    res.status(upstream.status).json(filterLearningTutorAgentChannelsSchema(payload));
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Tutor agent channel schema proxy error:", {
+      requestId,
+      error: error?.message || "Learning tutor agent channel schema request failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+});
 registerLearningJsonProxyRoute("POST", "/api/learning/tutor-agents", "/api/v1/tutorbot", {
   jsonLimit: "5mb",
   label: "Learning tutor agent create request",
-  sanitizeBody: (body) => sanitizeLearningClientPayload(body),
+  sanitizeBody: sanitizeLearningTutorAgentPayload,
 });
 registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents/souls", "/api/v1/tutorbot/souls", {
   label: "Learning tutor agent souls list request",
@@ -10748,14 +10777,52 @@ registerLearningJsonProxyRoute(
     ),
   { label: "Learning tutor agent detail request" }
 );
-registerLearningJsonProxyRoute(
-  "PATCH",
+const learningTutorAgentUpdateJson = express.json({ limit: "5mb" });
+app.patch(
   "/api/learning/tutor-agents/:agentId",
-  (req) => `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}`,
-  {
-    jsonLimit: "5mb",
-    label: "Learning tutor agent update request",
-    sanitizeBody: (body) => sanitizeLearningClientPayload(body),
+  requireLearningContext,
+  learningTutorAgentUpdateJson,
+  async (req, res) => {
+    if (!assertLearningRouteEnabled(req, res)) return;
+    const agentId = encodeURIComponent(req.params.agentId);
+    const body = sanitizeLearningTutorAgentPayload(req.body);
+
+    if (body?.channels && typeof body.channels === "object" && !Array.isArray(body.channels)) {
+      try {
+        const [detailResponse, schemaResponse] = await Promise.all([
+          fetchLearningPath({
+            ...learningClientOptions(req, "Learning tutor agent secret-preserving detail request"),
+            path: `/api/v1/tutorbot/${agentId}?include_secrets=true`,
+            method: "GET",
+          }),
+          fetchLearningPath({
+            ...learningClientOptions(req, "Learning tutor agent channel schema merge request"),
+            path: "/api/v1/tutorbot/channels/schema",
+            method: "GET",
+          }),
+        ]);
+        const detail = detailResponse.ok ? await detailResponse.json().catch(() => null) : null;
+        const schema = schemaResponse.ok
+          ? filterLearningTutorAgentChannelsSchema(await schemaResponse.json().catch(() => null))
+          : null;
+        body.channels = mergeLearningTutorAgentChannelSecrets(
+          body.channels,
+          detail?.channels,
+          schema
+        );
+      } catch (error) {
+        console.warn("[Learning] Tutor agent channel secret merge skipped:", {
+          requestId: getOrCreateRequestId(req),
+          error: error?.message || "Unable to read existing tutor channel secrets.",
+        });
+      }
+    }
+
+    await proxyLearningRequest(req, res, `/api/v1/tutorbot/${agentId}`, {
+      method: "PATCH",
+      body,
+      label: "Learning tutor agent update request",
+    });
   }
 );
 registerLearningJsonProxyRoute(

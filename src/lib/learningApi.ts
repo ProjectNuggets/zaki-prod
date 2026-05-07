@@ -537,7 +537,9 @@ export function getLearningTutorAgentChannelsSchema() {
 }
 
 export function getLearningTutorAgent(agentId: string) {
-  return learningRequest<unknown>(`/api/learning/tutor-agents/${encodeURIComponent(agentId)}`);
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/${encodeURIComponent(agentId)}`,
+  );
 }
 
 export function getLearningTutorAgentHistory(agentId: string) {
@@ -549,6 +551,13 @@ export function getLearningTutorAgentHistory(agentId: string) {
 export function createLearningTutorAgent(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/tutor-agents", {
     method: "POST",
+    body: payload,
+  });
+}
+
+export function updateLearningTutorAgent(agentId: string, payload: LearningJson) {
+  return learningRequest<unknown>(`/api/learning/tutor-agents/${encodeURIComponent(agentId)}`, {
+    method: "PATCH",
     body: payload,
   });
 }

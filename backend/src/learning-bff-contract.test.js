@@ -10,13 +10,17 @@ import {
   checkLearningContentLength,
   createLearningByteLimitTransform,
   extractLearningWsToken,
+  filterLearningTutorAgentChannelsConfig,
+  filterLearningTutorAgentChannelsSchema,
   findLearningRequestSizeError,
   getLearningBase,
   isLearningEnabled,
   mapLearningUpstreamFailure,
+  mergeLearningTutorAgentChannelSecrets,
   resolveCanonicalLearningUserId,
   resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
+  sanitizeLearningTutorAgentPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
   shouldConsumeLearningIngressQuota,
@@ -261,6 +265,18 @@ describe("learning BFF contract", () => {
     expect(
       shouldConsumeLearningIngressQuota({
         method: "POST",
+        originalUrl: "/api/learning/tutor-agents",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "PATCH",
+        originalUrl: "/api/learning/tutor-agents/bot-1",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
         originalUrl: "/api/learning/notebooks/records/with-summary",
       })
     ).toBe(true);
@@ -276,6 +292,100 @@ describe("learning BFF contract", () => {
         originalUrl: "/api/learning/books",
       })
     ).toBe(false);
+  });
+
+  test("filters tutor agent channels to the ZAKI hosted allowlist", () => {
+    expect(
+      filterLearningTutorAgentChannelsConfig({
+        send_progress: true,
+        send_tool_hints: false,
+        telegram: { enabled: true },
+        discord: { enabled: true },
+        whatsapp: { enabled: true },
+        email: { enabled: true },
+        slack: { enabled: true },
+        feishu: { enabled: true },
+      })
+    ).toEqual({
+      send_progress: true,
+      send_tool_hints: false,
+      telegram: { enabled: true },
+      discord: { enabled: true },
+      whatsapp: { enabled: true },
+      email: { enabled: true },
+    });
+
+    expect(
+      filterLearningTutorAgentChannelsSchema({
+        channels: {
+          slack: { display_name: "Slack" },
+          email: { display_name: "Email" },
+          whatsapp: { display_name: "WhatsApp" },
+          telegram: { display_name: "Telegram" },
+          discord: { display_name: "Discord" },
+          feishu: { display_name: "Feishu" },
+        },
+        global: { json_schema: {} },
+      })
+    ).toEqual({
+      channels: {
+        email: { display_name: "Email" },
+        whatsapp: { display_name: "WhatsApp" },
+        telegram: { display_name: "Telegram" },
+        discord: { display_name: "Discord" },
+      },
+      global: { json_schema: {} },
+    });
+  });
+
+  test("sanitizes tutor agent payloads without allowing unsupported channels or provider routing", () => {
+    expect(
+      sanitizeLearningTutorAgentPayload({
+        bot_id: "bot-1",
+        provider: "client-provider",
+        api_key: "client-key",
+        channels: {
+          telegram: { enabled: true, token: "secret" },
+          slack: { enabled: true, bot_token: "secret" },
+          send_progress: true,
+        },
+      })
+    ).toEqual({
+      bot_id: "bot-1",
+      channels: {
+        telegram: { enabled: true, token: "secret" },
+        send_progress: true,
+      },
+    });
+  });
+
+  test("preserves existing tutor agent channel secrets when clients leave masked or blank values", () => {
+    expect(
+      mergeLearningTutorAgentChannelSecrets(
+        {
+          telegram: { enabled: true, token: "***", allow_from: ["1"] },
+          email: { enabled: true, smtp_password: "", imap_password: "new-imap" },
+          slack: { enabled: true, bot_token: "***" },
+          send_progress: false,
+        },
+        {
+          telegram: { enabled: true, token: "old-telegram", allow_from: ["9"] },
+          email: { smtp_password: "old-smtp", imap_password: "old-imap" },
+          slack: { bot_token: "old-slack" },
+        },
+        {
+          channels: {
+            telegram: { secret_fields: ["token"] },
+            email: { secret_fields: ["smtp_password", "imap_password"] },
+            slack: { secret_fields: ["bot_token"] },
+          },
+        }
+      )
+    ).toEqual({
+      telegram: { enabled: true, token: "old-telegram", allow_from: ["1"] },
+      email: { enabled: true, smtp_password: "old-smtp", imap_password: "new-imap" },
+      send_progress: false,
+    });
   });
 
   test("resolves and enforces learning request byte caps", () => {

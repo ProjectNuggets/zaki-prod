@@ -128,6 +128,7 @@ import {
   updateLearningQuestionEntry,
   updateLearningSkill,
   updateLearningCoWriterDocument,
+  updateLearningTutorAgent,
   updateLearningMemory,
   uploadLearningKnowledge,
   uploadLearningKnowledgeArchive,
@@ -165,6 +166,30 @@ type LearningTab =
   | "workspaces";
 
 type Item = Record<string, unknown>;
+
+type LearningChannelJsonSchema = {
+  type?: string | string[];
+  title?: string;
+  description?: string;
+  default?: unknown;
+  enum?: unknown[];
+  properties?: Record<string, LearningChannelJsonSchema>;
+  items?: LearningChannelJsonSchema;
+  anyOf?: LearningChannelJsonSchema[];
+};
+
+type LearningChannelSchemaEntry = {
+  name: string;
+  display_name: string;
+  default_config: Record<string, unknown>;
+  secret_fields: string[];
+  json_schema: LearningChannelJsonSchema;
+};
+
+type LearningChannelSchemaCatalog = {
+  channels: Record<string, LearningChannelSchemaEntry>;
+  global?: { json_schema?: LearningChannelJsonSchema; secret_fields?: string[] };
+};
 type NotebookCreateDraft = { name: string; description: string };
 type CoWriterCreateDraft = { title?: string; content: string };
 type LearningObjectType =
@@ -314,6 +339,64 @@ function textOf(value: unknown, fallback = "") {
 function notebookSummary(value: unknown, fallback: string) {
   const text = textOf(value, fallback).replace(/\s+/g, " ").trim();
   return (text || fallback).slice(0, 240);
+}
+
+function learningChannelSchemaCatalog(value: unknown): LearningChannelSchemaCatalog {
+  const record = asRecord(value);
+  const rawChannels = asRecord(record.channels);
+  const channels: Record<string, LearningChannelSchemaEntry> = {};
+  for (const [name, rawValue] of Object.entries(rawChannels)) {
+    const entry = asRecord(rawValue);
+    const jsonSchema = asRecord(entry.json_schema) as LearningChannelJsonSchema;
+    channels[name] = {
+      name: textOf(entry.name, name),
+      display_name: textOf(entry.display_name, name),
+      default_config: asRecord(entry.default_config),
+      secret_fields: Array.isArray(entry.secret_fields) ? entry.secret_fields.map(String) : [],
+      json_schema: jsonSchema,
+    };
+  }
+  return { channels, global: asRecord(record.global) as LearningChannelSchemaCatalog["global"] };
+}
+
+function resolveLearningChannelSchemaVariant(schema: LearningChannelJsonSchema): LearningChannelJsonSchema {
+  if (!schema.anyOf?.length) return schema;
+  const first = schema.anyOf.find((variant) => variant.type !== "null") ?? schema.anyOf[0] ?? {};
+  return {
+    ...first,
+    title: schema.title ?? first.title,
+    description: schema.description ?? first.description,
+  };
+}
+
+function isLearningChannelNullable(schema: LearningChannelJsonSchema) {
+  return (
+    (Array.isArray(schema.type) && schema.type.includes("null")) ||
+    Boolean(schema.anyOf?.some((variant) => variant.type === "null"))
+  );
+}
+
+function defaultLearningChannelValue(schema: LearningChannelJsonSchema): unknown {
+  if (schema.default !== undefined) return schema.default;
+  const variant = resolveLearningChannelSchemaVariant(schema);
+  switch (variant.type) {
+    case "boolean":
+      return false;
+    case "integer":
+    case "number":
+      return 0;
+    case "array":
+      return [];
+    case "object":
+      return {};
+    case "string":
+    default:
+      return "";
+  }
+}
+
+function humanizeLearningChannelKey(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function itemTitle(item: Item, fallback: string) {
@@ -5889,6 +5972,347 @@ function QuestionAnswerBox({
   );
 }
 
+function LearningChannelField({
+  fieldKey,
+  schema,
+  value,
+  onChange,
+  secretFields,
+  path,
+}: {
+  fieldKey: string;
+  schema: LearningChannelJsonSchema;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  secretFields: Set<string>;
+  path: string;
+}) {
+  const variant = resolveLearningChannelSchemaVariant(schema);
+  const label = schema.title || variant.title || humanizeLearningChannelKey(fieldKey);
+  const description = schema.description || variant.description;
+  const enumValues = variant.enum ?? schema.enum;
+  const isSecret = secretFields.has(path);
+
+  if (variant.type === "boolean") {
+    return (
+      <label className="flex items-start gap-2 text-[13px] text-zaki-text">
+        <input
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(event) => onChange(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          {label}
+          {description ? <span className="ml-1 text-[11px] text-zaki-muted">- {description}</span> : null}
+        </span>
+      </label>
+    );
+  }
+
+  if (Array.isArray(enumValues) && enumValues.length) {
+    return (
+      <label className="block text-[12px] font-medium text-zaki-muted">
+        {label}
+        <select
+          value={String(value ?? "")}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-1 block h-9 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+        >
+          {enumValues.map((option) => (
+            <option key={String(option)} value={String(option)}>
+              {String(option)}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  if (variant.type === "array" && (variant.items?.type === "string" || !variant.items)) {
+    const lines = Array.isArray(value) ? value.map(String) : [];
+    return (
+      <label className="block text-[12px] font-medium text-zaki-muted">
+        {label}
+        <textarea
+          value={lines.join("\n")}
+          onChange={(event) =>
+            onChange(
+              event.target.value
+                .split("\n")
+                .map((line) => line.trim())
+                .filter(Boolean),
+            )
+          }
+          rows={Math.max(3, Math.min(8, lines.length + 1))}
+          className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 font-mono text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+        />
+        {description ? <span className="mt-1 block text-[11px] font-normal text-zaki-muted">{description}</span> : null}
+      </label>
+    );
+  }
+
+  if (variant.type === "object" && variant.properties) {
+    const record = asRecord(value);
+    return (
+      <fieldset className="space-y-2.5 rounded-zaki-lg border border-zaki-border/70 px-3 py-2.5">
+        <legend className="px-1 text-[12px] font-medium text-zaki-muted">{label}</legend>
+        {description ? <p className="text-[11px] text-zaki-muted">{description}</p> : null}
+        {Object.entries(variant.properties).map(([key, child]) => (
+          <LearningChannelField
+            key={key}
+            fieldKey={key}
+            schema={child}
+            value={record[key] ?? defaultLearningChannelValue(child)}
+            onChange={(next) => onChange({ ...record, [key]: next })}
+            secretFields={secretFields}
+            path={path ? `${path}.${key}` : key}
+          />
+        ))}
+      </fieldset>
+    );
+  }
+
+  if (variant.type === "integer" || variant.type === "number") {
+    return (
+      <label className="block text-[12px] font-medium text-zaki-muted">
+        {label}
+        <input
+          type="number"
+          value={typeof value === "number" ? value : ""}
+          onChange={(event) => {
+            const raw = event.target.value;
+            if (!raw) {
+              onChange(isLearningChannelNullable(schema) ? null : 0);
+              return;
+            }
+            onChange(variant.type === "integer" ? parseInt(raw, 10) : parseFloat(raw));
+          }}
+          className="mt-1 block h-9 w-40 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+        />
+        {description ? <span className="mt-1 block text-[11px] font-normal text-zaki-muted">{description}</span> : null}
+      </label>
+    );
+  }
+
+  const stringValue = value === null || value === undefined ? "" : String(value);
+  return (
+    <label className="block text-[12px] font-medium text-zaki-muted">
+      {label}
+      <input
+        type={isSecret ? "password" : "text"}
+        autoComplete={isSecret ? "new-password" : "off"}
+        spellCheck={!isSecret}
+        value={stringValue}
+        onChange={(event) => {
+          const next = event.target.value;
+          onChange(next === "" && isLearningChannelNullable(schema) ? null : next);
+        }}
+        placeholder={isSecret ? "Leave blank to keep saved secret" : undefined}
+        className={cn(
+          "mt-1 block h-9 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand",
+          isSecret && "font-mono",
+        )}
+      />
+      {description ? <span className="mt-1 block text-[11px] font-normal text-zaki-muted">{description}</span> : null}
+    </label>
+  );
+}
+
+function TutorChannelsPanel({
+  bots,
+  channelsSchema,
+}: {
+  bots: Item[];
+  channelsSchema: unknown;
+}) {
+  const queryClient = useQueryClient();
+  const catalog = useMemo(() => learningChannelSchemaCatalog(channelsSchema), [channelsSchema]);
+  const channelEntries = useMemo(() => Object.entries(catalog.channels), [catalog.channels]);
+  const [selectedBot, setSelectedBot] = useState("");
+  const [activeChannel, setActiveChannel] = useState("");
+  const [channels, setChannels] = useState<Record<string, unknown>>({});
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  useEffect(() => {
+    if (!selectedBot && bots[0]) setSelectedBot(tutorAgentId(bots[0], "agent-1"));
+  }, [bots, selectedBot]);
+
+  useEffect(() => {
+    if (!activeChannel && channelEntries[0]) setActiveChannel(channelEntries[0][0]);
+  }, [activeChannel, channelEntries]);
+
+  useEffect(() => {
+    if (!selectedBot) return;
+    let cancelled = false;
+    setLoadingDetail(true);
+    getLearningTutorAgent(selectedBot)
+      .then((payload) => {
+        if (cancelled) return;
+        const raw = asRecord(asRecord(payload).channels);
+        const next: Record<string, unknown> = {
+          send_progress: raw.send_progress !== false,
+          send_tool_hints: Boolean(raw.send_tool_hints),
+        };
+        for (const [name, entry] of channelEntries) {
+          const rawConfig = asRecord(raw[name]);
+          next[name] = Object.keys(rawConfig).length ? rawConfig : entry.default_config;
+        }
+        setChannels(next);
+      })
+      .catch((error) => toast.error(error.message))
+      .finally(() => {
+        if (!cancelled) setLoadingDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBot, channelEntries]);
+
+  const saveChannels = useMutation({
+    mutationFn: () => {
+      if (!selectedBot) throw new Error("Choose a tutor first.");
+      return updateLearningTutorAgent(selectedBot, { channels });
+    },
+    onSuccess: () => {
+      toast.success("Channels saved");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
+      void queryClient.invalidateQueries({ queryKey: ["learning", "tutor-agent", selectedBot] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  if (!bots.length) {
+    return <EmptyLine label="Create a bot first to configure channels." />;
+  }
+
+  const activeEntry = activeChannel ? catalog.channels[activeChannel] : undefined;
+  const activeValue = activeChannel ? asRecord(channels[activeChannel]) : {};
+  const activeSecretFields = new Set(activeEntry?.secret_fields ?? []);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-[12px] font-medium text-zaki-muted">Bot</label>
+        <select
+          value={selectedBot}
+          onChange={(event) => setSelectedBot(event.target.value)}
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+        >
+          {bots.map((bot, index) => {
+            const id = tutorAgentId(bot, `agent-${index + 1}`);
+            return (
+              <option key={id} value={id}>
+                {itemTitle(bot, id)} ({id})
+              </option>
+            );
+          })}
+        </select>
+        <button
+          type="button"
+          disabled={saveChannels.isPending || loadingDetail}
+          onClick={() => saveChannels.mutate()}
+          className="inline-flex h-9 items-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white disabled:opacity-50"
+        >
+          {saveChannels.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+          Save
+        </button>
+      </div>
+
+      <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+        <h3 className="text-[13px] font-semibold text-zaki-text">Delivery</h3>
+        <div className="mt-3 space-y-2">
+          <label className="flex items-center gap-2 text-[13px] text-zaki-text">
+            <input
+              type="checkbox"
+              checked={channels.send_progress !== false}
+              onChange={(event) => setChannels((current) => ({ ...current, send_progress: event.target.checked }))}
+            />
+            Stream progress text to channels
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-zaki-text">
+            <input
+              type="checkbox"
+              checked={Boolean(channels.send_tool_hints)}
+              onChange={(event) => setChannels((current) => ({ ...current, send_tool_hints: event.target.checked }))}
+            />
+            Stream tool hints to channels
+          </label>
+        </div>
+      </div>
+
+      {loadingDetail || !channelEntries.length ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="size-5 animate-spin text-zaki-muted" />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-[190px_1fr]">
+          <aside className="h-fit rounded-zaki-lg border border-zaki-border bg-zaki-raised p-2">
+            <div className="space-y-1">
+              {channelEntries.map(([name, entry]) => {
+                const enabled = asRecord(channels[name]).enabled === true;
+                const active = activeChannel === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setActiveChannel(name)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-zaki-md px-2.5 py-2 text-left text-[13px] transition-colors",
+                      active ? "bg-zaki-hover font-medium text-zaki-text" : "text-zaki-muted hover:text-zaki-text",
+                    )}
+                  >
+                    <span className="truncate">{entry.display_name}</span>
+                    {enabled ? <span className="ml-2 size-1.5 shrink-0 rounded-full bg-emerald-500" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <section className="space-y-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+            {activeEntry ? (
+              <>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-zaki-text">{activeEntry.display_name}</h3>
+                  <code className="text-[11px] text-zaki-muted">{activeEntry.name}</code>
+                </div>
+                {activeEntry.json_schema.description ? (
+                  <p className="text-xs leading-relaxed text-zaki-muted">
+                    {activeEntry.json_schema.description}
+                  </p>
+                ) : null}
+                {Object.entries(activeEntry.json_schema.properties ?? {}).map(([key, schema]) => (
+                  <LearningChannelField
+                    key={key}
+                    fieldKey={key}
+                    schema={schema}
+                    value={activeValue[key] ?? defaultLearningChannelValue(schema)}
+                    onChange={(next) =>
+                      setChannels((current) => ({
+                        ...current,
+                        [activeEntry.name]: {
+                          ...asRecord(current[activeEntry.name]),
+                          [key]: next,
+                        },
+                      }))
+                    }
+                    secretFields={activeSecretFields}
+                    path={key}
+                  />
+                ))}
+              </>
+            ) : (
+              <EmptyLine label="No channel schemas returned yet." />
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentsPanel({
   agentId,
   setAgentId,
@@ -5925,7 +6349,6 @@ function AgentsPanel({
   const [activeTab, setActiveTab] = useState<"bots" | "profiles" | "channels" | "souls">("bots");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("");
-  const channelEntries = Object.entries(asRecord(asRecord(channelsSchema).channels));
   const tabs = [
     { key: "bots" as const, label: "Bots", icon: Bot },
     { key: "profiles" as const, label: "Profiles", icon: FileText },
@@ -6170,28 +6593,7 @@ function AgentsPanel({
             )}
           </div>
         ) : activeTab === "channels" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {channelEntries.length ? (
-              channelEntries.map(([name, value]) => {
-                const channel = asRecord(value);
-                return (
-                  <div key={name} className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
-                    <div className="flex items-center gap-2">
-                      <Settings className="size-4 text-zaki-muted" />
-                      <h2 className="text-sm font-semibold text-zaki-text">
-                        {textOf(channel.display_name, name)}
-                      </h2>
-                    </div>
-                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-zaki-muted">
-                      {textOf(asRecord(channel.json_schema).description) || "Channel configuration schema available."}
-                    </p>
-                  </div>
-                );
-              })
-            ) : (
-              <EmptyLine label="No channel schemas returned yet." />
-            )}
-          </div>
+          <TutorChannelsPanel bots={items} channelsSchema={channelsSchema} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {souls.length ? (
