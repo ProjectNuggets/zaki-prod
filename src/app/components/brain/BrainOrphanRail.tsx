@@ -20,7 +20,10 @@ export function BrainOrphanRail({ userId, onPick }: Props) {
 
   return (
     <section
-      className="flex w-72 shrink-0 flex-col gap-2 overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-raised/60 p-3 text-sm"
+      // V1.11 hotfix (2026-05-07) — solid #181818 bg matching the
+      // BrainFilterPanel update; overlay panels need to be readable
+      // when slid over the dark canvas.
+      className="flex w-72 shrink-0 flex-col gap-2 overflow-hidden rounded-zaki-lg border border-white/10 bg-[#181818] p-3 text-sm"
       data-testid="brain-orphan-rail"
     >
       <header className="flex items-center justify-between">
