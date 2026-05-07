@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 28
-  completed_plans: 16
-  percent: 57
+  completed_plans: 18
+  percent: 64
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 03 Capability Parity Completion
-Plan: 03-04 Notebooks and save/export flows
-Status: 03-03 complete; ready to execute 03-04
-Last activity: 2026-05-07 - completed quiz/review/question-bank parity with upstream-shaped category manager, filters, bookmark/delete/remove actions, direct Review route rendering, Quiz Generation route browser smoke, frontend tests, typecheck, and diff hygiene passing.
+Plan: 03-06 Source upload, image upload, browser folder upload, archive upload, and connector-ready seams
+Status: 03-05 complete; ready to execute 03-06
+Last activity: 2026-05-07 - completed advanced capability parity for Deep Solve, Deep Research, Visualize, and Math Animator with hosted-safe result rendering, artifact display, Markdown export preservation, E2E payload/result coverage, typecheck, and notebook export tests passing.
 
 ## Locked Decisions
 
@@ -70,7 +70,9 @@ Last activity: 2026-05-07 - completed quiz/review/question-bank parity with upst
 - 03-01: Tutor chat and session parity.
 - 03-02: Book/lesson reader and block action parity.
 - 03-03: Quiz, review, question bank, weak-area loop parity.
+- 03-04: Notebooks and save/export flows.
+- 03-05: Deep research, deep solve, visualization, and math animation parity.
 
 ## Next Command
 
-Execute Phase 03 Plan 03-04: notebooks and save/export flows.
+Execute Phase 03 Plan 03-06: source upload, image upload, browser folder upload, archive upload, and connector-ready seams.
