@@ -66,6 +66,7 @@ export async function fetchLearningProxyPath({
   requestId,
   path,
   req,
+  body = req,
   method = req?.method || "GET",
   fetchWithTimeout,
   timeoutMs,
@@ -88,7 +89,7 @@ export async function fetchLearningProxyPath({
     }),
   };
   if (!["GET", "HEAD"].includes(String(method).toUpperCase())) {
-    options.body = req;
+    options.body = body;
     options.duplex = "half";
   }
   return fetchWithTimeout(`${resolvedBase}${normalizedPath}`, options, timeoutMs, label);

@@ -8,20 +8,23 @@ describe("buildLearningBookCreatePayload", () => {
         topic: "  teach attention  ",
         language: "en",
         selectedKnowledge: ["kb-a", ""],
-        selectedSessions: ["session-1", "session-2"],
-        selectedNotebooks: ["notebook-1"],
+        selectedSessions: [
+          { session_id: "session-1", message_ids: [1, 2, 2] },
+          { session_id: "session-2", message_ids: [] },
+        ],
+        selectedNotebooks: [{ notebook_id: "notebook-1", record_ids: ["record-1", "record-1"] }],
         selectedQuestions: [101, "102", "bad"],
       }),
     ).toEqual({
       user_intent: "teach attention",
       language: "en",
       knowledge_bases: ["kb-a"],
-      notebook_refs: [{ notebook_id: "notebook-1", record_ids: [] }],
+      notebook_refs: [{ notebook_id: "notebook-1", record_ids: ["record-1"] }],
       question_categories: [],
       question_entries: [101, 102],
       chat_session_id: "session-1",
       chat_selections: [
-        { session_id: "session-1", message_ids: [] },
+        { session_id: "session-1", message_ids: [1, 2] },
         { session_id: "session-2", message_ids: [] },
       ],
     });

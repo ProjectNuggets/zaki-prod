@@ -156,6 +156,42 @@ describe("learning client", () => {
     expect(options.headers["x-zaki-user-id"]).toBeUndefined();
   });
 
+  test("proxies raw requests with an explicit limited body stream", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    const limitedBody = { pipe() {} };
+    const req = {
+      method: "POST",
+      headers: {
+        "content-type": "multipart/form-data; boundary=abc",
+      },
+      pipe() {},
+    };
+
+    await fetchLearningProxyPath({
+      baseUrl: "http://learning:8001",
+      internalToken: "secret",
+      userId: "10",
+      requestId: "req-limited",
+      path: "/api/v1/knowledge/main/upload",
+      req,
+      body: limitedBody,
+      fetchWithTimeout,
+      timeoutMs: 30000,
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://learning:8001/api/v1/knowledge/main/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: limitedBody,
+        duplex: "half",
+      }),
+      30000,
+      "Learning upstream proxy request"
+    );
+  });
+
+
   test("throws when required config is missing", async () => {
     const fetchWithTimeout = jest.fn();
     await expect(

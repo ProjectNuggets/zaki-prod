@@ -52,6 +52,15 @@ const LEARNING_WS_ALLOWED_ROOT_FIELDS = new Set([
   "type",
 ]);
 const DEFAULT_LEARNING_MAX_REQUEST_BYTES = 100 * 1024 * 1024;
+const LEARNING_WS_QUOTA_FREE_TYPES = new Set([
+  "cancel",
+  "cancel_turn",
+  "heartbeat",
+  "ping",
+  "pong",
+  "subscribe",
+  "unsubscribe",
+]);
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -267,6 +276,27 @@ export function sanitizeLearningWsClientMessage(data, isBinary) {
     };
   } catch {
     return { data, isBinary };
+  }
+}
+
+export function shouldConsumeLearningWsQuota(data, isBinary) {
+  if (isBinary) return true;
+  const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
+  if (!text.trim()) return false;
+  try {
+    const payload = JSON.parse(text);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+    const type = String(payload.type || "").trim().toLowerCase();
+    if (type && LEARNING_WS_QUOTA_FREE_TYPES.has(type)) return false;
+    if (type === "start_turn") return true;
+    return Boolean(
+      payload.content ||
+      payload.message ||
+      payload.prompt ||
+      payload.query
+    );
+  } catch {
+    return text.trim().length > 0;
   }
 }
 

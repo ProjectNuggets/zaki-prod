@@ -75,6 +75,10 @@ export function listLearningSessions(limit = 100, offset = 0) {
   return learningRequest<unknown>(`/api/learning/sessions?${params.toString()}`);
 }
 
+export function getLearningSession(sessionId: string) {
+  return learningRequest<unknown>(`/api/learning/sessions/${encodeURIComponent(sessionId)}`);
+}
+
 export function listLearningKnowledge() {
   return learningRequest<unknown>("/api/learning/knowledge/list");
 }

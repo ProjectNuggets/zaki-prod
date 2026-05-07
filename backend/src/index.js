@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
@@ -82,6 +82,7 @@ import {
   resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
   sanitizeLearningWsClientMessage,
+  shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 import {
   fetchLearningPath,
@@ -8645,6 +8646,47 @@ async function requireLearningQuotaForIngress(req, res, next) {
   });
 }
 
+function sanitizeLearningJsonBody(body) {
+  return sanitizeLearningClientPayload(body);
+}
+
+function createLearningRequestSizeError(maxBytes, contentLength) {
+  const error = new Error("Learning request is too large.");
+  error.code = "learning_request_too_large";
+  error.maxBytes = maxBytes;
+  error.contentLength = contentLength;
+  return error;
+}
+
+function findLearningRequestSizeError(error) {
+  let current = error;
+  const seen = new Set();
+  while (current && typeof current === "object" && !seen.has(current)) {
+    if (current.code === "learning_request_too_large") return current;
+    seen.add(current);
+    current = current.cause;
+  }
+  return null;
+}
+
+function createLearningByteLimitedStream(req, maxBytes) {
+  let total = 0;
+  const limiter = new Transform({
+    transform(chunk, _encoding, callback) {
+      total += Buffer.byteLength(chunk);
+      if (total > maxBytes) {
+        const error = createLearningRequestSizeError(maxBytes, total);
+        req.destroy(error);
+        callback(error);
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+  req.pipe(limiter);
+  return limiter;
+}
+
 function hasConfiguredLearningEngine() {
   return Boolean(
     ZAKI_LEARNING_ENABLED &&
@@ -8919,6 +8961,7 @@ async function proxyLearningRawRequest(req, res, targetPath, {
   label = "Learning upstream raw request",
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
+  const limitedBody = createLearningByteLimitedStream(req, ZAKI_LEARNING_MAX_REQUEST_BYTES);
   try {
     const upstream = await fetchLearningProxyPath({
       baseUrl: LEARNING_ENGINE_BASE_URL,
@@ -8927,6 +8970,7 @@ async function proxyLearningRawRequest(req, res, targetPath, {
       requestId: getOrCreateRequestId(req),
       path: targetPath,
       req,
+      body: limitedBody,
       method,
       fetchWithTimeout,
       timeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
@@ -8935,6 +8979,17 @@ async function proxyLearningRawRequest(req, res, targetPath, {
     await pipeLearningResponse(req, res, upstream);
   } catch (error) {
     const requestId = getOrCreateRequestId(req);
+    const sizeError = findLearningRequestSizeError(error);
+    if (sizeError) {
+      res.status(413).json({
+        code: "request_too_large",
+        error: "Learning request is too large.",
+        maxBytes: sizeError.maxBytes || ZAKI_LEARNING_MAX_REQUEST_BYTES,
+        contentLength: sizeError.contentLength || null,
+        requestId,
+      });
+      return;
+    }
     console.error("[Learning] Raw upstream proxy error:", {
       requestId,
       error: error?.message || "Learning raw request failed.",
@@ -9955,7 +10010,7 @@ app.patch(
     const targetPath = `/api/v1/sessions/${encodeURIComponent(req.params.sessionId)}`;
     await proxyLearningRequest(req, res, targetPath, {
       method: "PATCH",
-      body: req.body,
+      body: sanitizeLearningJsonBody(req.body),
       label: "Learning session update request",
     });
   }
@@ -9977,7 +10032,7 @@ app.post(
     const targetPath = `/api/v1/sessions/${encodeURIComponent(req.params.sessionId)}/quiz-results`;
     await proxyLearningRequest(req, res, targetPath, {
       method: "POST",
-      body: req.body,
+      body: sanitizeLearningJsonBody(req.body),
       label: "Learning quiz results request",
     });
   }
@@ -10023,7 +10078,7 @@ function learningPathWithForwardedQuery(req, path, blockedKeys = []) {
 function registerLearningJsonProxyRoute(method, routePath, buildTargetPath, {
   jsonLimit = "5mb",
   label = "Learning upstream request",
-  sanitizeBody = (body) => body,
+  sanitizeBody = sanitizeLearningJsonBody,
   upstreamMethod = method,
 } = {}) {
   const verb = String(method || "GET").toLowerCase();
@@ -10057,7 +10112,7 @@ app.get("/api/learning/books", requireLearningContext, async (req, res) => {
 app.post("/api/learning/books", requireLearningContext, bookJson5mb, async (req, res) => {
   await proxyLearningRequest(req, res, "/api/v1/book/books", {
     method: "POST",
-    body: req.body,
+    body: sanitizeLearningJsonBody(req.body),
     label: "Learning book create request",
   });
 });
@@ -10069,7 +10124,7 @@ app.post(
   async (req, res) => {
     await proxyLearningRequest(req, res, "/api/v1/book/books/confirm-proposal", {
       method: "POST",
-      body: req.body,
+      body: sanitizeLearningJsonBody(req.body),
       label: "Learning book proposal confirm request",
     });
   }
@@ -10082,7 +10137,7 @@ app.post(
   async (req, res) => {
     await proxyLearningRequest(req, res, "/api/v1/book/books/confirm-spine", {
       method: "POST",
-      body: req.body,
+      body: sanitizeLearningJsonBody(req.body),
       label: "Learning book spine confirm request",
     });
   }
@@ -10104,7 +10159,7 @@ for (const action of [
   app.post(`/api/learning/books/${action}`, requireLearningContext, bookJson5mb, async (req, res) => {
     await proxyLearningRequest(req, res, `/api/v1/book/books/${action}`, {
       method: "POST",
-      body: req.body,
+      body: sanitizeLearningJsonBody(req.body),
       label: `Learning book ${action} request`,
     });
   });
@@ -10316,7 +10371,7 @@ app.post(
       `/api/v1/knowledge/${encodeURIComponent(req.params.kbName)}/reindex`,
       {
         method: "POST",
-        body: req.body,
+        body: sanitizeLearningJsonBody(req.body),
         label: "Learning knowledge reindex request",
       }
     );
@@ -11190,6 +11245,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   }
 
   const requestId = getOrCreateRequestId(req);
+  let outgoingChain = Promise.resolve();
   const upstreamSocket = new UpstreamWebSocket(upstreamUrl, {
     headers: buildLearningForwardHeaders({
       internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
@@ -11256,10 +11312,30 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   });
 
   clientSocket.on("message", (data, isBinary) => {
-    if (upstreamSocket.readyState === upstreamSocket.OPEN) {
-      const sanitized = sanitizeLearningWsClientMessage(data, isBinary);
-      upstreamSocket.send(sanitized.data, { binary: sanitized.isBinary });
-    }
+    const sanitized = sanitizeLearningWsClientMessage(data, isBinary);
+    outgoingChain = outgoingChain.then(async () => {
+      if (upstreamSocket.readyState !== upstreamSocket.OPEN) return;
+      if (shouldConsumeLearningWsQuota(sanitized.data, sanitized.isBinary)) {
+        const quota = await consumePromptQuotaForUser(context.authResult?.zakiUser, {
+          surface: LEARNING_SURFACE,
+        });
+        if (!quota?.allowed) {
+          closeClient(1008, "Learning quota exceeded.");
+          closeUpstream(1008, "learning_quota_exceeded");
+          return;
+        }
+      }
+      if (upstreamSocket.readyState === upstreamSocket.OPEN) {
+        upstreamSocket.send(sanitized.data, { binary: sanitized.isBinary });
+      }
+    }).catch((error) => {
+      console.error("[LearningProxy] Client websocket forward error:", {
+        requestId,
+        error: error?.message || "client websocket forward failed",
+      });
+      closeClient(1011, "Learning websocket proxy failed.");
+      closeUpstream(1011, "client_forward_error");
+    });
   });
 
   clientSocket.on("error", (error) => {
@@ -11297,13 +11373,6 @@ server.on("upgrade", (req, socket, head) => {
       .then(async (context) => {
         if (context.error) {
           writeWebSocketHttpError(socket, 401, "Unauthorized");
-          return;
-        }
-        const quota = await consumePromptQuotaForUser(context.authResult?.zakiUser, {
-          surface: LEARNING_SURFACE,
-        });
-        if (!quota?.allowed) {
-          writeWebSocketHttpError(socket, 429, "Too Many Requests");
           return;
         }
         context.targetPath = learningWsTargetPath;

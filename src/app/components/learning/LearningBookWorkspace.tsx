@@ -7,6 +7,8 @@ import {
   ArrowDown,
   ArrowUp,
   BookOpen,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Layers,
   Loader2,
@@ -47,6 +49,8 @@ import {
   deleteLearningBookBlock,
   getLearningBook,
   getLearningBookHealth,
+  getLearningNotebook,
+  getLearningSession,
   insertLearningBookBlock,
   learningKeys,
   moveLearningBookBlock,
@@ -117,6 +121,18 @@ type LearningBookBlock = {
   metadata?: Item;
   error?: string;
 };
+
+type ParentSelection<TChild extends string | number> =
+  | { mode: "all" }
+  | { mode: "subset"; ids: TChild[] };
+
+type BookSourceChild<TChild extends string | number> = {
+  id: TChild;
+  title: string;
+  subtitle?: string;
+};
+
+type BookSourceSelection<TChild extends string | number> = Map<string, ParentSelection<TChild>>;
 
 type BookChatMessage = {
   id: string;
@@ -370,6 +386,68 @@ function numericSourceId(item: Item, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function recordId(item: Item, fallback: string) {
+  return textOf(item.id) || textOf(item.record_id) || fallback;
+}
+
+function messageId(item: Item, fallback: number) {
+  const parsed = Number(item.id ?? item.message_id ?? item.index ?? fallback);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function extractNotebookRecordChildren(payload: unknown): BookSourceChild<string>[] {
+  const root = asRecord(payload);
+  const notebook = asRecord(root.notebook ?? root);
+  const records = [
+    ...arrayOfRecords(notebook.records),
+    ...arrayOfRecords(notebook.items),
+    ...arrayOfRecords(root.records),
+    ...arrayOfRecords(root.items),
+  ];
+  return records.map((record, index) => ({
+    id: recordId(record, `record-${index}`),
+    title: sourceLabel(record, `Record ${index + 1}`),
+    subtitle: textOf(record.summary) || textOf(record.content),
+  }));
+}
+
+function extractSessionMessageChildren(payload: unknown): BookSourceChild<number>[] {
+  const root = asRecord(payload);
+  const messages = [
+    ...arrayOfRecords(root.messages),
+    ...arrayOfRecords(root.items),
+    ...arrayOfRecords(root.history),
+    ...arrayOfRecords(asRecord(root.session).messages),
+  ];
+  return messages.map((message, index) => ({
+    id: messageId(message, index),
+    title: textOf(message.role, "message"),
+    subtitle: textOf(message.content) || textOf(message.message),
+  }));
+}
+
+function selectionCount<TChild extends string | number>(selection: BookSourceSelection<TChild>) {
+  let count = 0;
+  selection.forEach((value) => {
+    count += value.mode === "all" ? 1 : value.ids.length;
+  });
+  return count;
+}
+
+function selectionToNotebookRefs(selection: BookSourceSelection<string>) {
+  return Array.from(selection.entries()).map(([notebook_id, value]) => ({
+    notebook_id,
+    record_ids: value.mode === "all" ? [] : value.ids,
+  }));
+}
+
+function selectionToChatSelections(selection: BookSourceSelection<number>) {
+  return Array.from(selection.entries()).map(([session_id, value]) => ({
+    session_id,
+    message_ids: value.mode === "all" ? [] : value.ids,
+  }));
+}
+
 function toggleStringSelection(
   values: string[],
   value: string,
@@ -414,8 +492,8 @@ export function LearningBookWorkspace({
   const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
   const [bookLanguage, setBookLanguage] = useState("en");
   const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([]);
-  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
-  const [selectedNotebooks, setSelectedNotebooks] = useState<string[]>([]);
+  const [selectedSessions, setSelectedSessions] = useState<BookSourceSelection<number>>(() => new Map());
+  const [selectedNotebooks, setSelectedNotebooks] = useState<BookSourceSelection<string>>(() => new Map());
   const [selectedQuestions, setSelectedQuestions] = useState<Array<string | number>>([]);
   const progressRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -534,8 +612,8 @@ export function LearningBookWorkspace({
         topic,
         language: bookLanguage,
         selectedKnowledge,
-        selectedSessions,
-        selectedNotebooks,
+        selectedSessions: selectionToChatSelections(selectedSessions),
+        selectedNotebooks: selectionToNotebookRefs(selectedNotebooks),
         selectedQuestions,
       });
       const response = await createBook.mutateAsync(requestPayload);
@@ -851,10 +929,10 @@ function BookLibraryView({
   questionItems: Item[];
   selectedKnowledge: string[];
   setSelectedKnowledge: (values: string[]) => void;
-  selectedSessions: string[];
-  setSelectedSessions: (values: string[]) => void;
-  selectedNotebooks: string[];
-  setSelectedNotebooks: (values: string[]) => void;
+  selectedSessions: BookSourceSelection<number>;
+  setSelectedSessions: (values: BookSourceSelection<number>) => void;
+  selectedNotebooks: BookSourceSelection<string>;
+  setSelectedNotebooks: (values: BookSourceSelection<string>) => void;
   selectedQuestions: Array<string | number>;
   setSelectedQuestions: (values: Array<string | number>) => void;
   language: string;
@@ -871,8 +949,8 @@ function BookLibraryView({
   };
   const selectedSourceCount =
     selectedKnowledge.length +
-    selectedSessions.length +
-    selectedNotebooks.length +
+    selectionCount(selectedSessions) +
+    selectionCount(selectedNotebooks) +
     selectedQuestions.length;
 
   return (
@@ -955,19 +1033,21 @@ function BookLibraryView({
                 getId={(item, index) => textOf(item.name) || itemId(item, `kb-${index}`)}
                 onToggle={(id) => toggleStringSelection(selectedKnowledge, id, setSelectedKnowledge)}
               />
-              <BookSourceGroup
+              <BookTreeSourceGroup
                 label="Chats"
                 items={sessionItems}
                 selected={selectedSessions}
                 getId={(item, index) => itemId(item, `session-${index}`)}
-                onToggle={(id) => toggleStringSelection(selectedSessions, id, setSelectedSessions)}
+                loadChildren={async (id) => extractSessionMessageChildren(await getLearningSession(id))}
+                onChange={setSelectedSessions}
               />
-              <BookSourceGroup
+              <BookTreeSourceGroup
                 label="Notebooks"
                 items={notebookItems}
                 selected={selectedNotebooks}
                 getId={(item, index) => itemId(item, `notebook-${index}`)}
-                onToggle={(id) => toggleStringSelection(selectedNotebooks, id, setSelectedNotebooks)}
+                loadChildren={async (id) => extractNotebookRecordChildren(await getLearningNotebook(id))}
+                onChange={setSelectedNotebooks}
               />
               <BookSourceGroup
                 label="Questions"
@@ -1086,6 +1166,192 @@ function BookSourceGroup<TId extends string | number>({
                   {itemLabel}
                 </span>
               </label>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-zaki-sm border border-dashed border-zaki-border px-2 py-3 text-xs text-zaki-muted">
+          No items.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BookTreeSourceGroup<TChild extends string | number>({
+  label,
+  items,
+  selected,
+  getId,
+  loadChildren,
+  onChange,
+}: {
+  label: string;
+  items: Item[];
+  selected: BookSourceSelection<TChild>;
+  getId: (item: Item, index: number) => string;
+  loadChildren: (id: string) => Promise<BookSourceChild<TChild>[]>;
+  onChange: (selection: BookSourceSelection<TChild>) => void;
+}) {
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [childrenById, setChildrenById] = useState<Record<string, BookSourceChild<TChild>[]>>({});
+  const [loadingById, setLoadingById] = useState<Record<string, boolean>>({});
+  const needle = sourceQuery.trim().toLowerCase();
+  const sourceEntries = items.map((item, index) => ({
+    id: getId(item, index),
+    label: sourceLabel(item, `${label} ${index + 1}`),
+  }));
+  const visibleItems = needle
+    ? sourceEntries.filter((entry) =>
+        `${entry.label} ${String(entry.id)}`.toLowerCase().includes(needle),
+      )
+    : sourceEntries;
+  const selectedCount = selectionCount(selected);
+
+  const ensureChildren = async (id: string) => {
+    if (!id || childrenById[id] !== undefined || loadingById[id]) return;
+    setLoadingById((current) => ({ ...current, [id]: true }));
+    try {
+      const children = await loadChildren(id);
+      setChildrenById((current) => ({ ...current, [id]: children }));
+    } catch {
+      setChildrenById((current) => ({ ...current, [id]: [] }));
+    } finally {
+      setLoadingById((current) => ({ ...current, [id]: false }));
+    }
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else {
+        next.add(id);
+        void ensureChildren(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleParent = (id: string) => {
+    const next = new Map(selected);
+    if (next.has(id)) next.delete(id);
+    else next.set(id, { mode: "all" });
+    onChange(next);
+  };
+
+  const toggleChild = (parentId: string, childId: TChild) => {
+    const children = childrenById[parentId] ?? [];
+    const knownIds = children.map((child) => child.id);
+    const current = selected.get(parentId);
+    const ids =
+      current?.mode === "all"
+        ? knownIds.filter((id) => id !== childId)
+        : current?.mode === "subset"
+          ? current.ids.includes(childId)
+            ? current.ids.filter((id) => id !== childId)
+            : [...current.ids, childId]
+          : [childId];
+    const next = new Map(selected);
+    if (ids.length) next.set(parentId, { mode: "subset", ids });
+    else next.delete(parentId);
+    onChange(next);
+  };
+
+  return (
+    <div className="min-h-36 rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-normal text-zaki-muted">
+          {label}
+        </div>
+        {selectedCount ? (
+          <span className="rounded-full bg-zaki-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-zaki-brand">
+            {selectedCount}
+          </span>
+        ) : null}
+      </div>
+      {items.length > 6 ? (
+        <input
+          value={sourceQuery}
+          onChange={(event) => setSourceQuery(event.target.value)}
+          placeholder={`Search ${label.toLowerCase()}`}
+          className="mb-2 h-8 w-full rounded-zaki-sm border border-zaki-border bg-zaki-raised px-2 text-xs text-zaki-text outline-none focus:border-zaki-brand"
+        />
+      ) : null}
+      {visibleItems.length ? (
+        <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+          {visibleItems.map(({ id, label: itemLabel }) => {
+            const value = selected.get(id);
+            const children = childrenById[id] ?? [];
+            const isExpanded = expanded.has(id);
+            const indeterminate = value?.mode === "subset";
+            return (
+              <div key={id} className="rounded-zaki-sm hover:bg-zaki-hover">
+                <div className="flex items-start gap-1 px-1.5 py-1 text-xs text-zaki-text">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(id)}
+                    className="mt-0.5 flex size-4 shrink-0 items-center justify-center text-zaki-muted hover:text-zaki-text"
+                    aria-label={isExpanded ? `Collapse ${itemLabel}` : `Expand ${itemLabel}`}
+                  >
+                    {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                  </button>
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(value)}
+                      ref={(node) => {
+                        if (node) node.indeterminate = Boolean(indeterminate);
+                      }}
+                      onChange={() => toggleParent(id)}
+                      className="mt-0.5 size-3.5 rounded border-zaki-border accent-zaki-brand"
+                    />
+                    <span className="line-clamp-2 min-w-0">{itemLabel}</span>
+                  </label>
+                </div>
+                {isExpanded ? (
+                  <div className="ml-5 border-l border-zaki-border pl-2">
+                    {loadingById[id] ? (
+                      <div className="flex items-center gap-2 py-2 text-[11px] text-zaki-muted">
+                        <Loader2 className="size-3 animate-spin" />
+                        Loading...
+                      </div>
+                    ) : children.length ? (
+                      <div className="space-y-0.5 pb-1">
+                        {children.map((child) => {
+                          const checked =
+                            value?.mode === "all" ||
+                            (value?.mode === "subset" && value.ids.includes(child.id));
+                          return (
+                            <label
+                              key={String(child.id)}
+                              className="flex cursor-pointer items-start gap-2 rounded-zaki-sm px-1.5 py-1 text-[11px] text-zaki-text hover:bg-zaki-hover"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleChild(id, child.id)}
+                                className="mt-0.5 size-3 rounded border-zaki-border accent-zaki-brand"
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate">{child.title}</span>
+                                {child.subtitle ? (
+                                  <span className="block truncate text-[10px] text-zaki-muted">
+                                    {child.subtitle}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="py-2 text-[11px] text-zaki-muted">No child items.</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>

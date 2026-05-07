@@ -14,6 +14,7 @@ import {
   sanitizeLearningClientPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
+  shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 
 describe("learning BFF contract", () => {
@@ -177,6 +178,15 @@ describe("learning BFF contract", () => {
       data: binary,
       isBinary: true,
     });
+  });
+
+  test("identifies websocket messages that should consume learning quota", () => {
+    expect(shouldConsumeLearningWsQuota(JSON.stringify({ type: "start_turn", content: "teach" }), false)).toBe(true);
+    expect(shouldConsumeLearningWsQuota(JSON.stringify({ content: "hello", chat_id: "web" }), false)).toBe(true);
+    expect(shouldConsumeLearningWsQuota(JSON.stringify({ type: "cancel_turn", turn_id: "t1" }), false)).toBe(false);
+    expect(shouldConsumeLearningWsQuota(JSON.stringify({ type: "subscribe", book_id: "b1" }), false)).toBe(false);
+    expect(shouldConsumeLearningWsQuota(Buffer.from("raw prompt"), false)).toBe(true);
+    expect(shouldConsumeLearningWsQuota(Buffer.from("raw"), true)).toBe(true);
   });
 
   test("resolves and enforces learning request byte caps", () => {

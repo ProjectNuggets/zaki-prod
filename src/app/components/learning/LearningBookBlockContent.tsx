@@ -608,17 +608,32 @@ function FigureBlock({ block }: { block: LearningBookContentBlock }) {
   return <CodeBlock block={{ ...block, payload: { ...block.payload, code: content, language } }} />;
 }
 
+function buildSafeInteractiveSrcDoc(content: string) {
+  const csp =
+    "default-src 'none'; img-src data: blob:; media-src data: blob:; style-src 'unsafe-inline'; font-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+  const sanitized = content
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/javascript:/gi, "");
+  if (/<head\b[^>]*>/i.test(sanitized)) {
+    return sanitized.replace(/<head\b([^>]*)>/i, `<head$1>${meta}`);
+  }
+  return `<!doctype html><html><head>${meta}</head><body>${sanitized}</body></html>`;
+}
+
 function InteractiveBlock({ block }: { block: LearningBookContentBlock }) {
   const code = asRecord(block.payload?.code);
   const content = textOf(code.content) || textOf(block.payload?.html);
   const description = textOf(block.payload?.description);
+  const safeContent = useMemo(() => buildSafeInteractiveSrcDoc(content), [content]);
   if (!content.trim()) return <FallbackBlock block={block} />;
   return (
     <figure className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
       <iframe
         title={block.title || "Interactive learning block"}
-        sandbox="allow-scripts"
-        srcDoc={content}
+        sandbox=""
+        srcDoc={safeContent}
         className="h-[420px] w-full rounded-zaki-md border border-zaki-border bg-white"
       />
       {description ? <figcaption className="mt-3 text-xs text-zaki-muted">{description}</figcaption> : null}
