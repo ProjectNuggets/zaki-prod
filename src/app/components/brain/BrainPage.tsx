@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { Boxes, CircleDot, SlidersHorizontal, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
@@ -15,6 +16,17 @@ import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
 
 type BrainTab = "timeline" | "graph";
+
+// V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
+// rendered three always-visible columns (filter panel, canvas, side
+// rails), eating ~576px of horizontal chrome before the canvas got any
+// room. Obsidian's actual Graph View pattern is a full-bleed canvas
+// with chrome that surfaces on demand: a small icon button cluster
+// in the top-right toggles overlay panels for filters / clusters /
+// orphans. Only one panel at a time; click the same icon to close.
+// This `activePanel` state is the single-source-of-truth for that
+// floating-overlay shape.
+type ActivePanel = "filters" | "clusters" | "orphans" | null;
 
 // Debounce search input -> server-side ?search= filter to avoid hammering the
 // backend on every keystroke.
@@ -41,6 +53,9 @@ export function BrainPage() {
   const [centerKey, setCenterKey] = useState<string | null>(null);
   const [highlightKeys, setHighlightKeys] = useState<string[]>([]);
   const [selectedCommunityId, setSelectedCommunityId] = useState<number | null>(null);
+  // V1.11 — floating-overlay panel toggle (Obsidian Graph View pattern).
+  // null = canvas-only (default); set by clicking a corner icon.
+  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
 
   // Debounce search input into filters.search
   useEffect(() => {
@@ -236,40 +251,86 @@ export function BrainPage() {
             />
           </div>
 
-          {/* Main row: filter panel + graph + right rails */}
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <BrainFilterPanel filters={filters} onChange={setFilters} />
+          {/*
+            V1.11 (2026-05-07) — Full-bleed canvas with floating overlay
+            panels. Obsidian Graph View pattern: the canvas dominates the
+            viewport; chrome surfaces on demand via corner icon buttons.
+            Only one overlay open at a time (single-source `activePanel`
+            state), click the same icon to close. The panels themselves
+            (BrainFilterPanel, BrainCommunityLegend, BrainOrphanRail)
+            are unchanged — they're just positioned absolutely inside the
+            canvas instead of taking always-visible columns.
 
-            {/*
-              V1.11 (2026-05-07) — full-bleed dark canvas. The graph
-              container wraps the cytoscape view in a deep-black panel
-              so the rendered nodes/edges sit on a true Obsidian-style
-              canvas instead of the page's lighter chrome. Border + soft
-              shadow keep it framed within the layout without competing
-              with the surrounding rails. Pillar 1 — visible memory
-              starts with making the surface itself feel intentional.
-            */}
-            <div className="min-w-0 flex-1 overflow-hidden rounded-zaki-lg border border-zaki-border bg-[#0a0a0a] shadow-md">
-              <BrainGraphView
-                userId={userId}
-                selectedIds={selectedNodeIds}
-                onSelectionChange={setSelectedNodeIds}
-                filters={effectiveFilters}
-                highlightKeys={highlightKeys}
-                selectedCommunityId={selectedCommunityId}
-                centerKey={centerKey}
-                onCenterKeyChange={setCenterKey}
+            Layout:
+              - Canvas:    flex-1 height, true-black bg, rounded frame
+              - Top-right: vertical icon bar (filters / clusters / orphans)
+              - Overlays:  absolute, slide in from right when active,
+                           dismissable via X or by re-clicking the icon
+
+            Pre-V1.11 the 3-column flex (filter | canvas | rails) ate
+            ~576px of horizontal chrome before the graph got any room.
+            Now the graph claims the whole viewport.
+          */}
+          <div className="relative min-h-[640px] overflow-hidden rounded-zaki-lg border border-zaki-border bg-[#0a0a0a] shadow-md">
+            <BrainGraphView
+              userId={userId}
+              selectedIds={selectedNodeIds}
+              onSelectionChange={setSelectedNodeIds}
+              filters={effectiveFilters}
+              highlightKeys={highlightKeys}
+              selectedCommunityId={selectedCommunityId}
+              centerKey={centerKey}
+              onCenterKeyChange={setCenterKey}
+            />
+
+            {/* Top-right floating control cluster */}
+            <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col gap-2">
+              <PanelToggle
+                icon={SlidersHorizontal}
+                label={t("brain.panel.filters", { defaultValue: "Filters" })}
+                active={activePanel === "filters"}
+                onClick={() =>
+                  setActivePanel(activePanel === "filters" ? null : "filters")
+                }
+              />
+              <PanelToggle
+                icon={Boxes}
+                label={t("brain.panel.clusters", { defaultValue: "Clusters" })}
+                active={activePanel === "clusters"}
+                onClick={() =>
+                  setActivePanel(activePanel === "clusters" ? null : "clusters")
+                }
+              />
+              <PanelToggle
+                icon={CircleDot}
+                label={t("brain.panel.orphans", { defaultValue: "Orphans" })}
+                active={activePanel === "orphans"}
+                onClick={() =>
+                  setActivePanel(activePanel === "orphans" ? null : "orphans")
+                }
               />
             </div>
 
-            <div className="flex w-72 shrink-0 flex-col gap-3">
-              <BrainCommunityLegend
-                userId={userId}
-                selectedCommunityId={selectedCommunityId}
-                onSelectCommunity={setSelectedCommunityId}
-              />
-              <BrainOrphanRail userId={userId} onPick={handlePickKey} />
-            </div>
+            {/* Floating overlay panels — only one shown at a time */}
+            {activePanel === "filters" && (
+              <FloatingOverlay onClose={() => setActivePanel(null)}>
+                <BrainFilterPanel filters={filters} onChange={setFilters} />
+              </FloatingOverlay>
+            )}
+            {activePanel === "clusters" && (
+              <FloatingOverlay onClose={() => setActivePanel(null)}>
+                <BrainCommunityLegend
+                  userId={userId}
+                  selectedCommunityId={selectedCommunityId}
+                  onSelectCommunity={setSelectedCommunityId}
+                />
+              </FloatingOverlay>
+            )}
+            {activePanel === "orphans" && (
+              <FloatingOverlay onClose={() => setActivePanel(null)}>
+                <BrainOrphanRail userId={userId} onPick={handlePickKey} />
+              </FloatingOverlay>
+            )}
           </div>
 
           {/*
@@ -309,6 +370,65 @@ interface TabButtonProps {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+}
+
+// V1.11 (2026-05-07) — Floating control button used inside the canvas
+// to toggle overlay panels. Inherits the canvas's pointer-events:none
+// cluster and re-enables for itself; lives in a small dark-tinted
+// chip with a red-accent active state matching the rest of the page.
+interface PanelToggleProps {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+function PanelToggle({ icon: Icon, label, active, onClick }: PanelToggleProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`pointer-events-auto flex size-9 items-center justify-center rounded-zaki-md border backdrop-blur-md transition-colors ${
+        active
+          ? "border-[#f10202] bg-[#f10202]/15 text-[#f10202]"
+          : "border-white/10 bg-black/40 text-white/70 hover:border-white/20 hover:text-white"
+      }`}
+    >
+      <Icon className="size-4" />
+    </button>
+  );
+}
+
+// V1.11 (2026-05-07) — Wraps the existing side-panel components (filter,
+// clusters, orphans) as a floating right-anchored overlay inside the
+// canvas. The panel components keep their own width / styling; this
+// wrapper just provides positioning + a close affordance + scroll
+// containment when the panel content overflows the canvas height.
+interface FloatingOverlayProps {
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
+  return (
+    <div className="absolute right-3 top-14 bottom-3 z-20 flex max-h-[calc(100%-4rem)] flex-col">
+      <div className="absolute -top-1 right-1 z-30">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close panel"
+          className="flex size-6 items-center justify-center rounded-full border border-white/10 bg-black/60 text-white/70 backdrop-blur transition-colors hover:border-white/20 hover:text-white"
+        >
+          <X className="size-3" />
+        </button>
+      </div>
+      <div className="flex h-full min-h-0 overflow-hidden rounded-zaki-lg shadow-2xl">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function TabButton({ active, onClick, children }: TabButtonProps) {
