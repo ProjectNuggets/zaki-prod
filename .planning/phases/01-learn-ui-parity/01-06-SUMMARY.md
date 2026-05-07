@@ -9,7 +9,7 @@
   - Visualize
   - Math Animator
 - Routed those entries into the existing ZAKI Learn chat surface through capability presets instead of creating another dashboard or isolated flow.
-- Added route aliases for advanced workspace URLs:
+- Added route aliases for advanced workspace capability URLs:
   - `/learn?view=research`
   - `/learn?view=quiz`
   - `/learn?view=visualize`
@@ -26,6 +26,7 @@
   - frontend: `http://localhost:5173`
 - Browser: `/learn?view=workspaces` renders the advanced workspace entry cards.
 - Browser: Deep Research opens the shared chat area with the `Deep Research` capability selected.
+- Browser: `/learn?view=solve`, `/learn?view=research`, `/learn?view=quiz`, `/learn?view=visualize`, and `/learn?view=math-animation` open the matching chat capability directly.
 - Browser: Deep Research surface exposes Sources, Knowledge Base selector, Settings, Mode, and Depth controls.
 - `npm run typecheck`
 - `npm test -- --runTestsByPath src/lib/api.test.ts src/app/components/learning/learningBookCreatePayload.test.ts`

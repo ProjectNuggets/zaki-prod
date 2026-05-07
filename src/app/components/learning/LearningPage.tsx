@@ -246,14 +246,23 @@ const viewToLearningTab: Record<string, LearningTab> = {
   notebooks: "notebooks",
   review: "review",
   questions: "review",
-  solve: "workspaces",
+  solve: "chat",
   workspaces: "workspaces",
   vision: "workspaces",
-  research: "workspaces",
-  quiz: "workspaces",
-  visualize: "workspaces",
-  "math-animation": "workspaces",
-  "math-animator": "workspaces",
+  research: "chat",
+  quiz: "chat",
+  visualize: "chat",
+  "math-animation": "chat",
+  "math-animator": "chat",
+};
+
+const viewToCapabilityPreset: Record<string, string> = {
+  solve: "deep_solve",
+  research: "deep_research",
+  quiz: "deep_question",
+  visualize: "visualize",
+  "math-animation": "math_animator",
+  "math-animator": "math_animator",
 };
 
 function normalizeLearningTab(value: string | null): LearningTab {
@@ -429,7 +438,10 @@ export function LearningPage() {
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const requestedDocumentId = searchParams.get("doc") || "";
-  const requestedCapability = searchParams.get("capability") || "";
+  const requestedCapability =
+    searchParams.get("capability") ||
+    (requestedView ? viewToCapabilityPreset[requestedView.trim().toLowerCase()] : "") ||
+    "";
   const [tab, setTab] = useState<LearningTab>(() => normalizeLearningTab(requestedView));
   const [chatCapabilityPreset, setChatCapabilityPreset] = useState(requestedCapability);
   const [kbName, setKbName] = useState("main");
@@ -1740,7 +1752,11 @@ function LearningChatPanel({
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!capabilityPreset) return;
+    if (!capabilityPreset) {
+      setCapability("");
+      setCapabilityMenuOpen(false);
+      return;
+    }
     if (!learningCapabilities.some((entry) => entry.value === capabilityPreset)) return;
     setCapability(capabilityPreset);
     setCapabilityMenuOpen(false);

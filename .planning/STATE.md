@@ -9,18 +9,18 @@ progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 28
-  completed_plans: 6
-  percent: 21
+  completed_plans: 7
+  percent: 25
 ---
 
 # ZAKI Learn State
 
 ## Current Position
 
-Phase: 01 Learn UI Parity And Route Truth
-Plan: 01-07 Browser parity verification and UI code review
-Status: 01-06 complete; ready to execute 01-07
-Last activity: 2026-05-07 - completed advanced workspace entry points and verified Deep Research opens the hosted chat capability surface.
+Phase: 02 BFF Security And Multi-User Hardening
+Plan: 02-01 Mutation proxy sanitization
+Status: Phase 01 complete; ready to execute 02-01
+Last activity: 2026-05-07 - completed browser parity verification and direct capability alias fixes for Learn UI parity.
 
 ## Locked Decisions
 
@@ -36,6 +36,8 @@ Last activity: 2026-05-07 - completed advanced workspace entry points and verifi
 - `/learn?view=books` renders DeepTutor-style book library and `New book` opens creator flow.
 - `/learn?view=workspaces` renders advanced workspace entry points for Deep Solve, Deep Research, Quiz Generation, Visualize, Math Animator, plus Image solve.
 - Browser: Deep Research entry opens `/learn?view=chat&capability=deep_research` behavior inside the shared chat area with Sources, KB selector, Settings, Mode, and Depth controls visible.
+- Browser: `/learn?view=solve`, `/learn?view=research`, `/learn?view=quiz`, `/learn?view=visualize`, and `/learn?view=math-animation` now open the matching chat capability directly.
+- Browser: `/learn?view=chat`, `/tutorbot`, `/books`, `/knowledge`, `/writer`, `/space`, `/workspaces`, `/solve`, `/research`, `/quiz`, `/visualize`, and `/math-animation` passed route truth checks with no DeepTutor branding and no learning-disabled blocker.
 - `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
 - `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
@@ -49,7 +51,8 @@ Last activity: 2026-05-07 - completed advanced workspace entry points and verifi
 - 01-04: Space page sections.
 - 01-05: TutorBot management and chat surfaces.
 - 01-06: Advanced workspace entry points.
+- 01-07: Browser parity verification and UI code review.
 
 ## Next Command
 
-Execute Phase 01 Plan 01-07: browser parity verification and UI code review for all Learn route surfaces.
+Execute Phase 02 Plan 02-01: convert learning mutation proxying to route allowlists or recursive schema sanitizers.

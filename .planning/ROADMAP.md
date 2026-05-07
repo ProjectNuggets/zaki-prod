@@ -22,9 +22,9 @@ Last updated: 2026-05-07
 - [x] 01-04: Port/adapt Space page sections from upstream.
 - [x] 01-05: Port/adapt TutorBot management and chat surfaces from upstream.
 - [x] 01-06: Normalize advanced workspace entry points for solve, research, quiz, visualize, and math animation.
-- [ ] 01-07: Browser parity verification and UI code review.
+- [x] 01-07: Browser parity verification and UI code review.
 
-**Status:** In progress.
+**Status:** Complete.
 
 ## Phase 02: BFF Security And Multi-User Hardening
 
@@ -41,7 +41,7 @@ Last updated: 2026-05-07
 - [ ] 02-05: Split user-managed settings from operator-managed settings.
 - [ ] 02-06: Backend security test pass.
 
-**Status:** Pending.
+**Status:** In progress.
 
 ## Phase 03: Capability Parity Completion
 
