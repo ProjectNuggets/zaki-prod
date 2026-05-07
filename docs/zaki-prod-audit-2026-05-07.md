@@ -158,7 +158,48 @@ The navigation entry to most features. Three modes (Spaces / ZAKI bot / Learning
 
 ### Chat thread — `/spaces/:spaceId/threads/:threadId`
 
-_(audit pending)_
+Files: `src/app/components/chat/views/ChatView.tsx` (238 lines), `src/app/components/chat/MessageBubble.tsx` (216 lines), `src/app/components/InputArea.tsx` (1,014 lines), `src/app/components/chat/StreamingMessage.tsx` (76 lines), plus supporting widgets (`ThinkingIndicator`, `MessageActions`, `BotStatusRail`, `NullalisRuntimeWidgets`, `NullalisTurnTimeline`).
+
+**ChatView strengths.** Well-decomposed (238 lines), cleanly prop-driven, three-mode rendering (timelineMode / final_reply_reveal / regular). `t()` used correctly throughout. Comment discipline good (V1.10/V1.11 hotfix anchors).
+
+**MessageBubble strengths.** Compact (216 lines), uses `MessageContent` for assistant rendering (image inline, code blocks, etc.), `SourceChip` for channel attribution, "why this answer" memory-source disclosure. The bot pillar is well-served at the bubble level.
+
+**InputArea — major surface.** The composer where the user actually does the work. Most opinionated component in this audit so far. 1,014 lines.
+
+**P0**
+
+- **"Generate Image" menu item shows "coming soon" but the feature ships today** (`InputArea.tsx` line 783-803). `image_generate` tool works (Move 3 commit 16b852e wired the inline rendering). Today the menu item shows a stale "coming soon" pill + toast. **Decision needed before fix:** is this a deliberate gate (Nova wants a dedicated image-gen UI before exposing the menu entry) or a stale "coming soon" left from before the tool shipped? If stale, simplest fix is to set the textarea to a starter prompt like `"Generate an image of "` and focus, dropping the "coming soon" pill. NOT auto-fixed — flagging for your call.
+- **Off-brand pressure-meter colors `#22c55e` and `#f59e0b`** (lines 137-140). Hardcoded green / amber / red. `#f59e0b` matches `--zaki-warning` exactly (already a token), so that's a one-line swap. `#22c55e` (green) has no token equivalent — brand "low pressure" should arguably be `--zaki-success` (teal `#219171`). Visual change vs convention; needs design call before fix.
+- **Quota badge uses raw Tailwind `red-200/red-50/red-700` and `amber-200/amber-50/amber-700`** (lines 996-1000). Off-brand. Needs a `bg-zaki-warning` utility (token exists at `--zaki-warning-bg` but no utility class generated). Add the utility in `theme.css` `@theme` block, then map. **Token-coverage gap.**
+- **Assistant error bubble uses raw `border-rose-200/bg-rose-50/text-rose-900` plus dark equivalents** (`MessageBubble.tsx` line 153). Rose is not in the brand palette. Should be `border-zaki-strong bg-zaki-error text-zaki-error` (the `--zaki-error` token IS the brand red `#f10202` so this is on-brand naturally).
+
+**P1**
+
+- **InputArea is 1,014 lines.** Voice/STT (~150 LoC), slash command logic, mode picker, web search, query mode, file upload, context meter, attachments — all inline. Phase 4 split into `useVoiceRecorder()` hook + `<ComposerToolbar>` + `<ComposerTextarea>` + `<ComposerActions>`.
+- **No paste-to-attach.** The learning composer (`LearningPage.tsx` line 3035) handles `onPaste` for file/image attachments. ZAKI doesn't. Asymmetry — Nova's note that "learning has a better text input" maps directly. Add `onPaste` handler that filters DataTransfer items, accepts images/files, appends to `attachments`.
+- **No drag-and-drop overlay** for files. Power-user feature; same family as paste.
+- **No context chips above textarea.** Learning shows skill chips, memory file chips, source chips (`SpaceContextChip`) so the user sees what context their message will be sent with. ZAKI knows the active session, mode, channel, web-search state — but they're scattered as toggles in the toolbar. A unified row of chips above the textarea ("ZAKI bot · execute mode · web search on") would give the user the same clarity.
+- **Capability-aware placeholder.** Learning's textarea changes placeholder by capability (`"Describe the math animation..."` etc.). ZAKI rotates through `t("input.placeholders")` array — generic. Could be smarter: detect mode (plan/execute/review) and tailor placeholder ("Plan with ZAKI..." / "Ask ZAKI to do..." / "Review ZAKI's work...").
+- **Mode picker terminology overlap.** `["plan", "execute", "review"]` are workflow phases. The v1.11 handoff mentions "fast / balanced / deep" presets (response-style picker). Two orthogonal concepts; verify both are exposed and labeled clearly so users don't conflate them.
+- **Web search arm + Query mode toggle** feel functionally adjacent. UX confusion potential. Phase 2 design call: are these one toggle or two?
+- **Three-button voice flow** (Mic / Square / X) is busy. Common pattern: one button toggles record/stop, separate cancel only during recording. Already close but conditional rendering is complex.
+- **MessageBubble dead prop** `isStreaming` accepted then `void`-ed (line 74). Remove from prop signature.
+- **MessageActions `visible={false}`** (line 174) but actions still render — verify the prop semantic isn't dead.
+- **Image attachments lack zoom/lightbox** (line 115-122). Same affordance gap as the just-shipped `image_generate` inline images. Could share the same `ImageBlock` component for consistency.
+
+**P2**
+
+- **`zakiContextValue` clamps to `[0,100]` and rounds before display** — fine, but the conic-gradient visualization at low values (1-5%) renders as a tiny sliver. Could threshold display at >5%.
+- **`isUser && <div className="size-8 shrink-0" aria-hidden="true" />`** (line 213) — empty-spacer div for alignment. Functional but layout-via-div smell. Use grid or margin instead.
+
+### Token coverage gap (cross-cutting from chat audit)
+
+Concrete additions needed in `src/styles/tokens.css` + `src/styles/theme.css` `@theme` block to support proper migration off the off-brand colors found in:
+- `bg-zaki-warning` utility (subtle warning bg) — for quota badge, future warning chips
+- `text-zaki-warning` utility — for warning text
+- A "low pressure" / "neutral healthy" utility — green isn't in the brand; using teal `--zaki-success` for "low pressure" could work but visually different from the convention
+
+Filing this as a cross-cutting Phase 2 prep task: extend token coverage so utilities exist for every semantic the UI needs. Eliminate the temptation to reach for raw Tailwind colors.
 
 ### Brain page — `/brain`
 
