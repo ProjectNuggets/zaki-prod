@@ -38,7 +38,6 @@ import type {
 import {
   EDGE_COLOR,
   importanceToRadius,
-  idealEdgeLengthForType,
   nodeColor,
   type ColorPreset,
 } from "./brainColors";
@@ -754,15 +753,29 @@ function runLayout(cy: Core, f: BrainGraphFilters) {
     animationDuration: 600,
     animationEasing: "ease-out",
     randomize: true,
-    nodeRepulsion: f.nodeRepulsion,
-    // V1.11 (2026-05-07) — per-edge ideal length based on edge type so
-    // strong content links (typed / semantic) pull nodes closer and
-    // loose links (reference / session) sit farther apart. Obsidian's
-    // signature organic-distance behavior — relationship strength
-    // becomes spatial. Slider value is the baseline; the type-specific
-    // multiplier scales it. See idealEdgeLengthForType in brainColors.ts.
-    idealEdgeLength: (edge: cytoscape.EdgeSingular) =>
-      idealEdgeLengthForType(edge.data("edgeType"), f.idealEdgeLength),
+    // V1.11 hotfix (2026-05-07) — Obsidian-style organic distance via
+    // node-level repulsion instead of per-edge length.
+    //
+    // Background: an earlier Day 3c attempt passed `idealEdgeLength` as
+    // a function so semantic / reference / session edge types could each
+    // get their own resting length. cose-bilkent (a different layout
+    // package than cytoscape's stock `cose`) only accepts a NUMBER for
+    // idealEdgeLength; it propagated the function value into an internal
+    // array-allocation site and threw "Invalid array length" at mount.
+    //
+    // The pragmatic V1.11 substitute: scale node repulsion by node
+    // importance. Heavy hubs push neighbors further away; lightweight
+    // leaves cluster tightly around their connections. The eye reads
+    // the same hierarchy story — strong-relationship clusters tight,
+    // loose connections drift outward — without depending on a layout
+    // option cose-bilkent doesn't expose. Per-edge ideal-length lands
+    // V1.12 when we evaluate switching to fcose / d3-force.
+    nodeRepulsion: (node: cytoscape.NodeSingular) => {
+      const importance = (node.data("importance") as number | undefined) ?? 0.3;
+      const clamped = Math.max(0, Math.min(1, importance));
+      return f.nodeRepulsion * (0.6 + 0.9 * clamped);
+    },
+    idealEdgeLength: f.idealEdgeLength,
     edgeElasticity: f.edgeElasticity,
     gravity: f.gravity,
     numIter: 2500,
