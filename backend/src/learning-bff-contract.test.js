@@ -295,7 +295,49 @@ describe("learning BFF contract", () => {
     expect(
       shouldConsumeLearningIngressQuota({
         method: "POST",
+        originalUrl: "/api/learning/questions/categories",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/skills",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "PATCH",
+        originalUrl: "/api/learning/co-writer/documents/doc-1",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "PUT",
+        originalUrl: "/api/learning/memory",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
         originalUrl: "/api/learning/notebooks/records/with-summary",
+      })
+    ).toBe(true);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/knowledge/main/upload",
+      })
+    ).toBe(true);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/co-writer/edit",
+      })
+    ).toBe(true);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/vision/analyze",
       })
     ).toBe(true);
     expect(

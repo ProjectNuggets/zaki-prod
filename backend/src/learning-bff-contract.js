@@ -459,36 +459,39 @@ export function shouldConsumeLearningIngressQuota(req = {}) {
     ? path.slice("/api/learning".length) || "/"
     : path;
 
-  if (method === "POST" && learningPath === "/notebooks") return false;
-  if (method === "POST" && learningPath === "/notebooks/records/manual") return false;
-  if (method === "POST" && learningPath === "/tutor-agents") return false;
-  if (method === "POST" && learningPath === "/tutor-agents/souls") return false;
-
-  if (method === "PUT") {
-    const notebookPattern = new RegExp(`^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
-    const recordPattern = new RegExp(
-      `^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}/records/${LEARNING_NOTEBOOK_ID_SEGMENT}$`
-    );
-    const tutorSoulPattern = new RegExp(`^/tutor-agents/souls/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
-    const tutorFilePattern = new RegExp(
-      `^/tutor-agents/${LEARNING_NOTEBOOK_ID_SEGMENT}/files/${LEARNING_NOTEBOOK_ID_SEGMENT}$`
-    );
+  if (method === "POST") {
+    if (learningPath === "/books") return true;
     if (
-      notebookPattern.test(learningPath) ||
-      recordPattern.test(learningPath) ||
-      tutorSoulPattern.test(learningPath) ||
-      tutorFilePattern.test(learningPath)
+      [
+        "/books/confirm-proposal",
+        "/books/confirm-spine",
+        "/books/compile-page",
+        "/books/regenerate-block",
+        "/books/insert-block",
+        "/books/change-block-type",
+        "/books/deep-dive",
+        "/books/supplement",
+        "/books/rebuild",
+        "/co-writer/edit",
+        "/co-writer/edit-react",
+        "/co-writer/edit-react/stream",
+        "/co-writer/automark",
+        "/knowledge/create",
+        "/memory/refresh",
+        "/notebooks/records",
+        "/notebooks/records/with-summary",
+        "/vision/analyze",
+      ].includes(learningPath)
     ) {
-      return false;
+      return true;
     }
+    if (/^\/knowledge\/[^/]+\/(?:upload|upload-folder|upload-archive|reindex)$/.test(learningPath)) {
+      return true;
+    }
+    return false;
   }
 
-  if (method === "PATCH") {
-    const tutorAgentPattern = new RegExp(`^/tutor-agents/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
-    if (tutorAgentPattern.test(learningPath)) return false;
-  }
-
-  return true;
+  return false;
 }
 
 export function resolveLearningMaxRequestBytes(env = process.env) {
