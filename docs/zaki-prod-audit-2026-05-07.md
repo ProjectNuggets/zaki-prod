@@ -92,7 +92,42 @@ _(audit pending)_
 
 ### Sidebar — desktop nav
 
-_(audit pending)_
+File: `src/app/components/Sidebar.tsx` (2,357 lines)
+
+The navigation entry to most features. Three modes (Spaces / ZAKI bot / Learning) via `sidebarMode`, profile menu in the footer, and 8+ modal triggers (settings, sessions, cron, secrets, diagnostics, power-user, memory, space-settings).
+
+**P0 — functional bugs**
+
+- **Pin button label is inverted** (lines 1706, 1906). `{thread.pinned ? "Unpin" : "Pinned"}` — when a thread is NOT pinned, the button label reads "Pinned" (a state, not an action). Convention: buttons describe the action they perform on click. Should be `"Unpin" : "Pin"`. Two locations (space-pinned and user-spaces threads).
+- **Invisible text on premium badge** (line 2018). `isPremium ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-success"` — premium branch sets foreground green on a green background. WCAG fail (contrast 1:1). Free branch is fine.
+- **Tautological ternary** (line 1985). `isPremium ? "text-zaki-success" : "text-zaki-success"` — both branches identical. Either dead code or copy-paste error: free users probably should display in a different color (e.g., `text-zaki-muted`).
+- **Hardcoded English aria-labels** breaking RTL/Arabic users using screen readers (lines 1326, 1339, 1364, 1409, 1429): `"Main navigation"`, `"Open home"`, `"Spaces"`, `"Open profile"`, `"Collapse sidebar"`. Plus context menu labels: `"Unpin"`, `"Pinned"`, `"Rename"`, `"Delete"` (lines 1706-1922 area), `"Delete space"` dialog (line 2173 + body 2174), `aria-label="Memory viewer"` (line 2197).
+- **`bg-white` thread context menu has no dark-mode override** (line 1894). Renders pure white on the dark canvas. Visual + functional bug.
+- **"Settings" and "Language" buttons both open the same `SettingsModal`** (lines 2100 and 2113). Duplicate entry in profile menu — language switching should either be its own surface or be removed from menu and merged into Settings.
+
+**P1**
+
+- **2,357 lines in one component.** Same mega-file pattern as ChatArea + index.js. Profile menu, memory drawer, all 8 modals, and the entire space/thread tree rendered inline. Phase 4 split: profile menu → `SidebarProfileMenu`, modal stack → `SidebarModals`, space tree → `SpaceTree`.
+- **30 `useState` declarations** in the component. Modal-state booleans (8+) should be a single store: one active modal at a time.
+- **Brand-orange gradient where brand is red** (line 2203): `linear-gradient(135deg,#E56A54_0%,#219171_100%)` — `#E56A54` is salmon/orange, NOT in the ZAKI palette. Brand is `#f10202` + teal `#219171`. Stale color from pre-finalization era (same lineage as `LogoArabicOrange`).
+- **`fileStatusTone` uses non-brand Tailwind colors** (lines 99-109): `bg-emerald-50/text-emerald-700`, `bg-amber-50/text-amber-700`, `bg-rose-50/text-rose-700`. Should use `--zaki-success`, `--zaki-warning`, `--zaki-error`.
+- **`APP_VERSION = "1.5.69"` hardcoded** at line 57. Should come from `import.meta.env.VITE_APP_VERSION` or a generated build constant. Will drift silently (it probably already has).
+- **40 `isRtl ?` ternaries with hardcoded en/ar pairs** (e.g., `sidebarCopy` constant lines 111-125, `fileStatusTone.label` lines 100-108). Same i18n bypass anti-pattern as LoginScreen, at scale.
+- **20+ hex literals** (`#88735A`, `#141210`, `#1a1714`, `#2a2018`, `#0c0a09`, `#fff8f0`, `#f3e7d9`, `#E56A54`, `#ffb6a4`, `#efe6d9`, `rgba(15,15,15,0.12)`, `rgba(0,0,0,0.45)`, `rgba(241,2,2,0.18)`).
+- **Memory viewer dialog (line 2195) is `role="dialog" aria-modal="true"` but `useFocusTrap` (imported line 20) is not applied to it.** Keyboard users can Tab out of the dialog into background controls. Need to verify focus trap is actually wired.
+- **Custom `×` glyph as close button** (line 2221) instead of Lucide `X` icon. Inconsistent with the rest of the app.
+
+**P2**
+
+- **`backdrop-blur-[2px]`** arbitrary value (line 2184). Pick a backdrop blur token and use it consistently across all modals.
+- **Two "help" entries** ("How to use" → onboarding modal, "Help" → /help page). Distinct purposes but the labels don't make that clear. Rename to "Show me how" + "Help center" or similar.
+- **`gap-3 mb-4`** etc. — Tailwind default spacing utilities used liberally. Mostly aligned to 4px grid but mix of `mt-6 / pt-3 / py-4 / mb-2 / mb-3 / mb-5` reads as ad-hoc rather than scale-disciplined. Visual rhythm review in Phase 2.
+
+**Architecture notes**
+
+- 5 Zustand stores read in one component (`useAuthStore`, `useUIStore`, `useSpacesStore`, `useNavigationStore`, `useZakiSessionUiStore`). Cross-store reads make this brittle to refactor.
+- `goToThread`, `goToSpace`, `goToZakiBot`, `goToZakiHome` etc. — navigation helpers in `useNavigation()`. Good abstraction; but the Sidebar still also uses raw `navigate("/help")`, `navigate("/legal")` etc. Inconsistent: pick one.
+- ZAKI bot session list (`<ZakiSessionList>`) is its own component — good. The pattern should extend: `<SpaceTree>`, `<ProfileMenu>`, etc.
 
 ### Chat thread — `/spaces/:spaceId/threads/:threadId`
 

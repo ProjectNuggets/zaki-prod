@@ -1703,7 +1703,7 @@ export function Sidebar() {
                             onClick={() => togglePinned("thread", thread.id)}
                           >
                             <Pin className="size-3.5 text-zaki-muted" />
-                            {thread.pinned ? "Unpin" : "Pinned"}
+                            {thread.pinned ? "Unpin" : "Pin"}
                           </button>
                           <button
                             type="button"
@@ -1903,7 +1903,7 @@ export function Sidebar() {
                             onClick={() => togglePinned("thread", thread.id)}
                           >
                             <Pin className="size-3.5 text-zaki-muted" />
-                            {thread.pinned ? "Unpin" : "Pinned"}
+                            {thread.pinned ? "Unpin" : "Pin"}
                           </button>
                           <button
                             type="button"
@@ -1982,7 +1982,7 @@ export function Sidebar() {
 	              className={cn(
 	                "text-xs font-semibold",
 	                !isRtl && "uppercase tracking-wider",
-	                isPremium ? "text-zaki-success" : "text-zaki-success"
+	                isPremium ? "text-zaki-success" : "text-zaki-muted"
 	              )}
 	            >
 	              {planDisplay}
@@ -2015,7 +2015,7 @@ export function Sidebar() {
 	                "text-2xs font-semibold px-1.5 py-0.5 rounded",
 	                isRtl ? "mr-auto" : "ml-auto",
 	                !isRtl && "uppercase tracking-wider",
-	                isPremium ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-success"
+	                isPremium ? "bg-zaki-success text-zaki-success" : "bg-zaki-sunken text-zaki-muted"
 	              )}>
 	                {planLabel}
 	              </span>
