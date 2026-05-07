@@ -218,6 +218,8 @@ const viewToLearningTab: Record<string, LearningTab> = {
   review: "review",
   questions: "review",
   solve: "workspaces",
+  workspaces: "workspaces",
+  vision: "workspaces",
 };
 
 function normalizeLearningTab(value: string | null): LearningTab {
