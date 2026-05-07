@@ -265,7 +265,13 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
         "background-color": "data(color)",
         width: "data(size)",
         height: "data(size)",
-        label: "data(label)",
+        // V1.11 (2026-05-07) — labels hidden by default. They surface
+        // only when a node is in the focused neighborhood (hover or
+        // click), explicitly selected, time-highlighted, or the local-
+        // graph center. Achieves Obsidian's visual restraint without
+        // removing the information — hover any node and its label +
+        // neighbors' labels appear.
+        label: "",
         color: "#e5e7eb",
         "font-size": 10,
         "text-outline-width": 2,
@@ -276,6 +282,12 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
         "min-zoomed-font-size": Math.max(2, Math.floor(textFadeThreshold * 12)),
         "border-width": 0,
       },
+    },
+    {
+      // V1.11 — labels appear on focused neighborhood (hover or click),
+      // selected nodes, time-highlighted nodes, and the local-graph center.
+      selector: "node.focus, node.center, node.highlighted, node:selected",
+      css: { label: "data(label)" } as Record<string, unknown>,
     },
     {
       selector: "node.archived",
@@ -348,6 +360,11 @@ export function BrainGraphView({
   const setCenterKey = onCenterKeyChange;
   const [depth, setDepth] = useState<number>(1);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  // V1.11 (2026-05-07) — Obsidian-style hover-highlight. Transient
+  // companion to focusedNodeId; mouseover sets, mouseout clears.
+  // Click takes precedence (focusedNodeId ?? hoveredNodeId in the
+  // effective-id useEffect below).
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [hoverData, setHoverData] = useState<{
     node: NodeSingular;
     x: number;
@@ -429,8 +446,16 @@ export function BrainGraphView({
       const node = evt.target as NodeSingular;
       const renderedPos = node.renderedPosition();
       setHoverData({ node, x: renderedPos.x, y: renderedPos.y });
+      // V1.11 (2026-05-07) — Obsidian-style hover-highlight. Hover sets
+      // a transient hoveredNodeId; the focus useEffect dims non-neighbors
+      // and lights up the hovered node + its closed neighborhood. Click
+      // (focusedNodeId) takes precedence over hover when both are set.
+      setHoveredNodeId(node.id());
     });
-    cy.on("mouseout", "node", () => setHoverData(null));
+    cy.on("mouseout", "node", () => {
+      setHoverData(null);
+      setHoveredNodeId(null);
+    });
     cy.on("position", "node", () => {
       setHoverData((cur) => {
         if (!cur) return cur;
@@ -517,20 +542,48 @@ export function BrainGraphView({
     });
   }, [selectedIds]);
 
-  // Apply focus dimming when focusedNodeId is set.
+  // V1.11 (2026-05-07) — Apply focus dimming when EITHER focusedNodeId
+  // (click, persistent) OR hoveredNodeId (hover, transient) is set.
+  // Click takes precedence over hover via the `??` fallback so a
+  // user who clicked a node keeps that focus even when hovering
+  // elsewhere; mouseout clears hover but doesn't disturb the click
+  // focus. Neighborhood nodes get `.focus` class (added in V1.11)
+  // so labels surface for the hovered/clicked node + its neighbors,
+  // matching Obsidian's signature interaction.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
+    const effectiveId = focusedNodeId ?? hoveredNodeId;
     cy.batch(() => {
       cy.elements().removeClass("dimmed focus");
-      if (!focusedNodeId) return;
-      const focus = cy.getElementById(focusedNodeId);
+      if (!effectiveId) return;
+      const focus = cy.getElementById(effectiveId);
       if (!focus.length) return;
       const neighborhood = focus.closedNeighborhood();
       cy.elements().not(neighborhood).addClass("dimmed");
+      neighborhood.nodes().addClass("focus");
       neighborhood.edges().addClass("focus");
     });
-  }, [focusedNodeId, elements]);
+  }, [focusedNodeId, hoveredNodeId, elements]);
+
+  // V1.11 (2026-05-07) — Cluster-zoom on legend click. When the user
+  // picks a community in BrainCommunityLegend, fit the camera to the
+  // members of that community with a smooth animation. Without this
+  // the click only filtered the visible set; users had to manually
+  // zoom/pan to find the cluster. Padding 60 keeps the cluster
+  // breathing-room from the canvas edges.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || selectedCommunityId === null || selectedCommunityId === undefined) return;
+    const clusterNodes = cy.nodes().filter(
+      (node) => node.data("community_id") === selectedCommunityId,
+    );
+    if (clusterNodes.length === 0) return;
+    cy.animate({
+      fit: { eles: clusterNodes, padding: 60 },
+      duration: 600,
+    });
+  }, [selectedCommunityId, elements]);
 
   const focusedNodeData = useMemo<{
     node: BrainGraphNode | null;

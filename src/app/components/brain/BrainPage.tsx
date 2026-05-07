@@ -27,6 +27,11 @@ export function BrainPage() {
   const [tab, setTab] = useState<BrainTab>("timeline");
   const [degradedDismissed, setDegradedDismissed] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  // V1.11 (2026-05-07) — explicit compose-modal toggle. Pre-V1.11 the modal
+  // auto-opened the moment a user shift-click-selected a 2nd node, which
+  // was startling (the brain audit flagged it). Now the modal opens only
+  // on explicit user action via the floating "Compose from N" button below.
+  const [composeOpen, setComposeOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -217,11 +222,32 @@ export function BrainPage() {
             </div>
           </div>
 
+          {/*
+            V1.11 (2026-05-07) — Floating "Compose from N" trigger button
+            replaces the auto-opening modal. Shows when ≥2 nodes are
+            selected and the modal isn't already open. User clicks to
+            open; on close, both modal state AND node selection clear so
+            the next compose flow starts fresh.
+          */}
+          {selectedNodeIds.length >= 2 && !composeOpen ? (
+            <button
+              type="button"
+              onClick={() => setComposeOpen(true)}
+              className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 rounded-full bg-[#f10202] px-4 py-3 text-sm font-medium text-white shadow-lg transition hover:bg-[#f10202]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f10202]/40"
+              data-testid="brain-compose-from-selection-button"
+            >
+              {t("brain.compose.fromSelection", { count: selectedNodeIds.length, defaultValue: "Compose from {{count}}" })}
+            </button>
+          ) : null}
+
           <BrainComposeModal
             userId={userId}
-            open={selectedNodeIds.length >= 2}
+            open={composeOpen}
             selectedNodes={selectedNodes}
-            onClose={() => setSelectedNodeIds([])}
+            onClose={() => {
+              setComposeOpen(false);
+              setSelectedNodeIds([]);
+            }}
           />
         </div>
       )}
