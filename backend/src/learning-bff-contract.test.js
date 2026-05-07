@@ -1,12 +1,16 @@
 import { describe, expect, test } from "@jest/globals";
 import { readFileSync } from "node:fs";
+import { once } from "node:events";
+import { PassThrough } from "node:stream";
 import {
   buildLearningConfigErrorPayload,
   buildLearningDisabledPayload,
   buildLearningForwardHeaders,
   buildLearningProxyHeaders,
   checkLearningContentLength,
+  createLearningByteLimitTransform,
   extractLearningWsToken,
+  findLearningRequestSizeError,
   getLearningBase,
   isLearningEnabled,
   mapLearningUpstreamFailure,
@@ -249,5 +253,24 @@ describe("learning BFF contract", () => {
       maxBytes: 2048,
       reason: "invalid_content_length",
     });
+  });
+
+  test("byte-limits chunked learning upload streams without content length", async () => {
+    const source = new PassThrough();
+    const limited = source.pipe(createLearningByteLimitTransform(5));
+    const chunks = [];
+    limited.on("data", (chunk) => chunks.push(chunk.toString("utf8")));
+
+    source.write("abc");
+    source.end("def");
+
+    const [error] = await once(limited, "error");
+    const sizeError = findLearningRequestSizeError(error);
+    expect(sizeError).toMatchObject({
+      code: "learning_request_too_large",
+      maxBytes: 5,
+      contentLength: 6,
+    });
+    expect(chunks).toEqual(["abc"]);
   });
 });

@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
+import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
@@ -75,7 +75,9 @@ import {
   buildLearningConfigErrorPayload,
   buildLearningDisabledPayload,
   checkLearningContentLength,
+  createLearningByteLimitTransform,
   extractLearningWsToken,
+  findLearningRequestSizeError,
   isLearningEnabled,
   mapLearningUpstreamFailure,
   resolveCanonicalLearningUserId,
@@ -8650,38 +8652,9 @@ function sanitizeLearningJsonBody(body) {
   return sanitizeLearningClientPayload(body);
 }
 
-function createLearningRequestSizeError(maxBytes, contentLength) {
-  const error = new Error("Learning request is too large.");
-  error.code = "learning_request_too_large";
-  error.maxBytes = maxBytes;
-  error.contentLength = contentLength;
-  return error;
-}
-
-function findLearningRequestSizeError(error) {
-  let current = error;
-  const seen = new Set();
-  while (current && typeof current === "object" && !seen.has(current)) {
-    if (current.code === "learning_request_too_large") return current;
-    seen.add(current);
-    current = current.cause;
-  }
-  return null;
-}
-
 function createLearningByteLimitedStream(req, maxBytes) {
-  let total = 0;
-  const limiter = new Transform({
-    transform(chunk, _encoding, callback) {
-      total += Buffer.byteLength(chunk);
-      if (total > maxBytes) {
-        const error = createLearningRequestSizeError(maxBytes, total);
-        req.destroy(error);
-        callback(error);
-        return;
-      }
-      callback(null, chunk);
-    },
+  const limiter = createLearningByteLimitTransform(maxBytes, {
+    onLimit: (error) => req.destroy(error),
   });
   req.pipe(limiter);
   return limiter;

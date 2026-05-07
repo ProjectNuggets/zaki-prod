@@ -1,3 +1,5 @@
+import { Transform } from "node:stream";
+
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -331,4 +333,39 @@ export function checkLearningContentLength(headers = {}, maxBytes = DEFAULT_LEAR
     return { allowed: false, contentLength, maxBytes, reason: "request_too_large" };
   }
   return { allowed: true, contentLength, maxBytes };
+}
+
+export function createLearningRequestSizeError(maxBytes, contentLength) {
+  const error = new Error("Learning request is too large.");
+  error.code = "learning_request_too_large";
+  error.maxBytes = maxBytes;
+  error.contentLength = contentLength;
+  return error;
+}
+
+export function findLearningRequestSizeError(error) {
+  let current = error;
+  const seen = new Set();
+  while (current && typeof current === "object" && !seen.has(current)) {
+    if (current.code === "learning_request_too_large") return current;
+    seen.add(current);
+    current = current.cause;
+  }
+  return null;
+}
+
+export function createLearningByteLimitTransform(maxBytes, { onLimit } = {}) {
+  let total = 0;
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      total += Buffer.byteLength(chunk);
+      if (total > maxBytes) {
+        const error = createLearningRequestSizeError(maxBytes, total);
+        if (typeof onLimit === "function") onLimit(error);
+        callback(error);
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
 }

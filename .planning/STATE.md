@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 02 BFF Security And Multi-User Hardening
-Plan: 02-02 Raw upload byte limits
-Status: 02-01 complete; ready to execute 02-02
-Last activity: 2026-05-07 - hardened recursive learning payload sanitization and added BFF regression tests against raw request body forwarding.
+Plan: 02-03 WebSocket schema and quota hardening
+Status: 02-02 complete; ready to execute 02-03
+Last activity: 2026-05-07 - moved learning byte-limit stream logic into the BFF contract module and added chunked overflow coverage.
 
 ## Locked Decisions
 
@@ -40,6 +40,7 @@ Last activity: 2026-05-07 - hardened recursive learning payload sanitization and
 - Browser: `/learn?view=chat`, `/tutorbot`, `/books`, `/knowledge`, `/writer`, `/space`, `/workspaces`, `/solve`, `/research`, `/quiz`, `/visualize`, and `/math-animation` passed route truth checks with no DeepTutor branding and no learning-disabled blocker.
 - BFF: Learning JSON mutation proxy routes sanitize request bodies before forwarding.
 - BFF: Learning payload sanitizer strips snake_case, camelCase, and mixed-case provider/model/API-key/base URL variants recursively.
+- BFF: Raw learning uploads use a byte-counting stream limiter before proxying, including chunked requests without `Content-Length`.
 - `/learn?view=chat` currently shows chat shell but backend WebSocket connection can fail when local learning engine/backend is unavailable.
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
 - `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
@@ -55,7 +56,8 @@ Last activity: 2026-05-07 - hardened recursive learning payload sanitization and
 - 01-06: Advanced workspace entry points.
 - 01-07: Browser parity verification and UI code review.
 - 02-01: Mutation proxy sanitization.
+- 02-02: Raw upload byte limits.
 
 ## Next Command
 
-Execute Phase 02 Plan 02-02: enforce byte limits for raw and chunked uploads before proxying.
+Execute Phase 02 Plan 02-03: move WebSocket payload handling to allowlist schemas and consume quota only on mutating/prompt messages.
