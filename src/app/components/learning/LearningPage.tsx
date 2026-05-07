@@ -102,6 +102,7 @@ import {
   getLearningTutorAgentChannelsSchema,
   getLearningTutorAgentHistory,
   learningKeys,
+  listLearningTutorAgentFiles,
   openLearningSocket,
   prepareLearningSocketAuth,
   reindexLearningKnowledge,
@@ -130,6 +131,7 @@ import {
   updateLearningQuestionEntry,
   updateLearningSkill,
   updateLearningCoWriterDocument,
+  updateLearningTutorAgentFile,
   updateLearningTutorAgent,
   updateLearningTutorAgentSoul,
   updateLearningMemory,
@@ -193,6 +195,14 @@ type LearningChannelSchemaCatalog = {
   channels: Record<string, LearningChannelSchemaEntry>;
   global?: { json_schema?: LearningChannelJsonSchema; secret_fields?: string[] };
 };
+const TUTOR_PROFILE_FILES = [
+  "SOUL.md",
+  "USER.md",
+  "TOOLS.md",
+  "AGENTS.md",
+  "HEARTBEAT.md",
+] as const;
+type TutorProfileFile = (typeof TUTOR_PROFILE_FILES)[number];
 type NotebookCreateDraft = { name: string; description: string };
 type CoWriterCreateDraft = { title?: string; content: string };
 type LearningObjectType =
@@ -6324,6 +6334,421 @@ function TutorChannelsPanel({
   );
 }
 
+function TutorProfilesPanel({ bots, souls }: { bots: Item[]; souls: Item[] }) {
+  const queryClient = useQueryClient();
+  const [selectedBot, setSelectedBot] = useState("");
+  const [activeFile, setActiveFile] = useState<TutorProfileFile>("SOUL.md");
+  const [files, setFiles] = useState<Record<string, string>>({});
+  const [editor, setEditor] = useState("");
+  const [activeView, setActiveView] = useState<"edit" | "preview">("edit");
+  const [selectedSoulId, setSelectedSoulId] = useState("_custom");
+  const [sourceSoulId, setSourceSoulId] = useState<string | null>(null);
+  const [pendingSoulId, setPendingSoulId] = useState<string | null>(null);
+  const [replaceModalOpen, setReplaceModalOpen] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveMode, setSaveMode] = useState<"file_only" | "update_template" | "new_template">("file_only");
+  const [newTemplateName, setNewTemplateName] = useState("");
+
+  useEffect(() => {
+    if (!selectedBot && bots[0]) setSelectedBot(tutorAgentId(bots[0], "agent-1"));
+  }, [bots, selectedBot]);
+
+  const filesQuery = useQuery({
+    queryKey: ["learning", "tutor-agent-files", selectedBot],
+    queryFn: () => listLearningTutorAgentFiles(selectedBot),
+    enabled: Boolean(selectedBot),
+  });
+
+  const soulTemplates = useMemo(
+    () =>
+      souls.map((soul, index) => ({
+        id: itemId(soul, `soul-${index + 1}`),
+        name: itemTitle(soul, `Soul template ${index + 1}`),
+        content: textOf(soul.content) || textOf(soul.description),
+      })),
+    [souls],
+  );
+
+  const activeSoulTemplate = useMemo(
+    () => soulTemplates.find((soul) => soul.id === selectedSoulId) ?? null,
+    [selectedSoulId, soulTemplates],
+  );
+  const sourceSoulTemplate = useMemo(
+    () => soulTemplates.find((soul) => soul.id === sourceSoulId) ?? null,
+    [sourceSoulId, soulTemplates],
+  );
+
+  const matchSoulId = useCallback(
+    (content: string) => soulTemplates.find((soul) => soul.content === content)?.id ?? "_custom",
+    [soulTemplates],
+  );
+
+  useEffect(() => {
+    const record = asRecord(filesQuery.data);
+    const next: Record<string, string> = {};
+    for (const [key, value] of Object.entries(record)) {
+      next[key] = textOf(value);
+    }
+    setFiles(next);
+    const nextEditor = next[activeFile] ?? "";
+    setEditor(nextEditor);
+    if (activeFile === "SOUL.md") {
+      const matched = matchSoulId(next["SOUL.md"] ?? "");
+      setSelectedSoulId(matched);
+      setSourceSoulId(matched === "_custom" ? null : matched);
+    }
+    setActiveView("edit");
+  }, [activeFile, filesQuery.data, matchSoulId]);
+
+  const hasChanges = editor !== (files[activeFile] ?? "");
+
+  const applySoulSelection = useCallback(
+    (nextId: string) => {
+      if (nextId === "_custom") {
+        setSelectedSoulId("_custom");
+        setSourceSoulId(null);
+        return;
+      }
+      const soul = soulTemplates.find((item) => item.id === nextId);
+      if (!soul) return;
+      setSelectedSoulId(nextId);
+      setSourceSoulId(nextId);
+      setEditor(soul.content);
+      setActiveView("edit");
+    },
+    [soulTemplates],
+  );
+
+  const handleSoulSelect = (nextId: string) => {
+    if (hasChanges) {
+      setPendingSoulId(nextId);
+      setReplaceModalOpen(true);
+      return;
+    }
+    applySoulSelection(nextId);
+  };
+
+  const saveProfile = useMutation({
+    mutationFn: async ({
+      mode,
+      templateName,
+    }: {
+      mode: "file_only" | "update_template" | "new_template";
+      templateName?: string;
+    }) => {
+      if (!selectedBot) throw new Error("Choose a tutor first.");
+      if (activeFile === "SOUL.md") {
+        const content = editor.trim();
+        if (!content) throw new Error("SOUL.md is empty.");
+
+        if (mode === "update_template") {
+          if (!sourceSoulTemplate) throw new Error("No template selected to update.");
+          await updateLearningTutorAgentSoul(sourceSoulTemplate.id, {
+            name: sourceSoulTemplate.name,
+            content: editor,
+          });
+        } else if (mode === "new_template") {
+          const rawName = (templateName || "").trim();
+          const id = learningSlug(rawName);
+          if (!rawName || !id) throw new Error("Template name is required.");
+          const existing = new Set(soulTemplates.map((soul) => soul.id));
+          let nextId = id;
+          let suffix = 2;
+          while (existing.has(nextId)) {
+            nextId = `${id}-${suffix}`;
+            suffix += 1;
+          }
+          await createLearningTutorAgentSoul({ id: nextId, name: rawName, content: editor });
+          setSelectedSoulId(nextId);
+          setSourceSoulId(nextId);
+        }
+      }
+
+      await updateLearningTutorAgentFile(selectedBot, activeFile, editor);
+      if (activeFile === "SOUL.md") {
+        await updateLearningTutorAgent(selectedBot, { persona: editor });
+      }
+    },
+    onSuccess: () => {
+      toast.success(`${activeFile} saved`);
+      setFiles((current) => ({ ...current, [activeFile]: editor }));
+      setSaveModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["learning", "tutor-agent-files", selectedBot] });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgents });
+      void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentSouls });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleSaveClick = () => {
+    if (activeFile !== "SOUL.md") {
+      saveProfile.mutate({ mode: "file_only" });
+      return;
+    }
+    setSaveMode(sourceSoulTemplate ? "update_template" : "file_only");
+    setNewTemplateName(`${selectedBot || "custom"} soul`);
+    setSaveModalOpen(true);
+  };
+
+  const handleEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+      event.preventDefault();
+      handleSaveClick();
+    }
+  };
+
+  if (!bots.length) {
+    return <EmptyLine label="Create a bot first to edit profiles." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-[12px] font-medium text-zaki-muted">Bot</label>
+        <select
+          value={selectedBot}
+          onChange={(event) => setSelectedBot(event.target.value)}
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+        >
+          {bots.map((bot, index) => {
+            const id = tutorAgentId(bot, `agent-${index + 1}`);
+            return (
+              <option key={id} value={id}>
+                {itemTitle(bot, id)} ({id})
+              </option>
+            );
+          })}
+        </select>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1 border-b border-zaki-border pb-2">
+        {TUTOR_PROFILE_FILES.map((filename) => (
+          <button
+            key={filename}
+            type="button"
+            onClick={() => setActiveFile(filename)}
+            className={cn(
+              "rounded-zaki-lg px-2.5 py-1 text-[12px] transition-colors",
+              activeFile === filename
+                ? "bg-zaki-hover font-medium text-zaki-text"
+                : "text-zaki-muted hover:text-zaki-text",
+            )}
+          >
+            {filename.replace(".md", "")}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {(["edit", "preview"] as const).map((view) => (
+            <button
+              key={view}
+              type="button"
+              onClick={() => setActiveView(view)}
+              className={cn(
+                "rounded-zaki-lg px-3 py-1.5 text-[12px] transition-colors",
+                activeView === view
+                  ? "bg-zaki-hover font-medium text-zaki-text"
+                  : "text-zaki-muted hover:text-zaki-text",
+              )}
+            >
+              {view === "edit" ? "Edit" : "Preview"}
+            </button>
+          ))}
+          {activeFile === "SOUL.md" ? (
+            <>
+              <select
+                value={selectedSoulId}
+                onChange={(event) => handleSoulSelect(event.target.value)}
+                className="h-8 rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 text-[12px] text-zaki-text outline-none focus:border-zaki-brand"
+              >
+                <option value="_custom">Custom</option>
+                {soulTemplates.map((soul) => (
+                  <option key={soul.id} value={soul.id}>
+                    {soul.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-zaki-muted">
+                {activeSoulTemplate
+                  ? hasChanges
+                    ? `Editing template "${activeSoulTemplate.name}"`
+                    : `Using "${activeSoulTemplate.name}"`
+                  : "Custom soul"}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={handleSaveClick}
+          disabled={saveProfile.isPending || !hasChanges}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-3 text-[12px] font-semibold disabled:opacity-50",
+            hasChanges
+              ? "bg-zaki-brand text-white"
+              : "border border-zaki-border text-zaki-muted",
+          )}
+        >
+          {saveProfile.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Save className="size-3.5" />
+          )}
+          Save
+        </button>
+      </div>
+
+      {filesQuery.isLoading ? (
+        <div className="flex min-h-[400px] items-center justify-center">
+          <Loader2 className="size-5 animate-spin text-zaki-muted" />
+        </div>
+      ) : activeView === "edit" ? (
+        <div>
+          <textarea
+            value={editor}
+            onChange={(event) => setEditor(event.target.value)}
+            onKeyDown={handleEditorKeyDown}
+            spellCheck={false}
+            placeholder={`Edit ${activeFile}...`}
+            className="min-h-[420px] w-full resize-y rounded-zaki-lg border border-zaki-border bg-zaki-base px-5 py-4 font-mono text-[13px] leading-7 text-zaki-text outline-none focus:border-zaki-brand"
+          />
+          <p className="mt-2 text-[11px] text-zaki-muted">
+            Cmd+S to save · Markdown supported{hasChanges ? " · Unsaved changes" : ""}
+          </p>
+        </div>
+      ) : editor.trim() ? (
+        <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised px-6 py-5">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{editor}</ReactMarkdown>
+        </div>
+      ) : (
+        <div className="flex min-h-[300px] flex-col items-center justify-center rounded-zaki-lg border border-dashed border-zaki-border text-center">
+          <p className="text-sm font-medium text-zaki-text">{activeFile} is empty</p>
+          <p className="mt-1 text-[13px] text-zaki-muted">Switch to Edit to add content.</p>
+        </div>
+      )}
+
+      {saveModalOpen && activeFile === "SOUL.md" ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-zaki-lg border border-zaki-border bg-zaki-base p-5 shadow-xl">
+            <h3 className="text-[15px] font-semibold text-zaki-text">Save SOUL.md</h3>
+            <p className="mt-1 text-[12px] text-zaki-muted">
+              Save only this bot profile, overwrite the selected template, or save a new reusable template.
+            </p>
+            <div className="mt-4 space-y-2">
+              <label className="flex items-center gap-2 text-[12px] text-zaki-text">
+                <input
+                  type="radio"
+                  name="save-mode"
+                  checked={saveMode === "file_only"}
+                  onChange={() => setSaveMode("file_only")}
+                />
+                Save profile only
+              </label>
+              {sourceSoulTemplate ? (
+                <label className="flex items-center gap-2 text-[12px] text-zaki-text">
+                  <input
+                    type="radio"
+                    name="save-mode"
+                    checked={saveMode === "update_template"}
+                    onChange={() => setSaveMode("update_template")}
+                  />
+                  Save and overwrite template "{sourceSoulTemplate.name}"
+                </label>
+              ) : null}
+              <label className="flex items-center gap-2 text-[12px] text-zaki-text">
+                <input
+                  type="radio"
+                  name="save-mode"
+                  checked={saveMode === "new_template"}
+                  onChange={() => setSaveMode("new_template")}
+                />
+                Save and create new template
+              </label>
+            </div>
+            {saveMode === "new_template" ? (
+              <label className="mt-4 block text-[12px] font-medium text-zaki-muted">
+                Template name
+                <input
+                  value={newTemplateName}
+                  onChange={(event) => setNewTemplateName(event.target.value)}
+                  placeholder="e.g. IELTS Mentor"
+                  className="mt-1 h-10 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[13px] text-zaki-text outline-none focus:border-zaki-brand"
+                />
+              </label>
+            ) : null}
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSaveModalOpen(false)}
+                disabled={saveProfile.isPending}
+                className="rounded-zaki-md border border-zaki-border px-3 py-1.5 text-[12px] text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => saveProfile.mutate({ mode: saveMode, templateName: newTemplateName })}
+                disabled={
+                  saveProfile.isPending ||
+                  (saveMode === "new_template" && !newTemplateName.trim())
+                }
+                className="inline-flex items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+              >
+                {saveProfile.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Save className="size-3.5" />
+                )}
+                {saveMode === "update_template"
+                  ? "Save and overwrite"
+                  : saveMode === "new_template"
+                    ? "Save and create"
+                    : "Save profile"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {replaceModalOpen && activeFile === "SOUL.md" ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-zaki-lg border border-zaki-border bg-zaki-base p-5 shadow-xl">
+            <h3 className="text-[15px] font-semibold text-zaki-text">Replace SOUL.md content?</h3>
+            <p className="mt-1 text-[12px] text-zaki-muted">
+              You have unsaved changes. Switching templates will replace the current editor content.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setReplaceModalOpen(false);
+                  setPendingSoulId(null);
+                }}
+                className="rounded-zaki-md border border-zaki-border px-3 py-1.5 text-[12px] text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingSoulId) applySoulSelection(pendingSoulId);
+                  setReplaceModalOpen(false);
+                  setPendingSoulId(null);
+                }}
+                className="rounded-zaki-md bg-zaki-brand px-3 py-1.5 text-[12px] font-semibold text-white"
+              >
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function TutorSoulsPanel({ souls }: { souls: Item[] }) {
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -6901,30 +7326,7 @@ function AgentsPanel({
             )}
           </div>
         ) : activeTab === "profiles" ? (
-          <div className="space-y-3">
-            {items.length ? (
-              items.map((item, index) => (
-                <button
-                  key={tutorAgentId(item, `profile-${index + 1}`)}
-                  type="button"
-                  onClick={() => setSelectedAgentId(tutorAgentId(item, `profile-${index + 1}`))}
-                  className="flex w-full items-center justify-between gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 text-left hover:bg-zaki-hover"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-zaki-text">
-                      {itemTitle(item, `Profile ${index + 1}`)}
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-zaki-muted">
-                      {textOf(item.bot_id) || textOf(item.id)}
-                    </span>
-                  </span>
-                  <FileText className="size-4 shrink-0 text-zaki-muted" />
-                </button>
-              ))
-            ) : (
-              <EmptyLine label="No profiles yet." />
-            )}
-          </div>
+          <TutorProfilesPanel bots={items} souls={souls} />
         ) : activeTab === "channels" ? (
           <TutorChannelsPanel bots={items} channelsSchema={channelsSchema} />
         ) : (

@@ -572,6 +572,22 @@ export function getLearningTutorAgentHistory(agentId: string) {
   );
 }
 
+export function listLearningTutorAgentFiles(agentId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/files`,
+  );
+}
+
+export function updateLearningTutorAgentFile(agentId: string, filename: string, content: string) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}`,
+    {
+      method: "PUT",
+      body: { content },
+    },
+  );
+}
+
 export function createLearningTutorAgent(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/tutor-agents", {
     method: "POST",
