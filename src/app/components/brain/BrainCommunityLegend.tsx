@@ -72,14 +72,14 @@ export function BrainCommunityLegend({
       data-testid="brain-community-legend"
     >
       <header className="flex items-center justify-between">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-zaki-muted">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-white/55">
           {t("brain.communities.title", { defaultValue: "Clusters" })}
         </h3>
         <button
           type="button"
           onClick={handleRecompute}
           disabled={isRunning}
-          className="rounded-zaki-md border border-zaki-border px-2 py-0.5 text-xs text-zaki-text transition hover:border-[#f10202] hover:text-[#f10202] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 transition hover:border-[#f10202] hover:text-[#f10202] disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="brain-recompute-clusters"
         >
           {isRunning
@@ -88,10 +88,10 @@ export function BrainCommunityLegend({
         </button>
       </header>
 
-      {toast && <p className="text-xs text-zaki-muted">{toast}</p>}
+      {toast && <p className="text-xs text-white/55">{toast}</p>}
 
       {!communitiesQuery.isLoading && sorted.length === 0 && (
-        <p className="text-xs text-zaki-muted">
+        <p className="text-xs text-white/55">
           {t("brain.communities.emptyHint", {
             defaultValue:
               "No clusters yet. Click Recompute to detect groups in your knowledge graph.",
@@ -113,8 +113,8 @@ export function BrainCommunityLegend({
                 }
                 className={`flex w-full items-center gap-2 rounded-zaki-md px-2 py-1 text-left text-xs transition ${
                   isActive
-                    ? "bg-zaki-text/10 text-zaki-text"
-                    : "text-zaki-text hover:bg-zaki-text/5"
+                    ? "bg-white/10 text-white/85"
+                    : "text-white/85 hover:bg-white/5"
                 }`}
                 data-testid={`brain-cluster-row-${c.community_id}`}
               >
@@ -125,12 +125,12 @@ export function BrainCommunityLegend({
                 />
                 <span
                   className={`flex-1 truncate ${
-                    isFallback ? "italic text-zaki-muted" : ""
+                    isFallback ? "italic text-white/55" : ""
                   }`}
                 >
                   {c.name}
                 </span>
-                <span className="shrink-0 text-zaki-muted">{c.member_count}</span>
+                <span className="shrink-0 text-white/55">{c.member_count}</span>
               </button>
             </li>
           );

@@ -27,20 +27,20 @@ export function BrainOrphanRail({ userId, onPick }: Props) {
       data-testid="brain-orphan-rail"
     >
       <header className="flex items-center justify-between">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-zaki-muted">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-white/55">
           {t("brain.orphanRail.title", { defaultValue: "Orphans" })}
         </h3>
-        <span className="text-xs text-zaki-muted">{orphansQuery.data?.stats.orphans ?? 0}</span>
+        <span className="text-xs text-white/55">{orphansQuery.data?.stats.orphans ?? 0}</span>
       </header>
 
       {orphansQuery.isLoading && (
-        <p className="text-xs text-zaki-muted">
+        <p className="text-xs text-white/55">
           {t("brain.orphanRail.loading", { defaultValue: "Loading..." })}
         </p>
       )}
 
       {!orphansQuery.isLoading && list.length === 0 && (
-        <p className="text-xs text-zaki-muted">
+        <p className="text-xs text-white/55">
           {t("brain.orphanRail.empty", { defaultValue: "No orphan notes." })}
         </p>
       )}
@@ -54,11 +54,11 @@ export function BrainOrphanRail({ userId, onPick }: Props) {
               <button
                 type="button"
                 onClick={() => onPick(key)}
-                className="flex w-full flex-col gap-0.5 rounded-zaki-md px-2 py-1.5 text-left transition hover:bg-zaki-text/5"
+                className="flex w-full flex-col gap-0.5 rounded-zaki-md px-2 py-1.5 text-left transition hover:bg-white/5"
                 data-testid="brain-orphan-row"
               >
-                <span className="line-clamp-1 text-xs text-zaki-text">{o.summary}</span>
-                <span className="flex items-center gap-1.5 text-[10px] text-zaki-muted">
+                <span className="line-clamp-1 text-xs text-white/85">{o.summary}</span>
+                <span className="flex items-center gap-1.5 text-[10px] text-white/55">
                   <span
                     className="size-1.5 rounded-full"
                     style={{ backgroundColor: color }}

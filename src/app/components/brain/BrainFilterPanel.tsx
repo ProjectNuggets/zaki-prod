@@ -71,7 +71,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
       // of Nova's video. Solid dark panel reads cleanly against the
       // #0a0a0a canvas; the graph is still visible behind everywhere
       // the panel doesn't cover.
-      className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-zaki-lg border border-white/10 bg-[#181818] p-4 text-sm text-zaki-text"
+      className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-zaki-lg border border-white/10 bg-[#181818] p-4 text-sm text-white/85"
       data-testid="brain-filter-panel"
     >
       <Section title={t("brain.filterPanel.filters", { defaultValue: "Filters" })}>
@@ -102,8 +102,8 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
                 onClick={() => toggleLinkType(lt)}
                 className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition ${
                   active
-                    ? "border-zaki-text bg-zaki-text/10 text-zaki-text"
-                    : "border-zaki-border text-zaki-muted hover:border-zaki-text/40"
+                    ? "border-white/85 bg-white/10 text-white/85"
+                    : "border-white/10 text-white/55 hover:border-white/40"
                 }`}
                 data-testid={`brain-link-type-pill-${lt}`}
               >
@@ -121,7 +121,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           <button
             type="button"
             onClick={() => set("linkTypes", [])}
-            className="mt-2 text-xs text-zaki-muted underline-offset-2 hover:underline"
+            className="mt-2 text-xs text-white/55 underline-offset-2 hover:underline"
           >
             {t("brain.filterPanel.clearLinkTypes", { defaultValue: "Clear" })}
           </button>
@@ -137,8 +137,8 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
               onClick={() => set("colorPreset", p)}
               className={`flex-1 rounded-zaki-md border px-2 py-1 text-xs capitalize ${
                 filters.colorPreset === p
-                  ? "border-[#f10202] bg-[#f10202]/10 text-zaki-text"
-                  : "border-zaki-border text-zaki-muted hover:border-zaki-text/40"
+                  ? "border-[#f10202] bg-[#f10202]/10 text-white/85"
+                  : "border-white/10 text-white/55 hover:border-white/40"
               }`}
               data-testid={`brain-color-preset-${p}`}
             >
@@ -216,7 +216,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-zaki-muted">{title}</h3>
+      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-white/55">{title}</h3>
       <div className="space-y-2">{children}</div>
     </div>
   );
@@ -233,7 +233,7 @@ function ToggleRow({
 }) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-2 text-sm">
-      <span className="text-zaki-text">{label}</span>
+      <span className="text-white/85">{label}</span>
       <input
         type="checkbox"
         checked={value}
@@ -261,7 +261,7 @@ function NumberRow({
 }) {
   return (
     <label className="flex items-center justify-between gap-2 text-sm">
-      <span className="text-zaki-text">{label}</span>
+      <span className="text-white/85">{label}</span>
       <input
         type="number"
         value={value}
@@ -269,7 +269,7 @@ function NumberRow({
         max={max}
         step={step}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-20 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 py-0.5 text-sm text-zaki-text focus:border-[#f10202] focus:outline-none"
+        className="w-20 rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-sm text-white/85 focus:border-[#f10202] focus:outline-none"
       />
     </label>
   );
@@ -293,8 +293,8 @@ function SliderRow({
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs">
-        <span className="text-zaki-text">{label}</span>
-        <span className="text-zaki-muted">{value}</span>
+        <span className="text-white/85">{label}</span>
+        <span className="text-white/55">{value}</span>
       </div>
       <input
         type="range"

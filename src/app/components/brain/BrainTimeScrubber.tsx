@@ -59,11 +59,11 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
 
   return (
     <section
-      className="flex flex-col gap-2 rounded-zaki-lg border border-zaki-border bg-zaki-raised/60 p-3 text-sm"
+      className="flex flex-col gap-2 rounded-zaki-lg border border-white/10 bg-[#181818] p-3 text-sm"
       data-testid="brain-time-scrubber"
     >
       <header className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-zaki-muted">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-white/55">
           {t("brain.scrubber.title", { defaultValue: "Time scrubber" })}
         </h3>
         <div className="flex items-center gap-1.5">
@@ -71,7 +71,7 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 py-0.5 text-xs text-zaki-text focus:border-[#f10202] focus:outline-none"
+            className="rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-xs text-white/85 focus:border-[#f10202] focus:outline-none"
             data-testid="brain-scrubber-date"
           />
           <button
@@ -79,7 +79,7 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             onClick={() => {
               setDate((cur) => shiftDay(cur, -1));
             }}
-            className="rounded-zaki-md border border-zaki-border px-2 py-0.5 text-xs text-zaki-muted hover:text-zaki-text"
+            className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/55 hover:text-white"
             aria-label={t("brain.scrubber.prevDay", { defaultValue: "Previous day" })}
           >
             {"‹"}
@@ -89,7 +89,7 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             onClick={() => {
               setDate((cur) => shiftDay(cur, 1));
             }}
-            className="rounded-zaki-md border border-zaki-border px-2 py-0.5 text-xs text-zaki-muted hover:text-zaki-text"
+            className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/55 hover:text-white"
             aria-label={t("brain.scrubber.nextDay", { defaultValue: "Next day" })}
           >
             {"›"}
@@ -100,7 +100,7 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             className={`rounded-zaki-md border px-2 py-0.5 text-xs transition ${
               animating
                 ? "border-[#f10202] bg-[#f10202]/10 text-[#f10202]"
-                : "border-zaki-border text-zaki-text hover:border-[#f10202]"
+                : "border-white/10 text-white/85 hover:border-[#f10202]"
             }`}
             data-testid="brain-scrubber-animate"
           >
@@ -140,22 +140,22 @@ function DiffColumn({ title, tone, items, onPick }: DiffColumnProps) {
   const dot = tone === "positive" ? "bg-emerald-500" : "bg-amber-500";
   return (
     <div>
-      <div className="mb-1 flex items-center gap-1.5 text-xs text-zaki-muted">
+      <div className="mb-1 flex items-center gap-1.5 text-xs text-white/55">
         <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
         <span>
-          {title} <span className="text-zaki-muted">({items.length})</span>
+          {title} <span className="text-white/55">({items.length})</span>
         </span>
       </div>
       <ul className="max-h-32 space-y-0.5 overflow-y-auto">
         {items.length === 0 && (
-          <li className="px-1 text-xs text-zaki-muted">—</li>
+          <li className="px-1 text-xs text-white/55">—</li>
         )}
         {items.map((it) => (
           <li key={`${tone}-${it.key}`}>
             <button
               type="button"
               onClick={() => onPick(it.key)}
-              className="line-clamp-1 w-full rounded-zaki-md px-1 py-0.5 text-left text-xs text-zaki-text hover:bg-zaki-text/5"
+              className="line-clamp-1 w-full rounded-zaki-md px-1 py-0.5 text-left text-xs text-white/85 hover:bg-white/5"
             >
               {it.summary}
             </button>

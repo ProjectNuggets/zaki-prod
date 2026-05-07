@@ -699,19 +699,19 @@ export function BrainGraphView({
   return (
     <div className="relative w-full" data-testid="brain-graph-canvas-wrap">
       {/* Mode bar */}
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zaki-muted">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
         <div>
           {centerKey ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={exitLocalMode}
-                className="rounded-zaki-md border border-zaki-border px-2 py-0.5 text-xs text-zaki-text hover:border-[#f10202]"
+                className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 hover:border-[#f10202]"
                 data-testid="brain-back-to-global"
               >
                 {t("brain.graph.backToGlobal", { defaultValue: "← Back to global" })}
               </button>
-              <span className="font-mono text-zaki-text">{centerKey}</span>
+              <span className="font-mono text-white/85">{centerKey}</span>
               <label className="flex items-center gap-1">
                 <span>{t("brain.graph.depth", { defaultValue: "Depth" })}</span>
                 <input
@@ -754,18 +754,18 @@ export function BrainGraphView({
       <div className="relative">
         <div
           ref={containerRef}
-          className="size-full min-h-[640px] rounded-zaki-lg border border-zaki-border bg-black/60"
+          className="size-full min-h-[640px] rounded-zaki-lg border border-white/10 bg-black/60"
           data-testid="brain-graph-canvas"
         />
 
         {isLoading && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zaki-muted">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-white/55">
             {t("brain.graph.loading", { defaultValue: "Loading graph..." })}
           </div>
         )}
 
         {isError && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zaki-muted">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-white/55">
             {t("brain.error.loadFailed")}
           </div>
         )}
