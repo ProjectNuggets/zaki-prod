@@ -209,6 +209,16 @@ Nova's authority lifted the V1.11 "don't refactor for taste" guard — but the V
 
 **Strengths.** This is the cleanest surface in the audit. BrainPage uses a single-source `activePanel` state (Obsidian Graph View pattern). Heavy V1.11 hotfix comments document every non-obvious decision (the "why" comments DESIGN.md asked for). i18n via `t()` consistent throughout. Source attribution rendering in DetailPanel is the Pillar 1 trust-builder ("I can see exactly where ZAKI learned this"). Per-edge relevance-weighted layout fixes "important things sit close together."
 
+**P0 — silent runtime regression (caught in live preview)**
+
+`runLayout` in `BrainGraphView.tsx:867-891` wraps the per-edge `idealEdgeLength` function in a try/catch. Live preview against 40 nodes / 789 edges shows the function call **always throws `RangeError: Invalid array length`** deep inside cose-bilkent's `FDLayout.calcGrid` → `updateGrid` → `calcRepulsionForces` chain. Every layout run logs the warning + falls back to the constant. Net effect: **per-edge relevance-weighted distance — Nova's "if two nodes are close, they're more relevant" Pillar 1 differentiator — is never actually applied**.
+
+V1.11 hotfix-3 comment claimed: "with NaN clamped at the source, function-based idealEdgeLength is safe." Reality (live preview, 2026-05-07): the function returns finite numbers ≥ 20, but cose-bilkent's internal grid sizing rejects something downstream. Stack trace points at `calcGrid` (line 2691 of cose-bilkent v.4-7-1), not at `idealEdgeLength` evaluation itself. The crash is in the layout iteration loop, not at the first call.
+
+**Diagnosis path (next investigation):** likely candidate is dramatic length variance from the function (`relevance 1.0 → 0.5×base`, `relevance 0.2 → 1.3×base`) producing grid cell counts that overflow cose-bilkent's pre-allocated array. Test by clamping the returned length to a tighter range (e.g. `[0.7×base, 1.3×base]` instead of `[0.5×base, 1.3×base]`) and seeing if the error stops.
+
+**Severity: P0 because it's a silent loss of a load-bearing differentiator.** Logging this for the brain investigation queue. Not introduced by recent changes — pre-existing on main. Console also gets spammed (~24 entries per page load).
+
 **P0 — atomic ship-ready (small token migration + a11y)**
 
 - **Off-brand `text-red-500` error in `BrainComposeModal:148`** → `text-zaki-error`.

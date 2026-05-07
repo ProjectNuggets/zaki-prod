@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
 import { useBrainCompose } from "@/queries";
 import type { BrainGraphNode } from "@/lib/api";
 
@@ -84,83 +85,104 @@ export function BrainComposeModal({
     selectedNodes.length >= 2 &&
     !compose.isPending;
 
+  // Audit (2026-05-07) — Compose surface relocated from full-width
+  // canvas-bottom slide-up to a right-anchored card matching the
+  // FloatingOverlay panel slot. Rationale: the bottom-slide pattern
+  // covered ~30% of canvas vertical at full width, hiding the very
+  // graph the user is composing about. Right-anchored mirrors the
+  // panel pattern (filters/clusters/orphans), keeps canvas top + left
+  // visible for reference, and slides in from the right edge so the
+  // motion direction matches "I'm pulling up a side panel."
+  // Mutual exclusion with the FloatingOverlay panels is enforced by
+  // BrainPage: opening compose calls setActivePanel(null).
+  // Visual style is dark-canvas-locked (white-on-black with /opacity
+  // tints) since this surface lives inside the canvas region.
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ y: "100%", opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: "100%", opacity: 0 }}
+          initial={{ x: "100%", opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
-          className="absolute inset-x-0 bottom-0 rounded-t-zaki-lg border-t border-zaki-border bg-zaki-base p-4 shadow-2xl"
-          style={{ minHeight: 240 }}
+          className="absolute right-3 top-14 bottom-3 z-30 flex w-[min(420px,calc(100%-1.5rem))] max-h-[calc(100%-4.5rem)] flex-col rounded-zaki-lg border border-white/10 bg-black/85 shadow-2xl backdrop-blur-xl"
         >
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-zaki-text">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
+            <h3 className="text-sm font-semibold text-white">
               {t("brain.compose.title", { count: selectedNodes.length })}
             </h3>
             <button
               type="button"
               onClick={handleClose}
-              className="text-xs text-zaki-muted hover:text-zaki-text"
+              aria-label={t("brain.compose.cancel")}
+              className="rounded-full p-1 text-white/40 transition-colors hover:text-white"
             >
-              {t("brain.compose.cancel")}
+              <X className="size-3.5" />
             </button>
           </div>
 
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {selectedNodes.map((n) => (
-              <span
-                key={n.id}
-                className="max-w-[14rem] truncate rounded-full bg-zaki-raised px-2 py-0.5 text-[11px] text-zaki-muted"
-                title={n.summary}
-              >
-                {n.summary}
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {selectedNodes.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {selectedNodes.map((n) => (
+                  <span
+                    key={n.id}
+                    className="max-w-[14rem] truncate rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/70"
+                    title={n.summary}
+                  >
+                    {n.summary}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <label className="mb-3 block">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                {t("brain.compose.titleField")}
               </span>
-            ))}
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="mt-1 w-full rounded-zaki-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-zaki-brand focus:ring-1 focus:ring-zaki-brand/30"
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                {t("brain.compose.contentField")}
+              </span>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={6}
+                className="mt-1 w-full resize-y rounded-zaki-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-zaki-brand focus:ring-1 focus:ring-zaki-brand/30"
+              />
+            </label>
+
+            {error && (
+              <div className="mt-2 text-xs text-zaki-error">{error}</div>
+            )}
           </div>
 
-          <label className="mb-2 block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-zaki-muted">
-              {t("brain.compose.titleField")}
-            </span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 py-1.5 text-sm text-zaki-text outline-none focus:border-[#f10202]"
-            />
-          </label>
-
-          <label className="mb-3 block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-zaki-muted">
-              {t("brain.compose.contentField")}
-            </span>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={3}
-              className="mt-1 w-full rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 py-1.5 text-sm text-zaki-text outline-none focus:border-[#f10202]"
-            />
-          </label>
-
-          {error && (
-            <div className="mb-2 text-xs text-zaki-error">{error}</div>
-          )}
-
-          <div className="flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
             {justSynthesized ? (
-              <span className="text-xs font-semibold text-[#f10202]">
+              <span className="text-xs font-semibold text-zaki-brand">
                 {t("brain.compose.youSynthesized")}
               </span>
             ) : (
-              <span />
+              <span className="text-[11px] text-white/40">
+                {t("brain.compose.referenceCount", {
+                  defaultValue: "{{count}} references",
+                  count: selectedNodes.length,
+                })}
+              </span>
             )}
             <button
               type="button"
               disabled={!canSubmit}
               onClick={handleSubmit}
-              className="rounded-zaki-md bg-[#f10202] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-zaki-md bg-zaki-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-zaki-brand-hover disabled:opacity-50"
             >
               {compose.isPending
                 ? t("brain.compose.submitting")

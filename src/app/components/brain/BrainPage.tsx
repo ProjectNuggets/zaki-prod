@@ -334,17 +334,23 @@ export function BrainPage() {
           </div>
 
           {/*
-            V1.11 (2026-05-07) — Floating "Compose from N" trigger button
-            replaces the auto-opening modal. Shows when ≥2 nodes are
-            selected and the modal isn't already open. User clicks to
-            open; on close, both modal state AND node selection clear so
-            the next compose flow starts fresh.
+            Audit (2026-05-07) — Compose-from-N trigger relocated INSIDE
+            the canvas (was fixed bottom-6 right-6 viewport-anchored).
+            The viewport anchor put the button at risk of overlapping
+            sidebar / mobile UI on narrow screens. Anchored to the canvas
+            it lives inside the brain's visual frame and disappears
+            cleanly when the compose modal opens (mutual exclusion with
+            the FloatingOverlay panels: opening compose closes the active
+            panel so the right slot belongs to compose).
           */}
           {selectedNodeIds.length >= 2 && !composeOpen ? (
             <button
               type="button"
-              onClick={() => setComposeOpen(true)}
-              className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 rounded-full bg-[#f10202] px-4 py-3 text-sm font-medium text-white shadow-lg transition hover:bg-[#f10202]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f10202]/40"
+              onClick={() => {
+                setComposeOpen(true);
+                setActivePanel(null);
+              }}
+              className="absolute bottom-3 left-3 z-30 inline-flex items-center gap-2 rounded-full bg-zaki-brand px-4 py-2.5 text-sm font-medium text-white shadow-lg transition hover:bg-zaki-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/40"
               data-testid="brain-compose-from-selection-button"
             >
               {t("brain.compose.fromSelection", { count: selectedNodeIds.length, defaultValue: "Compose from {{count}}" })}
