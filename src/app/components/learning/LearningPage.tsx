@@ -70,6 +70,7 @@ import {
   getLearningTutorAgentHistory,
   learningKeys,
   openLearningSocket,
+  prepareLearningSocketAuth,
   listLearningKnowledgeFiles,
   listLearningBooks,
   listLearningCoWriterDocuments,
@@ -1620,6 +1621,7 @@ function LearningChatPanel({
   const [selectedMemoryFiles, setSelectedMemoryFiles] = useState<LearningMemoryFile[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [socketAuthReady, setSocketAuthReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
@@ -1718,6 +1720,18 @@ function LearningChatPanel({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setSocketAuthReady(false);
+    void prepareLearningSocketAuth().finally(() => {
+      if (!cancelled) setSocketAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!socketAuthReady) return undefined;
     const socket = openLearningSocket("/api/learning/ws");
     socketRef.current = socket;
     if (!socket) {
@@ -1877,7 +1891,7 @@ function LearningChatPanel({
       socket.close();
       socketRef.current = null;
     };
-  }, []);
+  }, [socketAuthReady]);
 
   const showAttachmentError = (message: string) => {
     setAttachmentError(message);
@@ -4289,6 +4303,7 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
   const [input, setInput] = useState("");
+  const [socketAuthReady, setSocketAuthReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
@@ -4318,6 +4333,18 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
   }, [messages, thinking]);
 
   useEffect(() => {
+    let cancelled = false;
+    setSocketAuthReady(false);
+    void prepareLearningSocketAuth().finally(() => {
+      if (!cancelled) setSocketAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!socketAuthReady) return undefined;
     const socket = openLearningSocket(
       `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/ws`,
     );
@@ -4402,7 +4429,7 @@ function TutorAgentChatPanel({ agentId, history }: { agentId: string; history: I
       socket.close();
       socketRef.current = null;
     };
-  }, [agentId]);
+  }, [agentId, socketAuthReady]);
 
   const sendMessage = () => {
     const content = input.trim();

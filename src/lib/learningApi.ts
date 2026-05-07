@@ -1,4 +1,4 @@
-import { backendAuthRequest, buildApiUrl, getAuthToken } from "@/lib/api";
+import { backendAuthRequest, buildApiUrl, getAuthToken, getFreshAuthToken } from "@/lib/api";
 
 export type LearningJson = Record<string, unknown>;
 
@@ -39,8 +39,6 @@ export async function learningRequest<T = unknown>(
 }
 
 export function learningWsUrl(path: string): string | null {
-  const token = getAuthToken();
-  if (!token) return null;
   const url = new URL(buildApiUrl(path), window.location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
@@ -48,9 +46,22 @@ export function learningWsUrl(path: string): string | null {
 
 export function openLearningSocket(path: string): WebSocket | null {
   const token = getAuthToken();
+  return openLearningSocketWithToken(path, token);
+}
+
+function openLearningSocketWithToken(path: string, token: string | null): WebSocket | null {
   const url = learningWsUrl(path);
   if (!token || !url) return null;
   return new WebSocket(url, ["zaki.learning.v1", `zaki.jwt.${token}`]);
+}
+
+export async function openFreshLearningSocket(path: string): Promise<WebSocket | null> {
+  const token = await getFreshAuthToken();
+  return openLearningSocketWithToken(path, token);
+}
+
+export async function prepareLearningSocketAuth(): Promise<string | null> {
+  return getFreshAuthToken();
 }
 
 export const learningKeys = {

@@ -63,6 +63,7 @@ import {
   learningKeys,
   moveLearningBookBlock,
   openLearningSocket,
+  prepareLearningSocketAuth,
   rebuildLearningBook,
   recordLearningBookQuizAttempt,
   refreshLearningBookFingerprints,
@@ -520,6 +521,7 @@ export function LearningBookWorkspace({
   const [spineDraft, setSpineDraft] = useState("");
   const [bookView, setBookView] = useState<"library" | "creator">("library");
   const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
+  const [progressSocketAuthReady, setProgressSocketAuthReady] = useState(false);
   const [bookLanguage, setBookLanguage] = useState("en");
   const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([]);
   const [selectedSessions, setSelectedSessions] = useState<BookSourceSelection<number>>(() => new Map());
@@ -572,7 +574,22 @@ export function LearningBookWorkspace({
   }, [selectedBookId]);
 
   useEffect(() => {
-    if (!selectedBookId) return undefined;
+    if (!selectedBookId) {
+      setProgressSocketAuthReady(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setProgressSocketAuthReady(false);
+    void prepareLearningSocketAuth().finally(() => {
+      if (!cancelled) setProgressSocketAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBookId]);
+
+  useEffect(() => {
+    if (!selectedBookId || !progressSocketAuthReady) return undefined;
     const socket = openLearningSocket("/api/learning/book/ws");
     if (!socket) return undefined;
 
@@ -617,7 +634,7 @@ export function LearningBookWorkspace({
         progressRefreshTimerRef.current = null;
       }
     };
-  }, [queryClient, selectedBookId]);
+  }, [progressSocketAuthReady, queryClient, selectedBookId]);
 
   const runBookAction = useMutation({
     mutationFn: async ({
@@ -2324,6 +2341,7 @@ function BookPageChatPanel({
 }) {
   const [messages, setMessages] = useState<BookChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [socketAuthReady, setSocketAuthReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [sessionId, setSessionId] = useState(
@@ -2346,6 +2364,18 @@ function BookPageChatPanel({
   }, [messages, streaming]);
 
   useEffect(() => {
+    let cancelled = false;
+    setSocketAuthReady(false);
+    void prepareLearningSocketAuth().finally(() => {
+      if (!cancelled) setSocketAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [book.id, page.id]);
+
+  useEffect(() => {
+    if (!socketAuthReady) return undefined;
     const socket = openLearningSocket("/api/learning/ws");
     socketRef.current = socket;
     if (!socket) {
@@ -2421,7 +2451,7 @@ function BookPageChatPanel({
       socket.close();
       socketRef.current = null;
     };
-  }, [book.id, page.id]);
+  }, [book.id, page.id, socketAuthReady]);
 
   const appendAssistantContent = (content: string, replace = false) => {
     const assistantId = assistantIdRef.current || `assistant-${Date.now()}`;

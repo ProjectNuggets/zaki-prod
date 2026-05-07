@@ -98,6 +98,10 @@ export function getAuthToken(): string | null {
   return useAuthStore.getState().token;
 }
 
+export async function getFreshAuthToken(): Promise<string | null> {
+  return (await refreshAccessToken()) || getAuthToken();
+}
+
 export function setAuthToken(token: string) {
   useAuthStore.getState().setToken(token);
 }
