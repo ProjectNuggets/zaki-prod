@@ -19,6 +19,7 @@ import {
   sanitizeLearningClientPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
+  shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 
@@ -236,6 +237,45 @@ describe("learning BFF contract", () => {
     expect(shouldConsumeLearningWsQuota(JSON.stringify({ type: "subscribe", book_id: "b1" }), false)).toBe(false);
     expect(shouldConsumeLearningWsQuota(Buffer.from("raw prompt"), false)).toBe(true);
     expect(shouldConsumeLearningWsQuota(Buffer.from("raw"), true)).toBe(true);
+  });
+
+  test("identifies learning HTTP mutations that should consume prompt quota", () => {
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/notebooks",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/notebooks/records/manual",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "PUT",
+        originalUrl: "/api/learning/notebooks/notebook-1/records/record-1",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/notebooks/records/with-summary",
+      })
+    ).toBe(true);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "POST",
+        originalUrl: "/api/learning/books",
+      })
+    ).toBe(true);
+    expect(
+      shouldConsumeLearningIngressQuota({
+        method: "GET",
+        originalUrl: "/api/learning/books",
+      })
+    ).toBe(false);
   });
 
   test("resolves and enforces learning request byte caps", () => {

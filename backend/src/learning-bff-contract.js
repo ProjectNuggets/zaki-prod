@@ -80,6 +80,7 @@ const LEARNING_WS_QUOTA_FREE_TYPES = new Set([
   "subscribe",
   "unsubscribe",
 ]);
+const LEARNING_NOTEBOOK_ID_SEGMENT = "[^/?#]+";
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -322,6 +323,35 @@ export function shouldConsumeLearningWsQuota(data, isBinary) {
   } catch {
     return text.trim().length > 0;
   }
+}
+
+function normalizeLearningRequestPath(value) {
+  const raw = String(value || "").trim();
+  const path = raw.split("?")[0].split("#")[0] || "";
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+export function shouldConsumeLearningIngressQuota(req = {}) {
+  const method = String(req.method || "").trim().toUpperCase();
+  if (!["POST", "PUT", "PATCH"].includes(method)) return false;
+
+  const path = normalizeLearningRequestPath(req.originalUrl || req.path || req.url);
+  const learningPath = path.startsWith("/api/learning")
+    ? path.slice("/api/learning".length) || "/"
+    : path;
+
+  if (method === "POST" && learningPath === "/notebooks") return false;
+  if (method === "POST" && learningPath === "/notebooks/records/manual") return false;
+
+  if (method === "PUT") {
+    const notebookPattern = new RegExp(`^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}$`);
+    const recordPattern = new RegExp(
+      `^/notebooks/${LEARNING_NOTEBOOK_ID_SEGMENT}/records/${LEARNING_NOTEBOOK_ID_SEGMENT}$`
+    );
+    if (notebookPattern.test(learningPath) || recordPattern.test(learningPath)) return false;
+  }
+
+  return true;
 }
 
 export function resolveLearningMaxRequestBytes(env = process.env) {

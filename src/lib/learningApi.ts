@@ -315,6 +315,13 @@ export function addLearningNotebookRecord(payload: LearningJson) {
   });
 }
 
+export function addLearningNotebookRecordManual(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/notebooks/records/manual", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function updateLearningNotebookRecord(
   notebookId: string,
   recordId: string,

@@ -84,6 +84,7 @@ import {
   resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
   sanitizeLearningWsClientMessage,
+  shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 import {
@@ -8605,7 +8606,8 @@ function learningClientOptions(req, label) {
 }
 
 async function requireLearningQuotaForIngress(req, res, next) {
-  if (!["POST", "PUT", "PATCH"].includes(String(req.method || "").toUpperCase())) {
+  const isMutation = ["POST", "PUT", "PATCH"].includes(String(req.method || "").toUpperCase());
+  if (!isMutation) {
     next();
     return;
   }
@@ -8624,6 +8626,10 @@ async function requireLearningQuotaForIngress(req, res, next) {
       maxBytes: sizeDecision.maxBytes,
       contentLength: sizeDecision.contentLength,
     });
+    return;
+  }
+  if (!shouldConsumeLearningIngressQuota(req)) {
+    next();
     return;
   }
   if (req.learningQuotaChecked) {
@@ -10468,6 +10474,30 @@ registerLearningJsonProxyRoute("POST", "/api/learning/notebooks/records", "/api/
   jsonLimit: "5mb",
   label: "Learning notebook record add request",
 });
+const learningManualNotebookRecordJson = express.json({ limit: "5mb" });
+app.post(
+  "/api/learning/notebooks/records/manual",
+  requireLearningContext,
+  learningManualNotebookRecordJson,
+  async (req, res) => {
+    const body = sanitizeLearningJsonBody(req.body);
+    if (!String(body?.summary || "").trim()) {
+      res.status(400).json({
+        code: "learning_manual_notebook_summary_required",
+        error: "Manual notebook records require a summary.",
+        message: "Manual notebook records require a summary.",
+        requestId: getOrCreateRequestId(req),
+      });
+      return;
+    }
+
+    await proxyLearningRequest(req, res, "/api/v1/notebook/add_record", {
+      method: "POST",
+      body,
+      label: "Learning notebook manual record add request",
+    });
+  }
+);
 registerLearningJsonProxyRoute(
   "POST",
   "/api/learning/notebooks/records/with-summary",
