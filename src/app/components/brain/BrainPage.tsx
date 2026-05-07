@@ -177,6 +177,32 @@ export function BrainPage() {
             </div>
           </div>
 
+          {/*
+            V1.11 (2026-05-07) — Counter strip. Replaces the implicit
+            "Trimmed: NN nodes hidden" message in BrainGraphView with
+            an honest, scannable summary of what's on screen vs. what
+            ZAKI has remembered total. Pillar 1 visible-memory beat:
+            users SEE the brain accreting over time.
+          */}
+          <div className="mb-3 flex items-baseline justify-between gap-3 px-1 text-xs text-zaki-muted">
+            <div>
+              {t("brain.counterStrip.showing", {
+                defaultValue: "Showing {{visible}} of {{total}} memories",
+                visible: initialGraphQuery.data?.nodes?.length ?? 0,
+                total: totalNodes,
+              })}
+              {(initialGraphQuery.data?.edges?.length ?? 0) > 0 ? (
+                <>
+                  {" · "}
+                  {t("brain.counterStrip.edges", {
+                    defaultValue: "{{count}} edges",
+                    count: initialGraphQuery.data?.edges?.length ?? 0,
+                  })}
+                </>
+              ) : null}
+            </div>
+          </div>
+
           {/* Time scrubber row */}
           <div className="mb-3">
             <BrainTimeScrubber

@@ -857,6 +857,41 @@ function DetailPanel({
           <p className="text-sm leading-relaxed text-white/90">{content}</p>
         )}
 
+        {/*
+          V1.11 (2026-05-07) — Source attribution section. Audit-flagged
+          as the highest-wow-per-LoC change because the backend already
+          serves it (BrainMemoryDetail.source: {timestamp, snippet?}) and
+          BrainMemoryDetail.session_id at the top level. Pre-V1.11 this
+          data was returned by /brain/memory/:key and silently ignored
+          by the DetailPanel. Now users see WHERE a memory came from —
+          which conversation, when, and the verbatim snippet that the
+          extractor latched onto. This is the trust-builder for Pillar
+          1 (visible memory): "I can see exactly where ZAKI learned
+          this fact."
+        */}
+        {detail?.source && (
+          <div className="mt-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              {t("brain.graph.detail.captured", { defaultValue: "Captured" })}
+            </p>
+            <div className="rounded-zaki-md border border-white/10 bg-white/5 px-2.5 py-2">
+              <p className="text-[10px] text-white/50">
+                {new Date(detail.source.timestamp * 1000).toLocaleString()}
+                {detail.session_id ? (
+                  <span className="ml-2 break-all font-mono text-[9px] text-white/30">
+                    {detail.session_id}
+                  </span>
+                ) : null}
+              </p>
+              {detail.source.snippet ? (
+                <p className="mt-1.5 border-l-2 border-white/20 pl-2 text-[11px] italic leading-relaxed text-white/70">
+                  &ldquo;{detail.source.snippet}&rdquo;
+                </p>
+              ) : null}
+            </div>
+          </div>
+        )}
+
         {linked.length > 0 && (
           <div className="mt-4">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
