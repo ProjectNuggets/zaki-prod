@@ -2144,6 +2144,9 @@ function LearningChatPanel({
   const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
   const socketRef = useRef<WebSocket | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const capabilityMenuRef = useRef<HTMLDivElement | null>(null);
+  const toolMenuRef = useRef<HTMLDivElement | null>(null);
+  const spaceMenuRef = useRef<HTMLDivElement | null>(null);
   const dragCounterRef = useRef(0);
   const attachmentErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachmentsRef = useRef<LearningAttachment[]>([]);
@@ -2225,6 +2228,40 @@ function LearningChatPanel({
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
+
+  useEffect(() => {
+    if (!capabilityMenuOpen && !toolMenuOpen && !spaceMenuOpen) return undefined;
+
+    const closeMenusForOutsideTarget = (target: Node) => {
+      if (capabilityMenuOpen && !capabilityMenuRef.current?.contains(target)) {
+        setCapabilityMenuOpen(false);
+      }
+      if (toolMenuOpen && !toolMenuRef.current?.contains(target)) {
+        setToolMenuOpen(false);
+      }
+      if (spaceMenuOpen && !spaceMenuRef.current?.contains(target)) {
+        setSpaceMenuOpen(false);
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node) closeMenusForOutsideTarget(event.target);
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setCapabilityMenuOpen(false);
+      setToolMenuOpen(false);
+      setSpaceMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [capabilityMenuOpen, toolMenuOpen, spaceMenuOpen]);
 
   useEffect(() => {
     if (!saveNotebookOpen || saveNotebookIds.length || !notebookItems.length) return;
@@ -2542,6 +2579,7 @@ function LearningChatPanel({
     setPanelCollapsed(false);
     setCapabilityMenuOpen(false);
     setToolMenuOpen(false);
+    setSpaceMenuOpen(false);
   };
 
   const toggleTool = (toolName: LearningToolName) => {
@@ -3023,10 +3061,15 @@ function LearningChatPanel({
         ) : null}
         <div className="border-t border-[var(--border)]/35 px-3 py-2">
           <div className="flex items-center gap-2">
-            <div className="relative shrink-0">
+            <div ref={capabilityMenuRef} className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => setCapabilityMenuOpen((open) => !open)}
+                aria-label="Learning capability menu"
+                onClick={() => {
+                  setCapabilityMenuOpen((open) => !open);
+                  setToolMenuOpen(false);
+                  setSpaceMenuOpen(false);
+                }}
                 className={cn(
                   "inline-flex shrink-0 items-center gap-1.5 px-1 py-1.5 text-[12px] transition-colors",
                   capabilityMenuOpen
@@ -3088,10 +3131,15 @@ function LearningChatPanel({
 
             <div className="flex min-w-0 flex-1 items-center gap-1">
               {isResearchMode ? (
-                <div className="relative flex items-center gap-0.5">
+                <div ref={toolMenuRef} className="relative flex items-center gap-0.5">
                   <button
                     type="button"
-                    onClick={() => setToolMenuOpen((open) => !open)}
+                    aria-label="Learning sources menu"
+                    onClick={() => {
+                      setToolMenuOpen((open) => !open);
+                      setCapabilityMenuOpen(false);
+                      setSpaceMenuOpen(false);
+                    }}
                     className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
                   >
                     <Layers size={12} strokeWidth={1.7} />
@@ -3147,10 +3195,15 @@ function LearningChatPanel({
                   ) : null}
                 </div>
               ) : visibleTools.length > 0 ? (
-                <div className="relative flex items-center gap-0.5">
+                <div ref={toolMenuRef} className="relative flex items-center gap-0.5">
                   <button
                     type="button"
-                    onClick={() => setToolMenuOpen((open) => !open)}
+                    aria-label="Learning tools menu"
+                    onClick={() => {
+                      setToolMenuOpen((open) => !open);
+                      setCapabilityMenuOpen(false);
+                      setSpaceMenuOpen(false);
+                    }}
                     className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
                   >
                     <Sparkles size={12} strokeWidth={1.7} />
@@ -3218,10 +3271,15 @@ function LearningChatPanel({
                 Attach
               </button>
 
-              <div className="relative flex items-center gap-0.5">
+              <div ref={spaceMenuRef} className="relative flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => setSpaceMenuOpen((open) => !open)}
+                  aria-label="Learning space context menu"
+                  onClick={() => {
+                    setSpaceMenuOpen((open) => !open);
+                    setCapabilityMenuOpen(false);
+                    setToolMenuOpen(false);
+                  }}
                   className="inline-flex shrink-0 items-center gap-1 px-1.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
                 >
                   <AtSign size={12} strokeWidth={1.7} />

@@ -7,20 +7,20 @@ last_updated: "2026-05-07"
 last_activity: 2026-05-07
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 28
-  completed_plans: 23
-  percent: 82
+  completed_plans: 24
+  percent: 86
 ---
 
 # ZAKI Learn State
 
 ## Current Position
 
-Phase: 04 Governance, Quota, Retention, Export
-Plan: 04-05 Operator deployment checklist with immutable image tags
-Status: Phase 04 in progress; 04-04 backup/restore DR gate complete
-Last activity: 2026-05-07 - completed Learn backup/restore and DR gate: disaster recovery policy, super-admin DR status endpoint, explicit readiness gates for tenant root/backups/target/immutable image/restore drill evidence, backup/restore runbook, spec updates, focused tests, lint, and full backend suite passing.
+Phase: 05 Final Parity Audit And Release Gate
+Plan: 05-01 Full upstream-vs-ZAKI feature matrix
+Status: Phase 04 complete; Phase 05 starting
+Last activity: 2026-05-07 - completed operator deployment readiness gate: super-admin deployment readiness endpoint, immutable ZAKI and learning-engine image checks, learning-engine mirror/source commit pinning, final-user setup runbook, route/function user-test plan, popup outside-click/Escape fix, full Learn parity E2E, typecheck, backend governance tests, and backend syntax checks passing.
 
 ## Locked Decisions
 
@@ -51,6 +51,9 @@ Last activity: 2026-05-07 - completed Learn backup/restore and DR gate: disaster
 - `/learn?view=space` Question Bank renders upstream-style Manage Categories, All, Bookmarked, Wrong Only, total count, and empty state; local category create/delete was browser-smoked and cleaned back to zero categories.
 - `/learn?view=review` renders the same Question Bank surface directly.
 - `/learn?view=quiz` renders the Quiz Generation chat capability with Custom/Mimic Paper, count, difficulty, type, and preference controls.
+- E2E: every ZAKI Learn route now has route/function smoke coverage in `e2e/learning-parity.spec.ts`.
+- UI: Learn composer Capability, Tools/Sources, and Space popups close on outside click and Escape without navigating away from Learn.
+- BFF: `GET /api/internal/learning/deployment-readiness` reports paid-user deployment gates for central auth, learning config, tenant root, immutable image refs, source mirror pinning, retention, and DR readiness.
 
 ## Completed Plans
 
@@ -77,7 +80,8 @@ Last activity: 2026-05-07 - completed Learn backup/restore and DR gate: disaster
 - 04-02: Data deletion/export implementation and audit state.
 - 04-03: Retention and cleanup policies.
 - 04-04: Backup/restore drill and disaster recovery runbook.
+- 04-05: Operator deployment checklist with immutable image tags.
 
 ## Next Command
 
-Execute Phase 04 Plan 04-05: operator deployment checklist with immutable image tags.
+Execute Phase 05 Plan 05-01: full upstream-vs-ZAKI feature matrix.

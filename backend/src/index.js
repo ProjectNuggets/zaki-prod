@@ -148,6 +148,7 @@ import {
   resolveLearningRetentionPolicy,
 } from "./learning-retention.js";
 import { buildLearningDisasterRecoveryStatus } from "./learning-disaster-recovery.js";
+import { buildLearningDeploymentReadinessStatus } from "./learning-deployment-readiness.js";
 import {
   getAccessStatus,
   getEffectiveEntitlementState,
@@ -5409,6 +5410,30 @@ app.get("/api/internal/learning/disaster-recovery", async (req, res) => {
   } catch (error) {
     console.error("[LearningDR] Status error:", error);
     res.status(500).json({ error: error?.message || "Unable to load learning DR status." });
+  }
+});
+
+app.get("/api/internal/learning/deployment-readiness", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+    const configured = Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN);
+    const disasterRecovery = buildLearningDisasterRecoveryStatus({
+      learningEnabled: ZAKI_LEARNING_ENABLED,
+      learningConfigured: configured,
+    });
+    res.status(200).json({
+      success: true,
+      deploymentReadiness: buildLearningDeploymentReadinessStatus({
+        learningEnabled: ZAKI_LEARNING_ENABLED,
+        learningConfigured: configured,
+        retentionPolicy: runtimeLearningRetentionPolicy,
+        disasterRecoveryStatus: disasterRecovery,
+      }),
+    });
+  } catch (error) {
+    console.error("[LearningDeploy] Readiness error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load learning deployment readiness." });
   }
 });
 

@@ -667,6 +667,18 @@ Learning engine image:
 ghcr.io/projectnuggets/zaki-learning-engine:<immutable-sha-tag>
 ```
 
+Paid-user readiness is enforced by the super-admin endpoint:
+
+```text
+GET /api/internal/learning/deployment-readiness
+```
+
+The endpoint combines central auth, learning BFF config, immutable image
+references, learning-engine mirror/source commit pinning, retention, and
+disaster recovery gates. `deploymentReadiness.ready` must be `true` before
+broad paid-user rollout. The operator runbook is
+`docs/zaki-learning-operator-deployment-checklist.md`.
+
 Required learning engine env:
 
 - `LEARNING_ENGINE_INTERNAL_AUTH_REQUIRED=true`
@@ -678,6 +690,10 @@ Required ZAKI backend env:
 - `LEARNING_ENGINE_BASE_URL`
 - `LEARNING_ENGINE_INTERNAL_TOKEN`
 - `ZAKI_LEARNING_ENABLED`
+- `ZAKI_APP_IMAGE_TAG` or equivalent immutable ZAKI image reference
+- `ZAKI_LEARNING_ENGINE_IMAGE_TAG`
+- `ZAKI_LEARNING_ENGINE_SOURCE_REPOSITORY`
+- `ZAKI_LEARNING_ENGINE_SOURCE_COMMIT`
 
 Rollout sequence:
 

@@ -514,6 +514,121 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByRole("button", { name: "Slack" })).toBeVisible();
   });
 
+  test("smokes every ZAKI Learn route and primary function entry", async ({ page }) => {
+    await mockLearning(page);
+
+    const routeChecks: Array<{
+      view: string;
+      visibleText: string | RegExp;
+      functionEntries: Array<string | RegExp>;
+    }> = [
+      {
+        view: "books",
+        visibleText: "Generate, browse and study your AI-authored books.",
+        functionEntries: [/New book/i],
+      },
+      {
+        view: "sources",
+        visibleText: "Knowledge Bases",
+        functionEntries: [/New knowledge base/i, /Add documents/i, /Details/i],
+      },
+      {
+        view: "chat",
+        visibleText: "What would you like to learn?",
+        functionEntries: [/Save to Notebook/i, /Download Markdown/i, /New chat/i],
+      },
+      {
+        view: "agents",
+        visibleText: "TutorBot Agents",
+        functionEntries: [/Create bot/i, /^Profiles$/, /^Channels$/, /^Soul Templates$/],
+      },
+      {
+        view: "notebooks",
+        visibleText: "Your notebooks",
+        functionEntries: [/Create$/, /Download Markdown/i],
+      },
+      {
+        view: "writer",
+        visibleText: "Co-Writer",
+        functionEntries: [/New draft/i, /From template/i],
+      },
+      {
+        view: "space",
+        visibleText: "Your personal learning library.",
+        functionEntries: [/Chat History/i, /^Notebooks$/, /Question Bank/i, /^Skills$/, /^Memory$/],
+      },
+      {
+        view: "review",
+        visibleText: "Manage Categories",
+        functionEntries: [/All/i, /Bookmarked/i, /Wrong Only/i],
+      },
+      {
+        view: "workspaces",
+        visibleText: "Advanced workspaces",
+        functionEntries: [/Deep Solve/i, /Deep Research/i, /Quiz Generation/i, /Visualize/i, /Math Animator/i, /Analyze/i],
+      },
+      {
+        view: "solve",
+        visibleText: "Deep Solve",
+        functionEntries: [/Tools/i, /Space/i],
+      },
+      {
+        view: "research",
+        visibleText: "Deep Research",
+        functionEntries: [/Sources/i, /Mode/i, /Depth/i],
+      },
+      {
+        view: "quiz",
+        visibleText: "Quiz Generation",
+        functionEntries: [/Custom/i, /Mimic Paper/i, /Count/i, /Difficulty/i],
+      },
+      {
+        view: "visualize",
+        visibleText: "Visualize",
+        functionEntries: [/Render Mode/i],
+      },
+      {
+        view: "math-animation",
+        visibleText: "Math Animator",
+        functionEntries: [/Output/i, /Quality/i, /Style Hint/i],
+      },
+    ];
+
+    for (const check of routeChecks) {
+      await page.goto(`/learn?view=${check.view}`);
+      await expect(page.getByText(check.visibleText).first()).toBeVisible();
+      for (const entry of check.functionEntries) {
+        await expect(page.getByText(entry).first()).toBeVisible();
+      }
+    }
+  });
+
+  test("closes Learn composer popups on outside click and Escape", async ({ page }) => {
+    await mockLearning(page);
+
+    await page.goto("/learn?view=chat");
+    await page.getByRole("button", { name: "Learning capability menu" }).click();
+    await expect(page.getByText("Flexible conversation with any tool")).toBeVisible();
+    await page.getByText("What would you like to learn?").click();
+    await expect(page.getByText("Flexible conversation with any tool")).toBeHidden();
+
+    await page.getByRole("button", { name: "Learning tools menu" }).click();
+    await expect(page.getByRole("button", { name: /Brainstorm/i })).toBeVisible();
+    await page.getByText("What would you like to learn?").click();
+    await expect(page.getByRole("button", { name: /Brainstorm/i })).toBeHidden();
+
+    await page.getByRole("button", { name: "Learning space context menu" }).click();
+    await expect(page.getByRole("button", { name: /Question Bank/i })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: /Question Bank/i })).toBeHidden();
+
+    await page.goto("/learn?view=research");
+    await page.getByRole("button", { name: "Learning sources menu" }).click();
+    await expect(page.getByRole("button", { name: /Papers/i })).toBeVisible();
+    await page.getByText("Deep Research").first().click();
+    await expect(page.getByRole("button", { name: /Papers/i })).toBeHidden();
+  });
+
   test("exports notebook records through the ZAKI Learn notebook view", async ({ page }) => {
     await mockLearning(page);
 
@@ -565,6 +680,33 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.goto("/learn?view=notebooks");
     await page.getByText("Energy Notes").click();
     await expect(page.getByText("Explain work-energy theorem.")).toBeVisible();
+  });
+
+  test("routes quiz generation with hosted config", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=quiz");
+    await expect(page.getByText("Quiz Generation").first()).toBeVisible();
+    await page.getByLabel("Count").fill("5");
+    await page.getByLabel("Difficulty").selectOption("medium");
+    await page.getByLabel("Type").selectOption("choice");
+    await page.getByLabel("Preference").fill("include answers with explanations");
+    await page.getByPlaceholder("How can I help you today?").fill("Create a quiz about Newton's laws.");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect.poll(() => learning.startedTurns.length).toBe(1);
+    expect(learning.startedTurns[0]).toMatchObject({
+      type: "start_turn",
+      capability: "deep_question",
+      content: "Create a quiz about Newton's laws.",
+      config: {
+        mode: "custom",
+        num_questions: 5,
+        difficulty: "medium",
+        question_type: "choice",
+        preference: "include answers with explanations",
+      },
+    });
   });
 
   test("creates and uploads source files, browser folders, and archives", async ({ page }) => {

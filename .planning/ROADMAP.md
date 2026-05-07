@@ -72,9 +72,9 @@ Last updated: 2026-05-07
 - [x] 04-02: Data deletion/export implementation and audit state.
 - [x] 04-03: Retention and cleanup policies.
 - [x] 04-04: Backup/restore drill and disaster recovery runbook.
-- [ ] 04-05: Operator deployment checklist with immutable image tags.
+- [x] 04-05: Operator deployment checklist with immutable image tags.
 
-**Status:** In progress. Current plan: 04-05 Operator deployment checklist with immutable image tags.
+**Status:** Complete.
 
 ## Phase 05: Final Parity Audit And Release Gate
 
@@ -88,4 +88,4 @@ Last updated: 2026-05-07
 - [ ] 05-04: Multi-user isolation smoke.
 - [ ] 05-05: Final code review and release-readiness verdict.
 
-**Status:** Pending.
+**Status:** In progress. Current plan: 05-01 Full upstream-vs-ZAKI feature matrix.
