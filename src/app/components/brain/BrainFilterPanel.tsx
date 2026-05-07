@@ -31,7 +31,11 @@ export const DEFAULT_FILTERS: BrainFilters = {
   linkTypes: [],
   search: "",
   maxNodes: 300,
-  colorPreset: "community",
+  // V1.11 (2026-05-07): default flipped from "community" to "mono".
+  // Obsidian-aesthetic visual restraint — every node renders muted gray;
+  // border styles (selected, highlighted, center) carry emphasis. Users
+  // who want the 12-color community palette can switch preset.
+  colorPreset: "mono",
   nodeRepulsion: 8000,
   idealEdgeLength: 120,
   gravity: 0.4,
@@ -118,8 +122,8 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
       </Section>
 
       <Section title={t("brain.filterPanel.colors", { defaultValue: "Colors" })}>
-        <div className="flex gap-1">
-          {(["community", "link_type", "kind"] as ColorPreset[]).map((p) => (
+        <div className="flex flex-wrap gap-1">
+          {(["mono", "community", "link_type", "kind"] as ColorPreset[]).map((p) => (
             <button
               key={p}
               type="button"

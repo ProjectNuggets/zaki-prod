@@ -185,7 +185,16 @@ export function BrainPage() {
           <div className="flex flex-col gap-3 lg:flex-row">
             <BrainFilterPanel filters={filters} onChange={setFilters} />
 
-            <div className="min-w-0 flex-1">
+            {/*
+              V1.11 (2026-05-07) — full-bleed dark canvas. The graph
+              container wraps the cytoscape view in a deep-black panel
+              so the rendered nodes/edges sit on a true Obsidian-style
+              canvas instead of the page's lighter chrome. Border + soft
+              shadow keep it framed within the layout without competing
+              with the surrounding rails. Pillar 1 — visible memory
+              starts with making the surface itself feel intentional.
+            */}
+            <div className="min-w-0 flex-1 overflow-hidden rounded-zaki-lg border border-zaki-border bg-[#0a0a0a] shadow-md">
               <BrainGraphView
                 userId={userId}
                 selectedIds={selectedNodeIds}
