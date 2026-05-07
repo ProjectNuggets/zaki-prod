@@ -27,6 +27,7 @@ import {
   Eraser,
   FileSearch,
   FileText,
+  FolderOpen,
   FolderUp,
   GraduationCap,
   Globe,
@@ -76,8 +77,11 @@ import {
   createLearningCoWriterDocument,
   createLearningKnowledge,
   createLearningNotebook,
+  createLearningQuestionCategory,
   createLearningSkill,
   createLearningTutorAgent,
+  deleteLearningQuestionCategory,
+  deleteLearningQuestionEntry,
   deleteLearningKnowledge,
   deleteLearningCoWriterDocument,
   deleteLearningSkill,
@@ -100,6 +104,7 @@ import {
   listLearningKnowledge,
   listLearningSessions,
   listLearningNotebooks,
+  listLearningQuestionCategories,
   listLearningQuestions,
   listLearningSkills,
   listLearningSolveSessions,
@@ -113,6 +118,9 @@ import {
   runLearningCoWriterAutoMark,
   runLearningCoWriterEdit,
   stopLearningTutorAgent,
+  removeLearningQuestionEntryCategory,
+  renameLearningQuestionCategory,
+  updateLearningQuestionEntry,
   updateLearningSkill,
   updateLearningCoWriterDocument,
   updateLearningMemory,
@@ -820,9 +828,9 @@ export function LearningPage() {
             onResult={setLastResult}
           />
         ) : tab === "review" ? (
-          <ReviewPanel
+          <QuestionBankPanel
             items={questionItems}
-            onOpen={(item) =>
+            onOpen={(item: Item) =>
               openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
             }
           />
@@ -3035,7 +3043,6 @@ function LearningSpacePanel({
   const [summaryDraft, setSummaryDraft] = useState("");
   const [profileDraft, setProfileDraft] = useState("");
   const [chatQuery, setChatQuery] = useState("");
-  const [questionFilter, setQuestionFilter] = useState<"all" | "bookmarked" | "wrong">("all");
   const [memoryFile, setMemoryFile] = useState<LearningMemoryFile>("summary");
   const [memoryView, setMemoryView] = useState<"edit" | "preview">("edit");
   const [skillOriginalName, setSkillOriginalName] = useState("");
@@ -3060,15 +3067,6 @@ function LearningSpacePanel({
         .includes(needle),
     );
   }, [chatQuery, sessionItems]);
-  const filteredQuestions = useMemo(() => {
-    if (questionFilter === "bookmarked") {
-      return questionItems.filter((item) => Boolean(item.bookmarked));
-    }
-    if (questionFilter === "wrong") {
-      return questionItems.filter((item) => item.is_correct === false);
-    }
-    return questionItems;
-  }, [questionFilter, questionItems]);
   const spaceItems = [
     {
       key: "chat_history" as const,
@@ -3313,31 +3311,7 @@ function LearningSpacePanel({
             description="Review and organize quiz questions across sessions. Filter bookmarked and wrong answers."
             count={`${questionItems.length} questions`}
           >
-            <div className="mb-4 flex flex-wrap items-center gap-1">
-              {[
-                ["all", "All"],
-                ["bookmarked", "Bookmarked"],
-                ["wrong", "Wrong Only"],
-              ].map(([value, label]) => {
-                const active = questionFilter === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setQuestionFilter(value as "all" | "bookmarked" | "wrong")}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-3 text-xs font-medium transition-colors",
-                      active ? "bg-zaki-hover text-zaki-text" : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
-                    )}
-                  >
-                    {value === "bookmarked" ? <Bookmark className="size-3.5" /> : null}
-                    {value === "wrong" ? <AlertTriangle className="size-3.5" /> : null}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            <ReviewPanel items={filteredQuestions} onOpen={onOpenQuestion} />
+            <QuestionBankPanel items={questionItems} onOpen={onOpenQuestion} />
           </SpaceContentBlock>
         ) : activeSection === "skills" ? (
           <SpaceContentBlock
@@ -4904,16 +4878,502 @@ function CoWriterDocumentEditor({
   );
 }
 
-function ReviewPanel({ items, onOpen }: { items: Item[]; onOpen: (item: Item) => void }) {
+type QuestionBankFilter = "all" | "bookmarked" | "wrong";
+
+function questionEntryId(item: Item, fallback: string) {
+  return textOf(item.id) || textOf(item.entry_id) || fallback;
+}
+
+function questionCategoryId(item: Item) {
+  return textOf(item.id) || textOf(item.category_id);
+}
+
+function questionEntryCategories(item: Item) {
+  return itemList(item.categories, []);
+}
+
+function QuestionBankPanel({ items, onOpen }: { items: Item[]; onOpen: (item: Item) => void }) {
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<QuestionBankFilter>("all");
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [renamingCategory, setRenamingCategory] = useState<{ id: string; name: string } | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+
+  const categoriesQuery = useQuery({
+    queryKey: [...learningKeys.questions, "categories"],
+    queryFn: listLearningQuestionCategories,
+    retry: 1,
+  });
+  const categories: Item[] = useMemo(
+    () => itemList(categoriesQuery.data, ["items", "categories"]),
+    [categoriesQuery.data],
+  );
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (activeCategoryId) {
+        const categoriesForEntry = questionEntryCategories(item);
+        if (!categoriesForEntry.some((category: Item) => questionCategoryId(category) === activeCategoryId)) {
+          return false;
+        }
+      }
+      if (filter === "bookmarked") return Boolean(item.bookmarked);
+      if (filter === "wrong") return item.is_correct === false;
+      return true;
+    });
+  }, [activeCategoryId, filter, items]);
+
+  const refreshQuestions = () => {
+    void queryClient.invalidateQueries({ queryKey: learningKeys.questions });
+    void queryClient.invalidateQueries({ queryKey: [...learningKeys.questions, "categories"] });
+  };
+
+  const toggleBookmark = useMutation({
+    mutationFn: ({ id, bookmarked }: { id: string; bookmarked: boolean }) =>
+      updateLearningQuestionEntry(id, { bookmarked }),
+    onMutate: ({ id }) => setPendingActionId(id),
+    onSuccess: refreshQuestions,
+    onError: (error) => toast.error(error.message),
+    onSettled: () => setPendingActionId(null),
+  });
+  const deleteEntry = useMutation({
+    mutationFn: (id: string) => deleteLearningQuestionEntry(id),
+    onMutate: (id) => setPendingActionId(id),
+    onSuccess: refreshQuestions,
+    onError: (error) => toast.error(error.message),
+    onSettled: () => setPendingActionId(null),
+  });
+  const removeFromCategory = useMutation({
+    mutationFn: ({ entryId, categoryId }: { entryId: string; categoryId: string }) =>
+      removeLearningQuestionEntryCategory(entryId, categoryId),
+    onMutate: ({ entryId }) => setPendingActionId(entryId),
+    onSuccess: refreshQuestions,
+    onError: (error) => toast.error(error.message),
+    onSettled: () => setPendingActionId(null),
+  });
+  const createCategory = useMutation({
+    mutationFn: (name: string) => createLearningQuestionCategory(name),
+    onSuccess: () => {
+      setNewCategoryName("");
+      refreshQuestions();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const renameCategory = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      renameLearningQuestionCategory(id, name),
+    onSuccess: () => {
+      setRenamingCategory(null);
+      refreshQuestions();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const deleteCategory = useMutation({
+    mutationFn: (id: string) => deleteLearningQuestionCategory(id),
+    onSuccess: (_, id) => {
+      if (activeCategoryId === id) setActiveCategoryId(null);
+      refreshQuestions();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   return (
-    <Section title="Question review" subtitle="Review saved quiz questions, attempts, bookmarks, and categories.">
-      <ItemList
-        items={items}
-        empty="No saved questions returned yet."
-        variant="question"
-        onOpen={onOpen}
-      />
-    </Section>
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-zaki-lg border border-zaki-border bg-zaki-base">
+        <button
+          type="button"
+          onClick={() => setManagerOpen((open) => !open)}
+          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-zaki-text hover:bg-zaki-hover"
+        >
+          <span className="flex items-center gap-2">
+            <FolderOpen className="size-3.5 text-zaki-muted" />
+            Manage Categories
+            <span className="rounded-full bg-zaki-hover px-1.5 py-0.5 text-[10px] text-zaki-muted">
+              {categories.length}
+            </span>
+          </span>
+          <ChevronDown className={cn("size-3.5 text-zaki-muted transition-transform", managerOpen && "rotate-180")} />
+        </button>
+
+        {managerOpen ? (
+          <div className="border-t border-zaki-border px-4 pb-4 pt-3">
+            <div className="space-y-1.5">
+              {categories.length ? (
+                categories.map((category: Item, index: number) => {
+                  const id = questionCategoryId(category) || `category-${index}`;
+                  const name = itemTitle(category, id);
+                  const renaming = renamingCategory?.id === id;
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center justify-between gap-2 rounded-zaki-md bg-zaki-hover/60 px-3 py-2"
+                    >
+                      {renaming ? (
+                        <input
+                          autoFocus
+                          value={renamingCategory.name}
+                          onChange={(event) =>
+                            setRenamingCategory({ id, name: event.target.value })
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && renamingCategory.name.trim()) {
+                              renameCategory.mutate({ id, name: renamingCategory.name.trim() });
+                            }
+                            if (event.key === "Escape") setRenamingCategory(null);
+                          }}
+                          onBlur={() => {
+                            if (renamingCategory?.name.trim()) {
+                              renameCategory.mutate({ id, name: renamingCategory.name.trim() });
+                            } else {
+                              setRenamingCategory(null);
+                            }
+                          }}
+                          className="min-w-0 flex-1 rounded-zaki-sm border border-zaki-border bg-zaki-base px-2 py-1 text-xs text-zaki-text outline-none focus:border-zaki-brand"
+                        />
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate text-xs text-zaki-text">
+                          {name}
+                          <span className="ml-1.5 text-zaki-muted">
+                            ({numericOf(category.entry_count)})
+                          </span>
+                        </span>
+                      )}
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setRenamingCategory({ id, name })}
+                          className="rounded-zaki-sm p-1 text-zaki-muted hover:bg-zaki-base hover:text-zaki-text"
+                          title="Rename category"
+                        >
+                          <Pencil className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm("Delete this category?")) deleteCategory.mutate(id);
+                          }}
+                          className="rounded-zaki-sm p-1 text-zaki-muted hover:bg-red-500/10 hover:text-red-600"
+                          title="Delete category"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="py-2 text-center text-xs text-zaki-muted">No categories yet.</p>
+              )}
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && newCategoryName.trim()) {
+                    createCategory.mutate(newCategoryName.trim());
+                  }
+                }}
+                placeholder="New category name..."
+                className="h-9 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand"
+              />
+              <button
+                type="button"
+                disabled={!newCategoryName.trim() || createCategory.isPending}
+                onClick={() => createCategory.mutate(newCategoryName.trim())}
+                className="inline-flex size-9 items-center justify-center rounded-zaki-md bg-zaki-brand text-white disabled:opacity-40"
+                title="Create category"
+              >
+                {createCategory.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          {[
+            ["all", "All"],
+            ["bookmarked", "Bookmarked"],
+            ["wrong", "Wrong Only"],
+          ].map(([value, label]) => {
+            const active = filter === value && !activeCategoryId;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setFilter(value as QuestionBankFilter);
+                  setActiveCategoryId(null);
+                }}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-3 text-xs font-medium transition-colors",
+                  active
+                    ? "bg-zaki-hover text-zaki-text"
+                    : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                )}
+              >
+                {value === "bookmarked" ? <Bookmark className="size-3.5" /> : null}
+                {value === "wrong" ? <AlertTriangle className="size-3.5" /> : null}
+                {label}
+              </button>
+            );
+          })}
+          {categories.length ? <span className="mx-1 text-zaki-border">|</span> : null}
+          {categories.map((category: Item, index: number) => {
+            const id = questionCategoryId(category) || `category-${index}`;
+            const active = activeCategoryId === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setActiveCategoryId(id);
+                  setFilter("all");
+                }}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-zaki-md px-3 text-xs font-medium transition-colors",
+                  active
+                    ? "bg-zaki-hover text-zaki-text"
+                    : "text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+                )}
+              >
+                <FolderOpen className="size-3.5" />
+                {itemTitle(category, id)}
+              </button>
+            );
+          })}
+        </div>
+        <span className="shrink-0 text-xs text-zaki-muted">Total: {filteredItems.length}</span>
+      </div>
+
+      {filteredItems.length ? (
+        <ul className="space-y-3">
+          {filteredItems.map((item, index) => {
+            const id = questionEntryId(item, `question-${index + 1}`);
+            const disabled = pendingActionId === id;
+            const options = asRecord(item.options);
+            const categoriesForEntry = questionEntryCategories(item);
+            const question = textOf(item.question) || itemTitle(item, "Question");
+            const isCorrect = item.is_correct === true;
+            const bookmarked = Boolean(item.bookmarked);
+            return (
+              <li
+                key={id}
+                className={cn(
+                  "rounded-zaki-lg border border-zaki-border bg-zaki-base px-5 py-4 shadow-sm",
+                  disabled && "opacity-60",
+                )}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      {textOf(item.difficulty) ? (
+                        <span className="rounded-zaki-sm bg-zaki-hover px-1.5 py-0.5 text-[10px] font-medium uppercase text-zaki-muted">
+                          {textOf(item.difficulty)}
+                        </span>
+                      ) : null}
+                      <span className="rounded-zaki-sm bg-zaki-hover px-1.5 py-0.5 text-[10px] font-medium text-zaki-muted">
+                        {textOf(item.question_type, "question")}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-zaki-sm px-1.5 py-0.5 text-[10px] font-semibold",
+                          isCorrect
+                            ? "bg-emerald-500/10 text-emerald-700"
+                            : "bg-red-500/10 text-red-700",
+                        )}
+                      >
+                        {isCorrect ? "Correct" : "Incorrect"}
+                      </span>
+                    </div>
+                    <div className="learning-markdown text-sm font-medium leading-relaxed text-zaki-text">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{question}</ReactMarkdown>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleBookmark.mutate({ id, bookmarked: !bookmarked })}
+                      disabled={disabled}
+                      title={bookmarked ? "Remove bookmark" : "Bookmark"}
+                      className={cn(
+                        "rounded-zaki-md p-1.5 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text disabled:opacity-40",
+                        bookmarked && "text-zaki-brand",
+                      )}
+                    >
+                      <Bookmark className="size-4" fill={bookmarked ? "currentColor" : "none"} />
+                    </button>
+                    {activeCategoryId ? (
+                      <button
+                        type="button"
+                        onClick={() => removeFromCategory.mutate({ entryId: id, categoryId: activeCategoryId })}
+                        disabled={disabled}
+                        title="Remove from category"
+                        className="rounded-zaki-md p-1.5 text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text disabled:opacity-40"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Delete this entry?")) deleteEntry.mutate(id);
+                      }}
+                      disabled={disabled}
+                      title="Delete"
+                      className="rounded-zaki-md p-1.5 text-zaki-muted hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {Object.keys(options).length ? (
+                  <div className="mb-3 space-y-1.5">
+                    {Object.entries(options).map(([key, value]) => {
+                      const userAnswer = textOf(item.user_answer).toUpperCase();
+                      const correctAnswer = textOf(item.correct_answer).toUpperCase();
+                      const optionKey = key.toUpperCase();
+                      const isUserAnswer = userAnswer === optionKey;
+                      const isCorrectAnswer = correctAnswer === optionKey;
+                      return (
+                        <div
+                          key={key}
+                          className={cn(
+                            "flex items-start gap-2.5 rounded-zaki-md border px-3 py-2 text-[13px]",
+                            isCorrectAnswer
+                              ? "border-emerald-300 bg-emerald-500/10"
+                              : isUserAnswer && !isCorrect
+                                ? "border-red-300 bg-red-500/10"
+                                : "border-transparent bg-zaki-hover/50",
+                          )}
+                        >
+                          <span className="mt-px shrink-0 font-semibold text-zaki-muted">{optionKey}.</span>
+                          <span className="min-w-0 flex-1 text-zaki-text">{textOf(value)}</span>
+                          {isCorrectAnswer ? (
+                            <span className="mt-px shrink-0 text-[10px] font-medium text-emerald-700">
+                              Correct
+                            </span>
+                          ) : null}
+                          {isUserAnswer && !isCorrect ? (
+                            <span className="mt-px shrink-0 text-[10px] font-medium text-red-700">
+                              Your pick
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mb-3 grid gap-2 text-[13px] sm:grid-cols-2">
+                    <QuestionAnswerBox
+                      label={`Your Answer ${isCorrect ? "✓" : "✗"}`}
+                      value={textOf(item.user_answer, "-")}
+                      tone={isCorrect ? "good" : "bad"}
+                    />
+                    <QuestionAnswerBox
+                      label="Reference Answer"
+                      value={textOf(item.correct_answer, "-")}
+                      tone="good"
+                    />
+                  </div>
+                )}
+
+                {textOf(item.explanation) ? (
+                  <div className="mb-3 rounded-zaki-md border border-blue-300/60 bg-blue-500/10 px-3 py-2.5">
+                    <div className="mb-1 text-[11px] font-medium uppercase tracking-normal text-blue-700">
+                      Explanation
+                    </div>
+                    <div className="learning-markdown text-[13px] leading-relaxed text-zaki-text">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{textOf(item.explanation)}</ReactMarkdown>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zaki-muted">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpen(item)}
+                      className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-hover/50 px-2.5 py-1 hover:bg-zaki-hover hover:text-zaki-text"
+                    >
+                      <FileSearch className="size-3" />
+                      Details
+                    </button>
+                    {textOf(item.session_title) ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-hover/50 px-2.5 py-1">
+                        <MessageSquare className="size-3" />
+                        {textOf(item.session_title)}
+                      </span>
+                    ) : null}
+                    {categoriesForEntry.map((category: Item, categoryIndex: number) => (
+                      <span
+                        key={`${id}-category-${categoryIndex}`}
+                        className="inline-flex items-center gap-1 rounded-zaki-md bg-zaki-hover px-2 py-1"
+                      >
+                        <FolderOpen className="size-3" />
+                        {itemTitle(category, "Category")}
+                      </span>
+                    ))}
+                  </div>
+                  <span>
+                    {textOf(item.created_at)
+                      ? new Date(numericOf(item.created_at) * 1000).toLocaleString()
+                      : ""}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="flex min-h-[320px] flex-col items-center justify-center rounded-zaki-lg border border-dashed border-zaki-border text-center">
+          <div className="mb-3 rounded-zaki-lg bg-zaki-hover p-2.5 text-zaki-muted">
+            <ClipboardList className="size-5" />
+          </div>
+          <p className="text-sm font-medium text-zaki-text">No entries yet</p>
+          <p className="mt-1.5 max-w-xs text-sm text-zaki-muted">
+            Questions from your quizzes will appear here.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuestionAnswerBox({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "good" | "bad";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-zaki-md border px-3 py-2.5",
+        tone === "good"
+          ? "border-emerald-300/70 bg-emerald-500/10"
+          : "border-red-300/70 bg-red-500/10",
+      )}
+    >
+      <div
+        className={cn(
+          "mb-1 text-[11px] font-medium uppercase tracking-normal",
+          tone === "good" ? "text-emerald-700" : "text-red-700",
+        )}
+      >
+        {label}
+      </div>
+      <div className="learning-markdown text-zaki-text">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+      </div>
+    </div>
   );
 }
 

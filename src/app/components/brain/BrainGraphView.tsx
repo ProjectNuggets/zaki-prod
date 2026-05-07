@@ -38,6 +38,7 @@ import type {
 import {
   EDGE_COLOR,
   importanceToRadius,
+  idealEdgeLengthForType,
   nodeColor,
   type ColorPreset,
 } from "./brainColors";
@@ -754,7 +755,14 @@ function runLayout(cy: Core, f: BrainGraphFilters) {
     animationEasing: "ease-out",
     randomize: true,
     nodeRepulsion: f.nodeRepulsion,
-    idealEdgeLength: f.idealEdgeLength,
+    // V1.11 (2026-05-07) — per-edge ideal length based on edge type so
+    // strong content links (typed / semantic) pull nodes closer and
+    // loose links (reference / session) sit farther apart. Obsidian's
+    // signature organic-distance behavior — relationship strength
+    // becomes spatial. Slider value is the baseline; the type-specific
+    // multiplier scales it. See idealEdgeLengthForType in brainColors.ts.
+    idealEdgeLength: (edge: cytoscape.EdgeSingular) =>
+      idealEdgeLengthForType(edge.data("edgeType"), f.idealEdgeLength),
     edgeElasticity: f.edgeElasticity,
     gravity: f.gravity,
     numIter: 2500,

@@ -9,8 +9,8 @@ progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 28
-  completed_plans: 15
-  percent: 54
+  completed_plans: 16
+  percent: 57
 ---
 
 # ZAKI Learn State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 03 Capability Parity Completion
-Plan: 03-03 Quiz, review, question bank, weak-area loop parity
-Status: 03-02 complete; ready to execute 03-03
-Last activity: 2026-05-07 - completed book/lesson reader parity with hover block toolbar, Deep Dive pending/sub-page selection, collapsible chapter sidebar, live book proposal browser smoke, frontend tests, typecheck, and diff hygiene passing.
+Plan: 03-04 Notebooks and save/export flows
+Status: 03-03 complete; ready to execute 03-04
+Last activity: 2026-05-07 - completed quiz/review/question-bank parity with upstream-shaped category manager, filters, bookmark/delete/remove actions, direct Review route rendering, Quiz Generation route browser smoke, frontend tests, typecheck, and diff hygiene passing.
 
 ## Locked Decisions
 
@@ -48,6 +48,9 @@ Last activity: 2026-05-07 - completed book/lesson reader parity with hover block
 - `/learn?view=writer` renders the Co-Writer document list; local browser creation is currently blocked by "Learning is not enabled for this environment", so full editor live navigation needs recheck once the learning backend is enabled.
 - `/learn?view=space` renders Space mini-nav, Chat History, Memory tabs, and Skills editor controls in-browser.
 - `/learn?view=tutorbot` can create a temporary TutorBot, open the full ZAKI Learn chat surface, connect over authenticated WebSocket, send a message, receive upstream error payloads, and delete the temporary bot. Current local provider/model routing returns `404`, which is operator configuration outside the user surface.
+- `/learn?view=space` Question Bank renders upstream-style Manage Categories, All, Bookmarked, Wrong Only, total count, and empty state; local category create/delete was browser-smoked and cleaned back to zero categories.
+- `/learn?view=review` renders the same Question Bank surface directly.
+- `/learn?view=quiz` renders the Quiz Generation chat capability with Custom/Mimic Paper, count, difficulty, type, and preference controls.
 
 ## Completed Plans
 
@@ -66,7 +69,8 @@ Last activity: 2026-05-07 - completed book/lesson reader parity with hover block
 - 02-06: Backend security test pass.
 - 03-01: Tutor chat and session parity.
 - 03-02: Book/lesson reader and block action parity.
+- 03-03: Quiz, review, question bank, weak-area loop parity.
 
 ## Next Command
 
-Execute Phase 03 Plan 03-03: quiz, review, question bank, weak-area loop parity.
+Execute Phase 03 Plan 03-04: notebooks and save/export flows.

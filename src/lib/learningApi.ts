@@ -353,12 +353,74 @@ export function runLearningCoWriterAutoMark(payload: LearningJson) {
 }
 
 export function listLearningQuestions() {
-  return learningRequest<unknown>("/api/learning/questions/entries?limit=100");
+  return learningRequest<unknown>("/api/learning/questions/entries?limit=200");
 }
 
 export function getLearningQuestionEntry(entryId: string) {
   return learningRequest<unknown>(
     `/api/learning/questions/entries/${encodeURIComponent(entryId)}`,
+  );
+}
+
+export function updateLearningQuestionEntry(entryId: string, payload: LearningJson) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/entries/${encodeURIComponent(entryId)}`,
+    {
+      method: "PATCH",
+      body: payload,
+    },
+  );
+}
+
+export function deleteLearningQuestionEntry(entryId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/entries/${encodeURIComponent(entryId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function addLearningQuestionEntryCategory(entryId: string, categoryId: string | number) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/entries/${encodeURIComponent(entryId)}/categories`,
+    {
+      method: "POST",
+      body: { category_id: Number(categoryId) },
+    },
+  );
+}
+
+export function removeLearningQuestionEntryCategory(entryId: string, categoryId: string | number) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/entries/${encodeURIComponent(entryId)}/categories/${encodeURIComponent(String(categoryId))}`,
+    { method: "DELETE" },
+  );
+}
+
+export function listLearningQuestionCategories() {
+  return learningRequest<unknown>("/api/learning/questions/categories");
+}
+
+export function createLearningQuestionCategory(name: string) {
+  return learningRequest<unknown>("/api/learning/questions/categories", {
+    method: "POST",
+    body: { name },
+  });
+}
+
+export function renameLearningQuestionCategory(categoryId: string | number, name: string) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/categories/${encodeURIComponent(String(categoryId))}`,
+    {
+      method: "PATCH",
+      body: { name },
+    },
+  );
+}
+
+export function deleteLearningQuestionCategory(categoryId: string | number) {
+  return learningRequest<unknown>(
+    `/api/learning/questions/categories/${encodeURIComponent(String(categoryId))}`,
+    { method: "DELETE" },
   );
 }
 
