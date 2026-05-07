@@ -525,7 +525,7 @@ function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
   //   - Solid shadow-2xl gives the panel proper elevation against
   //     the dark canvas without blur shimmer
   return (
-    <div className="absolute right-3 top-14 bottom-3 z-20 flex max-h-[calc(100%-4.5rem)] flex-col rounded-zaki-lg shadow-2xl">
+    <div className="absolute inset-x-3 bottom-3 z-20 flex max-h-[70%] flex-col rounded-zaki-lg shadow-2xl sm:inset-x-auto sm:right-3 sm:top-14 sm:max-h-[calc(100%-4.5rem)]">
       <button
         type="button"
         onClick={onClose}

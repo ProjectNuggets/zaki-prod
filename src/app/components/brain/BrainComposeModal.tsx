@@ -105,7 +105,7 @@ export function BrainComposeModal({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
-          className="absolute right-3 top-14 bottom-3 z-30 flex w-[min(420px,calc(100%-1.5rem))] max-h-[calc(100%-4.5rem)] flex-col rounded-zaki-lg border border-white/10 bg-black/85 shadow-2xl backdrop-blur-xl"
+          className="absolute inset-x-3 bottom-3 z-30 flex max-h-[80%] flex-col rounded-zaki-lg border border-white/10 bg-black/85 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:right-3 sm:top-14 sm:bottom-3 sm:w-[min(420px,calc(100%-1.5rem))] sm:max-h-[calc(100%-4.5rem)]"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
             <h3 className="text-sm font-semibold text-white">

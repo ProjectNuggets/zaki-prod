@@ -62,11 +62,11 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
       className="flex flex-col gap-2 rounded-zaki-lg border border-white/10 bg-[#181818] p-3 text-sm"
       data-testid="brain-time-scrubber"
     >
-      <header className="flex items-center justify-between gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-medium uppercase tracking-wide text-white/55">
           {t("brain.scrubber.title", { defaultValue: "Time scrubber" })}
         </h3>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <input
             type="date"
             value={date}
@@ -139,7 +139,7 @@ interface DiffColumnProps {
 function DiffColumn({ title, tone, items, onPick }: DiffColumnProps) {
   const dot = tone === "positive" ? "bg-zaki-success" : "bg-zaki-warning";
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-1 flex items-center gap-1.5 text-xs text-white/55">
         <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
         <span>
@@ -155,7 +155,7 @@ function DiffColumn({ title, tone, items, onPick }: DiffColumnProps) {
             <button
               type="button"
               onClick={() => onPick(it.key)}
-              className="line-clamp-1 w-full rounded-zaki-md px-1 py-0.5 text-left text-xs text-white/85 hover:bg-white/5"
+              className="block w-full truncate rounded-zaki-md px-1 py-0.5 text-left text-xs text-white/85 hover:bg-white/5"
             >
               {it.summary}
             </button>

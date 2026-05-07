@@ -959,7 +959,7 @@ function DetailPanel({
 
   return (
     <div
-      className="absolute inset-y-0 right-0 z-20 flex w-72 flex-col border-l border-white/10 bg-black/85 backdrop-blur-xl"
+      className="absolute inset-x-0 bottom-0 z-20 flex max-h-[70%] flex-col rounded-t-zaki-lg border-t border-white/10 bg-black/85 backdrop-blur-xl sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:max-h-none sm:w-72 sm:rounded-none sm:border-l sm:border-t-0"
       data-testid="brain-detail-panel"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
