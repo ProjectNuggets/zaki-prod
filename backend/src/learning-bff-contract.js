@@ -93,6 +93,51 @@ const LEARNING_TUTOR_AGENT_CHANNEL_GLOBAL_KEYS = new Set([
   "send_progress",
   "send_tool_hints",
 ]);
+const LEARNING_TUTOR_AGENT_CHANNEL_USER_FIELDS = Object.freeze({
+  whatsapp: new Set(["enabled", "allow_from"]),
+  telegram: new Set(["enabled", "token", "allow_from", "reply_to_message", "group_policy"]),
+  discord: new Set(["enabled", "token", "allow_from", "group_policy"]),
+  email: new Set([
+    "enabled",
+    "consent_granted",
+    "imap_host",
+    "imap_port",
+    "imap_username",
+    "imap_password",
+    "imap_mailbox",
+    "imap_use_ssl",
+    "smtp_host",
+    "smtp_port",
+    "smtp_username",
+    "smtp_password",
+    "smtp_use_tls",
+    "smtp_use_ssl",
+    "from_address",
+    "auto_reply_enabled",
+    "poll_interval_seconds",
+    "mark_seen",
+    "max_body_chars",
+    "subject_prefix",
+    "allow_from",
+  ]),
+  slack: new Set([
+    "enabled",
+    "bot_token",
+    "app_token",
+    "user_token_read_only",
+    "reply_in_thread",
+    "react_emoji",
+    "allow_from",
+    "group_policy",
+    "group_allow_from",
+    "dm",
+  ]),
+});
+const LEARNING_TUTOR_AGENT_CHANNEL_NESTED_USER_FIELDS = Object.freeze({
+  slack: Object.freeze({
+    dm: new Set(["enabled", "policy", "allow_from"]),
+  }),
+});
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -303,11 +348,12 @@ export function filterLearningTutorAgentChannelsConfig(channels) {
   const output = {};
   for (const [key, value] of Object.entries(channels)) {
     const normalizedKey = String(key).trim().toLowerCase();
-    if (
-      LEARNING_TUTOR_AGENT_CHANNEL_SET.has(normalizedKey) ||
-      LEARNING_TUTOR_AGENT_CHANNEL_GLOBAL_KEYS.has(normalizedKey)
-    ) {
+    if (LEARNING_TUTOR_AGENT_CHANNEL_GLOBAL_KEYS.has(normalizedKey)) {
       output[normalizedKey] = value;
+      continue;
+    }
+    if (LEARNING_TUTOR_AGENT_CHANNEL_SET.has(normalizedKey)) {
+      output[normalizedKey] = filterLearningTutorAgentChannelConfig(normalizedKey, value);
     }
   }
   return output;
@@ -336,7 +382,7 @@ export function filterLearningTutorAgentChannelsSchema(value) {
   const filteredChannels = {};
   for (const key of LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST) {
     if (Object.prototype.hasOwnProperty.call(channels, key)) {
-      filteredChannels[key] = channels[key];
+      filteredChannels[key] = filterLearningTutorAgentChannelSchema(key, channels[key]);
     }
   }
 
@@ -344,6 +390,66 @@ export function filterLearningTutorAgentChannelsSchema(value) {
     ...payload,
     channels: filteredChannels,
   };
+}
+
+function filterLearningTutorAgentChannelConfig(channel, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const allowedFields = LEARNING_TUTOR_AGENT_CHANNEL_USER_FIELDS[channel];
+  if (!allowedFields) return {};
+  const output = {};
+  for (const [field, nested] of Object.entries(value)) {
+    if (!allowedFields.has(field)) continue;
+    const nestedAllowedFields =
+      LEARNING_TUTOR_AGENT_CHANNEL_NESTED_USER_FIELDS[channel]?.[field];
+    if (nestedAllowedFields && isPlainObject(nested)) {
+      output[field] = Object.fromEntries(
+        Object.entries(nested).filter(([nestedField]) => nestedAllowedFields.has(nestedField))
+      );
+      continue;
+    }
+    output[field] = nested;
+  }
+  return output;
+}
+
+function filterLearningTutorAgentChannelSchema(channel, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const allowedFields = LEARNING_TUTOR_AGENT_CHANNEL_USER_FIELDS[channel];
+  if (!allowedFields) return value;
+  const output = { ...value };
+  output.default_config = filterLearningTutorAgentChannelConfig(
+    channel,
+    isPlainObject(value.default_config) ? value.default_config : {}
+  );
+  if (isPlainObject(value.json_schema) && isPlainObject(value.json_schema.properties)) {
+    const properties = {};
+    for (const [field, schema] of Object.entries(value.json_schema.properties)) {
+      if (!allowedFields.has(field)) continue;
+      const nestedAllowedFields =
+        LEARNING_TUTOR_AGENT_CHANNEL_NESTED_USER_FIELDS[channel]?.[field];
+      if (
+        nestedAllowedFields &&
+        isPlainObject(schema) &&
+        isPlainObject(schema.properties)
+      ) {
+        properties[field] = {
+          ...schema,
+          properties: Object.fromEntries(
+            Object.entries(schema.properties).filter(([nestedField]) =>
+              nestedAllowedFields.has(nestedField)
+            )
+          ),
+        };
+      } else {
+        properties[field] = schema;
+      }
+    }
+    output.json_schema = {
+      ...value.json_schema,
+      properties,
+    };
+  }
+  return output;
 }
 
 function isPlainObject(value) {

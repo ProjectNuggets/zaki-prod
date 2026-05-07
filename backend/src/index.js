@@ -316,6 +316,12 @@ const LEARNING_ENGINE_INTERNAL_TOKEN = (
   process.env.LEARNING_ENGINE_INTERNAL_TOKEN || ""
 ).trim();
 const ZAKI_LEARNING_ENABLED = isLearningEnabled(process.env.ZAKI_LEARNING_ENABLED);
+const ZAKI_LEARNING_WEBHOOK_BASE_URL = (
+  process.env.ZAKI_LEARNING_WEBHOOK_BASE_URL ||
+  ZAKI_AGENT_WEBHOOK_BASE_URL ||
+  process.env.ZAKI_PUBLIC_URL ||
+  ""
+).trim().replace(/\/+$/, "");
 const LEARNING_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
   1_000,
   Number(process.env.LEARNING_ENGINE_REQUEST_TIMEOUT_MS || 30_000)
@@ -9025,6 +9031,67 @@ function sanitizeLearningJsonBody(body) {
   return sanitizeLearningClientPayload(body);
 }
 
+function safeTimingEqualText(left, right) {
+  const leftBuffer = Buffer.from(String(left || ""), "utf8");
+  const rightBuffer = Buffer.from(String(right || ""), "utf8");
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function buildLearningTelegramWebhookSecret(userId, agentId) {
+  return crypto
+    .createHmac("sha256", LEARNING_ENGINE_INTERNAL_TOKEN)
+    .update(`${String(userId)}:${String(agentId)}:telegram`)
+    .digest("base64url");
+}
+
+function buildLearningTelegramWebhookUrl(userId, agentId) {
+  if (!ZAKI_LEARNING_WEBHOOK_BASE_URL || !/^https:\/\//i.test(ZAKI_LEARNING_WEBHOOK_BASE_URL)) {
+    return null;
+  }
+  const secret = buildLearningTelegramWebhookSecret(userId, agentId);
+  return `${ZAKI_LEARNING_WEBHOOK_BASE_URL}/api/learning/tutor-agents/${encodeURIComponent(agentId)}/channels/telegram/webhook/${encodeURIComponent(String(userId))}/${encodeURIComponent(secret)}`;
+}
+
+function hostedLearningTelegramIsEnabled(channels) {
+  return Boolean(
+    channels &&
+    typeof channels === "object" &&
+    !Array.isArray(channels) &&
+    channels.telegram &&
+    typeof channels.telegram === "object" &&
+    !Array.isArray(channels.telegram) &&
+    channels.telegram.enabled === true
+  );
+}
+
+function prepareLearningTutorAgentPayload(req, rawBody) {
+  const body = sanitizeLearningTutorAgentPayload(rawBody);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  if (!hostedLearningTelegramIsEnabled(body.channels)) return body;
+
+  const userId = resolveCanonicalLearningUserId(req.learningAuthResult);
+  const agentId = String(body.bot_id || req.params?.agentId || "").trim();
+  const webhookUrl = userId && agentId ? buildLearningTelegramWebhookUrl(userId, agentId) : null;
+  if (!webhookUrl) {
+    const error = new Error("ZAKI Learn Telegram webhook base URL is not configured.");
+    error.status = 400;
+    error.code = "learning_telegram_webhook_base_missing";
+    throw error;
+  }
+
+  body.channels = {
+    ...body.channels,
+    telegram: {
+      ...body.channels.telegram,
+      mode: "webhook",
+      webhook_url: webhookUrl,
+      webhook_secret_token: buildLearningTelegramWebhookSecret(userId, agentId),
+    },
+  };
+  return body;
+}
+
 function createLearningByteLimitedStream(req, maxBytes) {
   const limiter = createLearningByteLimitTransform(maxBytes, {
     onLimit: (error) => req.destroy(error),
@@ -10442,7 +10509,7 @@ function registerLearningJsonProxyRoute(method, routePath, buildTargetPath, {
       method: String(upstreamMethod || method).toUpperCase(),
       body: ["get", "head", "delete"].includes(verb)
         ? undefined
-        : sanitizeBody(req.body),
+        : sanitizeBody(req.body, req),
       label,
     });
   });
@@ -11102,11 +11169,32 @@ app.get("/api/learning/tutor-agents/channels/schema", requireLearningContext, as
     });
   }
 });
-registerLearningJsonProxyRoute("POST", "/api/learning/tutor-agents", "/api/v1/tutorbot", {
-  jsonLimit: "5mb",
-  label: "Learning tutor agent create request",
-  sanitizeBody: sanitizeLearningTutorAgentPayload,
-});
+app.post(
+  "/api/learning/tutor-agents",
+  requireLearningContext,
+  express.json({ limit: "5mb" }),
+  async (req, res) => {
+    if (!assertLearningRouteEnabled(req, res)) return;
+    let body;
+    try {
+      body = prepareLearningTutorAgentPayload(req, req.body);
+    } catch (error) {
+      res.status(error?.status || 400).json({
+        code: error?.code || "learning_tutor_agent_payload_invalid",
+        error: error?.message || "Learning tutor agent payload is invalid.",
+        message: error?.message || "Learning tutor agent payload is invalid.",
+        requestId: getOrCreateRequestId(req),
+      });
+      return;
+    }
+
+    await proxyLearningRequest(req, res, "/api/v1/tutorbot", {
+      method: "POST",
+      body,
+      label: "Learning tutor agent create request",
+    });
+  }
+);
 registerLearningJsonProxyRoute("GET", "/api/learning/tutor-agents/souls", "/api/v1/tutorbot/souls", {
   label: "Learning tutor agent souls list request",
 });
@@ -11151,7 +11239,18 @@ app.patch(
   async (req, res) => {
     if (!assertLearningRouteEnabled(req, res)) return;
     const agentId = encodeURIComponent(req.params.agentId);
-    const body = sanitizeLearningTutorAgentPayload(req.body);
+    let body;
+    try {
+      body = prepareLearningTutorAgentPayload(req, req.body);
+    } catch (error) {
+      res.status(error?.status || 400).json({
+        code: error?.code || "learning_tutor_agent_payload_invalid",
+        error: error?.message || "Learning tutor agent payload is invalid.",
+        message: error?.message || "Learning tutor agent payload is invalid.",
+        requestId: getOrCreateRequestId(req),
+      });
+      return;
+    }
 
     if (body?.channels && typeof body.channels === "object" && !Array.isArray(body.channels)) {
       const requestId = getOrCreateRequestId(req);
@@ -11219,6 +11318,73 @@ app.patch(
       body,
       label: "Learning tutor agent update request",
     });
+  }
+);
+app.post(
+  "/api/learning/tutor-agents/:agentId/channels/telegram/webhook/:userId/:secret",
+  express.json({ limit: "5mb" }),
+  async (req, res) => {
+    if (!assertLearningRouteEnabled(req, res)) return;
+    const requestId = getOrCreateRequestId(req);
+    const userId = String(req.params.userId || "").trim();
+    const agentId = String(req.params.agentId || "").trim();
+    const expectedSecret =
+      userId && agentId ? buildLearningTelegramWebhookSecret(userId, agentId) : "";
+    const providedSecret = String(req.params.secret || "").trim();
+    const providedHeaderSecret = String(
+      req.headers["x-telegram-bot-api-secret-token"] || ""
+    ).trim();
+
+    if (
+      !expectedSecret ||
+      !safeTimingEqualText(providedSecret, expectedSecret) ||
+      !safeTimingEqualText(providedHeaderSecret, expectedSecret)
+    ) {
+      res.status(401).json({
+        code: "learning_telegram_webhook_secret_invalid",
+        error: "Invalid Telegram webhook secret.",
+        message: "Invalid Telegram webhook secret.",
+        requestId,
+      });
+      return;
+    }
+
+    const zakiUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [
+      userId,
+    ]);
+    if (!zakiUser || !zakiUser.verified) {
+      res.status(404).json({
+        code: "learning_telegram_webhook_user_not_found",
+        error: "Learning webhook user was not found.",
+        message: "Learning webhook user was not found.",
+        requestId,
+      });
+      return;
+    }
+
+    const quotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser,
+      res,
+      surface: LEARNING_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!quotaDecision.allowed) {
+      res.status(quotaDecision.status).json(quotaDecision.payload);
+      return;
+    }
+
+    req.learningUserId = userId;
+    await proxyLearningRequest(
+      req,
+      res,
+      `/api/v1/tutorbot/${encodeURIComponent(agentId)}/channels/telegram/webhook`,
+      {
+        method: "POST",
+        body: sanitizeLearningClientPayload(req.body),
+        label: "Learning tutor agent Telegram webhook request",
+      }
+    );
   }
 );
 registerLearningJsonProxyRoute(

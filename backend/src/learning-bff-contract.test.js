@@ -359,42 +359,88 @@ describe("learning BFF contract", () => {
       filterLearningTutorAgentChannelsConfig({
         send_progress: true,
         send_tool_hints: false,
-        telegram: { enabled: true },
-        discord: { enabled: true },
-        whatsapp: { enabled: true },
+        telegram: { enabled: true, proxy: "socks5://evil.test", group_policy: "mention" },
+        discord: { enabled: true, gateway_url: "wss://evil.test", group_policy: "mention" },
+        whatsapp: { enabled: true, bridge_url: "ws://evil.test" },
         email: { enabled: true },
-        slack: { enabled: true },
+        slack: { enabled: true, mode: "webhook", dm: { enabled: true, webhook_path: "/x" } },
         feishu: { enabled: true },
       })
     ).toEqual({
       send_progress: true,
       send_tool_hints: false,
       whatsapp: { enabled: true },
-      telegram: { enabled: true },
-      discord: { enabled: true },
+      telegram: { enabled: true, group_policy: "mention" },
+      discord: { enabled: true, group_policy: "mention" },
       email: { enabled: true },
-      slack: { enabled: true },
+      slack: { enabled: true, dm: { enabled: true } },
     });
 
     expect(
       filterLearningTutorAgentChannelsSchema({
         channels: {
-          slack: { display_name: "Slack" },
+          slack: {
+            display_name: "Slack",
+            default_config: { enabled: false, mode: "socket", dm: { enabled: true, webhook_path: "/x" } },
+            json_schema: {
+              properties: {
+                enabled: { type: "boolean" },
+                mode: { type: "string" },
+                dm: {
+                  type: "object",
+                  properties: { enabled: { type: "boolean" }, webhook_path: { type: "string" } },
+                },
+              },
+            },
+          },
           email: { display_name: "Email" },
-          whatsapp: { display_name: "WhatsApp" },
-          telegram: { display_name: "Telegram" },
-          discord: { display_name: "Discord" },
+          whatsapp: {
+            display_name: "WhatsApp",
+            default_config: { enabled: false, bridge_url: "ws://localhost:3001" },
+            json_schema: { properties: { enabled: { type: "boolean" }, bridge_url: { type: "string" } } },
+          },
+          telegram: {
+            display_name: "Telegram",
+            default_config: { enabled: false, proxy: "socks5://proxy" },
+            json_schema: { properties: { enabled: { type: "boolean" }, proxy: { type: "string" } } },
+          },
+          discord: {
+            display_name: "Discord",
+            default_config: { enabled: false, gateway_url: "wss://gateway.discord.gg" },
+            json_schema: { properties: { enabled: { type: "boolean" }, gateway_url: { type: "string" } } },
+          },
           feishu: { display_name: "Feishu" },
         },
         global: { json_schema: {} },
       })
     ).toEqual({
       channels: {
-        whatsapp: { display_name: "WhatsApp" },
-        telegram: { display_name: "Telegram" },
-        discord: { display_name: "Discord" },
-        email: { display_name: "Email" },
-        slack: { display_name: "Slack" },
+        whatsapp: {
+          display_name: "WhatsApp",
+          default_config: { enabled: false },
+          json_schema: { properties: { enabled: { type: "boolean" } } },
+        },
+        telegram: {
+          display_name: "Telegram",
+          default_config: { enabled: false },
+          json_schema: { properties: { enabled: { type: "boolean" } } },
+        },
+        discord: {
+          display_name: "Discord",
+          default_config: { enabled: false },
+          json_schema: { properties: { enabled: { type: "boolean" } } },
+        },
+        email: { display_name: "Email", default_config: {} },
+        slack: {
+          display_name: "Slack",
+          default_config: { enabled: false, dm: { enabled: true } },
+          json_schema: {
+            properties: {
+              enabled: { type: "boolean" },
+              dm: { type: "object", properties: { enabled: { type: "boolean" } } },
+            },
+          },
+        },
       },
       global: { json_schema: {} },
     });
@@ -407,19 +453,21 @@ describe("learning BFF contract", () => {
         provider: "client-provider",
         api_key: "client-key",
         channels: {
-          telegram: { enabled: true, token: "secret" },
-          slack: { enabled: true, bot_token: "secret" },
+          telegram: { enabled: true, token: "secret", proxy: "socks5://evil.test" },
+          slack: { enabled: true, bot_token: "secret", mode: "webhook" },
+          discord: { enabled: true, token: "secret", gateway_url: "wss://evil.test" },
           send_progress: true,
         },
       })
     ).toEqual({
       bot_id: "bot-1",
-      channels: {
-        telegram: { enabled: true, token: "secret" },
-        slack: { enabled: true, bot_token: "secret" },
-        send_progress: true,
-      },
-    });
+        channels: {
+          telegram: { enabled: true, token: "secret" },
+          slack: { enabled: true, bot_token: "secret" },
+          discord: { enabled: true, token: "secret" },
+          send_progress: true,
+        },
+      });
   });
 
   test("preserves existing tutor agent channel secrets when clients leave masked or blank values", () => {
@@ -429,27 +477,31 @@ describe("learning BFF contract", () => {
           telegram: { enabled: true, token: "***", allow_from: ["1"] },
           email: { enabled: true, smtp_password: "", imap_password: "new-imap" },
           slack: { enabled: true, bot_token: "***" },
+          discord: { enabled: true, token: "***" },
           send_progress: false,
         },
         {
-          telegram: { enabled: true, token: "old-telegram", allow_from: ["9"] },
+          telegram: { enabled: true, token: "old-telegram", allow_from: ["9"], mode: "webhook" },
           email: { smtp_password: "old-smtp", imap_password: "old-imap" },
           slack: { bot_token: "old-slack" },
+          discord: { token: "old-discord", gateway_url: "wss://gateway.discord.gg" },
         },
         {
           channels: {
             telegram: { secret_fields: ["token"] },
             email: { secret_fields: ["smtp_password", "imap_password"] },
             slack: { secret_fields: ["bot_token"] },
+            discord: { secret_fields: ["token"] },
           },
         }
       )
     ).toEqual({
-      telegram: { enabled: true, token: "old-telegram", allow_from: ["1"] },
-      email: { enabled: true, smtp_password: "old-smtp", imap_password: "new-imap" },
-      slack: { enabled: true, bot_token: "old-slack" },
-      send_progress: false,
-    });
+        telegram: { enabled: true, token: "old-telegram", allow_from: ["1"] },
+        email: { enabled: true, smtp_password: "old-smtp", imap_password: "new-imap" },
+        slack: { enabled: true, bot_token: "old-slack" },
+        discord: { enabled: true, token: "old-discord" },
+        send_progress: false,
+      });
   });
 
   test("resolves and enforces learning request byte caps", () => {
