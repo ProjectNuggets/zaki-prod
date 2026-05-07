@@ -132,7 +132,19 @@ export function BrainPage() {
           <BrainTimelineView userId={userId} />
         </div>
       ) : (
-        <div data-testid="brain-graph-slot" className="mx-auto max-w-7xl px-3 sm:px-5">
+        /*
+          V1.11 (2026-05-07) — Graph row goes wide. Pre-V1.11 the graph
+          slot was constrained by `mx-auto max-w-7xl` (1280px), which
+          squeezed the canvas between the filter panel (288px) and the
+          right rails (288px), leaving only ~700px for the graph itself
+          even on wide displays. The graph is the centerpiece of the
+          brain page; it deserves the spotlight. Now: max-w-screen-2xl
+          (1536px) gives substantially more horizontal room while still
+          preventing the layout from spreading uncomfortably wide on
+          ultra-wide monitors. Header + tabs above remain max-w-7xl —
+          they don't need the extra width.
+        */
+        <div data-testid="brain-graph-slot" className="mx-auto max-w-screen-2xl px-3 sm:px-5">
           {/* Search bar — debounced into ?search= */}
           <div className="mb-3">
             <div className="relative">
