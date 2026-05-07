@@ -169,6 +169,14 @@ describe("learning BFF contract", () => {
         nested: [{ keep: true }],
       },
     });
+
+    expect(sanitizeLearningClientPayload({ unknown_root: "drop" }, { root: true })).toEqual({});
+    expect(
+      sanitizeLearningClientPayload(
+        { type: "subscribe", book_id: "book-1", unknown_root: "drop" },
+        { root: true }
+      )
+    ).toEqual({ type: "subscribe", book_id: "book-1" });
   });
 
   test("recursively strips provider routing variants from learning payloads", () => {
@@ -209,7 +217,7 @@ describe("learning BFF contract", () => {
 
   test("sanitizes websocket message buffers without touching binary frames", () => {
     const text = sanitizeLearningWsClientMessage(
-      Buffer.from(JSON.stringify({ content: "hello", api_key: "secret" })),
+      Buffer.from(JSON.stringify({ content: "hello", apiKey: "secret", unknown_root: "drop" })),
       false
     );
     expect(JSON.parse(String(text.data))).toEqual({ content: "hello" });
