@@ -139,9 +139,53 @@ async function mockAppShell(page: Page) {
 }
 
 async function mockLearning(page: Page) {
+  const notebooks = [
+    {
+      id: "nb-1",
+      name: "Newton Notes",
+      description: "Classical mechanics study notes.",
+      record_count: 1,
+      updated_at: "2026-05-07T10:00:00.000Z",
+    },
+  ];
+  const notebookDetails = new Map<string, Record<string, unknown>>([
+    [
+      "nb-1",
+      {
+        id: "nb-1",
+        name: "Newton Notes",
+        description: "Classical mechanics study notes.",
+        updated_at: "2026-05-07T10:00:00.000Z",
+        records: [
+          {
+            id: "rec-1",
+            title: "Momentum lesson",
+            type: "chat",
+            summary: "Explains conservation of momentum.",
+            output: "Momentum is conserved in a closed system.",
+            metadata: { source: "chat", session_id: "session-1" },
+            created_at: "2026-05-07T09:00:00.000Z",
+          },
+        ],
+      },
+    ],
+  ]);
+  const savedNotebookRecords: unknown[] = [];
+
+  await page.routeWebSocket("**/api/learning/ws", async (ws) => {
+    ws.onMessage((message) => {
+      const payload = JSON.parse(String(message)) as { type?: string; content?: string; session_id?: string };
+      if (payload.type !== "start_turn") return;
+      ws.send(JSON.stringify({ type: "session", session_id: payload.session_id || "session-e2e" }));
+      ws.send(JSON.stringify({ type: "content", content: "Notebook-ready answer." }));
+      ws.send(JSON.stringify({ type: "done" }));
+    });
+  });
+
   await page.route("**/api/learning/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    const method = route.request().method();
 
     if (path === "/api/learning/health") {
       await json(route, { ok: true, mode: "hosted" });
@@ -159,38 +203,62 @@ async function mockLearning(page: Page) {
     }
 
     if (path === "/api/learning/notebooks") {
-      await json(route, {
-        notebooks: [
-          {
-            id: "nb-1",
-            name: "Newton Notes",
-            description: "Classical mechanics study notes.",
-            record_count: 1,
-            updated_at: "2026-05-07T10:00:00.000Z",
-          },
-        ],
-      });
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as { name?: string; description?: string };
+        const id = `nb-${notebooks.length + 1}`;
+        const notebook = {
+          id,
+          name: String(body.name || "Untitled notebook"),
+          description: String(body.description || ""),
+          record_count: 0,
+          updated_at: "2026-05-07T11:00:00.000Z",
+        };
+        notebooks.push(notebook);
+        notebookDetails.set(id, { ...notebook, records: [] });
+        await json(route, { success: true, notebook });
+        return;
+      }
+      await json(route, { notebooks });
       return;
     }
 
-    if (path === "/api/learning/notebooks/nb-1") {
-      await json(route, {
-        id: "nb-1",
-        name: "Newton Notes",
-        description: "Classical mechanics study notes.",
-        updated_at: "2026-05-07T10:00:00.000Z",
-        records: [
-          {
-            id: "rec-1",
-            title: "Momentum lesson",
-            type: "chat",
-            summary: "Explains conservation of momentum.",
-            output: "Momentum is conserved in a closed system.",
-            metadata: { source: "chat", session_id: "session-1" },
-            created_at: "2026-05-07T09:00:00.000Z",
-          },
-        ],
-      });
+    if (path === "/api/learning/notebooks/records/manual") {
+      const body = route.request().postDataJSON() as {
+        notebook_ids?: string[];
+        record_type?: string;
+        title?: string;
+        summary?: string;
+        user_query?: string;
+        output?: string;
+        metadata?: Record<string, unknown>;
+      };
+      savedNotebookRecords.push(body);
+      for (const notebookId of body.notebook_ids ?? []) {
+        const detail = notebookDetails.get(notebookId);
+        if (!detail) continue;
+        const records = Array.isArray(detail.records) ? detail.records : [];
+        const record = {
+          id: `rec-${records.length + 1}`,
+          title: body.title || "Saved chat",
+          type: body.record_type || "chat",
+          summary: body.summary || "",
+          user_query: body.user_query || "",
+          output: body.output || "",
+          metadata: body.metadata || {},
+          created_at: "2026-05-07T11:05:00.000Z",
+        };
+        records.push(record);
+        detail.records = records;
+        const summary = notebooks.find((notebook) => notebook.id === notebookId);
+        if (summary) summary.record_count = records.length;
+      }
+      await json(route, { success: true, added_to_notebooks: body.notebook_ids ?? [] });
+      return;
+    }
+
+    if (path.startsWith("/api/learning/notebooks/")) {
+      const notebookId = decodeURIComponent(path.split("/").pop() || "");
+      await json(route, notebookDetails.get(notebookId) || {}, notebookDetails.has(notebookId) ? 200 : 404);
       return;
     }
 
@@ -300,16 +368,19 @@ async function mockLearning(page: Page) {
 
     await json(route, {});
   });
+
+  return { savedNotebookRecords };
 }
 
 test.describe("ZAKI Learn parity wiring", () => {
   test.beforeEach(async ({ page }) => {
     await mockAppShell(page);
-    await mockLearning(page);
     await bootstrapSession(page);
   });
 
   test("renders DeepTutor-shaped primary Learn surfaces", async ({ page }) => {
+    await mockLearning(page);
+
     await page.goto("/learn?view=books");
     await expect(page.getByText("Generate, browse and study your AI-authored books.")).toBeVisible();
     await expect(page.getByText("No books yet")).toBeVisible();
@@ -334,10 +405,12 @@ test.describe("ZAKI Learn parity wiring", () => {
   });
 
   test("exports notebook records through the ZAKI Learn notebook view", async ({ page }) => {
+    await mockLearning(page);
+
     await page.goto("/learn?view=notebooks");
 
     await expect(page.getByRole("heading", { name: "Your notebooks" })).toBeVisible();
-    await expect(page.getByText("Newton Notes")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Newton Notes" })).toBeVisible();
     await expect(page.getByText("Momentum lesson")).toBeVisible();
 
     const downloadPromise = page.waitForEvent("download");
@@ -351,5 +424,36 @@ test.describe("ZAKI Learn parity wiring", () => {
     expect(markdown).toContain("# Newton Notes");
     expect(markdown).toContain("## Momentum lesson");
     expect(markdown).toContain("Momentum is conserved in a closed system.");
+  });
+
+  test("creates a notebook and saves a chat turn into it", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=notebooks");
+    await page.getByPlaceholder("Notebook name").fill("Energy Notes");
+    await page.getByPlaceholder("Description").fill("Work and energy examples");
+    await page.getByRole("button", { name: /^Create$/ }).click();
+    await expect(page.getByText("Energy Notes")).toBeVisible();
+
+    await page.goto("/learn?view=chat");
+    await page.getByPlaceholder("How can I help you today?").fill("Explain work-energy theorem.");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByText("Notebook-ready answer.")).toBeVisible();
+
+    await page.getByRole("button", { name: /Save to Notebook/i }).click();
+    await page.getByRole("button", { name: /Energy Notes/i }).click();
+    await page.getByRole("button", { name: /^Save$/ }).click();
+
+    await expect.poll(() => learning.savedNotebookRecords.length).toBe(1);
+    expect(learning.savedNotebookRecords[0]).toMatchObject({
+      notebook_ids: expect.arrayContaining(["nb-2"]),
+      record_type: "chat",
+      user_query: "Explain work-energy theorem.",
+    });
+    expect(JSON.stringify(learning.savedNotebookRecords[0])).toContain("Notebook-ready answer.");
+
+    await page.goto("/learn?view=notebooks");
+    await page.getByText("Energy Notes").click();
+    await expect(page.getByText("Explain work-energy theorem.")).toBeVisible();
   });
 });
