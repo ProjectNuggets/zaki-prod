@@ -294,6 +294,13 @@ export function createLearningNotebook(payload: LearningJson) {
   });
 }
 
+export function addLearningNotebookRecord(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/notebooks/records", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function listLearningCoWriterDocuments() {
   return learningRequest<unknown>("/api/learning/co-writer/documents");
 }
@@ -332,6 +339,13 @@ export function deleteLearningCoWriterDocument(documentId: string) {
 
 export function runLearningCoWriterEdit(payload: LearningJson) {
   return learningRequest<unknown>("/api/learning/co-writer/edit", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function runLearningCoWriterAutoMark(payload: LearningJson) {
+  return learningRequest<unknown>("/api/learning/co-writer/automark", {
     method: "POST",
     body: payload,
   });

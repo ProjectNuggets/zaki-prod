@@ -5,11 +5,13 @@ import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, ReactNode, 
 import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowUp,
   AtSign,
   BarChart3,
   BookOpen,
   Bot,
+  Bold,
   Brain,
   BrainCircuit,
   ChevronDown,
@@ -20,16 +22,23 @@ import {
   Code2,
   Copy,
   Database,
+  Download,
+  Eraser,
   FileSearch,
   FileText,
   FolderUp,
   GraduationCap,
   Globe,
+  Heading1,
+  Heading2,
   Heart,
   History,
+  Italic,
   Image,
   Layers,
   Lightbulb,
+  List,
+  ListOrdered,
   Loader2,
   MessageSquare,
   Microscope,
@@ -37,6 +46,7 @@ import {
   Paperclip,
   PenLine,
   Plus,
+  Quote,
   Search,
   Send,
   Settings,
@@ -49,9 +59,12 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  addLearningNotebookRecord,
   analyzeLearningVision,
   createLearningBook,
   createLearningCoWriterDocument,
@@ -86,6 +99,8 @@ import {
   listLearningTutorAgentSouls,
   getLearningMemory,
   destroyLearningTutorAgent,
+  runLearningCoWriterAutoMark,
+  runLearningCoWriterEdit,
   updateLearningCoWriterDocument,
   updateLearningMemory,
   uploadLearningKnowledge,
@@ -124,7 +139,7 @@ type LearningTab =
   | "workspaces";
 
 type Item = Record<string, unknown>;
-type CoWriterCreateDraft = { title: string; content: string };
+type CoWriterCreateDraft = { title?: string; content: string };
 type LearningObjectType =
   | "source"
   | "book"
@@ -393,12 +408,14 @@ export function LearningPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
+  const requestedDocumentId = searchParams.get("doc") || "";
   const [tab, setTab] = useState<LearningTab>(() => normalizeLearningTab(requestedView));
   const [kbName, setKbName] = useState("main");
   const [bookTopic, setBookTopic] = useState("");
   const [notebookName, setNotebookName] = useState("");
-  const [documentTitle, setDocumentTitle] = useState("");
-  const [, setWriterText] = useState("");
+  const [selectedWriterDocumentId, setSelectedWriterDocumentId] = useState(
+    () => requestedDocumentId,
+  );
   const [agentId, setAgentId] = useState("");
   const [agentName, setAgentName] = useState("");
   const [agentPersona, setAgentPersona] = useState("");
@@ -416,6 +433,14 @@ export function LearningPage() {
   useEffect(() => {
     setTab(normalizeLearningTab(requestedView));
   }, [requestedView]);
+
+  useEffect(() => {
+    if (normalizeLearningTab(requestedView) !== "writer") {
+      setSelectedWriterDocumentId("");
+      return;
+    }
+    setSelectedWriterDocumentId(requestedDocumentId);
+  }, [requestedView, requestedDocumentId]);
 
   const knowledge = useQuery({
     queryKey: learningKeys.knowledge,
@@ -594,8 +619,8 @@ export function LearningPage() {
       createLearningCoWriterDocument({ title, content }),
     onSuccess: (payload) => {
       setLastResult(payload);
-      setDocumentTitle("");
-      setWriterText("");
+      const createdId = itemId(asRecord(payload));
+      if (createdId) setSelectedWriterDocumentId(createdId);
       toast.success("Document created");
       void queryClient.invalidateQueries({ queryKey: learningKeys.coWriterDocuments });
     },
@@ -722,14 +747,14 @@ export function LearningPage() {
           />
         ) : tab === "writer" ? (
           <WriterPanel
-            documentTitle={documentTitle}
-            setDocumentTitle={setDocumentTitle}
             createDocument={createDocument}
             deleteDocument={deleteDocument}
+            selectedDocumentId={selectedWriterDocumentId}
+            setSelectedDocumentId={setSelectedWriterDocumentId}
             items={documentItems}
-            onOpen={(item) =>
-              openObject("document", item, `document-${documentItems.indexOf(item) + 1}`)
-            }
+            knowledgeItems={knowledgeItems}
+            notebookItems={notebookItems}
+            onResult={setLastResult}
           />
         ) : tab === "review" ? (
           <ReviewPanel
@@ -3773,25 +3798,41 @@ function NotebooksPanel({
 }
 
 function WriterPanel({
-  documentTitle,
-  setDocumentTitle,
   createDocument,
   deleteDocument,
+  selectedDocumentId,
+  setSelectedDocumentId,
   items,
-  onOpen,
+  knowledgeItems,
+  notebookItems,
+  onResult,
 }: {
-  documentTitle: string;
-  setDocumentTitle: (value: string) => void;
   createDocument: UseMutationResult<unknown, Error, CoWriterCreateDraft, unknown>;
   deleteDocument: UseMutationResult<unknown, Error, string, unknown>;
+  selectedDocumentId: string;
+  setSelectedDocumentId: (value: string) => void;
   items: Item[];
-  onOpen: (item: Item) => void;
+  knowledgeItems: Item[];
+  notebookItems: Item[];
+  onResult: (value: unknown) => void;
 }) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const createDraft = (content = "") => {
-    const title = documentTitle.trim() || "Untitled draft";
-    createDocument.mutate({ title, content });
+    createDocument.mutate({ content });
   };
+
+  if (selectedDocumentId) {
+    return (
+      <CoWriterDocumentEditor
+        documentId={selectedDocumentId}
+        onBack={() => setSelectedDocumentId("")}
+        onResult={onResult}
+        deleteDocument={deleteDocument}
+        knowledgeItems={knowledgeItems}
+        notebookItems={notebookItems}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
@@ -3804,12 +3845,6 @@ function WriterPanel({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            value={documentTitle}
-            onChange={(event) => setDocumentTitle(event.target.value)}
-            placeholder="Untitled draft"
-            className="hidden h-8 w-44 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2.5 text-xs text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand sm:block"
-          />
           <button
             type="button"
             onClick={() => createDraft(CO_WRITER_SAMPLE_TEMPLATE)}
@@ -3879,11 +3914,11 @@ function WriterPanel({
                   key={id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => onOpen(item)}
+                  onClick={() => setSelectedDocumentId(id)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      onOpen(item);
+                      setSelectedDocumentId(id);
                     }
                   }}
                   className="group relative flex h-44 cursor-pointer flex-col rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4 text-left transition-colors hover:border-zaki-brand/40 hover:bg-zaki-hover hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand"
@@ -3939,6 +3974,488 @@ function WriterPanel({
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function CoWriterDocumentEditor({
+  documentId,
+  onBack,
+  onResult,
+  deleteDocument,
+  knowledgeItems,
+  notebookItems,
+}: {
+  documentId: string;
+  onBack: () => void;
+  onResult: (value: unknown) => void;
+  deleteDocument: UseMutationResult<unknown, Error, string, unknown>;
+  knowledgeItems: Item[];
+  notebookItems: Item[];
+}) {
+  const queryClient = useQueryClient();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [title, setTitle] = useState("");
+  const [markdown, setMarkdown] = useState("");
+  const [instruction, setInstruction] = useState("");
+  const [action, setAction] = useState<"rewrite" | "shorten" | "expand">("rewrite");
+  const [source, setSource] = useState<"none" | "rag" | "web">("none");
+  const [kbName, setKbName] = useState("");
+  const [notebookId, setNotebookId] = useState("");
+  const [status, setStatus] = useState("");
+  const [editorCollapsed, setEditorCollapsed] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [pendingClear, setPendingClear] = useState<"clear" | "template" | null>(null);
+  const wordCount = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
+  const charCount = markdown.length;
+  const selectedKbName = kbName || itemTitle(knowledgeItems[0] || {}, "");
+
+  const documentQuery = useQuery({
+    queryKey: ["learning", "co-writer", "document", documentId],
+    queryFn: () => getLearningCoWriterDocument(documentId),
+    retry: 1,
+  });
+
+  useEffect(() => {
+    const record = asRecord(documentQuery.data);
+    if (!Object.keys(record).length) return;
+    setTitle(itemTitle(record, "Untitled draft"));
+    setMarkdown(textOf(record.content));
+  }, [documentQuery.data]);
+
+  useEffect(() => {
+    if (!kbName && knowledgeItems[0]) {
+      setKbName(itemTitle(knowledgeItems[0], ""));
+    }
+  }, [kbName, knowledgeItems]);
+
+  useEffect(() => {
+    if (!notebookId && notebookItems[0]) {
+      setNotebookId(itemId(notebookItems[0]));
+    }
+  }, [notebookId, notebookItems]);
+
+  const updateDocument = useMutation({
+    mutationFn: () =>
+      updateLearningCoWriterDocument(documentId, {
+        title: title.trim() || null,
+        content: markdown,
+      }),
+    onSuccess: (payload) => {
+      onResult(payload);
+      setStatus("Saved");
+      toast.success("Document saved");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.coWriterDocuments });
+      void queryClient.invalidateQueries({
+        queryKey: ["learning", "co-writer", "document", documentId],
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const fullDraftEdit = useMutation({
+    mutationFn: () => {
+      if (!instruction.trim()) throw new Error("Enter an editing instruction first.");
+      return runLearningCoWriterEdit({
+        text: markdown,
+        instruction: instruction.trim(),
+        action,
+        source: source === "none" ? null : source,
+        kb_name: source === "rag" ? selectedKbName || null : null,
+      });
+    },
+    onSuccess: (payload) => {
+      const edited = textOf(asRecord(payload).edited_text);
+      if (edited) setMarkdown(edited);
+      onResult(payload);
+      setStatus(`Applied ${action} to the full draft`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const autoMark = useMutation({
+    mutationFn: () => runLearningCoWriterAutoMark({ text: markdown }),
+    onSuccess: (payload) => {
+      const marked = textOf(asRecord(payload).marked_text);
+      if (marked) setMarkdown(marked);
+      onResult(payload);
+      setStatus("Applied auto-mark annotations");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const saveToNotebook = useMutation({
+    mutationFn: () => {
+      if (!notebookId) throw new Error("Choose a notebook first.");
+      return addLearningNotebookRecord({
+        notebook_ids: [notebookId],
+        record_type: "co_writer",
+        title: title.trim() || "Untitled draft",
+        summary: "",
+        user_query: "Co-Writer draft",
+        output: markdown,
+        metadata: {
+          source: "zaki_learn",
+          document_id: documentId,
+        },
+        kb_name: selectedKbName || null,
+      });
+    },
+    onSuccess: (payload) => {
+      onResult(payload);
+      setStatus("Saved to notebook");
+      toast.success("Saved to notebook");
+      void queryClient.invalidateQueries({ queryKey: learningKeys.notebooks });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const insertSnippet = (snippet: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setMarkdown((value) => `${value}${snippet}`);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const next = `${markdown.slice(0, start)}${snippet}${markdown.slice(end)}`;
+    setMarkdown(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = start + snippet.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const downloadMarkdown = () => {
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(title || "zaki-draft").replace(/[^a-z0-9-_]+/gi, "-")}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const confirmClearAction = () => {
+    if (pendingClear === "clear") {
+      setMarkdown("");
+      setStatus("Draft cleared");
+    }
+    if (pendingClear === "template") {
+      setMarkdown(CO_WRITER_SAMPLE_TEMPLATE);
+      setStatus("Loaded example template");
+    }
+    setPendingClear(null);
+  };
+
+  const toolbar = [
+    { label: "H1", Icon: Heading1, snippet: "# Heading\n\n" },
+    { label: "H2", Icon: Heading2, snippet: "## Heading\n\n" },
+    { label: "Bold", Icon: Bold, snippet: "**bold text**" },
+    { label: "Italic", Icon: Italic, snippet: "_italic text_" },
+    { label: "Quote", Icon: Quote, snippet: "> Quote\n\n" },
+    { label: "Bulleted list", Icon: List, snippet: "- Item\n" },
+    { label: "Numbered list", Icon: ListOrdered, snippet: "1. Item\n" },
+    { label: "Code", Icon: Code2, snippet: "```text\ncode\n```\n" },
+  ];
+
+  if (documentQuery.isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center gap-2 bg-zaki-base text-sm text-zaki-muted">
+        <Loader2 className="size-4 animate-spin" />
+        Loading draft...
+      </div>
+    );
+  }
+
+  if (documentQuery.isError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-zaki-base text-center">
+        <AlertTriangle className="size-7 text-amber-500" />
+        <div>
+          <p className="text-sm font-semibold text-zaki-text">Draft unavailable</p>
+          <p className="mt-1 text-xs text-zaki-muted">The document could not be loaded.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex h-9 items-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm text-zaki-text hover:bg-zaki-hover"
+        >
+          <ArrowLeft className="size-4" />
+          Back to drafts
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-zaki-border px-4 py-1.5">
+        <div className="flex min-w-0 items-center gap-3 text-sm text-zaki-muted">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex shrink-0 items-center gap-1 rounded-zaki-md px-1.5 py-0.5 text-xs font-medium text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-text"
+            title="Back to documents"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Co-Writer</span>
+          </button>
+          <span className="text-zaki-muted/50">/</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => updateDocument.mutate()}
+            maxLength={120}
+            spellCheck={false}
+            placeholder="Untitled draft"
+            aria-label="Document title"
+            className="min-w-0 max-w-96 flex-1 rounded-zaki-md border border-transparent bg-transparent px-2 py-0.5 font-medium text-zaki-text outline-none hover:bg-zaki-hover focus:border-zaki-brand focus:bg-zaki-raised"
+          />
+          <span className="hidden text-xs sm:inline">
+            {wordCount} words · {charCount} chars
+          </span>
+          {updateDocument.isPending ? (
+            <span className="hidden items-center gap-1 text-[10px] text-zaki-muted sm:inline-flex">
+              <Loader2 className="size-2.5 animate-spin" />
+              Saving...
+            </span>
+          ) : status ? (
+            <span className="hidden text-[10px] text-zaki-muted sm:inline">{status}</span>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPendingClear("clear")}
+            className="inline-flex size-8 items-center justify-center rounded-zaki-md text-rose-600 hover:bg-rose-50"
+            title="Clear"
+          >
+            <Eraser className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={downloadMarkdown}
+            className="inline-flex size-8 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+            title="Export Markdown"
+          >
+            <Download className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingClear("template")}
+            className="inline-flex size-8 items-center justify-center rounded-zaki-md text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+            title="Load Example Template"
+          >
+            <FileText className="size-4" />
+          </button>
+          <button
+            type="button"
+            disabled={updateDocument.isPending}
+            onClick={() => updateDocument.mutate()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {updateDocument.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+            Save
+          </button>
+        </div>
+      </header>
+
+      <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-zaki-border px-3 py-1">
+        {toolbar.map(({ label, Icon, snippet }) => (
+          <button
+            key={label}
+            type="button"
+            title={label}
+            onClick={() => insertSnippet(snippet)}
+            className="shrink-0 rounded-zaki-md p-1.5 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-text"
+          >
+            <Icon className="size-4" />
+          </button>
+        ))}
+        <div className="mx-1 h-4 w-px shrink-0 bg-zaki-border" />
+        <button
+          type="button"
+          onClick={() => setEditorCollapsed((value) => !value)}
+          className="shrink-0 rounded-zaki-md px-2 py-1 text-[10px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          {editorCollapsed ? "Show editor" : "Hide editor"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setPreviewCollapsed((value) => !value)}
+          className="shrink-0 rounded-zaki-md px-2 py-1 text-[10px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+        >
+          {previewCollapsed ? "Show preview" : "Hide preview"}
+        </button>
+        <span className="ml-auto shrink-0 rounded bg-zaki-hover px-1.5 py-0.5 text-[10px] text-zaki-muted">GFM</span>
+      </div>
+
+      <div className="grid shrink-0 gap-2 border-b border-zaki-border p-3 lg:grid-cols-[1fr_11rem_11rem_11rem_auto_auto]">
+        <input
+          value={instruction}
+          onChange={(event) => setInstruction(event.target.value)}
+          placeholder="Tell AI what to do with the draft..."
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-raised px-3 text-sm text-zaki-text outline-none placeholder:text-zaki-muted focus:border-zaki-brand"
+        />
+        <select
+          value={action}
+          onChange={(event) => setAction(event.target.value as "rewrite" | "shorten" | "expand")}
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+        >
+          <option value="rewrite">Rewrite</option>
+          <option value="shorten">Shorten</option>
+          <option value="expand">Expand</option>
+        </select>
+        <select
+          value={source}
+          onChange={(event) => setSource(event.target.value as "none" | "rag" | "web")}
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+        >
+          <option value="none">No source</option>
+          <option value="rag">Knowledge base</option>
+          <option value="web">Web</option>
+        </select>
+        <select
+          value={kbName}
+          onChange={(event) => setKbName(event.target.value)}
+          disabled={!knowledgeItems.length}
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 text-sm text-zaki-text outline-none focus:border-zaki-brand disabled:opacity-60"
+        >
+          {knowledgeItems.length ? (
+            knowledgeItems.map((item, index) => {
+              const name = itemTitle(item, `kb-${index + 1}`);
+              return (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              );
+            })
+          ) : (
+            <option value="">No libraries</option>
+          )}
+        </select>
+        <button
+          type="button"
+          disabled={fullDraftEdit.isPending || !instruction.trim()}
+          onClick={() => fullDraftEdit.mutate()}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {fullDraftEdit.isPending ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+          Full Draft
+        </button>
+        <button
+          type="button"
+          disabled={autoMark.isPending || !markdown.trim()}
+          onClick={() => autoMark.mutate()}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+        >
+          {autoMark.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          Auto-mark
+        </button>
+      </div>
+
+      <div className="grid shrink-0 gap-2 border-b border-zaki-border px-3 py-2 lg:grid-cols-[1fr_auto_auto]">
+        <select
+          value={notebookId}
+          onChange={(event) => setNotebookId(event.target.value)}
+          disabled={!notebookItems.length}
+          className="h-9 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2 text-sm text-zaki-text outline-none focus:border-zaki-brand disabled:opacity-60"
+        >
+          {notebookItems.length ? (
+            notebookItems.map((item, index) => {
+              const id = itemId(item, `notebook-${index + 1}`);
+              return (
+                <option key={id} value={id}>
+                  {itemTitle(item, id)}
+                </option>
+              );
+            })
+          ) : (
+            <option value="">No notebooks</option>
+          )}
+        </select>
+        <button
+          type="button"
+          disabled={saveToNotebook.isPending || !notebookId || !markdown.trim()}
+          onClick={() => saveToNotebook.mutate()}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-zaki-border px-3 text-sm font-semibold text-zaki-text hover:bg-zaki-hover disabled:opacity-60"
+        >
+          {saveToNotebook.isPending ? <Loader2 className="size-4 animate-spin" /> : <NotebookPen className="size-4" />}
+          Save to Notebook
+        </button>
+        <button
+          type="button"
+          disabled={deleteDocument.isPending}
+          onClick={() => {
+            if (!window.confirm(`Delete draft "${title || documentId}"?`)) return;
+            deleteDocument.mutate(documentId, {
+              onSuccess: () => {
+                onBack();
+              },
+            });
+          }}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md border border-rose-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+        >
+          {deleteDocument.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          Delete
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        {!editorCollapsed ? (
+          <div className={cn("flex min-h-0 flex-col", previewCollapsed ? "w-full" : "w-1/2")}>
+            <div className="flex shrink-0 items-center justify-between border-b border-zaki-border px-3 py-1">
+              <span className="text-xs font-medium text-zaki-muted">Editor</span>
+            </div>
+            <textarea
+              ref={textareaRef}
+              value={markdown}
+              onChange={(event) => setMarkdown(event.target.value)}
+              spellCheck={false}
+              className="min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-[13px] leading-relaxed text-zaki-text outline-none placeholder:text-zaki-muted"
+              placeholder="Start writing in Markdown..."
+            />
+          </div>
+        ) : null}
+        {!previewCollapsed ? (
+          <div className={cn("flex min-h-0 flex-col border-l border-zaki-border", editorCollapsed ? "w-full" : "w-1/2")}>
+            <div className="flex shrink-0 items-center justify-between border-b border-zaki-border px-3 py-1">
+              <span className="text-xs font-medium text-zaki-muted">Preview</span>
+            </div>
+            <div className="learning-markdown min-h-0 flex-1 overflow-y-auto p-5 text-sm leading-relaxed text-zaki-text">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {markdown || "_Nothing to preview yet._"}
+              </ReactMarkdown>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {pendingClear ? (
+        <div className="fixed inset-x-0 bottom-5 z-50 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 shadow-lg">
+          <span className="text-sm text-zaki-text">
+            {pendingClear === "clear" ? "Clear this draft?" : "Replace this draft with the example template?"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPendingClear(null)}
+            className="h-8 rounded-zaki-md border border-zaki-border px-3 text-xs font-semibold text-zaki-text hover:bg-zaki-hover"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmClearAction}
+            className="h-8 rounded-zaki-md bg-zaki-brand px-3 text-xs font-semibold text-white"
+          >
+            Confirm
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
