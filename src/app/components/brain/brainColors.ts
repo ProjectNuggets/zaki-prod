@@ -1,11 +1,26 @@
 // Shared palette + color helpers for the V1.7 brain graph.
 //
-// Three color presets (user-toggleable):
+// Four color presets (user-toggleable):
+//   - mono: monochrome dark canvas (V1.11 default — Obsidian aesthetic)
 //   - community: palette[community_id mod 12]
 //   - link_type: 7 LinkType values
 //   - kind: core / daily / conversation (legacy fallback)
+//
+// V1.11 (2026-05-07) — `mono` added as the new default. The 12-color
+// community palette was visually noisy out-of-the-box; mono renders
+// every node in a muted gray and lets the existing border-emphasis
+// styles (selected, highlighted, center) carry the visual weight,
+// matching Obsidian's restraint. Users who want colors can switch
+// preset; all existing color logic preserved unchanged.
 
-export type ColorPreset = "community" | "link_type" | "kind";
+export type ColorPreset = "mono" | "community" | "link_type" | "kind";
+
+// V1.11 monochrome canvas — muted gray for all nodes; emphasis comes
+// from border styles (selected/highlighted/center) defined in
+// BrainGraphView.tsx cytoscape stylesheet. Picked to read on a dark
+// canvas (#0a0a0a background) without competing with the red brand
+// accent on selected/center nodes.
+export const MONO_NODE = "#6b7280";
 
 // 12-color qualitative palette (D3 Tableau, color-blind-friendly)
 export const COMMUNITY_PALETTE: readonly string[] = [
@@ -72,6 +87,9 @@ export function nodeColor(
     link_type?: string | null;
   },
 ): string {
+  // V1.11 mono preset — every node muted gray. Border styles
+  // (selected/highlighted/center) carry the visual emphasis.
+  if (preset === "mono") return MONO_NODE;
   if (preset === "community") {
     if (node.community_id !== null && node.community_id !== undefined) {
       return colorForCommunity(node.community_id);

@@ -39,20 +39,33 @@ const OPERATOR_MANAGED_LEARNING_FIELDS = new Set([
   "providersettings",
 ]);
 const LEARNING_WS_ALLOWED_ROOT_FIELDS = new Set([
+  "agent_id",
   "attachments",
+  "book_id",
   "book_references",
+  "bot_id",
   "capability",
   "chat_id",
   "config",
   "content",
+  "entry_id",
+  "file_id",
+  "filename",
   "history_references",
+  "id",
   "knowledge_bases",
   "language",
   "memory_references",
+  "message",
   "notebook_references",
+  "operation_id",
+  "page_id",
+  "prompt",
+  "query",
   "question_notebook_references",
   "session_id",
   "skills",
+  "task_id",
   "tools",
   "turn_id",
   "type",
@@ -254,14 +267,11 @@ export function sanitizeLearningClientPayload(value, { root = false } = {}) {
 
   const output = {};
   const entries = Object.entries(value);
-  const knownRootPayload =
-    root &&
-    entries.some(([key]) => LEARNING_WS_ALLOWED_ROOT_FIELDS.has(String(key)));
 
   for (const [key, nested] of entries) {
     const normalizedKey = String(key);
     if (isOperatorManagedLearningField(normalizedKey)) continue;
-    if (knownRootPayload && !LEARNING_WS_ALLOWED_ROOT_FIELDS.has(normalizedKey)) continue;
+    if (root && !LEARNING_WS_ALLOWED_ROOT_FIELDS.has(normalizedKey)) continue;
     output[normalizedKey] = sanitizeLearningClientPayload(nested);
   }
   return output;

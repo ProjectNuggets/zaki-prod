@@ -36,9 +36,9 @@ Last updated: 2026-05-07
 
 - [x] 02-01: Convert learning mutation proxying to route allowlists or recursive schema sanitizers.
 - [x] 02-02: Enforce byte limits for raw and chunked uploads before proxying.
-- [ ] 02-03: Move WebSocket payload handling to allowlist schemas and consume quota only on mutating/prompt messages.
-- [ ] 02-04: Gate unsafe generated HTML rendering behind operator policy and safe defaults.
-- [ ] 02-05: Split user-managed settings from operator-managed settings.
+- [x] 02-03: Move WebSocket payload handling to allowlist schemas and consume quota only on mutating/prompt messages.
+- [x] 02-04: Gate unsafe generated HTML rendering behind operator policy and safe defaults.
+- [x] 02-05: Split user-managed settings from operator-managed settings.
 - [ ] 02-06: Backend security test pass.
 
 **Status:** In progress.
