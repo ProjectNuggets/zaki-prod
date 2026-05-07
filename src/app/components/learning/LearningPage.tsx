@@ -1901,6 +1901,65 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
   return null;
 }
 
+function learningAdvancedResultMarkdown(message: TutorChatMessage) {
+  const metadata = learningResultMetadata(message);
+  if (!Object.keys(metadata).length) return "";
+
+  if (message.capability === "deep_research") {
+    const outlinePreview = asRecord(metadata.outline_preview);
+    const subTopics = learningRecords(metadata.sub_topics).length
+      ? learningRecords(metadata.sub_topics)
+      : learningRecords(outlinePreview.sub_topics);
+    if (!subTopics.length) return "";
+    const topic = textOf(metadata.topic) || textOf(outlinePreview.topic) || "Research Outline";
+    return [
+      "### Research Outline",
+      "",
+      `Topic: ${topic}`,
+      "",
+      ...subTopics.flatMap((item, index) => [
+        `${index + 1}. ${textOf(item.title, `Sub-topic ${index + 1}`)}`,
+        textOf(item.overview) ? `   ${textOf(item.overview)}` : "",
+      ]),
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (message.capability === "visualize") {
+    const renderType = textOf(metadata.render_type, "visualization");
+    const code = asRecord(metadata.code);
+    const content = textOf(code.content);
+    const language = textOf(code.language, renderType);
+    const parts = ["### Visualization", "", `Render type: ${renderType}`];
+    if (textOf(metadata.response)) parts.push("", textOf(metadata.response));
+    if (content) parts.push("", `\`\`\`${language}`, content, "```");
+    return parts.join("\n");
+  }
+
+  if (message.capability === "math_animator") {
+    const artifacts = learningRecords(metadata.artifacts);
+    const code = asRecord(metadata.code);
+    const source = textOf(code.content);
+    const parts = ["### Math Animator"];
+    if (textOf(metadata.response)) parts.push("", textOf(metadata.response));
+    if (artifacts.length) {
+      parts.push("", "Artifacts:");
+      artifacts.forEach((artifact) => {
+        const label = textOf(artifact.label) || textOf(artifact.filename, "Artifact");
+        const url = textOf(artifact.url);
+        parts.push(`- ${label}${url ? `: ${url}` : ""}`);
+      });
+    }
+    if (source) {
+      parts.push("", "```python", source, "```");
+    }
+    return parts.join("\n");
+  }
+
+  return "";
+}
+
 function LearningAttachmentChip({
   attachment,
   onRemove,
@@ -2624,7 +2683,8 @@ function LearningChatPanel({
       .map((message) => {
         const speaker =
           message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "System";
-        return `## ${speaker}\n\n${message.content}`;
+        const advancedResult = learningAdvancedResultMarkdown(message);
+        return `## ${speaker}\n\n${[message.content, advancedResult].filter(Boolean).join("\n\n")}`;
       })
       .join("\n\n");
 

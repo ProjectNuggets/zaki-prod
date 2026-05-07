@@ -543,6 +543,12 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect.poll(() => learning.startedTurns.length).toBe(2);
     await expect(page.getByText("Research Outline")).toBeVisible();
     await expect(page.getByText("Fourier basis")).toBeVisible();
+    let downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: /Download Markdown/i }).click();
+    let download = await downloadPromise;
+    let path = await download.path();
+    let markdown = await readFile(String(path), "utf8");
+    expect(markdown).toContain("### Research Outline");
     expect(learning.startedTurns[1]).toMatchObject({
       type: "start_turn",
       capability: "deep_research",
@@ -563,6 +569,13 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect.poll(() => learning.startedTurns.length).toBe(3);
     await expect(page.getByText("Visualization ready.")).toBeVisible();
     await expect(page.getByText("flowchart TD")).toBeVisible();
+    downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: /Download Markdown/i }).click();
+    download = await downloadPromise;
+    path = await download.path();
+    markdown = await readFile(String(path), "utf8");
+    expect(markdown).toContain("### Visualization");
+    expect(markdown).toContain("flowchart TD");
     expect(learning.startedTurns[2]).toMatchObject({
       type: "start_turn",
       capability: "visualize",
@@ -591,5 +604,13 @@ test.describe("ZAKI Learn parity wiring", () => {
         style_hint: "clean blackboard style",
       },
     });
+
+    downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: /Download Markdown/i }).click();
+    download = await downloadPromise;
+    path = await download.path();
+    markdown = await readFile(String(path), "utf8");
+    expect(markdown).toContain("### Math Animator");
+    expect(markdown).toContain("class Square(Scene): pass");
   });
 });
