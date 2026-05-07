@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Boxes, CircleDot, SlidersHorizontal, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph } from "@/queries";
@@ -36,7 +36,29 @@ export function BrainPage() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const userId = String(user?.id ?? "");
-  const [tab, setTab] = useState<BrainTab>("timeline");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Audit (2026-05-07) — URL is the single source of truth for shareable
+  // brain page state. Lazy initializers seed React state from the current
+  // URL on mount so a refresh / shared link / browser back lands on the
+  // same view. State changes write back to the URL via setSearchParams
+  // with replace:true so we don't pollute history.
+  const initialTab: BrainTab =
+    searchParams.get("tab") === "graph" ? "graph" : "timeline";
+  const initialPanel: ActivePanel = (() => {
+    const p = searchParams.get("panel");
+    return p === "filters" || p === "clusters" || p === "orphans" ? p : null;
+  })();
+  const initialCenter = searchParams.get("center");
+  const initialQ = searchParams.get("q") ?? "";
+  const initialCommunity = (() => {
+    const v = searchParams.get("community");
+    if (!v) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  })();
+
+  const [tab, setTab] = useState<BrainTab>(initialTab);
   const [degradedDismissed, setDegradedDismissed] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   // V1.11 (2026-05-07) — explicit compose-modal toggle. Pre-V1.11 the modal
@@ -44,24 +66,80 @@ export function BrainPage() {
   // was startling (the brain audit flagged it). Now the modal opens only
   // on explicit user action via the floating "Compose from N" button below.
   const [composeOpen, setComposeOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialQ);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialQ);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // V1.7 graph state
   const [filters, setFilters] = useState<BrainFilters>(DEFAULT_FILTERS);
-  const [centerKey, setCenterKey] = useState<string | null>(null);
+  const [centerKey, setCenterKey] = useState<string | null>(initialCenter);
   const [highlightKeys, setHighlightKeys] = useState<string[]>([]);
-  const [selectedCommunityId, setSelectedCommunityId] = useState<number | null>(null);
+  const [selectedCommunityId, setSelectedCommunityId] = useState<number | null>(initialCommunity);
   // V1.11 — floating-overlay panel toggle (Obsidian Graph View pattern).
   // null = canvas-only (default); set by clicking a corner icon.
-  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
 
   // Debounce search input into filters.search
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(searchQuery), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [searchQuery]);
+
+  // State -> URL sync. Writes only on graph tab to avoid noisy URLs while
+  // browsing the timeline. replace:true keeps the back button useful.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === "graph") next.set("tab", "graph"); else next.delete("tab");
+    if (debouncedSearch) next.set("q", debouncedSearch); else next.delete("q");
+    if (activePanel) next.set("panel", activePanel); else next.delete("panel");
+    if (centerKey) next.set("center", centerKey); else next.delete("center");
+    if (selectedCommunityId != null) next.set("community", String(selectedCommunityId));
+    else next.delete("community");
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, debouncedSearch, activePanel, centerKey, selectedCommunityId]);
+
+  // Keyboard shortcuts on the graph tab. Linear/Obsidian-grade affordance:
+  // f/c/o toggle the panel cluster, Esc collapses the active panel or
+  // exits local-graph mode, "/" focuses the search input. Skipped while
+  // any input/textarea has focus so typing the letters works normally.
+  useEffect(() => {
+    if (tab !== "graph") return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const inEditable =
+        !!target?.closest?.("input, textarea, [contenteditable='true']");
+      if (event.key === "Escape") {
+        if (activePanel) {
+          event.preventDefault();
+          setActivePanel(null);
+        } else if (centerKey) {
+          event.preventDefault();
+          setCenterKey(null);
+        }
+        return;
+      }
+      if (inEditable) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "f") {
+        event.preventDefault();
+        setActivePanel((p) => (p === "filters" ? null : "filters"));
+      } else if (event.key === "c") {
+        event.preventDefault();
+        setActivePanel((p) => (p === "clusters" ? null : "clusters"));
+      } else if (event.key === "o") {
+        event.preventDefault();
+        setActivePanel((p) => (p === "orphans" ? null : "orphans"));
+      } else if (event.key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [tab, activePanel, centerKey]);
 
   const effectiveFilters = useMemo<BrainFilters>(
     () => ({ ...filters, search: debouncedSearch }),
@@ -187,6 +265,14 @@ export function BrainPage() {
                 className="w-full rounded-zaki-lg border border-zaki-border bg-zaki-raised py-2 pl-8 pr-8 text-sm text-zaki-text placeholder:text-zaki-muted focus:border-[#f10202] focus:outline-none focus:ring-1 focus:ring-[#f10202]/30"
                 data-testid="brain-search-input"
               />
+              {!searchQuery && (
+                <kbd
+                  className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center rounded border border-zaki-border bg-zaki-raised px-1.5 py-0.5 font-mono-ui text-[10px] font-semibold text-zaki-muted sm:inline-flex"
+                  aria-hidden="true"
+                >
+                  /
+                </kbd>
+              )}
               {searchQuery && (
                 <button
                   type="button"
@@ -288,6 +374,7 @@ export function BrainPage() {
               <PanelToggle
                 icon={SlidersHorizontal}
                 label={t("brain.panel.filters", { defaultValue: "Filters" })}
+                shortcut="F"
                 active={activePanel === "filters"}
                 onClick={() =>
                   setActivePanel(activePanel === "filters" ? null : "filters")
@@ -296,6 +383,7 @@ export function BrainPage() {
               <PanelToggle
                 icon={Boxes}
                 label={t("brain.panel.clusters", { defaultValue: "Clusters" })}
+                shortcut="C"
                 active={activePanel === "clusters"}
                 onClick={() =>
                   setActivePanel(activePanel === "clusters" ? null : "clusters")
@@ -304,6 +392,7 @@ export function BrainPage() {
               <PanelToggle
                 icon={CircleDot}
                 label={t("brain.panel.orphans", { defaultValue: "Loose facts" })}
+                shortcut="O"
                 active={activePanel === "orphans"}
                 onClick={() =>
                   setActivePanel(activePanel === "orphans" ? null : "orphans")
@@ -387,20 +476,22 @@ interface PanelToggleProps {
   label: string;
   active: boolean;
   onClick: () => void;
+  shortcut?: string;
 }
 
-function PanelToggle({ icon: Icon, label, active, onClick }: PanelToggleProps) {
+function PanelToggle({ icon: Icon, label, active, onClick, shortcut }: PanelToggleProps) {
   // V1.11 hotfix (2026-05-07) — dropped backdrop-blur. On the deep
   // black canvas the blur created a faint translucent halo around
   // each button that read as misalignment. Solid `bg-zaki-raised/90`
   // matches the Obsidian-video gear button: clean dark chip, no
   // blur shimmer.
+  const tooltip = shortcut ? `${label} (${shortcut})` : label;
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
-      title={label}
+      aria-label={tooltip}
+      title={tooltip}
       className={`pointer-events-auto flex size-9 items-center justify-center rounded-zaki-md border transition-colors ${
         active
           ? "border-[#f10202]/60 bg-[#f10202]/15 text-[#f10202]"
