@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
+import { ImageBlock } from "./rendering/blocks/ImageBlock";
+import { extractGeneratedImages } from "./rendering/extractGeneratedImages";
 import { SourceChip } from "@/app/components/ui/zaki";
 
 /**
@@ -79,6 +81,30 @@ export function MessageBubble({
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
 
+  // 2026-05-08 — Hoist agent-generated images out of the collapsed
+  // tool-result expansion into the main reply slot. The image_generate
+  // tool's URL is the actual reply for an image-gen prompt; rendering
+  // it inline (above the text) makes the chat read like a normal "here
+  // you go" exchange instead of forcing the user to expand a worklog
+  // row to see the picture.
+  // Dedupe against URLs already inlined in message.content (the agent
+  // sometimes repeats the markdown ![](...) in its final reply, which
+  // parseAssistantContent will render as its own image block — we
+  // suppress those here to avoid two copies of the same image).
+  const generatedImages = useMemo(() => {
+    if (isUser) return [];
+    const images = extractGeneratedImages(message.turnEvents);
+    if (images.length === 0) return [];
+    const inlineUrls = new Set<string>();
+    const md = message.content || "";
+    const re = /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(md)) !== null) {
+      if (match[1]) inlineUrls.add(match[1]);
+    }
+    return images.filter((img) => !inlineUrls.has(img.url));
+  }, [isUser, message.turnEvents, message.content]);
+
   return (
     <div
       className={cn(
@@ -137,6 +163,16 @@ export function MessageBubble({
             })}
           </div>
         )}
+        {generatedImages.length > 0 ? (
+          <div className="flex w-full flex-col gap-2">
+            {generatedImages.map((img) => (
+              <ImageBlock
+                key={img.url}
+                block={{ id: `gen-${img.url}`, type: "image", url: img.url, alt: img.alt }}
+              />
+            ))}
+          </div>
+        ) : null}
         {(() => {
           const content = !isUser ? stripToolCallMarkup(message.content || "") : (message.content || "");
           if (!content) return null;

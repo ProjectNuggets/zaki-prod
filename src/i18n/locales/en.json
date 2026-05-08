@@ -445,7 +445,8 @@
       "Help me brainstorm a plan",
       "Draft a message or email",
       "Turn this into a checklist"
-    ]
+    ],
+    "dropFile": "Drop to attach"
   },
   "zakiExperimentalNotice": {
     "eyebrow": "Experimental",
@@ -906,6 +907,21 @@
     "success": {
       "approvalSent": "Approval sent",
       "requestDenied": "Request denied"
+    },
+    "quickReplies": {
+      "aria": "Quick replies",
+      "deeper": {
+        "label": "Go deeper",
+        "prefill": "Tell me more about that."
+      },
+      "angle": {
+        "label": "Try another angle",
+        "prefill": "Try a different approach."
+      },
+      "remember": {
+        "label": "Save to brain",
+        "prefill": "Save the key takeaway from this conversation to my brain."
+      }
     }
   },
   "onboarding": {

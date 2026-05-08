@@ -6008,6 +6008,13 @@ export function ChatArea() {
         onRegenerateMessage={handleRegenerateMessage}
         onThumbsUpMessage={handleThumbsUpMessage}
         onThumbsDownMessage={handleThumbsDownMessage}
+        onQuickReply={(prefill) => {
+          // S1 — one-click follow-up. Send the prefill as a fresh user
+          // message immediately, no edit step.
+          if (isZakiBotSendLocked) return;
+          void handleSend(prefill, []);
+        }}
+        isRtl={isRtl}
       />
     );
   };
@@ -6238,6 +6245,22 @@ export function ChatArea() {
                 showUpgradeStrip={!isZakiBotActiveSpace}
                 sendLocked={isZakiBotSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
+                threadKey={
+                  activeThreadId
+                    ? `${activeWorkspaceSlug || "_"}::${activeThreadId}`
+                    : null
+                }
+                lastUserMessage={
+                  (() => {
+                    for (let i = messages.length - 1; i >= 0; i--) {
+                      const m = messages[i];
+                      if (m && m.role === "user" && typeof m.content === "string" && m.content.trim()) {
+                        return m.content;
+                      }
+                    }
+                    return null;
+                  })()
+                }
                 zakiMode={activeSessionMode ?? "execute"}
                 onZakiModeChange={isZakiBotActiveSpace ? handleSessionModeChange : undefined}
                 zakiModePending={isZakiBotActiveSpace ? sessionModePending : false}

@@ -46,6 +46,8 @@ export function InputArea({
   zakiModePending = false,
   zakiContextPressurePercent = null,
   zakiContextTooltipCopy = null,
+  threadKey = null,
+  lastUserMessage = null,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
@@ -68,10 +70,33 @@ export function InputArea({
   zakiModePending?: boolean;
   zakiContextPressurePercent?: number | null;
   zakiContextTooltipCopy?: string | null;
+  /** Stable identifier for the active thread/space, used to scope draft
+   *  persistence and last-message recall. Null = no persistence. */
+  threadKey?: string | null;
+  /** Last sent user message text in this thread; ↑ on empty input
+   *  recalls it for editing. */
+  lastUserMessage?: string | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
-  const [inputValue, setInputValue] = useState("");
+  // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
+  // depth (a dragenter on a child fires another dragenter) so the overlay
+  // doesn't flicker as the cursor moves over inner elements.
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragDepthRef = useRef(0);
+  // 2026-05-08 — Per-thread draft persistence (table-stakes #6).
+  // Drafts are scoped to threadKey via sessionStorage so navigating
+  // away and back restores in-flight typing. Null threadKey skips
+  // persistence (e.g. pre-thread empty states).
+  const draftStorageKey = threadKey ? `zaki:draft:${threadKey}` : null;
+  const [inputValue, setInputValue] = useState<string>(() => {
+    if (!draftStorageKey || typeof window === "undefined") return "";
+    try {
+      return window.sessionStorage.getItem(draftStorageKey) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashHighlight, setSlashHighlight] = useState(0);
@@ -102,6 +127,60 @@ export function InputArea({
   const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
   const showZakiModeHint = zakiBotMode && effectiveZakiMode !== "execute";
   const zakiContextTooltip = zakiContextTooltipCopy || t("input.zaki.contextTooltip");
+
+  // 2026-05-08 — Composer-level paste + drag-drop for files.
+  //
+  // Paste: Cmd/Ctrl+V into the textarea picks up image / file blobs from
+  // clipboardData.files. We only preventDefault when there ARE files —
+  // plain-text pastes fall through to the textarea's normal behavior.
+  //
+  // Drag-drop: dragenter / dragover / dragleave / drop wired on the form
+  // container. dragenter depth counted via ref so the overlay doesn't
+  // flicker when the cursor crosses an inner element. drop reads
+  // dataTransfer.files and appends to attachments.
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = Array.from(event.clipboardData?.files || []);
+      if (files.length === 0) return;
+      event.preventDefault();
+      setAttachments((prev) => [...prev, ...files]);
+    },
+    [setAttachments]
+  );
+
+  const handleDragEnter = useCallback((event: React.DragEvent<HTMLFormElement>) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    if (dragDepthRef.current === 1) setIsDraggingFile(true);
+  }, []);
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLFormElement>) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    // Required so drop fires on this element.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLFormElement>) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingFile(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLFormElement>) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      dragDepthRef.current = 0;
+      setIsDraggingFile(false);
+      const files = Array.from(event.dataTransfer.files || []);
+      if (files.length === 0) return;
+      setAttachments((prev) => [...prev, ...files]);
+    },
+    [setAttachments]
+  );
 
   const handleToggleAliases = useCallback(() => {
     setShowAliases((value) => !value);
@@ -307,8 +386,51 @@ export function InputArea({
     if (inputValue.trim() || attachments.length > 0) {
       onSend(inputValue, attachments);
       setInputValue("");
+      if (draftStorageKey && typeof window !== "undefined") {
+        try {
+          window.sessionStorage.removeItem(draftStorageKey);
+        } catch {
+          /* ignore */
+        }
+      }
     }
   };
+
+  // 2026-05-08 — Draft persistence side-effects.
+  //
+  // (a) When threadKey changes, hydrate the new thread's draft into the
+  //     textarea so navigating thread A → B → A restores A's in-progress
+  //     text. Both branches handle the "no key" case by clearing.
+  // (b) Persist every keystroke to sessionStorage. sessionStorage (not
+  //     localStorage) so closing the browser doesn't surface stale drafts
+  //     across sessions, and so multi-tab edits don't fight.
+  useEffect(() => {
+    if (!draftStorageKey || typeof window === "undefined") {
+      setInputValue("");
+      return;
+    }
+    try {
+      const restored = window.sessionStorage.getItem(draftStorageKey) ?? "";
+      setInputValue(restored);
+    } catch {
+      setInputValue("");
+    }
+    // intentional: re-run only when the thread switches
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageKey || typeof window === "undefined") return;
+    try {
+      if (inputValue) {
+        window.sessionStorage.setItem(draftStorageKey, inputValue);
+      } else {
+        window.sessionStorage.removeItem(draftStorageKey);
+      }
+    } catch {
+      /* ignore quota / disabled storage */
+    }
+  }, [draftStorageKey, inputValue]);
 
   const canSend =
     !sendLocked && (inputValue.trim().length > 0 || attachments.length > 0);
@@ -434,7 +556,26 @@ export function InputArea({
       style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
     >
       {/* Input Box */}
-      <form onSubmit={handleSubmit} className="zaki-input-form relative z-10" dir={isRtl ? "rtl" : "ltr"}>
+      <form
+        onSubmit={handleSubmit}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className="zaki-input-form relative z-10"
+        dir={isRtl ? "rtl" : "ltr"}
+      >
+        {isDraggingFile ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-zaki-xl border-2 border-dashed border-zaki-brand bg-zaki-brand-10 backdrop-blur-sm"
+            aria-hidden
+          >
+            <div className="flex flex-col items-center gap-1 text-sm font-medium text-zaki-brand">
+              <Plus className="size-5" />
+              <span>{t("input.dropFile")}</span>
+            </div>
+          </div>
+        ) : null}
         <SlashCommandPalette
           open={slashOpen}
           filter={slashFilter}
@@ -609,6 +750,7 @@ export function InputArea({
                 ? slashOptionId(slashHighlight)
                 : undefined
             }
+            onPaste={handlePaste}
             onChange={(e) => {
               const value = e.target.value;
               setInputValue(value);
@@ -653,6 +795,32 @@ export function InputArea({
                 event.stopPropagation();
                 setSlashOpen(false);
                 setInputValue("");
+                return;
+              }
+              // 2026-05-08 — table-stakes #5: ↑ on empty input recalls
+              // the last user message in this thread for editing. Match
+              // Slack/iMessage muscle memory. Only fires when value is
+              // empty AND a previous user message exists, so it does
+              // not interfere with normal cursor navigation.
+              if (
+                event.key === "ArrowUp" &&
+                !event.shiftKey &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                inputValue.length === 0 &&
+                typeof lastUserMessage === "string" &&
+                lastUserMessage.length > 0
+              ) {
+                event.preventDefault();
+                setInputValue(lastUserMessage);
+                requestAnimationFrame(() => {
+                  const el = textareaRef.current;
+                  if (!el) return;
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                  const end = lastUserMessage.length;
+                  el.setSelectionRange(end, end);
+                });
                 return;
               }
               if (event.key === "Enter" && !event.shiftKey) {

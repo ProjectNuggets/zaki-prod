@@ -21,6 +21,7 @@ import {
   NullalisTurnTimeline,
   type TimelineRevealPhase,
 } from "../NullalisTurnTimeline";
+import { QuickReplyChips } from "../QuickReplyChips";
 
 interface ChatViewProps {
   messages: Message[];
@@ -49,6 +50,11 @@ interface ChatViewProps {
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
   onThumbsDownMessage?: (message: Message) => void;
+  /** S1 (2026-05-08) — fires the chosen prefill as a fresh user message
+   *  immediately. Renders one row of chips below the last assistant
+   *  message when the chat is idle. */
+  onQuickReply?: (prefill: string) => void;
+  isRtl?: boolean;
 }
 
 export function ChatView({
@@ -78,6 +84,8 @@ export function ChatView({
   onRegenerateMessage,
   onThumbsUpMessage,
   onThumbsDownMessage,
+  onQuickReply,
+  isRtl = false,
 }: ChatViewProps) {
   // Unified timeline surface: Nullalis (native reasoning) or bot mode
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
@@ -230,6 +238,9 @@ export function ChatView({
             {isLast && msg.role === "assistant"
               ? renderTimelineArtifacts({ phase: "done" })
               : null}
+            {isLast && msg.role === "assistant" && !isStreaming && onQuickReply ? (
+              <QuickReplyChips onPick={onQuickReply} isRtl={isRtl} className="ms-12" />
+            ) : null}
           </div>
         );
       })}
