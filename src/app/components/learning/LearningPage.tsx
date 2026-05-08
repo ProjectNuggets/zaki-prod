@@ -2272,11 +2272,17 @@ function LearningChatPanel({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
 
-  const persistSessionId = useCallback((nextSessionId: string, mode: "push" | "replace" = "replace") => {
+  const persistSessionId = useCallback((
+    nextSessionId: string,
+    mode: "push" | "replace" = "replace",
+    options: { restore?: boolean } = {},
+  ) => {
     const trimmed = nextSessionId.trim();
     if (!trimmed) return;
     setSessionId(trimmed);
-    setRestoredSessionId(trimmed);
+    if (options.restore !== false) {
+      setRestoredSessionId(trimmed);
+    }
     window.localStorage.setItem(sessionStorageKey, trimmed);
     if (sessionScope === "chat") window.localStorage.setItem("zaki.learn.sessionId", trimmed);
     const params = new URLSearchParams(window.location.search);
@@ -2541,13 +2547,13 @@ function LearningChatPanel({
       const content = learningEventText(eventType, payload);
       const nextSessionId = textOf(payload.session_id);
       const nextTurnId = textOf(payload.turn_id);
-      if (nextSessionId) persistSessionId(nextSessionId);
+      if (nextSessionId) persistSessionId(nextSessionId, "replace", { restore: false });
       if (nextTurnId) activeTurnIdRef.current = nextTurnId;
 
       if (eventType === "session") {
         const metadata = asRecord(payload.metadata);
         const metadataSessionId = textOf(metadata.session_id);
-        if (metadataSessionId) persistSessionId(metadataSessionId);
+        if (metadataSessionId) persistSessionId(metadataSessionId, "replace", { restore: false });
         return;
       }
 
@@ -2888,7 +2894,7 @@ function LearningChatPanel({
       skillsAutoMode,
       selectedMemoryFiles,
     });
-    persistSessionId(sessionId, "replace");
+    persistSessionId(sessionId, "replace", { restore: false });
     setMessages((items) => [
       ...items,
       {
