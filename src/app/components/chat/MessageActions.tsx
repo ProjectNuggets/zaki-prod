@@ -1,5 +1,8 @@
-import { Copy, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Copy, RefreshCw, ThumbsDown, ThumbsUp, Volume2, Square, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { useTextToSpeechForMessage } from "@/queries/useTextToSpeech";
 
 interface MessageActionsProps {
   onCopy?: () => void;
@@ -7,6 +10,11 @@ interface MessageActionsProps {
   onThumbsUp?: () => void;
   onThumbsDown?: () => void;
   visible?: boolean;
+  /** Message id + text for the read-aloud button. Both required to
+   *  enable the button — assistant messages with no readable content
+   *  hide the button. */
+  messageId?: string;
+  messageText?: string;
 }
 
 export function MessageActions({
@@ -15,14 +23,58 @@ export function MessageActions({
   onThumbsUp,
   onThumbsDown,
   visible = true,
+  messageId,
+  messageText,
 }: MessageActionsProps) {
   const { t } = useTranslation();
+  const ttsTargetId = messageId || "";
+  const { status: ttsStatus, toggle: ttsToggle } = useTextToSpeechForMessage(ttsTargetId);
+  const ttsAvailable = Boolean(messageId && messageText && messageText.trim().length > 0);
+  const ttsActive = ttsStatus !== null;
+
   return (
     <div
       className={`mt-1 flex items-center gap-1 text-zaki-muted transition-opacity focus-within:opacity-100 ${
         visible ? "" : "opacity-0 group-hover:opacity-100"
       }`}
     >
+      {ttsAvailable ? (
+        <button
+          type="button"
+          className={cn(
+            "inline-flex size-7 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
+            ttsActive
+              ? "bg-zaki-brand-10 text-zaki-brand"
+              : "hover:bg-zaki-elevated hover:text-zaki-secondary"
+          )}
+          title={t(
+            ttsActive
+              ? "messageActions.readAloudStop"
+              : "messageActions.readAloud"
+          )}
+          aria-label={t(
+            ttsActive
+              ? "messageActions.readAloudStop"
+              : "messageActions.readAloud"
+          )}
+          aria-pressed={ttsActive}
+          onClick={async () => {
+            try {
+              await ttsToggle(ttsTargetId, messageText || "");
+            } catch {
+              toast.error(t("messageActions.readAloudError"));
+            }
+          }}
+        >
+          {ttsStatus === "fetching" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : ttsStatus === "playing" ? (
+            <Square className="size-3.5" />
+          ) : (
+            <Volume2 className="size-3.5" />
+          )}
+        </button>
+      ) : null}
       <button
         type="button"
         className="inline-flex size-7 items-center justify-center rounded-full hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"

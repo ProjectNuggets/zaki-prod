@@ -17,6 +17,7 @@ import {
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
+  compactAgentSession,
   fetchBotRuntimeStatus,
   setAgentSessionMode,
   approveAgentSession,
@@ -44,6 +45,7 @@ import {
   ReadyState,
   CreateSpaceModal,
   EditInstructionsModal,
+  ApprovalRequiredCard,
 } from "./chat";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
@@ -2970,6 +2972,38 @@ export function ChatArea() {
       // non-critical — gauge just won't update
     }
   }, [activeThreadId, activeZakiSessionKey, agentUserId, setSessionContextPressure]);
+
+  // 2026-05-08 — Programmatic compact. Replaces the old "/compact" text
+  // hack the pre-flight banner used to send. Direct API call against
+  // /api/agent/sessions/:key/compact — no chat noise. After success we
+  // refresh the gauge so the meter immediately reflects the freed
+  // context. Toast surfaces tokens-saved when nullalis returns it.
+  const [isCompacting, setIsCompacting] = useState(false);
+  const handleCompactSession = useCallback(async () => {
+    const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+    if (!sessionKey) {
+      toast.error("Session not ready yet");
+      return;
+    }
+    if (isCompacting) return;
+    setIsCompacting(true);
+    try {
+      const { response, data } = await compactAgentSession(sessionKey);
+      if (!response.ok) throw new Error(`compact ${response.status}`);
+      void refreshContextGauge();
+      const before = data?.tokens_before;
+      const after = data?.tokens_after;
+      const savedSummary =
+        typeof before === "number" && typeof after === "number" && before > after
+          ? ` (${(before - after).toLocaleString()} tokens freed)`
+          : "";
+      toast.success(`Context compacted${savedSummary}`);
+    } catch {
+      toast.error("Couldn't compact — try again");
+    } finally {
+      setIsCompacting(false);
+    }
+  }, [activeZakiSessionKey, activeThreadId, agentUserId, isCompacting, refreshContextGauge]);
 
   const finalizeZakiBotProgress = useCallback(
     (reason: "done" | "error" | "abort" | "stream_end") => {
@@ -6243,9 +6277,27 @@ export function ChatArea() {
               <ZakiExperimentalNotice
                 active={isZakiBotActiveSpace && zakiBootstrapCompleted}
               />
+              {/* 2026-05-08 — Inline approval banner. The same
+                  ApprovalRequiredCard renders inside the timeline for
+                  historical context, but ZAKI agent actions need the
+                  user to act NOW — so we promote a copy directly above
+                  the composer where the user's attention lives. The
+                  card hides itself when there is no pending request,
+                  so the slot collapses cleanly. */}
+              {isZakiBotActiveSpace && nullalisApprovalRequest ? (
+                <div className="px-1 pb-2">
+                  <ApprovalRequiredCard
+                    request={nullalisApprovalRequest}
+                    onApprove={handleApprovalAction ? (id) => handleApprovalAction(id, true) : undefined}
+                    onDeny={handleApprovalAction ? (id) => handleApprovalAction(id, false) : undefined}
+                  />
+                </div>
+              ) : null}
               <InputArea
                 composerHandleRef={composerHandleRef}
                 onSend={handleSend}
+                onCompact={handleCompactSession}
+                isCompacting={isCompacting}
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}

@@ -213,6 +213,8 @@ export function MessageBubble({
           <>
             <MessageActions
               visible={false}
+              messageId={message.id}
+              messageText={stripToolCallMarkup(message.content || "")}
               onCopy={onCopy ? () => onCopy(message) : undefined}
               onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
               onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}

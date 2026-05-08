@@ -350,7 +350,10 @@
     "done": "Done"
   },
   "messageActions": {
-    "thumbsDown": "Mark as bad"
+    "thumbsDown": "Mark as bad",
+    "readAloud": "Read aloud",
+    "readAloudStop": "Stop reading",
+    "readAloudError": "Couldn't read aloud — try again."
   },
   "chat": {
     "thinking": "Thinking",
@@ -430,7 +433,8 @@
       "contextAriaUnknown": "Context usage not yet reported",
       "contextPercentUnknown": "Context: waiting for the agent to report token pressure",
       "compactPreflight": "Context is filling ({{percent}}%). Compact to free space before your next prompt.",
-      "compactPreflightAction": "Compact"
+      "compactPreflightAction": "Compact",
+      "compactPreflightActionBusy": "Compacting..."
     },
     "voice": {
       "tapToRecord": "Tap to record",

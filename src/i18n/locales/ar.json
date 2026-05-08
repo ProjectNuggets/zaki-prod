@@ -350,7 +350,10 @@
     "done": "تم"
   },
   "messageActions": {
-    "thumbsDown": "علامة سيئ"
+    "thumbsDown": "علامة سيئ",
+    "readAloud": "استمع للرد",
+    "readAloudStop": "أوقف الاستماع",
+    "readAloudError": "تعذّر تشغيل الصوت، حاول مرة أخرى."
   },
   "chat": {
     "thinking": "جاري التفكير",
@@ -430,7 +433,8 @@
       "contextAriaUnknown": "لم يُبلَّغ عن استخدام السياق بعد",
       "contextPercentUnknown": "السياق: في انتظار تقرير ضغط الرموز من الوكيل",
       "compactPreflight": "السياق يقترب من الامتلاء ({{percent}}%). اضغط لتقليصه قبل الرسالة التالية.",
-      "compactPreflightAction": "تقليص"
+      "compactPreflightAction": "تقليص",
+      "compactPreflightActionBusy": "جارٍ التقليص..."
     },
     "voice": {
       "tapToRecord": "اضغط للتسجيل",

@@ -66,8 +66,18 @@ export function InputArea({
   threadKey = null,
   lastUserMessage = null,
   composerHandleRef = null,
+  onCompact,
+  isCompacting = false,
 }: {
   onSend: (text: string, attachments: File[]) => void;
+  /** Programmatic compact handler. When provided, the high-pressure
+   *  pre-flight banner button calls this directly via the agent
+   *  /compact endpoint instead of sending the literal "/compact" text
+   *  through the chat pipeline. */
+  onCompact?: () => Promise<void> | void;
+  /** True while the compact request is in flight; banner button shows
+   *  a spinner and disables to avoid double-submits. */
+  isCompacting?: boolean;
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isSending?: boolean;
@@ -816,11 +826,27 @@ export function InputArea({
               </span>
               <button
                 type="button"
-                onClick={() => submitMessage("/compact")}
-                disabled={sendLocked || isSending}
-                className="shrink-0 rounded-full bg-zaki-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-zaki-warning hover:brightness-95 disabled:opacity-60"
+                onClick={() => {
+                  // Prefer the direct agent endpoint (cleaner, no chat
+                  // noise). Fall back to the slash-command shortcut if
+                  // the parent didn't wire onCompact.
+                  if (onCompact) {
+                    void onCompact();
+                  } else {
+                    submitMessage("/compact");
+                  }
+                }}
+                disabled={sendLocked || isSending || isCompacting}
+                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-zaki-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-zaki-warning hover:brightness-95 disabled:opacity-60"
               >
-                {t("input.zaki.compactPreflightAction")}
+                {isCompacting ? (
+                  <span className="size-3 animate-spin rounded-full border-2 border-zaki-warning border-t-transparent" />
+                ) : null}
+                {t(
+                  isCompacting
+                    ? "input.zaki.compactPreflightActionBusy"
+                    : "input.zaki.compactPreflightAction"
+                )}
               </button>
             </div>
           ) : null}
