@@ -218,14 +218,15 @@ describe("learning BFF contract", () => {
       sanitizeLearningProviderText("<think>private reasoning</think>\n\nVisible answer")
     ).toBe("Visible answer");
     expect(sanitizeLearningProviderText("<think>private reasoning")).toBe("");
+    expect(sanitizeLearningProviderText("I am DeepTutor.")).toBe("I am ZAKI Deep Learning.");
 
     expect(
       sanitizeLearningUpstreamPayload({
         items: [
           {
             type: "chat",
-            summary: "Intro <think>secret</think> safe",
-            nested: { response: "<think>hidden</think>\n\nShown" },
+            summary: "Intro <think>secret</think> safe from Deep Tutor",
+            nested: { response: "<think>hidden</think>\n\nShown by deeptutor" },
           },
           { type: "thinking", content: "internal chain" },
         ],
@@ -234,8 +235,8 @@ describe("learning BFF contract", () => {
       items: [
         {
           type: "chat",
-          summary: "Intro  safe",
-          nested: { response: "Shown" },
+          summary: "Intro  safe from ZAKI Deep Learning",
+          nested: { response: "Shown by ZAKI Deep Learning" },
         },
         { type: "thinking", content: "" },
       ],

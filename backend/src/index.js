@@ -11968,11 +11968,7 @@ function sanitizeLearningWsUpstreamMessage(data, isBinary) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { data, isBinary };
   }
-  const eventType = String(payload.type || "").toLowerCase();
-  if (eventType === "thinking" || eventType === "observation") {
-    payload.content = "";
-  }
-  return { data: JSON.stringify(payload), isBinary: false };
+  return { data: JSON.stringify(sanitizeLearningUpstreamPayload(payload)), isBinary: false };
 }
 
 function writeWebSocketHttpError(socket, statusCode, message) {

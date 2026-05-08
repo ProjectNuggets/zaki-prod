@@ -83,6 +83,7 @@ const LEARNING_WS_QUOTA_FREE_TYPES = new Set([
 const LEARNING_NOTEBOOK_ID_SEGMENT = "[^/?#]+";
 const LEARNING_THINK_BLOCK_PATTERN = /<think\b[^>]*>[\s\S]*?<\/think>/gi;
 const LEARNING_UNCLOSED_THINK_PATTERN = /<think\b[^>]*>[\s\S]*$/gi;
+const LEARNING_UPSTREAM_BRAND_PATTERN = /\bDeep\s*Tutor\b|\bDeepTutor\b|\bdeeptutor\b/gi;
 export const LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST = [
   "whatsapp",
   "telegram",
@@ -343,6 +344,7 @@ export function sanitizeLearningProviderText(value) {
   return text
     .replace(LEARNING_THINK_BLOCK_PATTERN, "")
     .replace(LEARNING_UNCLOSED_THINK_PATTERN, "")
+    .replace(LEARNING_UPSTREAM_BRAND_PATTERN, "ZAKI Deep Learning")
     .trim();
 }
 
