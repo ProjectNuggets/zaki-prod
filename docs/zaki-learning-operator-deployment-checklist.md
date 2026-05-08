@@ -34,8 +34,15 @@ Core learning BFF:
 ZAKI_LEARNING_ENABLED=true
 LEARNING_ENGINE_BASE_URL=http://zaki-learning-engine:8001
 LEARNING_ENGINE_INTERNAL_TOKEN=<cluster-secret>
-LEARNING_ENGINE_TENANT_DATA_ROOT=/srv/zaki-learning/users
+LEARNING_ENGINE_TENANT_DATA_ROOT=/data/users
 ```
+
+Production source of truth:
+
+- `zaki-infra/charts/zaki-learning-engine` defines the internal learning-engine deployment.
+- `zaki-infra/charts/zaki-api` enables Learn and points `zaki-api` at the internal service.
+- `zaki-infra/scripts/validate-learning-deploy.sh` must pass before promotion.
+- The internal token lives in `zaki-learning-engine-internal-token`; provider/search keys live in `zaki-learning-engine-secrets`.
 
 Central auth:
 
@@ -91,11 +98,17 @@ LLM_API_KEY=<operator-secret>
 EMBEDDING_BINDING=together
 EMBEDDING_HOST=https://api.together.xyz/v1/embeddings
 EMBEDDING_MODEL=intfloat/multilingual-e5-large-instruct
+EMBEDDING_DIMENSION=1024
 EMBEDDING_API_KEY=<operator-secret>
 
 SEARCH_PROVIDER=brave
 SEARCH_API_KEY=<operator-secret>
 ```
+
+Model policy:
+
+- Default paid-user model: `moonshotai/Kimi-K2.5`, because it covers chat, reasoning, JSON mode, tool use, and vision at the lower Together cost tier.
+- Premium/operator evaluation model: `moonshotai/Kimi-K2.6`, stronger and newer, but materially more expensive. Do not make it the default until unit economics are approved.
 
 ## Final User Setup
 
