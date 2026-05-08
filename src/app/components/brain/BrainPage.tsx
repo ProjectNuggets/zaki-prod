@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Boxes, CircleDot, SlidersHorizontal, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
-import { useBrainGraph } from "@/queries";
+import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
@@ -155,6 +155,14 @@ export function BrainPage() {
     max_nodes: effectiveFilters.maxNodes,
     exclude_orphans: effectiveFilters.excludeOrphans,
   });
+
+  // Audit (2026-05-08) — canonical "you" anchor from /brain/me. Used
+  // to mark the self node visually in the graph (.self class). Auto-
+  // anchoring focus-mode on the self node is deferred until backend
+  // wires identity-to-activity edges (today self is graph-orphan in
+  // the test corpus); for now it's a visible self-marker only.
+  const meQuery = useBrainMe(userId);
+  const selfKey = meQuery.data?.key ?? null;
 
   const selectedNodes = useMemo(
     () =>
@@ -395,6 +403,7 @@ export function BrainPage() {
               selectedCommunityId={selectedCommunityId}
               centerKey={centerKey}
               onCenterKeyChange={setCenterKey}
+              selfKey={selfKey}
             />
 
             {/* Top-right floating control cluster */}

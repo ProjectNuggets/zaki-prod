@@ -100,6 +100,11 @@ interface Props {
   /** Controlled drilldown center; null = global mode. */
   centerKey: string | null;
   onCenterKeyChange: (key: string | null) => void;
+  /** Canonical "you" anchor from /brain/me — null until loaded. The
+   *  matching node gets a .self class so the user can spot themselves
+   *  in the overview. Auto-anchoring focus-mode here is deferred until
+   *  backend connects identity to activity edges. */
+  selfKey?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -496,6 +501,21 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
         "border-opacity": 1,
       },
     },
+    // Audit (2026-05-08) — Self-marker. Double-ring border in brand red
+    // distinguishes the user's identity anchor from regular nodes and
+    // from the .center (which is a transient navigation focus). Label
+    // always visible so the user can spot themselves without hovering.
+    {
+      selector: "node.self",
+      css: {
+        "border-width": 3,
+        "border-color": "#f10202",
+        "border-style": "double",
+        "border-opacity": 1,
+        label: "data(label)",
+        opacity: 1,
+      } as Record<string, unknown>,
+    },
     {
       selector: "node:selected",
       css: {
@@ -562,6 +582,7 @@ export function BrainGraphView({
   selectedCommunityId = null,
   centerKey,
   onCenterKeyChange,
+  selfKey = null,
 }: Props) {
   const { t } = useTranslation();
 
@@ -788,6 +809,22 @@ export function BrainGraphView({
       });
     });
   }, [filters.search, elements]);
+
+  // Audit (2026-05-08) — Self-marker. Tags the canonical "you" anchor
+  // from /brain/me with a .self class so the user can spot themselves
+  // in the overview. Today it's a visible-only marker (auto-anchor-on-
+  // self deferred until backend wires identity-to-activity edges and
+  // self has a real neighborhood).
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.batch(() => {
+      cy.nodes().removeClass("self");
+      if (!selfKey) return;
+      const self = cy.getElementById(selfKey);
+      if (self.length) self.addClass("self");
+    });
+  }, [selfKey, elements]);
 
   // V1.11 (2026-05-07) — Apply focus dimming when EITHER focusedNodeId
   // (click, persistent) OR hoveredNodeId (hover, transient) is set.

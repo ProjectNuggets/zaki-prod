@@ -2354,6 +2354,37 @@ function adaptBrainMemoryResponse(
   };
 }
 
+export interface BrainMeResponse {
+  key: string;
+  kind: string;
+  summary: string;
+  valid_to: number | null;
+}
+
+// Audit (2026-05-08) — backend Day 1 #2 ships /brain/me as the canonical
+// "this is the user" anchor. Response shape mirrors the wrapped memory
+// pattern: { memory: { key, kind, summary, valid_to } }. This adapter
+// flattens it to a stable BrainMeResponse interface so the FE can
+// pivot when the underlying picker heuristic changes server-side.
+export async function fetchBrainMe(userId: string): Promise<BrainMeResponse | null> {
+  void userId;
+  const response = await backendAuthRequest("/api/agent/brain/me", {
+    method: "GET",
+  });
+  if (!response.ok) return null;
+  const raw = (await parseApiJson<unknown>(response)) as {
+    memory?: { key?: string; kind?: string; summary?: string; valid_to?: number | null };
+  } | null;
+  const m = raw?.memory;
+  if (!m?.key) return null;
+  return {
+    key: m.key,
+    kind: m.kind ?? "core",
+    summary: m.summary ?? "",
+    valid_to: m.valid_to ?? null,
+  };
+}
+
 export async function fetchBrainMemory(
   userId: string,
   key: string

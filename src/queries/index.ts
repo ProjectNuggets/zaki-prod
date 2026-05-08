@@ -20,6 +20,7 @@ export { useBrainGraph } from "./useBrainGraph";
 export { useBrainTimeline } from "./useBrainTimeline";
 export { useBrainCompose } from "./useBrainCompose";
 export { useBrainMemory, useBrainMemoryPrefetch, brainMemoryKeys } from "./useBrainMemory";
+export { useBrainMe } from "./useBrainMe";
 export { useBrainSearch, brainSearchKeys } from "./useBrainSearch";
 export { useBrainOrphans } from "./useBrainOrphans";
 export { useBrainLocalGraph } from "./useBrainLocalGraph";
