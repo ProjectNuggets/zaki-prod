@@ -425,6 +425,7 @@
     },
     "zaki": {
       "uploadFile": "Upload file",
+      "scheduleFollowUp": "Schedule a follow-up",
       "modeHint": "{{mode}} mode",
       "modeGroupAria": "Agent mode",
       "contextAria": "Context usage {{percent}} percent",
@@ -1838,6 +1839,35 @@
     "tasks": "Tasks"
   },
   "common": {
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "cancel": "Cancel"
+  },
+  "scheduleFollowUp": {
+    "title": "Schedule a follow-up",
+    "subtitle": "ZAKI will run the prompt at the time you pick.",
+    "whenLabel": "When",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "What should ZAKI do at that time?",
+    "nameLabel": "Name (optional)",
+    "namePlaceholder": "Morning brief",
+    "submit": "Schedule",
+    "firesAt": "Fires:",
+    "invalid": "Pick a future date and time.",
+    "quick": {
+      "in1h": "In 1 hour",
+      "in4h": "In 4 hours",
+      "tomorrow9": "Tomorrow 9am",
+      "weekdays9": "Weekdays 9am",
+      "weeklyMon9": "Mondays 9am",
+      "custom": "Custom date and time"
+    },
+    "preview": {
+      "weekdays": "Every weekday at {{time}}",
+      "weekly": "Every {{day}} at {{time}}"
+    },
+    "toast": {
+      "success": "Follow-up scheduled. {{when}}.",
+      "error": "Couldn't schedule the follow-up. Try again."
+    }
   }
 }

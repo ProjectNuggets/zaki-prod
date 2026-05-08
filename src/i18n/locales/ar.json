@@ -425,6 +425,7 @@
     },
     "zaki": {
       "uploadFile": "رفع ملف",
+      "scheduleFollowUp": "جدولة متابعة",
       "modeHint": "وضع {{mode}}",
       "modeGroupAria": "وضع الوكيل",
       "contextAria": "استخدام السياق {{percent}} بالمئة",
@@ -1850,6 +1851,35 @@
     "tasks": "مهام"
   },
   "common": {
-    "dismiss": "إغلاق"
+    "dismiss": "إغلاق",
+    "cancel": "إلغاء"
+  },
+  "scheduleFollowUp": {
+    "title": "جدولة متابعة",
+    "subtitle": "سيقوم زكي بتشغيل المطالبة في الوقت الذي تختاره.",
+    "whenLabel": "متى",
+    "promptLabel": "المطالبة",
+    "promptPlaceholder": "ماذا يجب أن يفعل زكي في ذلك الوقت؟",
+    "nameLabel": "الاسم (اختياري)",
+    "namePlaceholder": "موجز الصباح",
+    "submit": "جدولة",
+    "firesAt": "ينفذ:",
+    "invalid": "اختر تاريخًا ووقتًا في المستقبل.",
+    "quick": {
+      "in1h": "خلال ساعة",
+      "in4h": "خلال 4 ساعات",
+      "tomorrow9": "غدًا 9 صباحًا",
+      "weekdays9": "أيام الأسبوع 9 صباحًا",
+      "weeklyMon9": "كل اثنين 9 صباحًا",
+      "custom": "تاريخ ووقت مخصص"
+    },
+    "preview": {
+      "weekdays": "كل يوم عمل عند {{time}}",
+      "weekly": "كل {{day}} عند {{time}}"
+    },
+    "toast": {
+      "success": "تمت جدولة المتابعة. {{when}}.",
+      "error": "تعذّرت الجدولة. حاول مرة أخرى."
+    }
   }
 }

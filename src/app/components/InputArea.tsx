@@ -1,4 +1,5 @@
-import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square } from "lucide-react";
+import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, CalendarClock } from "lucide-react";
+import { ScheduleFollowUpDialog } from "@/app/components/agent/ScheduleFollowUpDialog";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -116,6 +117,7 @@ export function InputArea({
   composerHandleRef?: MutableRefObject<InputAreaHandle | null> | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
@@ -1087,6 +1089,19 @@ export function InputArea({
                       <Paperclip className="size-4 text-zaki-muted" />
                       {t("input.zaki.uploadFile")}
                     </button>
+                    <button
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setScheduleFollowUpOpen(true);
+                      }}
+                      data-testid="zaki-composer-schedule-followup"
+                    >
+                      <CalendarClock className="size-4 text-zaki-muted" />
+                      {t("input.zaki.scheduleFollowUp", { defaultValue: "Schedule a follow-up" })}
+                    </button>
                     <div className="my-1 h-px bg-zaki-subtle" />
                     {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
                       const selected = effectiveZakiMode === mode;
@@ -1373,6 +1388,11 @@ export function InputArea({
            {t("input.disclaimer")}
          </p>
       </div>
+      <ScheduleFollowUpDialog
+        isOpen={scheduleFollowUpOpen}
+        onClose={() => setScheduleFollowUpOpen(false)}
+        defaultPrompt={inputValue}
+      />
     </div>
   );
 }
