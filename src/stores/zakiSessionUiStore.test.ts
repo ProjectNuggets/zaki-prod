@@ -51,7 +51,7 @@ describe("zakiSessionUiStore", () => {
       mode: "plan",
       pending_approval_count: 1,
       last_channel: "telegram",
-      context_pressure_percent: 61,
+      context_pressure_percent: 75,
       live: true,
       pending_approvals: [{ id: "a1", tool: "send_email", reason: "ok", risk_level: "high" }],
     });
@@ -59,9 +59,23 @@ describe("zakiSessionUiStore", () => {
     expect(mapped.mode).toBe("plan");
     expect(mapped.approvalCount).toBe(1);
     expect(mapped.lastChannel).toBe("telegram");
+    expect(mapped.contextPressurePercent).toBe(75);
     expect(mapped.contextPressureState).toBe("warning");
     expect(mapped.pendingApprovals).toHaveLength(1);
     expect(mapped.live).toBe(true);
+  });
+
+  it("omits context pressure fields when the session response has no value", () => {
+    const mapped = mapAgentSessionToZakiSessionUi({
+      mode: "execute",
+      pending_approval_count: 0,
+    });
+
+    // List-endpoint responses without pressure must not clobber the live
+    // value already in the store. mapAgentSessionToZakiSessionUi must
+    // omit both keys when the source is silent.
+    expect("contextPressurePercent" in mapped).toBe(false);
+    expect("contextPressureState" in mapped).toBe(false);
   });
 
   it("buckets context pressure with the agreed thresholds", () => {

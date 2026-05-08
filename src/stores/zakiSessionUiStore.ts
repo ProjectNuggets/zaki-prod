@@ -52,41 +52,39 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
       : null;
   const patch: Partial<ZakiSessionUi> = {
     mode,
-    approvalCount:
-      typeof session.pending_approval_count === "number"
-        ? Math.max(0, session.pending_approval_count)
-        : 0,
-    pendingApprovals: Array.isArray(session.pending_approvals)
-      ? session.pending_approvals
-          .map((approval) => {
-            const id = String(approval?.id || "").trim();
-            if (!id) return null;
-            return {
-              id,
-              tool: String(approval?.tool || "").trim(),
-              reason: String(approval?.reason || "").trim(),
-              riskLevel: String(approval?.risk_level || "").trim(),
-              timestamp: Date.now(),
-            } satisfies ZakiSessionApprovalRequest;
-          })
-          .filter((approval): approval is ZakiSessionApprovalRequest => approval != null)
-      : [],
     lastChannel:
       typeof session.last_channel === "string" && session.last_channel.trim().length > 0
         ? session.last_channel.trim()
         : null,
     live: typeof session.live === "boolean" ? session.live : null,
   };
-  // 2026-05-08 — Only include the pressure fields when the list endpoint
-  // actually returns them. The session list response (every 30s tick)
-  // historically omitted context_pressure_percent for non-live sessions,
-  // so spreading `null` here was wiping out the live value that
-  // /sessions/{key}/context had just written. Authoritative source is
-  // refreshContextGauge → setContextPressure; let it own the value
-  // unless the list explicitly contradicts it.
+  // 2026-05-08 — Only include fields when the source response actually
+  // returns them. The session list response (every 30s tick) historically
+  // omitted context_pressure_percent and pending_approvals for non-live
+  // sessions, so spreading default values here was wiping live state that
+  // other endpoints had already written. Authoritative sources own each
+  // field; let the list ticks be additive only.
   if (typeof session.context_pressure_percent === "number") {
     patch.contextPressurePercent = session.context_pressure_percent;
     patch.contextPressureState = getContextPressureState(session.context_pressure_percent);
+  }
+  if (typeof session.pending_approval_count === "number") {
+    patch.approvalCount = Math.max(0, session.pending_approval_count);
+  }
+  if (Array.isArray(session.pending_approvals)) {
+    patch.pendingApprovals = session.pending_approvals
+      .map((approval) => {
+        const id = String(approval?.id || "").trim();
+        if (!id) return null;
+        return {
+          id,
+          tool: String(approval?.tool || "").trim(),
+          reason: String(approval?.reason || "").trim(),
+          riskLevel: String(approval?.risk_level || "").trim(),
+          timestamp: Date.now(),
+        } satisfies ZakiSessionApprovalRequest;
+      })
+      .filter((approval): approval is ZakiSessionApprovalRequest => approval != null);
   }
   return patch;
 }

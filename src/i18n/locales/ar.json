@@ -474,25 +474,11 @@
     }
   },
   "zakiSettingsSheet": {
-    "badge": "إعدادات زكي",
     "title": "اضبط كيف يظهر زكي",
     "subtitle": "تحكم في سلوك المساعد، وربط تيليجرام، ودرجة الاستقلالية من مكان واحد.",
-    "locked": {
-      "title": "قريبًا",
-      "note": "القنوات + سلوك الوكيل المتقدم قريبًا؛ وهو متاح حاليًا داخل التطبيق فقط."
-    },
-    "header": {
-      "readySummary": "ردود {{mode}}، وصول {{join}}، وجاهز للاستخدام.",
-      "setupSummary": "ابدأ بالسلوك الأساسي. يبقى الإعداد والقنوات والحدود داخل أقسام سريعة ومخففة."
-    },
     "closeAria": "إغلاق إعدادات زكي",
     "loading": {
-      "onboarding": "جارٍ تحميل إعداد زكي الحالي...",
       "state": "جارٍ تحميل إعدادات الوكيل..."
-    },
-    "summary": {
-      "ready": "جاهز للاستخدام",
-      "setupInProgress": "الإعداد قيد التنفيذ"
     },
     "status": {
       "enabled": "مفعّل",
@@ -500,24 +486,14 @@
     },
     "sections": {
       "overview": {
-        "title": "نظرة عامة",
-        "summary": "الجاهزية والمتطلبات وحالة تيليجرام"
-      },
-      "core": {
-        "title": "السلوك الأساسي",
-        "summary": "ردود {{style}}، ووصول {{join}}"
+        "title": "نظرة عامة"
       },
       "assistant": {
         "title": "المساعد",
         "summary": "ردود {{style}}، ووصول {{join}}"
       },
       "telegram": {
-        "title": "تيليجرام",
-        "summaryConnected": "متصل وجاهز للدردشة الخارجية.",
-        "summaryDisconnected": "اربط تيليجرام لتوصيل الردود خارج التطبيق.",
-        "summaryConnecting": "جارٍ ربط بوت تيليجرام الآن.",
-        "summaryVerifying": "جارٍ التحقق من المسار وحالة تيليجرام.",
-        "summaryNeedsAttention": "يحتاج تيليجرام إلى انتباه قبل أن يصبح جاهزًا."
+        "title": "تيليجرام"
       },
       "usage": {
         "title": "الاستخدام",
@@ -527,21 +503,7 @@
         "stateUnknown": "غير معروف"
       },
       "autonomy": {
-        "title": "الاستقلالية",
-        "summaryEnabled": "النبض مفعّل.",
-        "summaryDisabled": "النبض متوقف."
-      },
-      "workspace": {
-        "title": "سياق المساحة",
-        "summary": "{{connected}} من {{total}} قنوات متصلة"
-      },
-      "limits": {
-        "title": "الحدود والخطة",
-        "summary": "الاستخدام والوصول وعناصر الترقية"
-      },
-      "advanced": {
-        "title": "متقدم وخصوصية",
-        "summary": "اختصارات الحساب ومساعدة المنتج"
+        "title": "الاستقلالية"
       }
     },
     "fields": {
@@ -580,9 +542,7 @@
         "title": "ردود صوتية",
         "helper": "فعّل الردود المنطوقة عندما تدعمها القناة.",
         "requiresTelegram": "يتطلب تيليجرام",
-        "connectTelegram": "اربط تيليجرام",
-        "connectTelegramSuccess": "تم ربط تيليجرام.",
-        "connectTelegramError": "تعذر ربط تيليجرام. حاول مرة أخرى."
+        "connectTelegram": "اربط تيليجرام"
       }
     },
     "options": {
@@ -593,30 +553,13 @@
       "alwaysActive": "نشط دائمًا"
     },
     "workspace": {
-      "memoryTitle": "الذاكرة والمساعدة",
-      "memorySummary": "راجع ما يتذكره زكي وافتح المساعدة عندما تحتاج إلى شرح أوسع.",
-      "memoryHelper": "تبقى الذاكرة قابلة للمراجعة، والمساعدة على بعد خطوة واحدة.",
-      "reviewMemory": "راجع الذاكرة",
-      "openHelp": "افتح المساعدة",
-      "setupTitle": "حالة الإعداد",
       "setupNotCompleted": "لم يكتمل بعد",
-      "setupHelper": "{{status}}. آخر تحديث: {{updated}}.",
-      "channelsTitle": "القنوات المتصلة",
-      "channelsSummary": "{{connected}} من {{total}} قنوات متصلة",
-      "channelsSummaryLine": "{{connected}} من {{total}} قنوات جاهزة الآن.",
-      "channelsHelper": "تفاصيل كل مزود تبقى مخفية حتى تفتحها.",
       "channelStatus": {
         "connected": "متصل",
         "notConnected": "غير متصل",
         "needsSetup": "يحتاج إعدادًا"
       },
-      "channelDescriptions": {
-        "telegram": "صِل تيليجرام كي يستقبل زكي الرسائل ويرد عبر البوت الخاص بك.",
-        "slack": "أبقِ Slack جاهزًا عند بدء التفعيل داخل المساحة.",
-        "discord": "احتفظ بإرشادات Discord قريبة بدون فتح صفحة إدارية منفصلة."
-      },
-      "telegramToken": "رمز بوت تيليجرام",
-      "telegramWebhook": "رابط Webhook بديل (اختياري)"
+      "telegramToken": "رمز بوت تيليجرام"
     },
     "overview": {
       "operatorRequired": "ما يزال إعداد المشغل مطلوبًا قبل أن يتمكن هذا المستخدم من البدء خارجيًا.",
@@ -636,28 +579,13 @@
       "notReady": "ليس جاهزًا بعد"
     },
     "telegram": {
-      "statusTitle": "الاتصال",
-      "statusHelper": "استخدم رمز بوت تيليجرام ومعرّفات الدردشات المسموح بها لتفعيل التوصيل.",
-      "statusConnecting": "جارٍ الاتصال",
-      "statusVerifying": "جارٍ التحقق",
-      "statusNeedsAttention": "يحتاج إلى انتباه",
-      "connectingHelper": "جارٍ تسجيل Webhook الخاص بتيليجرام الآن.",
-      "verifyingHelper": "يجري التحقق من تيليجرام الآن. قد يستغرق ذلك بضع ثوانٍ بعد الإعداد.",
-      "needsAttentionHelper": "لم يتم تأكيد تيليجرام بالكامل بعد. إذا كان البوت يرد بالفعل، فحدّث الصفحة بعد بضع ثوانٍ.",
       "botTokenLabel": "رمز البوت",
       "botTokenMasked": "الرمز المحفوظ مخفي",
-      "webhookBaseLabel": "مسار الـ webhook",
-      "webhookBaseSummary": "تديره زكي",
-      "webhookBaseHelper": "يتولى زكي إدارة نطاق Webhook الخاص بتيليجرام نيابةً عنك. إذا فشل الإعداد فيمكن للدعم فحص إعداد Webhook الخاص بالمساحة.",
       "allowFromLabel": "معرّفات تيليجرام المسموح بها (اختياري)",
       "allowFromPlaceholder": "أدخل معرّف دردشة أو حساب في كل سطر، أو افصل بينها بفواصل.",
       "allowFromHelper": "اختياري. أضف معرّفات دردشة أو حسابات تيليجرام إذا أردت تقييد من يمكنه الوصول إلى وكيلك. اتركه فارغًا في المسار المعتاد.",
       "guide": {
         "title": "احصل على رمز بوت تيليجرام",
-        "step1": "افتح تيليجرام وابحث عن @BotFather.",
-        "step2": "أرسل /newbot واختر اسمًا ومعرّفًا للبوت.",
-        "step3": "سيرد BotFather برمز API. انسخه.",
-        "step4": "ألصق الرمز أدناه واضغط على اتصال.",
         "openBotFather": "افتح BotFather"
       }
     },
@@ -693,43 +621,13 @@
       "heartbeatHelper": "توقيت النبض تديره ZAKI. هذا المفتاح يتحكم فقط في تفعيل أو إيقاف توصيل النبض.",
       "heartbeatRequiresTelegram": "يجب ربط تيليجرام أولًا."
     },
-    "limits": {
-      "currentPlanTitle": "الخطة الحالية",
-      "currentPlanHelper": "اجمع الوصول المدفوع وعناصر الفوترة في صف واحد مختصر.",
-      "planSummary": "خطة {{plan}}، وحالة {{status}}",
-      "planSummaryWithExpiry": "خطة {{plan}}، وحالة {{status}} حتى {{expiry}}",
-      "usageTitle": "استخدام اليوم",
-      "usageSummary": "{{requests}} طلبات اليوم، وحالة {{state}}",
-      "usageUnavailable": "الاستخدام غير متاح مؤقتًا، لكن زكي ما يزال يعمل.",
-      "usageHelper": "يبقى عرض الاستخدام هنا مختصرًا. تفاصيل الفوترة والتسعير في الإعدادات العامة."
-    },
-    "advanced": {
-      "generalSettingsTitle": "إعدادات الحساب العامة",
-      "generalSettingsSummary": "الملف الشخصي واللغة والمظهر وتصدير البيانات وإجراءات الحساب موجودة في الإعدادات العامة.",
-      "generalSettingsHelper": "تبقى هذه اللوحة مركزة على زكي. استخدم الإعدادات العامة لتغييرات الحساب الأوسع.",
-      "helpTitle": "مساعدة المنتج",
-      "helpSummary": "افتح المساعدة عندما تريد الشرح الكامل لكيفية عمل زكي.",
-      "helpHelper": "هذا يحافظ على اللوحة هادئة مع إبقاء التوثيق قريبًا."
-    },
     "actions": {
-      "provisioning": "جارٍ التجهيز...",
-      "provision": "جهّز زكي",
-      "markIncomplete": "وضعه كغير مكتمل",
-      "markComplete": "وضعه كمكتمل",
       "connecting": "جارٍ الاتصال...",
       "connectTelegram": "اتصال تيليجرام",
       "reconnectTelegram": "إعادة ربط تيليجرام",
-      "disconnect": "فصل الاتصال",
-      "manage": "إدارة",
-      "comingSoon": "قريبًا",
-      "hide": "إخفاء",
-      "openSettings": "افتح الإعدادات",
-      "openHelp": "افتح المساعدة"
+      "disconnect": "فصل الاتصال"
     },
     "success": {
-      "provisioned": "تم تجهيز مساحة ZAKI.",
-      "onboardingComplete": "تم وضع الإعداد كـ مكتمل.",
-      "onboardingReopened": "تمت إعادة فتح الإعداد لمتابعة الضبط.",
       "settingsSaved": "تم حفظ إعدادات ZAKI.",
       "telegramConnected": "تم ربط تيليجرام. أرسل رسالة إلى البوت للتأكد من المسار.",
       "telegramDisconnected": "تم فصل تيليجرام.",
@@ -740,16 +638,12 @@
       "onboardingLoad": "تعذر تحميل إعداد زكي الآن.",
       "settingsLoad": "تعذر تحميل إعدادات زكي الآن.",
       "heartbeatLoad": "تعذر تحميل حالة النبض الآن.",
-      "botStateUnavailable": "إعدادات زكي غير متاحة مؤقتًا لهذا الحساب.",
       "botStateUnavailableUnknownUser": "إعدادات زكي غير متاحة لهذا الحساب بعد.",
       "sessionTimeoutRange": "يجب أن تكون نافذة الجلسة بين 5 و180 دقيقة.",
       "telegramTokenRequired": "أدخل رمز بوت تيليجرام قبل الاتصال.",
       "telegramTokenInvalid": "رمز بوت تيليجرام غير صالح.",
-      "telegramWebhookRequired": "لم يتم إعداد عنوان webhook الأساسي بعد. اطلب من المشغّل ضبطه للمساحة، أو أدخل قيمة https:// صالحة.",
-      "telegramWebhookInvalid": "يجب أن يبدأ عنوان webhook الأساسي بـ https://.",
       "telegramAllowFromRequired": "أضف معرّف دردشة أو حساب واحدًا على الأقل مسموحًا له.",
       "telegramConnectFailed": "تعذر ربط تيليجرام.",
-      "telegramConnectUnconfirmed": "لم يكتمل ربط تيليجرام. تحقّق من عنوان webhook وتسجيله ثم حاول مرة أخرى.",
       "telegramConnectStillVerifying": "ما يزال تيليجرام قيد التحقق. حدّث الصفحة بعد بضع ثوانٍ إذا كان البوت يرد بالفعل في تيليجرام.",
       "telegramDisconnectFailed": "تعذر فصل تيليجرام.",
       "telegramDisconnectUnconfirmed": "ما يزال تيليجرام يظهر كمتصل بعد الفصل. حدّث الصفحة وحاول مرة أخرى.",
@@ -778,52 +672,23 @@
     },
     "rail": {
       "identity": {
-        "label": "الهوية",
-        "summary": "الحساب والحالة والجاهزية"
+        "label": "الهوية"
       },
       "responseStyle": {
-        "label": "أسلوب الرد",
-        "summary": "النبرة والوضع وسلوك المجموعة"
+        "label": "أسلوب الرد"
       },
       "channels": {
-        "label": "القنوات",
-        "summary": "تيليجرام والتسليم بين القنوات"
+        "label": "القنوات"
       },
       "autonomy": {
-        "label": "الاستقلالية",
-        "summary": "النبضات والإشراف والصوت"
-      },
-      "brain": {
-        "label": "الذاكرة",
-        "summary": "الذاكرة والسياق والاسترجاع"
-      },
-      "models": {
-        "label": "النماذج",
-        "summary": "المزود وعمق التفكير"
-      },
-      "privacy": {
-        "label": "الخصوصية",
-        "summary": "الاحتفاظ والقياس"
+        "label": "الاستقلالية"
       },
       "plan": {
-        "label": "الخطة والاستخدام",
-        "summary": "المستوى والحصص والفوترة"
-      },
-      "advanced": {
-        "label": "متقدم",
-        "summary": "التشخيص والإعداد الخام"
+        "label": "الخطة والاستخدام"
       }
     },
     "placeholders": {
-      "comingSoon": "قريبًا",
-      "tierLocked": "خطة Pro",
-      "saveChangesAria": "حفظ تغييرات المساعد",
-      "navAria": "أقسام الإعدادات",
-      "placeholder": "هذا القسم قيد التصميم.",
-      "placeholderModels": "اختيار نموذج التفكير متاح مع خطة Pro.",
-      "placeholderBrain": "تحكم الذاكرة سيتوفر بعد إكمال إعادة بناء قاعدة الحقائق.",
-      "placeholderPrivacy": "فترات الاحتفاظ ومفاتيح القياس ستظهر هنا فور إقرار السياسة.",
-      "placeholderAdvanced": "أدوات التشخيص والإعداد الخام ستتوفر بعد ربط النماذج."
+      "navAria": "أقسام الإعدادات"
     },
     "privacy": {
       "footer": "بياناتك ملك لك. يلتزم ZAKI بـ GDPR. أرسل بريدًا إلى privacy@zakiai.com لحذف أي بيانات عند الطلب."

@@ -2939,14 +2939,20 @@ export function ChatArea() {
     try {
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
-      const { data } = await fetchAgentSessionContext(sessionKey);
+      const { response, data } = await fetchAgentSessionContext(sessionKey);
+      // Don't clobber a good in-store pressure value with `null` on a
+      // 4xx/5xx or on a 200 that omitted the field. Only write when the
+      // response succeeded AND we actually have a numeric pressure.
+      if (!response.ok) return;
       const pressurePct =
         typeof data?.context_pressure_percent === "number"
           ? data.context_pressure_percent
           : typeof data?.context_window_used_pct === "number"
           ? data.context_window_used_pct
           : null;
-      setSessionContextPressure(sessionKey, pressurePct);
+      if (typeof pressurePct === "number") {
+        setSessionContextPressure(sessionKey, pressurePct);
+      }
       if (data && typeof data.token_count === "number") {
         setNullalisContextGauge({
           tokenCount: data.token_count,
@@ -2983,7 +2989,18 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey) return;
+    // Initial fetch on mount + every 15s while the user is in ZAKI bot
+    // mode. Without periodic polling the meter only updated on session
+    // change and post-stream, so out-of-band pressure changes (another
+    // channel posting into the same session, background compaction
+    // landing) wouldn't reach the UI until the next user turn.
     void refreshContextGauge();
+    const interval = window.setInterval(() => {
+      void refreshContextGauge();
+    }, 15_000);
+    return () => {
+      window.clearInterval(interval);
+    };
   }, [isZakiBotActiveSpace, normalizedActiveZakiSessionKey, refreshContextGauge]);
 
   const upsertZakiBotToolCall = useCallback(

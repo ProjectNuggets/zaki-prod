@@ -134,10 +134,10 @@ describe("ZakiSettingsSheet", () => {
     render(<TestHarness />);
 
     expect(await screen.findByText("zakiSettingsSheet.title")).toBeInTheDocument();
-    expect(screen.getByText("zakiSettingsSheet.sections.overview.title")).toBeInTheDocument();
-    expect(screen.getByText("zakiSettingsSheet.sections.assistant.title")).toBeInTheDocument();
-    expect(screen.getByText("zakiSettingsSheet.sections.telegram.title")).toBeInTheDocument();
-    expect(screen.getByText("zakiSettingsSheet.sections.autonomy.title")).toBeInTheDocument();
+    expect(screen.getByText("zakiSettingsSheet.rail.identity.label")).toBeInTheDocument();
+    expect(screen.getByText("zakiSettingsSheet.rail.responseStyle.label")).toBeInTheDocument();
+    expect(screen.getByText("zakiSettingsSheet.rail.channels.label")).toBeInTheDocument();
+    expect(screen.getByText("zakiSettingsSheet.rail.autonomy.label")).toBeInTheDocument();
   });
 
   it("reads Telegram status from setup.channel_guides when channels are not present", async () => {
@@ -191,7 +191,7 @@ describe("ZakiSettingsSheet", () => {
     render(<TestHarness />);
 
     await screen.findByText("zakiSettingsSheet.title");
-    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.assistant.title/i }));
+    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.responseStyle.label/i }));
     await waitFor(() => {
       expect(screen.getByLabelText("zakiSettingsSheet.fields.responseStyle.title")).toBeInTheDocument();
     });
@@ -225,7 +225,7 @@ describe("ZakiSettingsSheet", () => {
     render(<TestHarness />);
 
     await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
-    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.telegram.title/i }));
+    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.channels.label/i }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "zakiSettingsSheet.actions.connectTelegram" })).toBeInTheDocument();
     });
@@ -265,13 +265,13 @@ describe("ZakiSettingsSheet", () => {
     await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.assistant.title/i }));
+    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.responseStyle.label/i }));
     await waitFor(() => {
       expect(screen.getByLabelText("zakiSettingsSheet.fields.voiceReplies.title")).toBeDisabled();
     });
     expect(screen.getByLabelText("zakiSettingsSheet.fields.voiceReplies.title")).toBeDisabled();
 
-    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.autonomy.title/i }));
+    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.autonomy.label/i }));
     expect(screen.getByLabelText("zakiSettingsSheet.autonomy.heartbeatTitle")).toBeDisabled();
   });
 
@@ -280,7 +280,7 @@ describe("ZakiSettingsSheet", () => {
     render(<TestHarness />);
 
     await screen.findByText("zakiSettingsSheet.title");
-    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.sections.autonomy.title/i }));
+    await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.autonomy.label/i }));
     await waitFor(() => {
       expect(screen.getByLabelText("zakiSettingsSheet.autonomy.heartbeatTitle")).toBeInTheDocument();
     });

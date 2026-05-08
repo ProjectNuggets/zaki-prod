@@ -134,13 +134,12 @@ export function InputArea({
   //   → zakiSessionUiStore.setContextPressure stores it
   //   → ChatArea passes activeSessionUi.contextPressurePercent here
   //
-  // Always show the meter when zakiBotMode is active and we have any
-  // numeric pressure value — including 0%. Hiding low values masked the
-  // honest signal: a user seeing 19% in agent logs needs to see 19% in
-  // the meter, not nothing. The visual itself (small conic ring) is
-  // already subtle enough at low values.
-  const showZakiContextMeter =
-    zakiBotMode && typeof zakiContextPressurePercent === "number";
+  // The meter is ALWAYS visible while zakiBotMode is active. Before the
+  // first /context response lands the value is null and we render at 0%
+  // — that's honest about the empty context. As soon as the backend
+  // returns pressure (initial mount, post-stream refresh, periodic poll
+  // in ChatArea), the ring fills to match. No hiding, no thresholds.
+  const showZakiContextMeter = zakiBotMode;
   const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
   // M3: tiered color by pressure, brand-coherent: ≤50% teal (success),
   // ≤75% amber (warning), >75% red (brand). Resolves via CSS variables so

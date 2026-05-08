@@ -474,25 +474,11 @@
     }
   },
   "zakiSettingsSheet": {
-    "badge": "ZAKI settings",
     "title": "Tune how ZAKI shows up",
     "subtitle": "Control assistant behavior, Telegram delivery, and autonomy from one place.",
-    "locked": {
-      "title": "Coming soon",
-      "note": "channels + advanced agent behavior coming soon; currently available in app only."
-    },
-    "header": {
-      "readySummary": "{{mode}} replies, {{join}} access, ready to use.",
-      "setupSummary": "Core behavior first. Setup, channels, and limits stay tucked behind quick sections."
-    },
     "closeAria": "Close ZAKI settings",
     "loading": {
-      "onboarding": "Loading your current ZAKI setup...",
       "state": "Loading agent settings..."
-    },
-    "summary": {
-      "ready": "Ready to use",
-      "setupInProgress": "Setup in progress"
     },
     "status": {
       "enabled": "Enabled",
@@ -500,29 +486,17 @@
     },
     "sections": {
       "overview": {
-        "title": "Overview",
-        "summary": "Readiness, requirements, and Telegram status"
-      },
-      "core": {
-        "title": "Core behavior",
-        "summary": "{{style}} replies, {{join}} access"
+        "title": "Overview"
       },
       "assistant": {
         "title": "Assistant",
         "summary": "{{style}} replies, {{join}} access"
       },
       "telegram": {
-        "title": "Telegram",
-        "summaryConnected": "Connected and ready for external chat.",
-        "summaryDisconnected": "Connect Telegram to deliver replies outside the app.",
-        "summaryConnecting": "Connecting your Telegram bot now.",
-        "summaryVerifying": "Verifying Telegram routing and status.",
-        "summaryNeedsAttention": "Telegram needs attention before it is ready."
+        "title": "Telegram"
       },
       "autonomy": {
-        "title": "Autonomy",
-        "summaryEnabled": "Heartbeat is active.",
-        "summaryDisabled": "Heartbeat is off."
+        "title": "Autonomy"
       },
       "usage": {
         "title": "Usage",
@@ -530,18 +504,6 @@
         "summaryUnavailable": "Usage temporarily unavailable.",
         "summaryPending": "No usage snapshot yet.",
         "stateUnknown": "unknown"
-      },
-      "workspace": {
-        "title": "Workspace context",
-        "summary": "{{connected}} of {{total}} channels connected"
-      },
-      "limits": {
-        "title": "Limits and plan",
-        "summary": "Usage, access, and premium controls"
-      },
-      "advanced": {
-        "title": "Advanced and privacy",
-        "summary": "Account shortcuts and product help"
       }
     },
     "fields": {
@@ -580,9 +542,7 @@
         "title": "Voice replies",
         "helper": "Enable spoken responses when the channel supports them.",
         "requiresTelegram": "Requires Telegram",
-        "connectTelegram": "Connect Telegram",
-        "connectTelegramSuccess": "Telegram connected.",
-        "connectTelegramError": "Could not connect Telegram. Try again."
+        "connectTelegram": "Connect Telegram"
       }
     },
     "options": {
@@ -593,30 +553,13 @@
       "alwaysActive": "Always active"
     },
     "workspace": {
-      "memoryTitle": "Memory and help",
-      "memorySummary": "Review what ZAKI remembers and open help when you need product context.",
-      "memoryHelper": "Memory stays editable. Help stays one step away.",
-      "reviewMemory": "Review memory",
-      "openHelp": "Open help",
-      "setupTitle": "Setup status",
       "setupNotCompleted": "Not completed yet",
-      "setupHelper": "{{status}}. Last update: {{updated}}.",
-      "channelsTitle": "Connected channels",
-      "channelsSummary": "{{connected}} of {{total}} channels connected",
-      "channelsSummaryLine": "{{connected}} of {{total}} channels are ready right now.",
-      "channelsHelper": "Provider details stay hidden until you open one.",
       "channelStatus": {
         "connected": "Connected",
         "notConnected": "Not connected",
         "needsSetup": "Needs setup"
       },
-      "channelDescriptions": {
-        "telegram": "Connect Telegram so ZAKI can receive and reply through your bot.",
-        "slack": "Keep Slack ready for workspace rollout.",
-        "discord": "Keep Discord instructions nearby without opening a separate admin page."
-      },
-      "telegramToken": "Telegram bot token",
-      "telegramWebhook": "Webhook URL override (optional)"
+      "telegramToken": "Telegram bot token"
     },
     "overview": {
       "operatorRequired": "Operator setup is still required before this user can start externally.",
@@ -636,28 +579,13 @@
       "notReady": "Not ready yet"
     },
     "telegram": {
-      "statusTitle": "Connection",
-      "statusHelper": "Use your Telegram bot token and allowed chat IDs to activate delivery.",
-      "statusConnecting": "Connecting",
-      "statusVerifying": "Verifying",
-      "statusNeedsAttention": "Needs attention",
-      "connectingHelper": "Registering your Telegram webhook now.",
-      "verifyingHelper": "Telegram is being verified. This can take a few seconds after setup.",
-      "needsAttentionHelper": "Telegram is not fully confirmed yet. If your bot already responds, refresh in a few seconds.",
       "botTokenLabel": "Bot token",
       "botTokenMasked": "Saved token is hidden",
-      "webhookBaseLabel": "Webhook routing",
-      "webhookBaseSummary": "Managed by ZAKI",
-      "webhookBaseHelper": "ZAKI manages the Telegram webhook domain for you. If setup fails, support can inspect the workspace webhook configuration.",
       "allowFromLabel": "Allowed Telegram ID(s) (optional)",
       "allowFromPlaceholder": "One chat ID or account ID per line, or separate with commas.",
       "allowFromHelper": "Optional. Add Telegram chat or account IDs if you want to restrict who can reach your agent. Leave it blank for the normal setup flow.",
       "guide": {
         "title": "Get your Telegram bot token",
-        "step1": "Open Telegram and search for @BotFather.",
-        "step2": "Send /newbot and pick a name plus handle for your bot.",
-        "step3": "BotFather replies with an API token. Copy it.",
-        "step4": "Paste the token below and click Connect.",
         "openBotFather": "Open BotFather"
       }
     },
@@ -693,43 +621,13 @@
       "pending": "No usage snapshot is available yet.",
       "helper": "Usage refreshes when this panel opens. The full cost breakdown will land once the runtime exposes per-period totals."
     },
-    "limits": {
-      "currentPlanTitle": "Current plan",
-      "currentPlanHelper": "Keep premium access and billing actions in one compact row.",
-      "planSummary": "{{plan}} plan, {{status}} status",
-      "planSummaryWithExpiry": "{{plan}} plan, {{status}} until {{expiry}}",
-      "usageTitle": "Usage today",
-      "usageSummary": "{{requests}} requests today, {{state}} status",
-      "usageUnavailable": "Usage is temporarily unavailable, but ZAKI still works.",
-      "usageHelper": "The usage view stays compact here. Full billing and pricing stay in the main settings surface."
-    },
-    "advanced": {
-      "generalSettingsTitle": "General account settings",
-      "generalSettingsSummary": "Profile, language, theme, export, and account actions live in the main settings surface.",
-      "generalSettingsHelper": "This panel stays focused on ZAKI. Use the main settings surface for broader account changes.",
-      "helpTitle": "Product help",
-      "helpSummary": "Open help when you want the longer explanation behind how ZAKI works.",
-      "helpHelper": "This keeps the main panel quiet while still making documentation easy to reach."
-    },
     "actions": {
-      "provisioning": "Provisioning...",
-      "provision": "Provision ZAKI",
-      "markIncomplete": "Mark as incomplete",
-      "markComplete": "Mark as complete",
       "connecting": "Connecting...",
       "connectTelegram": "Connect Telegram",
       "reconnectTelegram": "Reconnect Telegram",
-      "disconnect": "Disconnect",
-      "manage": "Manage",
-      "comingSoon": "Coming soon",
-      "hide": "Hide",
-      "openSettings": "Open settings",
-      "openHelp": "Open help"
+      "disconnect": "Disconnect"
     },
     "success": {
-      "provisioned": "ZAKI space provisioned.",
-      "onboardingComplete": "Onboarding marked complete.",
-      "onboardingReopened": "Onboarding reopened for further setup.",
       "settingsSaved": "ZAKI settings saved.",
       "telegramConnected": "Telegram connected. Send a message to your bot to confirm routing.",
       "telegramDisconnected": "Telegram disconnected.",
@@ -740,16 +638,12 @@
       "onboardingLoad": "Unable to load ZAKI setup right now.",
       "settingsLoad": "Unable to load ZAKI settings right now.",
       "heartbeatLoad": "Unable to load heartbeat status right now.",
-      "botStateUnavailable": "ZAKI settings are temporarily unavailable for this account.",
       "botStateUnavailableUnknownUser": "ZAKI settings are not available for this account yet.",
       "sessionTimeoutRange": "Session window must be between 5 and 180 minutes.",
       "telegramTokenRequired": "Enter a Telegram bot token before connecting.",
       "telegramTokenInvalid": "The Telegram bot token is invalid.",
-      "telegramWebhookRequired": "Webhook base URL is not configured yet. Ask the operator to set the workspace webhook base, or enter a valid https:// value.",
-      "telegramWebhookInvalid": "Webhook base URL must start with https://.",
       "telegramAllowFromRequired": "Add at least one allowed Telegram chat or account ID.",
       "telegramConnectFailed": "Unable to connect Telegram.",
-      "telegramConnectUnconfirmed": "Telegram setup did not finish. Check the webhook base and webhook registration, then try again.",
       "telegramConnectStillVerifying": "Telegram is still being verified. Refresh in a few seconds if your bot already responds in Telegram.",
       "telegramDisconnectFailed": "Unable to disconnect Telegram.",
       "telegramDisconnectUnconfirmed": "Telegram still looks connected after disconnect. Refresh and try again.",
@@ -778,52 +672,23 @@
     },
     "rail": {
       "identity": {
-        "label": "Identity",
-        "summary": "Account, status, readiness"
+        "label": "Identity"
       },
       "responseStyle": {
-        "label": "Response style",
-        "summary": "Tone, mode, group behavior"
+        "label": "Response style"
       },
       "channels": {
-        "label": "Channels",
-        "summary": "Telegram, app handoff"
+        "label": "Channels"
       },
       "autonomy": {
-        "label": "Autonomy",
-        "summary": "Heartbeat, supervision, voice"
-      },
-      "brain": {
-        "label": "Brain",
-        "summary": "Memory, context, recall"
-      },
-      "models": {
-        "label": "Models",
-        "summary": "Provider, reasoning depth"
-      },
-      "privacy": {
-        "label": "Privacy",
-        "summary": "Retention, telemetry"
+        "label": "Autonomy"
       },
       "plan": {
-        "label": "Plan & usage",
-        "summary": "Tier, quotas, billing"
-      },
-      "advanced": {
-        "label": "Advanced",
-        "summary": "Diagnostics, raw config"
+        "label": "Plan & usage"
       }
     },
     "placeholders": {
-      "comingSoon": "Coming soon",
-      "tierLocked": "Pro plan",
-      "saveChangesAria": "Save assistant changes",
-      "navAria": "Settings sections",
-      "placeholder": "This section is being designed. The first cut ships behind the same backend already powering Brain.",
-      "placeholderModels": "Reasoning model selection ships with the Pro plan.",
-      "placeholderBrain": "Memory ingestion controls land alongside the Brain backfill backend pass.",
-      "placeholderPrivacy": "Retention windows and telemetry toggles will surface here once policy ships.",
-      "placeholderAdvanced": "Diagnostics and raw config will land here once Models is wired."
+      "navAria": "Settings sections"
     },
     "privacy": {
       "footer": "Your data is yours. ZAKI is GDPR-compliant. Email privacy@zakiai.com to delete any data on request."

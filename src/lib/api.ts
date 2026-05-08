@@ -1495,34 +1495,6 @@ export async function synthesizeSpeech(
   return { response, data };
 }
 
-export type ConnectAgentTelegramPayload = {
-  bot_token?: string;
-  webhook_url?: string;
-  webhook_base_url?: string;
-  webhook_secret_token?: string;
-  account_id?: string;
-  chat_id?: string;
-  allow_from?: string[];
-  drop_pending_updates?: boolean;
-};
-
-export async function connectAgentTelegram(payload: ConnectAgentTelegramPayload) {
-  const response = await backendAuthRequest("/api/agent/channels/telegram/connect", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
-export async function disconnectAgentTelegram() {
-  const response = await backendAuthRequest("/api/agent/channels/telegram/disconnect", {
-    method: "DELETE",
-  });
-  const data = await parseApiJson<Record<string, unknown>>(response);
-  return { response, data };
-}
-
 export async function fetchAgentMe() {
   const response = await backendAuthRequest("/api/agent/me", { method: "GET" });
   const data = await parseApiJson<{ userId: string }>(response);

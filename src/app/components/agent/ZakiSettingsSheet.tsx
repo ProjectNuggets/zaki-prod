@@ -8,7 +8,6 @@ import {
   Gauge,
   Hash,
   Link2,
-  Lock,
   MessageCircle,
   Rocket,
   Send,
@@ -19,9 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import {
-  connectAgentTelegram,
   connectBotTelegram,
   disconnectBotTelegram,
   fetchBotHeartbeat,
@@ -538,10 +535,11 @@ function ChannelCard({
   );
 }
 
-// Phase 4-B (2026-05-08) — Tier visibility. The sheet header surfaces the
-// caller's current plan, the Models rail entry shows a PRO chip in place
-// of the bare lock icon, so a free user sees the gate without having to
-// click into the upgrade flow.
+// Phase 4-B (2026-05-08) — Tier visibility. Surfaces the caller's plan
+// in the sheet header so free users see their tier without leaving the
+// panel. The "locked" variant was for rail entries that are no longer
+// in the rail (Models / Brain / Privacy / Advanced were trimmed), so
+// the prop type collapses to PlanTierKey.
 type PlanTierKey = "free" | "personal" | "student" | "pro" | "codeActive";
 
 function TierBadge({
@@ -550,7 +548,7 @@ function TierBadge({
   className,
   size = "sm",
 }: {
-  tier: PlanTierKey | "locked";
+  tier: PlanTierKey;
   label: string;
   className?: string;
   size?: "xs" | "sm";
@@ -561,15 +559,10 @@ function TierBadge({
       className={cn(
         "inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wide",
         size === "xs" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
-        isElevated
-          ? "bg-zaki-brand-15 text-zaki-brand"
-          : tier === "locked"
-            ? "bg-zaki-hover text-zaki-muted"
-            : "bg-zaki-hover text-zaki-secondary",
+        isElevated ? "bg-zaki-brand-15 text-zaki-brand" : "bg-zaki-hover text-zaki-secondary",
         className
       )}
     >
-      {tier === "locked" ? <Lock className={cn(size === "xs" ? "size-2.5" : "size-3")} aria-hidden /> : null}
       <span>{label}</span>
     </span>
   );
@@ -1470,15 +1463,8 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                           {!telegramConnected ? (
                             <button
                               type="button"
-                              onClick={async () => {
-                                try {
-                                  await connectAgentTelegram({});
-                                  toast.success(t("zakiSettingsSheet.fields.voiceReplies.connectTelegramSuccess"));
-                                } catch {
-                                  toast.error(t("zakiSettingsSheet.fields.voiceReplies.connectTelegramError"));
-                                }
-                              }}
-                              className="mt-2 text-xs font-semibold text-[#f10202] hover:underline"
+                              onClick={() => setActiveSection("channels")}
+                              className="mt-2 text-xs font-semibold text-zaki-brand hover:underline"
                             >
                               {t("zakiSettingsSheet.fields.voiceReplies.connectTelegram")}
                             </button>
