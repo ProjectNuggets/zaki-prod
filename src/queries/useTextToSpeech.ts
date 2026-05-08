@@ -14,14 +14,18 @@
 import { create } from "zustand";
 import { synthesizeSpeech } from "@/lib/api";
 
+const MAX_CACHED_URLS = 8;
+
 type TtsState = {
   /** Message id currently playing or fetching, or null when idle. */
   activeMessageId: string | null;
   /** "fetching" while the synth request is in flight, "playing" once
    *  audio has started, null when idle. */
   status: "fetching" | "playing" | null;
-  /** Cached blob URL per message id. */
+  /** Cached blob URL per message id. Bounded LRU — eldest gets revoked. */
   cache: Record<string, string>;
+  /** LRU ordering: most-recently-used last. */
+  cacheOrder: string[];
   /** The singleton audio element. Created lazily in the browser. */
   audio: HTMLAudioElement | null;
   /** Toggle play/stop for a given message. */
@@ -29,13 +33,6 @@ type TtsState = {
   /** Stop any active playback (used on unmount / route change). */
   stop: () => void;
 };
-
-function getOrCreateAudio(state: TtsState): HTMLAudioElement | null {
-  if (typeof window === "undefined") return null;
-  if (state.audio) return state.audio;
-  const audio = new Audio();
-  return audio;
-}
 
 function base64ToBlobUrl(base64: string, format: string): string {
   // nullalis returns plain base64 (no data: prefix). Decode → Blob → URL.
@@ -58,6 +55,7 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
   activeMessageId: null,
   status: null,
   cache: {},
+  cacheOrder: [],
   audio: null,
 
   toggle: async (messageId, text) => {
@@ -76,10 +74,21 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
     const trimmed = (text || "").trim();
     if (!trimmed) return;
 
-    set({ activeMessageId: messageId, status: "fetching" });
-
-    const audio = getOrCreateAudio(state) ?? new Audio();
-    if (!state.audio) set({ audio });
+    // Lazy-init the singleton audio element atomically inside set() so
+    // two concurrent first-time toggles can't each construct their own.
+    set((s) => {
+      if (s.audio) return { activeMessageId: messageId, status: "fetching" };
+      if (typeof window === "undefined") {
+        return { activeMessageId: messageId, status: "fetching" };
+      }
+      return {
+        activeMessageId: messageId,
+        status: "fetching",
+        audio: new Audio(),
+      };
+    });
+    const audio = get().audio;
+    if (!audio) return;
 
     let blobUrl: string | undefined = get().cache[messageId];
     if (!blobUrl) {
@@ -90,7 +99,20 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
         }
         const fresh = base64ToBlobUrl(data.audio, data.format || "mp3");
         blobUrl = fresh;
-        set((s) => ({ cache: { ...s.cache, [messageId]: fresh } }));
+        set((s) => {
+          // Insert/promote to MRU; evict LRU if over cap, revoking the URL.
+          const nextOrder = s.cacheOrder.filter((id) => id !== messageId);
+          nextOrder.push(messageId);
+          const nextCache: Record<string, string> = { ...s.cache, [messageId]: fresh };
+          while (nextOrder.length > MAX_CACHED_URLS) {
+            const evicted = nextOrder.shift();
+            if (evicted && nextCache[evicted]) {
+              URL.revokeObjectURL(nextCache[evicted]);
+              delete nextCache[evicted];
+            }
+          }
+          return { cache: nextCache, cacheOrder: nextOrder };
+        });
       } catch (err) {
         // Bail out — caller surfaces a toast via the play wrapper.
         if (get().activeMessageId === messageId) {
@@ -98,6 +120,14 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
         }
         throw err;
       }
+    } else {
+      // Cache hit → promote to MRU.
+      set((s) => {
+        if (s.cacheOrder[s.cacheOrder.length - 1] === messageId) return {};
+        const nextOrder = s.cacheOrder.filter((id) => id !== messageId);
+        nextOrder.push(messageId);
+        return { cacheOrder: nextOrder };
+      });
     }
     if (!blobUrl) return;
 

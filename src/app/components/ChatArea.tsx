@@ -2979,13 +2979,15 @@ export function ChatArea() {
   // refresh the gauge so the meter immediately reflects the freed
   // context. Toast surfaces tokens-saved when nullalis returns it.
   const [isCompacting, setIsCompacting] = useState(false);
+  const compactingRef = useRef(false);
   const handleCompactSession = useCallback(async () => {
     const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
     if (!sessionKey) {
-      toast.error("Session not ready yet");
+      toast.error(t("zakiControls.compact.notReady", { defaultValue: "Session not ready yet." }));
       return;
     }
-    if (isCompacting) return;
+    if (compactingRef.current) return;
+    compactingRef.current = true;
     setIsCompacting(true);
     try {
       const { response, data } = await compactAgentSession(sessionKey);
@@ -2993,17 +2995,27 @@ export function ChatArea() {
       void refreshContextGauge();
       const before = data?.tokens_before;
       const after = data?.tokens_after;
-      const savedSummary =
-        typeof before === "number" && typeof after === "number" && before > after
-          ? ` (${(before - after).toLocaleString()} tokens freed)`
-          : "";
-      toast.success(`Context compacted${savedSummary}`);
+      if (typeof before === "number" && typeof after === "number" && before > after) {
+        toast.success(
+          t("zakiControls.compact.successWithFreed", {
+            defaultValue: "Context compacted. {{freed}} tokens freed.",
+            freed: (before - after).toLocaleString(),
+          }),
+        );
+      } else {
+        toast.success(
+          t("zakiControls.compact.success", { defaultValue: "Context compacted." }),
+        );
+      }
     } catch {
-      toast.error("Couldn't compact — try again");
+      toast.error(
+        t("zakiControls.compact.error", { defaultValue: "Couldn't compact. Try again." }),
+      );
     } finally {
+      compactingRef.current = false;
       setIsCompacting(false);
     }
-  }, [activeZakiSessionKey, activeThreadId, agentUserId, isCompacting, refreshContextGauge]);
+  }, [activeZakiSessionKey, activeThreadId, agentUserId, refreshContextGauge, t]);
 
   const finalizeZakiBotProgress = useCallback(
     (reason: "done" | "error" | "abort" | "stream_end") => {
@@ -6041,7 +6053,6 @@ export function ChatArea() {
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
         nullalisTaskItems={isZakiBotActiveSpace ? nullalisTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
-        onApprovalAction={isZakiBotActiveSpace ? handleApprovalAction : undefined}
         contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
         botMode={isZakiBotActiveSpace}

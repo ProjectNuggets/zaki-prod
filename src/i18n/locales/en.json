@@ -748,6 +748,12 @@
       "active": "Shell sandboxed",
       "activeWithBackend": "Shell sandboxed ({{backend}})"
     },
+    "compact": {
+      "success": "Context compacted.",
+      "successWithFreed": "Context compacted. {{freed}} tokens freed.",
+      "error": "Couldn't compact. Try again.",
+      "notReady": "Session not ready yet."
+    },
     "approval": {
       "title": "Approval required for {{tool}}",
       "defaultReason": "ZAKI requested approval before continuing.",

@@ -12,7 +12,6 @@ import type {
   ZakiUsageSummary,
 } from "../BotStatusRail";
 import {
-  ApprovalRequiredCard,
   ContextGauge,
   TaskChecklist,
 } from "../NullalisRuntimeWidgets";
@@ -39,7 +38,6 @@ interface ChatViewProps {
   nullalisTranscriptEntries?: NullalisTranscriptEntry[];
   nullalisTaskItems?: NullalisTaskItem[];
   nullalisApprovalRequest?: NullalisApprovalRequest | null;
-  onApprovalAction?: (requestId: string, approved: boolean) => void | Promise<void>;
   contextGaugeData?: ContextGaugeData | null;
   zakiUsageSummary?: ZakiUsageSummary | null;
   botMode?: boolean;
@@ -73,7 +71,6 @@ export function ChatView({
   nullalisTranscriptEntries = [],
   nullalisTaskItems = [],
   nullalisApprovalRequest = null,
-  onApprovalAction,
   contextGaugeData = null,
   zakiUsageSummary = null,
   botMode = false,
@@ -131,11 +128,6 @@ export function ChatView({
           usage={zakiUsageSummary}
         />
         <TaskChecklist tasks={nullalisTaskItems} />
-        <ApprovalRequiredCard
-          request={nullalisApprovalRequest}
-          onApprove={onApprovalAction ? (id) => onApprovalAction(id, true) : undefined}
-          onDeny={onApprovalAction ? (id) => onApprovalAction(id, false) : undefined}
-        />
       </div>
     );
   };
