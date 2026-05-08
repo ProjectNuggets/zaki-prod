@@ -2418,6 +2418,18 @@ function learningStreamText(eventType: string, payload: Item) {
   );
 }
 
+function normalizeBookChatMessage(item: Item, index: number): BookChatMessage | null {
+  const role = textOf(item.role, "assistant");
+  if (role !== "user" && role !== "assistant" && role !== "system") return null;
+  const content = textOf(item.content) || textOf(item.message) || textOf(item.text);
+  if (!content) return null;
+  return {
+    id: textOf(item.id) || textOf(item.message_id) || `book-chat-${index}`,
+    role,
+    content,
+  };
+}
+
 function BookPageChatPanel({
   book,
   page,
@@ -2438,6 +2450,19 @@ function BookPageChatPanel({
   const socketRef = useRef<WebSocket | null>(null);
   const assistantIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const sessionQuery = useQuery({
+    queryKey: [...learningKeys.sessions, "detail", sessionId],
+    enabled: Boolean(sessionId),
+    queryFn: () => getLearningSession(sessionId),
+    retry: false,
+  });
+  const restoredMessages = useMemo(
+    () =>
+      arrayOfRecords(asRecord(sessionQuery.data).messages)
+        .map((item, index) => normalizeBookChatMessage(item, index))
+        .filter((message): message is BookChatMessage => Boolean(message)),
+    [sessionQuery.data],
+  );
 
   useEffect(() => {
     setMessages([]);
@@ -2446,6 +2471,11 @@ function BookPageChatPanel({
       getBookPageChatSession(book, page.id) || `book-${book.id}-page-${page.id}`,
     );
   }, [book.id, book.metadata, page.id]);
+
+  useEffect(() => {
+    if (streaming) return;
+    setMessages(restoredMessages);
+  }, [restoredMessages, streaming]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

@@ -99,6 +99,7 @@ import {
   getLearningCoWriterDocument,
   getLearningNotebook,
   getLearningQuestionEntry,
+  getLearningSession,
   getLearningSolveSession,
   getLearningTutorAgent,
   getLearningTutorAgentActiveTurns,
@@ -579,6 +580,7 @@ export function LearningPage() {
   const requestedView = searchParams.get("view");
   const requestedDocumentId = searchParams.get("doc") || "";
   const requestedAgentId = searchParams.get("agent") || "";
+  const requestedSessionId = searchParams.get("session") || "";
   const requestedCapability =
     searchParams.get("capability") ||
     (requestedView ? viewToCapabilityPreset[requestedView.trim().toLowerCase()] : "") ||
@@ -1010,6 +1012,8 @@ export function LearningPage() {
             kbName={kbName}
             setKbName={setKbName}
             capabilityPreset={chatCapabilityPreset}
+            requestedSessionId={requestedSessionId}
+            requestedView={requestedView || "chat"}
             knowledgeItems={knowledgeItems}
             sessionItems={sessionItems}
             bookItems={bookItems}
@@ -2153,6 +2157,8 @@ function LearningChatPanel({
   kbName,
   setKbName,
   capabilityPreset,
+  requestedSessionId,
+  requestedView,
   knowledgeItems,
   sessionItems,
   bookItems,
@@ -2163,6 +2169,8 @@ function LearningChatPanel({
   kbName: string;
   setKbName: (name: string) => void;
   capabilityPreset: string;
+  requestedSessionId: string;
+  requestedView: string;
   knowledgeItems: Item[];
   sessionItems: Item[];
   bookItems: Item[];
@@ -2208,7 +2216,18 @@ function LearningChatPanel({
   const [socketAuthReady, setSocketAuthReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
-  const [sessionId, setSessionId] = useState(() => makeClientId("learn-session"));
+  const sessionScope = (requestedView || "chat").trim().toLowerCase() || "chat";
+  const sessionStorageKey = `zaki.learn.sessionId.${sessionScope}`;
+  const [restoredSessionId, setRestoredSessionId] = useState(
+    () =>
+      requestedSessionId ||
+      window.localStorage.getItem(sessionStorageKey) ||
+      (sessionScope === "chat" ? window.localStorage.getItem("zaki.learn.sessionId") : "") ||
+      "",
+  );
+  const [sessionId, setSessionId] = useState(
+    () => restoredSessionId || makeClientId("learn-session"),
+  );
   const socketRef = useRef<WebSocket | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const capabilityMenuRef = useRef<HTMLDivElement | null>(null);
@@ -2221,8 +2240,100 @@ function LearningChatPanel({
   const thinkingRef = useRef<string[]>([]);
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
+  const restoredActiveTurnIdRef = useRef("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
+
+  const persistSessionId = useCallback((nextSessionId: string, mode: "push" | "replace" = "replace") => {
+    const trimmed = nextSessionId.trim();
+    if (!trimmed) return;
+    setSessionId(trimmed);
+    setRestoredSessionId(trimmed);
+    window.localStorage.setItem(sessionStorageKey, trimmed);
+    if (sessionScope === "chat") window.localStorage.setItem("zaki.learn.sessionId", trimmed);
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", requestedView || params.get("view") || "chat");
+    if (capability) params.set("capability", capability);
+    else params.delete("capability");
+    params.set("session", trimmed);
+    const nextUrl = `/learn?${params.toString()}`;
+    if (window.location.pathname === "/learn") {
+      if (mode === "push") window.history.pushState(null, "", nextUrl);
+      else window.history.replaceState(null, "", nextUrl);
+    }
+  }, [capability, requestedView, sessionScope, sessionStorageKey]);
+
+  useEffect(() => {
+    const scopedSessionId =
+      requestedSessionId ||
+      window.localStorage.getItem(sessionStorageKey) ||
+      (sessionScope === "chat" ? window.localStorage.getItem("zaki.learn.sessionId") : "") ||
+      "";
+    setRestoredSessionId(scopedSessionId);
+    setSessionId(scopedSessionId || makeClientId("learn-session"));
+    if (scopedSessionId) {
+      window.localStorage.setItem(sessionStorageKey, scopedSessionId);
+      if (sessionScope === "chat") window.localStorage.setItem("zaki.learn.sessionId", scopedSessionId);
+      return;
+    }
+    setMessages([]);
+    setThinking([]);
+    thinkingRef.current = [];
+    activeAssistantIdRef.current = null;
+    activeTurnIdRef.current = null;
+  }, [requestedSessionId, sessionScope, sessionStorageKey]);
+
+  const restoredSession = useQuery({
+    queryKey: [...learningKeys.sessions, "detail", restoredSessionId],
+    enabled: Boolean(restoredSessionId),
+    queryFn: () => getLearningSession(restoredSessionId),
+    refetchInterval: (query) => {
+      const root = asRecord(query.state.data);
+      return itemList(root, ["active_turns"]).length || textOf(root.active_turn_id) ? 2000 : false;
+    },
+    retry: false,
+  });
+  const restoredMessages = useMemo(
+    () =>
+      itemList(restoredSession.data, ["messages", "items", "history"])
+        .map((item, index) => normalizeTutorHistoryMessage(item, index))
+        .filter((message): message is TutorChatMessage => Boolean(message)),
+    [restoredSession.data],
+  );
+  const restoredActiveTurnId = useMemo(() => {
+    const root = asRecord(restoredSession.data);
+    const activeTurn = itemList(root, ["active_turns"])[0];
+    return textOf(activeTurn?.id) || textOf(root.active_turn_id);
+  }, [restoredSession.data]);
+
+  useEffect(() => {
+    restoredActiveTurnIdRef.current = restoredActiveTurnId;
+  }, [restoredActiveTurnId]);
+
+  useEffect(() => {
+    if (!restoredSessionId || streaming) return;
+    setMessages(restoredMessages);
+    setThinking([]);
+    thinkingRef.current = [];
+    activeAssistantIdRef.current = null;
+    activeTurnIdRef.current = null;
+  }, [restoredMessages, restoredSessionId, streaming]);
+
+  useEffect(() => {
+    if (!restoredActiveTurnId) return;
+    activeTurnIdRef.current = restoredActiveTurnId;
+    setStreaming(true);
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          type: "subscribe_turn",
+          turn_id: restoredActiveTurnId,
+          after_seq: 0,
+        }),
+      );
+    }
+  }, [restoredActiveTurnId]);
 
   useEffect(() => {
     if (!capabilityPreset) {
@@ -2378,7 +2489,19 @@ function LearningChatPanel({
       setConnected(false);
       return undefined;
     }
-    socket.onopen = () => setConnected(true);
+    socket.onopen = () => {
+      setConnected(true);
+      const turnId = restoredActiveTurnIdRef.current;
+      if (turnId) {
+        socket.send(
+          JSON.stringify({
+            type: "subscribe_turn",
+            turn_id: turnId,
+            after_seq: 0,
+          }),
+        );
+      }
+    };
     socket.onmessage = (event) => {
       let payload: Item = {};
       try {
@@ -2390,13 +2513,13 @@ function LearningChatPanel({
       const content = learningEventText(eventType, payload);
       const nextSessionId = textOf(payload.session_id);
       const nextTurnId = textOf(payload.turn_id);
-      if (nextSessionId) setSessionId(nextSessionId);
+      if (nextSessionId) persistSessionId(nextSessionId);
       if (nextTurnId) activeTurnIdRef.current = nextTurnId;
 
       if (eventType === "session") {
         const metadata = asRecord(payload.metadata);
         const metadataSessionId = textOf(metadata.session_id);
-        if (metadataSessionId) setSessionId(metadataSessionId);
+        if (metadataSessionId) persistSessionId(metadataSessionId);
         return;
       }
 
@@ -2531,7 +2654,7 @@ function LearningChatPanel({
       socket.close();
       socketRef.current = null;
     };
-  }, [socketAuthReady]);
+  }, [persistSessionId, socketAuthReady]);
 
   const showAttachmentError = (message: string) => {
     setAttachmentError(message);
@@ -2737,6 +2860,7 @@ function LearningChatPanel({
       skillsAutoMode,
       selectedMemoryFiles,
     });
+    persistSessionId(sessionId, "replace");
     setMessages((items) => [
       ...items,
       {
@@ -2860,6 +2984,17 @@ function LearningChatPanel({
     setInput("");
     setAttachments([]);
     setSessionId(makeClientId("learn-session"));
+    setRestoredSessionId("");
+    window.localStorage.removeItem(sessionStorageKey);
+    if (sessionScope === "chat") window.localStorage.removeItem("zaki.learn.sessionId");
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", requestedView || params.get("view") || "chat");
+    if (capability) params.set("capability", capability);
+    else params.delete("capability");
+    params.delete("session");
+    if (window.location.pathname === "/learn") {
+      window.history.replaceState(null, "", `/learn?${params.toString()}`);
+    }
     activeAssistantIdRef.current = null;
     activeTurnIdRef.current = null;
     thinkingRef.current = [];
@@ -8690,8 +8825,8 @@ function TutorAgentChatPanel({
           {activityActive ? "Working" : connected ? "Live" : "Offline"}
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 [scrollbar-gutter:stable]">
-        <div className="mx-auto max-w-[720px] space-y-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 [scrollbar-gutter:stable]">
+        <div className="mx-auto w-full max-w-[960px] space-y-5">
         {messages.length || thinking.length ? (
           <>
             {messages.map((message) => (
@@ -8736,8 +8871,8 @@ function TutorAgentChatPanel({
         )}
         </div>
       </div>
-      <div className="shrink-0 border-t border-zaki-border px-5 py-3">
-        <div className="mx-auto flex max-w-[720px] gap-2">
+      <div className="shrink-0 border-t border-zaki-border px-6 py-3">
+        <div className="mx-auto flex w-full max-w-[960px] gap-2">
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
