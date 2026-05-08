@@ -141,7 +141,7 @@ export function LearningStudySetupPanel({
     return (
       <div className="mb-3 mt-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <GraduationCap className="size-4 shrink-0 text-[var(--primary)]" />
+          <GraduationCap className="size-4 shrink-0 text-zaki-brand" />
           <div className="min-w-0">
             <div className="truncate text-[12px] font-semibold text-[var(--foreground)]">
               {configured ? savedProfile.course || "Personal study setup" : "Set up your study loop"}
@@ -162,7 +162,7 @@ export function LearningStudySetupPanel({
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          className="inline-flex h-8 shrink-0 items-center rounded-full border border-zaki-brand-40 bg-zaki-brand-10 px-3 text-[11px] font-semibold text-zaki-brand transition-colors hover:bg-zaki-brand-15 hover:text-zaki-brand"
         >
           {configured ? "Edit" : "Start"}
         </button>
@@ -195,7 +195,7 @@ export function LearningStudySetupPanel({
             value={profile.course}
             onChange={(event) => update("course", event.target.value)}
             placeholder="e.g. Calculus II"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
           />
         </label>
         <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -204,7 +204,7 @@ export function LearningStudySetupPanel({
             value={profile.examDate}
             onChange={(event) => update("examDate", event.target.value)}
             placeholder="e.g. 2026-06-15"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
           />
         </label>
         <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] md:col-span-2">
@@ -213,7 +213,7 @@ export function LearningStudySetupPanel({
             value={profile.goal}
             onChange={(event) => update("goal", event.target.value)}
             placeholder="e.g. score 90% and understand proofs"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
           />
         </label>
         <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -222,7 +222,7 @@ export function LearningStudySetupPanel({
             value={profile.weakTopics}
             onChange={(event) => update("weakTopics", event.target.value)}
             placeholder="e.g. series, integration by parts"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
           />
         </label>
         <div className="grid grid-cols-[1fr_150px] gap-3 max-sm:grid-cols-1">
@@ -232,7 +232,7 @@ export function LearningStudySetupPanel({
               value={profile.weeklyHours}
               onChange={(event) => update("weeklyHours", event.target.value)}
               placeholder="e.g. 6"
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
             />
           </label>
           <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -240,7 +240,7 @@ export function LearningStudySetupPanel({
             <select
               value={profile.difficulty}
               onChange={(event) => update("difficulty", event.target.value)}
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
             >
               <option value="easy">Easy</option>
               <option value="medium">Medium</option>
@@ -260,14 +260,14 @@ export function LearningStudySetupPanel({
           <button
             type="button"
             onClick={onSave}
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--muted)]"
+            className="inline-flex h-9 items-center rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text transition-colors hover:bg-zaki-hover"
           >
             Save setup
           </button>
           <button
             type="button"
             onClick={onBuildPlan}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold text-white"
+            className="inline-flex h-9 items-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white transition-colors hover:bg-zaki-brand-hover"
           >
             <Sparkles className="size-3.5" />
             Build study plan
