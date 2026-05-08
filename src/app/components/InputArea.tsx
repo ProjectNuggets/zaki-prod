@@ -1,4 +1,4 @@
-import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, Brain, EyeOff } from "lucide-react";
+import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square } from "lucide-react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -27,18 +27,6 @@ function detectSlash(value: string): { active: boolean; filter: string } {
   if (value.includes(" ") || value.includes("\n")) return { active: false, filter: "" };
   return { active: true, filter: value.slice(1) };
 }
-
-// 2026-05-08 — Per-turn flags the user can flip from the composer. The
-// agent (nullalis) is expected to honor these on receive; the FE plumbs
-// them through to onSend regardless so the wire-up is in place.
-//   - privateTurn: don't store this exchange in the brain (GDPR-honest
-//     escape hatch for sensitive prompts; complements the GDPR footer
-//     in settings).
-//   - extendedThinking: agent runs a longer reasoning pass before reply.
-export type TurnOptions = {
-  privateTurn?: boolean;
-  extendedThinking?: boolean;
-};
 
 // 2026-05-08 — Imperative API for sending a turn that bypasses the
 // textarea draft. Used by:
@@ -79,7 +67,7 @@ export function InputArea({
   lastUserMessage = null,
   composerHandleRef = null,
 }: {
-  onSend: (text: string, attachments: File[], options?: TurnOptions) => void;
+  onSend: (text: string, attachments: File[]) => void;
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isSending?: boolean;
@@ -119,10 +107,6 @@ export function InputArea({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
-  // 2026-05-08 — Per-turn toggles. Reset to off after every send so they
-  // never silently linger across turns.
-  const [privateTurn, setPrivateTurn] = useState(false);
-  const [extendedThinking, setExtendedThinking] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
   // doesn't flicker as the cursor moves over inner elements.
@@ -501,21 +485,12 @@ export function InputArea({
       if (isSending || sendLocked) return;
       const text = textOverride !== undefined ? textOverride : inputValue;
       if (!text.trim() && attachments.length === 0) return;
-      const options: TurnOptions | undefined =
-        privateTurn || extendedThinking
-          ? {
-              privateTurn: privateTurn || undefined,
-              extendedThinking: extendedThinking || undefined,
-            }
-          : undefined;
-      onSend(text, attachments, options);
+      onSend(text, attachments);
       // Always clear the textarea after a send. For an override path
       // (compact / quick reply) the textarea may have held an unrelated
       // draft — that draft is intentionally consumed because the user
       // is sending a different message, and they can ↑ to recall.
       setInputValue("");
-      if (privateTurn) setPrivateTurn(false);
-      if (extendedThinking) setExtendedThinking(false);
       if (attachments.length > 0) setAttachments([]);
       if (draftStorageKey && typeof window !== "undefined") {
         try {
@@ -530,8 +505,6 @@ export function InputArea({
       sendLocked,
       inputValue,
       attachments,
-      privateTurn,
-      extendedThinking,
       onSend,
       setAttachments,
       draftStorageKey,
@@ -1279,74 +1252,6 @@ export function InputArea({
                 </div>
               </TooltipContent>
             </Tooltip>
-          ) : null}
-          {/* S4 + S5 (2026-05-08) — Per-turn toggles. ZAKI bot mode only,
-              since the agent is the consumer of these flags. Active state
-              is brand-tinted so the user can see at a glance that the
-              next turn behaves differently. Both reset on send. */}
-          {zakiBotMode ? (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setPrivateTurn((v) => !v)}
-                    aria-pressed={privateTurn}
-                    aria-label={t(
-                      privateTurn
-                        ? "input.zaki.privateTurn.disableAria"
-                        : "input.zaki.privateTurn.enableAria"
-                    )}
-                    data-testid="zaki-private-turn"
-                    className={cn(
-                      "size-9 rounded-full border flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
-                      privateTurn
-                        ? "border-zaki-brand bg-zaki-brand-10 text-zaki-brand"
-                        : "border-zaki-strong bg-zaki-elevated text-zaki-muted hover:bg-zaki-sunken"
-                    )}
-                  >
-                    <EyeOff className="size-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
-                  <div className="text-[11px] leading-5">
-                    {privateTurn
-                      ? t("input.zaki.privateTurn.activeTooltip")
-                      : t("input.zaki.privateTurn.idleTooltip")}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setExtendedThinking((v) => !v)}
-                    aria-pressed={extendedThinking}
-                    aria-label={t(
-                      extendedThinking
-                        ? "input.zaki.extendedThinking.disableAria"
-                        : "input.zaki.extendedThinking.enableAria"
-                    )}
-                    data-testid="zaki-extended-thinking"
-                    className={cn(
-                      "size-9 rounded-full border flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
-                      extendedThinking
-                        ? "border-zaki-brand bg-zaki-brand-10 text-zaki-brand"
-                        : "border-zaki-strong bg-zaki-elevated text-zaki-muted hover:bg-zaki-sunken"
-                    )}
-                  >
-                    <Brain className="size-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
-                  <div className="text-[11px] leading-5">
-                    {extendedThinking
-                      ? t("input.zaki.extendedThinking.activeTooltip")
-                      : t("input.zaki.extendedThinking.idleTooltip")}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </>
           ) : null}
           {/* Mic button — STT voice input (available on all chat surfaces) */}
           {!isStopMode ? (

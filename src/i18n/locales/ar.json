@@ -430,19 +430,7 @@
       "contextAriaUnknown": "لم يُبلَّغ عن استخدام السياق بعد",
       "contextPercentUnknown": "السياق: في انتظار تقرير ضغط الرموز من الوكيل",
       "compactPreflight": "السياق يقترب من الامتلاء ({{percent}}%). اضغط لتقليصه قبل الرسالة التالية.",
-      "compactPreflightAction": "تقليص",
-      "privateTurn": {
-        "enableAria": "اجعل هذه الدورة خاصة (لا تُحفظ)",
-        "disableAria": "إلغاء الوضع الخاص",
-        "idleTooltip": "سيتم حفظ هذه الدورة في ذاكرتك بشكل اعتيادي.",
-        "activeTooltip": "دورة خاصة — لن يتم حفظ هذا التبادل في ذاكرتك."
-      },
-      "extendedThinking": {
-        "enableAria": "تفعيل التفكير العميق لهذه الدورة",
-        "disableAria": "تعطيل التفكير العميق",
-        "idleTooltip": "يرد ZAKI بالسرعة الاعتيادية.",
-        "activeTooltip": "تفكير عميق — رد أبطأ بمنطق أعمق."
-      }
+      "compactPreflightAction": "تقليص"
     },
     "voice": {
       "tapToRecord": "اضغط للتسجيل",

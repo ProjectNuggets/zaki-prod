@@ -3762,7 +3762,6 @@ export function ChatArea() {
     assistantId,
     signal,
     disableResponseEnvelope = false,
-    turnOptions,
   }: {
     workspaceSlug: string;
     threadSlug: string;
@@ -3770,7 +3769,6 @@ export function ChatArea() {
     assistantId: string;
     signal?: AbortSignal;
     disableResponseEnvelope?: boolean;
-    turnOptions?: { privateTurn?: boolean; extendedThinking?: boolean };
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -3781,29 +3779,17 @@ export function ChatArea() {
     const requestPath = isZakiAgentSpace
       ? "/api/agent/chat/stream"
       : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
-    // 2026-05-08 — Per-turn flags from the composer (S4 + S5). The
-    // backend (nullalis) is the consumer; field names use snake_case to
-    // match agent payload conventions. Only included when set so the
-    // request body stays clean for normal turns.
-    const turnFlagsBody = turnOptions
-      ? {
-          ...(turnOptions.privateTurn ? { private_turn: true } : {}),
-          ...(turnOptions.extendedThinking ? { extended_thinking: true } : {}),
-        }
-      : {};
     const requestBody = isZakiAgentSpace
       ? {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
-          ...turnFlagsBody,
         }
       : {
           message,
           mode: queryModeEnabled ? "query" : "chat",
           ...(shouldDisableResponseEnvelope ? { disableResponseEnvelope: true } : {}),
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
-          ...turnFlagsBody,
         };
 
     console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
@@ -5064,16 +5050,10 @@ export function ChatArea() {
   // Multi-session: allow any threadId in the agent space (no longer force "main")
 
   // Handle send message
-  // 2026-05-08 — `options` carries per-turn flags from the composer
-  // (privateTurn = don't store this exchange in brain; extendedThinking
-  // = longer reasoning pass). Forwarded into streamChatMessage and onto
-  // the request body as private_turn / extended_thinking. Backend
-  // (nullalis) honoring is the consumer side and is tracked separately.
   const handleSend = useCallback(async (
     text: string,
     files: File[],
-    preferredWorkspaceSlug?: string | null,
-    options?: { privateTurn?: boolean; extendedThinking?: boolean }
+    preferredWorkspaceSlug?: string | null
   ) => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -5302,7 +5282,6 @@ export function ChatArea() {
         message: sendText,
         assistantId: assistantMessageId,
         signal: streamController.signal,
-        turnOptions: options,
       });
       if (isZakiBotTarget && agentUserId) {
         const sessionKey = buildAgentSessionKey(threadId, agentUserId);
@@ -6266,9 +6245,7 @@ export function ChatArea() {
               />
               <InputArea
                 composerHandleRef={composerHandleRef}
-                onSend={(text, files, options) =>
-                  void handleSend(text, files, undefined, options)
-                }
+                onSend={handleSend}
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}
