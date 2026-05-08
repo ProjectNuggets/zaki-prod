@@ -88,6 +88,7 @@ import {
   resolveCanonicalLearningUserId,
   resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
+  sanitizeLearningUpstreamPayload,
   sanitizeLearningTutorAgentPayload,
   sanitizeLearningWsClientMessage,
   shouldConsumeLearningIngressQuota,
@@ -9351,6 +9352,20 @@ async function pipeLearningResponse(req, res, upstream) {
   if (!upstream.body) {
     res.end();
     return;
+  }
+  const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      const raw = await upstream.text();
+      const payload = raw ? JSON.parse(raw) : null;
+      res.json(sanitizeLearningUpstreamPayload(payload));
+      return;
+    } catch (error) {
+      console.warn("[Learning] JSON response sanitizer fallback:", {
+        requestId,
+        error: error?.message || "Unable to sanitize learning JSON response.",
+      });
+    }
   }
   Readable.fromWeb(upstream.body).pipe(res);
 }

@@ -81,6 +81,8 @@ const LEARNING_WS_QUOTA_FREE_TYPES = new Set([
   "unsubscribe",
 ]);
 const LEARNING_NOTEBOOK_ID_SEGMENT = "[^/?#]+";
+const LEARNING_THINK_BLOCK_PATTERN = /<think\b[^>]*>[\s\S]*?<\/think>/gi;
+const LEARNING_UNCLOSED_THINK_PATTERN = /<think\b[^>]*>[\s\S]*$/gi;
 export const LEARNING_TUTOR_AGENT_CHANNEL_ALLOWLIST = [
   "whatsapp",
   "telegram",
@@ -331,6 +333,39 @@ export function sanitizeLearningClientPayload(value, { root = false } = {}) {
     if (isOperatorManagedLearningField(normalizedKey)) continue;
     if (root && !LEARNING_WS_ALLOWED_ROOT_FIELDS.has(normalizedKey)) continue;
     output[normalizedKey] = sanitizeLearningClientPayload(nested);
+  }
+  return output;
+}
+
+export function sanitizeLearningProviderText(value) {
+  const text = String(value || "");
+  if (!text) return text;
+  return text
+    .replace(LEARNING_THINK_BLOCK_PATTERN, "")
+    .replace(LEARNING_UNCLOSED_THINK_PATTERN, "")
+    .trim();
+}
+
+export function sanitizeLearningUpstreamPayload(value) {
+  if (typeof value === "string") {
+    return sanitizeLearningProviderText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeLearningUpstreamPayload(item));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const eventType = String(value.type || "").trim().toLowerCase();
+  const output = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (
+      (eventType === "thinking" || eventType === "observation") &&
+      ["content", "message", "response", "text", "delta"].includes(String(key).toLowerCase())
+    ) {
+      output[key] = "";
+      continue;
+    }
+    output[key] = sanitizeLearningUpstreamPayload(nested);
   }
   return output;
 }

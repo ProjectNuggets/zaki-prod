@@ -23,7 +23,9 @@ import {
   resolveCanonicalLearningUserId,
   resolveLearningMaxRequestBytes,
   sanitizeLearningClientPayload,
+  sanitizeLearningProviderText,
   sanitizeLearningTutorAgentPayload,
+  sanitizeLearningUpstreamPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
   shouldConsumeLearningIngressQuota,
@@ -208,6 +210,35 @@ describe("learning BFF contract", () => {
     expect(sanitized).toEqual({
       topic: "linear algebra",
       nested: [{ keep: true }],
+    });
+  });
+
+  test("sanitizes upstream learning payloads before browser display", () => {
+    expect(
+      sanitizeLearningProviderText("<think>private reasoning</think>\n\nVisible answer")
+    ).toBe("Visible answer");
+    expect(sanitizeLearningProviderText("<think>private reasoning")).toBe("");
+
+    expect(
+      sanitizeLearningUpstreamPayload({
+        items: [
+          {
+            type: "chat",
+            summary: "Intro <think>secret</think> safe",
+            nested: { response: "<think>hidden</think>\n\nShown" },
+          },
+          { type: "thinking", content: "internal chain" },
+        ],
+      })
+    ).toEqual({
+      items: [
+        {
+          type: "chat",
+          summary: "Intro  safe",
+          nested: { response: "Shown" },
+        },
+        { type: "thinking", content: "" },
+      ],
     });
   });
 

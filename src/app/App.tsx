@@ -261,6 +261,10 @@ export default function App() {
   }, [isZakiBotRoute]);
 
   const dismissOnboarding = () => {
+    if (typeof window !== "undefined" && user?.username) {
+      const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
+      window.localStorage.setItem(key, "done");
+    }
     setOnboardingOpen(false);
   };
 
