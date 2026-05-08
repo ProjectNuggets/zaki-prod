@@ -125,11 +125,25 @@ export function InputArea({
     });
   }, []);
 
-  // M3: context pressure meter — shown only when ZAKI bot mode and pressure > 0
+  // Phase 4-B (2026-05-08) — Compaction meter visibility threshold.
+  //
+  // The percent comes straight from the backend's
+  // `context_pressure_percent` (zakiSessionUiStore.setContextPressure ←
+  // ChatArea.refreshContextGauge ← fetchAgentSessionContext). It is
+  // already sourced from real token pressure, no local heuristic.
+  //
+  // Earlier behavior surfaced the meter at any pressure > 0, which made
+  // the ring appear from the very first message and feel like it was
+  // "running fast" as natural per-turn growth landed. A new conversation
+  // at 8% on turn 2 followed by 14% on turn 3 reads as motion when the
+  // user hasn't yet entered the pressure window where compaction matters.
+  // Threshold lifted to 40% so the meter only appears once context is
+  // actually starting to fill and stays out of the way otherwise.
+  const COMPACTION_VISIBILITY_THRESHOLD = 40;
   const showZakiContextMeter =
     zakiBotMode &&
     typeof zakiContextPressurePercent === "number" &&
-    zakiContextPressurePercent > 0;
+    zakiContextPressurePercent >= COMPACTION_VISIBILITY_THRESHOLD;
   const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
   // M3: tiered color by pressure, brand-coherent: ≤50% teal (success),
   // ≤75% amber (warning), >75% red (brand). Resolves via CSS variables so
@@ -765,36 +779,27 @@ export function InputArea({
               </div>
             )}
           </div>
-          {zakiBotMode ? (
-            <div className="flex items-center gap-1" role="group" aria-label={t("input.zaki.modeGroupAria")}>
-              {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
-                const selected = effectiveZakiMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    disabled={zakiModePending || !onZakiModeChange}
-                    onClick={() => handleSelectZakiMode(mode)}
-                    aria-pressed={selected}
-                    data-testid={`zaki-mode-pill-${mode}`}
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors",
-                      selected
-                        ? "bg-zaki-brand text-white"
-                        : "bg-zaki-elevated text-zaki-muted hover:bg-zaki-sunken",
-                      (zakiModePending || !onZakiModeChange) && "opacity-60 cursor-not-allowed"
-                    )}
-                  >
-                    {t(`zakiControls.modes.${mode}`)}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
+          {/* Phase 4-B (2026-05-08) — Mode indicator. The 3-pill always-on row
+              was redundant with the "+" composer menu's mode selector; it
+              shouted the available modes at every turn. The composer menu
+              is the source of truth for switching mode. We surface only
+              the active selection, and only when it is something other
+              than the default "execute" — Plan / Review get a subtle
+              brand-tinted pill, Execute stays silent. */}
           {showZakiModeHint ? (
-            <span className="text-[11px] font-medium text-zaki-muted" data-testid="zaki-mode-hint">
-              {t("input.zaki.modeHint", { mode: t(`zakiControls.modes.${effectiveZakiMode}`) })}
-            </span>
+            <button
+              type="button"
+              onClick={() => handleSelectZakiMode("execute")}
+              disabled={zakiModePending || !onZakiModeChange}
+              aria-label={t("input.zaki.modeHint", { mode: t(`zakiControls.modes.${effectiveZakiMode}`) })}
+              data-testid="zaki-mode-hint"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full bg-zaki-brand-10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zaki-brand transition-colors hover:bg-zaki-brand-15",
+                (zakiModePending || !onZakiModeChange) && "opacity-60 cursor-not-allowed"
+              )}
+            >
+              {t(`zakiControls.modes.${effectiveZakiMode}`)}
+            </button>
           ) : null}
           {!zakiBotMode ? (
             <button
