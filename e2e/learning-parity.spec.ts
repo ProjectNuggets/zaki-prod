@@ -935,6 +935,24 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByRole("button", { name: "Flashcards" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Weekly review" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Weak topics" })).toBeVisible();
+    await expect(page.getByText("Memory overview")).toBeVisible();
+    await expect(page.getByText("Saved records")).toBeVisible();
+
+    await page.getByRole("button", { name: /Chat Momentum lesson/i }).click();
+    await expect(page.getByText("Study this record")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Quiz from record" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Practice" })).toBeVisible();
+    await page.getByRole("button", { name: "Quiz from record" }).click();
+    await expect(page).toHaveURL(/view=chat/);
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      /Create a short answer-keyed quiz from this saved notebook record/,
+    );
+    await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
+      "Quiz Generation",
+    );
+
+    await page.goto("/learn?view=notebooks");
+    await expect(page.getByRole("heading", { name: "Newton Notes" })).toBeVisible();
 
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download notebook as Markdown" }).click();

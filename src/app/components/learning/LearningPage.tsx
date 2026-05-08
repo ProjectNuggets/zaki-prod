@@ -5698,6 +5698,24 @@ function NotebooksPanel({
 
   const notebookStudyContext = () =>
     learningNotebookMarkdown(selectedDetail, records).slice(0, 16_000);
+  const notebookRecordKind = (record: Item) =>
+    textOf(record.type) || textOf(record.record_type) || "record";
+
+  const latestRecordTime = useMemo(() => {
+    const times = records
+      .map((record) => Date.parse(textOf(record.created_at) || textOf(record.updated_at)))
+      .filter(Number.isFinite);
+    return times.length ? new Date(Math.max(...times)).toISOString() : "";
+  }, [records]);
+  const recordTypeCounts = useMemo(
+    () =>
+      records.reduce<Record<string, number>>((counts, record) => {
+        const type = notebookRecordKind(record);
+        counts[type] = (counts[type] || 0) + 1;
+        return counts;
+      }, {}),
+    [records],
+  );
 
   const startNotebookStudyAction = (
     action: "summary" | "quiz" | "flashcards" | "weekly" | "weak",
@@ -5725,6 +5743,35 @@ function NotebooksPanel({
       weak: {
         capability: "deep_solve",
         content: `Find weak topics from this notebook, then create a targeted practice plan with similar problems and step-by-step remediation.\n\n${context}`,
+      },
+    }[action];
+    onStartStudyFromNotebook(prompts.content, prompts.capability);
+  };
+
+  const startNotebookRecordStudyAction = (
+    record: Item,
+    index: number,
+    action: "quiz" | "flashcards" | "practice" | "check",
+  ) => {
+    const title = itemTitle(record, `Record ${index + 1}`);
+    const context = learningNotebookRecordMarkdown(record, index).slice(0, 8_000);
+    if (!context.trim()) return;
+    const prompts = {
+      quiz: {
+        capability: "deep_question",
+        content: `Create a short answer-keyed quiz from this saved notebook record. Include explanations and one review hint per question.\n\n${context}`,
+      },
+      flashcards: {
+        capability: "deep_question",
+        content: `Turn this saved notebook record into concise flashcards. Use front/back format and include spaced-review hints.\n\n${context}`,
+      },
+      practice: {
+        capability: "deep_solve",
+        content: `Create similar practice problems from this saved notebook record, then solve the first one step by step.\n\n${context}`,
+      },
+      check: {
+        capability: "deep_solve",
+        content: `Check my answer using this saved notebook record as reference. Tell me what is correct, what is wrong, and what to review next.\n\nReference record: ${title}\n\n${context}\n\nMy answer:\n`,
       },
     }[action];
     onStartStudyFromNotebook(prompts.content, prompts.capability);
@@ -5966,12 +6013,50 @@ function NotebooksPanel({
                   </div>
                 </div>
 
+                <div className="mb-2 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-zaki-muted">
+                  Memory overview
+                </div>
+                <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-4">
+                  <div className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted">
+                      Saved records
+                    </div>
+                    <div className="mt-1 text-lg font-semibold tabular-nums text-zaki-text">
+                      {records.length}
+                    </div>
+                  </div>
+                  <div className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted">
+                      Chat captures
+                    </div>
+                    <div className="mt-1 text-lg font-semibold tabular-nums text-zaki-text">
+                      {recordTypeCounts.chat || 0}
+                    </div>
+                  </div>
+                  <div className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted">
+                      Review material
+                    </div>
+                    <div className="mt-1 text-lg font-semibold tabular-nums text-zaki-text">
+                      {(recordTypeCounts.question || 0) + (recordTypeCounts.solve || 0)}
+                    </div>
+                  </div>
+                  <div className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-zaki-muted">
+                      Last saved
+                    </div>
+                    <div className="mt-1 truncate text-sm font-semibold text-zaki-text">
+                      {relativeTime(latestRecordTime) || "No saves yet"}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                   <div className="divide-y divide-zaki-border">
                     {records.length ? (
                       records.map((record, index) => {
                         const id = itemId(record, `record-${index + 1}`);
-                        const type = textOf(record.type, "record");
+                        const type = notebookRecordKind(record);
                         const badge = notebookRecordBadge(type);
                         const BadgeIcon = badge.icon;
                         const expanded = expandedRecordId === id;
@@ -6018,6 +6103,41 @@ function NotebooksPanel({
                                   </div>
                                 ) : null}
                                 <div className="mb-3 flex flex-wrap items-center gap-2">
+                                  <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-zaki-muted">
+                                    Study this record
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => startNotebookRecordStudyAction(record, index, "quiz")}
+                                    className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                                  >
+                                    <PenLine className="size-3.5" />
+                                    Quiz from record
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => startNotebookRecordStudyAction(record, index, "flashcards")}
+                                    className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                                  >
+                                    <Layers className="size-3.5" />
+                                    Flashcards
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => startNotebookRecordStudyAction(record, index, "practice")}
+                                    className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                                  >
+                                    <BrainCircuit className="size-3.5" />
+                                    Practice
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => startNotebookRecordStudyAction(record, index, "check")}
+                                    className="inline-flex h-8 items-center gap-2 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-xs font-medium text-zaki-text hover:bg-zaki-hover"
+                                  >
+                                    <CheckCircle2 className="size-3.5" />
+                                    Check answer
+                                  </button>
                                   {type === "chat" && sessionId ? (
                                     <button
                                       type="button"
