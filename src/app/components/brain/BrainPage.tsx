@@ -14,6 +14,7 @@ import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFil
 import { BrainOrphanRail } from "./BrainOrphanRail";
 import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
+import { BrainInsightsStrip } from "./BrainInsightsStrip";
 import { KIND_COLOR, KIND_LABEL } from "./brainColors";
 
 type BrainTab = "timeline" | "graph";
@@ -210,6 +211,8 @@ export function BrainPage() {
             <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
           </div>
         )}
+
+        <BrainInsightsStrip userId={userId} />
 
         <div className="mb-6 flex gap-2 border-b border-zaki-border">
           <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
