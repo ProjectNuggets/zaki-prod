@@ -100,6 +100,42 @@ describe("runtime config validation", () => {
     expect(errors.find((e) => e.key === "ZAKI_JWT_SIGNING_KEY")).toBeUndefined();
   });
 
+  it("blocks Nullalis dev-user bypass in production config", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_ALLOWED_ORIGINS: "https://app.chatzaki.com",
+        ZAKI_PUBLIC_URL: "https://api.chatzaki.com",
+        ZAKI_APP_URL: "https://app.chatzaki.com",
+        ZAKI_LEGAL_POLICY_VERSION: "1.0",
+        ZAKI_EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_test",
+        RESEND_FROM: "no-reply@chatzaki.com",
+        ZAKI_JWT_SIGNING_KEY: "a".repeat(64),
+        NULLALIS_DEV_USER_ID: "1",
+      })
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.errors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "NULLALIS_DEV_USER_ID" })])
+    );
+  });
+
+  it("warns about Nullalis dev-user bypass in local config", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "development",
+        NULLCLAW_DEV_USER_ID: "1",
+      })
+    );
+
+    expect(report.ok).toBe(true);
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "NULLALIS_DEV_USER_ID" })])
+    );
+  });
+
   it("requires learning engine base and token when learning is enabled", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({

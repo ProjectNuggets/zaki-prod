@@ -60,6 +60,7 @@ Production safety notes:
 - `ZAKI_LEGAL_POLICY_VERSION` must be explicitly set
 - Do not use verification bypass modes (`ZAKI_EMAIL_MODE=non|none|no`) in production
 - Keep `NULLCLAW_BASE_URL` internal-only, for example `http://nullclaw:3000`
+- Do not set `NULLALIS_DEV_USER_ID` or legacy `NULLCLAW_DEV_USER_ID` outside single-user local debugging. It bypasses authenticated user mapping and would collapse agent traffic to one configured user.
 - Set `ZAKI_AGENT_WEBHOOK_BASE_URL` to the public HTTPS agent ingress, for example `https://agent.zaki.com`
 - Telegram connect is now token-first: users should only need a bot token; `account_id` and `allow_from` are optional advanced fields
 

@@ -25,12 +25,23 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 
 | Gate | Status | Notes |
 | --- | --- | --- |
-| User isolation | BLOCKED | `npm run smoke:agent-isolation` is wired, but requires at least two bearer tokens via `ZAKI_MULTIUSER_TOKENS` or `ZAKI_MULTIUSER_TOKENS_FILE`. |
+| User isolation | PASS-BETA | Local two-user API smoke passed with real ZAKI users `57`/`58`; browser smoke passed with real users `63`/`64`. Nullalis confirmed distinct downstream sessions. `NULLALIS_DEV_USER_ID`/`NULLCLAW_DEV_USER_ID` must remain unset for all multi-user tests and hosted environments. |
 | Quota enforcement | BETA READY / GA GATE | Learning quota endpoint and frontend state exist; broad GA requires billing/unit economics thresholds and production monitoring checks. |
 | Retention/delete/export | GA GATE | Needs final operator policy verification before GA claim. |
 | Monitoring/alerts | GA GATE | Needs production dashboard/alert confirmation before GA claim. |
 | Provider routing/secrets | BETA READY / GA GATE | Operator-managed provider routing is enforced in BFF paths already reviewed; production secrets must be injected through infra, not user UI. |
+| Dev-user bypass | PASS-BETA | `backend/src/index.js` hard-fails in production when the bypass is set. `backend/src/config-validation.js` now also fails `config:check` in production and warns locally. |
+
+## Live Local UAT Evidence
+
+| Run | Result |
+| --- | --- |
+| Mocked desktop parity E2E | PASS: `npm run test:e2e -- e2e/learning-parity.spec.ts --project=chromium-desktop` — 11/11 passed. |
+| Live route smoke | PASS: 14/14 Learn routes loaded with expected controls, no console errors, and no failed responses. |
+| Live two-user API isolation | PASS: two paid local users, zero marker leaks, downstream sessions `agent:zaki-bot:user:57:thread:main` and `agent:zaki-bot:user:58:thread:main`. |
+| Live two-user browser smoke | PASS: two paid local browser users, no visible cross-user marker, no console errors, no failed responses. |
+| Config hardening | PASS: production config now rejects `NULLALIS_DEV_USER_ID`/`NULLCLAW_DEV_USER_ID`; local config check passes with it unset. |
 
 ## Current Verdict
 
-Target state after this run: code-level beta candidate. Automated E2E, typecheck, unit tests, production build, backend lint, and backend learning readiness tests pass. Live beta release remains blocked only on the two-user isolation smoke token requirement. GA-ready is intentionally blocked until quota, retention, export/delete, backup/recovery, and monitoring gates are verified against production infrastructure.
+Target state after this run: code-level beta candidate. Automated E2E, typecheck, targeted backend config tests, backend lint, config check, live route smoke, and live two-user isolation smoke pass locally. GA-ready remains intentionally blocked until quota/unit economics, retention, export/delete, backup/recovery, and monitoring gates are verified against production infrastructure.

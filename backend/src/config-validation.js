@@ -56,6 +56,7 @@ export function validateRuntimeConfig(env = process.env) {
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
+  const nullalisDevUserId = normalize(env.NULLALIS_DEV_USER_ID || env.NULLCLAW_DEV_USER_ID);
 
   const errors = [];
   const warnings = [];
@@ -154,6 +155,14 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_LEARNING_ENABLED",
       "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
+    );
+  }
+
+  if (nullalisDevUserId && !isProduction) {
+    pushIssue(
+      warnings,
+      "NULLALIS_DEV_USER_ID",
+      "NULLALIS_DEV_USER_ID/NULLCLAW_DEV_USER_ID is a local-only agent auth bypass; unset it for multi-user smoke tests."
     );
   }
 
@@ -286,6 +295,14 @@ export function validateRuntimeConfig(env = process.env) {
       errors,
       "ZAKI_EMAIL_MODE",
       "ZAKI_EMAIL_MODE must not bypass verification in production."
+    );
+  }
+
+  if (nullalisDevUserId) {
+    pushIssue(
+      errors,
+      "NULLALIS_DEV_USER_ID",
+      "NULLALIS_DEV_USER_ID/NULLCLAW_DEV_USER_ID must not be set in production because it maps all agent traffic to one configured user."
     );
   }
 
