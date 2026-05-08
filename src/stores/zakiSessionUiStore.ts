@@ -201,9 +201,23 @@ export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => 
     set((state) => {
       const current = state.sessions[normalized];
       const pendingApprovals = current?.pendingApprovals ?? [];
+      // Honor the timestamp-0 sentinel here too, so any caller that
+      // forwards an approval shaped by mapAgentSessionToZakiSessionUi
+      // gets a real timestamp (existing prior wins, otherwise stamp now).
+      // Today only the SSE path calls this with a real Date.now(); the
+      // resolution is defensive against future drift.
+      const resolvedApproval =
+        approval && approval.timestamp === 0
+          ? {
+              ...approval,
+              timestamp:
+                pendingApprovals.find((entry) => entry.id === approval.id)?.timestamp ??
+                Date.now(),
+            }
+          : approval;
       const nextPendingApprovals =
-        approval && !pendingApprovals.some((entry) => entry.id === approval.id)
-          ? [...pendingApprovals, approval]
+        resolvedApproval && !pendingApprovals.some((entry) => entry.id === resolvedApproval.id)
+          ? [...pendingApprovals, resolvedApproval]
           : pendingApprovals;
       return {
         sessions: {

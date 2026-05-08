@@ -426,7 +426,9 @@
       "modeGroupAria": "Agent mode",
       "contextAria": "Context usage {{percent}} percent",
       "contextPercent": "Context: {{percent}}%",
-      "contextTooltip": "Context compacts automatically when needed."
+      "contextTooltip": "Context compacts automatically when needed.",
+      "contextAriaUnknown": "Context usage not yet reported",
+      "contextPercentUnknown": "Context: waiting for the agent to report token pressure"
     },
     "voice": {
       "tapToRecord": "Tap to record",

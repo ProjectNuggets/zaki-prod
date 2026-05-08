@@ -426,7 +426,9 @@
       "modeGroupAria": "وضع الوكيل",
       "contextAria": "استخدام السياق {{percent}} بالمئة",
       "contextPercent": "السياق: {{percent}}٪",
-      "contextTooltip": "يتم ضغط السياق تلقائيًا عند الحاجة."
+      "contextTooltip": "يتم ضغط السياق تلقائيًا عند الحاجة.",
+      "contextAriaUnknown": "لم يُبلَّغ عن استخدام السياق بعد",
+      "contextPercentUnknown": "السياق: في انتظار تقرير ضغط الرموز من الوكيل"
     },
     "voice": {
       "tapToRecord": "اضغط للتسجيل",

@@ -857,7 +857,11 @@ export function InputArea({
                 <button
                   type="button"
                   className="group inline-flex size-9 items-center justify-center rounded-full border border-zaki-strong bg-zaki-elevated text-zaki-muted transition-colors hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-                  aria-label={t("input.zaki.contextAria", { percent: zakiContextValue })}
+                  aria-label={
+                    hasZakiContextValue
+                      ? t("input.zaki.contextAria", { percent: zakiContextValue })
+                      : t("input.zaki.contextAriaUnknown")
+                  }
                   data-testid="zaki-context-meter"
                 >
                   <span
@@ -881,7 +885,11 @@ export function InputArea({
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
                 <div className="space-y-0.5">
-                  <div>{t("input.zaki.contextPercent", { percent: zakiContextValue })}</div>
+                  <div>
+                    {hasZakiContextValue
+                      ? t("input.zaki.contextPercent", { percent: zakiContextValue })
+                      : t("input.zaki.contextPercentUnknown")}
+                  </div>
                   <div className="text-[11px] opacity-90">{zakiContextTooltip}</div>
                 </div>
               </TooltipContent>
