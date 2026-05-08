@@ -95,8 +95,13 @@ export function MessageBubble({
     if (isUser) return [];
     const images = extractGeneratedImages(message.turnEvents);
     if (images.length === 0) return [];
+    // Strip fenced code blocks before scanning for inline image URLs —
+    // parseAssistantContent treats markdown image syntax inside code
+    // fences as code, not as a rendered image, so dedupe shouldn't
+    // suppress hoisted images just because the syntax appears in a
+    // fence (e.g. a tutorial showing the markdown).
+    const md = (message.content || "").replace(/```[\s\S]*?```/g, "");
     const inlineUrls = new Set<string>();
-    const md = message.content || "";
     const re = /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(md)) !== null) {

@@ -55,7 +55,9 @@ function isImageGenerateEvent(event: PersistedTurnEvent): boolean {
   const source = asRecord(payload.content) ?? payload;
   const tool =
     asString(source.name) ?? asString(source.toolName) ?? asString(source.tool);
-  return tool === "image_generate";
+  // Match case-insensitively. eventType is already lowercased above; tool
+  // names should be too in case the agent emits "Image_Generate" or similar.
+  return tool?.toLowerCase() === "image_generate";
 }
 
 function extractResultText(event: PersistedTurnEvent): string {

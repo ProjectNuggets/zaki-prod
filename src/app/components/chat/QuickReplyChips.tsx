@@ -10,9 +10,9 @@
 //   - "Go deeper"  — request more detail on the same point
 //   - "Try another angle" — explicit redirect, useful when the answer
 //     missed the mark; cheaper than typing "no, try again"
-//   - "Save to brain" — sends `/remember` so the user lands on the
-//     remember command with prefilled cursor focus, taking advantage of
-//     the existing slash-command pipeline
+//   - "Save to brain" — fires a plain-prose prompt asking ZAKI to
+//     persist the key takeaway from the current conversation into its
+//     memory (the agent owns the actual remember tool call)
 //
 // i18n: zakiControls.quickReplies.{deeper,angle,remember}.{label,prefill}.
 

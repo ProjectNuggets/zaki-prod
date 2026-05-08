@@ -140,13 +140,50 @@ export function InputArea({
   // dataTransfer.files and appends to attachments.
   const handlePaste = useCallback(
     (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-      const files = Array.from(event.clipboardData?.files || []);
-      if (files.length === 0) return;
+      const cd = event.clipboardData;
+      if (!cd) return;
+      // Path 1 (Chrome/Firefox): clipboardData.files is populated for
+      // image/file pastes. Path 2 (Safari, sometimes Chrome screenshots):
+      // files is empty but clipboardData.items has entries with
+      // kind === "file" — read them via getAsFile(). Cover both.
+      const collected: File[] = Array.from(cd.files || []);
+      if (collected.length === 0 && cd.items) {
+        for (const item of Array.from(cd.items)) {
+          if (item.kind === "file") {
+            const f = item.getAsFile();
+            if (f) collected.push(f);
+          }
+        }
+      }
+      if (collected.length === 0) return;
       event.preventDefault();
-      setAttachments((prev) => [...prev, ...files]);
+      setAttachments((prev) => [...prev, ...collected]);
     },
     [setAttachments]
   );
+
+  // Window-level reset for drag-out-of-window. Native dragleave fires when
+  // the cursor crosses an internal boundary but NOT when it exits the
+  // window edge — without this the depth counter stays >0 and the overlay
+  // sticks open after the user drags away. dragend fires when the source
+  // releases on the page or anywhere else; we also listen for `drop`
+  // outside the form (so a user dropping in another part of the app
+  // doesn't leave our overlay up).
+  useEffect(() => {
+    if (!isDraggingFile) return;
+    const reset = () => {
+      dragDepthRef.current = 0;
+      setIsDraggingFile(false);
+    };
+    window.addEventListener("dragend", reset);
+    window.addEventListener("drop", reset);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("dragend", reset);
+      window.removeEventListener("drop", reset);
+      window.removeEventListener("blur", reset);
+    };
+  }, [isDraggingFile]);
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLFormElement>) => {
     if (!event.dataTransfer?.types.includes("Files")) return;
@@ -404,9 +441,18 @@ export function InputArea({
   // (b) Persist every keystroke to sessionStorage. sessionStorage (not
   //     localStorage) so closing the browser doesn't surface stale drafts
   //     across sessions, and so multi-tab edits don't fight.
+  //
+  // P1-4 fix: track the previous draftStorageKey via ref so the persist
+  // effect can detect "we just switched threads, the inputValue still
+  // holds the OLD thread's text" and skip a write that would otherwise
+  // briefly stamp the old draft under the new key before hydrate (a)
+  // overwrites it. Without this guard, A → B momentarily writes A's
+  // text under B's storage key.
+  const prevDraftKeyRef = useRef<string | null>(draftStorageKey);
   useEffect(() => {
     if (!draftStorageKey || typeof window === "undefined") {
       setInputValue("");
+      prevDraftKeyRef.current = draftStorageKey;
       return;
     }
     try {
@@ -415,12 +461,16 @@ export function InputArea({
     } catch {
       setInputValue("");
     }
+    prevDraftKeyRef.current = draftStorageKey;
     // intentional: re-run only when the thread switches
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftStorageKey]);
 
   useEffect(() => {
     if (!draftStorageKey || typeof window === "undefined") return;
+    // Skip the write that fires immediately after a thread switch where
+    // inputValue is still the OLD thread's text awaiting hydrate.
+    if (prevDraftKeyRef.current !== draftStorageKey) return;
     try {
       if (inputValue) {
         window.sessionStorage.setItem(draftStorageKey, inputValue);

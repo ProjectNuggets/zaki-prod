@@ -6010,9 +6010,13 @@ export function ChatArea() {
         onThumbsDownMessage={handleThumbsDownMessage}
         onQuickReply={(prefill) => {
           // S1 — one-click follow-up. Send the prefill as a fresh user
-          // message immediately, no edit step.
+          // message immediately, no edit step. Carry any staged
+          // attachments through (and clear them locally) so a chip
+          // click doesn't silently lose files the user already prepared.
           if (isZakiBotSendLocked) return;
-          void handleSend(prefill, []);
+          const carryAttachments = attachments;
+          if (carryAttachments.length > 0) setAttachments([]);
+          void handleSend(prefill, carryAttachments);
         }}
         isRtl={isRtl}
       />
