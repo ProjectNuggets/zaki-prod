@@ -40,6 +40,8 @@ import {
   type BotUsageSummary,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
+import { useEntitlements } from "@/queries";
+import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { cn } from "@/lib/utils";
 import { MetaLabel, SectionHeader, SheetShell } from "@/app/components/ui/zaki";
 
@@ -345,12 +347,14 @@ function SettingsRail({
   onSelect,
   suggestedSection,
   isRtl,
+  proLockedLabel,
   t,
 }: {
   activeSection: SectionValue;
   onSelect: (id: SectionValue) => void;
   suggestedSection: SectionValue;
   isRtl: boolean;
+  proLockedLabel: string;
   t: (key: string, opts?: { defaultValue?: string }) => string;
 }) {
   return (
@@ -388,10 +392,7 @@ function SettingsRail({
               {t(`zakiSettingsSheet.rail.${id}.label`)}
             </span>
             {tier === "pro" ? (
-              <Lock
-                className="size-3.5 shrink-0 text-zaki-muted"
-                aria-label={t("zakiSettingsSheet.placeholders.tierLocked")}
-              />
+              <TierBadge tier="locked" label={proLockedLabel} size="xs" />
             ) : !shipped ? (
               <span
                 className="shrink-0 rounded-full bg-zaki-hover px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-zaki-muted"
@@ -476,6 +477,43 @@ function SettingsPlaceholder({
 function InlineFieldError({ text }: { text?: string }) {
   if (!text) return null;
   return <p className="mt-2 text-xs text-zaki-brand">{text}</p>;
+}
+
+// Phase 4-B (2026-05-08) — Tier visibility. The sheet header surfaces the
+// caller's current plan, the Models rail entry shows a PRO chip in place
+// of the bare lock icon, so a free user sees the gate without having to
+// click into the upgrade flow.
+type PlanTierKey = "free" | "personal" | "student" | "pro" | "codeActive";
+
+function TierBadge({
+  tier,
+  label,
+  className,
+  size = "sm",
+}: {
+  tier: PlanTierKey | "locked";
+  label: string;
+  className?: string;
+  size?: "xs" | "sm";
+}) {
+  const isElevated = tier === "pro" || tier === "personal" || tier === "codeActive";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wide",
+        size === "xs" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
+        isElevated
+          ? "bg-zaki-brand-15 text-zaki-brand"
+          : tier === "locked"
+            ? "bg-zaki-hover text-zaki-muted"
+            : "bg-zaki-hover text-zaki-secondary",
+        className
+      )}
+    >
+      {tier === "locked" ? <Lock className={cn(size === "xs" ? "size-2.5" : "size-3")} aria-hidden /> : null}
+      <span>{label}</span>
+    </span>
+  );
 }
 
 // Phase 4-B (2026-05-08) — Visual mode picker. Replaces a `<select>` for
@@ -575,6 +613,20 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   const authLoading = useAuthStore((state) => state.isLoading);
   const authUser = useAuthStore((state) => state.user);
   const isAuthReady = !authLoading && Boolean(authUser);
+  const { data: entitlementsResult } = useEntitlements();
+  const entitlements = entitlementsResult?.data ?? null;
+  const planTierRaw = entitlements?.plan?.tier ?? "free";
+  const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
+  const planTierKey: PlanTierKey =
+    effectiveEntitlement.source === "access_code"
+      ? "codeActive"
+      : planTierRaw === "personal"
+        ? "personal"
+        : planTierRaw === "student"
+          ? "student"
+          : planTierRaw === "pro"
+            ? "pro"
+            : "free";
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const [loading, setLoading] = useState(false);
@@ -1170,10 +1222,16 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
     >
       <div dir={isRtl ? "rtl" : "ltr"} className="relative flex h-full flex-col">
         <div className="px-5 pt-4">
-          <MetaLabel className="inline-flex rounded-full border border-zaki bg-zaki-hover px-3 py-1 text-zaki-secondary">
-            <Sparkles className="size-3.5 text-zaki-brand" />
-            {t("zakiSettingsSheet.badge")}
-          </MetaLabel>
+          <div className={cn("flex flex-wrap items-center gap-2", isRtl && "flex-row-reverse")}>
+            <MetaLabel className="inline-flex rounded-full border border-zaki bg-zaki-hover px-3 py-1 text-zaki-secondary">
+              <Sparkles className="size-3.5 text-zaki-brand" />
+              {t("zakiSettingsSheet.badge")}
+            </MetaLabel>
+            <TierBadge
+              tier={planTierKey}
+              label={t(`sidebar.profile.planBadge.${planTierKey}`)}
+            />
+          </div>
           {banner ? (
             <div
               className={cn(
@@ -1195,6 +1253,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               onSelect={setActiveSection}
               suggestedSection={suggestedSection}
               isRtl={isRtl}
+              proLockedLabel={t("sidebar.profile.planBadge.pro")}
               t={t}
             />
             <div className="min-w-0 flex-1 px-1 py-4 md:px-5 md:py-1">
