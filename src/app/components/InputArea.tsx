@@ -7,6 +7,12 @@ import { cn } from "@/lib/utils";
 import { useEntitlements, useBrainSearch } from "@/queries";
 import { BrainMentionPopover } from "./chat/BrainMentionPopover";
 import type { BrainGraphNode } from "@/lib/api";
+import {
+  usePinnedContext,
+  buildPinnedContextPrefix,
+} from "@/queries/usePinnedContext";
+import { PinContextSheet } from "@/app/components/agent/PinContextSheet";
+import { Pin } from "lucide-react";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio, type AgentSessionMode } from "@/lib/api";
@@ -149,6 +155,7 @@ export function InputArea({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
+  const [pinContextOpen, setPinContextOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
@@ -217,6 +224,13 @@ export function InputArea({
     () => (mentionEnabled && brainSearchData?.results ? brainSearchData.results : []),
     [mentionEnabled, brainSearchData],
   );
+
+  // Pinned-context state. Per-thread persistence via sessionStorage; we
+  // gate visibility on zakiBotMode so the chip rail / plus-menu entry
+  // never shows in the Web channel where pins have no meaning.
+  const pinnedThreadKey = zakiBotMode ? threadKey : null;
+  const { pins: pinnedMemories, pin: pinMemory, unpin: unpinMemory, limit: pinLimit } =
+    usePinnedContext(pinnedThreadKey);
   const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
   const showZakiModeHint = zakiBotMode && effectiveZakiMode !== "execute";
   const zakiContextTooltip = zakiContextTooltipCopy || t("input.zaki.contextTooltip");
@@ -602,7 +616,13 @@ export function InputArea({
       if (isSending || sendLocked) return;
       const text = textOverride !== undefined ? textOverride : inputValue;
       if (!text.trim() && attachments.length === 0) return;
-      onSend(text, attachments);
+      // Prepend pinned-memory context so the agent sees the user's
+      // explicitly-pinned brain entries on every turn. The pins live in
+      // sessionStorage per thread; we DON'T mutate the textarea so the
+      // user keeps seeing only what they typed.
+      const pinnedPrefix = buildPinnedContextPrefix(pinnedMemories);
+      const wireText = pinnedPrefix && text ? `${pinnedPrefix}${text}` : text;
+      onSend(wireText, attachments);
       // Always clear the textarea after a send. For an override path
       // (compact / quick reply) the textarea may have held an unrelated
       // draft — that draft is intentionally consumed because the user
@@ -625,6 +645,7 @@ export function InputArea({
       onSend,
       setAttachments,
       draftStorageKey,
+      pinnedMemories,
     ]
   );
 
@@ -939,6 +960,36 @@ export function InputArea({
               showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
+        {zakiBotMode && pinnedMemories.length > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-1.5 px-1"
+            data-testid="zaki-pinned-context-rail"
+          >
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-muted">
+              <Pin className="size-3 text-zaki-brand" />
+              {t("input.zaki.pinnedRailLabel", { defaultValue: "Pinned" })}
+            </span>
+            {pinnedMemories.map((p) => (
+              <span
+                key={p.id}
+                className="inline-flex items-center gap-1 rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[11px] text-zaki-primary"
+              >
+                <span className="max-w-[160px] truncate">{p.label}</span>
+                <button
+                  type="button"
+                  onClick={() => unpinMemory(p.id)}
+                  className="rounded-full p-0.5 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+                  aria-label={t("pinContext.unpinAria", {
+                    defaultValue: "Unpin {{label}}",
+                    label: p.label,
+                  })}
+                >
+                  <X className="size-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="flex flex-col gap-2 px-1">
             <div className="flex flex-wrap gap-2">
@@ -1228,6 +1279,25 @@ export function InputArea({
                     >
                       <CalendarClock className="size-4 text-zaki-muted" />
                       {t("input.zaki.scheduleFollowUp", { defaultValue: "Schedule a follow-up" })}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      type="button"
+                      role="menuitem"
+                      disabled={!agentUserId}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setPinContextOpen(true);
+                      }}
+                      data-testid="zaki-composer-pin-context"
+                    >
+                      <Pin className="size-4 text-zaki-muted" />
+                      {t("input.zaki.pinContext", { defaultValue: "Pin a memory" })}
+                      {pinnedMemories.length > 0 ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-zaki-brand/10 px-1.5 text-[10px] font-semibold text-zaki-brand">
+                          {pinnedMemories.length}
+                        </span>
+                      ) : null}
                     </button>
                     <div className="my-1 h-px bg-zaki-subtle" />
                     {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
@@ -1571,6 +1641,15 @@ export function InputArea({
         isOpen={scheduleFollowUpOpen}
         onClose={() => setScheduleFollowUpOpen(false)}
         defaultPrompt={inputValue}
+      />
+      <PinContextSheet
+        isOpen={pinContextOpen}
+        onClose={() => setPinContextOpen(false)}
+        agentUserId={agentUserId}
+        pins={pinnedMemories}
+        onPin={pinMemory}
+        onUnpin={unpinMemory}
+        limit={pinLimit}
       />
     </div>
   );

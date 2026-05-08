@@ -426,6 +426,8 @@
     "zaki": {
       "uploadFile": "Upload file",
       "scheduleFollowUp": "Schedule a follow-up",
+      "pinContext": "Pin a memory",
+      "pinnedRailLabel": "Pinned",
       "modeHint": "{{mode}} mode",
       "modeGroupAria": "Agent mode",
       "contextAria": "Context usage {{percent}} percent",
@@ -1876,5 +1878,21 @@
     "loading": "Searching your brain...",
     "minChars": "Type at least 2 characters to search.",
     "empty": "No memories match that query."
+  },
+  "pinContext": {
+    "title": "Pin a memory",
+    "subtitle": "Pinned memories travel with every turn in this thread until you unpin them.",
+    "pinnedHeader": "Pinned ({{count}}/{{limit}})",
+    "searchLabel": "Search your brain",
+    "searchPlaceholder": "espresso, last meeting, etc.",
+    "resultsLabel": "Results",
+    "loading": "Searching...",
+    "minChars": "Type at least 2 characters to search.",
+    "empty": "No memories match that query.",
+    "pinAction": "Pin",
+    "alreadyPinned": "Pinned",
+    "pinned": "Pinned. ZAKI will keep this in mind.",
+    "limitReached": "You can pin up to {{limit}} memories per thread.",
+    "unpinAria": "Unpin {{label}}"
   }
 }

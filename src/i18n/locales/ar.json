@@ -426,6 +426,8 @@
     "zaki": {
       "uploadFile": "رفع ملف",
       "scheduleFollowUp": "جدولة متابعة",
+      "pinContext": "تثبيت ذاكرة",
+      "pinnedRailLabel": "المثبتة",
       "modeHint": "وضع {{mode}}",
       "modeGroupAria": "وضع الوكيل",
       "contextAria": "استخدام السياق {{percent}} بالمئة",
@@ -1888,5 +1890,21 @@
     "loading": "جارٍ البحث في الدماغ...",
     "minChars": "اكتب حرفين على الأقل للبحث.",
     "empty": "لا توجد ذكريات مطابقة لهذا الاستعلام."
+  },
+  "pinContext": {
+    "title": "تثبيت ذاكرة",
+    "subtitle": "الذكريات المثبتة تُرسل مع كل دور في هذه المحادثة حتى تلغي تثبيتها.",
+    "pinnedHeader": "المثبتة ({{count}}/{{limit}})",
+    "searchLabel": "ابحث في دماغك",
+    "searchPlaceholder": "قهوة، آخر اجتماع، إلخ.",
+    "resultsLabel": "النتائج",
+    "loading": "جارٍ البحث...",
+    "minChars": "اكتب حرفين على الأقل للبحث.",
+    "empty": "لا توجد ذكريات مطابقة لهذا الاستعلام.",
+    "pinAction": "تثبيت",
+    "alreadyPinned": "مثبتة",
+    "pinned": "تم التثبيت. سيأخذها زكي بعين الاعتبار.",
+    "limitReached": "يمكنك تثبيت حتى {{limit}} ذكريات لكل محادثة.",
+    "unpinAria": "إلغاء تثبيت {{label}}"
   }
 }
