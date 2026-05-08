@@ -265,6 +265,12 @@ type TutorChatMessage = {
   attachments?: LearningAttachment[];
 };
 
+type LearningTurnRetryDraft = {
+  websocketPayload: Record<string, unknown>;
+  userMessage: TutorChatMessage;
+  label: string;
+};
+
 type LearningSpacePickerKey =
   | "chat_history"
   | "books"
@@ -383,6 +389,20 @@ function textOf(value: unknown, fallback = "") {
   if (typeof value === "string" && value.trim()) return value;
   if (typeof value === "number") return String(value);
   return fallback;
+}
+
+const LEGACY_PENDING_DRAFT_STORAGE_KEY = "zaki.learn.pendingDraft";
+const PENDING_DRAFT_STORAGE_KEY_PREFIX = "zaki.learn.pendingDraft";
+
+function learningUserStorageKey(user: { id?: unknown; username?: unknown } | null | undefined) {
+  const rawKey = textOf(user?.id) || textOf(user?.username) || "anonymous";
+  return encodeURIComponent(rawKey);
+}
+
+function pendingLearningDraftStorageKey(
+  user: { id?: unknown; username?: unknown } | null | undefined,
+) {
+  return `${PENDING_DRAFT_STORAGE_KEY_PREFIX}:${learningUserStorageKey(user)}`;
 }
 
 function notebookSummary(value: unknown, fallback: string) {
@@ -596,6 +616,7 @@ function fileToBase64(file: File): Promise<string> {
 
 export function LearningPage() {
   const queryClient = useQueryClient();
+  const authUser = useAuthStore((state) => state.user);
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const requestedDocumentId = searchParams.get("doc") || "";
@@ -624,6 +645,10 @@ export function LearningPage() {
   const [, setLastResult] = useState<unknown>(null);
   const [selectedObject, setSelectedObject] = useState<SelectedLearningObject | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const pendingDraftStorageKey = useMemo(() => pendingLearningDraftStorageKey(authUser), [
+    authUser?.id,
+    authUser?.username,
+  ]);
 
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
@@ -1017,7 +1042,7 @@ export function LearningPage() {
     const trimmed = content.trim();
     if (!trimmed) return;
     window.localStorage.setItem(
-      "zaki.learn.pendingDraft",
+      pendingDraftStorageKey,
       JSON.stringify({
         content: trimmed,
         capability,
@@ -1277,6 +1302,35 @@ const learningCapabilities: LearningCapabilityDef[] = [
     defaultTools: [],
   },
 ];
+
+const learningStarterActions = [
+  {
+    label: "Understand a topic",
+    capability: "",
+    prompt: "Help me understand this topic from first principles: ",
+  },
+  {
+    label: "Solve a problem",
+    capability: "deep_solve",
+    prompt: "Solve this step by step, show the reasoning, then give me a similar practice problem:\n\n",
+  },
+  {
+    label: "Make a quiz",
+    capability: "deep_question",
+    prompt: "Create an answer-keyed quiz for this topic. Include difficulty levels and explanations:\n\n",
+  },
+  {
+    label: "Summarize notes",
+    capability: "",
+    prompt: "Summarize these notes into key ideas, weak points, and review questions:\n\n",
+  },
+  {
+    label: "Make study plan",
+    capability: "",
+    prompt: "",
+    opensStudySetup: true,
+  },
+] as const;
 
 type DeepQuestionMode = "custom" | "mimic";
 type DeepQuestionFormConfig = {
@@ -2250,9 +2304,12 @@ function LearningChatPanel({
   skillItems: Item[];
 }) {
   const authUser = useAuthStore((state) => state.user);
+  const pendingDraftStorageKey = useMemo(() => pendingLearningDraftStorageKey(authUser), [
+    authUser?.id,
+    authUser?.username,
+  ]);
   const studyProfileStorageKey = useMemo(() => {
-    const userKey = textOf(authUser?.id) || textOf(authUser?.username) || "anonymous";
-    return `${STUDY_PROFILE_STORAGE_KEY}:${userKey}`;
+    return `${STUDY_PROFILE_STORAGE_KEY}:${learningUserStorageKey(authUser)}`;
   }, [authUser?.id, authUser?.username]);
   const isPrimaryChatView = ((requestedView || "chat").trim().toLowerCase() || "chat") === "chat";
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
@@ -2297,6 +2354,7 @@ function LearningChatPanel({
     phase: "idle",
     label: "Ready",
   });
+  const [lastTurnRetryLabel, setLastTurnRetryLabel] = useState("");
   const [studyProfile, setStudyProfile] = useState<LearningStudyProfile>(() =>
     readLearningStudyProfile(studyProfileStorageKey),
   );
@@ -2327,6 +2385,7 @@ function LearningChatPanel({
   const attachmentsRef = useRef<LearningAttachment[]>([]);
   const messagesRef = useRef<TutorChatMessage[]>([]);
   const thinkingRef = useRef<string[]>([]);
+  const lastTurnRetryRef = useRef<LearningTurnRetryDraft | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
   const restoredActiveTurnIdRef = useRef("");
@@ -2959,10 +3018,21 @@ function LearningChatPanel({
     setSpaceMenuOpen(false);
   };
 
+  const startStarterAction = (action: (typeof learningStarterActions)[number]) => {
+    if ("opensStudySetup" in action && action.opensStudySetup) {
+      setStudyPanelOpen(true);
+      return;
+    }
+    selectCapability(action.capability);
+    setInput(action.prompt);
+    setPanelCollapsed(action.capability ? false : panelCollapsed);
+  };
+
   useEffect(() => {
-    const raw = window.localStorage.getItem("zaki.learn.pendingDraft");
+    window.localStorage.removeItem(LEGACY_PENDING_DRAFT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(pendingDraftStorageKey);
     if (!raw) return;
-    window.localStorage.removeItem("zaki.learn.pendingDraft");
+    window.localStorage.removeItem(pendingDraftStorageKey);
     try {
       const parsed = asRecord(JSON.parse(raw));
       const createdAt = Date.parse(textOf(parsed.createdAt));
@@ -2979,7 +3049,7 @@ function LearningChatPanel({
     } catch {
       // Invalid local handoff payloads are ignored; they are same-device convenience state.
     }
-  }, []);
+  }, [pendingDraftStorageKey]);
 
   const toggleTool = (toolName: LearningToolName) => {
     if (!activeCapability.allowedTools.includes(toolName)) return;
@@ -3163,16 +3233,36 @@ function LearningChatPanel({
       selectedMemoryFiles,
     });
     persistSessionId(sessionId, "replace", { restore: false });
-    setMessages((items) => [
-      ...items,
-      {
-        id: makeClientId("user"),
-        role: "user",
-        content,
-        capability: capability || "chat",
-        attachments: sentAttachments,
-      },
-    ]);
+    const userMessage: TutorChatMessage = {
+      id: makeClientId("user"),
+      role: "user",
+      content,
+      capability: capability || "chat",
+      attachments: sentAttachments,
+    };
+    const websocketPayload = {
+      type: "start_turn",
+      content,
+      capability: capability || null,
+      session_id: sessionId,
+      knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
+      tools: Array.from(selectedTools),
+      config,
+      ...spaceReferences,
+      attachments: sentAttachments.map((attachment) => ({
+        type: attachment.type,
+        filename: attachment.filename,
+        base64: attachment.base64,
+        mime_type: attachment.mime_type,
+      })),
+    };
+    lastTurnRetryRef.current = {
+      websocketPayload,
+      userMessage,
+      label: compactMessageExcerpt(content, 96),
+    };
+    setLastTurnRetryLabel(compactMessageExcerpt(content, 96));
+    setMessages((items) => [...items, userMessage]);
     setInput("");
     setAttachments([]);
     setSelectedHistorySessions([]);
@@ -3189,24 +3279,31 @@ function LearningChatPanel({
     activeTurnIdRef.current = null;
     thinkingRef.current = [];
     setThinking([]);
-    socket.send(
-      JSON.stringify({
-        type: "start_turn",
-        content,
-        capability: capability || null,
-        session_id: sessionId,
-        knowledge_bases: kbName.trim() ? [kbName.trim()] : [],
-        tools: Array.from(selectedTools),
-        config,
-        ...spaceReferences,
-        attachments: sentAttachments.map((attachment) => ({
-          type: attachment.type,
-          filename: attachment.filename,
-          base64: attachment.base64,
-          mime_type: attachment.mime_type,
-        })),
-      }),
-    );
+    socket.send(JSON.stringify(websocketPayload));
+  };
+
+  const retryLastTurn = () => {
+    const draft = lastTurnRetryRef.current;
+    const socket = socketRef.current;
+    if (!draft) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setRunState({ phase: "error", label: "Learning chat is not connected. Retry when it reconnects." });
+      return;
+    }
+    setMessages((items) => [
+      ...items,
+      {
+        ...draft.userMessage,
+        id: makeClientId("retry-user"),
+      },
+    ]);
+    setStreaming(true);
+    activeAssistantIdRef.current = makeClientId("assistant");
+    activeTurnIdRef.current = null;
+    thinkingRef.current = [];
+    setThinking([]);
+    setRunState({ phase: "working", label: "Retrying last learning turn" });
+    socket.send(JSON.stringify(draft.websocketPayload));
   };
 
   const cancelStreaming = () => {
@@ -3374,6 +3471,18 @@ function LearningChatPanel({
                 Ask anything - I'm here to help you understand.
               </p>
             </div>
+            <div className="mt-7 flex max-w-[720px] flex-wrap justify-center gap-2">
+              {learningStarterActions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => startStarterAction(action)}
+                  className="inline-flex h-9 items-center rounded-zaki-md border border-[var(--border)] bg-[var(--card)] px-3 text-[12px] font-semibold text-[var(--foreground)] shadow-sm transition-colors hover:border-zaki-brand-40 hover:bg-zaki-brand-10 hover:text-zaki-brand"
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="mx-auto min-h-0 w-full flex-1 space-y-7 overflow-y-auto pr-4 [scrollbar-gutter:stable]">
@@ -3463,6 +3572,9 @@ function LearningChatPanel({
             connected={connected}
             streaming={streaming}
             hasMessages={hasMessages}
+            steps={thinking}
+            retryLabel={lastTurnRetryLabel}
+            onRetry={runState.phase === "error" && lastTurnRetryRef.current ? retryLastTurn : undefined}
           />
           <div
         className={cn(

@@ -13,6 +13,7 @@ import {
   Microscope,
   NotebookPen,
   PenLine,
+  RefreshCw,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -319,11 +320,17 @@ export function LearningRunStateStrip({
   connected,
   streaming,
   hasMessages,
+  steps = [],
+  retryLabel = "",
+  onRetry,
 }: {
   state: LearningRunState;
   connected: boolean;
   streaming: boolean;
   hasMessages: boolean;
+  steps?: string[];
+  retryLabel?: string;
+  onRetry?: () => void;
 }) {
   if (!hasMessages && state.phase === "idle" && connected) return null;
   const tone =
@@ -332,20 +339,43 @@ export function LearningRunStateStrip({
       : state.phase === "complete"
         ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700"
         : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]";
+  const visibleSteps = steps.filter(Boolean).slice(-3);
   return (
-    <div className={cn("mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px]", tone)}>
-      {streaming || state.phase === "connecting" ? (
-        <Loader2 className="size-3.5 animate-spin" />
-      ) : state.phase === "error" ? (
-        <AlertTriangle className="size-3.5" />
-      ) : state.phase === "complete" ? (
-        <CheckCircle2 className="size-3.5" />
-      ) : (
-        <Clock3 className="size-3.5" />
-      )}
-      <span className="min-w-0 flex-1 truncate">
-        {connected ? state.label : "Reconnecting to ZAKI learning"}
-      </span>
+    <div className={cn("mb-2 rounded-lg border px-3 py-2 text-[12px]", tone)}>
+      <div className="flex items-center gap-2">
+        {streaming || state.phase === "connecting" ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : state.phase === "error" ? (
+          <AlertTriangle className="size-3.5" />
+        ) : state.phase === "complete" ? (
+          <CheckCircle2 className="size-3.5" />
+        ) : (
+          <Clock3 className="size-3.5" />
+        )}
+        <span className="min-w-0 flex-1 truncate">
+          {connected ? state.label : "Reconnecting to ZAKI learning"}
+        </span>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-zaki-md border border-current/20 px-2 text-[11px] font-semibold transition-colors hover:bg-current/10"
+            title={retryLabel ? `Retry: ${retryLabel}` : "Retry last learning turn"}
+          >
+            <RefreshCw className="size-3" />
+            Retry
+          </button>
+        ) : null}
+      </div>
+      {visibleSteps.length ? (
+        <ol className="mt-2 space-y-1 border-l border-current/20 pl-3">
+          {visibleSteps.map((step, index) => (
+            <li key={`${step}-${index}`} className="truncate text-[11px] opacity-80">
+              {step}
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </div>
   );
 }

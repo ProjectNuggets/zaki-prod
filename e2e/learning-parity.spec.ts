@@ -196,6 +196,7 @@ async function mockLearning(page: Page) {
   const knowledgeUploads: Array<{ path: string; body: string }> = [];
   const defaultKnowledgeUpdates: string[] = [];
   const assetRequests: string[] = [];
+  const forcedRetryFailures = new Set<string>();
   let studyProfile = {
     course: "",
     examDate: "",
@@ -238,12 +239,18 @@ async function mockLearning(page: Page) {
       if (payload.type !== "start_turn") return;
       startedTurns.push(payload);
       const sessionId = payload.session_id || "session-e2e";
+      const content = String(payload.content || "");
+      if (content.includes("force retry once") && !forcedRetryFailures.has(content)) {
+        forcedRetryFailures.add(content);
+        ws.send(JSON.stringify({ type: "error", content: "Forced retry test failure." }));
+        return;
+      }
       const history = sessionMessages.get(sessionId) ?? [];
       sessionMessages.set(sessionId, history);
       history.push({
         id: `${sessionId}-user-${history.length}`,
         role: "user",
-        content: String(payload.content || ""),
+        content,
         capability: payload.capability || "chat",
       });
       const assistantRecord: Record<string, unknown> = {
@@ -256,6 +263,7 @@ async function mockLearning(page: Page) {
       history.push(assistantRecord);
       const assistantEvents = assistantRecord.events as Array<Record<string, unknown>>;
       ws.send(JSON.stringify({ type: "session", session_id: sessionId }));
+      ws.send(JSON.stringify({ type: "progress", content: "Checking learning context." }));
       ws.send(JSON.stringify({ type: "content", content: "Notebook-ready answer." }));
       if (payload.capability === "deep_research") {
         const event = {
@@ -887,6 +895,21 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByRole("button", { name: /Papers/i })).toBeHidden();
   });
 
+  test("shows progress and retries a failed Learn turn", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=chat");
+    await page.getByPlaceholder("How can I help you today?").fill("force retry once with context");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(page.getByText("Learning stream error: Forced retry test failure.")).toBeVisible();
+    await page.getByRole("button", { name: "Retry" }).click();
+
+    await expect(page.getByText("Checking learning context.").first()).toBeVisible();
+    await expect(page.getByText("Notebook-ready answer.").first()).toBeVisible();
+    expect(learning.startedTurns.filter((turn) => turn.content === "force retry once with context")).toHaveLength(2);
+  });
+
   test("exports notebook records through the ZAKI Learn notebook view", async ({ page }) => {
     await mockLearning(page);
 
@@ -921,6 +944,40 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
       "Quiz Generation",
     );
+  });
+
+  test("scopes notebook draft handoff to the signed-in user", async ({ page }) => {
+    await mockLearning(page);
+    await page.addInitScript(() => {
+      const createdAt = new Date().toISOString();
+      window.localStorage.setItem(
+        "zaki.learn.pendingDraft",
+        JSON.stringify({ content: "legacy unscoped draft", createdAt }),
+      );
+      window.localStorage.setItem(
+        "zaki.learn.pendingDraft:999",
+        JSON.stringify({ content: "other user notebook draft", createdAt }),
+      );
+      window.localStorage.setItem(
+        "zaki.learn.pendingDraft:123",
+        JSON.stringify({ content: "current user notebook draft", createdAt }),
+      );
+    });
+
+    await page.goto("/learn?view=chat");
+
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      "current user notebook draft",
+    );
+    await expect(
+      page.evaluate(() => window.localStorage.getItem("zaki.learn.pendingDraft")),
+    ).resolves.toBeNull();
+    await expect(
+      page.evaluate(() => window.localStorage.getItem("zaki.learn.pendingDraft:123")),
+    ).resolves.toBeNull();
+    await expect(
+      page.evaluate(() => window.localStorage.getItem("zaki.learn.pendingDraft:999")),
+    ).resolves.toContain("other user notebook draft");
   });
 
   test("creates a notebook and saves a chat turn into it", async ({ page }) => {
@@ -959,7 +1016,15 @@ test.describe("ZAKI Learn parity wiring", () => {
 
     await page.goto("/learn?view=chat");
     await expect(page.getByText("Set up your study loop")).toBeVisible();
-    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByRole("button", { name: "Understand a topic" })).toBeVisible();
+    await page.getByRole("button", { name: "Solve a problem" }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/Solve this step by step/);
+    await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
+      "Deep Solve",
+    );
+    await page.reload();
+    await expect(page.getByText("Set up your study loop")).toBeVisible();
+    await page.getByRole("button", { name: "Make study plan" }).click();
     await expect(page.getByText("Study setup")).toBeVisible();
     await page.getByLabel("Course").fill("Calculus II");
     await page.getByLabel("Exam date").fill("2026-06-15");
