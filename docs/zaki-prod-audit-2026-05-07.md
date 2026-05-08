@@ -278,7 +278,58 @@ _(audit pending)_
 
 ### Settings (modal/sheet, not a route)
 
-_(audit pending — `ZakiSettingsSheet.tsx` triggered by `zaki:open-settings` event)_
+#### `ZakiSettingsSheet.tsx` — agent settings (right-side panel)
+
+File: `src/app/components/agent/ZakiSettingsSheet.tsx` (1,481 lines).
+Triggered by `zaki:open-settings` event from the sidebar profile menu.
+This is the canonical surface for everything agent-related: response style, channel connections, autonomy, usage. Booth-grade conversion surface.
+
+**Strengths.** Heavy `t()` discipline (198 calls). No off-brand Tailwind colors (emerald/amber/rose absent). Banner state (success/error) handled centrally. Telegram connection flow is wired with confirmation polling.
+
+**P0**
+
+- **`ERROR_COPY` constant — 7 hardcoded English strings** (lines 80-88). Same i18n bypass pattern as LoginScreen's `AUTH_COPY`, smaller scale. Strings like `"ZAKI is busy on another node. Retry shortly."` should be `t("zaki.error.temporaryContention", { defaultValue: ... })`. Blocks adding any third locale; ar users see English when these errors fire.
+
+**P1 — structural (Move 5 brief, deferred from V1.11)**
+
+The v1.11 handoff doc Move 5 brief explicitly calls out this sheet as needing redesign. Three big gaps:
+
+- **Accordion vs sidebar-nav.** Today: 5 sections stack vertically with collapse-and-expand. Result: cluttered scroll, only one section visible at a time, no overview of what's available. Brief: replace with a sidebar-nav layout (left rail of section names, right pane of content). Better discoverability, cleaner mental model, room to grow.
+
+- **Section ordering doesn't match the Move 5 plan.**
+  - Today: `overview / assistant / telegram / autonomy / usage` (5 sections)
+  - Brief: `Identity → Channels → Brain → Models (Pro 🔒) → Autonomy → Response Style → Privacy → Billing → Advanced` (9 sections)
+  - The brief splits "assistant" into Models + Response Style, adds Identity (who am I to ZAKI?), Brain (memory preferences), Privacy (data control), Billing (paid/free state). Each is a distinct user mental model.
+
+- **No visual mode pickers.** Brief: "Two visual mode pickers (3 cards each) — Response Style (Fast/Balanced/Deep), Autonomy (Read-only/Supervised/Full)." Today: plain `<select>` dropdowns (lines 1024-1043 for response style, 1053-1066 for group activation). Cards-with-icons-and-descriptions is what the brief asks for — meaningful tradeoffs (e.g., "Fast: snappy answers, lighter context" / "Deep: more reasoning, slower") are invisible in a dropdown.
+
+- **No tier gates.** Brief: "tier gates VISIBLE for free users (you can't sell what you can't see)." Search of the file: zero references to `pro`, `upgrade`, `premium`, `paid`, `locked`, or `tier` in any user-facing copy. Pro features simply don't exist in the UI. Free users have no idea what's behind a paywall, so no upgrade pressure. **Highest revenue-leverage P1.**
+
+- **No live thinking-mode badge in chat header.** Brief: "Add a 'live thinking-mode' badge to the chat header — clickable to flip mode without leaving the chat. Settings is canonical; badge is shortcut." Today: no such badge. The mode picker in the composer (`InputArea.tsx`, the plan/execute/review pills) is workflow-mode, not response-style-mode — those are different. Response style only changeable from settings.
+
+**P1 — other**
+
+- **1,481-line mega-component.** Same pattern as Sidebar.tsx, ChatArea.tsx, LearningPage.tsx. Per-section sub-components would split this in half. Phase 4 candidate.
+- **19 `useState` declarations.** Form drafts + dirty tracking + async busy flags + banner state + open-section + Telegram errors + heartbeat + onboarding state. Some belong in a per-section reducer; some belong in a shared form library (react-hook-form already a dep).
+- **Hex literals in dark-mode overrides.** `dark:bg-[#141210]`, `dark:border-[rgba(240,236,230,0.1)]` repeated ~10 times. Token gap — same root cause as LoginScreen.
+- **Usage section shows raw numbers without quota context.** "Requests today: 47, tokens today: 12,345" — no "of N max" or "you're at 80%, upgrade for unlimited." Even pre-Stripe, this is the obvious upgrade-trigger surface.
+- **Voice replies disabled state messaging.** "Requires Telegram" — clear, but the disabled visual treatment (gray label) reads as broken instead of pending. Pre-condition prompt with a "Connect Telegram" link would convert.
+- **Telegram bot-token entry as plain text input.** No "your bot token will not leave this device" reassurance, no link to BotFather setup guide. New users hit this and bounce.
+
+**P2**
+
+- Banner is a single slot; if two errors land in quick succession, the second clobbers the first. Toast queue would handle better.
+- Heartbeat toggle is in the autonomy section but reads like an "experimental" feature without clear payoff explanation.
+- Settings dirty-tracking shows an "Unsaved" badge but no shake/highlight when user tries to close — could lose changes silently.
+
+**Booth/launch impact**
+
+This is the single highest-impact paying-user surface after the chat itself. The Move 5 redesign was deferred to V1.12 in the handoff but never started. Without it:
+- Free users don't see what they're missing → no upgrade pressure
+- Mode tradeoffs are invisible → users default to balanced and never explore
+- Settings UX feels like a config panel, not a product
+
+Phase 2 design direction will set the bar; Phase 4 ships the Move 5 redesign as one of the first execution items.
 
 ### Onboarding (modal, not a route)
 
