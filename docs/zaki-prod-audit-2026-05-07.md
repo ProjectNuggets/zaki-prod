@@ -266,7 +266,54 @@ These are the things I'd want to change beyond the polish list. Each is a discus
 
 ### Pricing page — `/pricing`
 
-_(audit pending — exists despite handoff doc claim; need to verify wiring)_
+Files: `src/app/components/PricingPage.tsx` (1,029 lines), `src/app/components/BillingSuccessPage.tsx` (229 lines).
+
+Move 8 ("pricing page draft") from the V1.11 handoff doc was logged as "not started." Reading the actual code: **Move 8 is largely shipped.** Rich pricing surface with multi-provider checkout (Stripe / Paddle / Creem), monthly/yearly intervals, student rate, access-code redemption, access-code *purchase* flow, billing portal, cancel subscription, telemetry tracking on every CTA. The handoff doc undersold the ship state.
+
+Move 9 ("Stripe + paywall + cap-lift webhook") is also partially in: `useCheckout`, `useBillingPortal`, `useCancelSubscription`, `useEntitlements` all wired. What's not visible from this file alone: the cap-lift webhook handling (backend) and the paywall trigger when free tier exhausted.
+
+**Strengths.** i18n discipline strong throughout. Multi-provider abstraction. Good telemetry coverage (`pricing_viewed`, `upgrade_cta_clicked`, `checkout_started`). Plan cards have feature lists, monthly/yearly toggle, current-plan badge. Access-code flow is end-to-end (redeem + purchase). 0 off-brand Tailwind colors.
+
+**P0**
+
+- **Hex literals in dark-mode overrides.** ~9 instances: `dark:bg-[#181512]`, `dark:bg-[#221b16]`, `dark:border-[#4a382c]`, `dark:ring-offset-[#171411]`, etc. Token-coverage gap, same root cause.
+
+**P1 — pitch + positioning gaps**
+
+- **No "why ZAKI" hero.** Today's hero: eyebrow + title + "Current plan: Free" + Manage/Upgrade CTA. Straight to plans. Competitive pricing pages (Linear, Notion, Cron) lead with the *differentiator*: ZAKI's pitch line ("the AI that's actually yours") and the Five Pillars deserve hero real estate above the plan cards. Today the user opens /pricing already inside a transactional flow with no positioning context.
+- **Plan naming differs from v1.11 brief.** Brief said: Free (50/day) + Pro (~$15-20/mo) + Teams. Current: Free + Personal + Student rate. Personal might be the renamed Pro — verify intent, align naming or update the brief.
+- **No "what makes Pro worth it" deep section.** Plan cards have feature lists but they're brief. The brief calls out *"feature comparison table + FAQ + CTA."* Today: cards-only, no comparison table, no FAQ. The user has to compare line-by-line across two cards. A standard pricing comparison table (rows = features, columns = plans, ✓/✗) would clarify.
+- **No social proof / trust signals.** No "trusted by" logos, no testimonials, no usage stats ("X paying users"), no security badges (encrypted, GDPR, etc.). Pricing page conversion benefits significantly from these.
+- **No FAQ section.** Brief explicitly mentioned FAQ. Reduces ambiguity at the moment of conversion.
+- **Yearly discount not visually emphasized.** Toggle exists but if there's a discount (which there typically is on yearly), the savings isn't surfaced as e.g. "Save 20%". Saving language drives conversion.
+
+**P1 — UX small**
+
+- **Free plan card has a disabled "Included" button** that reads as broken-looking. Could be a subtle "Your plan" pill instead.
+- **Personal plan card includes the interval toggle inside the card.** Common pattern but cramped. Pulling the toggle to a global control above the cards (which it already kind of is, given multi-card pricing layouts) would clean.
+- **Provider selection modal** for users with checkout-provider choice is hidden behind `openProviderSelection`. Most users will flow to Stripe (the default). Worth verifying the modal doesn't appear for the common path — adds friction for no value.
+- **Access code purchase card** at the bottom feels disconnected from the main pricing offering. Either elevate (gift codes are a marketing channel) or move to a dedicated "/gift" page.
+
+**P1 — booth/launch surface specifically**
+
+- **No countdown / pre-launch positioning.** Web Summit context: temporary "Free for the duration of Web Summit" or "First 100 users free" mechanics aren't supported. Doable as a banner over the existing plans without restructuring.
+
+**P2**
+
+- 1,029 lines — one of the larger components but reasonable for the scope. No urgency to split.
+- 7 useState — moderate.
+- 15 isRtl ternaries — RTL handling explicit.
+
+#### `BillingSuccessPage.tsx` — post-checkout return
+
+229 lines. Renders after successful checkout / access-code purchase / etc.
+
+**Quick scan only** (smaller file, lower-risk surface):
+- Reads URL params (`session_id`, `kind`, `billing`) to confirm what flow ran
+- Shows toast / banner / next-step CTA
+- Uses `useSyncBilling` to refresh entitlements
+
+P1: post-purchase moments are conversion celebrations. Today this page is utilitarian. Worth a Phase 4 design pass — confetti / hero / "welcome to Pro" messaging — to anchor the user's emotional commitment. Not booth-critical.
 
 ### Help page — `/help`
 
@@ -331,13 +378,123 @@ This is the single highest-impact paying-user surface after the chat itself. The
 
 Phase 2 design direction will set the bar; Phase 4 ships the Move 5 redesign as one of the first execution items.
 
+#### `SettingsModal.tsx` — account / theme / billing / privacy
+
+File: `src/app/components/sidebar/SettingsModal.tsx` (387 lines).
+Triggered by sidebar profile-menu "Settings" entry.
+
+Concerns: profile (display name + email), preferences (theme + language), plan/billing summary + portal redirect, data privacy (export + delete account).
+
+**Strengths.** Clean i18n discipline (no hardcoded strings). Uses shared primitives (`SheetShell`, `SectionHeader`, `TypeToConfirmDialog`). Account export flow is end-to-end: fetches JSON, builds blob, triggers download. Delete account uses type-to-confirm with email phrase. Telemetry on pricing CTAs.
+
+**P0**
+
+- **Hex-literal sprawl in dark-mode overrides.** ~20 instances: `dark:bg-[#17110d]`, `dark:border-[#2e241b]`, `dark:text-[#c9b8a4]`, `dark:bg-[#120e0b]`, `dark:bg-[#1d1611]`, `dark:text-[#efe6d9]`, `dark:bg-[#251b14]`, `dark:text-[#aa947b]`, `dark:text-[#d7c9b7]`, `dark:text-[#8fe6cf]`, `dark:border-[#643126]`, `dark:text-[#ff9c86]`, `dark:text-[#ffb6a4]`, `dark:bg-[rgba(241,2,2,0.15)]`. Same root cause as LoginScreen — token coverage doesn't extend to dark-mode background variants, so each row reaches for inline hex. Phase 4 fix when extending the `--zaki-*` token system.
+
+**P1 — structural**
+
+- **Modal does too much.** Profile + Theme + Language + Plan/Billing + Privacy + Delete in one 387-line sheet. Each is a distinct user concern. Combined with the sidebar's "Settings" + "Language" entries (both opening this same sheet — already flagged in Sidebar audit), the surface conflates account-management with light preferences. Phase 4: split into a dedicated Settings *page* with sidebar-nav (Account / Appearance / Plan / Privacy / Danger). Pairs with the ZakiSettingsSheet redesign — collapse both into one canonical Settings surface.
+- **Theme + Language as plain `<select>` dropdowns.** Same critique as ZakiSettingsSheet's response-style picker. Theme especially deserves a 3-card visual picker (Light / Dark / System) with mini swatches — it's a brand surface and dropdowns hide the visual decision.
+- **Plan section overlaps with /pricing.** All upgrade/manage CTAs redirect to /pricing. The plan info here (current tier + status + access expiry) is informational; the *action* lives elsewhere. Could collapse to a single "Plan: Free · Manage →" row that expands inline OR navigates.
+- **No Brain/Memory section.** Account-level settings live here; agent-level live in ZakiSettingsSheet. From the user's perspective these are one concept. No cross-link between them. New users open "Settings" and have to discover ZakiSettingsSheet through a different sidebar entry.
+- **No identity card at the top.** Plain `<input>` fields for display name + email. No avatar, no member-since, no usage stats. Settings entry feels utilitarian; identity surface would feel ownership-y.
+
+**P1 — small**
+
+- **Delete account is in the privacy section** with red hover; danger conveyed only via color. Could move to a "Danger zone" sub-section with explicit visual isolation.
+- **No success feedback after Save Changes.** Footer says "Changes apply immediately" but on click of Save there's no toast or visual confirmation. Save state visible only via the saving prop's disabled treatment.
+- **`activeViaAccessCode` text** doesn't show the code itself or a "redeem another" affordance.
+
+**P2**
+
+- Cancel subscription button has a complex multi-state hover (red-on-hover for destructive intent). Renders correctly but visually busy for a destructive control.
+- Email input is `readOnly` — should show why (e.g. "to change, contact support") via aria-describedby.
+
 ### Onboarding (modal, not a route)
 
-_(audit pending — `OnboardingModal` + `SimpleOnboardingModal`)_
+Files: `src/app/components/onboarding/SimpleOnboardingModal.tsx` (188 lines, simple 2-step intro), `src/app/components/onboarding/OnboardingModal.tsx` (1,056 lines, guided tour).
+
+System has **two onboarding modals**:
+- `SimpleOnboardingModal` — auto-shown on first login (after 900ms delay), 2-step intro: "model" + "spaces."
+- `OnboardingModal` — triggered explicitly via `zaki:open-onboarding` event (from profile menu "How to use" entry). Guided tour with target-element spotlighting, task completion tracking, mobile vs desktop branching.
+
+**Strengths.** Sophisticated onboarding architecture for the time invested. Guided tour spotlights real DOM elements via `data-onboarding-id` attributes, tracks task completion progress, branches mobile vs desktop. Both modals are tested + i18n'd + RTL-aware.
+
+**P0**
+
+- **Hex literals** in dark-mode overrides on both files: `dark:bg-[#141210]`, `dark:border-[rgba(240,236,230,0.12)]`, `dark:border-[rgba(240,236,230,0.08)]`. Plus a hardcoded backdrop `bg-[rgba(20,14,10,0.48)]`. Same token-coverage gap as elsewhere.
+
+**P1 — pitch / activation gap**
+
+The onboarding modals are **live-walkthrough-shaped, not pitch-shaped**. They explain *how to use spaces and threads* but don't sell *why ZAKI*. The Five Pillars (Brain, Presence, Worker, Person, Wallet) — the differentiators — are nowhere in the onboarding flow.
+
+A first-time user finishes onboarding knowing:
+- They have spaces (folders for work)
+- They can pick a model
+- They can start a thread
+
+…and not knowing:
+- ZAKI builds a visible memory graph as you talk (Pillar 1)
+- ZAKI lives on Slack / Telegram / web with one brain (Pillar 2)
+- ZAKI corrects itself when you tell it it's wrong (Pillar 1 truth)
+- Autonomy modes let ZAKI work for you (Pillar 3)
+
+The roadmap line is *"the AI that's actually yours."* The onboarding doesn't say it. **Highest activation-leverage P1.**
+
+**P1 — small**
+
+- **Auto-show with 900ms delay** (App.tsx:212-215). Light moment of "what just happened?" before the modal lands. Acceptable but the delay should be replaced with proper user-ready signal (hydration complete, sidebar mounted, etc.) so it never lands during a layout shift.
+- **Two onboardings without clear cross-link.** A user who dismissed Simple won't know Guided exists. Profile menu has "How to use" but discovery is poor. Could merge: Simple expands into Guided ("Want a tour? →").
+- **No "what's next?" prompts after dismissal.** A dismissed Simple modal leaves the user on an empty home screen with no guidance. A persistent first-day banner ("New to ZAKI? Try the tour") would catch this audience.
+- **Localstorage flag `zaki:onboarding:v1:<username>`** marks "done." No way to re-trigger except the profile menu link. If the product evolves, a v2 / v3 flag is needed for surfacing future onboarding moments.
+
+**P2**
+
+- 1056 lines of guided-tour state management — a lot, but warranted for the spotlighting + task-completion logic. No urgency to refactor.
+- Both modals use `ModalShell` primitive — good shared abstraction.
 
 ### Mobile shell — `MobileHeader` + `MobileSidebar`
 
-_(audit pending)_
+Files: `src/app/components/MobileHeader.tsx` (41 lines), `src/app/components/MobileSidebar.tsx` (72 lines).
+
+**Strengths.** Minimal, focused. Header is hamburger + logo + spacer. Sidebar wraps the desktop `Sidebar` in a Radix Dialog drawer (280px, 85vw max, slide-in animation). Auto-closes on navigation events. Uses Radix primitive correctly for focus management.
+
+**P0**
+
+- **Hex literals.** `dark:bg-[#141210]/80`, `dark:border-[rgba(240,236,230,0.08)]`, `dark:text-[#c9b8a4]`, `dark:hover:text-[#efe6d9]`, `dark:bg-[#141210]`. Same token-coverage gap.
+- **`LogoArabicOrange` in MobileHeader** — stale name + stale color (per Sidebar audit, brand is red `#f10202`, not orange). Same lineage as the desktop sidebar issue.
+
+**P1**
+
+- **The mobile sidebar IS the desktop sidebar.** All findings from the Sidebar audit (mega-file size 2,357 lines, 30 useState, off-brand fileStatusTone colors, mixed i18n in aria-labels, "Settings" + "Language" duplicate, etc.) apply to mobile too. The mobile shell itself is fine; the content has issues already filed.
+- **No mobile-specific affordances.** A mobile user gets the desktop sidebar in a drawer. No bottom-tab nav, no mobile-tuned interactions (long-press for actions, swipe between threads, etc.). Mobile is a viewport, not a first-class form factor here.
+- **Header logo + ZAKI text together** — clean visually but the spacer-trick ("/* Spacer to center logo */") is a workaround, not a real centering. Real fix: header in a 3-column flex with hamburger left, logo center, action right. Today the right "action" slot is just an empty div.
+
+### Agent sub-sheets — sessions / cron / secrets / diagnostics / power-user
+
+Files: `SessionManagementSheet.tsx` (328), `CronManagementSheet.tsx` (417), `SecretsVaultSheet.tsx` (284), `DiagnosticsSheet.tsx` (225), `PowerUserSheet.tsx` (928). Total ~2,182 lines across 5 sub-sheets, all triggered from the Sidebar profile menu.
+
+These are **power-user surfaces** — agent runtime controls, scheduled tasks, secrets, diagnostics, approval queue. Most users will never open them. But they exist as the "you can see and tune everything" promise of ZAKI's transparency.
+
+**Strengths.** Well-decomposed (5 separate files, not one mega-sheet). Heavy `t()` usage (PowerUserSheet alone has 93 `t()` calls). Each sheet is scoped to a single concern.
+
+**P0**
+
+- **PowerUserSheet has 18 off-brand color references** (emerald / amber / rose). Likely status pills for approval queue / context pressure / mode states. Should map to brand semantic tokens (`--zaki-success`, `--zaki-warning`, `--zaki-error`) — the same migration we did for the brain page in commit a4ced58 et al. Phase 4 cleanup.
+- **Hex literals across all five sheets** for dark-mode overrides (~17 in PowerUserSheet alone). Same token gap.
+
+**P1 — surface gaps**
+
+- **No "what is this?" first-time hint** for any sub-sheet. A user opening PowerUserSheet for the first time gets a control panel with technical labels. A header subtitle ("Approve agent actions, control autonomy modes, watch context pressure") would orient them.
+- **Sub-sheet discoverability is sidebar-profile-menu only.** No way to jump from chat to "show me what ZAKI is running." A "📋 Tasks" / "🔑 Secrets" link in the chat composer or the brain page would surface them.
+- **Sessions sheet** likely shows raw session keys + state. Power-user-grade. Could benefit from session-by-channel grouping (Telegram session vs web session vs Slack session as visually-distinct rows).
+- **Cron sheet** — 417 lines. Likely the most user-friendly of the bunch since cron jobs are a real product feature ("daily morning briefing"). Worth a dedicated audit pass — it's a P1 retention-level feature the brief flagged as Move 4 activation gap ("Scheduled tasks: backend has the cron infrastructure but no UI"). Reading the line count, the UI exists. **Move 4 partially shipped.** Needs visibility check.
+- **Secrets vault** — sensitive surface. P1 a11y review needed: focus trap on input, copy-to-clipboard with visual feedback (not just toast), no values logged via product telemetry, redaction in screenshots.
+- **DiagnosticsSheet** — context layer dump. Useful for debugging but should never be the ENTRY point for non-technical users. P1: should be gated behind a "developer mode" toggle in settings rather than in the same profile menu.
+
+**P2**
+
+- All five sheets repeat the same banner / loading / error scaffolding. Phase 4: shared `<AgentSheet>` component would dedup ~150 lines across them.
 
 ---
 
