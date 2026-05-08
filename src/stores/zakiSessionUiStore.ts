@@ -50,7 +50,7 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
     session.mode === "plan" || session.mode === "execute" || session.mode === "review"
       ? session.mode
       : null;
-  return {
+  const patch: Partial<ZakiSessionUi> = {
     mode,
     approvalCount:
       typeof session.pending_approval_count === "number"
@@ -75,13 +75,20 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
       typeof session.last_channel === "string" && session.last_channel.trim().length > 0
         ? session.last_channel.trim()
         : null,
-    contextPressurePercent:
-      typeof session.context_pressure_percent === "number"
-        ? session.context_pressure_percent
-        : null,
-    contextPressureState: getContextPressureState(session.context_pressure_percent),
     live: typeof session.live === "boolean" ? session.live : null,
   };
+  // 2026-05-08 — Only include the pressure fields when the list endpoint
+  // actually returns them. The session list response (every 30s tick)
+  // historically omitted context_pressure_percent for non-live sessions,
+  // so spreading `null` here was wiping out the live value that
+  // /sessions/{key}/context had just written. Authoritative source is
+  // refreshContextGauge → setContextPressure; let it own the value
+  // unless the list explicitly contradicts it.
+  if (typeof session.context_pressure_percent === "number") {
+    patch.contextPressurePercent = session.context_pressure_percent;
+    patch.contextPressureState = getContextPressureState(session.context_pressure_percent);
+  }
+  return patch;
 }
 
 export function getContextPressureState(

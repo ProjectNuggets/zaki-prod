@@ -125,25 +125,22 @@ export function InputArea({
     });
   }, []);
 
-  // Phase 4-B (2026-05-08) — Compaction meter visibility threshold.
+  // Phase 4-B (2026-05-08) — Compaction meter wiring.
   //
-  // The percent comes straight from the backend's
-  // `context_pressure_percent` (zakiSessionUiStore.setContextPressure ←
-  // ChatArea.refreshContextGauge ← fetchAgentSessionContext). It is
-  // already sourced from real token pressure, no local heuristic.
+  // Source of truth chain:
+  //   backend agent: compaction.auto reports pressure=NN%
+  //   → /api/agent/sessions/{key}/context returns context_pressure_percent
+  //   → ChatArea.refreshContextGauge reads it
+  //   → zakiSessionUiStore.setContextPressure stores it
+  //   → ChatArea passes activeSessionUi.contextPressurePercent here
   //
-  // Earlier behavior surfaced the meter at any pressure > 0, which made
-  // the ring appear from the very first message and feel like it was
-  // "running fast" as natural per-turn growth landed. A new conversation
-  // at 8% on turn 2 followed by 14% on turn 3 reads as motion when the
-  // user hasn't yet entered the pressure window where compaction matters.
-  // Threshold lifted to 40% so the meter only appears once context is
-  // actually starting to fill and stays out of the way otherwise.
-  const COMPACTION_VISIBILITY_THRESHOLD = 40;
+  // Always show the meter when zakiBotMode is active and we have any
+  // numeric pressure value — including 0%. Hiding low values masked the
+  // honest signal: a user seeing 19% in agent logs needs to see 19% in
+  // the meter, not nothing. The visual itself (small conic ring) is
+  // already subtle enough at low values.
   const showZakiContextMeter =
-    zakiBotMode &&
-    typeof zakiContextPressurePercent === "number" &&
-    zakiContextPressurePercent >= COMPACTION_VISIBILITY_THRESHOLD;
+    zakiBotMode && typeof zakiContextPressurePercent === "number";
   const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
   // M3: tiered color by pressure, brand-coherent: ≤50% teal (success),
   // ≤75% amber (warning), >75% red (brand). Resolves via CSS variables so
