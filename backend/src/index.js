@@ -10352,6 +10352,18 @@ app.get(
   )
 );
 
+// V1.11 hardening (2026-05-08, FE spec #2) — server-side self-anchor
+// picker for focus-mode-as-primary on the brain page. Three-tier
+// picker: canonical key prefix → source-degree on identity edges →
+// 404 cold-corpus. Backend handler at gateway.zig:handleBrainMe.
+app.get(
+  "/api/agent/brain/me",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/me`
+  )
+);
+
 app.post(
   "/api/agent/brain/compose",
   requireAgentContext,
