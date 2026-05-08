@@ -1,4 +1,4 @@
-import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, CalendarClock } from "lucide-react";
+import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, CalendarClock, Pin } from "lucide-react";
 import { ScheduleFollowUpDialog } from "@/app/components/agent/ScheduleFollowUpDialog";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,6 @@ import {
   buildPinnedContextPrefix,
 } from "@/queries/usePinnedContext";
 import { PinContextSheet } from "@/app/components/agent/PinContextSheet";
-import { Pin } from "lucide-react";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio, type AgentSessionMode } from "@/lib/api";
@@ -188,6 +187,12 @@ export function InputArea({
     startPos: number;
   }>({ open: false, filter: "", startPos: -1 });
   const [mentionHighlight, setMentionHighlight] = useState(0);
+  // Mirror the highlight in a ref so the keydown closure can read the
+  // current value at Enter/Tab time without snapshotting a stale one.
+  const mentionHighlightRef = useRef(0);
+  useEffect(() => {
+    mentionHighlightRef.current = mentionHighlight;
+  }, [mentionHighlight]);
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const placeholderSuggestions = useMemo(
@@ -614,13 +619,16 @@ export function InputArea({
   const submitMessage = useCallback(
     (textOverride?: string) => {
       if (isSending || sendLocked) return;
-      const text = textOverride !== undefined ? textOverride : inputValue;
+      const isOverride = textOverride !== undefined;
+      const text = isOverride ? textOverride : inputValue;
       if (!text.trim() && attachments.length === 0) return;
       // Prepend pinned-memory context so the agent sees the user's
-      // explicitly-pinned brain entries on every turn. The pins live in
-      // sessionStorage per thread; we DON'T mutate the textarea so the
-      // user keeps seeing only what they typed.
-      const pinnedPrefix = buildPinnedContextPrefix(pinnedMemories);
+      // explicitly-pinned brain entries on every turn. Skip the prefix
+      // for programmatic overrides (compact, quick replies) and any
+      // text that starts with "/" so slash commands stay parsable.
+      const isCommand = text.trim().startsWith("/");
+      const pinnedPrefix =
+        !isOverride && !isCommand ? buildPinnedContextPrefix(pinnedMemories) : "";
       const wireText = pinnedPrefix && text ? `${pinnedPrefix}${text}` : text;
       onSend(wireText, attachments);
       // Always clear the textarea after a send. For an override path
@@ -674,6 +682,10 @@ export function InputArea({
   // text under B's storage key.
   const prevDraftKeyRef = useRef<string | null>(draftStorageKey);
   useEffect(() => {
+    // Always close any in-flight popovers when the thread switches so
+    // a half-typed mention doesn't leak from one thread to the next.
+    setMentionState({ open: false, filter: "", startPos: -1 });
+    setSlashOpen(false);
     if (!draftStorageKey || typeof window === "undefined") {
       setInputValue("");
       prevDraftKeyRef.current = draftStorageKey;
@@ -1148,7 +1160,7 @@ export function InputArea({
                 }
                 if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
                   event.preventDefault();
-                  const memory = mentionResults[mentionHighlight];
+                  const memory = mentionResults[mentionHighlightRef.current];
                   if (memory) handleMentionSelect(memory);
                   return;
                 }

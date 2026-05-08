@@ -64,8 +64,8 @@ export function BrainMentionPopover({
       if (containerRef.current.contains(event.target as Node)) return;
       onDismiss();
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, [open, onDismiss]);
 
   if (!open) return null;

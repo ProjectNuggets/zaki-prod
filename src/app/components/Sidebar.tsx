@@ -10,12 +10,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   apiRequest,
   approveAgentSession,
+  fetchAgentHistory,
   setAgentSessionMode,
   updateProfile,
   type AgentSessionMode,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
-import { fetchAgentHistory } from "@/lib/api";
 import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore, useZakiSessionUiStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -56,6 +56,24 @@ import {
 // Sidebar uses threads as required array
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 const APP_VERSION = "1.5.69";
+
+/**
+ * Build a safe filename for the session-download flow. Strips path
+ * separators, control chars, RTL-override codepoints, leading dots,
+ * and caps length so a long or hostile session label can't produce a
+ * confusing download name on disk.
+ */
+function safeDownloadFilename(name: string | null | undefined, fallback: string): string {
+  const cleaned = (name || fallback || "session")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[ ---​-‏‪-‮⁦-⁩]/g, "")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/^\.+/, "")
+    .slice(0, 80)
+    .trim();
+  return cleaned || fallback || "session";
+}
 
 type LearningSubnavEntry = {
   view: string;
@@ -1495,7 +1513,7 @@ export function Sidebar() {
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.href = url;
-                link.download = `${(label || threadSlug).replace(/\s+/g, "_")}.json`;
+                link.download = `${safeDownloadFilename(label, threadSlug)}.json`;
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
@@ -1517,9 +1535,14 @@ export function Sidebar() {
               const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
               if (!threadSlug) return;
               // Activate the session first so ChatArea has the messages
-              // loaded, then dispatch a request to open the share modal.
+              // loaded. The detail.sessionKey lets the listener queue
+              // the open until the right session has actually hydrated,
+              // avoiding a race where the modal opens against the
+              // previous thread's state.
               goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
-              window.dispatchEvent(new Event("zaki:open-share"));
+              window.dispatchEvent(
+                new CustomEvent("zaki:open-share", { detail: { sessionKey } }),
+              );
             }}
             onCreateSession={() => {
               // Reset to the Zaki welcome view so the user gets a visibly

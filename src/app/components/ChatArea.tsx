@@ -5535,13 +5535,33 @@ export function ChatArea() {
   }, [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest?.id]);
 
   // ZakiSessionList per-row share button dispatches this event after
-  // navigating to the chosen session, so the share modal opens once the
-  // messages have hydrated.
+  // navigating to the chosen session. We queue the requested sessionKey
+  // and only open the share modal once activeZakiSessionKey matches,
+  // so we never share against the previous thread's hydrated state.
+  const pendingShareSessionKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    const handler = () => setShareOpen(true);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionKey?: string } | undefined>)
+        .detail;
+      const requested = detail?.sessionKey || null;
+      if (!requested || requested === activeZakiSessionKey) {
+        setShareOpen(true);
+      } else {
+        pendingShareSessionKeyRef.current = requested;
+      }
+    };
     window.addEventListener("zaki:open-share", handler);
     return () => window.removeEventListener("zaki:open-share", handler);
-  }, []);
+  }, [activeZakiSessionKey]);
+  useEffect(() => {
+    if (
+      pendingShareSessionKeyRef.current &&
+      activeZakiSessionKey === pendingShareSessionKeyRef.current
+    ) {
+      pendingShareSessionKeyRef.current = null;
+      setShareOpen(true);
+    }
+  }, [activeZakiSessionKey]);
 
   // H7: y/n keyboard shortcuts — fire approve/deny when an approval card is visible
   useEffect(() => {

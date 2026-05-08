@@ -131,7 +131,7 @@ export function ZakiSessionList({
                 </div>
               </div>
             </button>
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-60">
               {onShareSession ? (
                 <button
                   type="button"
