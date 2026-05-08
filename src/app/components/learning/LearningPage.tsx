@@ -182,7 +182,6 @@ import {
   STUDY_PROFILE_STORAGE_KEY,
   compactMessageExcerpt,
   readLearningStudyProfile,
-  studyProfileConfigured,
   writeLearningStudyProfile,
   type LearningRunState,
   type LearningStudyAction,
@@ -2275,9 +2274,7 @@ function LearningChatPanel({
   const [studyDraft, setStudyDraft] = useState<LearningStudyProfile>(() =>
     readLearningStudyProfile(studyProfileStorageKey),
   );
-  const [studyPanelOpen, setStudyPanelOpen] = useState(
-    () => isPrimaryChatView && !studyProfileConfigured(readLearningStudyProfile(studyProfileStorageKey)),
-  );
+  const [studyPanelOpen, setStudyPanelOpen] = useState(false);
   const sessionScope = (requestedView || "chat").trim().toLowerCase() || "chat";
   const sessionStorageKey = `zaki.learn.sessionId.${sessionScope}`;
   const [restoredSessionId, setRestoredSessionId] = useState(
@@ -2335,7 +2332,7 @@ function LearningChatPanel({
     const nextProfile = readLearningStudyProfile(studyProfileStorageKey);
     setStudyProfile(nextProfile);
     setStudyDraft(nextProfile);
-    setStudyPanelOpen(isPrimaryChatView && !studyProfileConfigured(nextProfile));
+    setStudyPanelOpen(false);
   }, [isPrimaryChatView, studyProfileStorageKey]);
 
   useEffect(() => {

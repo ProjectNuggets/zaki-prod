@@ -881,6 +881,8 @@ test.describe("ZAKI Learn parity wiring", () => {
     const learning = await mockLearning(page);
 
     await page.goto("/learn?view=chat");
+    await expect(page.getByText("Set up your study loop")).toBeVisible();
+    await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByText("Study setup")).toBeVisible();
     await page.getByLabel("Course").fill("Calculus II");
     await page.getByLabel("Exam date").fill("2026-06-15");
