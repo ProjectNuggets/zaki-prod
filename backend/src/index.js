@@ -11942,6 +11942,24 @@ function normalizeWebSocketCloseReason(reason, fallback = "normal_closure") {
     : Buffer.from(text, "utf8").subarray(0, 123).toString("utf8");
 }
 
+function sanitizeLearningWsUpstreamMessage(data, isBinary) {
+  if (isBinary) return { data, isBinary };
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.isBuffer(data) ? data.toString("utf8") : String(data));
+  } catch {
+    return { data, isBinary };
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { data, isBinary };
+  }
+  const eventType = String(payload.type || "").toLowerCase();
+  if (eventType === "thinking" || eventType === "observation") {
+    payload.content = "";
+  }
+  return { data: JSON.stringify(payload), isBinary: false };
+}
+
 function writeWebSocketHttpError(socket, statusCode, message) {
   socket.write(
     `HTTP/1.1 ${statusCode} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
@@ -12084,6 +12102,8 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
 
   const requestId = getOrCreateRequestId(req);
   let outgoingChain = Promise.resolve();
+  const pendingClientMessages = [];
+  const maxPendingClientMessages = 20;
   const upstreamSocket = new UpstreamWebSocket(upstreamUrl, {
     headers: buildLearningForwardHeaders({
       internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
@@ -12117,15 +12137,42 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
     }
   };
 
+  const sendOrQueueUpstream = (data, isBinary) => {
+    if (upstreamSocket.readyState === upstreamSocket.OPEN) {
+      upstreamSocket.send(data, { binary: isBinary });
+      return;
+    }
+    if (upstreamSocket.readyState === upstreamSocket.CONNECTING) {
+      if (pendingClientMessages.length >= maxPendingClientMessages) {
+        closeClient(1013, "Learning websocket is busy.");
+        closeUpstream(1013, "learning_proxy_pending_overflow");
+        return;
+      }
+      pendingClientMessages.push({ data, isBinary });
+      return;
+    }
+    closeClient(1011, "Learning upstream connection is closed.");
+  };
+
+  const flushPendingClientMessages = () => {
+    while (pendingClientMessages.length && upstreamSocket.readyState === upstreamSocket.OPEN) {
+      const message = pendingClientMessages.shift();
+      upstreamSocket.send(message.data, { binary: message.isBinary });
+    }
+  };
+
   upstreamSocket.on("open", () => {
     if (clientSocket.readyState !== clientSocket.OPEN) {
       closeUpstream();
+      return;
     }
+    flushPendingClientMessages();
   });
 
   upstreamSocket.on("message", (data, isBinary) => {
     if (clientSocket.readyState === clientSocket.OPEN) {
-      clientSocket.send(data, { binary: isBinary });
+      const sanitized = sanitizeLearningWsUpstreamMessage(data, isBinary);
+      clientSocket.send(sanitized.data, { binary: sanitized.isBinary });
     }
   });
 
@@ -12163,9 +12210,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
           return;
         }
       }
-      if (upstreamSocket.readyState === upstreamSocket.OPEN) {
-        upstreamSocket.send(sanitized.data, { binary: sanitized.isBinary });
-      }
+      sendOrQueueUpstream(sanitized.data, sanitized.isBinary);
     }).catch((error) => {
       console.error("[LearningProxy] Client websocket forward error:", {
         requestId,
