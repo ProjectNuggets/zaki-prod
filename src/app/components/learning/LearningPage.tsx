@@ -7736,6 +7736,7 @@ function AgentsPanel({
                   value={agentId}
                   onChange={(event) => setAgentId(event.target.value)}
                   placeholder="Bot id"
+                  aria-describedby="learning-create-bot-id-help"
                   className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
                 />
                 <input
@@ -7745,6 +7746,9 @@ function AgentsPanel({
                   className="h-10 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
                 />
               </div>
+              <p id="learning-create-bot-id-help" className="mt-2 text-[12px] text-zaki-muted">
+                Bot id is required to enable Create bot. Display name and soul can be changed later.
+              </p>
               <div className="mt-3">
                 <label className="mb-1 block text-[12px] font-medium text-zaki-muted">
                   Soul
@@ -7792,6 +7796,7 @@ function AgentsPanel({
                 type="button"
                 disabled={!agentId.trim() || createAgent.isPending}
                 onClick={() => createAgent.mutate()}
+                title={!agentId.trim() ? "Enter a bot id to enable Create bot." : undefined}
                 className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {createAgent.isPending ? (
