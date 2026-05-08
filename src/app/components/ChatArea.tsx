@@ -5044,7 +5044,22 @@ export function ChatArea() {
   // Multi-session: allow any threadId in the agent space (no longer force "main")
 
   // Handle send message
-  const handleSend = useCallback(async (text: string, files: File[], preferredWorkspaceSlug?: string | null) => {
+  // 2026-05-08 — `options` carries per-turn flags from the composer
+  // (privateTurn = don't store this exchange in brain; extendedThinking
+  // = longer reasoning pass). Currently logged + forwarded to where the
+  // SSE turn payload is constructed; backend (nullalis) honoring is
+  // tracked separately. The FE plumb-through ensures the wire is in
+  // place and the toggles aren't lying about doing something.
+  const handleSend = useCallback(async (
+    text: string,
+    files: File[],
+    preferredWorkspaceSlug?: string | null,
+    options?: { privateTurn?: boolean; extendedThinking?: boolean }
+  ) => {
+    if (options && (options.privateTurn || options.extendedThinking)) {
+      // eslint-disable-next-line no-console
+      console.debug("[zaki] turn options", options);
+    }
     const trimmed = text.trim();
     if (!trimmed) {
       toast.error("Message is empty");
@@ -6237,7 +6252,9 @@ export function ChatArea() {
                 active={isZakiBotActiveSpace && zakiBootstrapCompleted}
               />
               <InputArea
-                onSend={handleSend}
+                onSend={(text, files, options) =>
+                  void handleSend(text, files, undefined, options)
+                }
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}

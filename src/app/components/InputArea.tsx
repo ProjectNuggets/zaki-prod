@@ -1,4 +1,4 @@
-import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square } from "lucide-react";
+import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, Brain, EyeOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,7 @@ import { useEntitlements } from "@/queries";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio, type AgentSessionMode } from "@/lib/api";
+import { applyExpansion } from "@/lib/expansionShortcuts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
 import {
   getDisplayOrder,
@@ -26,6 +27,18 @@ function detectSlash(value: string): { active: boolean; filter: string } {
   if (value.includes(" ") || value.includes("\n")) return { active: false, filter: "" };
   return { active: true, filter: value.slice(1) };
 }
+
+// 2026-05-08 — Per-turn flags the user can flip from the composer. The
+// agent (nullalis) is expected to honor these on receive; the FE plumbs
+// them through to onSend regardless so the wire-up is in place.
+//   - privateTurn: don't store this exchange in the brain (GDPR-honest
+//     escape hatch for sensitive prompts; complements the GDPR footer
+//     in settings).
+//   - extendedThinking: agent runs a longer reasoning pass before reply.
+export type TurnOptions = {
+  privateTurn?: boolean;
+  extendedThinking?: boolean;
+};
 
 export function InputArea({
   onSend,
@@ -49,7 +62,7 @@ export function InputArea({
   threadKey = null,
   lastUserMessage = null,
 }: {
-  onSend: (text: string, attachments: File[]) => void;
+  onSend: (text: string, attachments: File[], options?: TurnOptions) => void;
   attachments: File[];
   setAttachments: (value: File[] | ((prev: File[]) => File[])) => void;
   isSending?: boolean;
@@ -79,6 +92,10 @@ export function InputArea({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
+  // 2026-05-08 — Per-turn toggles. Reset to off after every send so they
+  // never silently linger across turns.
+  const [privateTurn, setPrivateTurn] = useState(false);
+  const [extendedThinking, setExtendedThinking] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
   // doesn't flicker as the cursor moves over inner elements.
@@ -270,6 +287,22 @@ export function InputArea({
     : 0;
   const pressureColor = "var(--zaki-accent)";
 
+  // Table-stakes #10 (2026-05-08) — High-pressure pre-flight nudge.
+  //
+  // When backend-reported pressure crosses the user-visible "context is
+  // filling" line (70% — chosen as the conventional waterline; the agent
+  // owns the actual compaction trigger and can fire whenever it wants),
+  // show a small banner above the composer offering /compact. One click
+  // sends the slash command as a fresh user message, freeing context
+  // before the user's next prompt has to fight for room. We don't render
+  // when there's an active stream (would overlap the typing indicator).
+  const SHOW_COMPACT_PREFLIGHT_AT = 70;
+  const showCompactPreflight =
+    zakiBotMode &&
+    !isSending &&
+    hasZakiContextValue &&
+    zakiContextValue >= SHOW_COMPACT_PREFLIGHT_AT;
+
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -421,8 +454,18 @@ export function InputArea({
       return;
     }
     if (inputValue.trim() || attachments.length > 0) {
-      onSend(inputValue, attachments);
+      const options: TurnOptions | undefined =
+        privateTurn || extendedThinking
+          ? {
+              privateTurn: privateTurn || undefined,
+              extendedThinking: extendedThinking || undefined,
+            }
+          : undefined;
+      onSend(inputValue, attachments, options);
       setInputValue("");
+      // Per-turn toggles always reset so they never carry over silently.
+      if (privateTurn) setPrivateTurn(false);
+      if (extendedThinking) setExtendedThinking(false);
       if (draftStorageKey && typeof window !== "undefined") {
         try {
           window.sessionStorage.removeItem(draftStorageKey);
@@ -717,6 +760,30 @@ export function InputArea({
               )}
             </div>
           ) : null}
+          {showCompactPreflight ? (
+            <div
+              className={cn(
+                "mt-2 flex items-center justify-between gap-3 rounded-zaki-xl border border-zaki-warning bg-zaki-warning px-3 py-2 text-xs font-medium",
+                isRtl && "flex-row-reverse text-right"
+              )}
+              data-testid="zaki-compact-preflight"
+            >
+              <span className="text-zaki-warning">
+                {t("input.zaki.compactPreflight", { percent: zakiContextValue })}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (sendLocked || isSending) return;
+                  onSend("/compact", []);
+                }}
+                disabled={sendLocked || isSending}
+                className="shrink-0 rounded-full bg-zaki-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-zaki-warning hover:brightness-95 disabled:opacity-60"
+              >
+                {t("input.zaki.compactPreflightAction")}
+              </button>
+            </div>
+          ) : null}
           <div
             className={cn(
               "w-full rounded-[16px] border border-zaki-strong bg-zaki-raised font-body px-3 py-2.5 flex flex-col gap-2 relative dark:bg-[#141210]",
@@ -802,7 +869,26 @@ export function InputArea({
             }
             onPaste={handlePaste}
             onChange={(e) => {
-              const value = e.target.value;
+              let value = e.target.value;
+              const ta = e.target;
+              // Table-stakes #13 — Espanso-style snippet expansion. Only
+              // fires when the user has just typed a `:trigger ` at the
+              // caret (start of input or after whitespace + the trailing
+              // space). Pasting `:weather` mid-paragraph never expands;
+              // editing earlier in the input never expands. Caret is
+              // restored to the end of the inserted replacement.
+              const expanded = applyExpansion(value, ta.selectionStart ?? value.length);
+              if (expanded) {
+                value = expanded.value;
+                requestAnimationFrame(() => {
+                  const el = textareaRef.current;
+                  if (!el) return;
+                  el.value = expanded.value;
+                  el.setSelectionRange(expanded.caret, expanded.caret);
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                });
+              }
               setInputValue(value);
               const { active } = detectSlash(value);
               setSlashOpen(active);
@@ -1112,6 +1198,74 @@ export function InputArea({
                 </div>
               </TooltipContent>
             </Tooltip>
+          ) : null}
+          {/* S4 + S5 (2026-05-08) — Per-turn toggles. ZAKI bot mode only,
+              since the agent is the consumer of these flags. Active state
+              is brand-tinted so the user can see at a glance that the
+              next turn behaves differently. Both reset on send. */}
+          {zakiBotMode ? (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setPrivateTurn((v) => !v)}
+                    aria-pressed={privateTurn}
+                    aria-label={t(
+                      privateTurn
+                        ? "input.zaki.privateTurn.disableAria"
+                        : "input.zaki.privateTurn.enableAria"
+                    )}
+                    data-testid="zaki-private-turn"
+                    className={cn(
+                      "size-9 rounded-full border flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
+                      privateTurn
+                        ? "border-zaki-brand bg-zaki-brand-10 text-zaki-brand"
+                        : "border-zaki-strong bg-zaki-elevated text-zaki-muted hover:bg-zaki-sunken"
+                    )}
+                  >
+                    <EyeOff className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
+                  <div className="text-[11px] leading-5">
+                    {privateTurn
+                      ? t("input.zaki.privateTurn.activeTooltip")
+                      : t("input.zaki.privateTurn.idleTooltip")}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setExtendedThinking((v) => !v)}
+                    aria-pressed={extendedThinking}
+                    aria-label={t(
+                      extendedThinking
+                        ? "input.zaki.extendedThinking.disableAria"
+                        : "input.zaki.extendedThinking.enableAria"
+                    )}
+                    data-testid="zaki-extended-thinking"
+                    className={cn(
+                      "size-9 rounded-full border flex items-center justify-center transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
+                      extendedThinking
+                        ? "border-zaki-brand bg-zaki-brand-10 text-zaki-brand"
+                        : "border-zaki-strong bg-zaki-elevated text-zaki-muted hover:bg-zaki-sunken"
+                    )}
+                  >
+                    <Brain className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
+                  <div className="text-[11px] leading-5">
+                    {extendedThinking
+                      ? t("input.zaki.extendedThinking.activeTooltip")
+                      : t("input.zaki.extendedThinking.idleTooltip")}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </>
           ) : null}
           {/* Mic button — STT voice input (available on all chat surfaces) */}
           {!isStopMode ? (

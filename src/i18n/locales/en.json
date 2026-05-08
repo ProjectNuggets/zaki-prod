@@ -428,7 +428,21 @@
       "contextPercent": "Context: {{percent}}%",
       "contextTooltip": "Context compacts automatically when needed.",
       "contextAriaUnknown": "Context usage not yet reported",
-      "contextPercentUnknown": "Context: waiting for the agent to report token pressure"
+      "contextPercentUnknown": "Context: waiting for the agent to report token pressure",
+      "compactPreflight": "Context is filling ({{percent}}%). Compact to free space before your next prompt.",
+      "compactPreflightAction": "Compact",
+      "privateTurn": {
+        "enableAria": "Mark this turn private (do not store)",
+        "disableAria": "Unmark private",
+        "idleTooltip": "This turn will be stored in your brain like normal.",
+        "activeTooltip": "Private turn — this exchange will not be stored in your brain."
+      },
+      "extendedThinking": {
+        "enableAria": "Enable extended thinking for this turn",
+        "disableAria": "Disable extended thinking",
+        "idleTooltip": "ZAKI replies at its normal pace.",
+        "activeTooltip": "Extended thinking — slower reply, deeper reasoning."
+      }
     },
     "voice": {
       "tapToRecord": "Tap to record",
