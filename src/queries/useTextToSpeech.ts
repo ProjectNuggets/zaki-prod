@@ -74,19 +74,17 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
     const trimmed = (text || "").trim();
     if (!trimmed) return;
 
+    // No-op on the server: don't mutate state if there's no Audio
+    // available, otherwise the store latches in "fetching" forever.
+    if (typeof window === "undefined") return;
+
     // Lazy-init the singleton audio element atomically inside set() so
     // two concurrent first-time toggles can't each construct their own.
-    set((s) => {
-      if (s.audio) return { activeMessageId: messageId, status: "fetching" };
-      if (typeof window === "undefined") {
-        return { activeMessageId: messageId, status: "fetching" };
-      }
-      return {
-        activeMessageId: messageId,
-        status: "fetching",
-        audio: new Audio(),
-      };
-    });
+    set((s) =>
+      s.audio
+        ? { activeMessageId: messageId, status: "fetching" }
+        : { activeMessageId: messageId, status: "fetching", audio: new Audio() },
+    );
     const audio = get().audio;
     if (!audio) return;
 

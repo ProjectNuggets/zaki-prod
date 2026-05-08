@@ -340,10 +340,25 @@ export function InputArea({
     compactArmedRef.current = false;
   }
   // When pressure is past the show line, the context meter itself
-  // becomes the compact trigger — no separate rail. Hysteresis keeps
+  // becomes the compact trigger. No separate rail. Hysteresis keeps
   // the meter from flickering between actionable/inert states.
   const compactArmed =
     zakiBotMode && !isSending && hasZakiContextValue && compactArmedRef.current;
+
+  // P1-03 — discoverability nudge. When the meter first becomes armed
+  // we briefly pulse a ring around it so the user notices the new
+  // affordance without us adding a permanent label.
+  const [armedPulse, setArmedPulse] = useState(false);
+  const wasArmedRef = useRef(false);
+  useEffect(() => {
+    if (compactArmed && !wasArmedRef.current) {
+      setArmedPulse(true);
+      const timer = setTimeout(() => setArmedPulse(false), 1800);
+      wasArmedRef.current = true;
+      return () => clearTimeout(timer);
+    }
+    if (!compactArmed) wasArmedRef.current = false;
+  }, [compactArmed]);
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -1234,7 +1249,7 @@ export function InputArea({
                   }}
                   disabled={compactArmed && isCompacting}
                   className={cn(
-                    "group inline-flex size-9 items-center justify-center rounded-full border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
+                    "group relative inline-flex size-9 items-center justify-center rounded-full border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
                     compactArmed
                       ? "cursor-pointer border-zaki-warning text-zaki-warning hover:bg-zaki-warning/10 focus-visible:ring-zaki-warning"
                       : "cursor-default border-zaki-strong text-zaki-muted hover:bg-zaki-sunken focus-visible:ring-zaki-accent",
@@ -1254,6 +1269,12 @@ export function InputArea({
                   data-testid="zaki-context-meter"
                   data-armed={compactArmed ? "true" : "false"}
                 >
+                  {armedPulse ? (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-full border-2 border-zaki-warning animate-ping opacity-70"
+                    />
+                  ) : null}
                   {compactArmed && isCompacting ? (
                     <span className="size-4 animate-spin rounded-full border-2 border-zaki-warning border-t-transparent" />
                   ) : (
@@ -1290,7 +1311,7 @@ export function InputArea({
                     <div className="text-[11px] font-medium text-zaki-warning">
                       {t(
                         isCompacting
-                          ? "input.zaki.compactPreflightActionBusy"
+                          ? "input.zaki.contextCompactBusy"
                           : "input.zaki.contextCompactHint",
                         {
                           defaultValue: isCompacting

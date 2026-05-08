@@ -435,7 +435,7 @@
       "contextPercentUnknown": "السياق: في انتظار تقرير ضغط الرموز من الوكيل",
       "contextCompactAria": "السياق عند {{percent}} بالمئة. اضغط للتقليص.",
       "contextCompactHint": "اضغط لتقليص السياق وتوفير مساحة.",
-      "compactPreflightActionBusy": "جارٍ التقليص..."
+      "contextCompactBusy": "جارٍ التقليص..."
     },
     "voice": {
       "tapToRecord": "اضغط للتسجيل",

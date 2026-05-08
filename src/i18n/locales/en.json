@@ -435,7 +435,7 @@
       "contextPercentUnknown": "Context: waiting for the agent to report token pressure",
       "contextCompactAria": "Context at {{percent}} percent. Click to compact.",
       "contextCompactHint": "Click to compact and free space.",
-      "compactPreflightActionBusy": "Compacting..."
+      "contextCompactBusy": "Compacting..."
     },
     "voice": {
       "tapToRecord": "Tap to record",

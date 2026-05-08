@@ -6288,13 +6288,10 @@ export function ChatArea() {
               <ZakiExperimentalNotice
                 active={isZakiBotActiveSpace && zakiBootstrapCompleted}
               />
-              {/* 2026-05-08 — Inline approval banner. The same
-                  ApprovalRequiredCard renders inside the timeline for
-                  historical context, but ZAKI agent actions need the
-                  user to act NOW — so we promote a copy directly above
-                  the composer where the user's attention lives. The
-                  card hides itself when there is no pending request,
-                  so the slot collapses cleanly. */}
+              {/* Single source of truth for ApprovalRequiredCard. The
+                  timeline copy was dropped in 18328cd so the decided
+                  state has one owner. Surfaces directly above the
+                  composer where the user's attention is. */}
               {isZakiBotActiveSpace && nullalisApprovalRequest ? (
                 <div className="px-1 pb-2">
                   <ApprovalRequiredCard

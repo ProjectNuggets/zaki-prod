@@ -36,11 +36,9 @@ export type FollowUpJob = {
 
 export type FollowUpSchedule =
   | { kind: "in_minutes"; minutes: number } // 30, 60, 240 etc.
-  | { kind: "at_datetime"; date: Date }      // explicit one-shot
-  | { kind: "daily"; hour: number; minute: number }
-  | { kind: "weekdays"; hour: number; minute: number } // Mon–Fri
-  | { kind: "weekly"; dow: number; hour: number; minute: number } // 0=Sun
-  | { kind: "raw"; expression: string };
+  | { kind: "at_datetime"; date: Date } // explicit one-shot
+  | { kind: "weekdays"; hour: number; minute: number } // Mon-Fri
+  | { kind: "weekly"; dow: number; hour: number; minute: number }; // 0=Sun
 
 /** Build a 5-field cron expression for a one-shot at the given Date. */
 export function cronForOneShotDate(date: Date): string {
@@ -70,12 +68,6 @@ export function compileSchedule(
         oneShot: true,
         firesAt: schedule.date,
       };
-    case "daily":
-      return {
-        expression: `${schedule.minute} ${schedule.hour} * * *`,
-        oneShot: false,
-        firesAt: null,
-      };
     case "weekdays":
       return {
         expression: `${schedule.minute} ${schedule.hour} * * 1-5`,
@@ -88,8 +80,6 @@ export function compileSchedule(
         oneShot: false,
         firesAt: null,
       };
-    case "raw":
-      return { expression: schedule.expression, oneShot: false, firesAt: null };
   }
 }
 

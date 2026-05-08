@@ -6,7 +6,7 @@
 // appends a job via the cron API (read-modify-write inside
 // scheduleAgentFollowUp).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CalendarClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,14 +60,20 @@ export function ScheduleFollowUpDialog({ isOpen, onClose, defaultPrompt = "" }: 
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Capture the parent's prompt once at open so subsequent keystrokes
+  // in the underlying composer don't clobber the user's edits in the
+  // dialog (P2-05). Stash defaultPrompt in a ref to keep the effect
+  // dependency stable.
+  const defaultPromptRef = useRef(defaultPrompt);
+  defaultPromptRef.current = defaultPrompt;
   useEffect(() => {
     if (isOpen) {
-      setPrompt(defaultPrompt || "");
+      setPrompt(defaultPromptRef.current || "");
       setName("");
       setQuick("in1h");
       setCustomDateTime(defaultCustomDateTime());
     }
-  }, [isOpen, defaultPrompt]);
+  }, [isOpen]);
 
   const schedule: FollowUpSchedule | null = useMemo(() => {
     switch (quick) {
@@ -110,9 +116,16 @@ export function ScheduleFollowUpDialog({ isOpen, onClose, defaultPrompt = "" }: 
       });
     }
     if (schedule.kind === "weekly") {
+      // Localize the weekday via Intl. Anchor on a known Sunday
+      // (2024-01-07) and step `dow` days forward so the formatter sees
+      // the right weekday in the active locale.
+      const anchor = new Date(2024, 0, 7 + schedule.dow);
+      const dayName = new Intl.DateTimeFormat(isRtl ? "ar" : undefined, {
+        weekday: "long",
+      }).format(anchor);
       return t("scheduleFollowUp.preview.weekly", {
         defaultValue: "Every {{day}} at {{time}}",
-        day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][schedule.dow],
+        day: dayName,
         time: `${pad(schedule.hour)}:${pad(schedule.minute)}`,
       });
     }
