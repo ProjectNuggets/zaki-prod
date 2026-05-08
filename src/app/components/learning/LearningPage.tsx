@@ -1956,6 +1956,79 @@ function learningRecords(value: unknown): Item[] {
   return Array.isArray(value) ? value.filter(isItem) : [];
 }
 
+function learningSourceRecords(metadata: Item): Item[] {
+  const candidates = [
+    metadata.sources,
+    metadata.citations,
+    metadata.references,
+    metadata.source_documents,
+    metadata.search_results,
+  ];
+  const records = candidates.flatMap((value) => learningRecords(value));
+  const seen = new Set<string>();
+  return records.filter((record) => {
+    const label =
+      textOf(record.title) ||
+      textOf(record.name) ||
+      textOf(record.source) ||
+      textOf(record.url) ||
+      textOf(record.link);
+    if (!label) return false;
+    const key = `${label}:${textOf(record.url) || textOf(record.link)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function safeLearningSourceUrl(value: unknown) {
+  const url = textOf(value).trim();
+  if (!url) return "";
+  return /^https?:\/\//i.test(url) ? url : "";
+}
+
+function LearningSourceList({ metadata }: { metadata: Item }) {
+  const sources = learningSourceRecords(metadata).slice(0, 6);
+  if (!sources.length) return null;
+  return (
+    <div className="mt-3 rounded-zaki-md border border-zaki-border bg-zaki-base p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zaki-text">
+        <FileSearch className="size-3.5 text-zaki-muted" />
+        Sources
+      </div>
+      <ul className="space-y-1.5">
+        {sources.map((source, index) => {
+          const title =
+            textOf(source.title) ||
+            textOf(source.name) ||
+            textOf(source.source) ||
+            textOf(source.url) ||
+            `Source ${index + 1}`;
+          const url = safeLearningSourceUrl(source.url) || safeLearningSourceUrl(source.link);
+          const snippet = textOf(source.snippet) || textOf(source.summary) || textOf(source.description);
+          return (
+            <li key={`${title}-${index}`} className="text-xs leading-5 text-zaki-muted">
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-zaki-text underline-offset-2 hover:underline"
+                >
+                  {title}
+                </a>
+              ) : (
+                <span className="font-medium text-zaki-text">{title}</span>
+              )}
+              {snippet ? <span className="ml-1">{snippet}</span> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function learningAssetUrl(url: string, type: string) {
   if (!url) return "";
   if (/^data:/i.test(url)) {
@@ -2006,6 +2079,7 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
             </li>
           ))}
         </ol>
+        <LearningSourceList metadata={metadata} />
       </section>
     );
   }
@@ -2129,6 +2203,7 @@ function learningAdvancedResultMarkdown(message: TutorChatMessage) {
       : learningRecords(outlinePreview.sub_topics);
     if (!subTopics.length) return "";
     const topic = textOf(metadata.topic) || textOf(outlinePreview.topic) || "Research Outline";
+    const sources = learningSourceRecords(metadata);
     return [
       "### Research Outline",
       "",
@@ -2138,6 +2213,18 @@ function learningAdvancedResultMarkdown(message: TutorChatMessage) {
         `${index + 1}. ${textOf(item.title, `Sub-topic ${index + 1}`)}`,
         textOf(item.overview) ? `   ${textOf(item.overview)}` : "",
       ]),
+      sources.length ? "" : "",
+      sources.length ? "Sources:" : "",
+      ...sources.map((source, index) => {
+        const title =
+          textOf(source.title) ||
+          textOf(source.name) ||
+          textOf(source.source) ||
+          textOf(source.url) ||
+          `Source ${index + 1}`;
+        const url = safeLearningSourceUrl(source.url) || safeLearningSourceUrl(source.link);
+        return `- ${title}${url ? `: ${url}` : ""}`;
+      }),
     ]
       .filter(Boolean)
       .join("\n");
@@ -3142,6 +3229,20 @@ function LearningChatPanel({
       selectCapability("");
       setInput(
         `Turn this into a structured lesson/book outline with sections, examples, practice checks, and notebook-ready summary:\n\n${excerpt}`,
+      );
+      return;
+    }
+    if (action === "check_answer") {
+      selectCapability("deep_solve");
+      setInput(
+        `Check my answer against this material. Mark what is correct, what is wrong, explain the fix, and give a confidence rating.\n\nMaterial:\n${excerpt}\n\nMy answer:\n`,
+      );
+      return;
+    }
+    if (action === "regenerate") {
+      selectCapability(message.capability && message.capability !== "chat" ? message.capability : "");
+      setInput(
+        `Regenerate this with stricter quality controls. Validate any answer key, cite sources when relevant, mark uncertainty, and make the explanation clearer.\n\nPrevious output:\n${excerpt}`,
       );
       return;
     }

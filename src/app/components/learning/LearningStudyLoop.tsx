@@ -48,6 +48,8 @@ export type LearningStudyAction =
   | "visualize"
   | "research"
   | "study_plan"
+  | "check_answer"
+  | "regenerate"
   | "save";
 
 type StudyActionMessage = {
@@ -428,6 +430,8 @@ export function LearningNextActionRow({
     { id: "flashcards", label: "Generate flashcards", icon: Layers },
     { id: "lesson", label: "Turn into lesson/book", icon: BookOpen },
     { id: "practice", label: "Practice similar", icon: BrainCircuit },
+    { id: "check_answer", label: "Check my answer", icon: CheckCircle2 },
+    { id: "regenerate", label: "Regenerate clearer", icon: RefreshCw },
     { id: "visualize", label: "Visualize", icon: BarChart3 },
     { id: "study_plan", label: "Add to study plan", icon: Clock3 },
     { id: "research", label: "Research deeper", icon: Microscope },

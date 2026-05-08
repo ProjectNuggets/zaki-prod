@@ -276,6 +276,18 @@ async function mockLearning(page: Page) {
                 overview: "Explain sinusoidal basis functions.",
               },
             ],
+            sources: [
+              {
+                title: "Fourier transform reference",
+                url: "https://example.com/fourier",
+                snippet: "Definition and examples.",
+              },
+              {
+                title: "Unsafe source",
+                url: "javascript:alert(1)",
+                snippet: "Should render as text only.",
+              },
+            ],
             research_config: payload.config,
           },
         };
@@ -1230,12 +1242,29 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect.poll(() => learning.startedTurns.length).toBe(2);
     await expect(page.getByText("Research Outline")).toBeVisible();
     await expect(page.getByText("Fourier basis")).toBeVisible();
+    await expect(page.getByText("Sources").first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Fourier transform reference" })).toBeVisible();
+    await expect(page.getByText("Unsafe source")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Unsafe source" })).toHaveCount(0);
+    await page.getByRole("button", { name: /Check my answer/i }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/Check my answer/);
+    await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
+      "Deep Solve",
+    );
+    await page.getByRole("button", { name: /Regenerate clearer/i }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/stricter quality controls/);
+    await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
+      "Deep Research",
+    );
     let downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: /Download Markdown/i }).click();
     let download = await downloadPromise;
     let path = await download.path();
     let markdown = await readFile(String(path), "utf8");
     expect(markdown).toContain("### Research Outline");
+    expect(markdown).toContain("Sources:");
+    expect(markdown).toContain("Fourier transform reference: https://example.com/fourier");
+    expect(markdown).not.toContain("javascript:alert");
     expect(learning.startedTurns[1]).toMatchObject({
       type: "start_turn",
       capability: "deep_research",
