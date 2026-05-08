@@ -895,6 +895,11 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByRole("heading", { name: "Your notebooks" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Newton Notes" })).toBeVisible();
     await expect(page.getByText("Momentum lesson")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Summarize" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Make quiz" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Flashcards" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Weekly review" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Weak topics" })).toBeVisible();
 
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download notebook as Markdown" }).click();
@@ -907,6 +912,15 @@ test.describe("ZAKI Learn parity wiring", () => {
     expect(markdown).toContain("# Newton Notes");
     expect(markdown).toContain("## Momentum lesson");
     expect(markdown).toContain("Momentum is conserved in a closed system.");
+
+    await page.getByRole("button", { name: "Make quiz" }).click();
+    await expect(page).toHaveURL(/view=chat/);
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      /Create an answer-keyed quiz from this notebook/,
+    );
+    await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
+      "Quiz Generation",
+    );
   });
 
   test("creates a notebook and saves a chat turn into it", async ({ page }) => {

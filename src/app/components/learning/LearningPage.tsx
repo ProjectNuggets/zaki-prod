@@ -16,6 +16,7 @@ import {
   Bold,
   Brain,
   BrainCircuit,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   CheckCircle2,
@@ -61,6 +62,7 @@ import {
   Square,
   Sparkles,
   Star,
+  Target,
   Trash2,
   Upload,
   RefreshCw,
@@ -1011,6 +1013,27 @@ export function LearningPage() {
     window.history.pushState(null, "", `/learn?${params.toString()}`);
   };
 
+  const openLearningChatDraft = (content: string, capability = "") => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    window.localStorage.setItem(
+      "zaki.learn.pendingDraft",
+      JSON.stringify({
+        content: trimmed,
+        capability,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    setTab("chat");
+    setChatCapabilityPreset(capability);
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "chat");
+    if (capability) params.set("capability", capability);
+    else params.delete("capability");
+    params.delete("session");
+    window.history.pushState(null, "", `/learn?${params.toString()}`);
+  };
+
   return (
     <div className="h-full overflow-hidden bg-zaki-base">
       <div className="h-full">
@@ -1062,6 +1085,7 @@ export function LearningPage() {
             createNotebook={createNotebook}
             items={notebookItems}
             onOpenChatSession={openLearningChatSession}
+            onStartStudyFromNotebook={openLearningChatDraft}
           />
         ) : tab === "writer" ? (
           <WriterPanel
@@ -1097,6 +1121,7 @@ export function LearningPage() {
             onOpenQuestion={(item) =>
               openObject("question", item, `question-${questionItems.indexOf(item) + 1}`)
             }
+            onStartStudyFromNotebook={openLearningChatDraft}
           />
         ) : tab === "agents" ? (
           <AgentsPanel
@@ -2934,6 +2959,28 @@ function LearningChatPanel({
     setSpaceMenuOpen(false);
   };
 
+  useEffect(() => {
+    const raw = window.localStorage.getItem("zaki.learn.pendingDraft");
+    if (!raw) return;
+    window.localStorage.removeItem("zaki.learn.pendingDraft");
+    try {
+      const parsed = asRecord(JSON.parse(raw));
+      const createdAt = Date.parse(textOf(parsed.createdAt));
+      if (Number.isFinite(createdAt) && Date.now() - createdAt > 5 * 60 * 1000) return;
+      const content = textOf(parsed.content);
+      const nextCapability = textOf(parsed.capability);
+      if (!content) return;
+      if (nextCapability && learningCapabilities.some((entry) => entry.value === nextCapability)) {
+        selectCapability(nextCapability);
+      } else {
+        selectCapability("");
+      }
+      setInput(content);
+    } catch {
+      // Invalid local handoff payloads are ignored; they are same-device convenience state.
+    }
+  }, []);
+
   const toggleTool = (toolName: LearningToolName) => {
     if (!activeCapability.allowedTools.includes(toolName)) return;
     setSelectedTools((current) => {
@@ -4087,6 +4134,7 @@ function LearningSpacePanel({
   recentActivityItems,
   onOpenChatSession,
   onOpenQuestion,
+  onStartStudyFromNotebook,
 }: {
   notebookName: string;
   setNotebookName: (value: string) => void;
@@ -4105,6 +4153,7 @@ function LearningSpacePanel({
   recentActivityItems: Item[];
   onOpenChatSession: (sessionId: string) => void;
   onOpenQuestion: (item: Item) => void;
+  onStartStudyFromNotebook: (content: string, capability?: string) => void;
 }) {
   const memoryRecord = asRecord(memory);
   const [activeSection, setActiveSection] = useState<
@@ -4401,6 +4450,7 @@ function LearningSpacePanel({
               createNotebook={createNotebook}
               items={notebookItems}
               onOpenChatSession={onOpenChatSession}
+              onStartStudyFromNotebook={onStartStudyFromNotebook}
             />
           </SpaceContentBlock>
         ) : activeSection === "question_bank" ? (
@@ -5370,12 +5420,14 @@ function NotebooksPanel({
   createNotebook,
   items,
   onOpenChatSession,
+  onStartStudyFromNotebook,
 }: {
   notebookName: string;
   setNotebookName: (value: string) => void;
   createNotebook: UseMutationResult<unknown, Error, NotebookCreateDraft, unknown>;
   items: Item[];
   onOpenChatSession: (sessionId: string) => void;
+  onStartStudyFromNotebook: (content: string, capability?: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [notebookDescription, setNotebookDescription] = useState("");
@@ -5429,6 +5481,40 @@ function NotebooksPanel({
       learningNotebookRecordExportFilename(selectedDetail, record, index),
       learningNotebookRecordMarkdown(record, index),
     );
+  };
+
+  const notebookStudyContext = () =>
+    learningNotebookMarkdown(selectedDetail, records).slice(0, 16_000);
+
+  const startNotebookStudyAction = (
+    action: "summary" | "quiz" | "flashcards" | "weekly" | "weak",
+  ) => {
+    const name = itemTitle(selectedDetail, itemTitle(selectedSummary ?? {}, "Notebook"));
+    const context = notebookStudyContext();
+    if (!context.trim()) return;
+    const prompts = {
+      summary: {
+        capability: "",
+        content: `Summarize this notebook into a clean study brief. Include key concepts, formulas/facts, examples, and what I should review next.\n\n${context}`,
+      },
+      quiz: {
+        capability: "deep_question",
+        content: `Create an answer-keyed quiz from this notebook. Include explanations, difficulty tags, and one follow-up review prompt per question.\n\n${context}`,
+      },
+      flashcards: {
+        capability: "deep_question",
+        content: `Generate concise flashcards from this notebook. Use front/back format, keep each card atomic, include answer keys, and add spaced-review hints.\n\n${context}`,
+      },
+      weekly: {
+        capability: "",
+        content: `Create a "what I learned this week" review from the notebook "${name}". Highlight progress, remaining gaps, and a practical next study session.\n\n${context}`,
+      },
+      weak: {
+        capability: "deep_solve",
+        content: `Find weak topics from this notebook, then create a targeted practice plan with similar problems and step-by-step remediation.\n\n${context}`,
+      },
+    }[action];
+    onStartStudyFromNotebook(prompts.content, prompts.capability);
   };
 
   const deleteNotebook = useMutation({
@@ -5606,10 +5692,55 @@ function NotebooksPanel({
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                     <span className="text-[11px] tabular-nums text-zaki-muted">
                       {records.length} records
                     </span>
+                    <button
+                      type="button"
+                      disabled={!records.length}
+                      onClick={() => startNotebookStudyAction("summary")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 text-xs font-medium text-zaki-text hover:bg-zaki-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Sparkles className="size-3.5" />
+                      Summarize
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!records.length}
+                      onClick={() => startNotebookStudyAction("quiz")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 text-xs font-medium text-zaki-text hover:bg-zaki-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <PenLine className="size-3.5" />
+                      Make quiz
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!records.length}
+                      onClick={() => startNotebookStudyAction("flashcards")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 text-xs font-medium text-zaki-text hover:bg-zaki-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Layers className="size-3.5" />
+                      Flashcards
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!records.length}
+                      onClick={() => startNotebookStudyAction("weekly")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 text-xs font-medium text-zaki-text hover:bg-zaki-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <CalendarDays className="size-3.5" />
+                      Weekly review
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!records.length}
+                      onClick={() => startNotebookStudyAction("weak")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 text-xs font-medium text-zaki-text hover:bg-zaki-hover disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Target className="size-3.5" />
+                      Weak topics
+                    </button>
                     <button
                       type="button"
                       onClick={downloadNotebook}
