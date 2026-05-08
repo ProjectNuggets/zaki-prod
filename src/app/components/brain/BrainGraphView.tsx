@@ -145,12 +145,34 @@ function edgeStyle(type: BrainGraphEdge["type"]) {
 // Edges without confidence/weight (older session/semantic/reference
 // types if any survive in cache) fall back to 0.5 — neutral pull.
 function edgeRelevance(edge: BrainGraphEdge): number {
-  if (edge.type !== "typed") {
-    // session / semantic / reference — neutral pull. The gateway only
-    // emits "typed" today; this is for forward-compat and any cached
-    // older data.
+  // Audit (2026-05-08) — extended to use weight for semantic edges. The
+  // prior implementation returned a constant 0.5 for everything except
+  // "typed" edges. With 99% of edges being "semantic" in real corpora,
+  // every non-typed edge produced uniform relevance → uniform layout
+  // distance. The fcose migration restored the function-form path; this
+  // extension gives it variance to actually use.
+  if (edge.type === "session") {
+    // Co-occurrence in a conversation has no per-pair similarity signal.
+    // Neutral pull is the right default.
     return 0.5;
   }
+  if (edge.type === "semantic") {
+    // Cosine similarity above the storage threshold (~0.72). Remap
+    // [0.7, 1.0] linearly to [0, 1] so the strongest semantic links
+    // pull tightly and the weak ones (just above threshold) pull
+    // loosely. Below 0.7 falls to 0 (rare, but defensive).
+    const w =
+      typeof edge.weight === "number" && Number.isFinite(edge.weight)
+        ? Math.max(0, Math.min(1, edge.weight))
+        : 0.5;
+    return Math.max(0, Math.min(1, (w - 0.7) / 0.3));
+  }
+  if (edge.type !== "typed") {
+    // reference / unknown — neutral pull as before.
+    return 0.5;
+  }
+  // typed edges — confidence × tanh(weight/3). Vote-style; weight is
+  // the count of corroborating extractions.
   const conf =
     typeof edge.confidence === "number" && Number.isFinite(edge.confidence)
       ? Math.max(0, Math.min(1, edge.confidence))
@@ -161,8 +183,7 @@ function edgeRelevance(edge: BrainGraphEdge): number {
       : 1.0;
   // tanh saturates: weight=1 → 0.32, weight=3 → 0.76, weight=10 → 0.99.
   const voteFactor = Math.tanh(w / 3);
-  const r = conf * voteFactor;
-  return Math.max(0, Math.min(1, r));
+  return Math.max(0, Math.min(1, conf * voteFactor));
 }
 
 function fetchOptsFromFilters(f: BrainGraphFilters): BrainGraphFetchOpts {
@@ -785,9 +806,6 @@ export function BrainGraphView({
 
   const isLoading = centerKey ? localQuery.isLoading : globalQuery.isLoading;
   const isError = centerKey ? localQuery.isError : globalQuery.isError;
-  const totalSkipped = !centerKey ? globalQuery.data?.total_skipped ?? 0 : 0;
-  const trimmed = !centerKey ? globalQuery.data?.trimmed ?? false : false;
-
   return (
     <div className="relative w-full" data-testid="brain-graph-canvas-wrap">
       {/* Mode bar */}
@@ -820,14 +838,14 @@ export function BrainGraphView({
               </label>
             </div>
           ) : (
-            <span>
-              {trimmed
-                ? t("brain.graph.trimmed", {
-                    defaultValue: "Trimmed: {{n}} nodes hidden.",
-                    n: totalSkipped,
-                  })
-                : null}
-            </span>
+            // Audit (2026-05-08) — dropped redundant "Trimmed: NN nodes
+            // hidden" label. The counter strip in BrainPage already
+            // shows "Showing N of M memories" honestly. The "Trimmed"
+            // framing here read as a failure ("we couldn't fit your
+            // brain") when the truth is "we hid the low-importance
+            // noise so the signal is visible." Counter strip is the
+            // canonical surface; this duplicate is gone.
+            <span aria-hidden />
           )}
         </div>
         <div className="flex items-center gap-2">
