@@ -2260,6 +2260,100 @@ export async function fetchBrainSearch(
   return parseApiJson<BrainSearchResponse>(response);
 }
 
+// Audit (2026-05-08) — backend Day 1 #6 changed the response shape from
+// flat fields to a wrapper { memory, edges, events }. This adapter
+// flattens it back to the BrainMemoryDetail interface so DetailPanel
+// keeps working without a per-call refactor. Synthesizes linked_memories
+// from the edges array; valid_history stays empty until backend exposes
+// the supersede event payload (event_log doesn't currently surface
+// valid_from / valid_to ranges per version — filed as a follow-up).
+type BrainMemoryWrappedResponse = {
+  memory?: {
+    key?: string;
+    content?: string;
+    summary?: string;
+    category?: string;
+    kind?: string;
+    session_id?: string | null;
+    valid_to?: number | null;
+    created_at?: number;
+    archived?: boolean;
+    metadata?: {
+      confidence?: number;
+      importance?: number;
+      [k: string]: unknown;
+    } | null;
+    link_type?: string | null;
+    source?: {
+      timestamp?: number;
+      session_id?: string | null;
+      snippet?: string | null;
+    } | null;
+  };
+  edges?: Array<{
+    source_key?: string;
+    target_key?: string;
+    predicate?: string;
+    weight?: number;
+    confidence?: number;
+    link_type?: string;
+  }>;
+  events?: Array<{
+    id?: string;
+    event_type?: string;
+    created_at?: number;
+    payload?: Record<string, unknown>;
+  }>;
+};
+
+function adaptBrainMemoryResponse(
+  raw: unknown,
+  fallbackKey: string,
+): BrainMemoryDetail {
+  // Detect wrapped vs legacy flat shape so we tolerate both.
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  if (!("memory" in obj)) {
+    return raw as BrainMemoryDetail;
+  }
+  const r = obj as BrainMemoryWrappedResponse;
+  const m = r.memory ?? {};
+  const events = r.events ?? [];
+  const edges = r.edges ?? [];
+  const firstUpsertCreatedAt =
+    events.find((e) => e.event_type === "upsert")?.created_at;
+  const linked: BrainMemoryDetail["linked_memories"] = edges.map((e) => ({
+    id: e.target_key,
+    link_type: e.link_type || e.predicate || "related",
+    summary: e.predicate || e.link_type || "linked",
+  }));
+  return {
+    id: m.key ?? fallbackKey,
+    key: m.key ?? fallbackKey,
+    kind: (m.kind ?? m.category ?? "") as BrainMemoryDetail["kind"],
+    created_at: m.created_at ?? firstUpsertCreatedAt ?? 0,
+    session_id: m.session_id ?? null,
+    summary: m.summary ?? m.content ?? "",
+    content: m.content ?? m.summary ?? "",
+    valid_to: m.valid_to ?? null,
+    importance_score:
+      (m.metadata && typeof m.metadata.importance === "number")
+        ? m.metadata.importance
+        : undefined,
+    confidence_score:
+      (m.metadata && typeof m.metadata.confidence === "number")
+        ? m.metadata.confidence
+        : undefined,
+    source: m.source
+      ? {
+          timestamp: m.source.timestamp ?? firstUpsertCreatedAt ?? 0,
+          snippet: m.source.snippet ?? null,
+        }
+      : null,
+    linked_memories: linked,
+    valid_history: [],
+  };
+}
+
 export async function fetchBrainMemory(
   userId: string,
   key: string
@@ -2270,5 +2364,6 @@ export async function fetchBrainMemory(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/memory ${response.status}`);
-  return parseApiJson<BrainMemoryDetail>(response);
+  const raw = await parseApiJson<unknown>(response);
+  return adaptBrainMemoryResponse(raw, key);
 }
