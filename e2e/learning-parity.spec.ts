@@ -877,6 +877,45 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByText("Explain work-energy theorem.")).toBeVisible();
   });
 
+  test("guides a student from study setup to next learning actions", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=chat");
+    await expect(page.getByText("Study setup")).toBeVisible();
+    await page.getByLabel("Course").fill("Calculus II");
+    await page.getByLabel("Exam date").fill("2026-06-15");
+    await page.getByLabel("Goal").fill("Score at least 90%");
+    await page.getByLabel("Weak topics").fill("series and integration by parts");
+    await page.getByLabel("Hours/week").fill("6");
+    await page.getByLabel("Study difficulty").selectOption("hard");
+    await page.getByRole("button", { name: /Build study plan/i }).click();
+
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/Calculus II/);
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect.poll(() => learning.startedTurns.length).toBe(1);
+    expect(learning.startedTurns[0]).toMatchObject({
+      capability: null,
+      content: expect.stringContaining("Calculus II"),
+    });
+    await expect(page.getByText("Notebook-ready answer.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Practice similar/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Make quiz/i })).toBeVisible();
+
+    await page.getByRole("button", { name: /Make quiz/i }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      /Create a focused quiz/,
+    );
+    await expect(page.getByRole("button", { name: "Learning capability menu" })).toContainText(
+      "Quiz Generation",
+    );
+    await expect(page.getByLabel("Difficulty")).toHaveValue("hard");
+
+    await page.getByRole("button", { name: /Explain simpler/i }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      /Explain this more simply/,
+    );
+  });
+
   test("creates a book proposal through the hosted book workflow", async ({ page }) => {
     const learning = await mockLearning(page);
 

@@ -74,6 +74,7 @@ import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { buildApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores";
 import {
   addLearningNotebookRecordManual,
   analyzeLearningVision,
@@ -173,6 +174,20 @@ import {
   learningNotebookRecordMarkdown,
 } from "./learningNotebookExport";
 import { buildLearningSpaceReferences } from "./learningSpaceReferences";
+import {
+  LearningNextActionRow,
+  LearningQualityChecklist,
+  LearningRunStateStrip,
+  LearningStudySetupPanel,
+  STUDY_PROFILE_STORAGE_KEY,
+  compactMessageExcerpt,
+  readLearningStudyProfile,
+  studyProfileConfigured,
+  writeLearningStudyProfile,
+  type LearningRunState,
+  type LearningStudyAction,
+  type LearningStudyProfile,
+} from "./LearningStudyLoop";
 
 type LearningTab =
   | "chat"
@@ -2206,6 +2221,12 @@ function LearningChatPanel({
   questionItems: Item[];
   skillItems: Item[];
 }) {
+  const authUser = useAuthStore((state) => state.user);
+  const studyProfileStorageKey = useMemo(() => {
+    const userKey = textOf(authUser?.id) || textOf(authUser?.username) || "anonymous";
+    return `${STUDY_PROFILE_STORAGE_KEY}:${userKey}`;
+  }, [authUser?.id, authUser?.username]);
+  const isPrimaryChatView = ((requestedView || "chat").trim().toLowerCase() || "chat") === "chat";
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
   const [input, setInput] = useState("");
@@ -2244,6 +2265,19 @@ function LearningChatPanel({
   const [socketAuthReady, setSocketAuthReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [runState, setRunState] = useState<LearningRunState>({
+    phase: "idle",
+    label: "Ready",
+  });
+  const [studyProfile, setStudyProfile] = useState<LearningStudyProfile>(() =>
+    readLearningStudyProfile(studyProfileStorageKey),
+  );
+  const [studyDraft, setStudyDraft] = useState<LearningStudyProfile>(() =>
+    readLearningStudyProfile(studyProfileStorageKey),
+  );
+  const [studyPanelOpen, setStudyPanelOpen] = useState(
+    () => isPrimaryChatView && !studyProfileConfigured(readLearningStudyProfile(studyProfileStorageKey)),
+  );
   const sessionScope = (requestedView || "chat").trim().toLowerCase() || "chat";
   const sessionStorageKey = `zaki.learn.sessionId.${sessionScope}`;
   const [restoredSessionId, setRestoredSessionId] = useState(
@@ -2296,6 +2330,13 @@ function LearningChatPanel({
       else window.history.replaceState(null, "", nextUrl);
     }
   }, [capability, requestedView, sessionScope, sessionStorageKey]);
+
+  useEffect(() => {
+    const nextProfile = readLearningStudyProfile(studyProfileStorageKey);
+    setStudyProfile(nextProfile);
+    setStudyDraft(nextProfile);
+    setStudyPanelOpen(isPrimaryChatView && !studyProfileConfigured(nextProfile));
+  }, [isPrimaryChatView, studyProfileStorageKey]);
 
   useEffect(() => {
     const scopedSessionId =
@@ -2519,12 +2560,17 @@ function LearningChatPanel({
     if (!socketAuthReady) return undefined;
     const socket = openLearningSocket("/api/learning/ws");
     socketRef.current = socket;
+    setRunState({ phase: "connecting", label: "Connecting to ZAKI learning" });
     if (!socket) {
       setConnected(false);
+      setRunState({ phase: "error", label: "Learning chat connection unavailable." });
       return undefined;
     }
     socket.onopen = () => {
       setConnected(true);
+      setRunState((current) =>
+        current.phase === "connecting" ? { phase: "idle", label: "Ready" } : current,
+      );
       const turnId = restoredActiveTurnIdRef.current;
       if (turnId) {
         socket.send(
@@ -2569,6 +2615,7 @@ function LearningChatPanel({
         if (content) {
           thinkingRef.current = [...thinkingRef.current, content];
           setThinking(thinkingRef.current.slice(-6));
+          setRunState({ phase: "working", label: content });
         }
         return;
       }
@@ -2641,6 +2688,7 @@ function LearningChatPanel({
         activeTurnIdRef.current = null;
         thinkingRef.current = [];
         setThinking([]);
+        setRunState({ phase: "complete", label: "Answer ready" });
         return;
       }
 
@@ -2650,6 +2698,7 @@ function LearningChatPanel({
         thinkingRef.current = [];
         setThinking([]);
         setStreaming(false);
+        setRunState({ phase: "complete", label: "Answer ready" });
         return;
       }
 
@@ -2667,6 +2716,10 @@ function LearningChatPanel({
         thinkingRef.current = [];
         setThinking([]);
         setStreaming(false);
+        setRunState({
+          phase: "error",
+          label: content ? `Learning stream error: ${content}` : "Learning stream returned an error.",
+        });
       }
     };
     socket.onerror = () => {
@@ -2679,10 +2732,16 @@ function LearningChatPanel({
         },
       ]);
       setStreaming(false);
+      setRunState({ phase: "error", label: "Learning chat connection failed." });
     };
     socket.onclose = () => {
       setConnected(false);
       setStreaming(false);
+      setRunState((current) =>
+        current.phase === "working" || current.phase === "connecting"
+          ? { phase: "error", label: "Learning chat disconnected." }
+          : current,
+      );
     };
     return () => {
       socket.close();
@@ -2826,6 +2885,69 @@ function LearningChatPanel({
     });
   };
 
+  const saveStudyProfile = (nextProfile: LearningStudyProfile) => {
+    setStudyProfile(nextProfile);
+    setStudyDraft(nextProfile);
+    writeLearningStudyProfile(nextProfile, studyProfileStorageKey);
+    setQuizConfig((config) => ({ ...config, difficulty: nextProfile.difficulty || "medium" }));
+    setStudyPanelOpen(false);
+    toast.success("Study setup saved");
+  };
+
+  const buildStudyPlanPrompt = (profile: LearningStudyProfile) => {
+    const lines = [
+      `Build me a practical study plan${profile.course ? ` for ${profile.course}` : ""}.`,
+      profile.examDate ? `Exam or deadline: ${profile.examDate}.` : "",
+      profile.goal ? `Goal: ${profile.goal}.` : "",
+      profile.weakTopics ? `Weak topics: ${profile.weakTopics}.` : "",
+      profile.weeklyHours ? `Available study time: ${profile.weeklyHours} hours per week.` : "",
+      "Include a weekly schedule, retrieval practice, spaced review, and what I should save to my notebook.",
+    ].filter(Boolean);
+    return lines.join("\n");
+  };
+
+  const startStudyPlan = () => {
+    const nextProfile = studyDraft;
+    saveStudyProfile(nextProfile);
+    selectCapability("");
+    setInput(buildStudyPlanPrompt(nextProfile));
+  };
+
+  const applyStudyAction = (action: LearningStudyAction, message: TutorChatMessage) => {
+    if (action === "save") {
+      setSaveNotebookOpen(true);
+      return;
+    }
+    const excerpt = compactMessageExcerpt(message.content);
+    if (action === "quiz") {
+      selectCapability("deep_question");
+      setQuizConfig((config) => ({
+        ...config,
+        difficulty: studyProfile.difficulty || config.difficulty,
+        preference: "Include the answer key, explanations, and one follow-up review prompt per question.",
+      }));
+      setInput(`Create a focused quiz from this material:\n\n${excerpt}`);
+      return;
+    }
+    if (action === "simplify") {
+      selectCapability("");
+      setInput(`Explain this more simply, then give me a quick check question:\n\n${excerpt}`);
+      return;
+    }
+    if (action === "practice") {
+      selectCapability("deep_solve");
+      setInput(`Give me one similar practice problem, let me try first, then solve it step by step:\n\n${excerpt}`);
+      return;
+    }
+    if (action === "visualize") {
+      selectCapability("visualize");
+      setInput(`Create a clear study diagram for this concept:\n\n${excerpt}`);
+      return;
+    }
+    selectCapability("deep_research");
+    setInput(`Research this topic and give me a concise study brief with sources:\n\n${excerpt}`);
+  };
+
   const sendMessage = async () => {
     const fallbackContent = attachments.some((attachment) => attachment.type === "image")
       ? "Please analyze the attached image(s)."
@@ -2916,6 +3038,7 @@ function LearningChatPanel({
     setSelectedMemoryFiles([]);
     setPanelCollapsed(true);
     setStreaming(true);
+    setRunState({ phase: "working", label: "Starting learning turn" });
     activeAssistantIdRef.current = makeClientId("assistant");
     activeTurnIdRef.current = null;
     thinkingRef.current = [];
@@ -2951,6 +3074,7 @@ function LearningChatPanel({
     thinkingRef.current = [];
     setThinking([]);
     setStreaming(false);
+    setRunState({ phase: "idle", label: "Stopped" });
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -3032,6 +3156,7 @@ function LearningChatPanel({
     activeAssistantIdRef.current = null;
     activeTurnIdRef.current = null;
     thinkingRef.current = [];
+    setRunState({ phase: "idle", label: "Ready" });
   };
 
   const handleDownloadMarkdown = () => {
@@ -3080,6 +3205,16 @@ function LearningChatPanel({
         </div>
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col overflow-hidden px-6">
+        <LearningStudySetupPanel
+          profile={studyDraft}
+          savedProfile={studyProfile}
+          open={studyPanelOpen}
+          onOpenChange={setStudyPanelOpen}
+          onChange={setStudyDraft}
+          onSave={() => saveStudyProfile(studyDraft)}
+          onBuildPlan={startStudyPlan}
+          notebooksCount={notebookItems.length}
+        />
         {!hasMessages ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
             <div className="text-center">
@@ -3137,6 +3272,15 @@ function LearningChatPanel({
                     {message.content}
                   </div>
                   <LearningAdvancedResultBlock message={message} />
+                  {message.role === "assistant" ? (
+                    <>
+                      <LearningQualityChecklist message={message} />
+                      <LearningNextActionRow
+                        onAction={(action) => applyStudyAction(action, message)}
+                        canSave={notebookItems.length > 0}
+                      />
+                    </>
+                  ) : null}
                   <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
@@ -3165,6 +3309,12 @@ function LearningChatPanel({
           {hasMessages ? (
             <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-transparent to-[var(--background)]/72" />
           ) : null}
+          <LearningRunStateStrip
+            state={runState}
+            connected={connected}
+            streaming={streaming}
+            hasMessages={hasMessages}
+          />
           <div
         className={cn(
           "relative rounded-2xl border bg-[var(--card)] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-colors",
