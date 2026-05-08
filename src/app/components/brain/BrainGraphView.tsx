@@ -187,10 +187,17 @@ function edgeRelevance(edge: BrainGraphEdge): number {
 }
 
 function fetchOptsFromFilters(f: BrainGraphFilters): BrainGraphFetchOpts {
+  // Audit (2026-05-08) — search is now a CLIENT-SIDE highlight overlay,
+  // not a server-side filter. Sending search to the backend caused the
+  // canvas to re-render a different node set on every keystroke (slow,
+  // jarring). Now: backend returns the full default graph; the search
+  // effect below applies .search-hit / .search-out cytoscape classes
+  // so matching nodes pop and non-matching dim. Feels alive — the
+  // graph reacts to typing instead of swapping out.
+  void f.search;
   return {
     max_nodes: f.maxNodes,
     exclude_orphans: f.excludeOrphans,
-    search: f.search || undefined,
     link_types: f.linkTypes.length > 0 ? f.linkTypes.join(",") : undefined,
   };
 }
@@ -520,6 +527,27 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
       selector: "edge.focus",
       css: { opacity: 0.95 } as Record<string, unknown>,
     },
+    // Audit (2026-05-08) — search overlay. Matching nodes pop with the
+    // brand red ring; non-matching dim further than the standard
+    // `.dimmed` so the matches dominate. Edges between two matches
+    // stay bright; any edge touching a non-match dims away.
+    {
+      selector: "node.search-hit",
+      css: {
+        "border-width": 4,
+        "border-color": "#f10202",
+        "border-opacity": 1,
+        opacity: 1,
+      } as Record<string, unknown>,
+    },
+    {
+      selector: "node.search-out",
+      css: { opacity: 0.1 } as Record<string, unknown>,
+    },
+    {
+      selector: "edge.search-out",
+      css: { opacity: 0.04 } as Record<string, unknown>,
+    },
   ];
 }
 
@@ -724,6 +752,42 @@ export function BrainGraphView({
       for (const id of selectedIds) cy.getElementById(id).select();
     });
   }, [selectedIds]);
+
+  // Audit (2026-05-08) — Search overlay. Applies cytoscape classes to
+  // matching / non-matching nodes when filters.search is non-empty.
+  // Search is now a pure visual highlight (not a server-side filter),
+  // so the canvas reacts to typing instead of swapping out node sets.
+  // Match logic: case-insensitive substring against display_label /
+  // summary / key — covers what users see in the hover tooltip.
+  // Edges between two matches stay bright; any edge touching a
+  // non-match dims away.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const q = filters.search.trim().toLowerCase();
+    cy.batch(() => {
+      cy.elements().removeClass("search-hit search-out");
+      if (!q) return;
+      const matchingIds = new Set<string>();
+      cy.nodes().forEach((n) => {
+        const label = String(n.data("display_label") ?? "").toLowerCase();
+        const summary = String(n.data("summary") ?? "").toLowerCase();
+        const key = String(n.data("key") ?? n.id() ?? "").toLowerCase();
+        if (label.includes(q) || summary.includes(q) || key.includes(q)) {
+          matchingIds.add(n.id());
+        }
+      });
+      cy.nodes().forEach((n) => {
+        if (matchingIds.has(n.id())) n.addClass("search-hit");
+        else n.addClass("search-out");
+      });
+      cy.edges().forEach((e) => {
+        const sIn = matchingIds.has(e.source().id());
+        const tIn = matchingIds.has(e.target().id());
+        if (!(sIn && tIn)) e.addClass("search-out");
+      });
+    });
+  }, [filters.search, elements]);
 
   // V1.11 (2026-05-07) — Apply focus dimming when EITHER focusedNodeId
   // (click, persistent) OR hoveredNodeId (hover, transient) is set.
