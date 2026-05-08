@@ -14,7 +14,6 @@ import {
   Eye,
   Rocket,
   Shield,
-  Sparkles,
   Telescope,
   Volume2,
   Zap,
@@ -43,7 +42,7 @@ import { useAuthStore } from "@/stores";
 import { useEntitlements } from "@/queries";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { cn } from "@/lib/utils";
-import { MetaLabel, SectionHeader, SheetShell } from "@/app/components/ui/zaki";
+import { MetaLabel, SheetShell } from "@/app/components/ui/zaki";
 
 type Props = {
   isOpen: boolean;
@@ -295,8 +294,8 @@ function CompactRow({
         disabled && "bg-zaki-hover/30 dark:bg-[#141210]"
       )}
     >
-      <div className={cn("flex flex-col gap-3 sm:items-start sm:justify-between", isRtl ? "sm:flex-row-reverse" : "sm:flex-row")}>
-        <div className={cn("min-w-0 flex-1", disabled && "opacity-75", isRtl && "text-right")}>
+      <div className="flex flex-col gap-3">
+        <div className={cn("min-w-0", disabled && "opacity-75", isRtl && "text-right")}>
           <div className="font-display text-sm font-bold text-zaki-primary dark:text-zaki-dark-primary">
             {title}
           </div>
@@ -309,7 +308,7 @@ function CompactRow({
             </p>
           ) : null}
         </div>
-        {control ? <div className={cn("w-full shrink-0 sm:w-[240px]", disabled && "opacity-80")}>{control}</div> : null}
+        {control ? <div className={cn("w-full", disabled && "opacity-80")}>{control}</div> : null}
       </div>
       {children ? <div className="mt-3 border-t border-zaki pt-3">{children}</div> : null}
     </div>
@@ -357,16 +356,19 @@ function SettingsRail({
   proLockedLabel: string;
   t: (key: string, opts?: { defaultValue?: string }) => string;
 }) {
+  // The sheet is `sm:max-w-[720px]`, so at the sm breakpoint and up we
+  // always have ≥720px for rail + content. Only fall back to the
+  // horizontal-tab layout when the sheet is full-width on small phones.
   return (
     <nav
       aria-label={t("zakiSettingsSheet.placeholders.navAria")}
       className={cn(
         "shrink-0 border-zaki",
-        "max-md:flex max-md:gap-1 max-md:overflow-x-auto max-md:border-b max-md:px-4 max-md:py-3",
+        "max-sm:flex max-sm:gap-1 max-sm:overflow-x-auto max-sm:border-b max-sm:px-4 max-sm:py-3",
         isRtl
-          ? "md:border-l md:pl-3 md:pr-4 md:py-4"
-          : "md:border-r md:pl-4 md:pr-3 md:py-4",
-        "md:flex md:w-44 md:flex-col md:gap-0.5"
+          ? "sm:border-l sm:pl-3 sm:pr-4 sm:py-4"
+          : "sm:border-r sm:pl-4 sm:pr-3 sm:py-4",
+        "sm:flex sm:w-52 sm:flex-col sm:gap-0.5"
       )}
     >
       {SECTION_META.map(({ id, icon: Icon, shipped, tier }) => {
@@ -379,7 +381,7 @@ function SettingsRail({
             onClick={() => onSelect(id)}
             className={cn(
               "group relative flex items-center gap-2 rounded-zaki-md px-3 py-2 text-sm transition-colors",
-              "max-md:shrink-0",
+              "max-sm:shrink-0",
               isActive
                 ? "bg-zaki-brand-10 text-zaki-primary dark:text-zaki-dark-primary"
                 : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary dark:text-zaki-dark-subtle dark:hover:text-zaki-dark-primary",
@@ -392,14 +394,15 @@ function SettingsRail({
               {t(`zakiSettingsSheet.rail.${id}.label`)}
             </span>
             {tier === "pro" ? (
-              <TierBadge tier="locked" label={proLockedLabel} size="xs" />
+              <Lock
+                className="size-3.5 shrink-0 text-zaki-muted"
+                aria-label={proLockedLabel}
+              />
             ) : !shipped ? (
               <span
-                className="shrink-0 rounded-full bg-zaki-hover px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-zaki-muted"
+                className="size-1.5 shrink-0 rounded-full bg-zaki-muted/60"
                 aria-label={t("zakiSettingsSheet.placeholders.comingSoon")}
-              >
-                {t("zakiSettingsSheet.placeholders.comingSoon")}
-              </span>
+              />
             ) : isSuggested ? (
               <span className="size-1.5 shrink-0 rounded-full bg-zaki-brand" aria-hidden />
             ) : null}
@@ -411,12 +414,13 @@ function SettingsRail({
 }
 
 function SettingsSection({
-  icon: Icon,
   title,
   summary,
   isRtl,
   children,
 }: {
+  // icon kept in props for API symmetry but the section header lives in
+  // the rail; the content panel only needs the title and one-line summary.
   icon: RailIcon;
   title: string;
   summary: string;
@@ -425,13 +429,11 @@ function SettingsSection({
 }) {
   return (
     <section className="flex flex-col gap-4">
-      <header className={cn("flex items-start gap-3", isRtl && "flex-row-reverse text-right")}>
-        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-hover text-zaki-brand">
-          <Icon className="size-4" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <SectionHeader title={title} subtitle={summary} />
-        </div>
+      <header className={cn("flex flex-col gap-1", isRtl && "text-right")}>
+        <h3 className="font-display text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+          {title}
+        </h3>
+        <p className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">{summary}</p>
       </header>
       <div>{children}</div>
     </section>
@@ -555,15 +557,13 @@ function ModeCardGroup<V extends string>({
       )}
       aria-disabled={disabled || undefined}
     >
-      <div className={cn("flex flex-col gap-1", isRtl && "text-right")}>
-        <legend className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-          {legend}
-        </legend>
-        {helper ? (
-          <p className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">{helper}</p>
-        ) : null}
-      </div>
-      <div role="radiogroup" aria-label={legend} className="grid gap-2 sm:grid-cols-3">
+      <legend className="sr-only">{legend}</legend>
+      {helper ? (
+        <p className={cn("text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted", isRtl && "text-right")}>
+          {helper}
+        </p>
+      ) : null}
+      <div role="radiogroup" aria-label={legend} className="grid grid-cols-1 gap-2 md:grid-cols-3">
         {options.map(({ value: optionValue, label, description, icon: Icon }) => {
           const isActive = optionValue === value;
           return (
@@ -1215,18 +1215,14 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       icon={<Settings className="size-4" />}
       side={isRtl ? "left" : "right"}
       width="lg"
-      className="w-full max-w-[100vw] sm:max-w-[720px] dark:text-zaki-dark-primary"
+      className="w-full sm:w-[720px] sm:max-w-[90vw] dark:text-zaki-dark-primary"
       description={t("zakiSettingsSheet.closeAria")}
       padded={false}
       footer={footer}
     >
       <div dir={isRtl ? "rtl" : "ltr"} className="relative flex h-full flex-col">
-        <div className="px-5 pt-4">
-          <div className={cn("flex flex-wrap items-center gap-2", isRtl && "flex-row-reverse")}>
-            <MetaLabel className="inline-flex rounded-full border border-zaki bg-zaki-hover px-3 py-1 text-zaki-secondary">
-              <Sparkles className="size-3.5 text-zaki-brand" />
-              {t("zakiSettingsSheet.badge")}
-            </MetaLabel>
+        <div className="px-5 pt-3">
+          <div className={cn("flex items-center", isRtl ? "justify-start" : "justify-end")}>
             <TierBadge
               tier={planTierKey}
               label={t(`sidebar.profile.planBadge.${planTierKey}`)}
@@ -1247,7 +1243,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         </div>
 
         <div className="relative flex-1 px-5 py-5">
-          <div className={cn("flex h-full min-h-0 flex-col md:flex-row", isRtl && "md:flex-row-reverse")}>
+          <div className={cn("flex h-full min-h-0 flex-col sm:flex-row", isRtl && "sm:flex-row-reverse")}>
             <SettingsRail
               activeSection={activeSection}
               onSelect={setActiveSection}
@@ -1256,11 +1252,11 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               proLockedLabel={t("sidebar.profile.planBadge.pro")}
               t={t}
             />
-            <div className="min-w-0 flex-1 px-1 py-4 md:px-5 md:py-1">
+            <div className="min-w-0 flex-1 px-1 py-4 sm:px-5 sm:py-1">
               {activeSection === "identity" && (
                 <SettingsSection
                   icon={Bot}
-                  title={t("zakiSettingsSheet.sections.overview.title")}
+                  title={t("zakiSettingsSheet.rail.identity.label")}
                   summary={overviewSummary}
                   isRtl={isRtl}
                 >
@@ -1320,7 +1316,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               {activeSection === "responseStyle" && (
                 <SettingsSection
                   icon={Volume2}
-                  title={t("zakiSettingsSheet.sections.assistant.title")}
+                  title={t("zakiSettingsSheet.rail.responseStyle.label")}
                   summary={t("zakiSettingsSheet.sections.assistant.summary", {
                     style: responseStyleLabel,
                     join: joinBehaviorLabel,
@@ -1516,7 +1512,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               {activeSection === "channels" && (
                 <SettingsSection
                   icon={Link2}
-                  title={t("zakiSettingsSheet.sections.telegram.title")}
+                  title={t("zakiSettingsSheet.rail.channels.label")}
                   summary={telegramSectionSummary}
                   isRtl={isRtl}
                 >
@@ -1608,7 +1604,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               {activeSection === "autonomy" && (
                 <SettingsSection
                   icon={Activity}
-                  title={t("zakiSettingsSheet.sections.autonomy.title")}
+                  title={t("zakiSettingsSheet.rail.autonomy.label")}
                   summary={
                     !telegramConnected
                       ? t("zakiSettingsSheet.autonomy.heartbeatRequiresTelegram")
@@ -1702,7 +1698,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               {activeSection === "plan" && (
                 <SettingsSection
                   icon={BarChart3}
-                  title={t("zakiSettingsSheet.sections.usage.title")}
+                  title={t("zakiSettingsSheet.rail.plan.label")}
                   summary={
                     usageUnavailable
                       ? t("zakiSettingsSheet.sections.usage.summaryUnavailable")
