@@ -6277,7 +6277,11 @@ export function ChatArea() {
                 onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
                 webSearchArmed={webSearchArmed}
                 onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
-                showUpgradeStrip={!isZakiBotActiveSpace}
+                // 2026-05-08 — Hide on the ZAKI landing/home view per
+                // Nova: the upsell pill bolted above the textarea was
+                // visual noise on the splash. Keep it only in real
+                // workspace chats where the slot is otherwise empty.
+                showUpgradeStrip={!isZakiBotActiveSpace && !showZakiHome}
                 sendLocked={isZakiBotSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
                 threadKey={
