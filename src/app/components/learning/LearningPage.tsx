@@ -101,6 +101,7 @@ import {
   getLearningQuestionEntry,
   getLearningSolveSession,
   getLearningTutorAgent,
+  getLearningTutorAgentActiveTurns,
   getLearningTutorAgentChannelsSchema,
   getLearningTutorAgentHistory,
   learningKeys,
@@ -577,6 +578,7 @@ export function LearningPage() {
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const requestedDocumentId = searchParams.get("doc") || "";
+  const requestedAgentId = searchParams.get("agent") || "";
   const requestedCapability =
     searchParams.get("capability") ||
     (requestedView ? viewToCapabilityPreset[requestedView.trim().toLowerCase()] : "") ||
@@ -592,6 +594,9 @@ export function LearningPage() {
   const [agentId, setAgentId] = useState("");
   const [agentName, setAgentName] = useState("");
   const [agentPersona, setAgentPersona] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState(
+    () => requestedAgentId || window.localStorage.getItem("zaki.learn.selectedAgentId") || "",
+  );
   const [visionQuestion, setVisionQuestion] = useState("");
   const [visionImage, setVisionImage] = useState<File | null>(null);
   const [, setLastResult] = useState<unknown>(null);
@@ -618,6 +623,33 @@ export function LearningPage() {
     }
     setSelectedWriterDocumentId(requestedDocumentId);
   }, [requestedView, requestedDocumentId]);
+
+  useEffect(() => {
+    if (normalizeLearningTab(requestedView) === "agents" && requestedAgentId) {
+      setSelectedAgentId(requestedAgentId);
+      window.localStorage.setItem("zaki.learn.selectedAgentId", requestedAgentId);
+    }
+  }, [requestedView, requestedAgentId]);
+
+  const openTutorAgentChat = useCallback((nextAgentId: string) => {
+    const trimmed = nextAgentId.trim();
+    if (!trimmed) return;
+    setSelectedAgentId(trimmed);
+    window.localStorage.setItem("zaki.learn.selectedAgentId", trimmed);
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "agents");
+    params.set("agent", trimmed);
+    window.history.pushState(null, "", `/learn?${params.toString()}`);
+  }, []);
+
+  const closeTutorAgentChat = useCallback(() => {
+    setSelectedAgentId("");
+    window.localStorage.removeItem("zaki.learn.selectedAgentId");
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "agents");
+    params.delete("agent");
+    window.history.pushState(null, "", `/learn?${params.toString()}`);
+  }, []);
 
   const knowledge = useQuery({
     queryKey: learningKeys.knowledge,
@@ -1061,6 +1093,9 @@ export function LearningPage() {
             souls={agentSoulItems}
             channelsSchema={agentChannelsSchema.data}
             notebookItems={notebookItems}
+            selectedAgentId={selectedAgentId}
+            onOpenAgentChat={openTutorAgentChat}
+            onCloseAgentChat={closeTutorAgentChat}
             onResult={setLastResult}
           />
         ) : tab === "workspaces" ? (
@@ -7592,6 +7627,9 @@ function AgentsPanel({
   souls,
   channelsSchema,
   notebookItems,
+  selectedAgentId,
+  onOpenAgentChat,
+  onCloseAgentChat,
   onResult,
 }: {
   agentId: string;
@@ -7609,11 +7647,13 @@ function AgentsPanel({
   souls: Item[];
   channelsSchema: unknown;
   notebookItems: Item[];
+  selectedAgentId: string;
+  onOpenAgentChat: (agentId: string) => void;
+  onCloseAgentChat: () => void;
   onResult: (value: unknown) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"bots" | "profiles" | "channels" | "souls">("bots");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [selectedAgentId, setSelectedAgentId] = useState("");
   const [selectedCreateSoulId, setSelectedCreateSoulId] = useState("_custom");
   const createSoulTemplates = useMemo(
     () =>
@@ -7649,7 +7689,7 @@ function AgentsPanel({
       <TutorAgentChatWorkspace
         agentId={selectedAgentId}
         notebookItems={notebookItems}
-        onBack={() => setSelectedAgentId("")}
+        onBack={onCloseAgentChat}
         onResult={onResult}
       />
     );
@@ -7706,7 +7746,7 @@ function AgentsPanel({
                       <button
                         key={id}
                         type="button"
-                        onClick={() => setSelectedAgentId(id)}
+                        onClick={() => onOpenAgentChat(id)}
                         className="flex w-full items-center gap-2 rounded-zaki-md px-2 py-1.5 text-left text-[13px] text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-text"
                       >
                         <span className={cn("size-1.5 rounded-full", statusTone(itemStatus(item)))} />
@@ -7825,7 +7865,7 @@ function AgentsPanel({
                       <div className="flex items-start justify-between gap-3">
                         <button
                           type="button"
-                          onClick={() => setSelectedAgentId(id)}
+                          onClick={() => onOpenAgentChat(id)}
                           className="min-w-0 flex-1 text-left"
                         >
                           <div className="flex items-center gap-2">
@@ -7840,7 +7880,7 @@ function AgentsPanel({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setSelectedAgentId(id)}
+                          onClick={() => onOpenAgentChat(id)}
                           className="rounded-zaki-md border border-zaki-border px-2 py-1 text-xs font-semibold text-zaki-text opacity-0 transition-opacity hover:bg-zaki-base group-hover:opacity-100"
                         >
                           Chat
@@ -7944,9 +7984,19 @@ function TutorAgentChatWorkspace({
     queryFn: () => getLearningTutorAgent(agentId),
     retry: 1,
   });
+  const activeTurns = useQuery({
+    queryKey: ["learning", "tutor-agent", agentId, "turns", "active"],
+    queryFn: () => getLearningTutorAgentActiveTurns(agentId),
+    refetchInterval: (query) =>
+      itemList(query.state.data, ["items", "turns", "active_turns"]).length ? 2000 : false,
+    retry: 1,
+  });
+  const activeTurnItems = itemList(activeTurns.data, ["items", "turns", "active_turns"]);
+  const activeTurnCount = activeTurnItems.length;
   const history = useQuery({
     queryKey: ["learning", "tutor-agent", agentId, "history"],
     queryFn: () => getLearningTutorAgentHistory(agentId),
+    refetchInterval: activeTurnCount ? 2000 : false,
     retry: 1,
   });
   const detailRecord = asRecord(detail.data);
@@ -8019,6 +8069,13 @@ function TutorAgentChatWorkspace({
     void queryClient.invalidateQueries({ queryKey: learningKeys.tutorAgentRecent });
   }, [agentId, queryClient]);
 
+  useEffect(() => {
+    if (activeTurnCount) return;
+    void queryClient.invalidateQueries({
+      queryKey: ["learning", "tutor-agent", agentId, "history"],
+    });
+  }, [activeTurnCount, agentId, queryClient]);
+
   return (
     <div className="flex h-full min-h-full flex-col overflow-hidden bg-zaki-base">
       <header className="flex shrink-0 items-center gap-3 border-b border-zaki-border px-5 py-3">
@@ -8080,15 +8137,14 @@ function TutorAgentChatWorkspace({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-        <div className="mx-auto max-w-[760px]">
-          <TutorAgentChatPanel
-            agentId={agentId}
-            history={historyItems}
-            onMessagesChange={setChatMessages}
-            onTurnComplete={handleTutorTurnComplete}
-          />
-        </div>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <TutorAgentChatPanel
+          agentId={agentId}
+          history={historyItems}
+          activeTurnCount={activeTurnCount}
+          onMessagesChange={setChatMessages}
+          onTurnComplete={handleTutorTurnComplete}
+        />
       </div>
     </div>
   );
@@ -8442,11 +8498,13 @@ function normalizeTutorHistoryMessage(item: Item, index: number): TutorChatMessa
 function TutorAgentChatPanel({
   agentId,
   history,
+  activeTurnCount = 0,
   onMessagesChange,
   onTurnComplete,
 }: {
   agentId: string;
   history: Item[];
+  activeTurnCount?: number;
   onMessagesChange?: (messages: TutorChatMessage[]) => void;
   onTurnComplete?: () => void;
 }) {
@@ -8471,11 +8529,12 @@ function TutorAgentChatPanel({
   );
 
   useEffect(() => {
+    if ((streaming || activeTurnCount) && messages.length) return;
     setMessages(initialMessages);
     setThinking([]);
     thinkingRef.current = [];
-    setInput("");
-  }, [agentId, initialMessages]);
+    if (!streaming && !activeTurnCount) setInput("");
+  }, [agentId, activeTurnCount, initialMessages, messages.length, streaming]);
 
   useEffect(() => {
     onMessagesChange?.(messages);
@@ -8603,40 +8662,48 @@ function TutorAgentChatPanel({
     setStreaming(true);
     socket.send(JSON.stringify({ content, chat_id: "web" }));
   };
+  const activityActive = streaming || activeTurnCount > 0;
 
   return (
-    <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised">
-      <div className="flex items-center justify-between border-b border-zaki-border px-4 py-3">
+    <div className="flex h-full min-h-0 flex-col bg-zaki-base">
+      <div className="flex shrink-0 items-center justify-between border-b border-zaki-border px-5 py-3">
         <div>
           <h3 className="text-sm font-semibold text-zaki-text">Tutor chat</h3>
           <p className="text-xs text-zaki-muted">
-            {connected ? "Connected" : "Connecting"} through the ZAKI learning gateway
+            {activityActive
+              ? "Working in the ZAKI learning gateway"
+              : connected
+                ? "Connected through the ZAKI learning gateway"
+                : "Connecting through the ZAKI learning gateway"}
           </p>
         </div>
         <span
           className={cn(
             "rounded-zaki-sm px-2 py-1 text-[11px] font-semibold",
-            connected
+            activityActive
+              ? "bg-zaki-brand/10 text-zaki-brand"
+              : connected
               ? "bg-emerald-500/10 text-emerald-700"
               : "bg-amber-500/10 text-amber-700",
           )}
         >
-          {streaming ? "Thinking" : connected ? "Live" : "Offline"}
+          {activityActive ? "Working" : connected ? "Live" : "Offline"}
         </span>
       </div>
-      <div className="max-h-80 space-y-3 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 [scrollbar-gutter:stable]">
+        <div className="mx-auto max-w-[720px] space-y-5">
         {messages.length || thinking.length ? (
           <>
             {messages.map((message) => (
               <div
                 key={message.id}
                 className={cn(
-                  "rounded-zaki-md border px-3 py-2 text-sm",
+                  "text-sm",
                   message.role === "user"
-                    ? "ml-8 border-zaki-brand/30 bg-zaki-brand/10 text-zaki-text"
+                    ? "ml-auto max-w-[80%] rounded-zaki-lg rounded-br-md bg-zaki-brand px-4 py-2.5 text-white"
                     : message.role === "system"
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : "mr-8 border-zaki-border bg-zaki-base text-zaki-text",
+                      ? "rounded-zaki-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800"
+                      : "max-w-full text-zaki-text",
                 )}
               >
                 {message.thinking?.length ? (
@@ -8650,10 +8717,16 @@ function TutorAgentChatPanel({
               </div>
             ))}
             {thinking.length ? (
-              <div className="mr-8 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-xs text-zaki-muted">
+              <div className="border-l-2 border-zaki-border pl-3 text-xs text-zaki-muted">
                 {thinking.slice(-3).map((entry, index) => (
                   <p key={`active-thinking-${index}`}>{entry}</p>
                 ))}
+              </div>
+            ) : null}
+            {activityActive && !thinking.length ? (
+              <div className="flex items-center gap-2 text-[13px] text-zaki-muted">
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>{activeTurnCount ? "Still working. You can leave and return." : "Thinking..."}</span>
               </div>
             ) : null}
             <div ref={bottomRef} />
@@ -8661,29 +8734,32 @@ function TutorAgentChatPanel({
         ) : (
           <EmptyLine label="Send a message to start this tutor conversation." />
         )}
+        </div>
       </div>
-      <div className="flex gap-2 border-t border-zaki-border p-3">
-        <input
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              sendMessage();
-            }
-          }}
-          placeholder="Ask this tutor..."
-          className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
-        />
-        <button
-          type="button"
-          disabled={!connected || !input.trim() || streaming}
-          onClick={sendMessage}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <Send className="size-4" />
-          Send
-        </button>
+      <div className="shrink-0 border-t border-zaki-border px-5 py-3">
+        <div className="mx-auto flex max-w-[720px] gap-2">
+          <input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+              }
+            }}
+            placeholder="Ask this tutor..."
+            className="h-10 min-w-0 flex-1 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-sm text-zaki-text outline-none focus:border-zaki-brand"
+          />
+          <button
+            type="button"
+            disabled={!connected || !input.trim() || activityActive}
+            onClick={sendMessage}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-zaki-md bg-zaki-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            <Send className="size-4" />
+            Send
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -618,6 +618,12 @@ export function getLearningTutorAgentHistory(agentId: string) {
   );
 }
 
+export function getLearningTutorAgentActiveTurns(agentId: string) {
+  return learningRequest<unknown>(
+    `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/turns/active`,
+  );
+}
+
 export function listLearningTutorAgentFiles(agentId: string) {
   return learningRequest<unknown>(
     `/api/learning/tutor-agents/${encodeURIComponent(agentId)}/files`,

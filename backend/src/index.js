@@ -11408,6 +11408,12 @@ registerLearningJsonProxyRoute(
     ),
   { label: "Learning tutor agent detail request" }
 );
+registerLearningJsonProxyRoute(
+  "GET",
+  "/api/learning/tutor-agents/:agentId/turns/active",
+  (req) => `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/turns/active`,
+  { label: "Learning tutor agent active turns request" }
+);
 const learningTutorAgentUpdateJson = express.json({ limit: "5mb" });
 app.patch(
   "/api/learning/tutor-agents/:agentId",
