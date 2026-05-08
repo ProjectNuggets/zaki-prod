@@ -537,4 +537,113 @@ _(running tally — first finding: hex sprawl in LoginScreen. Will track every c
 
 ## Synthesis
 
-_(written at end of Phase 1 — pillar coverage map, top 10 P0/P1 findings, recommended fix order)_
+All 11 surfaces audited. Six themes recur across every surface. Four P0 sweeps fix most of them in one pass. Booth-critical and launch-critical work ranked separately.
+
+### Cross-cutting themes
+
+**1. Hex-literal sprawl in dark-mode overrides — universal.**
+Every surface that has any dark-mode treatment reaches for inline hex (`dark:bg-[#141210]`, `dark:border-[#2e241b]`, `dark:text-[#c9b8a4]`, etc.). Counted: ~120+ instances across LoginScreen / Sidebar / SettingsModal / ZakiSettingsSheet / PricingPage / onboarding / mobile shell / sub-sheets. Root cause: token coverage in `tokens.css` is light on dark-mode background variants — there's no `bg-zaki-dark-card`, `border-zaki-dark-strong`, etc. Each component invents inline hex to fill the gap. **Phase 4 fix: extend the `--zaki-*` token system with dark-mode utilities so every visual choice maps to a token.**
+
+**2. Mega-files everywhere.**
+- `ChatArea.tsx` — 6,460 lines (6 view modes via internal state)
+- `LearningPage.tsx` — 8,782 lines (out of scope, but worth noting)
+- `Sidebar.tsx` — 2,357 lines
+- `ZakiSettingsSheet.tsx` — 1,481 lines
+- `OnboardingModal.tsx` — 1,056 lines
+- `PricingPage.tsx` — 1,029 lines
+- `PowerUserSheet.tsx` — 928 lines
+- `backend/src/index.js` — 11,300+ lines
+Phase 4 candidates for splitting. Not booth-critical; everything works as-is. Refactor wave when a feature compounds debt.
+
+**3. i18n discipline mostly good, three regressions.**
+Most surfaces use `t()` correctly. Three anti-patterns:
+- LoginScreen `AUTH_COPY` constant (~180 lines of en/ar string pairs in TSX)
+- Sidebar `sidebarCopy` constant (~13 string pairs)
+- ZakiSettingsSheet `ERROR_COPY` (7 hardcoded English error messages)
+Plus Sidebar has 5+ hardcoded English `aria-label`s. All P0 i18n violations.
+
+**4. Stale brand artifacts.**
+- `LogoArabicOrange` (component name + asset) used in LoginScreen, Sidebar, MobileHeader, ZakiHomeView. Brand finalized as red `#f10202`; orange is legacy.
+- `#E56A54` salmon/orange gradient in Sidebar memory dialog.
+- Off-brand status colors: `bg-emerald-*` / `bg-amber-*` / `bg-rose-*` in PowerUserSheet (18 instances), Sidebar fileStatusTone, BrainSemanticDegradedBanner (fixed), BrainGraphView Superseded (fixed), BrainTimeScrubber (fixed), MessageBubble error (fixed), InputArea quota badge (fixed), InputArea pressure thermometer (fixed). PowerUserSheet still pending.
+
+**5. No Five Pillars in user-visible copy.**
+The roadmap defines five pillars (Brain, Presence, Worker, Person, Wallet) as the differentiators. They appear in `docs/zaki-product-roadmap.md` and nowhere else in the user-facing app:
+- Onboarding modals: live walkthrough of "spaces and threads," no "ZAKI lives on every channel" or "watch ZAKI's mind work."
+- Pricing page: features listed as bullets, no pillar framing.
+- Empty states (chat home, brain): generic.
+- Settings: configures features, doesn't explain why they matter.
+The product *has* the differentiators in code; it doesn't *say* them in copy.
+
+**6. No tier gates / paid feature visibility.**
+ZakiSettingsSheet has zero `pro/upgrade/premium/locked` references. SettingsModal's plan section mostly redirects to /pricing without showing what's behind paywalls. Free users can't see what they're missing → no upgrade pressure → conversion floor.
+
+### Top P0 sweeps (do these first; mostly mechanical)
+
+**P0-A: Token coverage extension (cross-cutting).**
+Add dark-mode utilities to `tokens.css` `@theme inline` block so utilities like `bg-zaki-dark-card`, `border-zaki-dark-strong`, `text-zaki-dark-muted-deep` exist. Then sweep ~120 hex literals across 8 files into utilities. One PR, deterministic, no UX risk. Estimated 1 day.
+
+**P0-B: i18n migration of three constants.**
+Move `AUTH_COPY` (LoginScreen), `sidebarCopy` (Sidebar), `ERROR_COPY` (ZakiSettingsSheet) from inline TSX constants to `i18n/<lang>/<namespace>.json` resource files. Plus migrate hardcoded `aria-label` strings in Sidebar (5+ locations). Estimated 0.5–1 day.
+
+**P0-C: Brand artifact cleanup.**
+- Replace `LogoArabicOrange` with `LogoBrandRed` (or just `Logo`) — touches LoginScreen, Sidebar, MobileHeader, ZakiHomeView. Asset + component rename + import sweep.
+- PowerUserSheet 18 off-brand color references → tokens (same pattern as the brain migrations already shipped).
+- Sidebar memory dialog `#E56A54` orange gradient → brand red.
+Estimated 0.5 day.
+
+**P0-D: Spaces composer cleanup (already shipped 80a117d).**
+Done. ✓
+
+### Booth-critical work (launchable, not booth-blocking)
+
+The booth is a milestone, not a deadline (per Nova). But these matter for the "AI you can pay for" pitch even with extended timeline:
+
+| Surface | Move # | Status | Effort |
+|---|---|---|---|
+| Brain page | Move 2 | FE done, backend backfill pending | backend-blocked |
+| Spaces composer cleanup | Move 3 | ✓ shipped | done |
+| Activation gaps (TTS, scheduled tasks UI, brain compose) | Move 4 | Cron UI exists but invisible from chat | 0.5 day FE polish |
+| ZakiSettingsSheet redesign (sidebar-nav, 9 sections, visual mode pickers, tier gates) | Move 5 | not started | 2–3 days |
+| Slack channel | Move 7 | needs Bot Token (operator) | 0.5 day FE |
+| Pricing pitch + comparison + FAQ + trust | Move 8 | mostly shipped, gaps in pitch shape | 1 day |
+| Stripe + paywall + cap-lift | Move 9 | wired, needs paywall trigger surface | 1–2 days |
+
+### Launch-critical work (paying-user retention)
+
+These are the things a paying user notices over week 1–4:
+
+1. **Five Pillars in user-visible copy** — onboarding flow, pricing pitch, empty states, settings descriptions. The product *says* what it *is*. ~1 day across surfaces.
+2. **Tier gates visible** — every Pro feature in ZakiSettingsSheet shows with 🔒 + Pro badge for free users. Free users see what they'd unlock. ~0.5 day.
+3. **Settings as a route, not a modal** — split SettingsModal + ZakiSettingsSheet into a single `/settings` page with sidebar-nav. Account / Appearance / Brain / Channels / Models / Autonomy / Privacy / Plan / Advanced. Phase 4. ~3 days.
+4. **Onboarding pitch** — re-shape the 2-step Simple modal to lead with "ZAKI lives on every channel, remembers everything, corrects himself, and works while you sleep." Then guide them to first action. ~1 day.
+5. **Pricing trust signals** — testimonials, "trusted by," security badges, FAQ section. ~1 day.
+6. **Mobile-first affordances** — bottom-tab nav, swipe-between-threads, long-press for actions. The mobile audience grows after launch. ~3 days.
+
+### Pillar coverage map
+
+| Pillar | Surface coverage today | Gap |
+|---|---|---|
+| **1. Brain** (visible memory) | `/brain` page, supersede chain stepper, time scrubber, source attribution, insights strip | **Backend backfill needed.** FE work done. |
+| **2. Presence** (cross-channel) | Telegram connection in ZakiSettingsSheet, channel-attribution chips on messages | Slack pending Bot Token. WhatsApp/Discord deferred. Pitch absent from onboarding. |
+| **3. Worker** (autonomy + scheduling) | Autonomy mode in ZakiSettingsSheet, plan/execute/review pills in InputArea, CronManagementSheet | Cron UI exists, discoverability is poor. Autonomy choice not visually framed (Move 5 "3 cards" pending). |
+| **4. Person** (relational) | Display name in SettingsModal, identity card in `/brain/me` (now wired) | Mood layer planned for V1.13. Onboarding doesn't introduce ZAKI as a persona. |
+| **5. Wallet** (paid path) | PricingPage with multi-provider checkout, BillingSuccessPage, SettingsModal plan section | No tier gates visible in product. Pricing page lacks pitch shape. Cap-lift trigger UI missing. |
+
+Brain has the most FE investment but is data-blocked. Wallet has the second-most FE investment and is the second-biggest gap (no tier visibility = no upsell). Pillars 2-4 are mid-stack — code exists, copy/discoverability missing.
+
+### Recommended fix order
+
+Phase 4 execution sequence after Phase 2 design direction lands:
+
+1. **Sweep P0-A (token coverage) + P0-B (i18n migration) + P0-C (brand artifacts).** Mechanical. ~2 days.
+2. **Move 5 ZakiSettingsSheet redesign** with tier gates visible + visual mode pickers. ~3 days.
+3. **Onboarding pitch refactor** with Five Pillars. ~1 day.
+4. **Pricing pitch + comparison table + FAQ + trust.** ~1 day.
+5. **Settings consolidation** (SettingsModal + ZakiSettingsSheet → /settings page). ~3 days.
+6. **Mobile-first affordances pass.** ~3 days.
+7. **Brain page resumes** (when backend backfill ships).
+
+Total ~13 person-days for the post-Phase-2 execution plan, excluding brain (backend dependency).
+
+Phase 2 design direction doc lands next. It anchors all of the above in a single design contract.
