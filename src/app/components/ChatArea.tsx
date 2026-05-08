@@ -1,5 +1,5 @@
 import { BackgroundPattern } from "./BackgroundPattern";
-import { InputArea } from "./InputArea";
+import { InputArea, type InputAreaHandle } from "./InputArea";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
 import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
@@ -2259,6 +2259,12 @@ export function ChatArea() {
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
+  // 2026-05-08 — Imperative handle for InputArea so quick-reply chips
+  // (rendered up in ChatView) can route through the same submitMessage
+  // pipeline that InputArea owns. Without this, quick-reply skipped the
+  // per-turn toggle reset and could send privately when the user had
+  // armed privacy for a different turn.
+  const composerHandleRef = useRef<InputAreaHandle | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3756,6 +3762,7 @@ export function ChatArea() {
     assistantId,
     signal,
     disableResponseEnvelope = false,
+    turnOptions,
   }: {
     workspaceSlug: string;
     threadSlug: string;
@@ -3763,6 +3770,7 @@ export function ChatArea() {
     assistantId: string;
     signal?: AbortSignal;
     disableResponseEnvelope?: boolean;
+    turnOptions?: { privateTurn?: boolean; extendedThinking?: boolean };
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -3773,17 +3781,29 @@ export function ChatArea() {
     const requestPath = isZakiAgentSpace
       ? "/api/agent/chat/stream"
       : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
+    // 2026-05-08 — Per-turn flags from the composer (S4 + S5). The
+    // backend (nullalis) is the consumer; field names use snake_case to
+    // match agent payload conventions. Only included when set so the
+    // request body stays clean for normal turns.
+    const turnFlagsBody = turnOptions
+      ? {
+          ...(turnOptions.privateTurn ? { private_turn: true } : {}),
+          ...(turnOptions.extendedThinking ? { extended_thinking: true } : {}),
+        }
+      : {};
     const requestBody = isZakiAgentSpace
       ? {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
+          ...turnFlagsBody,
         }
       : {
           message,
           mode: queryModeEnabled ? "query" : "chat",
           ...(shouldDisableResponseEnvelope ? { disableResponseEnvelope: true } : {}),
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
+          ...turnFlagsBody,
         };
 
     console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
@@ -5046,20 +5066,15 @@ export function ChatArea() {
   // Handle send message
   // 2026-05-08 — `options` carries per-turn flags from the composer
   // (privateTurn = don't store this exchange in brain; extendedThinking
-  // = longer reasoning pass). Currently logged + forwarded to where the
-  // SSE turn payload is constructed; backend (nullalis) honoring is
-  // tracked separately. The FE plumb-through ensures the wire is in
-  // place and the toggles aren't lying about doing something.
+  // = longer reasoning pass). Forwarded into streamChatMessage and onto
+  // the request body as private_turn / extended_thinking. Backend
+  // (nullalis) honoring is the consumer side and is tracked separately.
   const handleSend = useCallback(async (
     text: string,
     files: File[],
     preferredWorkspaceSlug?: string | null,
     options?: { privateTurn?: boolean; extendedThinking?: boolean }
   ) => {
-    if (options && (options.privateTurn || options.extendedThinking)) {
-      // eslint-disable-next-line no-console
-      console.debug("[zaki] turn options", options);
-    }
     const trimmed = text.trim();
     if (!trimmed) {
       toast.error("Message is empty");
@@ -5287,6 +5302,7 @@ export function ChatArea() {
         message: sendText,
         assistantId: assistantMessageId,
         signal: streamController.signal,
+        turnOptions: options,
       });
       if (isZakiBotTarget && agentUserId) {
         const sessionKey = buildAgentSessionKey(threadId, agentUserId);
@@ -6024,14 +6040,11 @@ export function ChatArea() {
         onThumbsUpMessage={handleThumbsUpMessage}
         onThumbsDownMessage={handleThumbsDownMessage}
         onQuickReply={(prefill) => {
-          // S1 — one-click follow-up. Send the prefill as a fresh user
-          // message immediately, no edit step. Carry any staged
-          // attachments through (and clear them locally) so a chip
-          // click doesn't silently lose files the user already prepared.
+          // S1 — one-click follow-up. Route through the composer handle
+          // (not handleSend directly) so the per-turn toggles, drafts,
+          // and attachments all reset uniformly with a normal send.
           if (isZakiBotSendLocked) return;
-          const carryAttachments = attachments;
-          if (carryAttachments.length > 0) setAttachments([]);
-          void handleSend(prefill, carryAttachments);
+          composerHandleRef.current?.submitWith(prefill);
         }}
         isRtl={isRtl}
       />
@@ -6252,6 +6265,7 @@ export function ChatArea() {
                 active={isZakiBotActiveSpace && zakiBootstrapCompleted}
               />
               <InputArea
+                composerHandleRef={composerHandleRef}
                 onSend={(text, files, options) =>
                   void handleSend(text, files, undefined, options)
                 }

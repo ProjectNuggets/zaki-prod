@@ -1,5 +1,5 @@
 import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, Brain, EyeOff } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,21 @@ export type TurnOptions = {
   extendedThinking?: boolean;
 };
 
+// 2026-05-08 — Imperative API for sending a turn that bypasses the
+// textarea draft. Used by:
+//   - the high-pressure /compact pre-flight banner (sends the literal
+//     "/compact" command without disturbing the user's in-progress
+//     draft or staged attachments — actually, attachments tag along
+//     so a user with a file ready can still get the file delivered
+//     after compaction)
+//   - the quick-reply chips path in ChatArea (sends the chip prefill
+//     while honoring per-turn toggles that live in InputArea state)
+// Both routes flow through the same submitMessage logic so toggles,
+// drafts, sessionStorage, and attachment-clearing all stay consistent.
+export type InputAreaHandle = {
+  submitWith: (text: string) => void;
+};
+
 export function InputArea({
   onSend,
   attachments,
@@ -58,9 +73,11 @@ export function InputArea({
   onZakiModeChange,
   zakiModePending = false,
   zakiContextPressurePercent = null,
+  zakiCompactionThresholdPct = null,
   zakiContextTooltipCopy = null,
   threadKey = null,
   lastUserMessage = null,
+  composerHandleRef = null,
 }: {
   onSend: (text: string, attachments: File[], options?: TurnOptions) => void;
   attachments: File[];
@@ -82,6 +99,12 @@ export function InputArea({
   onZakiModeChange?: (mode: AgentSessionMode) => void | Promise<void>;
   zakiModePending?: boolean;
   zakiContextPressurePercent?: number | null;
+  /** Backend-reported compaction trigger threshold (from agent
+   *  diagnostics report.compaction_threshold_pct). When provided, the
+   *  pre-flight banner fires 10pp BELOW this value so the user has a
+   *  chance to /compact before the agent fires compaction itself. When
+   *  null, falls back to a conservative 70% FE default. */
+  zakiCompactionThresholdPct?: number | null;
   zakiContextTooltipCopy?: string | null;
   /** Stable identifier for the active thread/space, used to scope draft
    *  persistence and last-message recall. Null = no persistence. */
@@ -89,6 +112,10 @@ export function InputArea({
   /** Last sent user message text in this thread; ↑ on empty input
    *  recalls it for editing. */
   lastUserMessage?: string | null;
+  /** Imperative escape hatch for parent-driven sends (compact pre-flight,
+   *  quick replies). When invoked, runs through the same submitMessage
+   *  pipeline — toggles, drafts, attachments all reset consistently. */
+  composerHandleRef?: MutableRefObject<InputAreaHandle | null> | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
@@ -287,21 +314,37 @@ export function InputArea({
     : 0;
   const pressureColor = "var(--zaki-accent)";
 
-  // Table-stakes #10 (2026-05-08) — High-pressure pre-flight nudge.
+  // Table-stakes #10 (2026-05-08, refined per WR-05 review) —
+  // High-pressure pre-flight nudge.
   //
-  // When backend-reported pressure crosses the user-visible "context is
-  // filling" line (70% — chosen as the conventional waterline; the agent
-  // owns the actual compaction trigger and can fire whenever it wants),
-  // show a small banner above the composer offering /compact. One click
-  // sends the slash command as a fresh user message, freeing context
-  // before the user's next prompt has to fight for room. We don't render
-  // when there's an active stream (would overlap the typing indicator).
-  const SHOW_COMPACT_PREFLIGHT_AT = 70;
+  // The agent's actual compaction trigger lives in
+  // report.compaction_threshold_pct (per-session, dynamic). When that
+  // value is plumbed to InputArea (zakiCompactionThresholdPct), we lead
+  // it by 10pp so the user has a chance to /compact BEFORE the agent
+  // fires compaction. Without backend-reported threshold, fall back to
+  // a conservative 70% — clearly labeled as the FE default.
+  //
+  // Hysteresis: once the banner shows, it stays open until pressure
+  // drops 5pp below the show line. Otherwise the user types one
+  // character that nudges pressure up to the show line, the banner
+  // appears, the next character drops below, the banner hides — flicker.
+  const COMPACT_FALLBACK_SHOW_AT = 70;
+  const COMPACT_LEAD_PP = 10;
+  const COMPACT_HYSTERESIS_PP = 5;
+  const compactShowLine =
+    typeof zakiCompactionThresholdPct === "number" && zakiCompactionThresholdPct > 0
+      ? Math.max(0, zakiCompactionThresholdPct - COMPACT_LEAD_PP)
+      : COMPACT_FALLBACK_SHOW_AT;
+  const compactHideLine = Math.max(0, compactShowLine - COMPACT_HYSTERESIS_PP);
+  const compactArmedRef = useRef(false);
+  if (hasZakiContextValue) {
+    if (zakiContextValue >= compactShowLine) compactArmedRef.current = true;
+    else if (zakiContextValue < compactHideLine) compactArmedRef.current = false;
+  } else {
+    compactArmedRef.current = false;
+  }
   const showCompactPreflight =
-    zakiBotMode &&
-    !isSending &&
-    hasZakiContextValue &&
-    zakiContextValue >= SHOW_COMPACT_PREFLIGHT_AT;
+    zakiBotMode && !isSending && hasZakiContextValue && compactArmedRef.current;
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -449,11 +492,15 @@ export function InputArea({
     return () => clearInterval(interval);
   }, [inputValue.length, placeholderSuggestions.length]);
 
-  const submitMessage = () => {
-    if (isSending || sendLocked) {
-      return;
-    }
-    if (inputValue.trim() || attachments.length > 0) {
+  // submitMessage centralizes every send path so toggles, drafts, and
+  // attachments reset uniformly. textOverride lets parent-driven sends
+  // (compact pre-flight, quick reply chips) bypass the textarea draft
+  // while still flowing through this single pipeline.
+  const submitMessage = useCallback(
+    (textOverride?: string) => {
+      if (isSending || sendLocked) return;
+      const text = textOverride !== undefined ? textOverride : inputValue;
+      if (!text.trim() && attachments.length === 0) return;
       const options: TurnOptions | undefined =
         privateTurn || extendedThinking
           ? {
@@ -461,11 +508,15 @@ export function InputArea({
               extendedThinking: extendedThinking || undefined,
             }
           : undefined;
-      onSend(inputValue, attachments, options);
+      onSend(text, attachments, options);
+      // Always clear the textarea after a send. For an override path
+      // (compact / quick reply) the textarea may have held an unrelated
+      // draft — that draft is intentionally consumed because the user
+      // is sending a different message, and they can ↑ to recall.
       setInputValue("");
-      // Per-turn toggles always reset so they never carry over silently.
       if (privateTurn) setPrivateTurn(false);
       if (extendedThinking) setExtendedThinking(false);
+      if (attachments.length > 0) setAttachments([]);
       if (draftStorageKey && typeof window !== "undefined") {
         try {
           window.sessionStorage.removeItem(draftStorageKey);
@@ -473,8 +524,27 @@ export function InputArea({
           /* ignore */
         }
       }
-    }
-  };
+    },
+    [
+      isSending,
+      sendLocked,
+      inputValue,
+      attachments,
+      privateTurn,
+      extendedThinking,
+      onSend,
+      setAttachments,
+      draftStorageKey,
+    ]
+  );
+
+  useImperativeHandle(
+    composerHandleRef,
+    () => ({
+      submitWith: (text: string) => submitMessage(text),
+    }),
+    [submitMessage, composerHandleRef]
+  );
 
   // 2026-05-08 — Draft persistence side-effects.
   //
@@ -773,10 +843,7 @@ export function InputArea({
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  if (sendLocked || isSending) return;
-                  onSend("/compact", []);
-                }}
+                onClick={() => submitMessage("/compact")}
                 disabled={sendLocked || isSending}
                 className="shrink-0 rounded-full bg-zaki-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-zaki-warning hover:brightness-95 disabled:opacity-60"
               >
@@ -875,21 +942,35 @@ export function InputArea({
               // fires when the user has just typed a `:trigger ` at the
               // caret (start of input or after whitespace + the trailing
               // space). Pasting `:weather` mid-paragraph never expands;
-              // editing earlier in the input never expands. Caret is
-              // restored to the end of the inserted replacement.
+              // editing earlier in the input never expands.
+              //
+              // WR-01 (review fix) — set state only, do NOT write
+              // el.value imperatively. The previous version raced with
+              // fast typing: characters typed between the controlled
+              // re-render and the rAF stamp got overwritten. Now React
+              // owns the value and we restore the caret on the next tick
+              // when the DOM has settled.
               const expanded = applyExpansion(value, ta.selectionStart ?? value.length);
+              let nextCaret: number | null = null;
               if (expanded) {
                 value = expanded.value;
+                nextCaret = expanded.caret;
+              }
+              setInputValue(value);
+              if (nextCaret !== null) {
                 requestAnimationFrame(() => {
                   const el = textareaRef.current;
                   if (!el) return;
-                  el.value = expanded.value;
-                  el.setSelectionRange(expanded.caret, expanded.caret);
+                  // Only restore the caret if the DOM still reflects the
+                  // expansion we just applied — guards against further
+                  // typing landing before rAF fires.
+                  if (el.value === value && nextCaret !== null) {
+                    el.setSelectionRange(nextCaret, nextCaret);
+                  }
                   el.style.height = "auto";
                   el.style.height = `${el.scrollHeight}px`;
                 });
               }
-              setInputValue(value);
               const { active } = detectSlash(value);
               setSlashOpen(active);
               if (active) setSlashHighlight(0);
