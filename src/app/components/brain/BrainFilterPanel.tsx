@@ -158,7 +158,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
               onClick={() => set("colorPreset", p)}
               className={`flex-1 rounded-zaki-md border px-2 py-1 text-xs capitalize ${
                 filters.colorPreset === p
-                  ? "border-[#f10202] bg-[#f10202]/10 text-white/85"
+                  ? "border-zaki-brand bg-zaki-brand-10 text-white/85"
                   : "border-white/10 text-white/55 hover:border-white/40"
               }`}
               data-testid={`brain-color-preset-${p}`}
@@ -259,7 +259,7 @@ function ToggleRow({
         type="checkbox"
         checked={value}
         onChange={(e) => onChange(e.target.checked)}
-        className="size-4 accent-[#f10202]"
+        className="size-4 accent-zaki-brand"
       />
     </label>
   );
@@ -290,7 +290,7 @@ function NumberRow({
         max={max}
         step={step}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-20 rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-sm text-white/85 focus:border-[#f10202] focus:outline-none"
+        className="w-20 rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-sm text-white/85 focus:border-zaki-brand focus:outline-none"
       />
     </label>
   );
@@ -324,7 +324,7 @@ function SliderRow({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[#f10202]"
+        className="w-full accent-zaki-brand"
       />
     </div>
   );

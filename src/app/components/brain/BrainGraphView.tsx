@@ -36,6 +36,7 @@ import type {
   BrainMemoryDetail,
 } from "@/lib/api";
 import {
+  BRAND_RED,
   EDGE_COLOR,
   importancePercentileRanks,
   importanceToRadius,
@@ -497,7 +498,7 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
       selector: "node.center",
       css: {
         "border-width": 4,
-        "border-color": "#f10202",
+        "border-color": BRAND_RED,
         "border-opacity": 1,
       },
     },
@@ -509,7 +510,7 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
       selector: "node.self",
       css: {
         "border-width": 3,
-        "border-color": "#f10202",
+        "border-color": BRAND_RED,
         "border-style": "double",
         "border-opacity": 1,
         label: "data(label)",
@@ -520,7 +521,7 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
       selector: "node:selected",
       css: {
         "border-width": 3,
-        "border-color": "#f10202",
+        "border-color": BRAND_RED,
         "border-opacity": 1,
       },
     },
@@ -555,7 +556,7 @@ function buildStylesheet(textFadeThreshold: number): StylesheetCSS[] {
       selector: "node.search-hit",
       css: {
         "border-width": 4,
-        "border-color": "#f10202",
+        "border-color": BRAND_RED,
         "border-opacity": 1,
         opacity: 1,
       } as Record<string, unknown>,
@@ -917,7 +918,7 @@ export function BrainGraphView({
               <button
                 type="button"
                 onClick={exitLocalMode}
-                className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 hover:border-[#f10202]"
+                className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 hover:border-zaki-brand"
                 data-testid="brain-back-to-global"
               >
                 {t("brain.graph.backToGlobal", { defaultValue: "← Back to global" })}
@@ -932,7 +933,7 @@ export function BrainGraphView({
                   step={1}
                   value={depth}
                   onChange={(e) => setDepth(Number(e.target.value))}
-                  className="w-20 accent-[#f10202]"
+                  className="w-20 accent-zaki-brand"
                   data-testid="brain-depth-slider"
                 />
                 <span className="w-3 text-right">{depth}</span>
@@ -951,7 +952,7 @@ export function BrainGraphView({
         </div>
         <div className="flex items-center gap-2">
           {selectedIds.length > 0 && (
-            <span className="rounded-full bg-[#f10202]/10 px-2 py-0.5 text-[#f10202]">
+            <span className="rounded-full bg-zaki-brand-10 px-2 py-0.5 text-zaki-brand">
               {t("brain.graph.selected", {
                 defaultValue: "{{n}} selected",
                 n: selectedIds.length,
@@ -1146,7 +1147,7 @@ function DetailPanel({
             <div className="flex items-center gap-1" title={`importance ${(importance * 100).toFixed(0)}%`}>
               <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-[#f10202]"
+                  className="h-full rounded-full bg-zaki-brand"
                   style={{ width: `${importance * 100}%` }}
                 />
               </div>
@@ -1294,7 +1295,7 @@ function DetailPanel({
         <button
           type="button"
           onClick={() => onShowLocal(node.key ?? node.id)}
-          className="w-full rounded-zaki-md border border-[#f10202] bg-[#f10202]/10 px-3 py-1.5 text-xs font-medium text-[#f10202] transition hover:bg-[#f10202]/20"
+          className="w-full rounded-zaki-md border border-zaki-brand bg-zaki-brand-10 px-3 py-1.5 text-xs font-medium text-zaki-brand transition hover:bg-zaki-brand-20"
           data-testid="brain-show-local-graph"
         >
           {t("brain.graph.detail.showLocal", { defaultValue: "Show local graph" })}

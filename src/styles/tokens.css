@@ -645,7 +645,21 @@ code, pre, kbd, samp {
 .bg-zaki-brand-10 { background-color: var(--zaki-brand-10); }
 .bg-zaki-brand-15 { background-color: var(--zaki-brand-15); }
 .bg-zaki-brand-20 { background-color: var(--zaki-brand-20); }
+.hover\:bg-zaki-brand-10:hover { background-color: var(--zaki-brand-10); }
+.hover\:bg-zaki-brand-15:hover { background-color: var(--zaki-brand-15); }
 .hover\:bg-zaki-brand-20:hover { background-color: var(--zaki-brand-20); }
+
+/* Brand borders + focus + accent */
+.border-zaki-brand { border-color: var(--zaki-brand); }
+.border-zaki-brand-40 { border-color: rgba(241, 2, 2, 0.40); }
+.border-zaki-brand-60 { border-color: rgba(241, 2, 2, 0.60); }
+.hover\:border-zaki-brand:hover { border-color: var(--zaki-brand); }
+.hover\:border-zaki-brand-40:hover { border-color: rgba(241, 2, 2, 0.40); }
+.focus\:border-zaki-brand:focus { border-color: var(--zaki-brand); }
+.focus\:ring-zaki-brand:focus { box-shadow: 0 0 0 1px rgba(241, 2, 2, 0.30); }
+.ring-zaki-brand-40 { --tw-ring-color: rgba(241, 2, 2, 0.40); box-shadow: 0 0 0 1px rgba(241, 2, 2, 0.40); }
+.accent-zaki-brand { accent-color: var(--zaki-brand); }
+.hover\:text-zaki-brand:hover { color: var(--zaki-brand); }
 
 .bg-zaki-accent-10 { background-color: var(--zaki-accent-10); }
 .bg-zaki-accent-15 { background-color: var(--zaki-accent-15); }
@@ -677,6 +691,7 @@ code, pre, kbd, samp {
 .dark .dark\:text-zaki-dark-muted { color: var(--zaki-text-muted); }
 .dark .dark\:text-zaki-dark-subtle { color: var(--zaki-text-secondary); }
 .dark .dark\:border-zaki-dark { border-color: var(--zaki-surface-dark-hover); }
+.dark .dark\:border-zaki-dark-card { border-color: rgba(240, 236, 230, 0.08); }
 
 /* Spinner — teal accent */
 .border-zaki-spinner {

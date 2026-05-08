@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LogoArabicOrange } from "./icons";
+import { LogoArabicRed } from "./icons";
 import {
   requestPublicSignup,
   requestLogin,
@@ -580,7 +580,7 @@ export function LoginScreen() {
     >
       <div className={`w-full max-w-md rounded-zaki-2xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl p-8 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] ${isRtl ? "text-right" : "text-left"}`}>
         <div className="flex items-center">
-          <LogoArabicOrange />
+          <LogoArabicRed />
         </div>
         <h1 className="mt-3 font-display text-2xl font-bold text-zaki-primary dark:text-[#efe6d9]">
           {mode === "signup"

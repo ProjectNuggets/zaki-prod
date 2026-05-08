@@ -13,6 +13,11 @@
 // matching Obsidian's restraint. Users who want colors can switch
 // preset; all existing color logic preserved unchanged.
 
+// Canonical brand red. Mirror of CSS `--zaki-brand` so JS contexts that
+// can't resolve CSS vars (cytoscape style configs, canvas renderers)
+// have a single source of truth instead of inlined hex.
+export const BRAND_RED = "#f10202";
+
 export type ColorPreset = "mono" | "community" | "link_type" | "kind";
 
 // V1.11 monochrome canvas — muted gray for all nodes; emphasis comes

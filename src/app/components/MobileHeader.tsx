@@ -7,7 +7,7 @@
 
 import { Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { LogoArabicOrange } from "./icons";
+import { LogoArabicRed } from "./icons";
 import { useUIStore } from "@/stores";
 
 export function MobileHeader() {
@@ -28,7 +28,7 @@ export function MobileHeader() {
       </button>
 
       <div className="flex items-center gap-2">
-        <LogoArabicOrange />
+        <LogoArabicRed />
         <span className="font-display text-base font-bold text-zaki-primary dark:text-[#efe6d9]">
           ZAKI
         </span>

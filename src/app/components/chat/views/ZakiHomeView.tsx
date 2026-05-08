@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   X,
 } from "lucide-react";
-import { CenterLogo, LogoArabicOrange } from "../../icons";
+import { CenterLogo, LogoArabicRed } from "../../icons";
 import { useAuthStore } from "@/stores";
 import type { Space } from "@/types";
 import { apiRequest } from "@/lib/api";
@@ -479,7 +479,7 @@ export function ZakiHomeView({
           </div>
           <h1 className="mt-4 flex items-center gap-3 text-4xl md:text-5xl font-semibold text-zaki-primary tracking-tight">
             <span className="inline-flex size-12 md:size-14 items-center justify-center">
-              <LogoArabicOrange />
+              <LogoArabicRed />
             </span>
             <span>{t("home.heroHeadline")}</span>
           </h1>

@@ -1,6 +1,6 @@
 import svgPaths from "@/imports/svg-g3updgkf22";
 
-export function LogoArabicOrange({ className }: { className?: string }) {
+export function LogoArabicRed({ className }: { className?: string }) {
   return (
     <div className={className || "relative h-[32px] w-[46px] shrink-0"}>
       <svg className="block size-full" fill="none" preserveAspectRatio="xMidYMid meet" viewBox="0 0 46 32">

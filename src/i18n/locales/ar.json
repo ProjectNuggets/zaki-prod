@@ -190,7 +190,12 @@
       "saving": "جارٍ الحفظ..."
     },
     "brain": "الذاكرة",
-    "learning": "التعلّم"
+    "learning": "التعلّم",
+    "memory": {
+      "title": "ذاكرتك",
+      "subtitle": "ما الذي يتذكره ZAKI عنك",
+      "closeAria": "إغلاق الذاكرة"
+    }
   },
   "empty": {
     "headline": "جاهز دائمًا ليفهمك",
@@ -733,7 +738,16 @@
       "invalidProactiveUpdates": "يجب أن تكون التحديثات الاستباقية مفعلة أو متوقفة فقط.",
       "invalidVoiceReplies": "يجب أن تكون الردود الصوتية مفعلة أو متوقفة فقط.",
       "invalidSessionTimeoutMinutes": "يجب أن تكون مهلة الجلسة بين 5 و180 دقيقة.",
-      "invalidAutonomy": "اختر مستوى استقلالية: قراءة فقط، أو مراقَب، أو كامل."
+      "invalidAutonomy": "اختر مستوى استقلالية: قراءة فقط، أو مراقَب، أو كامل.",
+      "bot": {
+        "temporary_contention": "ZAKI مشغول على عقدة أخرى. يرجى المحاولة بعد قليل.",
+        "unauthorized": "سجّل الدخول مرة أخرى لإدارة مساحة ZAKI.",
+        "forbidden": "هذا الإجراء غير متاح لحسابك.",
+        "invalid_telegram_token": "رمز تيليجرام غير صالح. تحقق منه وحاول مرة أخرى.",
+        "provision_failed": "تعذّر تجهيز مساحة ZAKI الآن.",
+        "settings_update_failed": "تعذّر حفظ إعدادات ZAKI.",
+        "usage_unavailable": "بيانات الاستخدام غير متاحة مؤقتًا."
+      }
     },
     "footer": {
       "unsaved": "تغييرات غير محفوظة",

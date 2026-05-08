@@ -18,7 +18,7 @@ function Layer() {
   );
 }
 
-function LogoArabicOrange() {
+function LogoArabicRed() {
   return (
     <div className="h-[32px] overflow-clip relative shrink-0 w-[46px]" data-name="logo arabic orange 1">
       <Layer />
@@ -55,7 +55,7 @@ function Top() {
   return (
     <div className="relative shrink-0 w-full" data-name="Top">
       <div className="content-stretch flex items-start justify-between pl-[6px] pr-0 py-0 relative w-full">
-        <LogoArabicOrange />
+        <LogoArabicRed />
         <CustomIconButtonAiTemplate />
       </div>
     </div>

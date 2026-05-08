@@ -71,7 +71,7 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-xs text-white/85 focus:border-[#f10202] focus:outline-none"
+            className="rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-xs text-white/85 focus:border-zaki-brand focus:outline-none"
             data-testid="brain-scrubber-date"
           />
           <button
@@ -99,8 +99,8 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             onClick={() => setAnimating((v) => !v)}
             className={`rounded-zaki-md border px-2 py-0.5 text-xs transition ${
               animating
-                ? "border-[#f10202] bg-[#f10202]/10 text-[#f10202]"
-                : "border-white/10 text-white/85 hover:border-[#f10202]"
+                ? "border-zaki-brand bg-zaki-brand-10 text-zaki-brand"
+                : "border-white/10 text-white/85 hover:border-zaki-brand"
             }`}
             data-testid="brain-scrubber-animate"
           >

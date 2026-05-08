@@ -1,5 +1,5 @@
 import { 
-  LogoArabicOrange, SideBarIcon, SearchIcon, AddIcon, 
+  LogoArabicRed, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, type LucideIcon } from "lucide-react";
@@ -108,21 +108,6 @@ export function Sidebar() {
       label: isRtl ? "فشل" : "Failed",
     },
   } as const;
-  const sidebarCopy = {
-    justNow: isRtl ? "الآن" : "just now",
-    oneMinuteAgo: isRtl ? "منذ دقيقة" : "1 min ago",
-    minutesAgo: (count: number) => (isRtl ? `منذ ${count} دقائق` : `${count} min ago`),
-    oneHourAgo: isRtl ? "منذ ساعة" : "1 hour ago",
-    hoursAgo: (count: number) => (isRtl ? `منذ ${count} ساعات` : `${count} hours ago`),
-    today: isRtl ? "اليوم" : "today",
-    memoryTitle: isRtl ? "ذاكرتك" : "Your Memory",
-    memorySubtitle: isRtl ? "ما الذي يتذكره ZAKI عنك" : "What ZAKI remembers about you",
-    closeMemoryAria: isRtl ? "إغلاق الذاكرة" : "Close memory",
-    closeSpaceSettingsAria: isRtl ? "إغلاق إعدادات المساحة" : "Close space settings",
-    description: isRtl ? "الوصف" : "Description",
-    descriptionPlaceholder: isRtl ? "صف ما الذي خُصصت له هذه المساحة..." : "Describe what this space is for...",
-    workspaceTools: isRtl ? "أدوات المساحة" : "Workspace tools",
-  };
   // Get state from stores
   const { user, logout, setUser } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
@@ -1338,7 +1323,7 @@ export function Sidebar() {
               onClick={openAboutView}
               aria-label="Open home"
             >
-              <LogoArabicOrange className="h-6 w-8 shrink-0" />
+              <LogoArabicRed className="h-6 w-8 shrink-0" />
             </button>
             <button
               className="size-9 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
@@ -1420,7 +1405,7 @@ export function Sidebar() {
           type="button"
           onClick={openAboutView}
         >
-          <LogoArabicOrange />
+          <LogoArabicRed />
         </button>
         <button
           className="size-10 shrink-0 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
@@ -2204,8 +2189,8 @@ export function Sidebar() {
                   <Brain className="size-5 text-white" />
                 </div>
                 <div>
-                  <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">{sidebarCopy.memoryTitle}</div>
-                  <div className="text-xs text-zaki-disabled dark:text-zaki-dark-muted">{sidebarCopy.memorySubtitle}</div>
+                  <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">{t("sidebar.memory.title")}</div>
+                  <div className="text-xs text-zaki-disabled dark:text-zaki-dark-muted">{t("sidebar.memory.subtitle")}</div>
                 </div>
               </div>
               <button
@@ -2216,7 +2201,7 @@ export function Sidebar() {
                   setMemorySearchQuery("");
                   setMemoryInitialTab("memories");
                 }}
-                aria-label={sidebarCopy.closeMemoryAria}
+                aria-label={t("sidebar.memory.closeAria")}
               >
                 <span className="block text-lg leading-none">×</span>
               </button>

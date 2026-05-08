@@ -190,7 +190,12 @@
       "saving": "Saving..."
     },
     "brain": "Brain",
-    "learning": "Learn"
+    "learning": "Learn",
+    "memory": {
+      "title": "Your Memory",
+      "subtitle": "What ZAKI remembers about you",
+      "closeAria": "Close memory"
+    }
   },
   "empty": {
     "headline": "Ready when you are",
@@ -733,7 +738,16 @@
       "invalidProactiveUpdates": "Proactive updates must be either enabled or disabled.",
       "invalidVoiceReplies": "Voice replies must be either enabled or disabled.",
       "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes.",
-      "invalidAutonomy": "Pick read only, supervised, or full autonomy."
+      "invalidAutonomy": "Pick read only, supervised, or full autonomy.",
+      "bot": {
+        "temporary_contention": "ZAKI is busy on another node. Retry shortly.",
+        "unauthorized": "Sign in again to manage your ZAKI space.",
+        "forbidden": "This ZAKI action is not available for your account.",
+        "invalid_telegram_token": "The Telegram token is invalid. Check it and try again.",
+        "provision_failed": "We could not provision your ZAKI space right now.",
+        "settings_update_failed": "We could not save your ZAKI settings.",
+        "usage_unavailable": "Usage is temporarily unavailable."
+      }
     },
     "footer": {
       "unsaved": "Unsaved changes",
@@ -1453,59 +1467,59 @@
       "save_moreHint": "Save more safe memories without extra interruption"
     }
   },
-    "memoryViewer": {
-      "notebook": {
-        "title": "What ZAKI currently knows",
-        "body": "This is the personal memory layer that helps ZAKI stay useful across your Spaces.",
-        "helper": "You can change, remove, or review anything here.",
-        "empty": "Nothing notable here yet.",
-        "recentPending": "{{count}} memories are waiting for review.",
-        "recentConflicts": "{{count}} possible conflicts are waiting for a decision.",
-        "recentSaved": "Saved: {{content}} ({{date}})",
-        "activity": {
-          "saved": "Saved: {{content}} ({{date}})",
-          "review": "Needs review: {{content}} ({{date}})",
-          "conflict": "Possible conflict: {{content}} ({{date}})",
-          "edited": "Edited: {{content}} ({{date}})",
-          "outdated": "Marked outdated: {{content}} ({{date}})"
-        },
-        "groups": {
-          "about_you": {
-            "title": "About you",
-            "body": "Stable details, identity cues, and facts ZAKI can reuse carefully."
-          },
-          "preferences": {
-            "title": "Preferences",
-            "body": "How you like to work, write, plan, or receive help."
-          },
-          "ongoing_work": {
-            "title": "Ongoing work",
-            "body": "Projects, goals, and active context that may matter again soon."
-          },
-          "relationships": {
-            "title": "Relationships",
-            "body": "People or roles that help ZAKI understand your context."
-          },
-          "recent_changes": {
-            "title": "Recent changes",
-            "body": "The latest updates, reviews, and conflict signals across your memory."
-          }
-        }
+  "memoryViewer": {
+    "notebook": {
+      "title": "What ZAKI currently knows",
+      "body": "This is the personal memory layer that helps ZAKI stay useful across your Spaces.",
+      "helper": "You can change, remove, or review anything here.",
+      "empty": "Nothing notable here yet.",
+      "recentPending": "{{count}} memories are waiting for review.",
+      "recentConflicts": "{{count}} possible conflicts are waiting for a decision.",
+      "recentSaved": "Saved: {{content}} ({{date}})",
+      "activity": {
+        "saved": "Saved: {{content}} ({{date}})",
+        "review": "Needs review: {{content}} ({{date}})",
+        "conflict": "Possible conflict: {{content}} ({{date}})",
+        "edited": "Edited: {{content}} ({{date}})",
+        "outdated": "Marked outdated: {{content}} ({{date}})"
       },
-      "scope": {
-        "personal": {
-          "title": "Personal memory",
-          "body": "Follows you across Spaces and improves future replies over time."
+      "groups": {
+        "about_you": {
+          "title": "About you",
+          "body": "Stable details, identity cues, and facts ZAKI can reuse carefully."
         },
-        "space": {
-          "title": "Space context",
-          "body": "Files and instructions belong to the Space and stay shared inside it."
+        "preferences": {
+          "title": "Preferences",
+          "body": "How you like to work, write, plan, or receive help."
         },
-        "session": {
-          "title": "Temporary session context",
-          "body": "Short-lived chat context helps in the moment and is only kept if it becomes useful memory."
+        "ongoing_work": {
+          "title": "Ongoing work",
+          "body": "Projects, goals, and active context that may matter again soon."
+        },
+        "relationships": {
+          "title": "Relationships",
+          "body": "People or roles that help ZAKI understand your context."
+        },
+        "recent_changes": {
+          "title": "Recent changes",
+          "body": "The latest updates, reviews, and conflict signals across your memory."
         }
+      }
+    },
+    "scope": {
+      "personal": {
+        "title": "Personal memory",
+        "body": "Follows you across Spaces and improves future replies over time."
       },
+      "space": {
+        "title": "Space context",
+        "body": "Files and instructions belong to the Space and stay shared inside it."
+      },
+      "session": {
+        "title": "Temporary session context",
+        "body": "Short-lived chat context helps in the moment and is only kept if it becomes useful memory."
+      }
+    },
     "raw": {
       "title": "Raw records",
       "body": "Search, filter, export, review, and resolve the underlying memory records here."

@@ -79,7 +79,7 @@ export function BrainCommunityLegend({
           type="button"
           onClick={handleRecompute}
           disabled={isRunning}
-          className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 transition hover:border-[#f10202] hover:text-[#f10202] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 transition hover:border-zaki-brand hover:text-zaki-brand disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="brain-recompute-clusters"
         >
           {isRunning

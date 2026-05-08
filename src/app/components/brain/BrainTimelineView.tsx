@@ -126,7 +126,7 @@ export function BrainTimelineView({ userId }: Props) {
           <span className="flex items-center gap-2">
             <span
               className={`text-xs font-medium tabular-nums transition-colors ${
-                isAtNow ? "text-zaki-muted" : "text-[#f10202]"
+                isAtNow ? "text-zaki-muted" : "text-zaki-brand"
               }`}
             >
               {asOfLabel}
@@ -136,7 +136,7 @@ export function BrainTimelineView({ userId }: Props) {
                 type="button"
                 onClick={handleResetToNow}
                 aria-label={t("brain.timeline.slider.resetAria")}
-                className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[#f10202] ring-1 ring-[#f10202]/40 hover:bg-[#f10202]/10 focus:outline-none focus:ring-2"
+                className="rounded px-1.5 py-0.5 text-[10px] font-medium text-zaki-brand ring-1 ring-zaki-brand-40 hover:bg-zaki-brand-10 focus:outline-none focus:ring-2"
               >
                 {t("brain.timeline.slider.now")}
               </button>
@@ -152,7 +152,7 @@ export function BrainTimelineView({ userId }: Props) {
           onChange={handleSliderChange}
           aria-label={t("brain.timeline.slider.label")}
           aria-valuetext={asOfLabel}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zaki-border accent-[#f10202]"
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zaki-border accent-zaki-brand"
         />
         <div className="mt-1 flex justify-between text-[9px] text-zaki-muted">
           <span>

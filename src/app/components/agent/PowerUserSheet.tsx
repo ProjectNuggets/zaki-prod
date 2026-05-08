@@ -142,7 +142,7 @@ function renderNestedSection(title: string, data: unknown) {
   return (
     <div
       key={title}
-      className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+      className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card"
       data-testid={`power-user-context-section-${title.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
@@ -349,7 +349,7 @@ export function PowerUserSheet({
   const renderApprovals = () => (
     <div className="space-y-3" data-testid="power-user-approvals">
       {pendingApprovals.length === 0 ? (
-        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
           {t("zakiControls.powerUser.approvals.empty")}
         </div>
       ) : (
@@ -418,7 +418,7 @@ export function PowerUserSheet({
 
     return (
       <div className="space-y-3" data-testid="power-user-controls">
-        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-semibold text-zaki-primary">
@@ -459,7 +459,7 @@ export function PowerUserSheet({
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
               {t("zakiControls.powerUser.controls.sandboxTitle")}
             </div>
@@ -471,7 +471,7 @@ export function PowerUserSheet({
             </div>
           </div>
 
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
               {t("zakiControls.powerUser.controls.approvalsTitle")}
             </div>
@@ -485,7 +485,7 @@ export function PowerUserSheet({
             </div>
           </div>
 
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
               {t("zakiControls.powerUser.controls.contextTitle")}
             </div>
@@ -513,7 +513,7 @@ export function PowerUserSheet({
     if (contextDiagLoading && !contextDiag) {
       return (
         <div
-          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card"
           data-testid="power-user-context"
         >
           {t("zakiControls.powerUser.context.loading")}
@@ -535,7 +535,7 @@ export function PowerUserSheet({
       const reason = contextDiag.reason || "no_active_session";
       return (
         <div
-          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card"
           data-testid="power-user-context"
           data-state="inactive"
         >
@@ -561,7 +561,7 @@ export function PowerUserSheet({
 
     return (
       <div className="space-y-3" data-testid="power-user-context">
-        <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+        <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
           <div className="flex items-center justify-between">
             <span className="text-zaki-secondary">Model</span>
             <span className="font-mono-ui text-xs">{report?.model || "—"}</span>
@@ -617,7 +617,7 @@ export function PowerUserSheet({
         </div>
 
         {roles ? (
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
               {t("zakiControls.powerUser.context.roleBreakdown")}
             </div>
@@ -650,7 +650,7 @@ export function PowerUserSheet({
 
   const renderLegacyMemoryHealth = () =>
     memoryHealth ? (
-      <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+      <div className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
         <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
           {t("zakiControls.powerUser.memory.snapshotTitle")}
         </div>
@@ -703,7 +703,7 @@ export function PowerUserSheet({
     if (memoryDiagLoading && !memoryDiag) {
       return (
         <div
-          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+          className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card"
           data-testid="power-user-memory"
         >
           {t("zakiControls.powerUser.memory.loading")}
@@ -729,7 +729,7 @@ export function PowerUserSheet({
           data-testid="power-user-memory"
           data-state="inactive"
         >
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             {reason === "no_active_session"
               ? t("zakiControls.powerUser.memory.noActiveSession")
               : t("zakiControls.powerUser.memory.noDiagnostics", { reason })}
@@ -760,12 +760,12 @@ export function PowerUserSheet({
         {reportText ? (
           <pre
             data-testid="power-user-memory-report"
-            className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-zaki-lg border border-zaki bg-zaki-raised p-4 font-mono-ui text-xs leading-relaxed text-zaki-primary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+            className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-zaki-lg border border-zaki bg-zaki-raised p-4 font-mono-ui text-xs leading-relaxed text-zaki-primary dark:bg-zaki-dark-card dark:border-zaki-dark-card"
           >
             {reportText}
           </pre>
         ) : (
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             {t("zakiControls.powerUser.memory.noText")}
           </div>
         )}
@@ -793,7 +793,7 @@ export function PowerUserSheet({
     return (
       <div className="space-y-3" data-testid="power-user-usage">
         {usageLoading && !usageSurfaces ? (
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
             {t("zakiControls.powerUser.usage.loading")}
           </div>
         ) : null}
@@ -807,7 +807,7 @@ export function PowerUserSheet({
               key={row.surface}
               data-testid={`power-user-usage-surface-${row.surface}`}
               data-soft-limit-state={row.state}
-              className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+              className="grid gap-2 rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card"
             >
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{row.label}</span>

@@ -274,7 +274,7 @@ export function BrainPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t("brain.graph.search.placeholder")}
                 aria-label={t("brain.graph.search.placeholder")}
-                className="w-full rounded-zaki-lg border border-zaki-border bg-zaki-raised py-2 pl-8 pr-8 text-sm text-zaki-text placeholder:text-zaki-muted focus:border-[#f10202] focus:outline-none focus:ring-1 focus:ring-[#f10202]/30"
+                className="w-full rounded-zaki-lg border border-zaki-border bg-zaki-raised py-2 pl-8 pr-8 text-sm text-zaki-text placeholder:text-zaki-muted focus:border-zaki-brand focus:outline-none focus:ring-zaki-brand"
                 data-testid="brain-search-input"
               />
               {!searchQuery && (
@@ -531,7 +531,7 @@ function PanelToggle({ icon: Icon, label, active, onClick, shortcut }: PanelTogg
       title={tooltip}
       className={`pointer-events-auto flex size-9 items-center justify-center rounded-zaki-md border transition-colors ${
         active
-          ? "border-[#f10202]/60 bg-[#f10202]/15 text-[#f10202]"
+          ? "border-zaki-brand-60 bg-zaki-brand-15 text-zaki-brand"
           : "border-white/10 bg-zaki-raised/90 text-white/60 hover:border-white/20 hover:text-white"
       }`}
     >
@@ -585,7 +585,7 @@ function TabButton({ active, onClick, children }: TabButtonProps) {
       onClick={onClick}
       className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
         active
-          ? "border-[#f10202] text-zaki-text"
+          ? "border-zaki-brand text-zaki-text"
           : "border-transparent text-zaki-muted hover:text-zaki-text"
       }`}
     >

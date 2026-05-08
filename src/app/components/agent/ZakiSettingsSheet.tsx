@@ -77,15 +77,7 @@ const DEFAULT_SETTINGS: SettingsDraft = {
 
 const TELEGRAM_CONFIRMATION_DELAYS_MS = [0, 300, 1000, 2000];
 
-const ERROR_COPY: Record<BotErrorCode, string> = {
-  temporary_contention: "ZAKI is busy on another node. Retry shortly.",
-  unauthorized: "Sign in again to manage your ZAKI space.",
-  forbidden: "This ZAKI action is not available for your account.",
-  invalid_telegram_token: "The Telegram token is invalid. Check it and try again.",
-  provision_failed: "We could not provision your ZAKI space right now.",
-  settings_update_failed: "We could not save your ZAKI settings.",
-  usage_unavailable: "Usage is temporarily unavailable.",
-};
+type TFn = (key: string, options?: { defaultValue?: string }) => string;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -123,14 +115,14 @@ function getBotErrorCode(payload: unknown): BotErrorCode | null {
   return null;
 }
 
-function getBotErrorText(payload: unknown, fallback: string) {
+function getBotErrorText(t: TFn, payload: unknown, fallback: string) {
   const code = getBotErrorCode(payload);
-  return code ? ERROR_COPY[code] : fallback;
+  return code ? t(`zakiSettingsSheet.errors.bot.${code}`, { defaultValue: fallback }) : fallback;
 }
 
-function getErrorText(payload: unknown, fallback: string) {
+function getErrorText(t: TFn, payload: unknown, fallback: string) {
   const record = asRecord(payload);
-  return asString(record.message) || asString(record.error) || getBotErrorText(payload, fallback);
+  return asString(record.message) || asString(record.error) || getBotErrorText(t, payload, fallback);
 }
 
 function isUnknownBotUserError(payload: unknown) {
@@ -507,7 +499,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
             tone: "error",
             text: unknownUser
               ? t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser")
-              : getErrorText(data, t("zakiSettingsSheet.errors.onboardingLoad")),
+              : getErrorText(t, data, t("zakiSettingsSheet.errors.onboardingLoad")),
           });
           setOnboarding(null);
         }
@@ -538,7 +530,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
             tone: "error",
             text: unknownUser
               ? t("zakiSettingsSheet.errors.botStateUnavailableUnknownUser")
-              : getErrorText(data, t("zakiSettingsSheet.errors.settingsLoad")),
+              : getErrorText(t, data, t("zakiSettingsSheet.errors.settingsLoad")),
           });
           setSettings(null);
         }
@@ -554,7 +546,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         } else {
           setBanner({
             tone: "error",
-            text: getErrorText(data, t("zakiSettingsSheet.errors.heartbeatLoad")),
+            text: getErrorText(t, data, t("zakiSettingsSheet.errors.heartbeatLoad")),
           });
           setHeartbeat(null);
         }
@@ -718,7 +710,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       setSettingsErrors(fieldErrors);
       setBanner({
         tone: "error",
-        text: getErrorText(data, t("zakiSettingsSheet.errors.settingsSave")),
+        text: getErrorText(t, data, t("zakiSettingsSheet.errors.settingsSave")),
       });
       return false;
     }
@@ -776,7 +768,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       setTelegramErrors(extractTelegramFieldErrors(data, t));
       setBanner({
         tone: "error",
-        text: getErrorText(data, t("zakiSettingsSheet.errors.telegramConnectFailed")),
+        text: getErrorText(t, data, t("zakiSettingsSheet.errors.telegramConnectFailed")),
       });
       return;
     }
@@ -832,7 +824,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       tone: "error",
       text: response.ok
         ? t("zakiSettingsSheet.errors.telegramDisconnectUnconfirmed")
-        : getErrorText(data, t("zakiSettingsSheet.errors.telegramDisconnectFailed")),
+        : getErrorText(t, data, t("zakiSettingsSheet.errors.telegramDisconnectFailed")),
     });
   };
 
