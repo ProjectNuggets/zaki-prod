@@ -2989,17 +2989,39 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey) return;
-    // Initial fetch on mount + every 15s while the user is in ZAKI bot
-    // mode. Without periodic polling the meter only updated on session
-    // change and post-stream, so out-of-band pressure changes (another
-    // channel posting into the same session, background compaction
-    // landing) wouldn't reach the UI until the next user turn.
-    void refreshContextGauge();
-    const interval = window.setInterval(() => {
-      void refreshContextGauge();
-    }, 15_000);
+    // Initial fetch on mount + recurring polling while the user is in
+    // ZAKI bot mode. Without periodic refresh, out-of-band pressure
+    // changes (another channel posting into the same session, background
+    // compaction landing) wouldn't reach the UI until the next user turn.
+    //
+    // P2-01: setTimeout chaining (not setInterval) — the next poll only
+    // fires after the previous one resolves, so a slow response can't be
+    // overrun by a faster-stale one. P2-02: skip the tick entirely while
+    // document.hidden so backgrounded tabs do not hammer the agent.
+    let cancelled = false;
+    let timer: number | null = null;
+    const POLL_MS = 15_000;
+    const tick = async () => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && !document.hidden) {
+        await refreshContextGauge();
+      }
+      if (cancelled) return;
+      timer = window.setTimeout(tick, POLL_MS);
+    };
+    void tick();
+    // Resume immediately on visibility change so a tab that was hidden
+    // during a tick doesn't have to wait POLL_MS for fresh data.
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        void refreshContextGauge();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      window.clearInterval(interval);
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [isZakiBotActiveSpace, normalizedActiveZakiSessionKey, refreshContextGauge]);
 

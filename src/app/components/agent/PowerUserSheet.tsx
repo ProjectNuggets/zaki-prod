@@ -20,7 +20,6 @@ import {
 } from "@/lib/api";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 import {
-  type ZakiContextPressureState,
   type ZakiRuntimeSandbox,
 } from "@/stores/zakiSessionUiStore";
 
@@ -68,7 +67,6 @@ export interface PowerUserSheetProps {
   modePending?: boolean;
   onModeChange?: (mode: AgentSessionMode) => Promise<void> | void;
   contextPressurePercent?: number | null;
-  contextPressureState?: ZakiContextPressureState;
   sandbox?: ZakiRuntimeSandbox | null;
   pendingApprovals?: NullalisApprovalRequest[];
   onApproveRequest?: (id: string, approved: boolean) => Promise<void> | void;
@@ -182,7 +180,6 @@ export function PowerUserSheet({
   modePending = false,
   onModeChange,
   contextPressurePercent = null,
-  contextPressureState = null,
   sandbox = null,
   pendingApprovals = [],
   onApproveRequest,
@@ -403,12 +400,11 @@ export function PowerUserSheet({
   const renderControls = () => {
     const modeButtons: AgentSessionMode[] = ["plan", "execute", "review"];
     const modeValue = activeMode ?? "execute";
-    const contextTone =
-      contextPressureState === "near_limit"
-        ? "text-rose-600 dark:text-rose-400"
-        : contextPressureState === "warning"
-        ? "text-amber-600 dark:text-amber-400"
-        : "text-zaki-secondary";
+    // 2026-05-08 — Pressure renders as a plain percent; FE no longer
+    // colors it by tier. The real compaction trigger is per-session
+    // (report.compaction_threshold_pct, surfaced in the diagnostics tab),
+    // not anything this control panel can derive locally.
+    const contextTone = "text-zaki-secondary";
     const sandboxLabel =
       sandbox?.enabled === true
         ? sandbox.backend
@@ -493,11 +489,7 @@ export function PowerUserSheet({
               {typeof contextPressurePercent === "number" ? `${Math.round(contextPressurePercent)}%` : "—"}
             </div>
             <div className="mt-1 text-xs text-zaki-muted">
-              {contextPressureState === "near_limit"
-                ? t("zakiControls.context.near_limit")
-                : contextPressureState === "warning"
-                ? t("zakiControls.context.warning")
-                : t("zakiControls.context.normal")}
+              {t("zakiControls.context.normal")}
             </div>
           </div>
         </div>
@@ -904,7 +896,6 @@ export function PowerUserSheet({
     modePending,
     onModeChange,
     contextPressurePercent,
-    contextPressureState,
     sandbox,
     pendingCount,
   ]);

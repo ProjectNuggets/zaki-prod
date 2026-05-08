@@ -125,31 +125,34 @@ export function InputArea({
     });
   }, []);
 
-  // Phase 4-B (2026-05-08) — Compaction meter wiring.
+  // 2026-05-08 — Compaction meter mirrors token pressure 1:1.
   //
   // Source of truth chain:
-  //   backend agent: compaction.auto reports pressure=NN%
-  //   → /api/agent/sessions/{key}/context returns context_pressure_percent
-  //   → ChatArea.refreshContextGauge reads it
-  //   → zakiSessionUiStore.setContextPressure stores it
-  //   → ChatArea passes activeSessionUi.contextPressurePercent here
+  //   nullalis runtime emits compaction.auto pressure=NN% in its logs and
+  //   exposes the same percent via /api/v1/users/{u}/sessions/{k}/context
+  //     ↓ (proxied unchanged by Express BFF backend/src/index.js:10200)
+  //   /api/agent/sessions/{k}/context → context_pressure_percent
+  //     ↓
+  //   ChatArea.refreshContextGauge → setContextPressure → store
+  //     ↓
+  //   InputArea reads activeSessionUi.contextPressurePercent
   //
-  // The meter is ALWAYS visible while zakiBotMode is active. Before the
-  // first /context response lands the value is null and we render at 0%
-  // — that's honest about the empty context. As soon as the backend
-  // returns pressure (initial mount, post-stream refresh, periodic poll
-  // in ChatArea), the ring fills to match. No hiding, no thresholds.
+  // No FE-side buckets. No tiered colors. Single brand-teal ring.
+  // The real compaction trigger is per-session
+  // (report.compaction_threshold_pct, surfaced in PowerUserSheet
+  // diagnostics) — anything else here would be the FE inventing a signal
+  // it does not own.
+  //
+  // P2-05: distinguish "unknown" (null — /context has not landed yet) from
+  // "known-empty" (0 — backend says zero pressure). Unknown renders an
+  // empty outline ring, known-empty renders the green 0% so the user can
+  // tell whether the meter has data.
   const showZakiContextMeter = zakiBotMode;
-  const zakiContextValue = Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent ?? 0)));
-  // M3: tiered color by pressure, brand-coherent: ≤50% teal (success),
-  // ≤75% amber (warning), >75% red (brand). Resolves via CSS variables so
-  // theme changes propagate.
-  const pressureColor =
-    zakiContextValue <= 50
-      ? "var(--zaki-success)"
-      : zakiContextValue <= 75
-        ? "var(--zaki-warning)"
-        : "var(--zaki-brand)";
+  const hasZakiContextValue = typeof zakiContextPressurePercent === "number";
+  const zakiContextValue = hasZakiContextValue
+    ? Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent as number)))
+    : 0;
+  const pressureColor = "var(--zaki-accent)";
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -858,12 +861,21 @@ export function InputArea({
                   data-testid="zaki-context-meter"
                 >
                   <span
-                    className="relative block size-4 rounded-full"
-                    style={{
-                      background: `conic-gradient(${pressureColor} ${zakiContextValue}%, rgba(120,114,106,0.18) ${zakiContextValue}% 100%)`,
-                    }}
+                    className={cn(
+                      "relative block size-4 rounded-full",
+                      !hasZakiContextValue && "border border-dashed border-zaki-muted/50"
+                    )}
+                    style={
+                      hasZakiContextValue
+                        ? {
+                            background: `conic-gradient(${pressureColor} ${zakiContextValue}%, rgba(120,114,106,0.18) ${zakiContextValue}% 100%)`,
+                          }
+                        : undefined
+                    }
                   >
-                    <span className="absolute inset-[3px] rounded-full bg-zaki-elevated" />
+                    {hasZakiContextValue ? (
+                      <span className="absolute inset-[3px] rounded-full bg-zaki-elevated" />
+                    ) : null}
                   </span>
                 </button>
               </TooltipTrigger>

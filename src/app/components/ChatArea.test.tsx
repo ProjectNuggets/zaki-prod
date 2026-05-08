@@ -205,7 +205,6 @@ type TestZakiSessionUiState = {
       }>;
       lastChannel: string | null;
       contextPressurePercent: number | null;
-      contextPressureState: "normal" | "warning" | "near_limit" | null;
     }
   >;
   sandbox: { enabled: boolean; backend: string | null } | null;
@@ -287,7 +286,6 @@ describe("ChatArea Component", () => {
           pendingApprovals: [],
           lastChannel: "Web",
           contextPressurePercent: null,
-          contextPressureState: null,
         };
       }
     };

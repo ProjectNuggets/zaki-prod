@@ -212,7 +212,10 @@ function getStatusTone(status: "ready" | "warning" | "error" | "neutral") {
     return "border-zaki-accent/30 bg-zaki-accent/10 text-zaki-primary dark:text-zaki-dark-primary";
   }
   if (status === "warning") {
-    return "border-zaki-strong bg-zaki-hover text-zaki-primary dark:text-zaki-dark-primary";
+    // 2026-05-08 — Was returning a neutral hover tone, ignoring its name.
+    // Now uses the actual warning tokens so onboarding-stuck states read
+    // amber instead of looking identical to a regular card.
+    return "border-zaki-warning bg-zaki-warning text-zaki-primary dark:text-zaki-dark-primary";
   }
   if (status === "error") {
     return "border-zaki-brand/30 bg-zaki-brand/10 text-zaki-primary dark:text-zaki-dark-primary";

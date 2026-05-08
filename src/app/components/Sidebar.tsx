@@ -2274,7 +2274,6 @@ export function Sidebar() {
         modePending={powerUserModePending}
         onModeChange={handlePowerUserModeChange}
         contextPressurePercent={activeSessionUi?.contextPressurePercent ?? null}
-        contextPressureState={activeSessionUi?.contextPressureState ?? null}
         sandbox={sandboxState}
         pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
         onApproveRequest={handlePowerUserApprovalAction}

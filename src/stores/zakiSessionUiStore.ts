@@ -2,10 +2,21 @@ import { create } from "zustand";
 import type { AgentSession, AgentSessionMode, BotSandboxBackend } from "@/lib/api";
 import { normalizeZakiSessionKey } from "@/lib/zakiSessions";
 
-export const CONTEXT_PRESSURE_WARNING = 70;
-export const CONTEXT_PRESSURE_NEAR_LIMIT = 90;
-
-export type ZakiContextPressureState = "normal" | "warning" | "near_limit" | null;
+// 2026-05-08 — Removed FE-side pressure buckets (CONTEXT_PRESSURE_WARNING /
+// CONTEXT_PRESSURE_NEAR_LIMIT and getContextPressureState).
+//
+// The buckets were arbitrary thresholds (50/75 originally, bumped to 70/90
+// in commit dae57e1) with no relationship to the actual compaction trigger.
+// The real trigger lives in nullalis (the upstream agent runtime) and is
+// reported per-session as `compaction_threshold_pct` in the diagnostics
+// report. The Express BFF (backend/src/index.js:10200) is a transparent
+// proxy to /api/v1/users/{userId}/sessions/{key}/context — it does not
+// compute pressure, it forwards whatever nullalis returns.
+//
+// Per Nova: meter mirrors token pressure 1:1. No FE-derived tiers.
+// PowerUserSheet diagnostics still want a coarse signal; if needed it can
+// be re-added there using report.compaction_threshold_pct as the source of
+// truth, not a hardcoded constant in this store.
 
 export type ZakiRuntimeSandbox = {
   enabled: boolean;
@@ -26,7 +37,6 @@ export type ZakiSessionUi = {
   pendingApprovals: ZakiSessionApprovalRequest[];
   lastChannel: string | null;
   contextPressurePercent: number | null;
-  contextPressureState: ZakiContextPressureState;
   live: boolean | null;
 };
 
@@ -58,15 +68,14 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
         : null,
     live: typeof session.live === "boolean" ? session.live : null,
   };
-  // 2026-05-08 — Only include fields when the source response actually
-  // returns them. The session list response (every 30s tick) historically
-  // omitted context_pressure_percent and pending_approvals for non-live
-  // sessions, so spreading default values here was wiping live state that
-  // other endpoints had already written. Authoritative sources own each
-  // field; let the list ticks be additive only.
+  // Only include fields when the source response actually returns them.
+  // The session list response (every 30s tick) historically omitted
+  // context_pressure_percent and pending_approvals for non-live sessions,
+  // so spreading default values here was wiping live state that other
+  // endpoints had already written. Authoritative sources own each field;
+  // let the list ticks be additive only.
   if (typeof session.context_pressure_percent === "number") {
     patch.contextPressurePercent = session.context_pressure_percent;
-    patch.contextPressureState = getContextPressureState(session.context_pressure_percent);
   }
   if (typeof session.pending_approval_count === "number") {
     patch.approvalCount = Math.max(0, session.pending_approval_count);
@@ -81,23 +90,16 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
           tool: String(approval?.tool || "").trim(),
           reason: String(approval?.reason || "").trim(),
           riskLevel: String(approval?.risk_level || "").trim(),
-          timestamp: Date.now(),
+          // Sentinel: 0 means "use the existing in-store timestamp if any,
+          // otherwise stamp now". hydrateSession resolves this — keeping
+          // the mapper pure (no store reads) while still preserving the
+          // original approval-creation time across re-hydrations.
+          timestamp: 0,
         } satisfies ZakiSessionApprovalRequest;
       })
       .filter((approval): approval is ZakiSessionApprovalRequest => approval != null);
   }
   return patch;
-}
-
-export function getContextPressureState(
-  contextPressurePercent: number | null | undefined
-): ZakiContextPressureState {
-  if (typeof contextPressurePercent !== "number" || Number.isNaN(contextPressurePercent)) {
-    return null;
-  }
-  if (contextPressurePercent >= CONTEXT_PRESSURE_NEAR_LIMIT) return "near_limit";
-  if (contextPressurePercent >= CONTEXT_PRESSURE_WARNING) return "warning";
-  return "normal";
 }
 
 function createDefaultSessionUi(overrides?: Partial<ZakiSessionUi>): ZakiSessionUi {
@@ -107,7 +109,6 @@ function createDefaultSessionUi(overrides?: Partial<ZakiSessionUi>): ZakiSession
     pendingApprovals: [],
     lastChannel: null,
     contextPressurePercent: null,
-    contextPressureState: null,
     live: null,
     ...overrides,
   };
@@ -115,6 +116,25 @@ function createDefaultSessionUi(overrides?: Partial<ZakiSessionUi>): ZakiSession
 
 function normalizeSessionKey(sessionKey: string) {
   return normalizeZakiSessionKey(String(sessionKey || "").trim());
+}
+
+// Resolve sentinel timestamps (0) on incoming approvals: prefer the existing
+// store timestamp if the same id is already known, otherwise stamp now.
+function resolveApprovalTimestamps(
+  incoming: ZakiSessionApprovalRequest[],
+  existing: ZakiSessionApprovalRequest[] | undefined
+): ZakiSessionApprovalRequest[] {
+  if (!existing || existing.length === 0) {
+    const now = Date.now();
+    return incoming.map((a) => (a.timestamp === 0 ? { ...a, timestamp: now } : a));
+  }
+  const byId = new Map(existing.map((a) => [a.id, a]));
+  const now = Date.now();
+  return incoming.map((a) => {
+    if (a.timestamp !== 0) return a;
+    const prior = byId.get(a.id);
+    return { ...a, timestamp: prior?.timestamp ?? now };
+  });
 }
 
 export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => ({
@@ -137,18 +157,28 @@ export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => 
   hydrateSession: (sessionKey, patch) => {
     const normalized = normalizeSessionKey(sessionKey);
     if (!normalized) return;
-    set((state) => ({
-      sessions: {
-        ...state.sessions,
-        [normalized]: createDefaultSessionUi({
-          ...state.sessions[normalized],
-          ...patch,
-          contextPressureState: getContextPressureState(
-            patch.contextPressurePercent ?? state.sessions[normalized]?.contextPressurePercent ?? null
-          ),
-        }),
-      },
-    }));
+    set((state) => {
+      const current = state.sessions[normalized];
+      const merged = createDefaultSessionUi({
+        ...current,
+        ...patch,
+      });
+      // Resolve approval timestamp sentinels against the prior in-store
+      // entries so the original approval-creation time is preserved across
+      // list refetches and detail refreshes.
+      if (patch.pendingApprovals) {
+        merged.pendingApprovals = resolveApprovalTimestamps(
+          patch.pendingApprovals,
+          current?.pendingApprovals
+        );
+      }
+      return {
+        sessions: {
+          ...state.sessions,
+          [normalized]: merged,
+        },
+      };
+    });
   },
 
   setMode: (sessionKey, mode) => {
@@ -218,7 +248,6 @@ export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => 
         [normalized]: createDefaultSessionUi({
           ...state.sessions[normalized],
           contextPressurePercent,
-          contextPressureState: getContextPressureState(contextPressurePercent),
         }),
       },
     }));

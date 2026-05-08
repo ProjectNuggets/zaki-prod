@@ -8,7 +8,6 @@ import {
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { CONTEXT_PRESSURE_WARNING, CONTEXT_PRESSURE_NEAR_LIMIT } from "@/stores/zakiSessionUiStore";
 import type {
   NullalisApprovalRequest,
   NullalisTaskItem,
@@ -240,19 +239,12 @@ export function ContextGauge({
   const maxLabel = new Intl.NumberFormat("en-US").format(data.contextMax);
   const ariaLabel = `Context window ${tokenLabel} of ${maxLabel} tokens, ${pctLabel} percent used`;
 
-  const barColor =
-    pct >= CONTEXT_PRESSURE_NEAR_LIMIT
-      ? "bg-zaki-brand"
-      : pct >= CONTEXT_PRESSURE_WARNING
-        ? "bg-amber-500 dark:bg-amber-400"
-        : "bg-zaki-accent";
-
-  const textColor =
-    pct >= CONTEXT_PRESSURE_NEAR_LIMIT
-      ? "text-zaki-brand"
-      : pct >= CONTEXT_PRESSURE_WARNING
-        ? "text-amber-700 dark:text-amber-300"
-        : "text-zaki-muted dark:text-zaki-dark-muted";
+  // 2026-05-08 — Single color, no FE-side tier buckets. Pressure is the
+  // raw signal nullalis emits; the actual compaction trigger lives in
+  // backend report.compaction_threshold_pct (per-session, dynamic), not
+  // in any constant defined here. Mirror only — no FE opinion.
+  const barColor = "bg-zaki-accent";
+  const textColor = "text-zaki-muted dark:text-zaki-dark-muted";
 
   const trackColor = "bg-zaki-elevated dark:bg-[#1a1714]";
 

@@ -1,7 +1,6 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it } from "@jest/globals";
 import {
-  getContextPressureState,
   mapAgentSessionToZakiSessionUi,
   useZakiSessionUiStore,
 } from "./zakiSessionUiStore";
@@ -26,7 +25,7 @@ describe("zakiSessionUiStore", () => {
     expect(session?.live).toBeNull();
   });
 
-  it("tracks approval and context pressure state per session", () => {
+  it("tracks approvals and context pressure per session", () => {
     const store = useZakiSessionUiStore.getState();
     store.incrementApprovalCount("agent:zaki-bot:user:1:thread:main", {
       id: "approval-1",
@@ -43,7 +42,6 @@ describe("zakiSessionUiStore", () => {
     expect(session?.approvalCount).toBe(1);
     expect(session?.pendingApprovals).toHaveLength(1);
     expect(session?.contextPressurePercent).toBe(92);
-    expect(session?.contextPressureState).toBe("near_limit");
   });
 
   it("maps backend session truth into UI state", () => {
@@ -60,29 +58,67 @@ describe("zakiSessionUiStore", () => {
     expect(mapped.approvalCount).toBe(1);
     expect(mapped.lastChannel).toBe("telegram");
     expect(mapped.contextPressurePercent).toBe(75);
-    expect(mapped.contextPressureState).toBe("warning");
     expect(mapped.pendingApprovals).toHaveLength(1);
     expect(mapped.live).toBe(true);
   });
 
-  it("omits context pressure fields when the session response has no value", () => {
+  it("omits pressure + approvals when the session response has no value", () => {
     const mapped = mapAgentSessionToZakiSessionUi({
       mode: "execute",
-      pending_approval_count: 0,
     });
 
-    // List-endpoint responses without pressure must not clobber the live
-    // value already in the store. mapAgentSessionToZakiSessionUi must
-    // omit both keys when the source is silent.
+    // List-endpoint responses without these fields must not clobber
+    // live values already in the store. mapAgentSessionToZakiSessionUi
+    // must omit them entirely so spreading the patch leaves prior
+    // store entries intact.
     expect("contextPressurePercent" in mapped).toBe(false);
-    expect("contextPressureState" in mapped).toBe(false);
+    expect("approvalCount" in mapped).toBe(false);
+    expect("pendingApprovals" in mapped).toBe(false);
   });
 
-  it("buckets context pressure with the agreed thresholds", () => {
-    expect(getContextPressureState(null)).toBeNull();
-    expect(getContextPressureState(69)).toBe("normal");
-    expect(getContextPressureState(70)).toBe("warning");
-    expect(getContextPressureState(89)).toBe("warning");
-    expect(getContextPressureState(90)).toBe("near_limit");
+  it("hydrateSession preserves a prior pressure value when the patch omits it", () => {
+    const store = useZakiSessionUiStore.getState();
+    store.setContextPressure("agent:zaki-bot:user:1:thread:main", 41);
+    store.hydrateSession(
+      "agent:zaki-bot:user:1:thread:main",
+      mapAgentSessionToZakiSessionUi({ mode: "execute" })
+    );
+    const session =
+      useZakiSessionUiStore.getState().sessions["agent:zaki-bot:user:1:thread:main"];
+    // Prior 41 must survive — the list tick patch did not include
+    // context_pressure_percent so the store keeps what /context wrote.
+    expect(session?.contextPressurePercent).toBe(41);
+    expect(session?.mode).toBe("execute");
+  });
+
+  it("hydrateSession preserves approval timestamps across re-hydration", () => {
+    const store = useZakiSessionUiStore.getState();
+    // First hydration creates the approval
+    store.hydrateSession(
+      "agent:zaki-bot:user:1:thread:main",
+      mapAgentSessionToZakiSessionUi({
+        pending_approvals: [{ id: "a1", tool: "x", reason: "y", risk_level: "low" }],
+      })
+    );
+    const before =
+      useZakiSessionUiStore.getState().sessions["agent:zaki-bot:user:1:thread:main"];
+    const firstStamp = before?.pendingApprovals[0]?.timestamp ?? 0;
+    expect(firstStamp).toBeGreaterThan(0);
+
+    // Wait a tick, then re-hydrate the same approval
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        store.hydrateSession(
+          "agent:zaki-bot:user:1:thread:main",
+          mapAgentSessionToZakiSessionUi({
+            pending_approvals: [{ id: "a1", tool: "x", reason: "y", risk_level: "low" }],
+          })
+        );
+        const after =
+          useZakiSessionUiStore.getState().sessions["agent:zaki-bot:user:1:thread:main"];
+        expect(after?.pendingApprovals[0]?.timestamp).toBe(firstStamp);
+        resolve();
+      }, 5);
+    });
   });
 });
