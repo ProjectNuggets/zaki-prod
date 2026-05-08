@@ -547,7 +547,21 @@
     "fields": {
       "responseStyle": {
         "title": "Response style",
-        "helper": "Choose whether ZAKI leans toward speed, balance, or deeper reasoning."
+        "helper": "Choose whether ZAKI leans toward speed, balance, or deeper reasoning.",
+        "modes": {
+          "fast": {
+            "description": "Snap replies, lighter context.",
+            "helper": "Best for quick check-ins and short questions."
+          },
+          "balanced": {
+            "description": "Default. Even mix of speed and reasoning.",
+            "helper": "Right for most chat, including back-and-forth."
+          },
+          "deep": {
+            "description": "Slower replies, deeper thinking.",
+            "helper": "Best for planning, decisions, and longer threads."
+          }
+        }
       },
       "sessionWindow": {
         "title": "Session window",

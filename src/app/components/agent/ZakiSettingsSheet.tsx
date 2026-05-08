@@ -5,13 +5,19 @@ import {
   Bot,
   Brain as BrainIcon,
   Cpu,
+  Gauge,
   Link2,
   Lock,
   Settings,
   Settings2,
   ShieldCheck,
+  Eye,
+  Rocket,
+  Shield,
   Sparkles,
+  Telescope,
   Volume2,
+  Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -470,6 +476,99 @@ function SettingsPlaceholder({
 function InlineFieldError({ text }: { text?: string }) {
   if (!text) return null;
   return <p className="mt-2 text-xs text-zaki-brand">{text}</p>;
+}
+
+// Phase 4-B (2026-05-08) — Visual mode picker. Replaces a `<select>` for
+// assistant_mode (fast / balanced / deep). The 3-card layout makes the
+// trade-off legible without a click: each card carries its own icon plus
+// a one-line description, so the user picks the personality directly
+// rather than guessing what "Deep" means in a dropdown.
+type ModeCardOption<V extends string> = {
+  value: V;
+  label: string;
+  description: string;
+  icon: RailIcon;
+};
+
+function ModeCardGroup<V extends string>({
+  legend,
+  helper,
+  value,
+  onChange,
+  options,
+  isRtl,
+  errorText,
+  disabled,
+}: {
+  legend: string;
+  helper?: string;
+  value: V;
+  onChange: (next: V) => void;
+  options: readonly ModeCardOption<V>[];
+  isRtl: boolean;
+  errorText?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset
+      className={cn(
+        "flex flex-col gap-3 rounded-zaki-xl border border-zaki bg-zaki-raised p-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card",
+        disabled && "opacity-70"
+      )}
+      aria-disabled={disabled || undefined}
+    >
+      <div className={cn("flex flex-col gap-1", isRtl && "text-right")}>
+        <legend className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+          {legend}
+        </legend>
+        {helper ? (
+          <p className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">{helper}</p>
+        ) : null}
+      </div>
+      <div role="radiogroup" aria-label={legend} className="grid gap-2 sm:grid-cols-3">
+        {options.map(({ value: optionValue, label, description, icon: Icon }) => {
+          const isActive = optionValue === value;
+          return (
+            <button
+              key={optionValue}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              onClick={() => !disabled && onChange(optionValue)}
+              disabled={disabled}
+              className={cn(
+                "group flex h-full flex-col gap-2 rounded-zaki-md border p-3 text-left transition-colors",
+                isActive
+                  ? "border-zaki-brand bg-zaki-brand-10 text-zaki-primary dark:text-zaki-dark-primary"
+                  : "border-zaki bg-zaki-base text-zaki-secondary hover:border-zaki-brand-40 hover:bg-zaki-hover dark:bg-zaki-base dark:text-zaki-dark-subtle",
+                disabled && "cursor-not-allowed",
+                isRtl && "text-right"
+              )}
+            >
+              <div className={cn("flex items-center gap-2", isRtl && "flex-row-reverse")}>
+                <span
+                  className={cn(
+                    "flex size-7 items-center justify-center rounded-zaki-md",
+                    isActive ? "bg-zaki-brand text-white" : "bg-zaki-hover text-zaki-secondary"
+                  )}
+                  aria-hidden
+                >
+                  <Icon className="size-3.5" />
+                </span>
+                <span className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                  {label}
+                </span>
+              </div>
+              <span className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                {description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <InlineFieldError text={errorText} />
+    </fieldset>
+  );
 }
 
 export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
@@ -1170,31 +1269,38 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                   isRtl={isRtl}
                 >
                   <div className="space-y-3">
-                    <CompactRow
-                      title={t("zakiSettingsSheet.fields.responseStyle.title")}
-                      summary={responseStyleLabel}
+                    <ModeCardGroup
+                      legend={t("zakiSettingsSheet.fields.responseStyle.title")}
                       helper={t("zakiSettingsSheet.fields.responseStyle.helper")}
-                      isRtl={isRtl}
-                      control={
-                        <div>
-                          <select
-                            aria-label={t("zakiSettingsSheet.fields.responseStyle.title")}
-                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-body text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
-                            value={settingsDraft.assistant_mode}
-                            onChange={(event) =>
-                              setSettingsDraft((current) => ({
-                                ...current,
-                                assistant_mode: event.target.value as SettingsDraft["assistant_mode"],
-                              }))
-                            }
-                          >
-                            <option value="fast">{t("zakiSettingsSheet.options.fast")}</option>
-                            <option value="balanced">{t("zakiSettingsSheet.options.balanced")}</option>
-                            <option value="deep">{t("zakiSettingsSheet.options.deep")}</option>
-                          </select>
-                          <InlineFieldError text={settingsErrors.assistant_mode} />
-                        </div>
+                      value={settingsDraft.assistant_mode}
+                      onChange={(next) =>
+                        setSettingsDraft((current) => ({
+                          ...current,
+                          assistant_mode: next,
+                        }))
                       }
+                      isRtl={isRtl}
+                      errorText={settingsErrors.assistant_mode}
+                      options={[
+                        {
+                          value: "fast",
+                          label: t("zakiSettingsSheet.options.fast"),
+                          description: t("zakiSettingsSheet.fields.responseStyle.modes.fast.description"),
+                          icon: Zap,
+                        },
+                        {
+                          value: "balanced",
+                          label: t("zakiSettingsSheet.options.balanced"),
+                          description: t("zakiSettingsSheet.fields.responseStyle.modes.balanced.description"),
+                          icon: Gauge,
+                        },
+                        {
+                          value: "deep",
+                          label: t("zakiSettingsSheet.options.deep"),
+                          description: t("zakiSettingsSheet.fields.responseStyle.modes.deep.description"),
+                          icon: Telescope,
+                        },
+                      ]}
                     />
 
                     <CompactRow
@@ -1454,48 +1560,38 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                   isRtl={isRtl}
                 >
                   <div className="space-y-3">
-                    <CompactRow
-                      title={t("zakiSettingsSheet.autonomy.levelTitle")}
-                      summary={t(`zakiSettingsSheet.autonomy.levels.${settingsDraft.autonomy}.label`)}
+                    <ModeCardGroup
+                      legend={t("zakiSettingsSheet.autonomy.levelTitle")}
                       helper={t("zakiSettingsSheet.autonomy.levelHelper")}
-                      isRtl={isRtl}
-                      control={
-                        <div className="space-y-2">
-                          {(["supervised", "full", "read_only"] as const).map((level) => (
-                            <label
-                              key={level}
-                              className={`flex cursor-pointer items-start gap-3 rounded-zaki-md border px-3 py-2 transition-colors ${
-                                settingsDraft.autonomy === level
-                                  ? "border-zaki-accent bg-zaki-accent/5 dark:bg-zaki-accent/10"
-                                  : "border-zaki-strong bg-zaki-raised hover:border-zaki-accent/40 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)]"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="autonomy-level"
-                                value={level}
-                                checked={settingsDraft.autonomy === level}
-                                onChange={() =>
-                                  setSettingsDraft((current) => ({
-                                    ...current,
-                                    autonomy: level,
-                                  }))
-                                }
-                                className="mt-1"
-                              />
-                              <span className="flex flex-1 flex-col gap-0.5">
-                                <span className="text-sm font-medium text-zaki-primary dark:text-zaki-dark-primary">
-                                  {t(`zakiSettingsSheet.autonomy.levels.${level}.label`)}
-                                </span>
-                                <span className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                                  {t(`zakiSettingsSheet.autonomy.levels.${level}.description`)}
-                                </span>
-                              </span>
-                            </label>
-                          ))}
-                          <InlineFieldError text={settingsErrors.autonomy} />
-                        </div>
+                      value={settingsDraft.autonomy}
+                      onChange={(next) =>
+                        setSettingsDraft((current) => ({
+                          ...current,
+                          autonomy: next,
+                        }))
                       }
+                      isRtl={isRtl}
+                      errorText={settingsErrors.autonomy}
+                      options={[
+                        {
+                          value: "read_only",
+                          label: t("zakiSettingsSheet.autonomy.levels.read_only.label"),
+                          description: t("zakiSettingsSheet.autonomy.levels.read_only.description"),
+                          icon: Eye,
+                        },
+                        {
+                          value: "supervised",
+                          label: t("zakiSettingsSheet.autonomy.levels.supervised.label"),
+                          description: t("zakiSettingsSheet.autonomy.levels.supervised.description"),
+                          icon: Shield,
+                        },
+                        {
+                          value: "full",
+                          label: t("zakiSettingsSheet.autonomy.levels.full.label"),
+                          description: t("zakiSettingsSheet.autonomy.levels.full.description"),
+                          icon: Rocket,
+                        },
+                      ]}
                     />
 
                     <CompactRow
