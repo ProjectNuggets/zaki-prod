@@ -3,14 +3,10 @@ import {
   Activity,
   BarChart3,
   Bot,
-  Brain as BrainIcon,
-  Cpu,
   Gauge,
   Link2,
   Lock,
   Settings,
-  Settings2,
-  ShieldCheck,
   Eye,
   Rocket,
   Shield,
@@ -54,19 +50,18 @@ type BannerState =
   | { tone: "error"; text: string }
   | null;
 
-// Phase 4-B (2026-05-08) — Five-pillar sidebar-nav layout (replaces the
-// prior 5-item accordion). Sections still in flight retain a `placeholder`
-// flag so the rail is honest about what is shipped vs. coming.
+// Phase 4-B (2026-05-08) — Sidebar-nav layout. Five sections, user-facing.
+// Models / Brain / Privacy / Advanced were removed per Nova's direction:
+//   - Models: ZAKI does not let users choose providers, so don't promise it.
+//   - Brain: lives at /brain, doesn't belong in agent settings.
+//   - Privacy: GDPR + delete-on-request is a footnote, not a toggle page.
+//   - Advanced: nothing to expose at the user level.
 type SectionValue =
   | "identity"
   | "responseStyle"
   | "channels"
   | "autonomy"
-  | "brain"
-  | "models"
-  | "privacy"
-  | "plan"
-  | "advanced";
+  | "plan";
 type TelegramUiStatus =
   | "not_connected"
   | "connecting"
@@ -316,29 +311,20 @@ function CompactRow({
 }
 
 // Phase 4-B (2026-05-08) — Sidebar-nav rail meta. The 5 currently-shipped
-// sections render real content; the 4 placeholder sections (brain, models,
-// privacy, advanced) render an honest "coming soon" card, so the rail is
-// not lying about what is wired. `tier === "pro"` paints a lock badge so
-// the gate is visible long before the upgrade modal fires.
+// All 5 entries are real, shipped settings. No placeholders.
 type RailIcon = ComponentType<SVGProps<SVGSVGElement> & { className?: string }>;
 
 type RailMetaEntry = {
   id: SectionValue;
   icon: RailIcon;
-  shipped: boolean;
-  tier?: "pro";
 };
 
 const SECTION_META: readonly RailMetaEntry[] = [
-  { id: "identity", icon: Bot, shipped: true },
-  { id: "responseStyle", icon: Volume2, shipped: true },
-  { id: "channels", icon: Link2, shipped: true },
-  { id: "autonomy", icon: Activity, shipped: true },
-  { id: "brain", icon: BrainIcon, shipped: false },
-  { id: "models", icon: Cpu, shipped: false, tier: "pro" },
-  { id: "privacy", icon: ShieldCheck, shipped: false },
-  { id: "plan", icon: BarChart3, shipped: true },
-  { id: "advanced", icon: Settings2, shipped: false },
+  { id: "identity", icon: Bot },
+  { id: "responseStyle", icon: Volume2 },
+  { id: "channels", icon: Link2 },
+  { id: "autonomy", icon: Activity },
+  { id: "plan", icon: BarChart3 },
 ];
 
 function SettingsRail({
@@ -346,14 +332,12 @@ function SettingsRail({
   onSelect,
   suggestedSection,
   isRtl,
-  proLockedLabel,
   t,
 }: {
   activeSection: SectionValue;
   onSelect: (id: SectionValue) => void;
   suggestedSection: SectionValue;
   isRtl: boolean;
-  proLockedLabel: string;
   t: (key: string, opts?: { defaultValue?: string }) => string;
 }) {
   // The sheet is `sm:max-w-[720px]`, so at the sm breakpoint and up we
@@ -371,7 +355,7 @@ function SettingsRail({
         "sm:flex sm:w-52 sm:flex-col sm:gap-0.5"
       )}
     >
-      {SECTION_META.map(({ id, icon: Icon, shipped, tier }) => {
+      {SECTION_META.map(({ id, icon: Icon }) => {
         const isActive = activeSection === id;
         const isSuggested = !isActive && suggestedSection === id;
         return (
@@ -393,17 +377,7 @@ function SettingsRail({
             <span className="min-w-0 flex-1 truncate">
               {t(`zakiSettingsSheet.rail.${id}.label`)}
             </span>
-            {tier === "pro" ? (
-              <Lock
-                className="size-3.5 shrink-0 text-zaki-muted"
-                aria-label={proLockedLabel}
-              />
-            ) : !shipped ? (
-              <span
-                className="size-1.5 shrink-0 rounded-full bg-zaki-muted/60"
-                aria-label={t("zakiSettingsSheet.placeholders.comingSoon")}
-              />
-            ) : isSuggested ? (
+            {isSuggested ? (
               <span className="size-1.5 shrink-0 rounded-full bg-zaki-brand" aria-hidden />
             ) : null}
           </button>
@@ -437,42 +411,6 @@ function SettingsSection({
       </header>
       <div>{children}</div>
     </section>
-  );
-}
-
-function SettingsPlaceholder({
-  icon: Icon,
-  title,
-  summary,
-  bodyKey,
-  locked,
-  isRtl,
-  t,
-}: {
-  icon: RailIcon;
-  title: string;
-  summary: string;
-  bodyKey: string;
-  locked?: boolean;
-  isRtl: boolean;
-  t: (key: string, opts?: { defaultValue?: string }) => string;
-}) {
-  return (
-    <SettingsSection icon={Icon} title={title} summary={summary} isRtl={isRtl}>
-      <div className="rounded-zaki-xl border border-dashed border-zaki bg-zaki-raised px-5 py-8 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
-        <div className={cn("flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zaki-muted dark:text-zaki-dark-muted", isRtl && "flex-row-reverse")}>
-          {locked ? <Lock className="size-3.5" aria-hidden /> : null}
-          <span>
-            {locked
-              ? t("zakiSettingsSheet.placeholders.tierLocked")
-              : t("zakiSettingsSheet.placeholders.comingSoon")}
-          </span>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
-          {t(bodyKey)}
-        </p>
-      </div>
-    </SettingsSection>
   );
 }
 
@@ -1249,7 +1187,6 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               onSelect={setActiveSection}
               suggestedSection={suggestedSection}
               isRtl={isRtl}
-              proLockedLabel={t("sidebar.profile.planBadge.pro")}
               t={t}
             />
             <div className="min-w-0 flex-1 px-1 py-4 sm:px-5 sm:py-1">
@@ -1516,7 +1453,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                   summary={telegramSectionSummary}
                   isRtl={isRtl}
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <CompactRow
                       title={t("zakiSettingsSheet.telegram.statusTitle")}
                       summary={telegramStatusSummary}
@@ -1524,77 +1461,104 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       isRtl={isRtl}
                     />
 
-                    <div className="rounded-zaki-xl border border-zaki-strong bg-zaki-raised px-4 py-4 dark:bg-[#1a1714]">
-                      <div className="grid gap-3">
-                        <label className="block">
-                          <MetaLabel className="mb-2 flex">
-                            {t("zakiSettingsSheet.telegram.botTokenLabel")}
-                          </MetaLabel>
-                          <input
-                            aria-label={t("zakiSettingsSheet.telegram.botTokenLabel")}
-                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
-                            placeholder={
-                              telegramConnected
-                                ? t("zakiSettingsSheet.telegram.botTokenMasked")
-                                : t("zakiSettingsSheet.workspace.telegramToken")
-                            }
-                            type="password"
-                            value={telegramToken}
-                            onChange={(event) => setTelegramToken(event.target.value)}
-                          />
-                          <InlineFieldError text={telegramErrors.bot_token} />
-                        </label>
+                    <div className={cn(
+                      "rounded-zaki-xl border border-zaki bg-zaki-base px-4 py-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card",
+                      isRtl && "text-right"
+                    )}>
+                      <h4 className="font-display text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        {t("zakiSettingsSheet.telegram.guide.title")}
+                      </h4>
+                      <ol className={cn(
+                        "mt-3 space-y-2 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle",
+                        isRtl && "text-right"
+                      )}>
+                        {(["step1", "step2", "step3", "step4"] as const).map((step, index) => (
+                          <li key={step} className={cn("flex items-start gap-2", isRtl && "flex-row-reverse")}>
+                            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-zaki-brand-15 text-[11px] font-semibold text-zaki-brand">
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              {t(`zakiSettingsSheet.telegram.guide.${step}`)}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                      <a
+                        href="https://t.me/BotFather"
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className={cn(
+                          "mt-3 inline-flex items-center gap-1 text-xs font-medium text-zaki-brand hover:underline",
+                          isRtl && "flex-row-reverse"
+                        )}
+                      >
+                        {t("zakiSettingsSheet.telegram.guide.openBotFather")}
+                        <span aria-hidden>{isRtl ? "←" : "→"}</span>
+                      </a>
+                    </div>
 
-                        <CompactRow
-                          title={t("zakiSettingsSheet.telegram.webhookBaseLabel")}
-                          summary={t("zakiSettingsSheet.telegram.webhookBaseSummary")}
-                          helper={t("zakiSettingsSheet.telegram.webhookBaseHelper")}
-                          isRtl={isRtl}
+                    <div className="space-y-3 rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+                      <label className="block">
+                        <MetaLabel className="mb-2 flex">
+                          {t("zakiSettingsSheet.telegram.botTokenLabel")}
+                        </MetaLabel>
+                        <input
+                          aria-label={t("zakiSettingsSheet.telegram.botTokenLabel")}
+                          className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-zaki-dark-card dark:border-zaki-dark-card dark:text-zaki-dark-primary"
+                          placeholder={
+                            telegramConnected
+                              ? t("zakiSettingsSheet.telegram.botTokenMasked")
+                              : t("zakiSettingsSheet.workspace.telegramToken")
+                          }
+                          type="password"
+                          value={telegramToken}
+                          onChange={(event) => setTelegramToken(event.target.value)}
                         />
+                        <InlineFieldError text={telegramErrors.bot_token} />
+                      </label>
 
-                        <label className="block">
-                          <MetaLabel className="mb-2 flex">
-                            {t("zakiSettingsSheet.telegram.allowFromLabel")}
-                          </MetaLabel>
-                          <textarea
-                            aria-label={t("zakiSettingsSheet.telegram.allowFromLabel")}
-                            className="min-h-[96px] w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-primary"
-                            placeholder={t("zakiSettingsSheet.telegram.allowFromPlaceholder")}
-                            value={telegramAllowFrom}
-                            onChange={(event) => setTelegramAllowFrom(event.target.value)}
-                          />
-                          <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                            {t("zakiSettingsSheet.telegram.allowFromHelper")}
-                          </p>
-                          <InlineFieldError text={telegramErrors.allow_from} />
-                        </label>
+                      <label className="block">
+                        <MetaLabel className="mb-2 flex">
+                          {t("zakiSettingsSheet.telegram.allowFromLabel")}
+                        </MetaLabel>
+                        <textarea
+                          aria-label={t("zakiSettingsSheet.telegram.allowFromLabel")}
+                          className="min-h-[96px] w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-zaki-dark-card dark:border-zaki-dark-card dark:text-zaki-dark-primary"
+                          placeholder={t("zakiSettingsSheet.telegram.allowFromPlaceholder")}
+                          value={telegramAllowFrom}
+                          onChange={(event) => setTelegramAllowFrom(event.target.value)}
+                        />
+                        <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                          {t("zakiSettingsSheet.telegram.allowFromHelper")}
+                        </p>
+                        <InlineFieldError text={telegramErrors.allow_from} />
+                      </label>
 
-                        <div className={cn("flex flex-wrap gap-2", isRtl && "justify-end")}>
-                          <button
-                            type="button"
-                            disabled={telegramBusy || agentUserUnavailable}
-                            className="rounded-full bg-zaki-brand px-4 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
-                            onClick={() => {
-                              void handleTelegramConnect();
-                            }}
-                          >
-                            {telegramBusy
-                              ? t("zakiSettingsSheet.actions.connecting")
-                              : telegramConnected
-                                ? t("zakiSettingsSheet.actions.reconnectTelegram")
-                                : t("zakiSettingsSheet.actions.connectTelegram")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={telegramBusy || !telegramConnected || agentUserUnavailable}
-                            className="rounded-full border border-zaki-strong px-4 py-2 text-sm font-medium text-zaki-primary transition-colors hover:bg-zaki-hover disabled:opacity-60"
-                            onClick={() => {
-                              void handleTelegramDisconnect();
-                            }}
-                          >
-                            {t("zakiSettingsSheet.actions.disconnect")}
-                          </button>
-                        </div>
+                      <div className={cn("flex flex-wrap gap-2", isRtl && "justify-end")}>
+                        <button
+                          type="button"
+                          disabled={telegramBusy || agentUserUnavailable}
+                          className="rounded-full bg-zaki-brand px-4 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
+                          onClick={() => {
+                            void handleTelegramConnect();
+                          }}
+                        >
+                          {telegramBusy
+                            ? t("zakiSettingsSheet.actions.connecting")
+                            : telegramConnected
+                              ? t("zakiSettingsSheet.actions.reconnectTelegram")
+                              : t("zakiSettingsSheet.actions.connectTelegram")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={telegramBusy || !telegramConnected || agentUserUnavailable}
+                          className="rounded-full border border-zaki-strong px-4 py-2 text-sm font-medium text-zaki-primary transition-colors hover:bg-zaki-hover disabled:opacity-60"
+                          onClick={() => {
+                            void handleTelegramDisconnect();
+                          }}
+                        >
+                          {t("zakiSettingsSheet.actions.disconnect")}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1605,13 +1569,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 <SettingsSection
                   icon={Activity}
                   title={t("zakiSettingsSheet.rail.autonomy.label")}
-                  summary={
-                    !telegramConnected
-                      ? t("zakiSettingsSheet.autonomy.heartbeatRequiresTelegram")
-                      : heartbeatEnabled
-                      ? t("zakiSettingsSheet.sections.autonomy.summaryEnabled")
-                      : t("zakiSettingsSheet.sections.autonomy.summaryDisabled")
-                  }
+                  summary={t(`zakiSettingsSheet.autonomy.levels.${settingsDraft.autonomy}.label`)}
                   isRtl={isRtl}
                 >
                   <div className="space-y-3">
@@ -1763,47 +1721,6 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                 </SettingsSection>
               )}
 
-              {activeSection === "brain" && (
-                <SettingsPlaceholder
-                  icon={BrainIcon}
-                  title={t("zakiSettingsSheet.rail.brain.label")}
-                  summary={t("zakiSettingsSheet.rail.brain.summary")}
-                  bodyKey="zakiSettingsSheet.placeholders.placeholderBrain"
-                  isRtl={isRtl}
-                  t={t}
-                />
-              )}
-              {activeSection === "models" && (
-                <SettingsPlaceholder
-                  icon={Cpu}
-                  title={t("zakiSettingsSheet.rail.models.label")}
-                  summary={t("zakiSettingsSheet.rail.models.summary")}
-                  bodyKey="zakiSettingsSheet.placeholders.placeholderModels"
-                  locked
-                  isRtl={isRtl}
-                  t={t}
-                />
-              )}
-              {activeSection === "privacy" && (
-                <SettingsPlaceholder
-                  icon={ShieldCheck}
-                  title={t("zakiSettingsSheet.rail.privacy.label")}
-                  summary={t("zakiSettingsSheet.rail.privacy.summary")}
-                  bodyKey="zakiSettingsSheet.placeholders.placeholderPrivacy"
-                  isRtl={isRtl}
-                  t={t}
-                />
-              )}
-              {activeSection === "advanced" && (
-                <SettingsPlaceholder
-                  icon={Settings2}
-                  title={t("zakiSettingsSheet.rail.advanced.label")}
-                  summary={t("zakiSettingsSheet.rail.advanced.summary")}
-                  bodyKey="zakiSettingsSheet.placeholders.placeholderAdvanced"
-                  isRtl={isRtl}
-                  t={t}
-                />
-              )}
             </div>
           </div>
 
@@ -1814,6 +1731,13 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
             </div>
           )}
         </div>
+
+        <p className={cn(
+          "px-5 pb-4 text-[11px] leading-5 text-zaki-muted dark:text-zaki-dark-muted",
+          isRtl && "text-right"
+        )}>
+          {t("zakiSettingsSheet.privacy.footer")}
+        </p>
       </div>
     </SheetShell>
   );
