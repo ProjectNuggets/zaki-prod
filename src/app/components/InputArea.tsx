@@ -4,7 +4,9 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useEntitlements } from "@/queries";
+import { useEntitlements, useBrainSearch } from "@/queries";
+import { BrainMentionPopover } from "./chat/BrainMentionPopover";
+import type { BrainGraphNode } from "@/lib/api";
 import { resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio, type AgentSessionMode } from "@/lib/api";
@@ -27,6 +29,31 @@ function detectSlash(value: string): { active: boolean; filter: string } {
   if (!value.startsWith("/")) return { active: false, filter: "" };
   if (value.includes(" ") || value.includes("\n")) return { active: false, filter: "" };
   return { active: true, filter: value.slice(1) };
+}
+
+/**
+ * Brain @-mention detection — looks at the substring before the cursor
+ * for the most recent "@" preceded by start-of-string or whitespace.
+ * Returns the active filter (everything after that @ up to the cursor)
+ * and the @ position so callers can splice on selection.
+ */
+export function detectMention(
+  value: string,
+  cursorPos: number,
+): { active: boolean; filter: string; startPos: number } {
+  if (!value || cursorPos < 1) return { active: false, filter: "", startPos: -1 };
+  const before = value.slice(0, cursorPos);
+  const at = before.lastIndexOf("@");
+  if (at === -1) return { active: false, filter: "", startPos: -1 };
+  // The @ must be at start-of-string or preceded by whitespace.
+  if (at > 0 && !/\s/.test(before.charAt(at - 1))) {
+    return { active: false, filter: "", startPos: -1 };
+  }
+  const fragment = before.slice(at + 1);
+  // No whitespace in the fragment — once the user types a space, the
+  // mention closes.
+  if (/\s/.test(fragment)) return { active: false, filter: "", startPos: -1 };
+  return { active: true, filter: fragment, startPos: at };
 }
 
 // 2026-05-08 — Imperative API for sending a turn that bypasses the
@@ -69,6 +96,7 @@ export function InputArea({
   composerHandleRef = null,
   onCompact,
   isCompacting = false,
+  agentUserId = null,
 }: {
   onSend: (text: string, attachments: File[]) => void;
   /** Programmatic compact handler. When provided, the high-pressure
@@ -115,6 +143,9 @@ export function InputArea({
    *  quick replies). When invoked, runs through the same submitMessage
    *  pipeline — toggles, drafts, attachments all reset consistently. */
   composerHandleRef?: MutableRefObject<InputAreaHandle | null> | null;
+  /** Resolved agent user id for brain mention search. When null, the
+   *  @-mention popover stays inert. */
+  agentUserId?: string | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
@@ -141,6 +172,15 @@ export function InputArea({
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashHighlight, setSlashHighlight] = useState(0);
   const [showAliases, setShowAliases] = useState(false);
+  // Brain @-mention state. Cursor position is sampled on every change /
+  // selectionchange so the popover can detect a mention even if the
+  // user types in the middle of the line.
+  const [mentionState, setMentionState] = useState<{
+    open: boolean;
+    filter: string;
+    startPos: number;
+  }>({ open: false, filter: "", startPos: -1 });
+  const [mentionHighlight, setMentionHighlight] = useState(0);
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const placeholderSuggestions = useMemo(
@@ -163,6 +203,19 @@ export function InputArea({
   const filteredSlashCommands = useMemo<SlashCommand[]>(
     () => getDisplayOrder({ filter: slashFilter, showAliases, isOperator: false }).flat,
     [slashFilter, showAliases],
+  );
+
+  // Brain mention search. Only fires when the popover is open AND we
+  // have a user id to scope the query to. The hook itself bails on
+  // queries shorter than 2 chars and on 404 backends.
+  const mentionEnabled = Boolean(zakiBotMode && agentUserId && mentionState.open);
+  const { data: brainSearchData, isLoading: brainSearchLoading } = useBrainSearch(
+    mentionEnabled ? (agentUserId as string) : "",
+    mentionEnabled ? mentionState.filter : "",
+  );
+  const mentionResults: BrainGraphNode[] = useMemo(
+    () => (mentionEnabled && brainSearchData?.results ? brainSearchData.results : []),
+    [mentionEnabled, brainSearchData],
   );
   const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
   const showZakiModeHint = zakiBotMode && effectiveZakiMode !== "execute";
@@ -280,6 +333,40 @@ export function InputArea({
       textarea.style.height = `${textarea.scrollHeight}px`;
     });
   }, []);
+
+  /**
+   * Insert the selected memory into the textarea by splicing
+   * "@<short_label> " in place of the in-progress @-token. Uses the
+   * memory's display_label or summary, truncated so a long memory
+   * doesn't take over the composer.
+   */
+  const handleMentionSelect = useCallback(
+    (memory: BrainGraphNode) => {
+      if (mentionState.startPos < 0) return;
+      const textarea = textareaRef.current;
+      const cursor = textarea?.selectionStart ?? mentionState.startPos + mentionState.filter.length + 1;
+      const label = (memory.display_label || memory.summary || "").trim();
+      const trimmedLabel =
+        label.length > 60 ? `${label.slice(0, 57).trim()}...` : label;
+      const insertion = `@${trimmedLabel} `;
+      const before = inputValue.slice(0, mentionState.startPos);
+      const after = inputValue.slice(cursor);
+      const next = `${before}${insertion}${after}`;
+      setInputValue(next);
+      setMentionState({ open: false, filter: "", startPos: -1 });
+      setMentionHighlight(0);
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.focus();
+        const newCursor = before.length + insertion.length;
+        ta.setSelectionRange(newCursor, newCursor);
+        ta.style.height = "auto";
+        ta.style.height = `${ta.scrollHeight}px`;
+      });
+    },
+    [inputValue, mentionState],
+  );
 
   // 2026-05-08 — Compaction meter mirrors token pressure 1:1.
   //
@@ -756,6 +843,19 @@ export function InputArea({
           listboxId={SLASH_LISTBOX_ID}
           optionId={slashOptionId}
         />
+        <BrainMentionPopover
+          open={mentionState.open && Boolean(zakiBotMode && agentUserId)}
+          filter={mentionState.filter}
+          results={mentionResults}
+          isLoading={brainSearchLoading}
+          highlightIndex={mentionHighlight}
+          onHighlightChange={setMentionHighlight}
+          onSelect={handleMentionSelect}
+          onDismiss={() =>
+            setMentionState({ open: false, filter: "", startPos: -1 })
+          }
+          isRtl={isRtl}
+        />
         <div className="rounded-zaki-xl border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
@@ -956,12 +1056,58 @@ export function InputArea({
               const { active } = detectSlash(value);
               setSlashOpen(active);
               if (active) setSlashHighlight(0);
+              // Brain @-mention detection. Use the post-expansion caret
+              // when available so an expansion that just landed doesn't
+              // mis-detect a mention from the snippet.
+              const cursor = nextCaret ?? ta.selectionStart ?? value.length;
+              const mention = detectMention(value, cursor);
+              if (mention.active && zakiBotMode && agentUserId) {
+                setMentionState({
+                  open: true,
+                  filter: mention.filter,
+                  startPos: mention.startPos,
+                });
+                setMentionHighlight(0);
+              } else if (mentionState.open) {
+                setMentionState({ open: false, filter: "", startPos: -1 });
+              }
               if (textareaRef.current) {
                 textareaRef.current.style.height = "auto";
                 textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
               }
             }}
             onKeyDown={(event) => {
+              // Brain @-mention keyboard navigation. Takes priority
+              // over slash because the user can have only one popover
+              // open at a time and mentions can occur mid-text.
+              const mentionResultsCount = mentionResults.length;
+              if (mentionState.open && mentionResultsCount > 0) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setMentionHighlight((index) => (index + 1) % mentionResultsCount);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setMentionHighlight(
+                    (index) =>
+                      (index - 1 + mentionResultsCount) % mentionResultsCount,
+                  );
+                  return;
+                }
+                if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+                  event.preventDefault();
+                  const memory = mentionResults[mentionHighlight];
+                  if (memory) handleMentionSelect(memory);
+                  return;
+                }
+              }
+              if (mentionState.open && event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setMentionState({ open: false, filter: "", startPos: -1 });
+                return;
+              }
               if (slashOpen && filteredSlashCommands.length > 0) {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();

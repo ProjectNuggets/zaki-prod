@@ -6306,6 +6306,7 @@ export function ChatArea() {
                 onSend={handleSend}
                 onCompact={handleCompactSession}
                 isCompacting={isCompacting}
+                agentUserId={isZakiBotActiveSpace ? agentUserId : null}
                 attachments={attachments}
                 setAttachments={setAttachments}
                 isSending={isStreaming}
