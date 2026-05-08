@@ -753,6 +753,55 @@
       "unsaved": "Unsaved changes",
       "saving": "Saving...",
       "saveAssistant": "Save assistant settings"
+    },
+    "rail": {
+      "identity": {
+        "label": "Identity",
+        "summary": "Account, status, readiness"
+      },
+      "responseStyle": {
+        "label": "Response style",
+        "summary": "Tone, mode, group behavior"
+      },
+      "channels": {
+        "label": "Channels",
+        "summary": "Telegram, app handoff"
+      },
+      "autonomy": {
+        "label": "Autonomy",
+        "summary": "Heartbeat, supervision, voice"
+      },
+      "brain": {
+        "label": "Brain",
+        "summary": "Memory, context, recall"
+      },
+      "models": {
+        "label": "Models",
+        "summary": "Provider, reasoning depth"
+      },
+      "privacy": {
+        "label": "Privacy",
+        "summary": "Retention, telemetry"
+      },
+      "plan": {
+        "label": "Plan & usage",
+        "summary": "Tier, quotas, billing"
+      },
+      "advanced": {
+        "label": "Advanced",
+        "summary": "Diagnostics, raw config"
+      }
+    },
+    "placeholders": {
+      "comingSoon": "Coming soon",
+      "tierLocked": "Pro plan",
+      "saveChangesAria": "Save assistant changes",
+      "navAria": "Settings sections",
+      "placeholder": "This section is being designed. The first cut ships behind the same backend already powering Brain.",
+      "placeholderModels": "Reasoning model selection ships with the Pro plan.",
+      "placeholderBrain": "Memory ingestion controls land alongside the Brain backfill backend pass.",
+      "placeholderPrivacy": "Retention windows and telemetry toggles will surface here once policy ships.",
+      "placeholderAdvanced": "Diagnostics and raw config will land here once Models is wired."
     }
   },
   "zakiControls": {

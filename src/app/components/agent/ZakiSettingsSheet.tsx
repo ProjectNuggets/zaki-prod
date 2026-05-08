@@ -1,5 +1,18 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, BarChart3, Bot, Link2, Settings, Sparkles, Volume2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
+import {
+  Activity,
+  BarChart3,
+  Bot,
+  Brain as BrainIcon,
+  Cpu,
+  Link2,
+  Lock,
+  Settings,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Volume2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -22,7 +35,6 @@ import {
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
 import { MetaLabel, SectionHeader, SheetShell } from "@/app/components/ui/zaki";
 
 type Props = {
@@ -35,8 +47,19 @@ type BannerState =
   | { tone: "error"; text: string }
   | null;
 
-type SectionValue = "overview" | "assistant" | "telegram" | "autonomy" | "usage";
-type OpenSectionValue = SectionValue | "";
+// Phase 4-B (2026-05-08) — Five-pillar sidebar-nav layout (replaces the
+// prior 5-item accordion). Sections still in flight retain a `placeholder`
+// flag so the rail is honest about what is shipped vs. coming.
+type SectionValue =
+  | "identity"
+  | "responseStyle"
+  | "channels"
+  | "autonomy"
+  | "brain"
+  | "models"
+  | "privacy"
+  | "plan"
+  | "advanced";
 type TelegramUiStatus =
   | "not_connected"
   | "connecting"
@@ -285,25 +308,162 @@ function CompactRow({
   );
 }
 
-function SectionBadge({
+// Phase 4-B (2026-05-08) — Sidebar-nav rail meta. The 5 currently-shipped
+// sections render real content; the 4 placeholder sections (brain, models,
+// privacy, advanced) render an honest "coming soon" card, so the rail is
+// not lying about what is wired. `tier === "pro"` paints a lock badge so
+// the gate is visible long before the upgrade modal fires.
+type RailIcon = ComponentType<SVGProps<SVGSVGElement> & { className?: string }>;
+
+type RailMetaEntry = {
+  id: SectionValue;
+  icon: RailIcon;
+  shipped: boolean;
+  tier?: "pro";
+};
+
+const SECTION_META: readonly RailMetaEntry[] = [
+  { id: "identity", icon: Bot, shipped: true },
+  { id: "responseStyle", icon: Volume2, shipped: true },
+  { id: "channels", icon: Link2, shipped: true },
+  { id: "autonomy", icon: Activity, shipped: true },
+  { id: "brain", icon: BrainIcon, shipped: false },
+  { id: "models", icon: Cpu, shipped: false, tier: "pro" },
+  { id: "privacy", icon: ShieldCheck, shipped: false },
+  { id: "plan", icon: BarChart3, shipped: true },
+  { id: "advanced", icon: Settings2, shipped: false },
+];
+
+function SettingsRail({
+  activeSection,
+  onSelect,
+  suggestedSection,
+  isRtl,
+  t,
+}: {
+  activeSection: SectionValue;
+  onSelect: (id: SectionValue) => void;
+  suggestedSection: SectionValue;
+  isRtl: boolean;
+  t: (key: string, opts?: { defaultValue?: string }) => string;
+}) {
+  return (
+    <nav
+      aria-label={t("zakiSettingsSheet.placeholders.navAria")}
+      className={cn(
+        "shrink-0 border-zaki",
+        "max-md:flex max-md:gap-1 max-md:overflow-x-auto max-md:border-b max-md:px-4 max-md:py-3",
+        isRtl
+          ? "md:border-l md:pl-3 md:pr-4 md:py-4"
+          : "md:border-r md:pl-4 md:pr-3 md:py-4",
+        "md:flex md:w-44 md:flex-col md:gap-0.5"
+      )}
+    >
+      {SECTION_META.map(({ id, icon: Icon, shipped, tier }) => {
+        const isActive = activeSection === id;
+        const isSuggested = !isActive && suggestedSection === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onSelect(id)}
+            className={cn(
+              "group relative flex items-center gap-2 rounded-zaki-md px-3 py-2 text-sm transition-colors",
+              "max-md:shrink-0",
+              isActive
+                ? "bg-zaki-brand-10 text-zaki-primary dark:text-zaki-dark-primary"
+                : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary dark:text-zaki-dark-subtle dark:hover:text-zaki-dark-primary",
+              isRtl ? "text-right" : "text-left"
+            )}
+            aria-current={isActive ? "page" : undefined}
+          >
+            <Icon className={cn("size-4 shrink-0", isActive && "text-zaki-brand")} aria-hidden />
+            <span className="min-w-0 flex-1 truncate">
+              {t(`zakiSettingsSheet.rail.${id}.label`)}
+            </span>
+            {tier === "pro" ? (
+              <Lock
+                className="size-3.5 shrink-0 text-zaki-muted"
+                aria-label={t("zakiSettingsSheet.placeholders.tierLocked")}
+              />
+            ) : !shipped ? (
+              <span
+                className="shrink-0 rounded-full bg-zaki-hover px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-zaki-muted"
+                aria-label={t("zakiSettingsSheet.placeholders.comingSoon")}
+              >
+                {t("zakiSettingsSheet.placeholders.comingSoon")}
+              </span>
+            ) : isSuggested ? (
+              <span className="size-1.5 shrink-0 rounded-full bg-zaki-brand" aria-hidden />
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function SettingsSection({
   icon: Icon,
   title,
   summary,
-  isRtl = false,
+  isRtl,
+  children,
 }: {
-  icon: typeof Bot;
+  icon: RailIcon;
   title: string;
   summary: string;
-  isRtl?: boolean;
+  isRtl: boolean;
+  children: ReactNode;
 }) {
   return (
-    <div className={cn("min-w-0 flex-1", isRtl && "text-right")}>
-      <SectionHeader
-        icon={<Icon className="size-4" />}
-        title={title}
-        subtitle={summary}
-      />
-    </div>
+    <section className="flex flex-col gap-4">
+      <header className={cn("flex items-start gap-3", isRtl && "flex-row-reverse text-right")}>
+        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-zaki-md bg-zaki-hover text-zaki-brand">
+          <Icon className="size-4" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <SectionHeader title={title} subtitle={summary} />
+        </div>
+      </header>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function SettingsPlaceholder({
+  icon: Icon,
+  title,
+  summary,
+  bodyKey,
+  locked,
+  isRtl,
+  t,
+}: {
+  icon: RailIcon;
+  title: string;
+  summary: string;
+  bodyKey: string;
+  locked?: boolean;
+  isRtl: boolean;
+  t: (key: string, opts?: { defaultValue?: string }) => string;
+}) {
+  return (
+    <SettingsSection icon={Icon} title={title} summary={summary} isRtl={isRtl}>
+      <div className="rounded-zaki-xl border border-dashed border-zaki bg-zaki-raised px-5 py-8 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+        <div className={cn("flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zaki-muted dark:text-zaki-dark-muted", isRtl && "flex-row-reverse")}>
+          {locked ? <Lock className="size-3.5" aria-hidden /> : null}
+          <span>
+            {locked
+              ? t("zakiSettingsSheet.placeholders.tierLocked")
+              : t("zakiSettingsSheet.placeholders.comingSoon")}
+          </span>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+          {t(bodyKey)}
+        </p>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -332,7 +492,7 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [telegramUiStatusOverride, setTelegramUiStatusOverride] = useState<TelegramUiStatus | null>(null);
   const [heartbeatBusy, setHeartbeatBusy] = useState(false);
-  const [openSection, setOpenSection] = useState<OpenSectionValue>("");
+  const [activeSection, setActiveSection] = useState<SectionValue>("identity");
   const [settingsErrors, setSettingsErrors] = useState<SettingsFieldErrors>({});
   const [telegramErrors, setTelegramErrors] = useState<TelegramFieldErrors>({});
   const [agentUserUnavailable, setAgentUserUnavailable] = useState(false);
@@ -396,12 +556,12 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         : t("zakiSettingsSheet.overview.awaitingStatus");
 
   const suggestedSection: SectionValue = operatorConfigRequired
-    ? "overview"
+    ? "identity"
     : !telegramConnected
-      ? "telegram"
+      ? "channels"
       : minimumRequired.length > 0
-        ? "overview"
-        : "assistant";
+        ? "identity"
+        : "responseStyle";
 
   const syncPostMutationTelegramState = async (
     targetState: "connected" | "disconnected",
@@ -585,15 +745,21 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
     setTelegramToken("");
     setTelegramAllowFrom("");
     setTelegramUiStatusOverride(null);
-    setOpenSection("");
+    setActiveSection("identity");
     setSettingsErrors({});
     setTelegramErrors({});
     setAgentUserUnavailable(false);
   }, [isOpen]);
 
+  const sectionInitRef = useRef(false);
   useEffect(() => {
-    if (!isOpen || loading) return;
-    setOpenSection((current) => (current ? current : suggestedSection));
+    if (!isOpen) {
+      sectionInitRef.current = false;
+      return;
+    }
+    if (loading || sectionInitRef.current) return;
+    setActiveSection(suggestedSection);
+    sectionInitRef.current = true;
   }, [isOpen, loading, suggestedSection]);
 
   useEffect(() => {
@@ -924,23 +1090,22 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
         </div>
 
         <div className="relative flex-1 px-5 py-5">
-          <Accordion
-              type="single"
-              collapsible
-              value={openSection}
-              onValueChange={(value) => setOpenSection((value as OpenSectionValue) || "")}
-              className="space-y-0"
-            >
-              <AccordionItem value="overview" className="border-b border-zaki px-0">
-                <AccordionTrigger className="py-5 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={Bot}
-                    title={t("zakiSettingsSheet.sections.overview.title")}
-                    summary={overviewSummary}
-                    isRtl={isRtl}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-6">
+          <div className={cn("flex h-full min-h-0 flex-col md:flex-row", isRtl && "md:flex-row-reverse")}>
+            <SettingsRail
+              activeSection={activeSection}
+              onSelect={setActiveSection}
+              suggestedSection={suggestedSection}
+              isRtl={isRtl}
+              t={t}
+            />
+            <div className="min-w-0 flex-1 px-1 py-4 md:px-5 md:py-1">
+              {activeSection === "identity" && (
+                <SettingsSection
+                  icon={Bot}
+                  title={t("zakiSettingsSheet.sections.overview.title")}
+                  summary={overviewSummary}
+                  isRtl={isRtl}
+                >
                   <div className="space-y-3">
                     <div className={cn("rounded-2xl border px-4 py-3 text-sm", getStatusTone(overviewStatusTone))}>
                       <div className="font-semibold">{overviewSummary}</div>
@@ -991,22 +1156,19 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       isRtl={isRtl}
                     />
                   </div>
-                </AccordionContent>
-              </AccordionItem>
+                </SettingsSection>
+              )}
 
-              <AccordionItem value="assistant" className="border-b border-zaki px-0">
-                <AccordionTrigger className="py-5 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={Volume2}
-                    title={t("zakiSettingsSheet.sections.assistant.title")}
-                    summary={t("zakiSettingsSheet.sections.assistant.summary", {
-                      style: responseStyleLabel,
-                      join: joinBehaviorLabel,
-                    })}
-                    isRtl={isRtl}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-6">
+              {activeSection === "responseStyle" && (
+                <SettingsSection
+                  icon={Volume2}
+                  title={t("zakiSettingsSheet.sections.assistant.title")}
+                  summary={t("zakiSettingsSheet.sections.assistant.summary", {
+                    style: responseStyleLabel,
+                    join: joinBehaviorLabel,
+                  })}
+                  isRtl={isRtl}
+                >
                   <div className="space-y-3">
                     <CompactRow
                       title={t("zakiSettingsSheet.fields.responseStyle.title")}
@@ -1183,19 +1345,16 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       }
                     />
                   </div>
-                </AccordionContent>
-              </AccordionItem>
+                </SettingsSection>
+              )}
 
-              <AccordionItem value="telegram" className="border-b border-zaki px-0">
-                <AccordionTrigger className="py-5 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={Link2}
-                    title={t("zakiSettingsSheet.sections.telegram.title")}
-                    summary={telegramSectionSummary}
-                    isRtl={isRtl}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-6">
+              {activeSection === "channels" && (
+                <SettingsSection
+                  icon={Link2}
+                  title={t("zakiSettingsSheet.sections.telegram.title")}
+                  summary={telegramSectionSummary}
+                  isRtl={isRtl}
+                >
                   <div className="space-y-3">
                     <CompactRow
                       title={t("zakiSettingsSheet.telegram.statusTitle")}
@@ -1278,25 +1437,22 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       </div>
                     </div>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
+                </SettingsSection>
+              )}
 
-              <AccordionItem value="autonomy" className="border-b border-zaki px-0">
-                <AccordionTrigger className="py-5 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={Activity}
-                    title={t("zakiSettingsSheet.sections.autonomy.title")}
-                    summary={
-                      !telegramConnected
-                        ? t("zakiSettingsSheet.autonomy.heartbeatRequiresTelegram")
-                        : heartbeatEnabled
-                        ? t("zakiSettingsSheet.sections.autonomy.summaryEnabled")
-                        : t("zakiSettingsSheet.sections.autonomy.summaryDisabled")
-                    }
-                    isRtl={isRtl}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-6">
+              {activeSection === "autonomy" && (
+                <SettingsSection
+                  icon={Activity}
+                  title={t("zakiSettingsSheet.sections.autonomy.title")}
+                  summary={
+                    !telegramConnected
+                      ? t("zakiSettingsSheet.autonomy.heartbeatRequiresTelegram")
+                      : heartbeatEnabled
+                      ? t("zakiSettingsSheet.sections.autonomy.summaryEnabled")
+                      : t("zakiSettingsSheet.sections.autonomy.summaryDisabled")
+                  }
+                  isRtl={isRtl}
+                >
                   <div className="space-y-3">
                     <CompactRow
                       title={t("zakiSettingsSheet.autonomy.levelTitle")}
@@ -1385,28 +1541,25 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       }
                     />
                   </div>
-                </AccordionContent>
-              </AccordionItem>
+                </SettingsSection>
+              )}
 
-              <AccordionItem value="usage" className="border-b border-zaki px-0">
-                <AccordionTrigger className="py-5 no-underline hover:no-underline">
-                  <SectionBadge
-                    icon={BarChart3}
-                    title={t("zakiSettingsSheet.sections.usage.title")}
-                    summary={
-                      usageUnavailable
-                        ? t("zakiSettingsSheet.sections.usage.summaryUnavailable")
-                        : usage
-                          ? t("zakiSettingsSheet.sections.usage.summary", {
-                              requests: usage.requests_day ?? 0,
-                              state: usage.state ?? t("zakiSettingsSheet.sections.usage.stateUnknown"),
-                            })
-                          : t("zakiSettingsSheet.sections.usage.summaryPending")
-                    }
-                    isRtl={isRtl}
-                  />
-                </AccordionTrigger>
-                <AccordionContent className="pb-6">
+              {activeSection === "plan" && (
+                <SettingsSection
+                  icon={BarChart3}
+                  title={t("zakiSettingsSheet.sections.usage.title")}
+                  summary={
+                    usageUnavailable
+                      ? t("zakiSettingsSheet.sections.usage.summaryUnavailable")
+                      : usage
+                        ? t("zakiSettingsSheet.sections.usage.summary", {
+                            requests: usage.requests_day ?? 0,
+                            state: usage.state ?? t("zakiSettingsSheet.sections.usage.stateUnknown"),
+                          })
+                        : t("zakiSettingsSheet.sections.usage.summaryPending")
+                  }
+                  isRtl={isRtl}
+                >
                   <div className="space-y-3">
                     {usageUnavailable ? (
                       <p className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-3 text-sm text-zaki-secondary dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:text-zaki-dark-subtle">
@@ -1456,9 +1609,52 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       {t("zakiSettingsSheet.usage.helper")}
                     </p>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                </SettingsSection>
+              )}
+
+              {activeSection === "brain" && (
+                <SettingsPlaceholder
+                  icon={BrainIcon}
+                  title={t("zakiSettingsSheet.rail.brain.label")}
+                  summary={t("zakiSettingsSheet.rail.brain.summary")}
+                  bodyKey="zakiSettingsSheet.placeholders.placeholderBrain"
+                  isRtl={isRtl}
+                  t={t}
+                />
+              )}
+              {activeSection === "models" && (
+                <SettingsPlaceholder
+                  icon={Cpu}
+                  title={t("zakiSettingsSheet.rail.models.label")}
+                  summary={t("zakiSettingsSheet.rail.models.summary")}
+                  bodyKey="zakiSettingsSheet.placeholders.placeholderModels"
+                  locked
+                  isRtl={isRtl}
+                  t={t}
+                />
+              )}
+              {activeSection === "privacy" && (
+                <SettingsPlaceholder
+                  icon={ShieldCheck}
+                  title={t("zakiSettingsSheet.rail.privacy.label")}
+                  summary={t("zakiSettingsSheet.rail.privacy.summary")}
+                  bodyKey="zakiSettingsSheet.placeholders.placeholderPrivacy"
+                  isRtl={isRtl}
+                  t={t}
+                />
+              )}
+              {activeSection === "advanced" && (
+                <SettingsPlaceholder
+                  icon={Settings2}
+                  title={t("zakiSettingsSheet.rail.advanced.label")}
+                  summary={t("zakiSettingsSheet.rail.advanced.summary")}
+                  bodyKey="zakiSettingsSheet.placeholders.placeholderAdvanced"
+                  isRtl={isRtl}
+                  t={t}
+                />
+              )}
+            </div>
+          </div>
 
           {!loading ? null : (
             <div className="mt-4 flex items-center gap-2 rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-secondary dark:bg-[#1a1714] dark:text-zaki-dark-subtle">
