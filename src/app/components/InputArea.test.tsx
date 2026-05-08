@@ -184,7 +184,7 @@ describe("InputArea primary action button", () => {
     expect(screen.getByTestId("zaki-mode-hint")).toBeInTheDocument();
   });
 
-  it("shows the context meter only when ZAKI has a real context percentage", () => {
+  it("shows the context meter when ZAKI has known or pending context pressure", () => {
     const { rerender } = render(
       <InputArea
         onSend={jest.fn()}
@@ -195,7 +195,7 @@ describe("InputArea primary action button", () => {
       />
     );
 
-    expect(screen.queryByTestId("zaki-context-meter")).not.toBeInTheDocument();
+    expect(screen.getByTestId("zaki-context-meter")).toBeInTheDocument();
 
     rerender(
       <InputArea

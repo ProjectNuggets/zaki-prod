@@ -174,6 +174,16 @@ async function mockLearning(page: Page) {
   ]);
   const savedNotebookRecords: unknown[] = [];
   const startedTurns: Array<Record<string, unknown>> = [];
+  const sessionMessages = new Map<string, Array<Record<string, unknown>>>();
+  const createdBooks: Array<Record<string, unknown>> = [];
+  const tutorAgentMessages: Array<Record<string, unknown>> = [];
+  const tutorHistory: Array<Record<string, unknown>> = [
+    {
+      id: "agent-history-1",
+      role: "assistant",
+      content: "Past tutor message.",
+    },
+  ];
   const knowledgeBases: Array<Record<string, unknown>> = [
     {
       name: "main",
@@ -187,6 +197,25 @@ async function mockLearning(page: Page) {
   const defaultKnowledgeUpdates: string[] = [];
   const assetRequests: string[] = [];
 
+  await page.routeWebSocket("**/api/learning/tutor-agents/*/ws", async (ws) => {
+    ws.onMessage((message) => {
+      const payload = JSON.parse(String(message)) as Record<string, unknown>;
+      tutorAgentMessages.push(payload);
+      const content = String(payload.content || "");
+      if (content) {
+        tutorHistory.push({ id: `agent-user-${tutorHistory.length}`, role: "user", content });
+      }
+      ws.send(JSON.stringify({ type: "thinking", content: "Checking the tutor workspace." }));
+      ws.send(JSON.stringify({ type: "content", content: "Tutor reply through the hosted gateway." }));
+      tutorHistory.push({
+        id: `agent-assistant-${tutorHistory.length}`,
+        role: "assistant",
+        content: "Tutor reply through the hosted gateway.",
+      });
+      ws.send(JSON.stringify({ type: "done" }));
+    });
+  });
+
   await page.routeWebSocket("**/api/learning/ws", async (ws) => {
     ws.onMessage((message) => {
       const payload = JSON.parse(String(message)) as {
@@ -196,64 +225,85 @@ async function mockLearning(page: Page) {
       } & Record<string, unknown>;
       if (payload.type !== "start_turn") return;
       startedTurns.push(payload);
-      ws.send(JSON.stringify({ type: "session", session_id: payload.session_id || "session-e2e" }));
+      const sessionId = payload.session_id || "session-e2e";
+      const history = sessionMessages.get(sessionId) ?? [];
+      sessionMessages.set(sessionId, history);
+      history.push({
+        id: `${sessionId}-user-${history.length}`,
+        role: "user",
+        content: String(payload.content || ""),
+        capability: payload.capability || "chat",
+      });
+      const assistantRecord: Record<string, unknown> = {
+        id: `${sessionId}-assistant-${history.length}`,
+        role: "assistant",
+        content: "Notebook-ready answer.",
+        capability: payload.capability || "chat",
+        events: [],
+      };
+      history.push(assistantRecord);
+      const assistantEvents = assistantRecord.events as Array<Record<string, unknown>>;
+      ws.send(JSON.stringify({ type: "session", session_id: sessionId }));
       ws.send(JSON.stringify({ type: "content", content: "Notebook-ready answer." }));
       if (payload.capability === "deep_research") {
-        ws.send(
-          JSON.stringify({
-            type: "result",
-            metadata: {
-              topic: payload.content,
-              sub_topics: [
-                {
-                  title: "Fourier basis",
-                  overview: "Explain sinusoidal basis functions.",
-                },
-              ],
-              research_config: payload.config,
-            },
-          }),
-        );
+        const event = {
+          type: "result",
+          metadata: {
+            topic: payload.content,
+            sub_topics: [
+              {
+                title: "Fourier basis",
+                overview: "Explain sinusoidal basis functions.",
+              },
+            ],
+            research_config: payload.config,
+          },
+        };
+        assistantEvents.push(event);
+        ws.send(JSON.stringify(event));
       }
       if (payload.capability === "visualize") {
-        ws.send(
-          JSON.stringify({
-            type: "result",
-            metadata: {
-              response: "Visualization ready.",
-              render_type: "mermaid",
-              code: {
-                language: "mermaid",
-                content: "flowchart TD\\n  A[Start] --> B[Update weights]",
-              },
-              analysis: {
-                description: "Gradient descent process flow.",
-              },
+        const event = {
+          type: "result",
+          metadata: {
+            response: "Visualization ready.",
+            render_type: "mermaid",
+            code: {
+              language: "mermaid",
+              content: "flowchart TD\\n  A[Start] --> B[Update weights]",
             },
-          }),
-        );
+            analysis: {
+              description: "Gradient descent process flow.",
+            },
+          },
+        };
+        assistantEvents.push(event);
+        ws.send(JSON.stringify(event));
       }
       if (payload.capability === "math_animator") {
-        ws.send(
-          JSON.stringify({
-            type: "result",
-            metadata: {
-              response: "Storyboard ready.",
-              output_mode: "image",
-              code: { language: "python", content: "class Square(Scene): pass" },
-              artifacts: [
-                {
-                  type: "image",
-                  url: "/api/outputs/math/frame.gif",
-                  filename: "frame.gif",
-                  label: "Frame preview",
-                },
-              ],
-              timings: {},
-              render: { quality: "high" },
-            },
-          }),
-        );
+        const config = (payload.config ?? {}) as Record<string, unknown>;
+        const outputMode = String(config.output_mode || "image");
+        const isVideo = outputMode === "video";
+        const event = {
+          type: "result",
+          metadata: {
+            response: "Storyboard ready.",
+            output_mode: outputMode,
+            code: { language: "python", content: "class Square(Scene): pass" },
+            artifacts: [
+              {
+                type: isVideo ? "video" : "image",
+                url: isVideo ? "/api/outputs/math/animation.mp4" : "/api/outputs/math/frame.gif",
+                filename: isVideo ? "animation.mp4" : "frame.gif",
+                label: isVideo ? "Video preview" : "Frame preview",
+              },
+            ],
+            timings: {},
+            render: { quality: String(config.quality || "high") },
+          },
+        };
+        assistantEvents.push(event);
+        ws.send(JSON.stringify(event));
       }
       ws.send(JSON.stringify({ type: "done" }));
     });
@@ -273,8 +323,10 @@ async function mockLearning(page: Page) {
       assetRequests.push(path);
       await route.fulfill({
         status: 200,
-        contentType: "image/gif",
-        body: Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
+        contentType: path.endsWith(".mp4") ? "video/mp4" : "image/gif",
+        body: path.endsWith(".mp4")
+          ? Buffer.from("")
+          : Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
       });
       return;
     }
@@ -361,7 +413,51 @@ async function mockLearning(page: Page) {
     }
 
     if (path === "/api/learning/books") {
-      await json(route, { books: [] });
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        const topic = String(body.user_intent || body.topic || "Generated book");
+        const proposal = {
+          title: topic,
+          description: "Generated proposal for E2E verification.",
+          language: body.language || "en",
+          chapters: [
+            { id: "chapter-1", title: "Foundations", pages: [] },
+          ],
+        };
+        const book = {
+          id: `book-${createdBooks.length + 1}`,
+          book_id: `book-${createdBooks.length + 1}`,
+          title: topic,
+          description: "Generated proposal for E2E verification.",
+          status: "draft",
+          language: body.language || "en",
+          chapter_count: 1,
+          page_count: 0,
+          proposal,
+          chapters: proposal.chapters,
+          updated_at: "2026-05-07T12:30:00.000Z",
+        };
+        createdBooks.push({ request: body, book });
+        await json(route, { book, proposal });
+        return;
+      }
+      await json(route, { books: createdBooks.map((entry) => entry.book) });
+      return;
+    }
+
+    if (path.startsWith("/api/learning/books/")) {
+      const parts = path.split("/");
+      const bookId = decodeURIComponent(parts[4] || "");
+      const record = createdBooks.find((entry) => (entry.book as Record<string, unknown>).id === bookId);
+      if (path.endsWith("/spine")) {
+        await json(route, { chapters: record ? ((record.book as Record<string, unknown>).chapters ?? []) : [] });
+        return;
+      }
+      if (path.endsWith("/health")) {
+        await json(route, { stale_pages: [], stale_blocks: [], status: "fresh" });
+        return;
+      }
+      await json(route, record ? { book: record.book } : {}, record ? 200 : 404);
       return;
     }
 
@@ -455,6 +551,16 @@ async function mockLearning(page: Page) {
       return;
     }
 
+    if (path.startsWith("/api/learning/sessions/")) {
+      const sessionId = decodeURIComponent(path.split("/").pop() || "");
+      await json(route, {
+        session_id: sessionId,
+        messages: sessionMessages.get(sessionId) ?? [],
+        active_turns: [],
+      });
+      return;
+    }
+
     if (path === "/api/learning/solve/sessions") {
       await json(route, { sessions: [] });
       return;
@@ -471,6 +577,26 @@ async function mockLearning(page: Page) {
           },
         ],
       });
+      return;
+    }
+
+    if (path === "/api/learning/tutor-agents/agent-1") {
+      await json(route, {
+        bot_id: "agent-1",
+        name: "Calculus Tutor",
+        running: true,
+        persona: "No persona returned.",
+      });
+      return;
+    }
+
+    if (path === "/api/learning/tutor-agents/agent-1/history") {
+      await json(route, { messages: tutorHistory });
+      return;
+    }
+
+    if (path === "/api/learning/tutor-agents/agent-1/turns/active") {
+      await json(route, { active_turns: [] });
       return;
     }
 
@@ -535,6 +661,8 @@ async function mockLearning(page: Page) {
   return {
     savedNotebookRecords,
     startedTurns,
+    createdBooks,
+    tutorAgentMessages,
     knowledgeUploads,
     defaultKnowledgeUpdates,
     assetRequests,
@@ -749,6 +877,58 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByText("Explain work-energy theorem.")).toBeVisible();
   });
 
+  test("creates a book proposal through the hosted book workflow", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=books");
+    await page.getByRole("button", { name: /New book/i }).first().click();
+    await page
+      .getByPlaceholder("e.g. Build intuition for transformer attention with derivations and exercises.")
+      .fill("Build a compact calculus foundations book.");
+    await page.getByLabel("Book language").selectOption("en");
+    await page.getByRole("button", { name: /Generate proposal/i }).click();
+
+    await expect.poll(() => learning.createdBooks.length).toBe(1);
+    expect(learning.createdBooks[0].request).toMatchObject({
+      user_intent: "Build a compact calculus foundations book.",
+      language: "en",
+    });
+    await expect(page.getByRole("button", { name: /Confirm proposal/i })).toBeVisible();
+  });
+
+  test("routes TutorBot chat, preserves returned history, and exposes hosted channels", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=agents");
+    await page.getByRole("button", { name: /Calculus Tutor/i }).first().click();
+    await expect(page.getByText("Tutor chat")).toBeVisible();
+    await expect(page.getByText("Past tutor message.")).toBeVisible();
+
+    await page.getByPlaceholder("Ask this tutor...").fill("Help me plan a derivative lesson.");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect.poll(() => learning.tutorAgentMessages.length).toBe(1);
+    expect(learning.tutorAgentMessages[0]).toMatchObject({
+      content: "Help me plan a derivative lesson.",
+      chat_id: "web",
+    });
+    await expect(page.getByText("Tutor reply through the hosted gateway.")).toBeVisible();
+
+    await page.goto("/learn?view=space");
+    await page.goto("/learn?view=agents");
+    await expect(page.getByText("Tutor reply through the hosted gateway.")).toBeVisible();
+    await page.getByRole("button", { name: "Back to bots" }).click();
+    await page.getByRole("button", { name: /Calculus Tutor/i }).first().click();
+    await expect(page.getByText("Help me plan a derivative lesson.")).toBeVisible();
+    await expect(page.getByText("Tutor reply through the hosted gateway.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Back to bots" }).click();
+    await page.getByRole("button", { name: /^Channels$/ }).click();
+    for (const channel of ["WhatsApp", "Telegram", "Discord", "Email", "Slack"]) {
+      await expect(page.getByRole("button", { name: channel })).toBeVisible();
+    }
+  });
+
   test("routes quiz generation with hosted config", async ({ page }) => {
     const learning = await mockLearning(page);
 
@@ -894,6 +1074,14 @@ test.describe("ZAKI Learn parity wiring", () => {
       "src",
       /\/api\/learning\/outputs\/math\/frame\.gif/,
     );
+    await expect(page.getByRole("link", { name: /Open/i }).first()).toHaveAttribute(
+      "href",
+      /\/api\/learning\/outputs\/math\/frame\.gif/,
+    );
+    await expect(page.getByRole("link", { name: /Download/i }).first()).toHaveAttribute(
+      "download",
+      "frame.gif",
+    );
     await expect.poll(() => learning.assetRequests.includes("/api/learning/outputs/math/frame.gif")).toBe(true);
     await expect(page.getByText("View Manim Code")).toBeVisible();
     expect(learning.startedTurns[3]).toMatchObject({
@@ -913,5 +1101,40 @@ test.describe("ZAKI Learn parity wiring", () => {
     markdown = await readFile(String(path), "utf8");
     expect(markdown).toContain("### Math Animator");
     expect(markdown).toContain("class Square(Scene): pass");
+  });
+
+  test("renders video math artifacts with preview and download wiring", async ({ page }) => {
+    const learning = await mockLearning(page);
+
+    await page.goto("/learn?view=math-animation");
+    await page.getByLabel("Output").selectOption("video");
+    await page.getByLabel("Quality").selectOption("low");
+    await page
+      .getByPlaceholder("Describe the math animation or storyboard you want...")
+      .fill("Animate the derivative of x squared.");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect.poll(() => learning.startedTurns.length).toBe(1);
+    expect(learning.startedTurns[0]).toMatchObject({
+      type: "start_turn",
+      capability: "math_animator",
+      config: {
+        output_mode: "video",
+        quality: "low",
+      },
+    });
+    await expect(page.getByText("Video preview")).toBeVisible();
+    await expect(page.locator("video").first()).toHaveAttribute(
+      "src",
+      /\/api\/learning\/outputs\/math\/animation\.mp4/,
+    );
+    await expect(page.getByRole("link", { name: /Open/i }).first()).toHaveAttribute(
+      "href",
+      /\/api\/learning\/outputs\/math\/animation\.mp4/,
+    );
+    await expect(page.getByRole("link", { name: /Download/i }).first()).toHaveAttribute(
+      "download",
+      "animation.mp4",
+    );
   });
 });

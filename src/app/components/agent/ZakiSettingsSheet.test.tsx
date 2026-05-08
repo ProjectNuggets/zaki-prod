@@ -2,6 +2,7 @@ import "@testing-library/jest-dom";
 import { describe, expect, it, beforeEach, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ZakiSettingsSheet } from "./ZakiSettingsSheet";
 import { useAuthStore } from "@/stores";
 import {
@@ -36,6 +37,12 @@ jest.mock("@/lib/api", () => ({
   fetchBotHeartbeat: jest.fn(),
   fetchBotOnboarding: jest.fn(),
   fetchBotSettings: jest.fn(),
+  fetchEntitlements: jest.fn().mockResolvedValue({
+    success: true,
+    plan: { tier: "free", status: "inactive" },
+    access: { active: true, readOnly: false },
+    features: {},
+  }),
   fetchBotUsage: jest.fn().mockResolvedValue({
     response: { ok: true, status: 200 },
     data: { state: "normal", requests_day: 0, tokens_day: 0, tokens_month: 0 },
@@ -49,7 +56,22 @@ jest.mock("@/stores", () => ({
 }));
 
 function TestHarness() {
-  return <ZakiSettingsSheet isOpen onClose={jest.fn()} />;
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ZakiSettingsSheet isOpen onClose={jest.fn()} />
+    </QueryClientProvider>
+  );
+}
+
+async function openIdentitySection() {
+  await screen.findByText("zakiSettingsSheet.title");
+  await userEvent.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.identity.label/i }));
 }
 
 describe("ZakiSettingsSheet", () => {
@@ -162,8 +184,9 @@ describe("ZakiSettingsSheet", () => {
 
     render(<TestHarness />);
 
+    await openIdentitySection();
     expect(await screen.findByText("zakiSettingsSheet.workspace.channelStatus.connected")).toBeInTheDocument();
-    expect(screen.getByText("zakiSettingsSheet.overview.readyToStart")).toBeInTheDocument();
+    expect(screen.getAllByText("zakiSettingsSheet.overview.readyToStart").length).toBeGreaterThan(0);
   });
 
   it("waits for auth readiness before loading settings state", async () => {
@@ -224,7 +247,6 @@ describe("ZakiSettingsSheet", () => {
     const user = userEvent.setup();
     render(<TestHarness />);
 
-    await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
     await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.channels.label/i }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "zakiSettingsSheet.actions.connectTelegram" })).toBeInTheDocument();
@@ -262,7 +284,6 @@ describe("ZakiSettingsSheet", () => {
     });
 
     render(<TestHarness />);
-    await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /zakiSettingsSheet.rail.responseStyle.label/i }));
@@ -311,7 +332,7 @@ describe("ZakiSettingsSheet", () => {
 
     render(<TestHarness />);
 
-    await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
+    await screen.findByText("zakiSettingsSheet.title");
     expect(screen.getByLabelText("zakiSettingsSheet.telegram.botTokenLabel")).toBeInTheDocument();
   });
 
@@ -359,7 +380,7 @@ describe("ZakiSettingsSheet", () => {
     const user = userEvent.setup();
     render(<TestHarness />);
 
-    await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
+    await screen.findByText("zakiSettingsSheet.title");
     await user.clear(screen.getByLabelText("zakiSettingsSheet.telegram.allowFromLabel"));
     await user.type(screen.getByLabelText("zakiSettingsSheet.telegram.botTokenLabel"), "123456:ABC");
     await user.type(screen.getByLabelText("zakiSettingsSheet.telegram.allowFromLabel"), "12345");
@@ -373,6 +394,7 @@ describe("ZakiSettingsSheet", () => {
       expect(connectBotTelegram).toHaveBeenCalled();
     });
 
+    await openIdentitySection();
     expect(await screen.findByText("zakiSettingsSheet.workspace.channelStatus.connected")).toBeInTheDocument();
   });
 
@@ -397,7 +419,7 @@ describe("ZakiSettingsSheet", () => {
     const user = userEvent.setup();
     render(<TestHarness />);
 
-    await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
+    await screen.findByText("zakiSettingsSheet.title");
     await user.clear(screen.getByLabelText("zakiSettingsSheet.telegram.allowFromLabel"));
     await user.type(screen.getByLabelText("zakiSettingsSheet.telegram.botTokenLabel"), "123456:ABC");
     await user.type(screen.getByLabelText("zakiSettingsSheet.telegram.allowFromLabel"), "12345");
@@ -446,7 +468,7 @@ describe("ZakiSettingsSheet", () => {
     const user = userEvent.setup();
     render(<TestHarness />);
 
-    await screen.findByText("zakiSettingsSheet.workspace.channelStatus.notConnected");
+    await screen.findByText("zakiSettingsSheet.title");
     await user.clear(screen.getByLabelText("zakiSettingsSheet.telegram.allowFromLabel"));
     await user.type(screen.getByLabelText("zakiSettingsSheet.telegram.botTokenLabel"), "123456:ABC");
     await user.type(screen.getByLabelText("zakiSettingsSheet.telegram.allowFromLabel"), "12345");

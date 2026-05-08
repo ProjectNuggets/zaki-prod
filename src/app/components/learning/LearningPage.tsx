@@ -1966,11 +1966,39 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
               return (
                 <figure key={`${url}-${index}`} className="rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
                   {type === "video" ? (
-                    <video src={url} controls playsInline preload="metadata" className="aspect-video w-full rounded-zaki-sm bg-black object-contain" />
+                    <video
+                      src={url}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      aria-label={label}
+                      className="aspect-video w-full rounded-zaki-sm bg-black object-contain"
+                    />
                   ) : (
                     <img src={url} alt={label} className="max-h-[280px] w-full rounded-zaki-sm object-contain" />
                   )}
-                  <figcaption className="mt-1 truncate text-[11px] text-zaki-muted">{label}</figcaption>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <figcaption className="min-w-0 truncate text-[11px] text-zaki-muted">{label}</figcaption>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-zaki-sm px-1.5 py-1 text-[11px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                      >
+                        <ExternalLink className="size-3" />
+                        Open
+                      </a>
+                      <a
+                        href={url}
+                        download={textOf(artifact.filename) || undefined}
+                        className="inline-flex items-center gap-1 rounded-zaki-sm px-1.5 py-1 text-[11px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
+                      >
+                        <Download className="size-3" />
+                        Download
+                      </a>
+                    </div>
+                  </div>
                 </figure>
               );
             })}
@@ -8617,16 +8645,24 @@ function AgentDetailSummary({ agentId, value }: { agentId: string; value: unknow
 function normalizeTutorHistoryMessage(item: Item, index: number): TutorChatMessage | null {
   const roleRaw = textOf(item.role, "assistant").toLowerCase();
   const role = roleRaw === "user" ? "user" : roleRaw === "system" ? "system" : "assistant";
+  const metadata = asRecord(item.metadata);
   const content =
     textOf(item.content) ||
     textOf(item.message) ||
     textOf(item.text) ||
     textOf(item.response);
   if (!content) return null;
+  const events = learningRecords(item.events);
+  const thinking = itemList(item.thinking, ["thinking", "progress"]).map((entry) =>
+    typeof entry === "string" ? entry : learningEventText(textOf(asRecord(entry).type), asRecord(entry)),
+  ).filter(Boolean);
   return {
     id: textOf(item.id, `history-${index}`),
     role,
     content,
+    capability: textOf(item.capability) || textOf(metadata.capability),
+    events: events.length ? events : undefined,
+    thinking: thinking.length ? thinking : undefined,
   };
 }
 
