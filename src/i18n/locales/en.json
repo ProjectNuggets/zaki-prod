@@ -827,6 +827,32 @@
     },
     "privacy": {
       "footer": "Your data is yours. ZAKI is GDPR-compliant. Email privacy@zakiai.com to delete any data on request."
+    },
+    "channelsList": {
+      "headerHeading": "Where ZAKI shows up",
+      "headerSummary": "Connect ZAKI to the apps you already use. More integrations land as backend wiring ships.",
+      "comingSoonPill": "COMING SOON",
+      "connectedPill": "CONNECTED",
+      "notConnectedPill": "NOT CONNECTED",
+      "telegram": {
+        "name": "Telegram",
+        "tagline": "Chat with ZAKI from any Telegram device, group, or channel."
+      },
+      "slack": {
+        "name": "Slack",
+        "tagline": "Bring ZAKI into your team workspace. /zaki commands and threaded replies."
+      },
+      "discord": {
+        "name": "Discord",
+        "tagline": "Add ZAKI as a server bot. Slash commands and thread context."
+      },
+      "whatsapp": {
+        "name": "WhatsApp",
+        "tagline": "Reach ZAKI on WhatsApp, including voice notes and media."
+      },
+      "connectingPill": "CONNECTING…",
+      "verifyingPill": "VERIFYING…",
+      "needsAttentionPill": "NEEDS ATTENTION"
     }
   },
   "zakiControls": {

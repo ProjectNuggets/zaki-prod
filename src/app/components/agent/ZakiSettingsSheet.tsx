@@ -3,12 +3,16 @@ import {
   Activity,
   BarChart3,
   Bot,
+  Eye,
+  Gamepad2,
   Gauge,
+  Hash,
   Link2,
   Lock,
-  Settings,
-  Eye,
+  MessageCircle,
   Rocket,
+  Send,
+  Settings,
   Shield,
   Telescope,
   Volume2,
@@ -419,6 +423,121 @@ function InlineFieldError({ text }: { text?: string }) {
   return <p className="mt-2 text-xs text-zaki-brand">{text}</p>;
 }
 
+// Phase 4-B (2026-05-08) — Channel cards. The Channels section surfaces all
+// integrations (Telegram, Slack, Discord, WhatsApp) as stacked cards.
+// Telegram is fully wired and renders its setup flow inline; the other
+// three are honest "coming soon" cards so the surface is ready for the
+// backend handoff Nova is coordinating. Each card uses the platform's
+// brand color for its icon tile so users recognize the channel without
+// reading.
+type ChannelStatus =
+  | "connected"
+  | "not_connected"
+  | "connecting"
+  | "verifying"
+  | "needs_attention"
+  | "coming_soon";
+
+function ChannelCard({
+  icon,
+  iconBg,
+  name,
+  tagline,
+  status,
+  isRtl,
+  t,
+  children,
+}: {
+  icon: ReactNode;
+  iconBg: string;
+  name: string;
+  tagline: string;
+  status: ChannelStatus;
+  isRtl: boolean;
+  t: (key: string, opts?: { defaultValue?: string }) => string;
+  children?: ReactNode;
+}) {
+  const isComingSoon = status === "coming_soon";
+  const statusLabel = (() => {
+    switch (status) {
+      case "connected":
+        return t("zakiSettingsSheet.channelsList.connectedPill");
+      case "not_connected":
+        return t("zakiSettingsSheet.channelsList.notConnectedPill");
+      case "connecting":
+        return t("zakiSettingsSheet.channelsList.connectingPill");
+      case "verifying":
+        return t("zakiSettingsSheet.channelsList.verifyingPill");
+      case "needs_attention":
+        return t("zakiSettingsSheet.channelsList.needsAttentionPill");
+      default:
+        return t("zakiSettingsSheet.channelsList.comingSoonPill");
+    }
+  })();
+  const statusClass = (() => {
+    switch (status) {
+      case "connected":
+        return "bg-zaki-accent-15 text-zaki-accent";
+      case "connecting":
+      case "verifying":
+        return "bg-zaki-brand-15 text-zaki-brand";
+      case "needs_attention":
+        return "bg-zaki-warning text-zaki-warning";
+      case "not_connected":
+        return "bg-zaki-hover text-zaki-secondary";
+      default:
+        return "bg-zaki-hover text-zaki-muted";
+    }
+  })();
+
+  return (
+    <div
+      className={cn(
+        "rounded-zaki-xl border border-zaki bg-zaki-raised dark:bg-zaki-dark-card dark:border-zaki-dark-card",
+        isComingSoon && "opacity-90"
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-start gap-3 px-4 py-3",
+          isRtl && "flex-row-reverse text-right"
+        )}
+      >
+        <span
+          className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-zaki-md text-white"
+          style={{ background: iconBg }}
+          aria-hidden
+        >
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className={cn("flex items-center gap-2", isRtl && "flex-row-reverse")}>
+            <span className="font-display text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {name}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                statusClass
+              )}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+            {tagline}
+          </p>
+        </div>
+      </div>
+      {children ? (
+        <div className="border-t border-zaki/60 px-4 py-4 dark:border-zaki-dark-card">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // Phase 4-B (2026-05-08) — Tier visibility. The sheet header surfaces the
 // caller's current plan, the Models rail entry shows a PRO chip in place
 // of the bare lock icon, so a free user sees the gate without having to
@@ -593,7 +712,6 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
   const telegramSetup = useMemo(() => getChannelSetup(setup, "telegram"), [setup]);
   const telegramStatus = getChannelStatus(telegramSetup);
   const telegramConnected = getTelegramConnected(telegramStatus);
-  const telegramUiStatus = telegramUiStatusOverride ?? (telegramConnected ? "connected" : "not_connected");
   const minimumRequired = asStringArray(
     onboarding?.minimum_required ?? asRecord(onboarding?.setup).minimum_required
   );
@@ -875,51 +993,6 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
       return current;
     });
   }, [telegramBusy, telegramConnected]);
-
-  const telegramStatusSummary = (() => {
-    switch (telegramUiStatus) {
-      case "connecting":
-        return t("zakiSettingsSheet.telegram.statusConnecting");
-      case "verifying":
-        return t("zakiSettingsSheet.telegram.statusVerifying");
-      case "needs_attention":
-        return t("zakiSettingsSheet.telegram.statusNeedsAttention");
-      case "connected":
-        return t("zakiSettingsSheet.workspace.channelStatus.connected");
-      default:
-        return t("zakiSettingsSheet.workspace.channelStatus.notConnected");
-    }
-  })();
-
-  const telegramStatusHelper = (() => {
-    if (telegramUiStatus === "connecting") {
-      return t("zakiSettingsSheet.telegram.connectingHelper");
-    }
-    if (telegramUiStatus === "verifying") {
-      return t("zakiSettingsSheet.telegram.verifyingHelper");
-    }
-    if (telegramUiStatus === "needs_attention") {
-      return banner?.tone === "error"
-        ? banner.text
-        : t("zakiSettingsSheet.telegram.needsAttentionHelper");
-    }
-    return getChannelMeta(telegramSetup) || t("zakiSettingsSheet.telegram.statusHelper");
-  })();
-
-  const telegramSectionSummary = (() => {
-    switch (telegramUiStatus) {
-      case "connecting":
-        return t("zakiSettingsSheet.sections.telegram.summaryConnecting");
-      case "verifying":
-        return t("zakiSettingsSheet.sections.telegram.summaryVerifying");
-      case "needs_attention":
-        return t("zakiSettingsSheet.sections.telegram.summaryNeedsAttention");
-      case "connected":
-        return t("zakiSettingsSheet.sections.telegram.summaryConnected");
-      default:
-        return t("zakiSettingsSheet.sections.telegram.summaryDisconnected");
-    }
-  })();
 
   const handleSaveAssistantSettings = async () => {
     setSavingSettings(true);
@@ -1449,118 +1522,158 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
               {activeSection === "channels" && (
                 <SettingsSection
                   icon={Link2}
-                  title={t("zakiSettingsSheet.rail.channels.label")}
-                  summary={telegramSectionSummary}
+                  title={t("zakiSettingsSheet.channelsList.headerHeading")}
+                  summary={t("zakiSettingsSheet.channelsList.headerSummary")}
                   isRtl={isRtl}
                 >
-                  <div className="space-y-4">
-                    <CompactRow
-                      title={t("zakiSettingsSheet.telegram.statusTitle")}
-                      summary={telegramStatusSummary}
-                      helper={telegramStatusHelper}
+                  <div className="space-y-3">
+                    <ChannelCard
+                      icon={<Send className="size-4" />}
+                      iconBg="#229ED9"
+                      name={t("zakiSettingsSheet.channelsList.telegram.name")}
+                      tagline={t("zakiSettingsSheet.channelsList.telegram.tagline")}
+                      status={
+                        telegramUiStatusOverride === "connecting"
+                          ? "connecting"
+                          : telegramUiStatusOverride === "verifying"
+                            ? "verifying"
+                            : telegramUiStatusOverride === "needs_attention"
+                              ? "needs_attention"
+                              : telegramConnected
+                                ? "connected"
+                                : "not_connected"
+                      }
                       isRtl={isRtl}
+                      t={t}
+                    >
+                      <div className={cn("space-y-4", isRtl && "text-right")}>
+                        <div>
+                          <h4 className="font-display text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                            {t("zakiSettingsSheet.telegram.guide.title")}
+                          </h4>
+                          <ol className="mt-3 space-y-2 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {(["step1", "step2", "step3", "step4"] as const).map((step, index) => (
+                              <li
+                                key={step}
+                                className={cn("flex items-start gap-2", isRtl && "flex-row-reverse")}
+                              >
+                                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-zaki-brand-15 text-[11px] font-semibold text-zaki-brand">
+                                  {index + 1}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  {t(`zakiSettingsSheet.telegram.guide.${step}`)}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                          <a
+                            href="https://t.me/BotFather"
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className={cn(
+                              "mt-3 inline-flex items-center gap-1 text-xs font-medium text-zaki-brand hover:underline",
+                              isRtl && "flex-row-reverse"
+                            )}
+                          >
+                            {t("zakiSettingsSheet.telegram.guide.openBotFather")}
+                            <span aria-hidden>{isRtl ? "←" : "→"}</span>
+                          </a>
+                        </div>
+
+                        <label className="block">
+                          <MetaLabel className="mb-2 flex">
+                            {t("zakiSettingsSheet.telegram.botTokenLabel")}
+                          </MetaLabel>
+                          <input
+                            aria-label={t("zakiSettingsSheet.telegram.botTokenLabel")}
+                            className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-zaki-dark-card dark:border-zaki-dark-card dark:text-zaki-dark-primary"
+                            placeholder={
+                              telegramConnected
+                                ? t("zakiSettingsSheet.telegram.botTokenMasked")
+                                : t("zakiSettingsSheet.workspace.telegramToken")
+                            }
+                            type="password"
+                            value={telegramToken}
+                            onChange={(event) => setTelegramToken(event.target.value)}
+                          />
+                          <InlineFieldError text={telegramErrors.bot_token} />
+                        </label>
+
+                        <label className="block">
+                          <MetaLabel className="mb-2 flex">
+                            {t("zakiSettingsSheet.telegram.allowFromLabel")}
+                          </MetaLabel>
+                          <textarea
+                            aria-label={t("zakiSettingsSheet.telegram.allowFromLabel")}
+                            className="min-h-[96px] w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-zaki-dark-card dark:border-zaki-dark-card dark:text-zaki-dark-primary"
+                            placeholder={t("zakiSettingsSheet.telegram.allowFromPlaceholder")}
+                            value={telegramAllowFrom}
+                            onChange={(event) => setTelegramAllowFrom(event.target.value)}
+                          />
+                          <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                            {t("zakiSettingsSheet.telegram.allowFromHelper")}
+                          </p>
+                          <InlineFieldError text={telegramErrors.allow_from} />
+                        </label>
+
+                        <div className={cn("flex flex-wrap gap-2", isRtl && "justify-end")}>
+                          <button
+                            type="button"
+                            disabled={telegramBusy || agentUserUnavailable}
+                            className="rounded-full bg-zaki-brand px-4 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
+                            onClick={() => {
+                              void handleTelegramConnect();
+                            }}
+                          >
+                            {telegramBusy
+                              ? t("zakiSettingsSheet.actions.connecting")
+                              : telegramConnected
+                                ? t("zakiSettingsSheet.actions.reconnectTelegram")
+                                : t("zakiSettingsSheet.actions.connectTelegram")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={telegramBusy || !telegramConnected || agentUserUnavailable}
+                            className="rounded-full border border-zaki-strong px-4 py-2 text-sm font-medium text-zaki-primary transition-colors hover:bg-zaki-hover disabled:opacity-60"
+                            onClick={() => {
+                              void handleTelegramDisconnect();
+                            }}
+                          >
+                            {t("zakiSettingsSheet.actions.disconnect")}
+                          </button>
+                        </div>
+                      </div>
+                    </ChannelCard>
+
+                    <ChannelCard
+                      icon={<Hash className="size-4" />}
+                      iconBg="#4A154B"
+                      name={t("zakiSettingsSheet.channelsList.slack.name")}
+                      tagline={t("zakiSettingsSheet.channelsList.slack.tagline")}
+                      status="coming_soon"
+                      isRtl={isRtl}
+                      t={t}
                     />
 
-                    <div className={cn(
-                      "rounded-zaki-xl border border-zaki bg-zaki-base px-4 py-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card",
-                      isRtl && "text-right"
-                    )}>
-                      <h4 className="font-display text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                        {t("zakiSettingsSheet.telegram.guide.title")}
-                      </h4>
-                      <ol className={cn(
-                        "mt-3 space-y-2 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle",
-                        isRtl && "text-right"
-                      )}>
-                        {(["step1", "step2", "step3", "step4"] as const).map((step, index) => (
-                          <li key={step} className={cn("flex items-start gap-2", isRtl && "flex-row-reverse")}>
-                            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-zaki-brand-15 text-[11px] font-semibold text-zaki-brand">
-                              {index + 1}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              {t(`zakiSettingsSheet.telegram.guide.${step}`)}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                      <a
-                        href="https://t.me/BotFather"
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className={cn(
-                          "mt-3 inline-flex items-center gap-1 text-xs font-medium text-zaki-brand hover:underline",
-                          isRtl && "flex-row-reverse"
-                        )}
-                      >
-                        {t("zakiSettingsSheet.telegram.guide.openBotFather")}
-                        <span aria-hidden>{isRtl ? "←" : "→"}</span>
-                      </a>
-                    </div>
+                    <ChannelCard
+                      icon={<Gamepad2 className="size-4" />}
+                      iconBg="#5865F2"
+                      name={t("zakiSettingsSheet.channelsList.discord.name")}
+                      tagline={t("zakiSettingsSheet.channelsList.discord.tagline")}
+                      status="coming_soon"
+                      isRtl={isRtl}
+                      t={t}
+                    />
 
-                    <div className="space-y-3 rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card">
-                      <label className="block">
-                        <MetaLabel className="mb-2 flex">
-                          {t("zakiSettingsSheet.telegram.botTokenLabel")}
-                        </MetaLabel>
-                        <input
-                          aria-label={t("zakiSettingsSheet.telegram.botTokenLabel")}
-                          className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-zaki-dark-card dark:border-zaki-dark-card dark:text-zaki-dark-primary"
-                          placeholder={
-                            telegramConnected
-                              ? t("zakiSettingsSheet.telegram.botTokenMasked")
-                              : t("zakiSettingsSheet.workspace.telegramToken")
-                          }
-                          type="password"
-                          value={telegramToken}
-                          onChange={(event) => setTelegramToken(event.target.value)}
-                        />
-                        <InlineFieldError text={telegramErrors.bot_token} />
-                      </label>
-
-                      <label className="block">
-                        <MetaLabel className="mb-2 flex">
-                          {t("zakiSettingsSheet.telegram.allowFromLabel")}
-                        </MetaLabel>
-                        <textarea
-                          aria-label={t("zakiSettingsSheet.telegram.allowFromLabel")}
-                          className="min-h-[96px] w-full rounded-zaki-md border border-zaki-strong bg-zaki-raised px-3 py-2 font-mono-ui text-sm text-zaki-primary outline-none transition-colors focus:border-zaki-accent focus:ring-2 focus:ring-zaki-accent/20 dark:bg-zaki-dark-card dark:border-zaki-dark-card dark:text-zaki-dark-primary"
-                          placeholder={t("zakiSettingsSheet.telegram.allowFromPlaceholder")}
-                          value={telegramAllowFrom}
-                          onChange={(event) => setTelegramAllowFrom(event.target.value)}
-                        />
-                        <p className="mt-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
-                          {t("zakiSettingsSheet.telegram.allowFromHelper")}
-                        </p>
-                        <InlineFieldError text={telegramErrors.allow_from} />
-                      </label>
-
-                      <div className={cn("flex flex-wrap gap-2", isRtl && "justify-end")}>
-                        <button
-                          type="button"
-                          disabled={telegramBusy || agentUserUnavailable}
-                          className="rounded-full bg-zaki-brand px-4 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
-                          onClick={() => {
-                            void handleTelegramConnect();
-                          }}
-                        >
-                          {telegramBusy
-                            ? t("zakiSettingsSheet.actions.connecting")
-                            : telegramConnected
-                              ? t("zakiSettingsSheet.actions.reconnectTelegram")
-                              : t("zakiSettingsSheet.actions.connectTelegram")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={telegramBusy || !telegramConnected || agentUserUnavailable}
-                          className="rounded-full border border-zaki-strong px-4 py-2 text-sm font-medium text-zaki-primary transition-colors hover:bg-zaki-hover disabled:opacity-60"
-                          onClick={() => {
-                            void handleTelegramDisconnect();
-                          }}
-                        >
-                          {t("zakiSettingsSheet.actions.disconnect")}
-                        </button>
-                      </div>
-                    </div>
+                    <ChannelCard
+                      icon={<MessageCircle className="size-4" />}
+                      iconBg="#25D366"
+                      name={t("zakiSettingsSheet.channelsList.whatsapp.name")}
+                      tagline={t("zakiSettingsSheet.channelsList.whatsapp.tagline")}
+                      status="coming_soon"
+                      isRtl={isRtl}
+                      t={t}
+                    />
                   </div>
                 </SettingsSection>
               )}

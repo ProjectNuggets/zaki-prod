@@ -827,6 +827,32 @@
     },
     "privacy": {
       "footer": "بياناتك ملك لك. يلتزم ZAKI بـ GDPR. أرسل بريدًا إلى privacy@zakiai.com لحذف أي بيانات عند الطلب."
+    },
+    "channelsList": {
+      "headerHeading": "أين يظهر ZAKI",
+      "headerSummary": "اربط ZAKI بالتطبيقات التي تستخدمها. مزيد من القنوات قريبًا.",
+      "comingSoonPill": "قريبًا",
+      "connectedPill": "متصل",
+      "notConnectedPill": "غير متصل",
+      "telegram": {
+        "name": "تيليجرام",
+        "tagline": "تحدث مع ZAKI من أي جهاز أو مجموعة على تيليجرام."
+      },
+      "slack": {
+        "name": "Slack",
+        "tagline": "أحضر ZAKI إلى مساحة عمل فريقك. أوامر /zaki والردود على الخيوط."
+      },
+      "discord": {
+        "name": "Discord",
+        "tagline": "أضف ZAKI كبوت للسيرفر. أوامر مائلة وسياق الخيوط."
+      },
+      "whatsapp": {
+        "name": "WhatsApp",
+        "tagline": "تواصل مع ZAKI عبر واتساب، بما في ذلك الرسائل الصوتية والوسائط."
+      },
+      "connectingPill": "جارٍ الاتصال…",
+      "verifyingPill": "جارٍ التحقق…",
+      "needsAttentionPill": "يحتاج انتباهًا"
     }
   },
   "zakiControls": {
