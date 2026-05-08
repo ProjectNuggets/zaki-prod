@@ -1,9 +1,11 @@
-import { Plus, MessageSquare, Loader2, Download, Share2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, MessageSquare, Loader2, Download, Share2, Pencil, Trash2, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { formatSessionTime } from "@/lib/zakiBot";
 import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import type { AgentSession } from "@/lib/api";
+import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
 
 interface ZakiSessionListProps {
   sessions: AgentSession[];
@@ -18,6 +20,8 @@ interface ZakiSessionListProps {
   /** Open the share dialog for the given session. Selects the session
    *  first if needed so the share modal can read its messages. */
   onShareSession?: (sessionKey: string) => void;
+  /** Permanent delete via /api/agent/sessions/:key DELETE. Optional. */
+  onDeleteSession?: (sessionKey: string, label: string) => void;
 }
 
 export function ZakiSessionList({
@@ -29,7 +33,26 @@ export function ZakiSessionList({
   isRtl,
   onDownloadSession,
   onShareSession,
+  onDeleteSession,
 }: ZakiSessionListProps) {
+  const { getLabel: getOverlayLabel, setLabel: setOverlayLabel } = useSessionTitleOverlay();
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (renamingKey && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingKey]);
+  const commitRename = (sessionKey: string, fallback: string) => {
+    const trimmed = renameDraft.trim();
+    if (trimmed && trimmed !== fallback) {
+      setOverlayLabel(sessionKey, trimmed);
+    }
+    setRenamingKey(null);
+    setRenameDraft("");
+  };
   const { t } = useTranslation();
   if (isLoading) {
     return (
@@ -70,10 +93,13 @@ export function ZakiSessionList({
         const isActive =
           activeSessionKey != null &&
           normalizedSessionKey === normalizeZakiSessionKey(activeSessionKey);
-        const label = formatZakiSessionLabel({
+        const baseLabel = formatZakiSessionLabel({
           sessionKey: normalizedSessionKey,
           title: session.title,
         });
+        const overlayLabel = getOverlayLabel(normalizedSessionKey);
+        const label = overlayLabel || baseLabel;
+        const isRenaming = renamingKey === normalizedSessionKey;
         const time = formatSessionTime(session.last_active);
         const mode = session.mode ?? null;
         const live = session.live === true;
@@ -94,6 +120,7 @@ export function ZakiSessionList({
           >
             <button
               type="button"
+              disabled={isRenaming}
               className={cn(
                 "flex flex-1 items-center gap-2 text-left min-w-0",
                 isRtl && "text-right flex-row-reverse",
@@ -104,7 +131,32 @@ export function ZakiSessionList({
                 <MessageSquare className="size-3.5 text-zaki-muted" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    type="text"
+                    value={renameDraft}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitRename(normalizedSessionKey, baseLabel);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setRenamingKey(null);
+                        setRenameDraft("");
+                      }
+                    }}
+                    onBlur={() => commitRename(normalizedSessionKey, baseLabel)}
+                    className="w-full rounded-zaki-md border border-zaki-accent bg-zaki-raised px-2 py-1 text-sm text-zaki-primary outline-none"
+                    aria-label={t("zakiControls.sessionList.renameInput", {
+                      defaultValue: "Session name",
+                    })}
+                  />
+                ) : (
+                  <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+                )}
                 <div className="mt-0.5 flex items-center gap-1.5">
                   {mode ? (
                     <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
@@ -132,6 +184,41 @@ export function ZakiSessionList({
               </div>
             </button>
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-60">
+              {!isRenaming ? (
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingKey(normalizedSessionKey);
+                    setRenameDraft(label);
+                  }}
+                  aria-label={t("zakiControls.sessionList.renameSessionAria", {
+                    defaultValue: "Rename {{label}}",
+                    label,
+                  })}
+                  title={t("zakiControls.sessionList.renameSession", {
+                    defaultValue: "Rename session",
+                  })}
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-brand transition-colors hover:bg-zaki-brand/10 focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                  onMouseDown={(e) => {
+                    // mousedown so the click runs before the input's onBlur
+                    e.preventDefault();
+                    commitRename(normalizedSessionKey, baseLabel);
+                  }}
+                  aria-label={t("zakiControls.sessionList.confirmRenameAria", {
+                    defaultValue: "Save name",
+                  })}
+                >
+                  <Check className="size-3.5" />
+                </button>
+              )}
               {onShareSession ? (
                 <button
                   type="button"
@@ -168,6 +255,25 @@ export function ZakiSessionList({
                   })}
                 >
                   <Download className="size-3.5" />
+                </button>
+              ) : null}
+              {onDeleteSession && !isRenaming ? (
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-brand/10 hover:text-zaki-brand focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteSession(normalizedSessionKey, label);
+                  }}
+                  aria-label={t("zakiControls.sessionList.deleteSessionAria", {
+                    defaultValue: "Delete {{label}}",
+                    label,
+                  })}
+                  title={t("zakiControls.sessionList.deleteSession", {
+                    defaultValue: "Delete session",
+                  })}
+                >
+                  <Trash2 className="size-3.5" />
                 </button>
               ) : null}
             </div>

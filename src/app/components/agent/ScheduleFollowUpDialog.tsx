@@ -220,8 +220,20 @@ export function ScheduleFollowUpDialog({ isOpen, onClose, defaultPrompt = "" }: 
             </div>
           ) : null}
           {previewText ? (
-            <div className="mt-2 text-2xs text-zaki-muted">
-              {t("scheduleFollowUp.firesAt", { defaultValue: "Fires:" })} <span className="text-zaki-secondary">{previewText}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-2xs text-zaki-muted">
+              <span>
+                {t("scheduleFollowUp.firesAt", { defaultValue: "Fires:" })}{" "}
+                <span className="text-zaki-secondary">{previewText}</span>
+              </span>
+              {schedule && (schedule.kind === "in_minutes" || schedule.kind === "at_datetime") ? (
+                <span className="inline-flex items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-secondary">
+                  {t("scheduleFollowUp.oneShotChip", { defaultValue: "One-time" })}
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-secondary">
+                  {t("scheduleFollowUp.recurringChip", { defaultValue: "Recurring" })}
+                </span>
+              )}
             </div>
           ) : (
             <div className="mt-2 text-2xs text-zaki-warning">
@@ -230,6 +242,14 @@ export function ScheduleFollowUpDialog({ isOpen, onClose, defaultPrompt = "" }: 
               })}
             </div>
           )}
+          {schedule && (schedule.kind === "in_minutes" || schedule.kind === "at_datetime") ? (
+            <div className="mt-1 text-2xs text-zaki-muted leading-snug">
+              {t("scheduleFollowUp.oneShotHint", {
+                defaultValue:
+                  "Fires once. For a recurring task, ask ZAKI in chat: \"remind me every weekday at 9am to ...\".",
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div>

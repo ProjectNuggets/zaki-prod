@@ -10,6 +10,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   apiRequest,
   approveAgentSession,
+  deleteAgentSession,
   fetchAgentHistory,
   setAgentSessionMode,
   updateProfile,
@@ -1543,6 +1544,37 @@ export function Sidebar() {
               window.dispatchEvent(
                 new CustomEvent("zaki:open-share", { detail: { sessionKey } }),
               );
+            }}
+            onDeleteSession={async (sessionKey, label) => {
+              const confirmed = window.confirm(
+                t("zakiControls.sessionList.deleteConfirm", {
+                  defaultValue: "Delete \"{{label}}\"? This can't be undone.",
+                  label,
+                }),
+              );
+              if (!confirmed) return;
+              try {
+                const { response } = await deleteAgentSession(sessionKey);
+                if (!response.ok) throw new Error(`delete ${response.status}`);
+                await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+                if (activeSessionKey === sessionKey) {
+                  // Active session got nuked. Bounce to the ZAKI home so the
+                  // user isn't stuck on a 404 thread.
+                  goToZakiHome();
+                  window.dispatchEvent(new Event("zaki:clear-thread"));
+                }
+                toast.success(
+                  t("zakiControls.sessionList.deleteSuccess", {
+                    defaultValue: "Session deleted.",
+                  }),
+                );
+              } catch {
+                toast.error(
+                  t("zakiControls.sessionList.deleteError", {
+                    defaultValue: "Couldn't delete the session. Try again.",
+                  }),
+                );
+              }
             }}
             onCreateSession={() => {
               // Reset to the Zaki welcome view so the user gets a visibly

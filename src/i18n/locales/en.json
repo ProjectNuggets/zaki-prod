@@ -786,7 +786,16 @@
       "downloadSuccess": "Session downloaded.",
       "downloadError": "Couldn't download the session. Try again.",
       "shareSession": "Share session",
-      "shareSessionAria": "Share {{label}}"
+      "shareSessionAria": "Share {{label}}",
+      "renameSession": "Rename session",
+      "renameSessionAria": "Rename {{label}}",
+      "renameInput": "Session name",
+      "confirmRenameAria": "Save name",
+      "deleteSession": "Delete session",
+      "deleteSessionAria": "Delete {{label}}",
+      "deleteConfirm": "Delete \"{{label}}\"? This can't be undone.",
+      "deleteSuccess": "Session deleted.",
+      "deleteError": "Couldn't delete the session. Try again."
     },
     "sessionManagement": {
       "title": "Sessions",
@@ -1873,6 +1882,9 @@
       "weekdays": "Every weekday at {{time}}",
       "weekly": "Every {{day}} at {{time}}"
     },
+    "oneShotChip": "One-time",
+    "recurringChip": "Recurring",
+    "oneShotHint": "Fires once. For a recurring task, ask ZAKI in chat: \"remind me every weekday at 9am to ...\".",
     "toast": {
       "success": "Follow-up scheduled. {{when}}.",
       "error": "Couldn't schedule the follow-up. Try again."

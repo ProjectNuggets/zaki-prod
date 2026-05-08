@@ -786,7 +786,16 @@
       "downloadSuccess": "تم تنزيل الجلسة.",
       "downloadError": "تعذّر تنزيل الجلسة. حاول مرة أخرى.",
       "shareSession": "مشاركة الجلسة",
-      "shareSessionAria": "مشاركة {{label}}"
+      "shareSessionAria": "مشاركة {{label}}",
+      "renameSession": "إعادة تسمية الجلسة",
+      "renameSessionAria": "إعادة تسمية {{label}}",
+      "renameInput": "اسم الجلسة",
+      "confirmRenameAria": "حفظ الاسم",
+      "deleteSession": "حذف الجلسة",
+      "deleteSessionAria": "حذف {{label}}",
+      "deleteConfirm": "حذف \"{{label}}\"؟ لا يمكن التراجع.",
+      "deleteSuccess": "تم حذف الجلسة.",
+      "deleteError": "تعذّر حذف الجلسة. حاول مرة أخرى."
     },
     "sessionManagement": {
       "title": "الجلسات",
@@ -1885,6 +1894,9 @@
       "weekdays": "كل يوم عمل عند {{time}}",
       "weekly": "كل {{day}} عند {{time}}"
     },
+    "oneShotChip": "مرة واحدة",
+    "recurringChip": "متكرر",
+    "oneShotHint": "يُنفذ مرة واحدة. للمهام المتكررة، اطلب من زكي في المحادثة: \"ذكّرني كل يوم عمل في الساعة 9 صباحًا بـ ...\".",
     "toast": {
       "success": "تمت جدولة المتابعة. {{when}}.",
       "error": "تعذّرت الجدولة. حاول مرة أخرى."
