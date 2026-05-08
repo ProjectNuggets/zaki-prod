@@ -1,8 +1,8 @@
-// BrainGraphView (V1.7) — cytoscape.js + cose-bilkent.
+// BrainGraphView (V1.7) — cytoscape.js + fcose.
 //
 // Replaces the prior d3-force/Canvas implementation with a force-directed
 // cytoscape graph that matches Obsidian's UX:
-//   - cose-bilkent layout with live tunable forces
+//   - fcose layout with live tunable forces (per-edge relevance-weighted)
 //   - hover preview rendered from cached node payload (no round trip)
 //   - color presets toggle: community / link_type / kind
 //   - smooth zoom + pan on infinite canvas
@@ -43,24 +43,31 @@ import {
   type ColorPreset,
 } from "./brainColors";
 
-// cose-bilkent has no shipped types; declare it.
+// Audit (2026-05-08) — migrated from cytoscape-cose-bilkent to fcose.
+// cose-bilkent's function-form idealEdgeLength threw RangeError in
+// FDLayout.calcGrid every layout run (132 console entries per page
+// load), silently disabling the per-edge relevance-weighted layout
+// the V1.11 hotfix-3 was meant to deliver. fcose is the same Bilkent
+// group's successor with active maintenance and reliable function-
+// form support. Same force-directed feel, no aesthetic regression.
+// Repro details in docs/brain-cose-bilkent-reproduction-2026-05-08.md.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error — no types ship with cytoscape-cose-bilkent
-import coseBilkent from "cytoscape-cose-bilkent";
+// @ts-expect-error — no types ship with cytoscape-fcose
+import fcose from "cytoscape-fcose";
 
 // Register the layout once. cytoscape.use is idempotent in practice but we
 // guard with a module-level flag to be safe under HMR.
-let _coseBilkentRegistered = false;
-function ensureCoseBilkent() {
-  if (_coseBilkentRegistered) return;
+let _fcoseRegistered = false;
+function ensureFcose() {
+  if (_fcoseRegistered) return;
   try {
-    cytoscape.use(coseBilkent);
+    cytoscape.use(fcose);
   } catch {
     // already registered (HMR re-entry)
   }
-  _coseBilkentRegistered = true;
+  _fcoseRegistered = true;
 }
-ensureCoseBilkent();
+ensureFcose();
 
 // ── Props ────────────────────────────────────────────────────
 
@@ -881,40 +888,37 @@ export function BrainGraphView({
 }
 
 function runLayout(cy: Core, f: BrainGraphFilters) {
-  // V1.11 hotfix-3 (2026-05-07) — per-edge relevance-weighted layout.
+  // Audit (2026-05-08) — migrated to fcose. cose-bilkent's function-form
+  // idealEdgeLength threw RangeError in FDLayout.calcGrid every render,
+  // silently disabling per-edge relevance-weighted distance. fcose
+  // honors the function form reliably.
   //
-  // Nova: "node distance should show relevance. if two nodes are closer
-  // to each other that means they are more relevant to each other."
-  //
-  // The earlier hotfix-2 comment claimed cose-bilkent rejects function
-  // values for idealEdgeLength. That diagnosis was wrong — the real
-  // cause of "Invalid array length" was NaN propagating from node
-  // importance into radius/opacity arrays. With NaN clamped at the
-  // source (buildElementsFromGlobal line ~164), function-based
-  // idealEdgeLength is safe.
-  //
-  // Mapping:
+  // Mapping (Nova: "node distance should show relevance"):
   //   length = base * (1.5 - relevance)
   //   typed predicate (relevance 1.0) → 0.5 × base (tight pull)
-  //   reference        (0.65)         → 0.85 × base
-  //   semantic         (0.45)         → 1.05 × base
-  //   session          (0.20)         → 1.30 × base (loose)
+  //   semantic high   (0.85+)         → tight
+  //   semantic low    (0.5)           → 1.0 × base
+  //   session         (0.5)           → 1.0 × base
   //
-  // Try/catch wraps the function call: if a future cose-bilkent build
-  // tightens the type, we fall back to the slider-driven constant rather
-  // than crash the graph.
+  // Try/catch retained as a defensive backstop in case a future
+  // fcose build narrows the type, but the function path now succeeds.
   const baseOpts: Record<string, unknown> = {
-    name: "cose-bilkent",
+    name: "fcose",
     animate: true,
     animationDuration: 600,
     animationEasing: "ease-out",
     randomize: true,
+    quality: "default",
     nodeRepulsion: f.nodeRepulsion,
     edgeElasticity: f.edgeElasticity,
     gravity: f.gravity,
     numIter: 2500,
     fit: true,
     padding: 30,
+    // fcose-specific tuning: incremental layout for stability after
+    // filter changes, but allow randomize: true on first layout to
+    // avoid local minima.
+    nodeSeparation: 80,
   };
   const fnOpts = {
     ...baseOpts,
@@ -933,7 +937,7 @@ function runLayout(cy: Core, f: BrainGraphFilters) {
     // Fallback: rejected — use constant.
     // eslint-disable-next-line no-console
     console.warn(
-      "[brain] cose-bilkent rejected per-edge idealEdgeLength; falling back to constant",
+      "[brain] fcose rejected per-edge idealEdgeLength; falling back to constant. Should not happen — investigate.",
       err,
     );
     cy.layout({
