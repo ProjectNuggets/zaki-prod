@@ -339,7 +339,10 @@ export function InputArea({
   } else {
     compactArmedRef.current = false;
   }
-  const showCompactPreflight =
+  // When pressure is past the show line, the context meter itself
+  // becomes the compact trigger — no separate rail. Hysteresis keeps
+  // the meter from flickering between actionable/inert states.
+  const compactArmed =
     zakiBotMode && !isSending && hasZakiContextValue && compactArmedRef.current;
 
   // ── Voice recording (STT) ──────────────────────────────────────────
@@ -815,43 +818,6 @@ export function InputArea({
               )}
             </div>
           ) : null}
-          {showCompactPreflight ? (
-            <div
-              className={cn(
-                "mt-2 flex items-center justify-between gap-3 rounded-zaki-xl border border-zaki-warning bg-zaki-warning px-3 py-2 text-xs font-medium",
-                isRtl && "flex-row-reverse text-right"
-              )}
-              data-testid="zaki-compact-preflight"
-            >
-              <span className="text-zaki-warning">
-                {t("input.zaki.compactPreflight", { percent: zakiContextValue })}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  // Prefer the direct agent endpoint (cleaner, no chat
-                  // noise). Fall back to the slash-command shortcut if
-                  // the parent didn't wire onCompact.
-                  if (onCompact) {
-                    void onCompact();
-                  } else {
-                    submitMessage("/compact");
-                  }
-                }}
-                disabled={sendLocked || isSending || isCompacting}
-                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-zaki-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-zaki-warning hover:brightness-95 disabled:opacity-60"
-              >
-                {isCompacting ? (
-                  <span className="size-3 animate-spin rounded-full border-2 border-zaki-warning border-t-transparent" />
-                ) : null}
-                {t(
-                  isCompacting
-                    ? "input.zaki.compactPreflightActionBusy"
-                    : "input.zaki.compactPreflightAction"
-                )}
-              </button>
-            </div>
-          ) : null}
           <div
             className={cn(
               "w-full rounded-[16px] border border-zaki-strong bg-zaki-raised font-body px-3 py-2.5 flex flex-col gap-2 relative dark:bg-[#141210]",
@@ -1249,47 +1215,93 @@ export function InputArea({
             </span>
           ) : null}
           <span className="flex-1" />
-          {/* M3: Context pressure meter — conic-gradient ring with tiered color */}
+          {/* M3: Context pressure meter. When pressure crosses the
+               compact-arming line the meter itself becomes the compact
+               trigger — click to free space. Hysteresis on
+               compactArmedRef keeps it from flickering. */}
           {showZakiContextMeter ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="group inline-flex size-9 items-center justify-center rounded-full border border-zaki-strong bg-zaki-elevated text-zaki-muted transition-colors hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+                  onClick={() => {
+                    if (!compactArmed || isCompacting) return;
+                    if (onCompact) {
+                      void onCompact();
+                    } else {
+                      submitMessage("/compact");
+                    }
+                  }}
+                  disabled={compactArmed && isCompacting}
+                  className={cn(
+                    "group inline-flex size-9 items-center justify-center rounded-full border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
+                    compactArmed
+                      ? "cursor-pointer border-zaki-warning text-zaki-warning hover:bg-zaki-warning/10 focus-visible:ring-zaki-warning"
+                      : "cursor-default border-zaki-strong text-zaki-muted hover:bg-zaki-sunken focus-visible:ring-zaki-accent",
+                    compactArmed && isCompacting && "opacity-70"
+                  )}
                   aria-label={
-                    hasZakiContextValue
-                      ? t("input.zaki.contextAria", { percent: zakiContextValue })
-                      : t("input.zaki.contextAriaUnknown")
+                    compactArmed
+                      ? t("input.zaki.contextCompactAria", {
+                          percent: zakiContextValue,
+                          defaultValue:
+                            "Context at {{percent}} percent. Click to compact.",
+                        })
+                      : hasZakiContextValue
+                        ? t("input.zaki.contextAria", { percent: zakiContextValue })
+                        : t("input.zaki.contextAriaUnknown")
                   }
                   data-testid="zaki-context-meter"
+                  data-armed={compactArmed ? "true" : "false"}
                 >
-                  <span
-                    className={cn(
-                      "relative block size-4 rounded-full",
-                      !hasZakiContextValue && "border border-dashed border-zaki-muted/50"
-                    )}
-                    style={
-                      hasZakiContextValue
-                        ? {
-                            background: `conic-gradient(${pressureColor} ${zakiContextValue}%, rgba(120,114,106,0.18) ${zakiContextValue}% 100%)`,
-                          }
-                        : undefined
-                    }
-                  >
-                    {hasZakiContextValue ? (
-                      <span className="absolute inset-[3px] rounded-full bg-zaki-elevated" />
-                    ) : null}
-                  </span>
+                  {compactArmed && isCompacting ? (
+                    <span className="size-4 animate-spin rounded-full border-2 border-zaki-warning border-t-transparent" />
+                  ) : (
+                    <span
+                      className={cn(
+                        "relative block size-4 rounded-full",
+                        !hasZakiContextValue && "border border-dashed border-zaki-muted/50"
+                      )}
+                      style={
+                        hasZakiContextValue
+                          ? {
+                              background: `conic-gradient(${
+                                compactArmed ? "var(--zaki-warning)" : pressureColor
+                              } ${zakiContextValue}%, rgba(120,114,106,0.18) ${zakiContextValue}% 100%)`,
+                            }
+                          : undefined
+                      }
+                    >
+                      {hasZakiContextValue ? (
+                        <span className="absolute inset-[3px] rounded-full bg-zaki-elevated" />
+                      ) : null}
+                    </span>
+                  )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={8} className="max-w-[220px]">
+              <TooltipContent side="top" sideOffset={8} className="max-w-[240px]">
                 <div className="space-y-0.5">
                   <div>
                     {hasZakiContextValue
                       ? t("input.zaki.contextPercent", { percent: zakiContextValue })
                       : t("input.zaki.contextPercentUnknown")}
                   </div>
-                  <div className="text-[11px] opacity-90">{zakiContextTooltip}</div>
+                  {compactArmed ? (
+                    <div className="text-[11px] font-medium text-zaki-warning">
+                      {t(
+                        isCompacting
+                          ? "input.zaki.compactPreflightActionBusy"
+                          : "input.zaki.contextCompactHint",
+                        {
+                          defaultValue: isCompacting
+                            ? "Compacting..."
+                            : "Click to compact and free space.",
+                        },
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] opacity-90">{zakiContextTooltip}</div>
+                  )}
                 </div>
               </TooltipContent>
             </Tooltip>

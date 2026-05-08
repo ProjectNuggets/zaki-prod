@@ -433,8 +433,8 @@
       "contextTooltip": "يتم ضغط السياق تلقائيًا عند الحاجة.",
       "contextAriaUnknown": "لم يُبلَّغ عن استخدام السياق بعد",
       "contextPercentUnknown": "السياق: في انتظار تقرير ضغط الرموز من الوكيل",
-      "compactPreflight": "السياق يقترب من الامتلاء ({{percent}}%). اضغط لتقليصه قبل الرسالة التالية.",
-      "compactPreflightAction": "تقليص",
+      "contextCompactAria": "السياق عند {{percent}} بالمئة. اضغط للتقليص.",
+      "contextCompactHint": "اضغط لتقليص السياق وتوفير مساحة.",
       "compactPreflightActionBusy": "جارٍ التقليص..."
     },
     "voice": {

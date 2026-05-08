@@ -433,8 +433,8 @@
       "contextTooltip": "Context compacts automatically when needed.",
       "contextAriaUnknown": "Context usage not yet reported",
       "contextPercentUnknown": "Context: waiting for the agent to report token pressure",
-      "compactPreflight": "Context is filling ({{percent}}%). Compact to free space before your next prompt.",
-      "compactPreflightAction": "Compact",
+      "contextCompactAria": "Context at {{percent}} percent. Click to compact.",
+      "contextCompactHint": "Click to compact and free space.",
       "compactPreflightActionBusy": "Compacting..."
     },
     "voice": {
