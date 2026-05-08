@@ -104,6 +104,7 @@ import {
 } from "./learning-client.js";
 import {
   completeLearningStudyTask,
+  createLearningStudyTask,
   createLearningStudyPlan,
   getLearningStudyState,
   normalizeLearningStudyProfile,
@@ -10610,6 +10611,44 @@ app.post(
         code: "learning_study_plan_create_failed",
         error: "Study plan creation failed.",
         message: "Could not create learning study plan.",
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/learning/study/tasks",
+  requireLearningContext,
+  learningStudyJson,
+  async (req, res) => {
+    const userId = requireNumericLearningUserId(req, res);
+    if (!userId) return;
+    try {
+      const task = await createLearningStudyTask({
+        dbQuery,
+        userId,
+        task: req.body || {},
+      });
+      res.status(201).json({ success: true, task });
+    } catch (error) {
+      if (error?.code === "learning_study_plan_required") {
+        res.status(409).json({
+          code: "learning_study_plan_required",
+          error: "Study plan required.",
+          message: "Create a study plan before adding custom study tasks.",
+          requestId: getOrCreateRequestId(req),
+        });
+        return;
+      }
+      console.error("[LearningStudy] Task create failed:", {
+        requestId: getOrCreateRequestId(req),
+        error: error?.message || error,
+      });
+      res.status(500).json({
+        code: "learning_study_task_create_failed",
+        error: "Study task creation failed.",
+        message: "Could not add item to the learning study plan.",
         requestId: getOrCreateRequestId(req),
       });
     }

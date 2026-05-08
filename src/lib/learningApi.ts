@@ -159,6 +159,16 @@ export function updateLearningStudyTask(taskId: string, patch: LearningJson) {
   );
 }
 
+export function createLearningStudyTask(payload: LearningJson) {
+  return learningRequest<{ success?: boolean; task: LearningStudyTask }>(
+    "/api/learning/study/tasks",
+    {
+      method: "POST",
+      body: payload,
+    },
+  );
+}
+
 export function completeLearningStudyTask(taskId: string) {
   return learningRequest<{ success?: boolean; task: LearningStudyTask }>(
     `/api/learning/study/tasks/${encodeURIComponent(taskId)}/complete`,

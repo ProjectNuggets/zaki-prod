@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 import {
   buildLearningStudyPlan,
   createLearningStudyPlan,
+  createLearningStudyTask,
   normalizeLearningStudyProfile,
   studyProfileConfigured,
   updateLearningStudyTask,
@@ -156,5 +157,58 @@ describe("learning study state", () => {
     expect(dbQuery).not.toHaveBeenCalled();
     expect(result.plan.title).toBe("Biology study plan");
     expect(result.plan.tasks.length).toBeGreaterThan(0);
+  });
+
+  test("adds a custom task to the active user study plan", async () => {
+    const dbQuery = jest.fn(async (sql, params = []) => {
+      if (String(sql).startsWith("SELECT id")) return { rows: [{ id: "plan-1" }] };
+      return {
+        rows: [
+          {
+            id: params[0],
+            plan_id: params[1],
+            kind: params[3],
+            title: params[4],
+            description: params[5],
+            status: params[6],
+            source_json: JSON.parse(params[7]),
+            due_at: null,
+            completed_at: null,
+            created_at: "2026-05-08T00:00:00.000Z",
+            updated_at: "2026-05-08T00:00:00.000Z",
+          },
+        ],
+      };
+    });
+
+    const task = await createLearningStudyTask({
+      dbQuery,
+      userId: 57,
+      task: {
+        kind: "flashcards",
+        title: "Review saved flashcards",
+        description: "Use this during spaced review.",
+        source: { route: "chat", messageId: "m1" },
+      },
+    });
+
+    expect(dbQuery).toHaveBeenNthCalledWith(1, expect.stringContaining("WHERE user_id = $1"), [57]);
+    expect(task).toMatchObject({
+      planId: "plan-1",
+      kind: "flashcards",
+      title: "Review saved flashcards",
+      source: { route: "chat", messageId: "m1" },
+    });
+  });
+
+  test("rejects custom tasks when the user has no active study plan", async () => {
+    const dbQuery = jest.fn(async () => ({ rows: [] }));
+    await expect(
+      createLearningStudyTask({
+        dbQuery,
+        userId: 57,
+        task: { title: "Review" },
+      })
+    ).rejects.toMatchObject({ code: "learning_study_plan_required" });
   });
 });

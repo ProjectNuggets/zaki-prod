@@ -1,12 +1,14 @@
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
   BrainCircuit,
   CheckCircle2,
   ChevronDown,
   Clock3,
   GraduationCap,
   Lightbulb,
+  Layers,
   Loader2,
   Microscope,
   NotebookPen,
@@ -39,9 +41,12 @@ export type LearningStudyProfile = {
 export type LearningStudyAction =
   | "quiz"
   | "simplify"
+  | "flashcards"
+  | "lesson"
   | "practice"
   | "visualize"
   | "research"
+  | "study_plan"
   | "save";
 
 type StudyActionMessage = {
@@ -387,11 +392,14 @@ export function LearningNextActionRow({
     icon: LucideIcon;
     disabled?: boolean;
   }> = [
-    { id: "save", label: "Save note", icon: NotebookPen, disabled: !canSave },
+    { id: "save", label: "Save to notebook", icon: NotebookPen, disabled: !canSave },
     { id: "quiz", label: "Make quiz", icon: PenLine },
     { id: "simplify", label: "Explain simpler", icon: Lightbulb },
+    { id: "flashcards", label: "Generate flashcards", icon: Layers },
+    { id: "lesson", label: "Turn into lesson/book", icon: BookOpen },
     { id: "practice", label: "Practice similar", icon: BrainCircuit },
     { id: "visualize", label: "Visualize", icon: BarChart3 },
+    { id: "study_plan", label: "Add to study plan", icon: Clock3 },
     { id: "research", label: "Research deeper", icon: Microscope },
   ];
   return (

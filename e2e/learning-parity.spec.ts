@@ -207,6 +207,7 @@ async function mockLearning(page: Page) {
     preferredStyle: "balanced",
   };
   let studyPlan: Record<string, unknown> | null = null;
+  const studyTasks: Array<Record<string, unknown>> = [];
 
   await page.routeWebSocket("**/api/learning/tutor-agents/*/ws", async (ws) => {
     ws.onMessage((message) => {
@@ -355,11 +356,28 @@ async function mockLearning(page: Page) {
             { id: "task-1", kind: "quiz", title: "Checkpoint quiz", status: "pending" },
           ],
         },
-        tasks: [
-          { id: "task-1", kind: "quiz", title: "Checkpoint quiz", status: "pending" },
-        ],
+        tasks: studyTasks,
       };
+      studyTasks.splice(0, studyTasks.length, {
+        id: "task-1",
+        kind: "quiz",
+        title: "Checkpoint quiz",
+        status: "pending",
+      });
       await json(route, { success: true, profile: studyProfile, plan: studyPlan }, 201);
+      return;
+    }
+
+    if (path === "/api/learning/study/tasks" && method === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      const task = {
+        id: `task-${studyTasks.length + 1}`,
+        status: "pending",
+        ...body,
+      };
+      studyTasks.push(task);
+      if (studyPlan) studyPlan.tasks = studyTasks;
+      await json(route, { success: true, task }, 201);
       return;
     }
 
@@ -710,6 +728,7 @@ async function mockLearning(page: Page) {
     knowledgeUploads,
     defaultKnowledgeUpdates,
     assetRequests,
+    studyTasks,
   };
 }
 
@@ -904,7 +923,7 @@ test.describe("ZAKI Learn parity wiring", () => {
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("Notebook-ready answer.")).toBeVisible();
 
-    await page.getByRole("button", { name: /Save to Notebook/i }).click();
+    await page.getByRole("button", { name: "Save to Notebook", exact: true }).click();
     await page.getByRole("button", { name: /Energy Notes/i }).click();
     await page.getByRole("button", { name: /^Save$/ }).click();
 
@@ -950,6 +969,9 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByText("Notebook-ready answer.")).toBeVisible();
     await expect(page.getByRole("button", { name: /Practice similar/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Make quiz/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Generate flashcards/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Turn into lesson\/book/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Add to study plan/i })).toBeVisible();
 
     await page.getByRole("button", { name: /Make quiz/i }).click();
     await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
@@ -964,6 +986,27 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
       /Explain this more simply/,
     );
+
+    await page.getByRole("button", { name: /Generate flashcards/i }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      /Generate flashcards/,
+    );
+
+    await page.getByRole("button", { name: /Turn into lesson\/book/i }).click();
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(
+      /structured lesson\/book outline/,
+    );
+
+    await page.getByRole("button", { name: /Add to study plan/i }).click();
+    await expect.poll(() => learning.studyTasks.length).toBe(2);
+    expect(learning.studyTasks[1]).toMatchObject({
+      kind: "review",
+      title: expect.stringContaining("Review:"),
+      source: expect.objectContaining({
+        messageId: expect.any(String),
+        excerpt: expect.stringContaining("Notebook-ready answer"),
+      }),
+    });
   });
 
   test("creates a book proposal through the hosted book workflow", async ({ page }) => {

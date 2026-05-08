@@ -206,6 +206,20 @@ function rowToTask(row) {
   };
 }
 
+function normalizeTaskKind(value) {
+  const kind = cleanText(value, 64).toLowerCase();
+  return TASK_KINDS.has(kind) ? kind : "study";
+}
+
+function normalizeTaskStatus(value) {
+  const status = cleanText(value, 32).toLowerCase();
+  return TASK_STATUSES.has(status) ? status : "pending";
+}
+
+function normalizeTaskSource(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 export async function getLearningStudyState({ dbQuery, userId }) {
   const profileResult = await dbQuery(
     `SELECT profile_json, updated_at
@@ -353,4 +367,47 @@ export async function completeLearningStudyTask({ dbQuery, userId, taskId }) {
     taskId,
     patch: { status: "done" },
   });
+}
+
+export async function createLearningStudyTask({ dbQuery, userId, task }) {
+  const activePlan = await dbQuery(
+    `SELECT id
+     FROM zaki_learning_study_plans
+     WHERE user_id = $1 AND status = 'active'
+     ORDER BY updated_at DESC, created_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+  const planId = activePlan.rows?.[0]?.id || "";
+  if (!planId) {
+    const error = new Error("No active study plan.");
+    error.code = "learning_study_plan_required";
+    throw error;
+  }
+
+  const kind = normalizeTaskKind(task?.kind);
+  const title = cleanText(task?.title, PROFILE_SHORT_LIMIT) || "Review saved learning item";
+  const description = cleanText(task?.description, PROFILE_TEXT_LIMIT);
+  const status = normalizeTaskStatus(task?.status);
+  const source = normalizeTaskSource(task?.source);
+  const taskId = crypto.randomUUID();
+  const completedAt = status === "done" ? new Date().toISOString() : null;
+  const result = await dbQuery(
+    `INSERT INTO zaki_learning_study_tasks
+      (id, plan_id, user_id, kind, title, description, status, source_json, completed_at, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::timestamptz, NOW(), NOW())
+     RETURNING id, plan_id, kind, title, description, status, source_json, due_at, completed_at, created_at, updated_at`,
+    [
+      taskId,
+      planId,
+      userId,
+      kind,
+      title,
+      description,
+      status,
+      JSON.stringify(source),
+      completedAt,
+    ]
+  );
+  return rowToTask(result.rows?.[0]);
 }

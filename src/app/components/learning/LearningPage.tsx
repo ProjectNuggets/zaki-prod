@@ -79,6 +79,7 @@ import {
   addLearningNotebookRecordManual,
   analyzeLearningVision,
   clearLearningMemory,
+  createLearningStudyTask,
   createLearningStudyPlan,
   createLearningBook,
   createLearningCoWriterDocument,
@@ -2352,6 +2353,17 @@ function LearningChatPanel({
     },
   });
 
+  const createStudyTaskMutation = useMutation({
+    mutationFn: createLearningStudyTask,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: learningKeys.study });
+      toast.success("Added to study plan");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Could not add this item to the study plan");
+    },
+  });
+
   const persistSessionId = useCallback((
     nextSessionId: string,
     mode: "push" | "replace" = "replace",
@@ -2973,6 +2985,21 @@ function LearningChatPanel({
       return;
     }
     const excerpt = compactMessageExcerpt(message.content);
+    if (action === "study_plan") {
+      createStudyTaskMutation.mutate({
+        kind: message.capability === "deep_question" ? "quiz" : "review",
+        title: `Review: ${compactMessageExcerpt(message.content, 96) || "Saved learning item"}`,
+        description: "Review this answer and turn it into retained understanding.",
+        source: {
+          route: requestedView || "chat",
+          sessionId,
+          messageId: message.id,
+          capability: message.capability || "chat",
+          excerpt,
+        },
+      });
+      return;
+    }
     if (action === "quiz") {
       selectCapability("deep_question");
       setQuizConfig((config) => ({
@@ -2981,6 +3008,24 @@ function LearningChatPanel({
         preference: "Include the answer key, explanations, and one follow-up review prompt per question.",
       }));
       setInput(`Create a focused quiz from this material:\n\n${excerpt}`);
+      return;
+    }
+    if (action === "flashcards") {
+      selectCapability("deep_question");
+      setQuizConfig((config) => ({
+        ...config,
+        question_type: "short_answer",
+        difficulty: studyProfile.difficulty || config.difficulty,
+        preference: "Generate concise flashcards with front/back pairs, answer keys, and one spaced-review hint per card.",
+      }));
+      setInput(`Generate flashcards from this material. Use front/back format and keep each card atomic:\n\n${excerpt}`);
+      return;
+    }
+    if (action === "lesson") {
+      selectCapability("");
+      setInput(
+        `Turn this into a structured lesson/book outline with sections, examples, practice checks, and notebook-ready summary:\n\n${excerpt}`,
+      );
       return;
     }
     if (action === "simplify") {
