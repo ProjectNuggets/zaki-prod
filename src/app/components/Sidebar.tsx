@@ -15,6 +15,7 @@ import {
   type AgentSessionMode,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
+import { fetchAgentHistory } from "@/lib/api";
 import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore, useZakiSessionUiStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -1471,6 +1472,54 @@ export function Sidebar() {
               const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
               if (!threadSlug) return;
               goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
+            }}
+            onDownloadSession={async (sessionKey, label) => {
+              const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
+              if (!threadSlug) return;
+              try {
+                const { data } = await fetchAgentHistory(
+                  ZAKI_BOT_SPACE_ID,
+                  threadSlug,
+                  "merged",
+                );
+                const payload = {
+                  spaceId: ZAKI_BOT_SPACE_ID,
+                  threadId: threadSlug,
+                  sessionKey,
+                  exportedAt: new Date().toISOString(),
+                  history: data?.history ?? [],
+                };
+                const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `${(label || threadSlug).replace(/\s+/g, "_")}.json`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+                toast.success(
+                  t("zakiControls.sessionList.downloadSuccess", {
+                    defaultValue: "Session downloaded.",
+                  }),
+                );
+              } catch {
+                toast.error(
+                  t("zakiControls.sessionList.downloadError", {
+                    defaultValue: "Couldn't download the session. Try again.",
+                  }),
+                );
+              }
+            }}
+            onShareSession={(sessionKey) => {
+              const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
+              if (!threadSlug) return;
+              // Activate the session first so ChatArea has the messages
+              // loaded, then dispatch a request to open the share modal.
+              goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
+              window.dispatchEvent(new Event("zaki:open-share"));
             }}
             onCreateSession={() => {
               // Reset to the Zaki welcome view so the user gets a visibly

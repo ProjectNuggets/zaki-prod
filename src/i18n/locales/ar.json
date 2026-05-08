@@ -780,7 +780,13 @@
     "sessionList": {
       "emptyTitle": "لا توجد جلسات بعد",
       "emptyHelper": "ابدأ محادثة مع زكي",
-      "newSession": "جلسة جديدة"
+      "newSession": "جلسة جديدة",
+      "downloadSession": "تنزيل الجلسة",
+      "downloadSessionAria": "تنزيل {{label}}",
+      "downloadSuccess": "تم تنزيل الجلسة.",
+      "downloadError": "تعذّر تنزيل الجلسة. حاول مرة أخرى.",
+      "shareSession": "مشاركة الجلسة",
+      "shareSessionAria": "مشاركة {{label}}"
     },
     "sessionManagement": {
       "title": "الجلسات",

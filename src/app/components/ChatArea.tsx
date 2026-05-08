@@ -5534,6 +5534,15 @@ export function ChatArea() {
     };
   }, [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest?.id]);
 
+  // ZakiSessionList per-row share button dispatches this event after
+  // navigating to the chosen session, so the share modal opens once the
+  // messages have hydrated.
+  useEffect(() => {
+    const handler = () => setShareOpen(true);
+    window.addEventListener("zaki:open-share", handler);
+    return () => window.removeEventListener("zaki:open-share", handler);
+  }, []);
+
   // H7: y/n keyboard shortcuts — fire approve/deny when an approval card is visible
   useEffect(() => {
     if (!nullalisApprovalRequest) return;

@@ -1,4 +1,4 @@
-import { Plus, MessageSquare, Loader2 } from "lucide-react";
+import { Plus, MessageSquare, Loader2, Download, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { formatSessionTime } from "@/lib/zakiBot";
@@ -12,6 +12,12 @@ interface ZakiSessionListProps {
   onSelectSession: (sessionKey: string) => void;
   onCreateSession: () => void;
   isRtl: boolean;
+  /** Download the session's history as a JSON file. Optional so older
+   *  call sites without the handler keep working. */
+  onDownloadSession?: (sessionKey: string, label: string) => void;
+  /** Open the share dialog for the given session. Selects the session
+   *  first if needed so the share modal can read its messages. */
+  onShareSession?: (sessionKey: string) => void;
 }
 
 export function ZakiSessionList({
@@ -21,6 +27,8 @@ export function ZakiSessionList({
   onSelectSession,
   onCreateSession,
   isRtl,
+  onDownloadSession,
+  onShareSession,
 }: ZakiSessionListProps) {
   const { t } = useTranslation();
   if (isLoading) {
@@ -76,47 +84,94 @@ export function ZakiSessionList({
             : 0;
 
         return (
-          <button
+          <div
             key={normalizedSessionKey}
-            type="button"
             className={cn(
-              "zaki-thread-item w-full text-left py-2 px-2.5 rounded-lg flex items-center gap-2",
+              "zaki-thread-item group relative w-full py-2 px-2.5 rounded-lg flex items-center gap-2",
               isRtl && "text-right flex-row-reverse",
               isActive ? "zaki-nav-active" : ""
             )}
-            onClick={() => onSelectSession(normalizedSessionKey)}
           >
-            <div className="relative shrink-0">
-              <MessageSquare className="size-3.5 text-zaki-muted" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
-              <div className="mt-0.5 flex items-center gap-1.5">
-                {mode ? (
-                  <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
-                    {mode}
-                  </span>
-                ) : null}
-                <span
-                  aria-label={live ? "live" : "idle"}
-                  className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
-                />
-                {lastChannel ? (
-                  <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
-                    {lastChannel}
-                  </span>
-                ) : null}
-                {pendingApprovalCount > 0 ? (
-                  <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
-                    {pendingApprovalCount}
-                  </span>
-                ) : null}
-                {time ? (
-                  <span className="text-2xs text-zaki-muted">{time}</span>
-                ) : null}
+            <button
+              type="button"
+              className={cn(
+                "flex flex-1 items-center gap-2 text-left min-w-0",
+                isRtl && "text-right flex-row-reverse",
+              )}
+              onClick={() => onSelectSession(normalizedSessionKey)}
+            >
+              <div className="relative shrink-0">
+                <MessageSquare className="size-3.5 text-zaki-muted" />
               </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  {mode ? (
+                    <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+                      {mode}
+                    </span>
+                  ) : null}
+                  <span
+                    aria-label={live ? "live" : "idle"}
+                    className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
+                  />
+                  {lastChannel ? (
+                    <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                      {lastChannel}
+                    </span>
+                  ) : null}
+                  {pendingApprovalCount > 0 ? (
+                    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
+                      {pendingApprovalCount}
+                    </span>
+                  ) : null}
+                  {time ? (
+                    <span className="text-2xs text-zaki-muted">{time}</span>
+                  ) : null}
+                </div>
+              </div>
+            </button>
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              {onShareSession ? (
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShareSession(normalizedSessionKey);
+                  }}
+                  aria-label={t("zakiControls.sessionList.shareSessionAria", {
+                    defaultValue: "Share {{label}}",
+                    label,
+                  })}
+                  title={t("zakiControls.sessionList.shareSession", {
+                    defaultValue: "Share session",
+                  })}
+                >
+                  <Share2 className="size-3.5" />
+                </button>
+              ) : null}
+              {onDownloadSession ? (
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownloadSession(normalizedSessionKey, label);
+                  }}
+                  aria-label={t("zakiControls.sessionList.downloadSessionAria", {
+                    defaultValue: "Download {{label}}",
+                    label,
+                  })}
+                  title={t("zakiControls.sessionList.downloadSession", {
+                    defaultValue: "Download session",
+                  })}
+                >
+                  <Download className="size-3.5" />
+                </button>
+              ) : null}
             </div>
-          </button>
+          </div>
         );
       })}
 

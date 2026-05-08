@@ -780,7 +780,13 @@
     "sessionList": {
       "emptyTitle": "No sessions yet",
       "emptyHelper": "Start a conversation with ZAKI",
-      "newSession": "New session"
+      "newSession": "New session",
+      "downloadSession": "Download session",
+      "downloadSessionAria": "Download {{label}}",
+      "downloadSuccess": "Session downloaded.",
+      "downloadError": "Couldn't download the session. Try again.",
+      "shareSession": "Share session",
+      "shareSessionAria": "Share {{label}}"
     },
     "sessionManagement": {
       "title": "Sessions",
