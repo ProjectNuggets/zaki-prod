@@ -28,10 +28,12 @@ export type LearningRunState =
 export type LearningStudyProfile = {
   course: string;
   examDate: string;
+  topics: string;
   goal: string;
   weakTopics: string;
   weeklyHours: string;
   difficulty: string;
+  preferredStyle: string;
 };
 
 export type LearningStudyAction =
@@ -51,10 +53,12 @@ type StudyActionMessage = {
 const defaultStudyProfile: LearningStudyProfile = {
   course: "",
   examDate: "",
+  topics: "",
   goal: "",
   weakTopics: "",
   weeklyHours: "",
   difficulty: "medium",
+  preferredStyle: "balanced",
 };
 
 export const STUDY_PROFILE_STORAGE_KEY = "zaki.learn.studyProfile.v1";
@@ -81,10 +85,12 @@ export function readLearningStudyProfile(
     return {
       course: textOf(parsed.course),
       examDate: textOf(parsed.examDate),
+      topics: textOf(parsed.topics),
       goal: textOf(parsed.goal),
       weakTopics: textOf(parsed.weakTopics),
       weeklyHours: textOf(parsed.weeklyHours),
       difficulty: textOf(parsed.difficulty, "medium"),
+      preferredStyle: textOf(parsed.preferredStyle, "balanced"),
     };
   } catch {
     return defaultStudyProfile;
@@ -100,8 +106,9 @@ export function writeLearningStudyProfile(
 
 export function studyProfileConfigured(profile: LearningStudyProfile) {
   return Boolean(
-    profile.course.trim() ||
+      profile.course.trim() ||
       profile.examDate.trim() ||
+      profile.topics.trim() ||
       profile.goal.trim() ||
       profile.weakTopics.trim(),
   );
@@ -155,7 +162,7 @@ export function LearningStudySetupPanel({
                   ]
                     .filter(Boolean)
                     .join(" · ") || "Saved study preferences"
-                : "Course, exam, weak topics, practice, and notebook capture"}
+                : "Course, topics, exam, weak areas, practice, and notebook capture"}
             </div>
           </div>
         </div>
@@ -208,6 +215,15 @@ export function LearningStudySetupPanel({
           />
         </label>
         <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] md:col-span-2">
+          Topics
+          <input
+            value={profile.topics}
+            onChange={(event) => update("topics", event.target.value)}
+            placeholder="e.g. limits, derivatives, integrals, series"
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
+          />
+        </label>
+        <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] md:col-span-2">
           Goal
           <input
             value={profile.goal}
@@ -225,7 +241,7 @@ export function LearningStudySetupPanel({
             className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
           />
         </label>
-        <div className="grid grid-cols-[1fr_150px] gap-3 max-sm:grid-cols-1">
+        <div className="grid grid-cols-[1fr_150px_160px] gap-3 max-sm:grid-cols-1 md:col-span-2">
           <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Hours/week
             <input
@@ -246,6 +262,21 @@ export function LearningStudySetupPanel({
               <option value="medium">Medium</option>
               <option value="hard">Hard</option>
               <option value="exam">Exam</option>
+            </select>
+          </label>
+          <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Study style
+            <select
+              value={profile.preferredStyle}
+              onChange={(event) => update("preferredStyle", event.target.value)}
+              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
+            >
+              <option value="balanced">Balanced</option>
+              <option value="simple">Simple</option>
+              <option value="deep">Deep</option>
+              <option value="exam">Exam</option>
+              <option value="visual">Visual</option>
+              <option value="practice">Practice</option>
             </select>
           </label>
         </div>

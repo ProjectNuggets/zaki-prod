@@ -2,6 +2,46 @@ import { backendAuthRequest, buildApiUrl, getAuthToken, getFreshAuthToken } from
 
 export type LearningJson = Record<string, unknown>;
 
+export type LearningStudyProfile = {
+  course: string;
+  examDate: string;
+  topics: string;
+  goal: string;
+  weakTopics: string;
+  weeklyHours: string;
+  difficulty: string;
+  preferredStyle: string;
+};
+
+export type LearningStudyTask = {
+  id: string;
+  planId?: string;
+  kind: string;
+  title: string;
+  description?: string;
+  status: "pending" | "running" | "done" | "error" | "skipped";
+  source?: LearningJson;
+  dueAt?: string | null;
+  completedAt?: string | null;
+};
+
+export type LearningStudyPlan = {
+  id: string;
+  title: string;
+  status: string;
+  profile: LearningStudyProfile;
+  plan: LearningJson;
+  tasks: LearningStudyTask[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type LearningStudyState = {
+  success?: boolean;
+  profile: LearningStudyProfile;
+  plan: LearningStudyPlan | null;
+};
+
 type LearningRequestOptions = {
   method?: string;
   body?: LearningJson;
@@ -66,6 +106,7 @@ export async function prepareLearningSocketAuth(): Promise<string | null> {
 
 export const learningKeys = {
   health: ["learning", "health"] as const,
+  study: ["learning", "study"] as const,
   knowledge: ["learning", "knowledge"] as const,
   knowledgeUploadPolicy: ["learning", "knowledge", "upload-policy"] as const,
   books: ["learning", "books"] as const,
@@ -83,6 +124,47 @@ export const learningKeys = {
   tutorAgentChannelsSchema: ["learning", "tutor-agents", "channels", "schema"] as const,
   solveSessions: ["learning", "solve", "sessions"] as const,
 };
+
+export function getLearningStudyState() {
+  return learningRequest<LearningStudyState>("/api/learning/study");
+}
+
+export function updateLearningStudyProfile(profile: LearningStudyProfile) {
+  return learningRequest<{ success?: boolean; profile: LearningStudyProfile; configured?: boolean }>(
+    "/api/learning/study/profile",
+    {
+      method: "PUT",
+      body: profile,
+    },
+  );
+}
+
+export function createLearningStudyPlan(profile: LearningStudyProfile) {
+  return learningRequest<{ success?: boolean; profile: LearningStudyProfile; plan: LearningStudyPlan }>(
+    "/api/learning/study/plans",
+    {
+      method: "POST",
+      body: { profile },
+    },
+  );
+}
+
+export function updateLearningStudyTask(taskId: string, patch: LearningJson) {
+  return learningRequest<{ success?: boolean; task: LearningStudyTask }>(
+    `/api/learning/study/tasks/${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      body: patch,
+    },
+  );
+}
+
+export function completeLearningStudyTask(taskId: string) {
+  return learningRequest<{ success?: boolean; task: LearningStudyTask }>(
+    `/api/learning/study/tasks/${encodeURIComponent(taskId)}/complete`,
+    { method: "POST", body: {} },
+  );
+}
 
 export function listLearningSessions(limit = 100, offset = 0) {
   const params = new URLSearchParams({

@@ -103,6 +103,14 @@ import {
   probeLearningReady,
 } from "./learning-client.js";
 import {
+  completeLearningStudyTask,
+  createLearningStudyPlan,
+  getLearningStudyState,
+  normalizeLearningStudyProfile,
+  updateLearningStudyTask,
+  upsertLearningStudyProfile,
+} from "./learning-study.js";
+import {
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
   registerBotBffAliases,
@@ -5627,7 +5635,16 @@ app.get("/api/account/export", async (req, res) => {
       }
     };
 
-    const [accessRedemptions, sharedConversations, memories, memoryConfirmations, memoryConflicts] =
+    const [
+      accessRedemptions,
+      sharedConversations,
+      memories,
+      memoryConfirmations,
+      memoryConflicts,
+      learningStudyProfiles,
+      learningStudyPlans,
+      learningStudyTasks,
+    ] =
       await Promise.all([
         loadOptionalRows(
           `SELECT id, code_id, code, campaign, redeemed_at, access_expires_at
@@ -5663,6 +5680,26 @@ app.get("/api/account/export", async (req, res) => {
            WHERE user_id = $1
            ORDER BY created_at DESC`,
           [email]
+        ),
+        loadOptionalRows(
+          `SELECT profile_json, created_at, updated_at
+           FROM zaki_learning_study_profiles
+           WHERE user_id = $1`,
+          [zakiUser.id]
+        ),
+        loadOptionalRows(
+          `SELECT id, title, status, profile_json, plan_json, created_at, updated_at
+           FROM zaki_learning_study_plans
+           WHERE user_id = $1
+           ORDER BY updated_at DESC, created_at DESC`,
+          [zakiUser.id]
+        ),
+        loadOptionalRows(
+          `SELECT id, plan_id, kind, title, description, status, source_json, due_at, completed_at, created_at, updated_at
+           FROM zaki_learning_study_tasks
+           WHERE user_id = $1
+           ORDER BY created_at DESC`,
+          [zakiUser.id]
         ),
       ]);
     const learning = await buildLearningAccountExportSnapshot({
@@ -5716,6 +5753,11 @@ app.get("/api/account/export", async (req, res) => {
         conflicts: memoryConflicts,
       },
       learning,
+      learningStudy: {
+        profiles: learningStudyProfiles,
+        plans: learningStudyPlans,
+        tasks: learningStudyTasks,
+      },
     };
 
     const fileDate = new Date().toISOString().slice(0, 10);
@@ -10437,6 +10479,216 @@ app.get("/api/internal/learning/status", async (req, res) => {
     res.status(500).json({ error: error?.message || "Learning status failed." });
   }
 });
+
+const learningStudyJson = express.json({ limit: "128kb" });
+
+function requireNumericLearningUserId(req, res) {
+  const userId = Number(req.learningUserId);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    res.status(400).json({
+      code: "invalid_learning_user_id",
+      error: "Invalid learning user.",
+      message: "Learning study state requires a canonical ZAKI user id.",
+      requestId: getOrCreateRequestId(req),
+    });
+    return null;
+  }
+  return userId;
+}
+
+app.get("/api/learning/study", requireLearningContext, async (req, res) => {
+  const userId = requireNumericLearningUserId(req, res);
+  if (!userId) return;
+  try {
+    const state = await getLearningStudyState({ dbQuery, userId });
+    res.status(200).json({ success: true, ...state });
+  } catch (error) {
+    console.error("[LearningStudy] State load failed:", {
+      requestId: getOrCreateRequestId(req),
+      error: error?.message || error,
+    });
+    res.status(500).json({
+      code: "learning_study_state_unavailable",
+      error: "Study state unavailable.",
+      message: "Could not load learning study state.",
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+});
+
+app.get("/api/learning/study/profile", requireLearningContext, async (req, res) => {
+  const userId = requireNumericLearningUserId(req, res);
+  if (!userId) return;
+  try {
+    const state = await getLearningStudyState({ dbQuery, userId });
+    res.status(200).json({ success: true, profile: state.profile });
+  } catch (error) {
+    console.error("[LearningStudy] Profile load failed:", {
+      requestId: getOrCreateRequestId(req),
+      error: error?.message || error,
+    });
+    res.status(500).json({
+      code: "learning_study_profile_unavailable",
+      error: "Study profile unavailable.",
+      message: "Could not load learning study profile.",
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+});
+
+app.put(
+  "/api/learning/study/profile",
+  requireLearningContext,
+  learningStudyJson,
+  async (req, res) => {
+    const userId = requireNumericLearningUserId(req, res);
+    if (!userId) return;
+    try {
+      const result = await upsertLearningStudyProfile({
+        dbQuery,
+        userId,
+        profile: normalizeLearningStudyProfile(req.body || {}),
+      });
+      res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      console.error("[LearningStudy] Profile save failed:", {
+        requestId: getOrCreateRequestId(req),
+        error: error?.message || error,
+      });
+      res.status(500).json({
+        code: "learning_study_profile_save_failed",
+        error: "Study profile save failed.",
+        message: "Could not save learning study profile.",
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
+);
+
+app.get("/api/learning/study/plans/current", requireLearningContext, async (req, res) => {
+  const userId = requireNumericLearningUserId(req, res);
+  if (!userId) return;
+  try {
+    const state = await getLearningStudyState({ dbQuery, userId });
+    res.status(200).json({ success: true, plan: state.plan });
+  } catch (error) {
+    console.error("[LearningStudy] Plan load failed:", {
+      requestId: getOrCreateRequestId(req),
+      error: error?.message || error,
+    });
+    res.status(500).json({
+      code: "learning_study_plan_unavailable",
+      error: "Study plan unavailable.",
+      message: "Could not load current learning study plan.",
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+});
+
+app.post(
+  "/api/learning/study/plans",
+  requireLearningContext,
+  learningStudyJson,
+  async (req, res) => {
+    const userId = requireNumericLearningUserId(req, res);
+    if (!userId) return;
+    try {
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const result = await createLearningStudyPlan({
+        dbQuery,
+        withTransaction: withDbTransaction,
+        userId,
+        profile: normalizeLearningStudyProfile(body.profile || body),
+      });
+      res.status(201).json({ success: true, ...result });
+    } catch (error) {
+      console.error("[LearningStudy] Plan create failed:", {
+        requestId: getOrCreateRequestId(req),
+        error: error?.message || error,
+      });
+      res.status(500).json({
+        code: "learning_study_plan_create_failed",
+        error: "Study plan creation failed.",
+        message: "Could not create learning study plan.",
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
+);
+
+app.patch(
+  "/api/learning/study/tasks/:taskId",
+  requireLearningContext,
+  learningStudyJson,
+  async (req, res) => {
+    const userId = requireNumericLearningUserId(req, res);
+    if (!userId) return;
+    try {
+      const task = await updateLearningStudyTask({
+        dbQuery,
+        userId,
+        taskId: req.params.taskId,
+        patch: req.body || {},
+      });
+      if (!task) {
+        res.status(404).json({
+          code: "learning_study_task_not_found",
+          error: "Study task not found.",
+          message: "The requested study task was not found.",
+          requestId: getOrCreateRequestId(req),
+        });
+        return;
+      }
+      res.status(200).json({ success: true, task });
+    } catch (error) {
+      console.error("[LearningStudy] Task update failed:", {
+        requestId: getOrCreateRequestId(req),
+        taskId: req.params.taskId,
+        error: error?.message || error,
+      });
+      res.status(500).json({
+        code: "learning_study_task_update_failed",
+        error: "Study task update failed.",
+        message: "Could not update learning study task.",
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/learning/study/tasks/:taskId/complete",
+  requireLearningContext,
+  async (req, res) => {
+    const userId = requireNumericLearningUserId(req, res);
+    if (!userId) return;
+    try {
+      const task = await completeLearningStudyTask({ dbQuery, userId, taskId: req.params.taskId });
+      if (!task) {
+        res.status(404).json({
+          code: "learning_study_task_not_found",
+          error: "Study task not found.",
+          message: "The requested study task was not found.",
+          requestId: getOrCreateRequestId(req),
+        });
+        return;
+      }
+      res.status(200).json({ success: true, task });
+    } catch (error) {
+      console.error("[LearningStudy] Task complete failed:", {
+        requestId: getOrCreateRequestId(req),
+        taskId: req.params.taskId,
+        error: error?.message || error,
+      });
+      res.status(500).json({
+        code: "learning_study_task_complete_failed",
+        error: "Study task completion failed.",
+        message: "Could not complete learning study task.",
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
+);
 
 app.get("/api/learning/health", requireLearningContext, async (req, res) => {
   if (!assertLearningRouteEnabled(req, res)) return;

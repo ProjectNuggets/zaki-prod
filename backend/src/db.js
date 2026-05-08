@@ -250,6 +250,55 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_learning_study_profiles (
+      user_id BIGINT PRIMARY KEY REFERENCES zaki_users(id) ON DELETE CASCADE,
+      profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_learning_study_plans (
+      id TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+      profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      plan_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_learning_study_plans_user_status
+    ON zaki_learning_study_plans(user_id, status, updated_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_learning_study_tasks (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL REFERENCES zaki_learning_study_plans(id) ON DELETE CASCADE,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'study',
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'done', 'error', 'skipped')),
+      source_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      due_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_learning_study_tasks_user_plan
+    ON zaki_learning_study_tasks(user_id, plan_id, created_at ASC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

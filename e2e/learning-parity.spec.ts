@@ -196,6 +196,17 @@ async function mockLearning(page: Page) {
   const knowledgeUploads: Array<{ path: string; body: string }> = [];
   const defaultKnowledgeUpdates: string[] = [];
   const assetRequests: string[] = [];
+  let studyProfile = {
+    course: "",
+    examDate: "",
+    topics: "",
+    goal: "",
+    weakTopics: "",
+    weeklyHours: "",
+    difficulty: "medium",
+    preferredStyle: "balanced",
+  };
+  let studyPlan: Record<string, unknown> | null = null;
 
   await page.routeWebSocket("**/api/learning/tutor-agents/*/ws", async (ws) => {
     ws.onMessage((message) => {
@@ -316,6 +327,39 @@ async function mockLearning(page: Page) {
 
     if (path === "/api/learning/health") {
       await json(route, { ok: true, mode: "hosted" });
+      return;
+    }
+
+    if (path === "/api/learning/study") {
+      await json(route, { success: true, profile: studyProfile, plan: studyPlan });
+      return;
+    }
+
+    if (path === "/api/learning/study/profile" && method === "PUT") {
+      studyProfile = { ...studyProfile, ...(route.request().postDataJSON() as typeof studyProfile) };
+      await json(route, { success: true, profile: studyProfile, configured: Boolean(studyProfile.course) });
+      return;
+    }
+
+    if (path === "/api/learning/study/plans" && method === "POST") {
+      const body = route.request().postDataJSON() as { profile?: typeof studyProfile };
+      studyProfile = { ...studyProfile, ...(body.profile || {}) };
+      studyPlan = {
+        id: "study-plan-1",
+        title: `${studyProfile.course || "Personal"} study plan`,
+        status: "active",
+        profile: studyProfile,
+        plan: {
+          summary: "E2E durable study plan",
+          tasks: [
+            { id: "task-1", kind: "quiz", title: "Checkpoint quiz", status: "pending" },
+          ],
+        },
+        tasks: [
+          { id: "task-1", kind: "quiz", title: "Checkpoint quiz", status: "pending" },
+        ],
+      };
+      await json(route, { success: true, profile: studyProfile, plan: studyPlan }, 201);
       return;
     }
 
@@ -886,13 +930,17 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByText("Study setup")).toBeVisible();
     await page.getByLabel("Course").fill("Calculus II");
     await page.getByLabel("Exam date").fill("2026-06-15");
+    await page.getByRole("textbox", { name: "Topics", exact: true }).fill("limits, derivatives, integrals, series");
     await page.getByLabel("Goal").fill("Score at least 90%");
     await page.getByLabel("Weak topics").fill("series and integration by parts");
     await page.getByLabel("Hours/week").fill("6");
     await page.getByLabel("Study difficulty").selectOption("hard");
+    await page.getByLabel("Study style").selectOption("practice");
     await page.getByRole("button", { name: /Build study plan/i }).click();
 
     await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/Calculus II/);
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/limits, derivatives/);
+    await expect(page.getByPlaceholder("How can I help you today?")).toHaveValue(/practice/);
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => learning.startedTurns.length).toBe(1);
     expect(learning.startedTurns[0]).toMatchObject({

@@ -79,6 +79,7 @@ import {
   addLearningNotebookRecordManual,
   analyzeLearningVision,
   clearLearningMemory,
+  createLearningStudyPlan,
   createLearningBook,
   createLearningCoWriterDocument,
   createLearningKnowledge,
@@ -127,6 +128,7 @@ import {
   listLearningTutorAgentSouls,
   getLearningKnowledgeSupportedFileTypes,
   getLearningMemory,
+  getLearningStudyState,
   getLearningSkill,
   destroyLearningTutorAgent,
   refreshLearningMemory,
@@ -142,6 +144,7 @@ import {
   updateLearningTutorAgentFile,
   updateLearningTutorAgent,
   updateLearningTutorAgentSoul,
+  updateLearningStudyProfile,
   updateLearningMemory,
   uploadLearningKnowledge,
   uploadLearningKnowledgeArchive,
@@ -2275,6 +2278,7 @@ function LearningChatPanel({
     readLearningStudyProfile(studyProfileStorageKey),
   );
   const [studyPanelOpen, setStudyPanelOpen] = useState(false);
+  const [studyDraftDirty, setStudyDraftDirty] = useState(false);
   const sessionScope = (requestedView || "chat").trim().toLowerCase() || "chat";
   const sessionStorageKey = `zaki.learn.sessionId.${sessionScope}`;
   const [restoredSessionId, setRestoredSessionId] = useState(
@@ -2302,6 +2306,51 @@ function LearningChatPanel({
   const restoredActiveTurnIdRef = useRef("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
+
+  const studyStateQuery = useQuery({
+    queryKey: learningKeys.study,
+    queryFn: getLearningStudyState,
+    enabled: isPrimaryChatView,
+    staleTime: 60_000,
+  });
+
+  const saveStudyProfileMutation = useMutation({
+    mutationFn: updateLearningStudyProfile,
+    onSuccess: (payload) => {
+      const nextProfile = payload.profile;
+      setStudyProfile(nextProfile);
+      setStudyDraft(nextProfile);
+      setStudyDraftDirty(false);
+      writeLearningStudyProfile(nextProfile, studyProfileStorageKey);
+      setQuizConfig((config) => ({ ...config, difficulty: nextProfile.difficulty || "medium" }));
+      void queryClient.invalidateQueries({ queryKey: learningKeys.study });
+      setStudyPanelOpen(false);
+      toast.success("Study setup saved");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Study setup could not be saved");
+    },
+  });
+
+  const createStudyPlanMutation = useMutation({
+    mutationFn: createLearningStudyPlan,
+    onSuccess: (payload) => {
+      const nextProfile = payload.profile;
+      setStudyProfile(nextProfile);
+      setStudyDraft(nextProfile);
+      setStudyDraftDirty(false);
+      writeLearningStudyProfile(nextProfile, studyProfileStorageKey);
+      setQuizConfig((config) => ({ ...config, difficulty: nextProfile.difficulty || "medium" }));
+      void queryClient.invalidateQueries({ queryKey: learningKeys.study });
+      setStudyPanelOpen(false);
+      toast.success("Study plan saved");
+      selectCapability("");
+      setInput(buildStudyPlanPrompt(nextProfile));
+    },
+    onError: (error) => {
+      toast.error(error.message || "Study plan could not be created");
+    },
+  });
 
   const persistSessionId = useCallback((
     nextSessionId: string,
@@ -2332,8 +2381,19 @@ function LearningChatPanel({
     const nextProfile = readLearningStudyProfile(studyProfileStorageKey);
     setStudyProfile(nextProfile);
     setStudyDraft(nextProfile);
+    setStudyDraftDirty(false);
     setStudyPanelOpen(false);
   }, [isPrimaryChatView, studyProfileStorageKey]);
+
+  useEffect(() => {
+    if (!studyStateQuery.data?.profile) return;
+    if (studyPanelOpen && studyDraftDirty) return;
+    const nextProfile = studyStateQuery.data.profile;
+    setStudyProfile(nextProfile);
+    setStudyDraft(nextProfile);
+    setStudyDraftDirty(false);
+    writeLearningStudyProfile(nextProfile, studyProfileStorageKey);
+  }, [studyDraftDirty, studyPanelOpen, studyProfileStorageKey, studyStateQuery.data?.profile]);
 
   useEffect(() => {
     const scopedSessionId =
@@ -2883,12 +2943,7 @@ function LearningChatPanel({
   };
 
   const saveStudyProfile = (nextProfile: LearningStudyProfile) => {
-    setStudyProfile(nextProfile);
-    setStudyDraft(nextProfile);
-    writeLearningStudyProfile(nextProfile, studyProfileStorageKey);
-    setQuizConfig((config) => ({ ...config, difficulty: nextProfile.difficulty || "medium" }));
-    setStudyPanelOpen(false);
-    toast.success("Study setup saved");
+    saveStudyProfileMutation.mutate(nextProfile);
   };
 
   const buildStudyPlanPrompt = (profile: LearningStudyProfile) => {
@@ -2896,8 +2951,12 @@ function LearningChatPanel({
       `Build me a practical study plan${profile.course ? ` for ${profile.course}` : ""}.`,
       profile.examDate ? `Exam or deadline: ${profile.examDate}.` : "",
       profile.goal ? `Goal: ${profile.goal}.` : "",
+      profile.topics ? `Topics: ${profile.topics}.` : "",
       profile.weakTopics ? `Weak topics: ${profile.weakTopics}.` : "",
       profile.weeklyHours ? `Available study time: ${profile.weeklyHours} hours per week.` : "",
+      profile.preferredStyle && profile.preferredStyle !== "balanced"
+        ? `Preferred study style: ${profile.preferredStyle}.`
+        : "",
       "Include a weekly schedule, retrieval practice, spaced review, and what I should save to my notebook.",
     ].filter(Boolean);
     return lines.join("\n");
@@ -2905,9 +2964,7 @@ function LearningChatPanel({
 
   const startStudyPlan = () => {
     const nextProfile = studyDraft;
-    saveStudyProfile(nextProfile);
-    selectCapability("");
-    setInput(buildStudyPlanPrompt(nextProfile));
+    createStudyPlanMutation.mutate(nextProfile);
   };
 
   const applyStudyAction = (action: LearningStudyAction, message: TutorChatMessage) => {
@@ -3207,7 +3264,10 @@ function LearningChatPanel({
           savedProfile={studyProfile}
           open={studyPanelOpen}
           onOpenChange={setStudyPanelOpen}
-          onChange={setStudyDraft}
+          onChange={(nextProfile) => {
+            setStudyDraft(nextProfile);
+            setStudyDraftDirty(true);
+          }}
           onSave={() => saveStudyProfile(studyDraft)}
           onBuildPlan={startStudyPlan}
           notebooksCount={notebookItems.length}
