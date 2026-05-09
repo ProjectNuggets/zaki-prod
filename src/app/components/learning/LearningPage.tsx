@@ -1387,8 +1387,8 @@ const defaultVisualizeConfig: VisualizeFormConfig = {
 };
 
 const defaultResearchConfig: DeepResearchFormConfig = {
-  mode: "",
-  depth: "",
+  mode: "notes",
+  depth: "quick",
   sources: ["kb", "web", "papers"],
 };
 
@@ -1988,6 +1988,403 @@ function safeLearningSourceUrl(value: unknown) {
   return /^https?:\/\//i.test(url) ? url : "";
 }
 
+function stripLearningCodeFence(value: string) {
+  return value
+    .trim()
+    .replace(/^```[a-zA-Z0-9_-]*\s*([\s\S]*?)\s*```$/i, "$1")
+    .trim();
+}
+
+function removeLearningFencedCode(value: string) {
+  return value.replace(/```(?:svg|mermaid|html|javascript|js)?\s*[\s\S]*?```/gi, "").trim();
+}
+
+function learningStringList(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => textOf(item)).filter(Boolean) : [];
+}
+
+function learningNumberList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => Number(item)).filter((item) => Number.isFinite(item))
+    : [];
+}
+
+function safeLearningChartColor(value: string, fallback: string) {
+  const color = value.trim();
+  if (
+    /^#[0-9a-f]{3,8}$/i.test(color) ||
+    /^rgba?\([\d\s.,%+-]+\)$/i.test(color) ||
+    /^hsla?\([\d\s.,%+-]+deg?\)$/i.test(color) ||
+    /^[a-z]+$/i.test(color)
+  ) {
+    return color;
+  }
+  return fallback;
+}
+
+function escapeLearningSvgText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function parseLearningMermaidFlowchart(source: string) {
+  const clean = stripLearningCodeFence(source).replace(/\r/g, "");
+  const nodes = new Map<string, string>();
+  const edges: Array<[string, string]> = [];
+  const addNode = (id: string, label?: string) => {
+    const cleanId = id.trim().replace(/[^A-Za-z0-9_-]/g, "");
+    if (!cleanId) return "";
+    if (!nodes.has(cleanId)) nodes.set(cleanId, label?.trim() || cleanId.replace(/_/g, " "));
+    if (label?.trim()) nodes.set(cleanId, label.trim());
+    return cleanId;
+  };
+
+  const labelPattern = /([A-Za-z][\w-]*)\s*(?:\["([^"]+)"\]|\("([^"]+)"\)|\{([^}]+)\})/g;
+  for (const match of clean.matchAll(labelPattern)) {
+    addNode(match[1] || "", match[2] || match[3] || match[4]);
+  }
+
+  const edgePattern =
+    /([A-Za-z][\w-]*)(?:\s*(?:\["[^"]+"\]|\("[^"]+"\)|\{[^}]+\}))?\s*-+>\s*([A-Za-z][\w-]*)(?:\s*(?:\["[^"]+"\]|\("[^"]+"\)|\{[^}]+\}))?/g;
+  for (const match of clean.matchAll(edgePattern)) {
+    const from = addNode(match[1] || "");
+    const to = addNode(match[2] || "");
+    if (from && to) edges.push([from, to]);
+  }
+
+  return { nodes: Array.from(nodes.entries()), edges };
+}
+
+function LearningMermaidPreview({ source, description }: { source: string; description: string }) {
+  const diagram = useMemo(() => parseLearningMermaidFlowchart(source), [source]);
+  const nodes = diagram.nodes.slice(0, 16);
+  if (!nodes.length) return <LearningSourcePreview source={source} label="Mermaid source" />;
+
+  const width = 820;
+  const nodeWidth = 190;
+  const nodeHeight = 52;
+  const rowGap = 28;
+  const height = Math.max(160, nodes.length * (nodeHeight + rowGap) + 32);
+  const positions = new Map(
+    nodes.map(([id], index) => [
+      id,
+      {
+        x: 56 + (index % 2) * 320,
+        y: 20 + index * (nodeHeight + rowGap),
+      },
+    ]),
+  );
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#c33a24"/>
+    </marker>
+  </defs>
+  <rect width="${width}" height="${height}" rx="14" fill="#fffaf5"/>
+  ${diagram.edges
+    .map(([from, to]) => {
+      const a = positions.get(from);
+      const b = positions.get(to);
+      if (!a || !b) return "";
+      return `<path d="M${a.x + nodeWidth} ${a.y + nodeHeight / 2} C ${a.x + nodeWidth + 52} ${a.y + nodeHeight / 2}, ${b.x - 52} ${b.y + nodeHeight / 2}, ${b.x} ${b.y + nodeHeight / 2}" fill="none" stroke="#c33a24" stroke-width="2" marker-end="url(#arrow)" opacity="0.72"/>`;
+    })
+    .join("")}
+  ${nodes
+    .map(([id, label]) => {
+      const pos = positions.get(id)!;
+      return `<g>
+        <rect x="${pos.x}" y="${pos.y}" width="${nodeWidth}" height="${nodeHeight}" rx="8" fill="#ffffff" stroke="#e5d6c8"/>
+        <text x="${pos.x + 14}" y="${pos.y + 22}" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#2b2118">${escapeLearningSvgText(label).slice(0, 34)}</text>
+        <text x="${pos.x + 14}" y="${pos.y + 40}" font-family="system-ui, sans-serif" font-size="11" fill="#8a7665">${escapeLearningSvgText(id)}</text>
+      </g>`;
+    })
+    .join("")}
+</svg>`;
+  return (
+    <figure className="rounded-zaki-md border border-zaki-border bg-zaki-base p-3">
+      <img
+        src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+        alt={description || "Generated diagram"}
+        className="h-auto w-full rounded-zaki-md"
+      />
+      {description ? <figcaption className="mt-2 text-xs text-zaki-muted">{description}</figcaption> : null}
+      <details className="mt-2 text-xs text-zaki-muted">
+        <summary className="cursor-pointer">Source</summary>
+        <pre className="mt-2 max-h-40 overflow-auto rounded-zaki-md bg-zaki-raised p-3">
+          <code>{stripLearningCodeFence(source)}</code>
+        </pre>
+      </details>
+    </figure>
+  );
+}
+
+function LearningSvgPreview({ source, description }: { source: string; description: string }) {
+  const clean = stripLearningCodeFence(source);
+  if (!clean.trim().startsWith("<svg")) return <LearningSourcePreview source={source} label="SVG source" />;
+  return (
+    <figure className="rounded-zaki-md border border-zaki-border bg-zaki-base p-3">
+      <img
+        src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(clean)}`}
+        alt={description || "Generated SVG visualization"}
+        className="h-auto w-full rounded-zaki-md"
+      />
+      {description ? <figcaption className="mt-2 text-xs text-zaki-muted">{description}</figcaption> : null}
+    </figure>
+  );
+}
+
+function LearningSourcePreview({ source, label }: { source: string; label: string }) {
+  return (
+    <div className="rounded-zaki-md border border-dashed border-zaki-border bg-zaki-base p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zaki-text">
+        <Code2 className="size-3.5 text-zaki-muted" />
+        {label}
+      </div>
+      <pre className="max-h-[260px] overflow-auto rounded-zaki-md bg-zaki-raised p-3 text-xs leading-5 text-zaki-text">
+        <code>{stripLearningCodeFence(source)}</code>
+      </pre>
+    </div>
+  );
+}
+
+function learningStripJsComments(value: string) {
+  return value
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+function findBalancedLearningFragment(source: string, startIndex: number, openChar: string, closeChar: string) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  let start = -1;
+  for (let index = Math.max(0, startIndex); index < source.length; index += 1) {
+    const char = source[index] || "";
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === openChar) {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (char === closeChar && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) return source.slice(start, index + 1);
+    }
+  }
+  return "";
+}
+
+function findLearningJsObjectForKey(source: string, key: string) {
+  const pattern = new RegExp(`\\b${key}\\s*:`, "i");
+  const match = pattern.exec(source);
+  if (!match) return "";
+  const openIndex = source.indexOf("{", match.index + match[0].length);
+  if (openIndex < 0) return "";
+  return findBalancedLearningFragment(source, openIndex, "{", "}");
+}
+
+function normalizeLearningJsObjectLiteral(value: string) {
+  return learningStripJsComments(value)
+    .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+    .replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (_match, body: string) =>
+      JSON.stringify(body.replace(/\\'/g, "'")),
+    )
+    .replace(/,\s*([}\]])/g, "$1")
+    .trim();
+}
+
+function parseLearningJsObjectLiteral(value: string) {
+  try {
+    return asRecord(JSON.parse(normalizeLearningJsObjectLiteral(value)));
+  } catch {
+    return {};
+  }
+}
+
+function extractLearningChartObject(source: string) {
+  const clean = learningStripJsComments(source).trim();
+  const directObject = findBalancedLearningFragment(clean, clean.indexOf("{"), "{", "}");
+  const parsedDirect = directObject ? parseLearningJsObjectLiteral(directObject) : {};
+  if (Object.keys(asRecord(parsedDirect.data)).length || Array.isArray(asRecord(parsedDirect.data).datasets)) {
+    return parsedDirect;
+  }
+  const dataObject = findLearningJsObjectForKey(clean, "data");
+  const parsedData = dataObject ? parseLearningJsObjectLiteral(dataObject) : {};
+  if (Object.keys(parsedData).length) {
+    return {
+      type: clean.match(/\btype\s*:\s*["']([^"']+)["']/i)?.[1] || "bar",
+      data: parsedData,
+    };
+  }
+  return {};
+}
+
+export function parseLearningChartJsConfig(source: string) {
+  const clean = stripLearningCodeFence(source)
+    .replace(/^const\s+\w+\s*=\s*/i, "")
+    .replace(/^export\s+default\s+/i, "")
+    .replace(/;\s*$/i, "")
+    .trim();
+  try {
+    const parsed = JSON.parse(clean);
+    return asRecord(parsed);
+  } catch {
+    const extracted = extractLearningChartObject(clean);
+    if (Object.keys(extracted).length) return extracted;
+    const type = clean.match(/\btype\s*:\s*["']([^"']+)["']/i)?.[1] || "bar";
+    const labelsRaw = clean.match(/\blabels\s*:\s*\[([\s\S]*?)\]/i)?.[1] || "";
+    const labels = Array.from(labelsRaw.matchAll(/["']([^"']+)["']/g)).map((match) => match[1]);
+    const datasets = Array.from(clean.matchAll(/\{[^{}]*\bdata\s*:\s*\[([\s\S]*?)\][^{}]*\}/gi))
+      .map((match, index) => {
+        const block = match[0] || "";
+        const label = block.match(/\blabel\s*:\s*["']([^"']+)["']/i)?.[1] || `Series ${index + 1}`;
+        const color =
+          block.match(/\bbackgroundColor\s*:\s*["']([^"']+)["']/i)?.[1] ||
+          block.match(/\bborderColor\s*:\s*["']([^"']+)["']/i)?.[1] ||
+          "";
+        const data = (match[1] || "")
+          .split(",")
+          .map((item) => Number(item.trim()))
+          .filter((item) => Number.isFinite(item));
+        return { label, data, backgroundColor: color, borderColor: color };
+      })
+      .filter((dataset) => dataset.data.length);
+    return labels.length && datasets.length ? { type, data: { labels, datasets } } : {};
+  }
+}
+
+function LearningChartJsPreview({ source, description }: { source: string; description: string }) {
+  const chart = useMemo(() => parseLearningChartJsConfig(source), [source]);
+  const data = asRecord(chart.data);
+  const labels = learningStringList(data.labels).slice(0, 10);
+  const datasets = learningRecords(data.datasets).slice(0, 3);
+  const firstValues = learningNumberList(datasets[0]?.data).slice(0, labels.length);
+  if (!labels.length || !firstValues.length) {
+    return <LearningSourcePreview source={source} label="Chart.js source" />;
+  }
+
+  const chartType = textOf(chart.type, "bar").toLowerCase();
+  const width = 820;
+  const height = 360;
+  const margin = { top: 28, right: 28, bottom: 70, left: 64 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const allValues = datasets.flatMap((dataset) => learningNumberList(dataset.data).slice(0, labels.length));
+  const maxValue = Math.max(1, ...allValues);
+  const minValue = Math.min(0, ...allValues);
+  const span = Math.max(1, maxValue - minValue);
+  const colors = ["#c33a24", "#2f7d68", "#7b4fd6"];
+  const xFor = (index: number, offset = 0) =>
+    margin.left + (index + 0.5 + offset) * (plotWidth / Math.max(1, labels.length));
+  const yFor = (value: number) => margin.top + ((maxValue - value) / span) * plotHeight;
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img">
+  <rect width="${width}" height="${height}" rx="14" fill="#fffaf5"/>
+  <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#d8c8b8"/>
+  <line x1="${margin.left}" y1="${margin.top + plotHeight}" x2="${margin.left + plotWidth}" y2="${margin.top + plotHeight}" stroke="#d8c8b8"/>
+  <text x="${margin.left}" y="20" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#2b2118">${escapeLearningSvgText(description || "Generated chart").slice(0, 86)}</text>
+  ${[0, 0.25, 0.5, 0.75, 1]
+    .map((tick) => {
+      const value = maxValue - tick * span;
+      const y = yFor(value);
+      return `<line x1="${margin.left}" y1="${y}" x2="${margin.left + plotWidth}" y2="${y}" stroke="#eadfd4"/><text x="${margin.left - 10}" y="${y + 4}" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="#8a7665">${escapeLearningSvgText(String(Math.round(value * 100) / 100))}</text>`;
+    })
+    .join("")}
+  ${labels
+    .map((label, index) => {
+      const x = xFor(index);
+      return `<text x="${x}" y="${height - 34}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#6f5f52" transform="rotate(-28 ${x} ${height - 34})">${escapeLearningSvgText(label).slice(0, 18)}</text>`;
+    })
+    .join("")}
+  ${datasets
+    .map((dataset, datasetIndex) => {
+      const values = learningNumberList(dataset.data).slice(0, labels.length);
+      const color =
+        safeLearningChartColor(
+          textOf(dataset.backgroundColor) || textOf(dataset.borderColor),
+          colors[datasetIndex % colors.length] || "#c33a24",
+        );
+      if (chartType.includes("line")) {
+        const points = values.map((value, index) => `${xFor(index)} ${yFor(value)}`).join(" ");
+        return `<polyline points="${points}" fill="none" stroke="${escapeLearningSvgText(color)}" stroke-width="3"/>${values
+          .map((value, index) => `<circle cx="${xFor(index)}" cy="${yFor(value)}" r="4" fill="${escapeLearningSvgText(color)}"/>`)
+          .join("")}`;
+      }
+      const groupWidth = plotWidth / Math.max(1, labels.length);
+      const barWidth = Math.max(10, (groupWidth * 0.66) / Math.max(1, datasets.length));
+      return values
+        .map((value, index) => {
+          const x = xFor(index) - (barWidth * datasets.length) / 2 + datasetIndex * barWidth;
+          const y = yFor(Math.max(value, 0));
+          const baseY = yFor(0);
+          return `<rect x="${x}" y="${y}" width="${barWidth - 3}" height="${Math.max(2, baseY - y)}" rx="4" fill="${escapeLearningSvgText(color)}" opacity="0.86"/>`;
+        })
+        .join("");
+    })
+    .join("")}
+  ${datasets
+    .map((dataset, index) => `<circle cx="${margin.left + index * 180}" cy="${height - 14}" r="5" fill="${escapeLearningSvgText(colors[index % colors.length] || "#c33a24")}"/><text x="${margin.left + 10 + index * 180}" y="${height - 10}" font-family="system-ui, sans-serif" font-size="11" fill="#6f5f52">${escapeLearningSvgText(textOf(dataset.label, `Series ${index + 1}`)).slice(0, 24)}</text>`)
+    .join("")}
+</svg>`;
+
+  return (
+    <figure className="rounded-zaki-md border border-zaki-border bg-zaki-base p-3">
+      <img
+        src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+        alt={description || "Generated chart"}
+        className="h-auto w-full rounded-zaki-md"
+      />
+      {description ? <figcaption className="mt-2 text-xs text-zaki-muted">{description}</figcaption> : null}
+      <details className="mt-2 text-xs text-zaki-muted">
+        <summary className="cursor-pointer">Source</summary>
+        <pre className="mt-2 max-h-40 overflow-auto rounded-zaki-md bg-zaki-raised p-3">
+          <code>{stripLearningCodeFence(source)}</code>
+        </pre>
+      </details>
+    </figure>
+  );
+}
+
+function LearningVisualizationPreview({
+  renderType,
+  language,
+  content,
+  description,
+}: {
+  renderType: string;
+  language: string;
+  content: string;
+  description: string;
+}) {
+  const kind = (renderType || language || "").toLowerCase();
+  if (kind === "svg" || language === "svg" || content.trim().startsWith("<svg")) {
+    return <LearningSvgPreview source={content} description={description} />;
+  }
+  if (kind === "mermaid" || language === "mermaid") {
+    return <LearningMermaidPreview source={content} description={description} />;
+  }
+  if (kind === "chartjs" || kind === "chart.js" || language === "javascript" || language === "js") {
+    return <LearningChartJsPreview source={content} description={description} />;
+  }
+  return <LearningSourcePreview source={content} label={kind === "chartjs" ? "Chart.js source" : "Artifact source"} />;
+}
+
 function LearningSourceList({ metadata }: { metadata: Item }) {
   const sources = learningSourceRecords(metadata).slice(0, 6);
   if (!sources.length) return null;
@@ -2088,9 +2485,12 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
   if (message.capability === "visualize") {
     const renderType = textOf(metadata.render_type, "visualization");
     const code = asRecord(metadata.code);
+    const language = textOf(code.language).toLowerCase();
     const content = textOf(code.content);
     const analysis = asRecord(metadata.analysis);
     if (!content && !textOf(metadata.response)) return null;
+    const description = textOf(analysis.description) || textOf(metadata.response);
+    const responseText = removeLearningFencedCode(textOf(metadata.response));
     return (
       <section className="mt-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised p-3">
         <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zaki-text">
@@ -2100,16 +2500,19 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
             {renderType}
           </span>
         </div>
-        {textOf(metadata.response) ? (
-          <p className="mb-2 text-xs leading-5 text-zaki-muted">{textOf(metadata.response)}</p>
+        {responseText ? (
+          <p className="mb-2 text-xs leading-5 text-zaki-muted">{responseText}</p>
         ) : null}
         {textOf(analysis.description) ? (
           <p className="mb-2 text-xs leading-5 text-zaki-muted">{textOf(analysis.description)}</p>
         ) : null}
         {content ? (
-          <pre className="max-h-[360px] overflow-auto rounded-zaki-md bg-zaki-base p-3 text-xs leading-5 text-zaki-text">
-            <code>{content}</code>
-          </pre>
+          <LearningVisualizationPreview
+            renderType={renderType}
+            language={language}
+            content={content}
+            description={description}
+          />
         ) : null}
       </section>
     );
@@ -2315,6 +2718,14 @@ function learningAdvancedResultMarkdown(message: TutorChatMessage) {
   }
 
   return "";
+}
+
+function primaryLearningMessageContent(message: TutorChatMessage) {
+  const content = message.content.trim();
+  if (message.capability === "visualize" && Object.keys(learningResultMetadata(message)).length) {
+    return removeLearningFencedCode(content);
+  }
+  return message.content;
 }
 
 function LearningAttachmentChip({
@@ -2730,6 +3141,20 @@ function LearningChatPanel({
     ...researchConfig,
     sources: Array.from(selectedResearchSources),
   });
+
+  useEffect(() => {
+    if (!isResearchMode) return;
+    setResearchConfig((current) => ({
+      ...current,
+      mode: current.mode || defaultResearchConfig.mode,
+      depth: current.depth || defaultResearchConfig.depth,
+      sources: current.sources.length ? current.sources : defaultResearchConfig.sources,
+    }));
+    setSelectedResearchSources((current) =>
+      current.size ? current : new Set(defaultResearchConfig.sources),
+    );
+  }, [isResearchMode]);
+
   const canSend =
     connected &&
     !streaming &&
@@ -3675,14 +4100,16 @@ function LearningChatPanel({
                       ))}
                     </div>
                   ) : null}
-                  <div
-                    className={cn(
-                      "prose prose-sm max-w-none whitespace-pre-wrap text-[14px] leading-relaxed text-[var(--foreground)]",
-                      message.role === "system" && "text-amber-700",
-                    )}
-                  >
-                    {message.content}
-                  </div>
+                  {primaryLearningMessageContent(message) ? (
+                    <div
+                      className={cn(
+                        "prose prose-sm max-w-none whitespace-pre-wrap text-[14px] leading-relaxed text-[var(--foreground)]",
+                        message.role === "system" && "text-amber-700",
+                      )}
+                    >
+                      {primaryLearningMessageContent(message)}
+                    </div>
+                  ) : null}
                   <LearningAdvancedResultBlock message={message} />
                   {message.role === "assistant" ? (
                     <>

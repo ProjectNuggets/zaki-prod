@@ -52,9 +52,6 @@ import {
 } from "./learningBookProgress";
 import {
   changeLearningBookBlockType,
-  compileLearningBookPage,
-  confirmLearningBookProposal,
-  confirmLearningBookSpine,
   createLearningBookDeepDive,
   deleteLearningBook,
   deleteLearningBookBlock,
@@ -347,6 +344,16 @@ function getAcceptedBookId(payload: unknown) {
   return textOf(poll.resource_id) || textOf(root.book_id) || textOf(root.bookId);
 }
 
+function learningBookBackgroundPayload(bookId: string, reason: string) {
+  return {
+    status: "accepted",
+    code: "learning_action_still_running",
+    book_id: bookId,
+    message: reason,
+    poll: { resource_type: "book", resource_id: bookId },
+  };
+}
+
 function bookDetailHasRunningWork(detail: LearningBookDetail | null) {
   if (!detail) return false;
   if (["draft", "spine_ready", "compiling"].includes(detail.book.status)) return true;
@@ -422,6 +429,13 @@ function parseBookProgressEvent(data: unknown): LearningBookProgressEvent | null
   } catch {
     return null;
   }
+}
+
+function bookResultBookId(payload: unknown) {
+  const root = asRecord(payload);
+  const book = asRecord(root.book);
+  const page = asRecord(root.page);
+  return textOf(book.id) || textOf(page.book_id) || getLearningBookProgressEventBookId(root);
 }
 
 function sourceLabel(item: Item, fallback: string) {
@@ -544,14 +558,12 @@ export function LearningBookWorkspace({
   const [spineDraft, setSpineDraft] = useState("");
   const [bookView, setBookView] = useState<"library" | "creator">("library");
   const [bookProgress, setBookProgress] = useState(() => emptyLearningBookProgress());
-  const [progressSocketAuthReady, setProgressSocketAuthReady] = useState(false);
   const [bookLanguage, setBookLanguage] = useState("en");
   const [pendingDeepDiveTopic, setPendingDeepDiveTopic] = useState<string | null>(null);
   const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([]);
   const [selectedSessions, setSelectedSessions] = useState<BookSourceSelection<number>>(() => new Map());
   const [selectedNotebooks, setSelectedNotebooks] = useState<BookSourceSelection<string>>(() => new Map());
   const [selectedQuestions, setSelectedQuestions] = useState<Array<string | number>>([]);
-  const progressRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailPollBookIdRef = useRef<string | null>(null);
 
@@ -653,75 +665,113 @@ export function LearningBookWorkspace({
     detailPollTimerRef.current = setTimeout(tick, 1000);
   };
 
+  const executeBookWsCommand = (
+    command: Item,
+    resultTypes: string[],
+    bookId: string,
+    timeoutMs = 180_000,
+  ) =>
+    new Promise<unknown>((resolve, reject) => {
+      const socket = openLearningSocket("/api/learning/book/ws");
+      if (!socket) {
+        reject(new Error("Book progress connection unavailable."));
+        return;
+      }
+
+      let settled = false;
+      let commandSent = false;
+      const timeout = window.setTimeout(() => {
+        if (settled) return;
+        setBookProgress((current) =>
+          reduceLearningBookProgressEvent(current, {
+            type: "progress",
+            stage: "compilation",
+            content: "Book task is still running in the background.",
+            metadata: { book_id: bookId },
+          }),
+        );
+        finish(() =>
+          resolve(
+            learningBookBackgroundPayload(
+              bookId,
+              "Book task is still running in the background. Progress will keep refreshing.",
+            ),
+          ),
+        );
+      }, timeoutMs);
+
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        callback();
+        socket.close();
+      };
+
+      socket.onopen = () => {
+        setBookProgress((current) =>
+          reduceLearningBookProgressEvent(current, {
+            type: "stage_begin",
+            stage: "compilation",
+            content: "Book task started",
+            metadata: { book_id: bookId },
+          }),
+        );
+        socket.send(JSON.stringify(command));
+        commandSent = true;
+      };
+
+      socket.onmessage = (event) => {
+        const payload = parseBookProgressEvent(event.data);
+        if (!payload) return;
+        const payloadType = textOf(payload.type);
+        const payloadBookId = bookResultBookId(payload);
+        if (payloadBookId && payloadBookId !== bookId) return;
+
+        setBookProgress((current) => reduceLearningBookProgressEvent(current, payload));
+        if (learningBookProgressEventShouldRefresh(payload)) {
+          void queryClient.invalidateQueries({ queryKey: learningKeys.books });
+          void queryClient.invalidateQueries({ queryKey: [...learningKeys.books, "detail", bookId] });
+          void queryClient.invalidateQueries({ queryKey: [...learningKeys.books, "health", bookId] });
+        }
+
+        if (payloadType === "error") {
+          finish(() => reject(new Error(textOf(payload.content, "Book task failed."))));
+          return;
+        }
+        if (resultTypes.includes(payloadType)) {
+          finish(() => resolve(payload));
+        }
+      };
+
+      socket.onerror = () => {
+        finish(() => reject(new Error("Book progress connection failed.")));
+      };
+
+      socket.onclose = () => {
+        if (!settled) {
+          if (commandSent) {
+            finish(() =>
+              resolve(
+                learningBookBackgroundPayload(
+                  bookId,
+                  "Book progress connection closed while the task may still be running.",
+                ),
+              ),
+            );
+          } else {
+            finish(() => reject(new Error("Book progress connection closed before the task started.")));
+          }
+        }
+      };
+    });
+
   useEffect(() => {
     setBookProgress(emptyLearningBookProgress());
     stopDetailPolling();
   }, [selectedBookId]);
 
   useEffect(() => stopDetailPolling, []);
-
-  useEffect(() => {
-    if (!selectedBookId) {
-      setProgressSocketAuthReady(false);
-      return undefined;
-    }
-    let cancelled = false;
-    setProgressSocketAuthReady(false);
-    void prepareLearningSocketAuth().finally(() => {
-      if (!cancelled) setProgressSocketAuthReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBookId]);
-
-  useEffect(() => {
-    if (!selectedBookId || !progressSocketAuthReady) return undefined;
-    const socket = openLearningSocket("/api/learning/book/ws");
-    if (!socket) return undefined;
-
-    const scheduleRefresh = () => {
-      if (progressRefreshTimerRef.current) return;
-      progressRefreshTimerRef.current = setTimeout(() => {
-        progressRefreshTimerRef.current = null;
-        void queryClient.invalidateQueries({ queryKey: learningKeys.books });
-        void queryClient.invalidateQueries({
-          queryKey: [...learningKeys.books, "detail", selectedBookId],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: [...learningKeys.books, "health", selectedBookId],
-        });
-      }, 500);
-    };
-
-    socket.onmessage = (event) => {
-      const payload = parseBookProgressEvent(event.data);
-      if (!payload) return;
-      const eventBookId = getLearningBookProgressEventBookId(payload);
-      if (eventBookId && eventBookId !== selectedBookId) return;
-      setBookProgress((current) => reduceLearningBookProgressEvent(current, payload));
-      if (learningBookProgressEventShouldRefresh(payload)) {
-        scheduleRefresh();
-      }
-    };
-    socket.onerror = () => {
-      setBookProgress((current) =>
-        reduceLearningBookProgressEvent(current, {
-          type: "error",
-          content: "Book progress connection failed.",
-          metadata: { book_id: selectedBookId },
-        }),
-      );
-    };
-
-    return () => {
-      socket.close();
-      if (progressRefreshTimerRef.current) {
-        clearTimeout(progressRefreshTimerRef.current);
-        progressRefreshTimerRef.current = null;
-      }
-    };
-  }, [progressSocketAuthReady, queryClient, selectedBookId]);
 
   const runBookAction = useMutation({
     mutationFn: async ({
@@ -800,10 +850,19 @@ export function LearningBookWorkspace({
     runBookAction.mutate({
       label: "Book outline requested",
       action: () =>
-        confirmLearningBookProposal({
-          book_id: activeBook.id,
-          proposal: parseJsonText(proposalDraft || jsonText(activeBook.proposal || {})),
-        }),
+        executeBookWsCommand(
+          {
+            type: "confirm_proposal",
+            book_id: activeBook.id,
+            proposal: parseJsonText(proposalDraft || jsonText(activeBook.proposal || {})),
+          },
+          ["confirm_proposal_result"],
+          activeBook.id,
+        ),
+      afterSuccess: (payload) => {
+        const spine = asRecord(asRecord(payload).spine);
+        if (Object.keys(spine).length) setSpineDraft(jsonText(spine));
+      },
     });
   };
 
@@ -812,11 +871,20 @@ export function LearningBookWorkspace({
     runBookAction.mutate({
       label: "Book compilation started",
       action: () =>
-        confirmLearningBookSpine({
-          book_id: activeBook.id,
-          spine: parseJsonText(spineDraft || jsonText(detail.spine)),
-          auto_compile: true,
-        }),
+        executeBookWsCommand(
+          {
+            type: "confirm_spine",
+            book_id: activeBook.id,
+            spine: parseJsonText(spineDraft || jsonText(detail.spine)),
+            auto_compile: true,
+          },
+          ["confirm_spine_result"],
+          activeBook.id,
+          300_000,
+        ),
+      afterSuccess: () => {
+        pollBookDetailUntilSettled(activeBook.id);
+      },
     });
   };
 
@@ -825,11 +893,17 @@ export function LearningBookWorkspace({
     runBookAction.mutate({
       label: force ? "Page regeneration started" : "Page compilation started",
       action: () =>
-        compileLearningBookPage({
-          book_id: activeBook.id,
-          page_id: page.id,
-          force,
-        }),
+        executeBookWsCommand(
+          {
+            type: "compile_page",
+            book_id: activeBook.id,
+            page_id: page.id,
+            force,
+          },
+          ["compile_page_result"],
+          activeBook.id,
+          240_000,
+        ),
     });
   };
 
