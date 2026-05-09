@@ -31,8 +31,8 @@ Related source-of-truth documents:
 | 5 | Governance | Verify data export, account deletion, retention cleanup, and backup/restore. | Export/delete/retention/restore evidence is green. | PASS-BETA |
 | 6 | Observability And Failure UX | Ensure operators and users see failures clearly. | Health checks, alerts, task states, retries, and long-running progress all work. | PASS-BETA |
 | 7 | Production Deployment Readiness | Validate central auth, internal tokens, image/source pins, secrets, CORS/CSP, and staging/production config. | `/api/internal/learning/deployment-readiness` is ready in the target environment and staging smoke passes. | PASS-BETA |
-| 8 | Final Code And Security Review | Review all Learn changes after gates are green. | No open P0/P1; P2 items either fixed or explicitly accepted with rationale. | PENDING |
-| 9 | Beta/GA Declaration | Declare the highest truthful readiness level based on evidence. | Beta or GA verdict written with exact remaining blockers, if any. | PENDING |
+| 8 | Final Code And Security Review | Review all Learn changes after gates are green. | No open P0/P1; P2 items either fixed or explicitly accepted with rationale. | PASS |
+| 9 | Beta/GA Declaration | Declare the highest truthful readiness level based on evidence. | Beta or GA verdict written with exact remaining blockers, if any. | PASS-BETA |
 
 ## Phase 1 Checklist
 
@@ -203,3 +203,54 @@ Remaining GA expansion:
 ## Change Control
 
 Any change to phase scope must be added here as a dated note. Execution fixes are allowed inside the active phase, but the exit gate cannot be weakened without explicit user approval.
+
+## Phase 8 Final Review
+
+Scope reviewed:
+
+- ZAKI BFF learning quota, governance, observability, account usage, WebSocket, and deployment-readiness changes.
+- Learning-engine tenant account usage endpoint.
+- Multi-user isolation smoke script and protected-artifact E2E updates.
+- Frozen readiness/UAT docs and infra deployment validation evidence.
+
+Review result:
+
+- PASS: no open P0/P1 findings found in the reviewed readiness changes.
+- PASS: new internal observability route is super-admin gated.
+- PASS: observability events strip query strings before storing routes, so tokens/search terms are not retained.
+- PASS: active Learn WebSocket status exposes aggregate counts only, not user ids.
+- PASS: learning-engine account usage endpoint returns counts only, not tenant filesystem paths.
+- PASS: quota enforcement remains BFF/operator-managed; user payload provider/model fields remain stripped by contract tests.
+- PASS: production deployment-readiness remains fail-closed when image/source/DR gates are missing.
+
+Fresh verification:
+
+- PASS: `npm --prefix backend test -- src/learning-bff-contract.test.js src/learning-quota.test.js src/learning-observability.test.js src/learning-retention.test.js src/learning-disaster-recovery.test.js src/learning-deployment-readiness.test.js src/learning-governance-audit.test.js --runInBand` passed 55/55.
+- PASS: `npm --prefix backend run lint`.
+- PASS: `npm run typecheck`.
+- PASS: `.venv/bin/python -m pytest -q tests/api/test_account_usage.py tests/services/test_zaki_runtime.py` passed 19/19.
+- PASS: `npm run test:e2e -- --project=chromium-desktop e2e/learning-parity.spec.ts` passed 14/14.
+- PASS: `npm run smoke:learning-isolation` run `learniso-moypsuko` passed with two paid local users (`83`/`84`) and zero cross-user marker leakage.
+
+## Phase 9 Readiness Declaration
+
+Verdict: local beta-ready for human daily users; not GA-ready until target-environment gates are green.
+
+What can be offered now in beta/staging:
+
+- ZAKI Learn chat, solve, research, quiz, visualize, math image/video artifacts, books, sources/uploads, notebooks, writer, TutorBot/agents, space, review, and workspaces.
+- Student study loop and course/exam setup.
+- Notebook-centered save/export flows.
+- Hosted multi-user isolation with central ZAKI auth.
+- Operator-managed Together/Kimi LLM route, Together embeddings, and Brave search.
+- Quota controls for prompts, request bytes, tenant storage, book generation, external search, and concurrent Learn WebSockets.
+- Governance beta gates for export/delete, retention policy, audit events, local DB/public-schema restore, and tenant-root snapshot restore.
+- Internal observability for Learn health, quota, deployment gates, recent failures, and WebSocket aggregates.
+
+Remaining GA blockers:
+
+- Run `/api/internal/learning/deployment-readiness` in the target staging/production environment and verify `deploymentReadiness.ready:true`.
+- Complete a staging restore drill from the real off-host backup target and set `ZAKI_LEARNING_LAST_RESTORE_DRILL_AT`.
+- Wire production alerting/dashboard ownership to learning engine health, LLM/search failures, quota spikes, and background task failure rates.
+- Run real-login staging route smoke after image promotion.
+- Push local commits to remote only after the deployment target and release branch are approved.
