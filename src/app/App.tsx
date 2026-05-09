@@ -10,8 +10,6 @@ import { LoginScreen } from "./components/LoginScreen";
 import { LegalPage } from "./components/LegalPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
-import { OnboardingModal } from "./components/onboarding/OnboardingModal";
-import { SimpleOnboardingModal } from "./components/onboarding/SimpleOnboardingModal";
 import {
   buildApiUrl,
   fetchCurrentUser,
@@ -19,9 +17,7 @@ import {
   fetchLegalConsentStatus,
   submitLegalReconsent,
 } from "@/lib/api";
-import { openSpacesMemoryViewer } from "@/lib/spacesMemory";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
-import { isZakiBotSpaceId } from "@/lib/zakiBot";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
 
@@ -42,13 +38,10 @@ export default function App() {
   const scrollTimerRef = useRef<number | null>(null);
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
-  const isZakiBotRoute = isZakiBotSpaceId(params.spaceId);
   const isLearningRoute = location.pathname === "/learn";
   
   // Auth state from Zustand
   const { token, user, isHydrating, setToken, setUser, setHydrating, logout } = useAuthStore();
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [guidedOnboardingOpen, setGuidedOnboardingOpen] = useState(false);
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
     getInitialLegalPolicyVersion
   );
@@ -63,7 +56,6 @@ export default function App() {
     systemTheme,
     setSystemTheme,
     resolvedTheme,
-    setMobileSidebarOpen,
   } = useUIStore();
 
   // Sync navigation store with React Router location (without triggering re-renders)
@@ -186,36 +178,6 @@ export default function App() {
   }, []); // Run once on mount — empty deps (FE-02)
 
   useEffect(() => {
-    if (isZakiBotRoute) {
-      setOnboardingOpen(false);
-      setGuidedOnboardingOpen(false);
-    }
-  }, [isZakiBotRoute]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!user?.username || isHydrating) return;
-    if (isZakiBotRoute) {
-      setOnboardingOpen(false);
-      return;
-    }
-    if (guidedOnboardingOpen) {
-      setOnboardingOpen(false);
-      return;
-    }
-    const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
-    const completed = window.localStorage.getItem(key) === "done";
-    if (completed) {
-      setOnboardingOpen(false);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setOnboardingOpen(true);
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [user?.username, isHydrating, isZakiBotRoute, guidedOnboardingOpen]);
-
-  useEffect(() => {
     if (!token || !user?.username || isHydrating) {
       setLegalReconsentRequired(false);
       setLegalReconsentChecked(false);
@@ -246,67 +208,6 @@ export default function App() {
       isMounted = false;
     };
   }, [token, user?.username, isHydrating]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleOpenOnboarding = () => {
-      if (isZakiBotRoute) return;
-      setOnboardingOpen(false);
-      setGuidedOnboardingOpen(true);
-    };
-    window.addEventListener("zaki:open-onboarding", handleOpenOnboarding);
-    return () => {
-      window.removeEventListener("zaki:open-onboarding", handleOpenOnboarding);
-    };
-  }, [isZakiBotRoute]);
-
-  const dismissOnboarding = () => {
-    if (typeof window !== "undefined" && user?.username) {
-      const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
-      window.localStorage.setItem(key, "done");
-    }
-    setOnboardingOpen(false);
-  };
-
-  const dismissGuidedOnboarding = () => {
-    setGuidedOnboardingOpen(false);
-  };
-
-  const completeOnboarding = () => {
-    if (typeof window !== "undefined" && user?.username) {
-      const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
-      window.localStorage.setItem(key, "done");
-    }
-    setOnboardingOpen(false);
-  };
-
-  const completeGuidedOnboarding = () => {
-    if (typeof window !== "undefined" && user?.username) {
-      const key = `zaki:onboarding:v1:${String(user.username).toLowerCase()}`;
-      window.localStorage.setItem(key, "done");
-    }
-    setGuidedOnboardingOpen(false);
-  };
-
-  const openCreateSpace = () => {
-    window.dispatchEvent(new Event("zaki:view-spaces"));
-    window.dispatchEvent(new Event("zaki:open-create-space"));
-  };
-
-  const openMemory = () => {
-    openSpacesMemoryViewer({ enabled: !isZakiBotRoute });
-  };
-
-  const openSettings = () => {
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
-      setMobileSidebarOpen(true);
-      window.setTimeout(() => {
-        window.dispatchEvent(new Event("zaki:open-settings"));
-      }, 0);
-      return;
-    }
-    window.dispatchEvent(new Event("zaki:open-settings"));
-  };
 
   const handleLegalReconsent = async () => {
     if (!legalReconsentChecked) {
@@ -443,22 +344,6 @@ export default function App() {
           </div>
         </div>
       )}
-      <SimpleOnboardingModal
-        isOpen={onboardingOpen}
-        userName={user?.fullName || user?.username || t("home.guestName")}
-        onDismiss={dismissOnboarding}
-        onComplete={completeOnboarding}
-        onCreateSpace={openCreateSpace}
-      />
-      <OnboardingModal
-        isOpen={guidedOnboardingOpen}
-        userName={user?.fullName || user?.username || t("home.guestName")}
-        onDismiss={dismissGuidedOnboarding}
-        onComplete={completeGuidedOnboarding}
-        onCreateSpace={openCreateSpace}
-        onOpenMemory={openMemory}
-        onOpenSettings={openSettings}
-      />
     </>
   );
 }
