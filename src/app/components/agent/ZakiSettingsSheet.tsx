@@ -8,12 +8,13 @@ import {
   Gauge,
   Hash,
   Link2,
-  MessageCircle,
+  Mail,
   Rocket,
   Send,
   Settings,
   Shield,
   Telescope,
+  Users,
   Volume2,
   Zap,
 } from "lucide-react";
@@ -98,7 +99,18 @@ const DEFAULT_SETTINGS: SettingsDraft = {
   proactive_updates: true,
   voice_replies: false,
   session_timeout_minutes: "30",
-  autonomy: "supervised",
+  // V1.14.4 review MD-03 — align FE default with backend default.
+  // Backend `cfg.autonomy.level` defaults to `.full` per
+  // config_types.zig:67 (rationale at lines 60-66: "nullalis v1 is a
+  // single-user pod, the pod owner IS the user, and the SecurityPolicy
+  // still blocks high-risk shell commands"). FE previously defaulted
+  // to "supervised" which mismatched the backend, causing fresh-install
+  // tenants to silently demote autonomy on first save (the FE saw the
+  // backend echo "full", but its DEFAULT_SETTINGS comparison logic at
+  // the patch boundary fired the inequality and sent "supervised"
+  // back). The "(recommended)" label in the radio reflects the SAFETY
+  // recommendation for shared-pod scenarios; v1 single-pod ships .full.
+  autonomy: "full",
 };
 
 const TELEGRAM_CONFIRMATION_DELAYS_MS = [0, 300, 1000, 2000];
@@ -424,10 +436,13 @@ function InlineFieldError({ text }: { text?: string }) {
 }
 
 // Phase 4-B (2026-05-08) — Channel cards. The Channels section surfaces all
-// integrations (Telegram, Slack, Discord, WhatsApp) as stacked cards.
-// Telegram is fully wired and renders its setup flow inline; the other
-// three are honest "coming soon" cards so the surface is ready for the
-// backend handoff Nova is coordinating. Each card uses the platform's
+// integrations (Telegram, Slack, Discord, Microsoft Teams, Email) as stacked
+// cards. V1.14.4 booth-readiness (2026-05-09): WhatsApp removed (Meta Business
+// API auth dance is out of scope for booth-week); Teams + Email added as
+// placeholders since their backend modules already exist
+// (src/channels/{teams,email}.zig). Telegram is fully wired and renders its
+// setup flow inline; the others are honest "coming soon" cards so the surface
+// is ready for the backend handoff Nova is coordinating. Each card uses the platform's
 // brand color for its icon tile so users recognize the channel without
 // reading.
 type ChannelStatus =
@@ -1654,11 +1669,38 @@ export function ZakiSettingsSheet({ isOpen, onClose }: Props) {
                       t={t}
                     />
 
+                    {/*
+                      V1.14.4 booth-readiness — Teams + Email replace
+                      WhatsApp in the placeholder strip. Backend modules
+                      exist for both (src/channels/teams.zig + email.zig)
+                      but FE wire-up is the next sprint after booth.
+                      WhatsApp dropped: Meta Business API auth dance is
+                      multi-day work and not booth-week scope. Telegram
+                      remains the only fully-wired channel today.
+                    */}
                     <ChannelCard
-                      icon={<MessageCircle className="size-4" />}
-                      iconBg="#25D366"
-                      name={t("zakiSettingsSheet.channelsList.whatsapp.name")}
-                      tagline={t("zakiSettingsSheet.channelsList.whatsapp.tagline")}
+                      icon={<Users className="size-4" />}
+                      iconBg="#5059C9"
+                      name={t("zakiSettingsSheet.channelsList.teams.name", {
+                        defaultValue: "Microsoft Teams",
+                      })}
+                      tagline={t("zakiSettingsSheet.channelsList.teams.tagline", {
+                        defaultValue: "Reach ZAKI in your Teams workspace.",
+                      })}
+                      status="coming_soon"
+                      isRtl={isRtl}
+                      t={t}
+                    />
+
+                    <ChannelCard
+                      icon={<Mail className="size-4" />}
+                      iconBg="#0F766E"
+                      name={t("zakiSettingsSheet.channelsList.email.name", {
+                        defaultValue: "Email",
+                      })}
+                      tagline={t("zakiSettingsSheet.channelsList.email.tagline", {
+                        defaultValue: "Forward an inbox; ZAKI replies as you.",
+                      })}
                       status="coming_soon"
                       isRtl={isRtl}
                       t={t}
