@@ -90,4 +90,49 @@ describe("zaki session helpers", () => {
       }),
     ).toBe("Task 77");
   });
+
+  it("falls back to a date stamp when the threadId looks opaque and createdAt is provided", () => {
+    const opaque = "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV";
+    // 2026-05-08 in any locale will at least include "May" or the
+    // localized month name. We just assert "Session ·" prefix to keep
+    // the test locale-resilient.
+    const out = formatZakiSessionFallbackLabel(opaque, {
+      createdAt: "2026-05-08T00:00:00Z",
+    });
+    expect(out.startsWith("Session ·")).toBe(true);
+  });
+
+  it("returns the readable threadId when it isn't an opaque id", () => {
+    expect(
+      formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:thread:trip-planning", {
+        createdAt: "2026-05-08T00:00:00Z",
+      }),
+    ).toBe("trip-planning");
+  });
+
+  it("uses createdAt date for unknown-lane keys when no readable tail is available", () => {
+    const out = formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:abcdef0123456789", {
+      createdAt: "2026-05-08T00:00:00Z",
+    });
+    expect(out.startsWith("Session ·")).toBe(true);
+  });
+
+  it("uses readable tail when key tail is short and human-meaningful", () => {
+    expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:demo")).toBe("demo");
+  });
+
+  it("returns plain Session when nothing better is available", () => {
+    expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:abcdef0123456789")).toBe(
+      "Session",
+    );
+  });
+
+  it("threads createdAt through formatZakiSessionLabel", () => {
+    const out = formatZakiSessionLabel({
+      sessionKey: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+      title: null,
+      createdAt: "2026-05-08T00:00:00Z",
+    });
+    expect(out.startsWith("Session ·")).toBe(true);
+  });
 });

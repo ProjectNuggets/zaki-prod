@@ -112,6 +112,7 @@ export function ZakiSessionList({
         const baseLabel = formatZakiSessionLabel({
           sessionKey: normalizedSessionKey,
           title: session.title,
+          createdAt: session.created_at ?? session.last_active ?? null,
         });
         const overlayLabel = getOverlayLabel(normalizedSessionKey);
         const label = overlayLabel || baseLabel;

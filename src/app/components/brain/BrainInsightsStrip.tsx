@@ -7,6 +7,20 @@ interface Props {
   userId: string;
 }
 
+/**
+ * Internal codenames that may surface as community names in the brain
+ * data (the runtime had memories tagged with "nullALIS", "panther",
+ * etc. during pre-launch development). When the brain's top community
+ * matches one of these, fall back to a generic copy so the user never
+ * sees a developer-facing label on their dashboard.
+ */
+const INTERNAL_CODENAME_PATTERN = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
+
+function isInternalCodename(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return INTERNAL_CODENAME_PATTERN.test(name);
+}
+
 // Audit (2026-05-08) — Insights strip. Pillar-1 visible-memory beat:
 // users SEE the brain accruing. Three cards above the tabs answer
 // "what does ZAKI know about me?" at a glance.
@@ -37,10 +51,13 @@ export function BrainInsightsStrip({ userId }: Props) {
     const sevenDaysAgo = nowSeconds - 7 * 24 * 60 * 60;
     const firstPage = timelineQuery.data?.pages?.[0]?.entries ?? [];
     const newThisWeek = firstPage.filter((e) => (e.created_at ?? 0) >= sevenDaysAgo).length;
-    // Top community by member_count.
+    // Top community by member_count. Skip any whose name matches an
+    // internal-only codename so a developer artifact never leaks onto
+    // the user's dashboard.
     const communities = communitiesQuery.data?.communities ?? [];
     const topCommunity = communities
       .slice()
+      .filter((c) => !isInternalCodename(c.name))
       .sort((a, b) => (b.member_count ?? 0) - (a.member_count ?? 0))[0];
     return {
       total,
