@@ -243,6 +243,22 @@ export function buildLearningConfigErrorPayload(message, requestId) {
   };
 }
 
+export function buildLearningAcceptedPayload({
+  requestId,
+  action = "learning_task",
+  message = "Learning task is still running. Progress will update automatically.",
+} = {}) {
+  return {
+    code: "learning_action_still_running",
+    status: "accepted",
+    action,
+    error: "Learning task is still running.",
+    message,
+    retryable: false,
+    requestId,
+  };
+}
+
 export function mapLearningUpstreamFailure(statusCode, requestId) {
   if (statusCode === 401 || statusCode === 403) {
     return {

@@ -71,6 +71,7 @@ import {
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
+  buildLearningAcceptedPayload,
   buildLearningForwardHeaders,
   buildLearningConfigErrorPayload,
   buildLearningDisabledPayload,
@@ -561,6 +562,11 @@ async function fetchWithTimeout(url, options = {}, timeoutMs, label = "Request")
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isLearningTimeoutError(error) {
+  const message = String(error?.message || "");
+  return /\btimed out after \d+ms$/.test(message);
 }
 
 async function withTimeout(promise, timeoutMs, label = "Operation") {
@@ -9418,16 +9424,63 @@ async function proxyLearningRequest(req, res, targetPath, {
   body = undefined,
   label = "Learning upstream request",
   timeoutMs = LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
+  timeoutAcceptedAction = null,
+  acceptedAfterMs = null,
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
   try {
-    const upstream = await fetchLearningPath({
+    const upstreamPromise = fetchLearningPath({
       ...learningClientOptions(req, label),
       path: targetPath,
       method,
       body,
       timeoutMs,
     });
+    if (timeoutAcceptedAction && Number.isFinite(acceptedAfterMs) && acceptedAfterMs > 0) {
+      const acceptedMarker = Symbol("learning_accepted");
+      let acceptedTimer = null;
+      const acceptedDelay = new Promise((resolve) => {
+        acceptedTimer = setTimeout(() => resolve(acceptedMarker), acceptedAfterMs);
+        if (typeof acceptedTimer.unref === "function") {
+          acceptedTimer.unref();
+        }
+      });
+      const upstream = await Promise.race([
+        upstreamPromise,
+        acceptedDelay,
+      ]);
+      if (acceptedTimer) clearTimeout(acceptedTimer);
+      if (upstream === acceptedMarker) {
+        upstreamPromise
+          .then(async (backgroundUpstream) => {
+            if (backgroundUpstream?.body) {
+              await backgroundUpstream.arrayBuffer().catch(() => null);
+            }
+            console.info("[Learning] Background book action completed:", {
+              requestId: getOrCreateRequestId(req),
+              action: timeoutAcceptedAction,
+              status: backgroundUpstream?.status,
+            });
+          })
+          .catch((backgroundError) => {
+            console.warn("[Learning] Background book action failed:", {
+              requestId: getOrCreateRequestId(req),
+              action: timeoutAcceptedAction,
+              error: backgroundError?.message || "Learning background action failed.",
+            });
+          });
+        res.status(202).json(
+          buildLearningAcceptedPayload({
+            requestId: getOrCreateRequestId(req),
+            action: timeoutAcceptedAction,
+          })
+        );
+        return;
+      }
+      await pipeLearningResponse(req, res, upstream);
+      return;
+    }
+    const upstream = await upstreamPromise;
     await pipeLearningResponse(req, res, upstream);
   } catch (error) {
     const requestId = getOrCreateRequestId(req);
@@ -9436,6 +9489,20 @@ async function proxyLearningRequest(req, res, targetPath, {
       error?.message === "LEARNING_ENGINE_INTERNAL_TOKEN is not configured."
     ) {
       res.status(500).json(buildLearningConfigErrorPayload(error.message, requestId));
+      return;
+    }
+    if (timeoutAcceptedAction && isLearningTimeoutError(error)) {
+      console.warn("[Learning] Long-running upstream task still active after BFF timeout:", {
+        requestId,
+        action: timeoutAcceptedAction,
+        error: error?.message || "Learning request timed out.",
+      });
+      res.status(202).json(
+        buildLearningAcceptedPayload({
+          requestId,
+          action: timeoutAcceptedAction,
+        })
+      );
       return;
     }
     console.error("[Learning] Upstream proxy error:", {
@@ -11011,6 +11078,14 @@ app.post(
   }
 );
 
+const longRunningBookActions = new Set([
+  "compile-page",
+  "regenerate-block",
+  "deep-dive",
+  "supplement",
+  "rebuild",
+]);
+
 for (const action of [
   "compile-page",
   "regenerate-block",
@@ -11025,12 +11100,17 @@ for (const action of [
   "rebuild",
 ]) {
   app.post(`/api/learning/books/${action}`, requireLearningContext, bookJson5mb, async (req, res) => {
-    await proxyLearningRequest(req, res, `/api/v1/book/books/${action}`, {
+    const proxyOptions = {
       method: "POST",
       body: sanitizeLearningJsonBody(req.body),
       label: `Learning book ${action} request`,
       timeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
-    });
+    };
+    if (longRunningBookActions.has(action)) {
+      proxyOptions.timeoutAcceptedAction = `book_${action.replaceAll("-", "_")}`;
+      proxyOptions.acceptedAfterMs = 25000;
+    }
+    await proxyLearningRequest(req, res, `/api/v1/book/books/${action}`, proxyOptions);
   });
 }
 

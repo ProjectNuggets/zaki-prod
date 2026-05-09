@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { PassThrough } from "node:stream";
 import {
   buildLearningConfigErrorPayload,
+  buildLearningAcceptedPayload,
   buildLearningDisabledPayload,
   buildLearningForwardHeaders,
   buildLearningProxyHeaders,
@@ -120,6 +121,23 @@ describe("learning BFF contract", () => {
       code: "learning_config_missing",
       error: "missing",
       requestId: "req-4",
+    });
+  });
+
+  test("builds stable accepted payload for long-running learning tasks", () => {
+    expect(
+      buildLearningAcceptedPayload({
+        requestId: "req-book-timeout",
+        action: "book_compile_page",
+      })
+    ).toEqual({
+      code: "learning_action_still_running",
+      status: "accepted",
+      action: "book_compile_page",
+      error: "Learning task is still running.",
+      message: "Learning task is still running. Progress will update automatically.",
+      retryable: false,
+      requestId: "req-book-timeout",
     });
   });
 

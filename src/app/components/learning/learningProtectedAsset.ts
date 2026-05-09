@@ -51,8 +51,13 @@ export function useLearningProtectedAsset(url: string): LearningAssetState {
         });
         if (!response.ok) throw new Error(`Asset request failed: ${response.status}`);
         const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) setState({ src: objectUrl, status: "ready" });
+        const nextObjectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(nextObjectUrl);
+          return;
+        }
+        objectUrl = nextObjectUrl;
+        setState({ src: objectUrl, status: "ready" });
       } catch {
         if (!cancelled) setState({ src: "", status: "error" });
       }

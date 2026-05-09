@@ -130,14 +130,34 @@ function textOf(value: unknown, fallback = "") {
   return fallback;
 }
 
+function sanitizeBookDisplayText(value: string) {
+  const text = value.trim();
+  if (!text) return "";
+  const metaMarker =
+    /^\s*["'“”]*(The user wants|User wants|Key requirements|Key constraints|Content requirements|Let me|I need to|I should|So I should|Word count|Drafting:|Structure:|Tone:|Wait,|The prompt says|Identity policy|No H1|No JSON|Check constraints|Constraints check|Final check|Reviewing constraints|Looks good|Keep it|\d+\s*-\s*\d+\s+short sentences)\b/im;
+  const promptLeak =
+    /\b(The user wants|Key constraints|Content requirements|The prompt says|Identity policy|I need to|I should|So I should)\b/i;
+  const postAnswer =
+    /^\s*["'“”]*(Word count|Let me|I should|So I should|The prompt says|Wait,|Identity policy|No H1|No JSON|Check constraints|Constraints check|Final check|Reviewing constraints|Looks good|Keep it|\d+\s*-\s*\d+\s+short sentences)\b/im;
+  const trimmed = (text.replace(postAnswer, "\u0000").split("\u0000")[0] || "").trim();
+  if (promptLeak.test(trimmed)) return "";
+  if (metaMarker.test(trimmed.slice(0, 2500))) return "";
+  return trimmed;
+}
+
+function stripHtmlFence(value: string) {
+  return value.trim().replace(/^```(?:html)?\s*([\s\S]*?)\s*```$/i, "$1").trim();
+}
+
 function arrayOfRecords(value: unknown): Item[] {
   return Array.isArray(value) ? value.map(asRecord) : [];
 }
 
 function markdown(content: string) {
+  const safeContent = sanitizeBookDisplayText(content);
   return (
     <div className="prose prose-sm max-w-none text-zaki-text dark:prose-invert">
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown>{safeContent}</ReactMarkdown>
     </div>
   );
 }
@@ -321,7 +341,7 @@ function SectionBlock({ block }: { block: LearningBookContentBlock }) {
 function CalloutBlock({ block }: { block: LearningBookContentBlock }) {
   const variant = textOf(block.payload?.variant, "key_idea");
   const label = textOf(block.payload?.label, variant.replace(/_/g, " "));
-  const body = textOf(block.payload?.body);
+  const body = sanitizeBookDisplayText(textOf(block.payload?.body));
   const style = CALLOUT_STYLES[variant] || CALLOUT_STYLES.key_idea!;
   const Icon = style.icon;
   return (
@@ -579,7 +599,7 @@ function TimelineBlock({ block }: { block: LearningBookContentBlock }) {
 function CodeBlock({ block }: { block: LearningBookContentBlock }) {
   const language = textOf(block.payload?.language, "python");
   const code = textOf(block.payload?.code) || textOf(block.payload?.source);
-  const explanation = textOf(block.payload?.explanation);
+  const explanation = sanitizeBookDisplayText(textOf(block.payload?.explanation));
   if (!code) return <FallbackBlock block={block} />;
   return (
     <div className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-4">
@@ -595,8 +615,8 @@ function CodeBlock({ block }: { block: LearningBookContentBlock }) {
 function FigureBlock({ block }: { block: LearningBookContentBlock }) {
   const code = asRecord(block.payload?.code);
   const language = textOf(code.language, "svg").toLowerCase();
-  const content = textOf(code.content);
-  const description = textOf(block.payload?.description);
+  const content = stripHtmlFence(textOf(code.content));
+  const description = sanitizeBookDisplayText(textOf(block.payload?.description));
   const imageUrl = textOf(block.payload?.url) || textOf(block.payload?.image_url);
 
   if (imageUrl) {
@@ -641,8 +661,8 @@ function buildSafeInteractiveSrcDoc(content: string) {
 
 function InteractiveBlock({ block }: { block: LearningBookContentBlock }) {
   const code = asRecord(block.payload?.code);
-  const content = textOf(code.content) || textOf(block.payload?.html);
-  const description = textOf(block.payload?.description);
+  const content = stripHtmlFence(textOf(code.content) || textOf(block.payload?.html));
+  const description = sanitizeBookDisplayText(textOf(block.payload?.description));
   const safeContent = useMemo(() => buildSafeInteractiveSrcDoc(content), [content]);
   if (!content.trim()) return <FallbackBlock block={block} />;
   return (
