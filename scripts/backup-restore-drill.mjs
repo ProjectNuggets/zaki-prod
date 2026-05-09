@@ -48,6 +48,10 @@ function parseArgs(argv) {
     databaseUrl: process.env.DATABASE_URL || "",
     backupDir: process.env.BACKUP_DIR || "tmp/backups",
     adminDatabase: process.env.BACKUP_ADMIN_DATABASE || "postgres",
+    excludeSchemas: String(process.env.BACKUP_EXCLUDE_SCHEMAS || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
     keepDrillDb: false,
   };
 
@@ -65,6 +69,9 @@ function parseArgs(argv) {
         break;
       case "admin-database":
         args.adminDatabase = value || args.adminDatabase;
+        break;
+      case "exclude-schema":
+        if (value) args.excludeSchemas.push(value);
         break;
       case "keep-drill-db":
         args.keepDrillDb = ["1", "true", "yes", "on"].includes(value.toLowerCase());
@@ -182,8 +189,16 @@ async function main() {
   console.log(`[Drill] Evidence: ${evidencePath}`);
   console.log(`[Drill] Drill DB: ${drillDbName}`);
   console.log(`[Drill] Admin DB: ${args.adminDatabase}`);
+  if (args.excludeSchemas.length > 0) {
+    console.log(`[Drill] Excluded schemas: ${args.excludeSchemas.join(", ")}`);
+  }
 
-  await run("pg_dump", ["--format=custom", "--file", backupPath, args.databaseUrl]);
+  const dumpArgs = ["--format=custom", "--file", backupPath];
+  for (const pattern of args.excludeSchemas) {
+    dumpArgs.push("--exclude-schema", pattern);
+  }
+  dumpArgs.push(args.databaseUrl);
+  await run("pg_dump", dumpArgs);
 
   await run("psql", [adminUrl, "-v", "ON_ERROR_STOP=1", "-c", `DROP DATABASE IF EXISTS "${drillDbName}";`]);
   await run("psql", [adminUrl, "-v", "ON_ERROR_STOP=1", "-c", `CREATE DATABASE "${drillDbName}";`]);

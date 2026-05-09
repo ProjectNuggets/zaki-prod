@@ -7,6 +7,10 @@ export const LEARNING_QUOTA_POLICY_VERSION = "2026-05-07.v1";
 export const DEFAULT_LEARNING_ABSOLUTE_MAX_REQUEST_BYTES = 100 * MB;
 
 const ACTIVE_TIERS = new Set(["free", "student", "personal"]);
+const ACTION_LABELS = Object.freeze({
+  book_generation: "book generation",
+  external_search: "external search",
+});
 
 const PLAN_DEFAULTS = Object.freeze({
   free: Object.freeze({
@@ -194,12 +198,94 @@ export function resolveLearningQuotaPolicy(
     enforcement: {
       promptRequests: "enforced",
       requestBytes: "enforced",
-      storageBytes: "planned",
+      storageBytes: "enforced",
       artifactBytes: "planned",
-      booksPerDay: "planned",
-      externalSearchesPerDay: "planned",
-      concurrentSessions: "planned",
+      booksPerDay: "enforced",
+      externalSearchesPerDay: "enforced",
+      concurrentSessions: "enforced",
     },
+  };
+}
+
+export function resolveLearningActionQuota(action, policy) {
+  const normalized = String(action || "").trim().toLowerCase();
+  if (normalized === "book_generation") {
+    return {
+      action: normalized,
+      label: ACTION_LABELS[normalized],
+      bucket: "learning:books",
+      limit: parsePositiveInteger(policy?.generation?.booksPerDay, PLAN_DEFAULTS.free.generation.booksPerDay),
+      policyTier: policy?.tier || null,
+    };
+  }
+  if (normalized === "external_search") {
+    return {
+      action: normalized,
+      label: ACTION_LABELS[normalized],
+      bucket: "learning:external_searches",
+      limit: parsePositiveInteger(
+        policy?.generation?.externalSearchesPerDay,
+        PLAN_DEFAULTS.free.generation.externalSearchesPerDay
+      ),
+      policyTier: policy?.tier || null,
+    };
+  }
+  return null;
+}
+
+export function buildLearningActionLimitPayload(decision, actionQuota, requestId) {
+  return {
+    code: "learning_action_limit_reached",
+    error: `You reached today's ${actionQuota?.label || "learning action"} limit.`,
+    message: `You reached today's ${actionQuota?.label || "learning action"} limit.`,
+    action: actionQuota?.action || null,
+    bucket: actionQuota?.bucket || null,
+    policyTier: actionQuota?.policyTier || null,
+    limit: decision?.limit ?? actionQuota?.limit ?? null,
+    remaining: 0,
+    resetAt: decision?.resetAt || null,
+    requestId,
+  };
+}
+
+export function checkLearningStorageQuota({ currentBytes = 0, incomingBytes = 0, policy } = {}) {
+  const maxBytes = parsePositiveInteger(
+    policy?.storage?.tenantMaxBytes,
+    PLAN_DEFAULTS.free.storage.tenantMaxBytes
+  );
+  const current = Math.max(0, Number.isFinite(Number(currentBytes)) ? Math.floor(Number(currentBytes)) : 0);
+  const incoming = Math.max(0, Number.isFinite(Number(incomingBytes)) ? Math.floor(Number(incomingBytes)) : 0);
+  const projectedBytes = current + incoming;
+  if (current >= maxBytes || projectedBytes > maxBytes) {
+    return {
+      allowed: false,
+      currentBytes: current,
+      incomingBytes: incoming,
+      projectedBytes,
+      maxBytes,
+      reason: "tenant_storage_limit_reached",
+    };
+  }
+  return {
+    allowed: true,
+    currentBytes: current,
+    incomingBytes: incoming,
+    projectedBytes,
+    maxBytes,
+  };
+}
+
+export function buildLearningStorageLimitPayload(decision, requestId, policy = null) {
+  return {
+    code: decision?.reason || "tenant_storage_limit_reached",
+    error: "Learning storage limit reached.",
+    message: "Learning storage limit reached.",
+    currentBytes: decision?.currentBytes ?? null,
+    incomingBytes: decision?.incomingBytes ?? null,
+    projectedBytes: decision?.projectedBytes ?? null,
+    maxBytes: decision?.maxBytes || policy?.storage?.tenantMaxBytes || null,
+    policyTier: policy?.tier || null,
+    requestId,
   };
 }
 

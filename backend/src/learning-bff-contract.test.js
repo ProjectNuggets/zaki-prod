@@ -29,6 +29,8 @@ import {
   sanitizeLearningUpstreamPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
+  classifyLearningIngressQuotaAction,
+  classifyLearningWsQuotaAction,
   shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
@@ -419,6 +421,50 @@ describe("learning BFF contract", () => {
         originalUrl: "/api/learning/books",
       })
     ).toBe(false);
+  });
+
+  test("classifies route-specific learning action quotas", () => {
+    expect(
+      classifyLearningIngressQuotaAction({
+        method: "POST",
+        originalUrl: "/api/learning/books",
+      })
+    ).toBe("book_generation");
+    expect(
+      classifyLearningIngressQuotaAction({
+        method: "POST",
+        originalUrl: "/api/learning/notebooks",
+      })
+    ).toBeNull();
+  });
+
+  test("classifies external search websocket actions", () => {
+    expect(
+      classifyLearningWsQuotaAction(
+        JSON.stringify({
+          type: "start_turn",
+          capability: "deep_research",
+          config: { sources: ["kb", "web"] },
+        }),
+        false
+      )
+    ).toBe("external_search");
+    expect(
+      classifyLearningWsQuotaAction(
+        JSON.stringify({
+          type: "start_turn",
+          capability: "deep_research",
+          config: { sources: ["kb"] },
+        }),
+        false
+      )
+    ).toBeNull();
+    expect(
+      classifyLearningWsQuotaAction(
+        JSON.stringify({ type: "start_turn", capability: "deep_solve" }),
+        false
+      )
+    ).toBeNull();
   });
 
   test("filters tutor agent channels to the ZAKI hosted allowlist", () => {

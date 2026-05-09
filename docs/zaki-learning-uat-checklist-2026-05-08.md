@@ -27,7 +27,7 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 | --- | --- | --- |
 | User isolation | PASS-BETA | Local two-user API smoke passed with real ZAKI users `57`/`58`; browser smoke passed with real users `63`/`64`. Nullalis confirmed distinct downstream sessions. `NULLALIS_DEV_USER_ID`/`NULLCLAW_DEV_USER_ID` must remain unset for all multi-user tests and hosted environments. |
 | Quota enforcement | BETA READY / GA GATE | Learning quota endpoint and frontend state exist; broad GA requires billing/unit economics thresholds and production monitoring checks. |
-| Retention/delete/export | GA GATE | Needs final operator policy verification before GA claim. |
+| Retention/delete/export | PASS-BETA / GA GATE | Local export/delete smoke now completes without account-delete fallback; governance audit and retention tests pass. Production still needs operator policy verification before GA claim. |
 | Monitoring/alerts | GA GATE | Needs production dashboard/alert confirmation before GA claim. |
 | Provider routing/secrets | BETA READY / GA GATE | Operator-managed provider routing is enforced in BFF paths already reviewed; production secrets must be injected through infra, not user UI. |
 | Dev-user bypass | PASS-BETA | `backend/src/index.js` hard-fails in production when the bypass is set. `backend/src/config-validation.js` now also fails `config:check` in production and warns locally. |
@@ -37,6 +37,7 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 | Run | Result |
 | --- | --- |
 | Mocked desktop parity E2E | PASS: `npm run test:e2e -- e2e/learning-parity.spec.ts --project=chromium-desktop` — 14/14 passed. |
+| Repeatable Learn two-user isolation smoke | PASS: `npm run smoke:learning-isolation` — seeded two verified paid local users, wrote separate Learn state, reused the same TutorBot id under both tenants, and detected zero cross-user marker leakage. |
 | Typecheck | PASS: `npm run typecheck`. |
 | Backend learning contracts | PASS: `npm --prefix backend test -- learning-study.test.js learning-bff-contract.test.js --runInBand` — 30/30 passed. |
 | Live route smoke | PASS: 14/14 Learn routes loaded with expected controls and no horizontal overflow. |
@@ -44,7 +45,10 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 | Live two-user API isolation | PASS: two paid local users, zero marker leaks, downstream sessions `agent:zaki-bot:user:57:thread:main` and `agent:zaki-bot:user:58:thread:main`. |
 | Live two-user browser smoke | PASS: two paid local browser users, no visible cross-user marker, no console errors, no failed responses. |
 | Config hardening | PASS: production config now rejects `NULLALIS_DEV_USER_ID`/`NULLCLAW_DEV_USER_ID`; local config check passes with it unset. |
+| Learning quota/cost controls | PASS-BETA: prompt, request bytes, tenant storage bytes, book generation, external search, and concurrent Learn WebSocket gates are enforced by plan/user. Live quota and account-usage endpoints returned current policy/usage. |
+| Account deletion governance | PASS-BETA: repeat Learn two-user isolation smoke run `learniso-moyovhih` completed cleanup without DB-row fallback warnings after export list limits were lowered to the upstream-supported `limit=200`. |
+| Retention and DR governance | PASS-BETA / GA GATE: retention, DR, deployment-readiness, and governance audit tests passed 18/18. Local public-schema database restore verified `zaki_users=134`, `zaki_learning_account_audit_events=16`, `zaki_daily_prompt_usage=79`; tenant-root snapshot/restore verified file counts `758 -> 758 -> 758`. Full production GA still requires an off-host backup target and staging restore drill. |
 
 ## Current Verdict
 
-Target state after this run: code-level beta candidate. Automated E2E, typecheck, targeted backend contract tests, live route smoke, and live two-user isolation smoke pass locally. GA-ready remains intentionally blocked until quota/unit economics, retention, export/delete, backup/recovery, and monitoring gates are verified against production infrastructure.
+Target state after this run: code-level beta candidate. Automated E2E, typecheck, targeted backend contract tests, live route smoke, live two-user isolation smoke, local export/delete cleanup, retention/DR policy tests, and local backup/restore evidence pass. GA-ready remains intentionally blocked until production backup/recovery, monitoring, and deployment-readiness gates are verified against production infrastructure.

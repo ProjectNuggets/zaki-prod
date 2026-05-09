@@ -4,6 +4,7 @@ node_modules
 website/.env.local
 playwright-report/
 test-results/
+tmp/
 .next/
 .claude/
 .planning/
@@ -13,4 +14,3 @@ test-results/
 # during the D28 commit. Block them going forward.
 zaki-webhook.*.ts.net.crt
 zaki-webhook.*.ts.net.key
-

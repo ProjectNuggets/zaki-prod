@@ -715,6 +715,41 @@ export function shouldConsumeLearningIngressQuota(req = {}) {
   return false;
 }
 
+export function classifyLearningIngressQuotaAction(req = {}) {
+  const method = String(req.method || "").trim().toUpperCase();
+  if (method !== "POST") return null;
+  const path = normalizeLearningRequestPath(req.originalUrl || req.path || req.url);
+  const learningPath = path.startsWith("/api/learning")
+    ? path.slice("/api/learning".length) || "/"
+    : path;
+  if (learningPath === "/books") return "book_generation";
+  return null;
+}
+
+export function classifyLearningWsQuotaAction(data, isBinary) {
+  if (isBinary) return null;
+  const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
+  if (!text.trim()) return null;
+  try {
+    const payload = JSON.parse(text);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    const type = String(payload.type || "").trim().toLowerCase();
+    if (type !== "start_turn") return null;
+    const capability = String(payload.capability || payload.mode || "").trim().toLowerCase();
+    if (capability === "deep_research" || capability === "research") {
+      const sources = Array.isArray(payload.config?.sources)
+        ? payload.config.sources.map((source) => String(source || "").toLowerCase())
+        : [];
+      if (sources.length === 0 || sources.some((source) => ["web", "search", "papers"].includes(source))) {
+        return "external_search";
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function resolveLearningMaxRequestBytes(env = process.env) {
   const parsed = Number(env?.ZAKI_LEARNING_MAX_REQUEST_BYTES);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_LEARNING_MAX_REQUEST_BYTES;

@@ -2,7 +2,11 @@ import { describe, expect, test } from "@jest/globals";
 import {
   buildLearningQuotaStatus,
   buildLearningRequestTooLargePayload,
+  buildLearningActionLimitPayload,
   checkLearningQuotaContentLength,
+  checkLearningStorageQuota,
+  buildLearningStorageLimitPayload,
+  resolveLearningActionQuota,
   resolveLearningQuotaPolicy,
   resolveLearningQuotaTier,
 } from "./learning-quota.js";
@@ -109,7 +113,10 @@ describe("learning quota policy", () => {
       enforcement: {
         promptRequests: "enforced",
         requestBytes: "enforced",
-        storageBytes: "planned",
+        storageBytes: "enforced",
+        booksPerDay: "enforced",
+        externalSearchesPerDay: "enforced",
+        concurrentSessions: "enforced",
       },
     });
     expect(status.dailyPrompts).toMatchObject({
@@ -133,6 +140,112 @@ describe("learning quota policy", () => {
       contentLength: 800,
       policyTier: "free",
       requestId: "req-1",
+    });
+  });
+
+  test("resolves action quota buckets from the effective learning plan", () => {
+    const policy = resolveLearningQuotaPolicy(
+      { plan_tier: "student", plan_status: "active" },
+      {
+        nowDate: NOW,
+        env: {
+          ZAKI_LEARNING_STUDENT_BOOKS_PER_DAY: "7",
+          ZAKI_LEARNING_STUDENT_EXTERNAL_SEARCHES_PER_DAY: "13",
+        },
+      }
+    );
+
+    expect(resolveLearningActionQuota("book_generation", policy)).toMatchObject({
+      action: "book_generation",
+      bucket: "learning:books",
+      limit: 7,
+      policyTier: "student",
+    });
+    expect(resolveLearningActionQuota("external_search", policy)).toMatchObject({
+      action: "external_search",
+      bucket: "learning:external_searches",
+      limit: 13,
+      policyTier: "student",
+    });
+    expect(resolveLearningActionQuota("unknown", policy)).toBeNull();
+  });
+
+  test("returns stable action limit payloads", () => {
+    expect(
+      buildLearningActionLimitPayload(
+        { limit: 1, resetAt: "2026-05-08T00:00:00.000Z" },
+        {
+          action: "book_generation",
+          label: "book generation",
+          bucket: "learning:books",
+          policyTier: "free",
+          limit: 1,
+        },
+        "req-2"
+      )
+    ).toEqual({
+      code: "learning_action_limit_reached",
+      error: "You reached today's book generation limit.",
+      message: "You reached today's book generation limit.",
+      action: "book_generation",
+      bucket: "learning:books",
+      policyTier: "free",
+      limit: 1,
+      remaining: 0,
+      resetAt: "2026-05-08T00:00:00.000Z",
+      requestId: "req-2",
+    });
+  });
+
+  test("enforces tenant storage quota with projected request bytes", () => {
+    const policy = resolveLearningQuotaPolicy(
+      { plan_tier: "free", plan_status: "inactive" },
+      {
+        nowDate: NOW,
+        env: { ZAKI_LEARNING_FREE_TENANT_STORAGE_BYTES: "1000" },
+      }
+    );
+
+    expect(checkLearningStorageQuota({ currentBytes: 100, incomingBytes: 200, policy })).toEqual({
+      allowed: true,
+      currentBytes: 100,
+      incomingBytes: 200,
+      projectedBytes: 300,
+      maxBytes: 1000,
+    });
+    expect(checkLearningStorageQuota({ currentBytes: 950, incomingBytes: 100, policy })).toEqual({
+      allowed: false,
+      currentBytes: 950,
+      incomingBytes: 100,
+      projectedBytes: 1050,
+      maxBytes: 1000,
+      reason: "tenant_storage_limit_reached",
+    });
+  });
+
+  test("returns stable tenant storage limit payloads", () => {
+    expect(
+      buildLearningStorageLimitPayload(
+        {
+          reason: "tenant_storage_limit_reached",
+          currentBytes: 950,
+          incomingBytes: 100,
+          projectedBytes: 1050,
+          maxBytes: 1000,
+        },
+        "req-3",
+        { tier: "free" }
+      )
+    ).toEqual({
+      code: "tenant_storage_limit_reached",
+      error: "Learning storage limit reached.",
+      message: "Learning storage limit reached.",
+      currentBytes: 950,
+      incomingBytes: 100,
+      projectedBytes: 1050,
+      maxBytes: 1000,
+      policyTier: "free",
+      requestId: "req-3",
     });
   });
 });

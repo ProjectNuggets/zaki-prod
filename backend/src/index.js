@@ -92,6 +92,8 @@ import {
   sanitizeLearningUpstreamPayload,
   sanitizeLearningTutorAgentPayload,
   sanitizeLearningWsClientMessage,
+  classifyLearningIngressQuotaAction,
+  classifyLearningWsQuotaAction,
   shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
@@ -146,9 +148,13 @@ import {
   enforcePromptQuotaForIngress,
 } from "./quota-route-handlers.js";
 import {
+  buildLearningActionLimitPayload,
   buildLearningQuotaStatus,
   buildLearningRequestTooLargePayload,
+  buildLearningStorageLimitPayload,
   checkLearningQuotaContentLength,
+  checkLearningStorageQuota,
+  resolveLearningActionQuota,
   resolveLearningQuotaPolicy,
 } from "./learning-quota.js";
 import {
@@ -3546,6 +3552,31 @@ async function consumePromptQuotaForUser(
     unlimited: false,
     bucket: quotaConfig.bucket,
     surface: normalizedSurface,
+  };
+}
+
+async function consumeLearningActionQuotaForUser(
+  zakiUser,
+  action,
+  policy,
+  { nowDate = new Date() } = {}
+) {
+  const actionQuota = resolveLearningActionQuota(action, policy);
+  if (!actionQuota) {
+    return { allowed: true, quota: null, actionQuota: null };
+  }
+  const consumed = await consumeDailyPromptQuota({
+    dbQuery,
+    dbGet,
+    userId: zakiUser.id,
+    bucket: actionQuota.bucket,
+    limit: actionQuota.limit,
+    nowDate,
+  });
+  return {
+    allowed: Boolean(consumed?.allowed),
+    quota: consumed,
+    actionQuota,
   };
 }
 
@@ -9019,6 +9050,49 @@ function learningClientOptions(req, label) {
   };
 }
 
+function normalizeLearningProxyPath(req) {
+  const raw = String(req.originalUrl || req.path || req.url || "").split("?")[0].split("#")[0];
+  const pathValue = raw.startsWith("/") ? raw : `/${raw}`;
+  return pathValue.startsWith("/api/learning")
+    ? pathValue.slice("/api/learning".length) || "/"
+    : pathValue;
+}
+
+function shouldCheckLearningStorageQuota(req) {
+  const method = String(req.method || "").trim().toUpperCase();
+  if (!["POST", "PUT", "PATCH"].includes(method)) return false;
+  const learningPath = normalizeLearningProxyPath(req);
+  return (
+    learningPath === "/books" ||
+    learningPath.startsWith("/books/") ||
+    learningPath.startsWith("/knowledge/") ||
+    learningPath.startsWith("/notebooks") ||
+    learningPath.startsWith("/co-writer/documents") ||
+    learningPath.startsWith("/memory") ||
+    learningPath.startsWith("/skills") ||
+    learningPath.startsWith("/tutor-agents")
+  );
+}
+
+async function fetchLearningStorageUsageForRequest(req) {
+  const upstream = await fetchLearningPath({
+    ...learningClientOptions(req, "Learning account usage request"),
+    path: "/api/v1/account/usage",
+    method: "GET",
+  });
+  if (!upstream.ok) {
+    const error = new Error(`Learning account usage request failed with ${upstream.status}`);
+    error.status = upstream.status;
+    throw error;
+  }
+  const payload = await upstream.json().catch(() => null);
+  return {
+    totalBytes: Math.max(0, Number(payload?.total_bytes || 0)),
+    files: Math.max(0, Number(payload?.files || 0)),
+    directories: Math.max(0, Number(payload?.directories || 0)),
+  };
+}
+
 async function requireLearningQuotaForIngress(req, res, next) {
   const isMutation = ["POST", "PUT", "PATCH"].includes(String(req.method || "").toUpperCase());
   if (!isMutation) {
@@ -9058,6 +9132,65 @@ async function requireLearningQuotaForIngress(req, res, next) {
           )
         );
       return;
+    }
+    if (shouldCheckLearningStorageQuota(req)) {
+      let usage;
+      try {
+        usage = await fetchLearningStorageUsageForRequest(req);
+      } catch (error) {
+        const requestId = getOrCreateRequestId(req);
+        console.warn("[Learning] Storage quota check failed closed:", {
+          requestId,
+          status: error?.status || null,
+          error: error?.message || "Learning account usage unavailable.",
+        });
+        res.status(503).json({
+          code: "learning_storage_quota_unavailable",
+          error: "Learning storage quota could not be checked.",
+          message: "Learning is temporarily unable to check storage quota safely.",
+          retryable: true,
+          requestId,
+        });
+        return;
+      }
+      const storageDecision = checkLearningStorageQuota({
+        currentBytes: usage.totalBytes,
+        incomingBytes: planSizeDecision.contentLength || 0,
+        policy: learningPolicy,
+      });
+      if (!storageDecision.allowed) {
+        res
+          .status(413)
+          .json(
+            buildLearningStorageLimitPayload(
+              storageDecision,
+              getOrCreateRequestId(req),
+              learningPolicy
+            )
+          );
+        return;
+      }
+      req.learningStorageUsage = usage;
+    }
+    const action = classifyLearningIngressQuotaAction(req);
+    if (action) {
+      const actionDecision = await consumeLearningActionQuotaForUser(
+        req.learningAuthResult?.zakiUser,
+        action,
+        learningPolicy
+      );
+      if (!actionDecision.allowed) {
+        res
+          .status(429)
+          .json(
+            buildLearningActionLimitPayload(
+              actionDecision.quota,
+              actionDecision.actionQuota,
+              getOrCreateRequestId(req)
+            )
+          );
+        return;
+      }
     }
     if (!shouldConsumeLearningIngressQuota(req)) {
       req.learningQuotaChecked = true;
@@ -9250,11 +9383,11 @@ async function buildLearningAccountExportSnapshot({ zakiUser, requestId }) {
 
   const userId = String(zakiUser?.id || "");
   const calls = [
-    ["sessions", "/api/v1/sessions?limit=500&offset=0"],
+    ["sessions", "/api/v1/sessions?limit=200&offset=0"],
     ["books", "/api/v1/book/books"],
     ["knowledgeBases", "/api/v1/knowledge/list"],
     ["notebooks", "/api/v1/notebook/list"],
-    ["questionBank", "/api/v1/question-notebook/entries?limit=500"],
+    ["questionBank", "/api/v1/question-notebook/entries?limit=200"],
     ["skills", "/api/v1/skills/list"],
     ["memory", "/api/v1/memory"],
     ["coWriterDocuments", "/api/v1/co_writer/documents"],
@@ -10822,6 +10955,46 @@ app.get("/api/learning/health", requireLearningContext, async (req, res) => {
   }
 });
 
+app.get("/api/learning/account/usage", requireLearningContext, async (req, res) => {
+  if (!assertLearningRouteEnabled(req, res)) return;
+  try {
+    const policy = resolveLearningQuotaPolicy(req.learningAuthResult?.zakiUser, {
+      absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+    });
+    const usage = await fetchLearningStorageUsageForRequest(req);
+    const storageDecision = checkLearningStorageQuota({
+      currentBytes: usage.totalBytes,
+      incomingBytes: 0,
+      policy,
+    });
+    res.status(200).json({
+      totalBytes: usage.totalBytes,
+      files: usage.files,
+      directories: usage.directories,
+      storage: {
+        maxBytes: storageDecision.maxBytes,
+        remainingBytes: Math.max(0, storageDecision.maxBytes - usage.totalBytes),
+        overLimit: !storageDecision.allowed,
+      },
+      policyTier: policy.tier,
+      policyVersion: policy.policyVersion,
+    });
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    console.error("[Learning] Account usage proxy error:", {
+      requestId,
+      error: error?.message || "Learning account usage failed.",
+    });
+    res.status(503).json({
+      code: "learning_unavailable",
+      error: "Learning is unavailable.",
+      message: "Learning account usage is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+});
+
 app.get("/api/learning/outputs/:outputPath(*)", requireLearningContext, async (req, res) => {
   const outputPath = encodeLearningRelativePath(req.params.outputPath);
   if (!outputPath) {
@@ -12331,6 +12504,25 @@ app.all("*", async (req, res) => {
 const server = http.createServer(app);
 const agentProxyWss = new WebSocketServer({ noServer: true });
 const learningProxyWss = new WebSocketServer({ noServer: true });
+const activeLearningWsByUser = new Map();
+
+function getActiveLearningWsCount(userId) {
+  return activeLearningWsByUser.get(String(userId || "")) || 0;
+}
+
+function incrementActiveLearningWs(userId) {
+  const key = String(userId || "");
+  if (!key) return () => {};
+  activeLearningWsByUser.set(key, getActiveLearningWsCount(key) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const next = Math.max(0, getActiveLearningWsCount(key) - 1);
+    if (next > 0) activeLearningWsByUser.set(key, next);
+    else activeLearningWsByUser.delete(key);
+  };
+}
 
 function isValidWebSocketCloseCode(code) {
   return (
@@ -12508,6 +12700,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   }
 
   const requestId = getOrCreateRequestId(req);
+  const releaseActiveLearningWs = incrementActiveLearningWs(context.userId);
   let outgoingChain = Promise.resolve();
   const pendingClientMessages = [];
   const maxPendingClientMessages = 20;
@@ -12607,6 +12800,22 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
     const sanitized = sanitizeLearningWsClientMessage(data, isBinary);
     outgoingChain = outgoingChain.then(async () => {
       if (upstreamSocket.readyState !== upstreamSocket.OPEN) return;
+      const action = classifyLearningWsQuotaAction(sanitized.data, sanitized.isBinary);
+      if (action) {
+        const actionDecision = await consumeLearningActionQuotaForUser(
+          context.authResult?.zakiUser,
+          action,
+          context.learningQuotaPolicy ||
+            resolveLearningQuotaPolicy(context.authResult?.zakiUser, {
+              absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+            })
+        );
+        if (!actionDecision.allowed) {
+          closeClient(1008, "Learning action quota exceeded.");
+          closeUpstream(1008, "learning_action_quota_exceeded");
+          return;
+        }
+      }
       if (shouldConsumeLearningWsQuota(sanitized.data, sanitized.isBinary)) {
         const quota = await consumePromptQuotaForUser(context.authResult?.zakiUser, {
           surface: LEARNING_SURFACE,
@@ -12637,6 +12846,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   });
 
   clientSocket.on("close", () => {
+    releaseActiveLearningWs();
     closeUpstream();
   });
 });
@@ -12665,6 +12875,16 @@ server.on("upgrade", (req, socket, head) => {
           writeWebSocketHttpError(socket, 401, "Unauthorized");
           return;
         }
+        const learningPolicy = resolveLearningQuotaPolicy(context.authResult?.zakiUser, {
+          absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+        });
+        const activeCount = getActiveLearningWsCount(context.userId);
+        const concurrentLimit = Math.max(1, Number(learningPolicy?.generation?.concurrentSessions || 1));
+        if (activeCount >= concurrentLimit) {
+          writeWebSocketHttpError(socket, 429, "Too Many Requests");
+          return;
+        }
+        context.learningQuotaPolicy = learningPolicy;
         context.targetPath = learningWsTargetPath;
         learningProxyWss.handleUpgrade(req, socket, head, (ws) => {
           learningProxyWss.emit("connection", ws, req, context);

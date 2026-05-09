@@ -1330,11 +1330,11 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByText("Frame preview")).toBeVisible();
     await expect(page.getByAltText("Frame preview")).toHaveAttribute(
       "src",
-      /\/api\/learning\/outputs\/math\/frame\.gif/,
+      /^blob:/,
     );
     await expect(page.getByRole("link", { name: /Open/i }).first()).toHaveAttribute(
       "href",
-      /\/api\/learning\/outputs\/math\/frame\.gif/,
+      /^blob:/,
     );
     await expect(page.getByRole("link", { name: /Download/i }).first()).toHaveAttribute(
       "download",
@@ -1384,15 +1384,16 @@ test.describe("ZAKI Learn parity wiring", () => {
     await expect(page.getByText("Video preview")).toBeVisible();
     await expect(page.locator("video").first()).toHaveAttribute(
       "src",
-      /\/api\/learning\/outputs\/math\/animation\.mp4/,
+      /^blob:/,
     );
     await expect(page.getByRole("link", { name: /Open/i }).first()).toHaveAttribute(
       "href",
-      /\/api\/learning\/outputs\/math\/animation\.mp4/,
+      /^blob:/,
     );
     await expect(page.getByRole("link", { name: /Download/i }).first()).toHaveAttribute(
       "download",
       "animation.mp4",
     );
+    await expect.poll(() => learning.assetRequests.includes("/api/learning/outputs/math/animation.mp4")).toBe(true);
   });
 });
