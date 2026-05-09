@@ -240,6 +240,7 @@ export function ZakiDashboard({
           <button
             type="button"
             onClick={() => navigate("/brain")}
+            data-onboarding-id="zaki-dashboard-brain-entry"
             className="group mt-3 flex w-full items-center justify-between gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 text-left transition-colors hover:border-[#f10202]/40 hover:bg-zaki-raised/80"
           >
             <div className="flex items-center gap-3">

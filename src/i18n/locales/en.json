@@ -979,6 +979,21 @@
       "importMemory": "Bring memory from ChatGPT or Claude",
       "dismissAria": "Dismiss welcome card"
     },
+    "tour": {
+      "stepLabel": "Step {{n}} of {{total}}",
+      "plusMenu": {
+        "title": "More than just typing",
+        "body": "Tap the plus to schedule follow-ups, pin a memory to this thread, or switch ZAKI between Plan, Execute, and Review modes."
+      },
+      "compaction": {
+        "title": "Conversation getting long?",
+        "body": "When the meter glows, click it to compact. ZAKI summarizes the back-and-forth so you can keep going without losing context."
+      },
+      "brainPanel": {
+        "title": "ZAKI is learning about you",
+        "body": "Open your brain to see what ZAKI remembers. You can edit, pin, or forget anything."
+      }
+    },
     "simple": {
       "eyebrow": "Getting started",
       "title": "Start clean, {{userName}}",

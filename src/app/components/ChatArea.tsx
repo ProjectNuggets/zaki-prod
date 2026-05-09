@@ -77,6 +77,7 @@ import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { OnboardingHeroCard } from "./onboarding/OnboardingHeroCard";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
+import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import {
   ZakiBootstrapCard,
@@ -6535,6 +6536,21 @@ export function ChatArea() {
           handleSend(dump, []);
         }}
       />
+
+      {sidebarMode === "zaki" ? (
+        <OnboardingTour
+          progress={onboardingProgress}
+          setStage={setOnboardingStage}
+          gates={{
+            compactionArmed: (() => {
+              const g = nullalisContextGauge;
+              if (!g || !g.tokenCount || !g.contextMax) return false;
+              return g.tokenCount / g.contextMax >= 0.6;
+            })(),
+            brainHasMemories: false,
+          }}
+        />
+      ) : null}
 
       <CreateSpaceModal
         isOpen={createSpaceOpen}
