@@ -336,6 +336,26 @@ function normalizeDetail(payload: unknown): LearningBookDetail | null {
   };
 }
 
+function isLearningAcceptedPayload(payload: unknown) {
+  const root = asRecord(payload);
+  return root.code === "learning_action_still_running" || root.status === "accepted";
+}
+
+function getAcceptedBookId(payload: unknown) {
+  const root = asRecord(payload);
+  const poll = asRecord(root.poll);
+  return textOf(poll.resource_id) || textOf(root.book_id) || textOf(root.bookId);
+}
+
+function bookDetailHasRunningWork(detail: LearningBookDetail | null) {
+  if (!detail) return false;
+  if (["draft", "spine_ready", "compiling"].includes(detail.book.status)) return true;
+  return detail.pages.some((page) => {
+    if (["pending", "planning", "generating"].includes(page.status)) return true;
+    return page.blocks.some((block) => ["pending", "generating"].includes(block.status || ""));
+  });
+}
+
 function formatRelative(seconds?: number) {
   if (!seconds) return "";
   const diff = Date.now() / 1000 - seconds;
@@ -532,6 +552,8 @@ export function LearningBookWorkspace({
   const [selectedNotebooks, setSelectedNotebooks] = useState<BookSourceSelection<string>>(() => new Map());
   const [selectedQuestions, setSelectedQuestions] = useState<Array<string | number>>([]);
   const progressRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detailPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detailPollBookIdRef = useRef<string | null>(null);
 
   const books = useMemo(() => items.map(normalizeBook), [items]);
   const filteredBooks = useMemo(() => {
@@ -573,9 +595,70 @@ export function LearningBookWorkspace({
     }
   };
 
+  const stopDetailPolling = () => {
+    if (detailPollTimerRef.current) {
+      clearTimeout(detailPollTimerRef.current);
+      detailPollTimerRef.current = null;
+    }
+    detailPollBookIdRef.current = null;
+  };
+
+  const pollBookDetailUntilSettled = (bookId: string) => {
+    stopDetailPolling();
+    detailPollBookIdRef.current = bookId;
+    let attempts = 0;
+    const maxAttempts = 150;
+
+    const tick = async () => {
+      if (detailPollBookIdRef.current !== bookId) return;
+      attempts += 1;
+      try {
+        const nextDetail = normalizeDetail(await getLearningBook(bookId));
+        if (nextDetail) {
+          queryClient.setQueryData([...learningKeys.books, "detail", bookId], nextDetail);
+        }
+        await queryClient.invalidateQueries({ queryKey: learningKeys.books });
+        await queryClient.invalidateQueries({ queryKey: [...learningKeys.books, "health", bookId] });
+        if (!bookDetailHasRunningWork(nextDetail)) {
+          setBookProgress((current) =>
+            reduceLearningBookProgressEvent(current, {
+              type: "progress",
+              content: "compilation_complete",
+              metadata: { book_id: bookId },
+            }),
+          );
+          stopDetailPolling();
+          return;
+        }
+        if (attempts >= maxAttempts) {
+          stopDetailPolling();
+          return;
+        }
+      } catch {
+        if (attempts >= maxAttempts) {
+          stopDetailPolling();
+          return;
+        }
+      }
+      detailPollTimerRef.current = setTimeout(tick, 2000);
+    };
+
+    setBookProgress((current) =>
+      reduceLearningBookProgressEvent(current, {
+        type: "stage_begin",
+        stage: "compilation",
+        metadata: { book_id: bookId },
+      }),
+    );
+    detailPollTimerRef.current = setTimeout(tick, 1000);
+  };
+
   useEffect(() => {
     setBookProgress(emptyLearningBookProgress());
+    stopDetailPolling();
   }, [selectedBookId]);
+
+  useEffect(() => stopDetailPolling, []);
 
   useEffect(() => {
     if (!selectedBookId) {
@@ -651,6 +734,14 @@ export function LearningBookWorkspace({
       afterSuccess?: (payload: unknown) => void | Promise<void>;
     }) => action().then((payload) => ({ label, payload, afterSuccess })),
     onSuccess: async ({ label, payload, afterSuccess }) => {
+      if (isLearningAcceptedPayload(payload)) {
+        const acceptedBookId = getAcceptedBookId(payload) || selectedBookId || activeBook?.id || "";
+        toast.success("Book task is still running");
+        await refreshDetail();
+        if (acceptedBookId) pollBookDetailUntilSettled(acceptedBookId);
+        await afterSuccess?.(payload);
+        return;
+      }
       toast.success(label);
       await refreshDetail();
       await afterSuccess?.(payload);

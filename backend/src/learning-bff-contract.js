@@ -247,8 +247,9 @@ export function buildLearningAcceptedPayload({
   requestId,
   action = "learning_task",
   message = "Learning task is still running. Progress will update automatically.",
+  poll = null,
 } = {}) {
-  return {
+  const payload = {
     code: "learning_action_still_running",
     status: "accepted",
     action,
@@ -257,6 +258,10 @@ export function buildLearningAcceptedPayload({
     retryable: false,
     requestId,
   };
+  if (poll && typeof poll === "object") {
+    payload.poll = poll;
+  }
+  return payload;
 }
 
 export function mapLearningUpstreamFailure(statusCode, requestId) {

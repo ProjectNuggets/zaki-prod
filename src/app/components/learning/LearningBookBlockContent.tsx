@@ -149,6 +149,44 @@ function stripHtmlFence(value: string) {
   return value.trim().replace(/^```(?:html)?\s*([\s\S]*?)\s*```$/i, "$1").trim();
 }
 
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function parseMermaidFlowchart(source: string) {
+  const nodes = new Map<string, string>();
+  const edges: Array<[string, string]> = [];
+  const addNode = (id: string, label?: string) => {
+    const cleanId = id.trim().replace(/[^A-Za-z0-9_-]/g, "");
+    if (!cleanId) return "";
+    if (!nodes.has(cleanId)) nodes.set(cleanId, label?.trim() || cleanId);
+    if (label?.trim()) nodes.set(cleanId, label.trim());
+    return cleanId;
+  };
+
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("%%") || /^(flowchart|graph)\s+/i.test(line)) continue;
+
+    const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*(?:\["([^"]+)"\]|\("([^"]+)"\)|\{([^}]+)\})/);
+    if (nodeMatch) addNode(nodeMatch[1] || "", nodeMatch[2] || nodeMatch[3] || nodeMatch[4]);
+
+    const edgeMatch = line.match(/^(.+?)\s*-+(?:>|-)\s*(.+)$/);
+    if (!edgeMatch) continue;
+    const leftNode = (edgeMatch[1] || "").match(/([A-Za-z0-9_-]+)\s*(?:\["([^"]+)"\]|\("([^"]+)"\)|\{([^}]+)\})?/) || [];
+    const rightNode = (edgeMatch[2] || "").match(/([A-Za-z0-9_-]+)\s*(?:\["([^"]+)"\]|\("([^"]+)"\)|\{([^}]+)\})?/) || [];
+    const from = addNode(leftNode[1] || "", leftNode[2] || leftNode[3] || leftNode[4]);
+    const to = addNode(rightNode[1] || "", rightNode[2] || rightNode[3] || rightNode[4]);
+    if (from && to) edges.push([from, to]);
+  }
+
+  return { nodes: Array.from(nodes.entries()), edges };
+}
+
 function arrayOfRecords(value: unknown): Item[] {
   return Array.isArray(value) ? value.map(asRecord) : [];
 }
@@ -615,6 +653,7 @@ function CodeBlock({ block }: { block: LearningBookContentBlock }) {
 function FigureBlock({ block }: { block: LearningBookContentBlock }) {
   const code = asRecord(block.payload?.code);
   const language = textOf(code.language, "svg").toLowerCase();
+  const renderType = textOf(block.payload?.render_type).toLowerCase();
   const content = stripHtmlFence(textOf(code.content));
   const description = sanitizeBookDisplayText(textOf(block.payload?.description));
   const imageUrl = textOf(block.payload?.url) || textOf(block.payload?.image_url);
@@ -642,7 +681,109 @@ function FigureBlock({ block }: { block: LearningBookContentBlock }) {
     );
   }
 
+  if ((language === "mermaid" || renderType === "mermaid") && content.trim()) {
+    return <MermaidFigure source={content} description={description} />;
+  }
+
+  if ((language === "javascript" || renderType === "chartjs") && content.trim()) {
+    return <StaticChartFigure source={content} description={description} />;
+  }
+
   return <CodeBlock block={{ ...block, payload: { ...block.payload, code: content, language } }} />;
+}
+
+function MermaidFigure({ source, description }: { source: string; description: string }) {
+  const diagram = useMemo(() => parseMermaidFlowchart(source), [source]);
+  const nodes = diagram.nodes.slice(0, 12);
+  if (!nodes.length) {
+    return <StaticDiagramSource source={source} description={description} label="Mermaid diagram" />;
+  }
+  const width = 760;
+  const nodeHeight = 54;
+  const gap = 24;
+  const height = Math.max(160, nodes.length * (nodeHeight + gap) + 40);
+  const positions = new Map(
+    nodes.map(([id], index) => [
+      id,
+      {
+        x: 80 + (index % 2) * 280,
+        y: 24 + index * (nodeHeight + gap),
+      },
+    ]),
+  );
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#b84a1b"/>
+    </marker>
+  </defs>
+  <rect width="${width}" height="${height}" rx="14" fill="#fffaf5"/>
+  ${diagram.edges
+    .map(([from, to]) => {
+      const a = positions.get(from);
+      const b = positions.get(to);
+      if (!a || !b) return "";
+      return `<path d="M${a.x + 220} ${a.y + nodeHeight / 2} C ${a.x + 270} ${a.y + nodeHeight / 2}, ${b.x - 50} ${b.y + nodeHeight / 2}, ${b.x} ${b.y + nodeHeight / 2}" fill="none" stroke="#b84a1b" stroke-width="2" marker-end="url(#arrow)" opacity="0.75"/>`;
+    })
+    .join("")}
+  ${nodes
+    .map(([id, label]) => {
+      const pos = positions.get(id)!;
+      return `<g>
+        <rect x="${pos.x}" y="${pos.y}" width="220" height="${nodeHeight}" rx="8" fill="#ffffff" stroke="#e4d5c5"/>
+        <text x="${pos.x + 14}" y="${pos.y + 22}" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#2b2118">${escapeXml(label).slice(0, 42)}</text>
+        <text x="${pos.x + 14}" y="${pos.y + 40}" font-family="system-ui, sans-serif" font-size="11" fill="#8a7665">${escapeXml(id)}</text>
+      </g>`;
+    })
+    .join("")}
+</svg>`;
+  const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return (
+    <figure className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
+      <img src={src} alt={description || "Generated Mermaid diagram"} className="h-auto w-full rounded-zaki-md" />
+      {description ? <figcaption className="mt-3 text-xs text-zaki-muted">{description}</figcaption> : null}
+      <details className="mt-3 text-xs text-zaki-muted">
+        <summary className="cursor-pointer">Diagram source</summary>
+        <pre className="mt-2 max-h-40 overflow-auto rounded-zaki-md bg-zaki-raised p-3">
+          <code>{source}</code>
+        </pre>
+      </details>
+    </figure>
+  );
+}
+
+function StaticChartFigure({ source, description }: { source: string; description: string }) {
+  return <StaticDiagramSource source={source} description={description} label="Static chart artifact" />;
+}
+
+function StaticDiagramSource({
+  source,
+  description,
+  label,
+}: {
+  source: string;
+  description: string;
+  label: string;
+}) {
+  return (
+    <figure className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
+      <div className="flex min-h-32 flex-col items-center justify-center rounded-zaki-md border border-dashed border-zaki-border bg-zaki-raised px-4 text-center">
+        <Code2 className="mb-2 size-5 text-zaki-brand" />
+        <div className="text-sm font-semibold text-zaki-text">{label}</div>
+        <div className="mt-1 max-w-md text-xs leading-5 text-zaki-muted">
+          The diagram artifact is ready. Open the source below if you need to inspect it.
+        </div>
+      </div>
+      {description ? <figcaption className="mt-3 text-xs text-zaki-muted">{description}</figcaption> : null}
+      <details className="mt-3 text-xs text-zaki-muted">
+        <summary className="cursor-pointer">Artifact source</summary>
+        <pre className="mt-2 max-h-48 overflow-auto rounded-zaki-md bg-zaki-raised p-3">
+          <code>{source}</code>
+        </pre>
+      </details>
+    </figure>
+  );
 }
 
 function buildSafeInteractiveSrcDoc(content: string) {

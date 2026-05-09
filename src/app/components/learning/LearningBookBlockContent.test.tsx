@@ -34,4 +34,28 @@ describe("LearningBookBlockContent", () => {
     expect(srcDoc).not.toMatch(/\son[a-z]+\s*=/i);
     expect(srcDoc).not.toMatch(/javascript:/i);
   });
+
+  it("renders Mermaid figure blocks as an SVG image preview", () => {
+    const { container } = render(
+      <LearningBookBlockContent
+        block={{
+          id: "figure-1",
+          type: "figure",
+          payload: {
+            render_type: "mermaid",
+            code: {
+              language: "mermaid",
+              content: 'flowchart TD\n  topic["Photosynthesis"]\n  topic --> ATP["ATP"]',
+            },
+            description: "Concept flow",
+          },
+        }}
+      />,
+    );
+
+    const image = container.querySelector("img");
+    expect(image).toBeInTheDocument();
+    expect(image?.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+    expect(container.querySelector("pre")).toHaveTextContent("flowchart TD");
+  });
 });

@@ -9426,6 +9426,7 @@ async function proxyLearningRequest(req, res, targetPath, {
   timeoutMs = LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
   timeoutAcceptedAction = null,
   acceptedAfterMs = null,
+  acceptedPoll = null,
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
   try {
@@ -9473,6 +9474,7 @@ async function proxyLearningRequest(req, res, targetPath, {
           buildLearningAcceptedPayload({
             requestId: getOrCreateRequestId(req),
             action: timeoutAcceptedAction,
+            poll: acceptedPoll,
           })
         );
         return;
@@ -9501,6 +9503,7 @@ async function proxyLearningRequest(req, res, targetPath, {
         buildLearningAcceptedPayload({
           requestId,
           action: timeoutAcceptedAction,
+          poll: acceptedPoll,
         })
       );
       return;
@@ -11100,15 +11103,26 @@ for (const action of [
   "rebuild",
 ]) {
   app.post(`/api/learning/books/${action}`, requireLearningContext, bookJson5mb, async (req, res) => {
+    const sanitizedBody = sanitizeLearningJsonBody(req.body);
     const proxyOptions = {
       method: "POST",
-      body: sanitizeLearningJsonBody(req.body),
+      body: sanitizedBody,
       label: `Learning book ${action} request`,
       timeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
     };
     if (longRunningBookActions.has(action)) {
+      const bookId = String(sanitizedBody?.book_id || "").trim();
       proxyOptions.timeoutAcceptedAction = `book_${action.replaceAll("-", "_")}`;
       proxyOptions.acceptedAfterMs = 25000;
+      if (bookId) {
+        proxyOptions.acceptedPoll = {
+          method: "GET",
+          path: `/api/learning/books/${encodeURIComponent(bookId)}`,
+          interval_ms: 2000,
+          resource_type: "book",
+          resource_id: bookId,
+        };
+      }
     }
     await proxyLearningRequest(req, res, `/api/v1/book/books/${action}`, proxyOptions);
   });

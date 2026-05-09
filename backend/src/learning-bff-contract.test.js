@@ -129,6 +129,13 @@ describe("learning BFF contract", () => {
       buildLearningAcceptedPayload({
         requestId: "req-book-timeout",
         action: "book_compile_page",
+        poll: {
+          method: "GET",
+          path: "/api/learning/books/book-1",
+          interval_ms: 2000,
+          resource_type: "book",
+          resource_id: "book-1",
+        },
       })
     ).toEqual({
       code: "learning_action_still_running",
@@ -136,6 +143,13 @@ describe("learning BFF contract", () => {
       action: "book_compile_page",
       error: "Learning task is still running.",
       message: "Learning task is still running. Progress will update automatically.",
+      poll: {
+        method: "GET",
+        path: "/api/learning/books/book-1",
+        interval_ms: 2000,
+        resource_type: "book",
+        resource_id: "book-1",
+      },
       retryable: false,
       requestId: "req-book-timeout",
     });
