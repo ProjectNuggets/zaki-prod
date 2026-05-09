@@ -19,6 +19,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import { buildApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useLearningProtectedAsset } from "./learningProtectedAsset";
 
 type Item = Record<string, unknown>;
 
@@ -601,8 +602,8 @@ function FigureBlock({ block }: { block: LearningBookContentBlock }) {
   if (imageUrl) {
     return (
       <figure className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
-        <img
-          src={resolveLearningAssetUrl(imageUrl)}
+        <ProtectedLearningImage
+          url={resolveLearningAssetUrl(imageUrl)}
           alt={description || "Generated figure"}
           className="h-auto w-full rounded-zaki-md"
         />
@@ -670,14 +671,60 @@ function AnimationBlock({ block }: { block: LearningBookContentBlock }) {
     <figure className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
       <div className="overflow-hidden rounded-zaki-md bg-black">
         {isVideo ? (
-          <video src={url} controls playsInline preload="metadata" className="aspect-video w-full object-contain" />
+          <ProtectedLearningVideo url={url} className="aspect-video w-full object-contain" />
         ) : (
-          <img src={url} alt={summary || "Animation frame"} className="h-auto w-full" />
+          <ProtectedLearningImage url={url} alt={summary || "Animation frame"} className="h-auto w-full" />
         )}
       </div>
       {summary ? <figcaption className="mt-3 text-xs text-zaki-muted">{summary}</figcaption> : null}
     </figure>
   );
+}
+
+function ProtectedLearningImage({
+  url,
+  alt,
+  className,
+}: {
+  url: string;
+  alt: string;
+  className?: string;
+}) {
+  const asset = useLearningProtectedAsset(url);
+  if (asset.status === "loading") {
+    return (
+      <div className="flex min-h-24 items-center justify-center rounded-zaki-md bg-zaki-raised text-xs text-zaki-muted">
+        Loading asset...
+      </div>
+    );
+  }
+  if (asset.status === "error") {
+    return (
+      <div className="flex min-h-24 items-center justify-center rounded-zaki-md border border-dashed border-zaki-border bg-zaki-raised px-3 text-center text-xs text-zaki-muted">
+        Asset preview is unavailable. Refresh the page and try again.
+      </div>
+    );
+  }
+  return <img src={asset.src} alt={alt} className={className} />;
+}
+
+function ProtectedLearningVideo({ url, className }: { url: string; className?: string }) {
+  const asset = useLearningProtectedAsset(url);
+  if (asset.status === "loading") {
+    return (
+      <div className="flex aspect-video w-full items-center justify-center bg-zaki-raised text-xs text-zaki-muted">
+        Loading video...
+      </div>
+    );
+  }
+  if (asset.status === "error") {
+    return (
+      <div className="flex aspect-video w-full items-center justify-center border border-dashed border-zaki-border bg-zaki-raised px-3 text-center text-xs text-zaki-muted">
+        Video preview is unavailable. Refresh the page and try again.
+      </div>
+    );
+  }
+  return <video src={asset.src} controls playsInline preload="metadata" className={className} />;
 }
 
 function DeepDiveBlock({

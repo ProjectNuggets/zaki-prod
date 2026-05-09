@@ -9417,6 +9417,7 @@ async function proxyLearningRequest(req, res, targetPath, {
   method = req.method,
   body = undefined,
   label = "Learning upstream request",
+  timeoutMs = LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
   try {
@@ -9425,6 +9426,7 @@ async function proxyLearningRequest(req, res, targetPath, {
       path: targetPath,
       method,
       body,
+      timeoutMs,
     });
     await pipeLearningResponse(req, res, upstream);
   } catch (error) {
@@ -10990,6 +10992,7 @@ app.post(
       method: "POST",
       body: sanitizeLearningJsonBody(req.body),
       label: "Learning book proposal confirm request",
+      timeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
     });
   }
 );
@@ -11003,6 +11006,7 @@ app.post(
       method: "POST",
       body: sanitizeLearningJsonBody(req.body),
       label: "Learning book spine confirm request",
+      timeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
     });
   }
 );
@@ -11025,6 +11029,7 @@ for (const action of [
       method: "POST",
       body: sanitizeLearningJsonBody(req.body),
       label: `Learning book ${action} request`,
+      timeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
     });
   });
 }

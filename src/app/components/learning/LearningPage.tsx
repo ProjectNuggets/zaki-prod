@@ -77,6 +77,7 @@ import { toast } from "sonner";
 import { buildApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores";
+import { useLearningProtectedAsset } from "./learningProtectedAsset";
 import {
   addLearningNotebookRecordManual,
   analyzeLearningVision,
@@ -2135,42 +2136,14 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
               const label = textOf(artifact.label) || textOf(artifact.filename, `Artifact ${index + 1}`);
               if (!url) return null;
               return (
-                <figure key={`${url}-${index}`} className="rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
-                  {type === "video" ? (
-                    <video
-                      src={url}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      aria-label={label}
-                      className="aspect-video w-full rounded-zaki-sm bg-black object-contain"
-                    />
-                  ) : (
-                    <img src={url} alt={label} className="max-h-[280px] w-full rounded-zaki-sm object-contain" />
-                  )}
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <figcaption className="min-w-0 truncate text-[11px] text-zaki-muted">{label}</figcaption>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-zaki-sm px-1.5 py-1 text-[11px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
-                      >
-                        <ExternalLink className="size-3" />
-                        Open
-                      </a>
-                      <a
-                        href={url}
-                        download={textOf(artifact.filename) || undefined}
-                        className="inline-flex items-center gap-1 rounded-zaki-sm px-1.5 py-1 text-[11px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text"
-                      >
-                        <Download className="size-3" />
-                        Download
-                      </a>
-                    </div>
-                  </div>
-                </figure>
+                <LearningMathArtifactFigure
+                  key={`${url}-${index}`}
+                  artifact={artifact}
+                  index={index}
+                  type={type}
+                  url={url}
+                  label={label}
+                />
               );
             })}
           </div>
@@ -2190,6 +2163,86 @@ function LearningAdvancedResultBlock({ message }: { message: TutorChatMessage })
   }
 
   return null;
+}
+
+function LearningMathArtifactFigure({
+  artifact,
+  index,
+  type,
+  url,
+  label,
+}: {
+  artifact: Item;
+  index: number;
+  type: string;
+  url: string;
+  label: string;
+}) {
+  const asset = useLearningProtectedAsset(url);
+  const filename = textOf(artifact.filename) || undefined;
+  const linkHref = asset.src || undefined;
+  const unavailable = asset.status === "error";
+
+  return (
+    <figure key={`${url}-${index}`} className="rounded-zaki-md border border-zaki-border bg-zaki-base p-2">
+      {asset.status === "loading" ? (
+        <div className="flex min-h-24 items-center justify-center rounded-zaki-sm bg-zaki-raised text-xs text-zaki-muted">
+          Loading artifact...
+        </div>
+      ) : unavailable ? (
+        <div className="flex min-h-24 items-center justify-center rounded-zaki-sm border border-dashed border-zaki-border bg-zaki-raised px-3 text-center text-xs text-zaki-muted">
+          Artifact preview is unavailable. Refresh the page and try again.
+        </div>
+      ) : type === "video" ? (
+        <video
+          src={asset.src}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={label}
+          className="aspect-video w-full rounded-zaki-sm bg-black object-contain"
+        />
+      ) : (
+        <img src={asset.src} alt={label} className="max-h-[280px] w-full rounded-zaki-sm object-contain" />
+      )}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <figcaption className="min-w-0 truncate text-[11px] text-zaki-muted">{label}</figcaption>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <a
+            href={linkHref}
+            target="_blank"
+            rel="noreferrer"
+            aria-disabled={!linkHref}
+            onClick={(event) => {
+              if (!linkHref) event.preventDefault();
+            }}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-zaki-sm px-1.5 py-1 text-[11px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+              !linkHref && "pointer-events-none opacity-50",
+            )}
+          >
+            <ExternalLink className="size-3" />
+            Open
+          </a>
+          <a
+            href={linkHref}
+            download={filename}
+            aria-disabled={!linkHref}
+            onClick={(event) => {
+              if (!linkHref) event.preventDefault();
+            }}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-zaki-sm px-1.5 py-1 text-[11px] font-medium text-zaki-muted hover:bg-zaki-hover hover:text-zaki-text",
+              !linkHref && "pointer-events-none opacity-50",
+            )}
+          >
+            <Download className="size-3" />
+            Download
+          </a>
+        </div>
+      </div>
+    </figure>
+  );
 }
 
 function learningAdvancedResultMarkdown(message: TutorChatMessage) {
