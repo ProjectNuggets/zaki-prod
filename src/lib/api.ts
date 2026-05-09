@@ -1269,6 +1269,31 @@ export type ThreadAutoTitleResponse = {
   };
 };
 
+/**
+ * Agent session auto-title — same shape as the thread version, scoped
+ * by sessionKey. Mirrors the thread-auto-title contract so the FE
+ * pattern (in-flight ref + attempts cap + "skipped" reason set) is
+ * shared between Spaces and ZAKI bot.
+ */
+export type AgentSessionAutoTitleRequest = {
+  userMessage: string;
+  assistantMessage: string;
+  currentLabel: string;
+};
+
+export type AgentSessionAutoTitleResponse = {
+  status: "updated" | "skipped";
+  reason?:
+    | "not_default_label"
+    | "insufficient_content"
+    | "generation_failed"
+    | "session_not_found";
+  session?: {
+    key: string;
+    title: string;
+  };
+};
+
 export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
   const params = new URLSearchParams({ surface });
   const response = await backendAuthRequest(`/api/usage/quota?${params.toString()}`, {
@@ -1373,6 +1398,32 @@ export async function autoTitleThread(
     }
   );
   const data = await parseApiJson<ThreadAutoTitleResponse>(response);
+  return { response, data };
+}
+
+/**
+ * Generate + persist a title for a ZAKI agent session after the first
+ * user / assistant exchange. The BFF handler:
+ *   - verifies access via the agent-session bearer
+ *   - skips when the session already has a non-default title
+ *   - generates 3-6 word title via the shared thread-auto-title helper
+ *   - PATCHes the upstream nullalis session with the new title
+ *
+ * Returns the same {status, reason?, session?} contract the thread
+ * version uses.
+ */
+export async function autoTitleAgentSession(
+  sessionKey: string,
+  payload: AgentSessionAutoTitleRequest,
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/sessions/${encodeURIComponent(sessionKey)}/auto-title`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  const data = await parseApiJson<AgentSessionAutoTitleResponse>(response);
   return { response, data };
 }
 

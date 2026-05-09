@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   autoTitleThread,
+  autoTitleAgentSession,
   apiRequest,
   buildApiUrl,
   captureMemory,
@@ -72,6 +73,7 @@ import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
+import { prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
@@ -2317,6 +2319,10 @@ export function ChatArea() {
   const autoTitleAttemptsRef = useRef<Record<string, number>>({});
   const autoTitleFinalizedRef = useRef<Record<string, boolean>>({});
   const autoTitleInFlightRef = useRef<Record<string, boolean>>({});
+  // Same pattern, scoped per ZAKI sessionKey instead of (spaceId, threadId).
+  const autoTitleSessionAttemptsRef = useRef<Record<string, number>>({});
+  const autoTitleSessionFinalizedRef = useRef<Record<string, boolean>>({});
+  const autoTitleSessionInFlightRef = useRef<Record<string, boolean>>({});
 
   const measureInputMetrics = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -2941,6 +2947,72 @@ export function ChatArea() {
     [applyThreadLabelUpdate, getAutoTitleKey, getThreadLabel, queryClient]
   );
 
+  /**
+   * ZAKI session auto-title — mirror of maybeAutoTitleThread but scoped
+   * by sessionKey. Strips any pinned-context wrapper from the user
+   * message before sending so the BE sees the actual question, not the
+   * fenced reference block.
+   */
+  const maybeAutoTitleSession = useCallback(
+    async (
+      sessionKey: string,
+      exchange?: { userMessage: string; assistantMessage: string },
+    ) => {
+      if (!sessionKey) return;
+      if (autoTitleSessionFinalizedRef.current[sessionKey]) return;
+      if (autoTitleSessionInFlightRef.current[sessionKey]) return;
+
+      const cleaned = prepareAutoTitleExchange([
+        { role: "user", content: exchange?.userMessage ?? "" },
+        { role: "assistant", content: exchange?.assistantMessage ?? "" },
+      ]);
+      if (!cleaned) return;
+
+      const attempts = autoTitleSessionAttemptsRef.current[sessionKey] ?? 0;
+      if (attempts >= 2) {
+        autoTitleSessionFinalizedRef.current[sessionKey] = true;
+        return;
+      }
+
+      autoTitleSessionAttemptsRef.current[sessionKey] = attempts + 1;
+      autoTitleSessionInFlightRef.current[sessionKey] = true;
+
+      try {
+        const { response, data } = await autoTitleAgentSession(sessionKey, {
+          userMessage: cleaned.userMessage,
+          assistantMessage: cleaned.assistantMessage,
+          currentLabel: "",
+        });
+
+        if (!response.ok || !data) return;
+
+        if (data.status === "updated" && data.session?.title) {
+          autoTitleSessionFinalizedRef.current[sessionKey] = true;
+          await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+          return;
+        }
+
+        // BE says "already has a title" — stop retrying.
+        if (data.reason === "not_default_label") {
+          autoTitleSessionFinalizedRef.current[sessionKey] = true;
+          await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+          return;
+        }
+
+        // Don't finalize on a transient generation_failed — the BE
+        // pattern lets us retry up to 2x for those.
+        if (data.reason !== "generation_failed") {
+          autoTitleSessionFinalizedRef.current[sessionKey] = true;
+        }
+      } catch {
+        // Best-effort only.
+      } finally {
+        autoTitleSessionInFlightRef.current[sessionKey] = false;
+      }
+    },
+    [queryClient],
+  );
+
   const updateAssistantSources = useCallback(
     (threadSlug: string, assistantId: string, sources: Array<{ id: string; content: string; type: string }>) => {
       setMessagesByThread((prev) => {
@@ -3069,9 +3141,42 @@ export function ChatArea() {
         // with pending approvals since "done" fires when the SSE stream ends,
         // which can happen while an approval is still waiting for user action.
         refreshContextGauge();
+        // Auto-title the session from the first complete user/assistant
+        // exchange. Best-effort, non-blocking — bailouts inside the
+        // helper handle "already titled" / generation failure / etc.
+        const sessionKey = activeZakiSessionKey;
+        const threadMessages = activeThreadId ? messagesByThread[activeThreadId] : undefined;
+        if (sessionKey && threadMessages && threadMessages.length >= 2) {
+          let firstUser: string | null = null;
+          let firstAssistant: string | null = null;
+          for (const m of threadMessages) {
+            if (!firstUser && m.role === "user" && m.content?.trim()) {
+              firstUser = m.content;
+              continue;
+            }
+            if (firstUser && !firstAssistant && m.role === "assistant" && m.content?.trim()) {
+              firstAssistant = m.content;
+              break;
+            }
+          }
+          if (firstUser && firstAssistant) {
+            void maybeAutoTitleSession(sessionKey, {
+              userMessage: firstUser,
+              assistantMessage: firstAssistant,
+            });
+          }
+        }
       }
     },
-    [clearZakiBotProgressVisuals, isZakiBotActiveSpace, refreshContextGauge]
+    [
+      clearZakiBotProgressVisuals,
+      isZakiBotActiveSpace,
+      refreshContextGauge,
+      activeZakiSessionKey,
+      activeThreadId,
+      messagesByThread,
+      maybeAutoTitleSession,
+    ]
   );
 
   useEffect(() => {
