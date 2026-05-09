@@ -17,7 +17,6 @@ import { useCallback, useEffect, useState } from "react";
 
 export const ONBOARDING_STAGES = [
   "welcome",
-  "first_message",
   "plus_menu",
   "compaction",
   "brain_panel",

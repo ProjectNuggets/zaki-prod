@@ -2207,7 +2207,14 @@ export function Sidebar() {
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
-                window.dispatchEvent(new Event("zaki:open-onboarding"));
+                // Reset all stages to pending so the staged tour replays
+                // from the welcome card. ChatArea listens for this.
+                window.dispatchEvent(new Event("zaki:reset-onboarding"));
+                toast.success(
+                  t("sidebar.profile.howToUseReset", {
+                    defaultValue: "Restarting the tour. Head to ZAKI.",
+                  }),
+                );
               }}
               data-onboarding-id="profile-menu-how-to-use"
 	            >

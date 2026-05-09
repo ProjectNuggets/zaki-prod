@@ -79,6 +79,7 @@ import { OnboardingHeroCard } from "./onboarding/OnboardingHeroCard";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
+import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
   ZakiBootstrapCard,
   hasSeenZakiBootstrapCard,
@@ -2161,8 +2162,20 @@ export function ChatArea() {
   // Onboarding stage progress lives per-user in localStorage; the hook
   // resolves the next pending stage for us. The hero card surfaces above
   // the composer only while welcome is still pending.
-  const { progress: onboardingProgress, setStage: setOnboardingStage } =
+  const { progress: onboardingProgress, setStage: setOnboardingStage, reset: resetOnboarding } =
     useOnboardingProgress(authUserId);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => resetOnboarding();
+    window.addEventListener("zaki:reset-onboarding", handler);
+    return () => window.removeEventListener("zaki:reset-onboarding", handler);
+  }, [resetOnboarding]);
+  // Brain memory count drives the brain_panel stage gate — we only
+  // surface "open your brain" once ZAKI has actually saved a few facts
+  // worth showing.
+  const onboardingBrainGraph = useBrainGraph(authUserId || "");
+  const onboardingBrainCount =
+    onboardingBrainGraph.data?.total_nodes_in_corpus ?? 0;
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
   const heroCardActive =
     Boolean(authUserId) && onboardingProgress.welcome === "pending";
@@ -6547,7 +6560,7 @@ export function ChatArea() {
               if (!g || !g.tokenCount || !g.contextMax) return false;
               return g.tokenCount / g.contextMax >= 0.6;
             })(),
-            brainHasMemories: false,
+            brainHasMemories: onboardingBrainCount >= 5,
           }}
         />
       ) : null}
