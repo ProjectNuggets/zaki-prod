@@ -49,6 +49,7 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 | Account deletion governance | PASS-BETA: repeat Learn two-user isolation smoke run `learniso-moyovhih` completed cleanup without DB-row fallback warnings after export list limits were lowered to the upstream-supported `limit=200`. |
 | Retention and DR governance | PASS-BETA / GA GATE: retention, DR, deployment-readiness, and governance audit tests passed 18/18. Local public-schema database restore verified `zaki_users=134`, `zaki_learning_account_audit_events=16`, `zaki_daily_prompt_usage=79`; tenant-root snapshot/restore verified file counts `758 -> 758 -> 758`. Full production GA still requires an off-host backup target and staging restore drill. |
 | Learn observability | PASS-BETA / GA GATE: focused observability tests passed 37/37. Live `/api/internal/learning/observability` returned configured status, quota enforcement, active WebSocket aggregates, deployment gates, and DR gates. A deliberate missing-session request recorded a bounded `learning_upstream_failure` event. Production alert wiring remains a GA gate. |
+| Production deployment readiness | PASS-BETA / GA GATE: local config check passes and local readiness endpoint fail-closes on production-only gates. `zaki-infra/scripts/validate-learning-deploy.sh` passes with production chart values for internal Learn service, tenant root, secrets, provider routing, immutable refs, and source pin. GA requires target-environment readiness endpoint green plus staging smoke. |
 
 ## Current Verdict
 

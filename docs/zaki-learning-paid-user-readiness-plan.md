@@ -30,7 +30,7 @@ Related source-of-truth documents:
 | 4 | Quota, Cost, Entitlement | Make paid/free economics enforceable at BFF/operator level. | Quotas are enforced by plan/user/route/provider and unit economics assumptions are recorded. | PASS-BETA |
 | 5 | Governance | Verify data export, account deletion, retention cleanup, and backup/restore. | Export/delete/retention/restore evidence is green. | PASS-BETA |
 | 6 | Observability And Failure UX | Ensure operators and users see failures clearly. | Health checks, alerts, task states, retries, and long-running progress all work. | PASS-BETA |
-| 7 | Production Deployment Readiness | Validate central auth, internal tokens, image/source pins, secrets, CORS/CSP, and staging/production config. | `/api/internal/learning/deployment-readiness` is ready in the target environment and staging smoke passes. | PENDING |
+| 7 | Production Deployment Readiness | Validate central auth, internal tokens, image/source pins, secrets, CORS/CSP, and staging/production config. | `/api/internal/learning/deployment-readiness` is ready in the target environment and staging smoke passes. | PASS-BETA |
 | 8 | Final Code And Security Review | Review all Learn changes after gates are green. | No open P0/P1; P2 items either fixed or explicitly accepted with rationale. | PENDING |
 | 9 | Beta/GA Declaration | Declare the highest truthful readiness level based on evidence. | Beta or GA verdict written with exact remaining blockers, if any. | PENDING |
 
@@ -185,6 +185,20 @@ Minimum covered dimensions:
 - Operator-managed Together/search/embedding secrets.
 - CORS/CSP/upload/request limits.
 - Staging smoke with real login.
+
+Fresh evidence:
+
+- PASS: local runtime config check: `npm --prefix backend run config:check`.
+- PASS: local super-admin deployment-readiness endpoint is reachable and fail-closed. It passes central auth signing key, learning enabled/configured, learning internal token, operator AI stack, and retention policy.
+- PASS: local deployment-readiness endpoint correctly blocks non-local production gates in the local `.env`: explicit tenant data root, immutable ZAKI image ref, immutable learning image ref, source mirror pin, and disaster recovery readiness.
+- PASS: `zaki-infra` production Learn validator: `/Users/nova/Desktop/zaki-infra/scripts/validate-learning-deploy.sh` returned `validate-learning-deploy: ok`.
+- PASS: `zaki-infra` has production chart values for in-cluster learning route, dedicated internal token secret, dedicated provider secret, explicit tenant data root `/data/users`, Kimi/Together LLM route, Together embeddings, Brave search, immutable image/source fields, and source mirror commit pin.
+
+Remaining GA expansion:
+
+- After image promotion, run `/api/internal/learning/deployment-readiness` against staging/production with the real super-admin token and verify `deploymentReadiness.ready:true`.
+- Set/verify production DR env: off-host backup target, `ZAKI_LEARNING_BACKUPS_ENABLED=true`, and fresh `ZAKI_LEARNING_LAST_RESTORE_DRILL_AT`.
+- Run the real-login staging Learn smoke after the deployment-readiness endpoint is green.
 
 ## Change Control
 
