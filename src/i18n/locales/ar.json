@@ -350,10 +350,12 @@
     "done": "تم"
   },
   "messageActions": {
-    "thumbsDown": "علامة سيئ",
+    "thumbsDown": "جرّب زاوية مختلفة",
+    "thumbsDownStreaming": "انتظر اكتمال الرد قبل التقييم.",
+    "thumbsDownNoUser": "لا يوجد طلب سابق لإعادته.",
     "readAloud": "استمع للرد",
     "readAloudStop": "أوقف الاستماع",
-    "readAloudError": "تعذّر تشغيل الصوت، حاول مرة أخرى."
+    "readAloudError": "تعذّر تشغيل الصوت. حاول مرة أخرى."
   },
   "chat": {
     "thinking": "جاري التفكير",
@@ -723,9 +725,13 @@
         "name": "Discord",
         "tagline": "أضف ZAKI كبوت للسيرفر. أوامر مائلة وسياق الخيوط."
       },
-      "whatsapp": {
-        "name": "WhatsApp",
-        "tagline": "تواصل مع ZAKI عبر واتساب، بما في ذلك الرسائل الصوتية والوسائط."
+      "teams": {
+        "name": "Microsoft Teams",
+        "tagline": "تواصل مع ZAKI عبر مساحة عمل تيمز — رسائل خاصة، قنوات، ومتابعات الاجتماعات."
+      },
+      "email": {
+        "name": "البريد الإلكتروني",
+        "tagline": "حوّل بريدك إلى ZAKI ليقرأ ويصيغ ويرد نيابةً عنك."
       },
       "connectingPill": "جارٍ الاتصال…",
       "verifyingPill": "جارٍ التحقق…",
@@ -794,6 +800,7 @@
       "deleteSession": "حذف الجلسة",
       "deleteSessionAria": "حذف {{label}}",
       "deleteConfirm": "حذف \"{{label}}\"؟ لا يمكن التراجع.",
+      "deleteConfirmAction": "حذف",
       "deleteSuccess": "تم حذف الجلسة.",
       "deleteError": "تعذّر حذف الجلسة. حاول مرة أخرى."
     },

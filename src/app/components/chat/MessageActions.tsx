@@ -15,6 +15,10 @@ interface MessageActionsProps {
    *  hide the button. */
   messageId?: string;
   messageText?: string;
+  /** Persisted reaction state for visual highlighting (up = green pin
+   *  on a good answer, down = red pin on a rejected one). null when
+   *  no reaction has been applied. */
+  reaction?: "up" | "down" | null;
 }
 
 export function MessageActions({
@@ -25,6 +29,7 @@ export function MessageActions({
   visible = true,
   messageId,
   messageText,
+  reaction = null,
 }: MessageActionsProps) {
   const { t } = useTranslation();
   const ttsTargetId = messageId || "";
@@ -95,7 +100,13 @@ export function MessageActions({
       </button>
       <button
         type="button"
-        className="inline-flex size-7 items-center justify-center rounded-full hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"
+        aria-pressed={reaction === "up"}
+        className={cn(
+          "inline-flex size-7 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
+          reaction === "up"
+            ? "bg-zaki-accent/15 text-zaki-accent"
+            : "hover:bg-zaki-elevated hover:text-zaki-secondary",
+        )}
         title="Good response"
         aria-label="Mark as good response"
         onClick={onThumbsUp}
@@ -104,7 +115,13 @@ export function MessageActions({
       </button>
       <button
         type="button"
-        className="inline-flex size-7 items-center justify-center rounded-full hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"
+        aria-pressed={reaction === "down"}
+        className={cn(
+          "inline-flex size-7 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
+          reaction === "down"
+            ? "bg-zaki-brand/15 text-zaki-brand"
+            : "hover:bg-zaki-elevated hover:text-zaki-secondary",
+        )}
         title={t("messageActions.thumbsDown")}
         aria-label={t("messageActions.thumbsDown")}
         onClick={onThumbsDown}

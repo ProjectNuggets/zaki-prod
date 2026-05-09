@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, MessageSquare, Loader2, Download, Share2, Pencil, Trash2, Check, X } from "lucide-react";
+import { Plus, MessageSquare, Loader2, Download, Share2, Pencil, Trash2, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { formatSessionTime } from "@/lib/zakiBot";
 import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import type { AgentSession } from "@/lib/api";
 import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
+import { InlineConfirm } from "@/app/components/ui/zaki";
 
 interface ZakiSessionListProps {
   sessions: AgentSession[];
@@ -38,6 +39,7 @@ export function ZakiSessionList({
   const { getLabel: getOverlayLabel, setLabel: setOverlayLabel } = useSessionTitleOverlay();
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (renamingKey && renameInputRef.current) {
@@ -52,6 +54,20 @@ export function ZakiSessionList({
     }
     setRenamingKey(null);
     setRenameDraft("");
+  };
+  /**
+   * Switch the rename target from any in-flight row to a new one. If the
+   * user was already renaming a different row, commit that draft first
+   * so a half-typed label isn't silently dropped (P2-A).
+   */
+  const startRename = (sessionKey: string, fallback: string, currentLabel: string) => {
+    if (renamingKey && renamingKey !== sessionKey) {
+      const trimmed = renameDraft.trim();
+      if (trimmed) setOverlayLabel(renamingKey, trimmed);
+    }
+    setRenamingKey(sessionKey);
+    setRenameDraft(currentLabel);
+    void fallback;
   };
   const { t } = useTranslation();
   if (isLoading) {
@@ -118,26 +134,25 @@ export function ZakiSessionList({
               isActive ? "zaki-nav-active" : ""
             )}
           >
-            <button
-              type="button"
-              disabled={isRenaming}
-              className={cn(
-                "flex flex-1 items-center gap-2 text-left min-w-0",
-                isRtl && "text-right flex-row-reverse",
-              )}
-              onClick={() => onSelectSession(normalizedSessionKey)}
-            >
-              <div className="relative shrink-0">
-                <MessageSquare className="size-3.5 text-zaki-muted" />
-              </div>
-              <div className="flex-1 min-w-0">
-                {isRenaming ? (
+            {isRenaming ? (
+              // Renaming state: input is a sibling of the row, not nested
+              // inside a <button>, so we keep HTML semantics valid and a11y
+              // tree clean.
+              <div
+                className={cn(
+                  "flex flex-1 items-center gap-2 min-w-0",
+                  isRtl && "text-right flex-row-reverse",
+                )}
+              >
+                <div className="relative shrink-0">
+                  <MessageSquare className="size-3.5 text-zaki-muted" />
+                </div>
+                <div className="flex-1 min-w-0">
                   <input
                     ref={renameInputRef}
                     type="text"
                     value={renameDraft}
                     onChange={(e) => setRenameDraft(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -154,35 +169,67 @@ export function ZakiSessionList({
                       defaultValue: "Session name",
                     })}
                   />
-                ) : (
-                  <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
-                )}
-                <div className="mt-0.5 flex items-center gap-1.5">
-                  {mode ? (
-                    <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
-                      {mode}
-                    </span>
-                  ) : null}
-                  <span
-                    aria-label={live ? "live" : "idle"}
-                    className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
-                  />
-                  {lastChannel ? (
-                    <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
-                      {lastChannel}
-                    </span>
-                  ) : null}
-                  {pendingApprovalCount > 0 ? (
-                    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
-                      {pendingApprovalCount}
-                    </span>
-                  ) : null}
-                  {time ? (
-                    <span className="text-2xs text-zaki-muted">{time}</span>
-                  ) : null}
                 </div>
               </div>
-            </button>
+            ) : (
+              <button
+                type="button"
+                className={cn(
+                  "flex flex-1 items-center gap-2 text-left min-w-0",
+                  isRtl && "text-right flex-row-reverse",
+                )}
+                onClick={() => onSelectSession(normalizedSessionKey)}
+              >
+                <div className="relative shrink-0">
+                  <MessageSquare className="size-3.5 text-zaki-muted" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {mode ? (
+                      <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+                        {mode}
+                      </span>
+                    ) : null}
+                    <span
+                      aria-label={live ? "live" : "idle"}
+                      className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
+                    />
+                    {lastChannel ? (
+                      <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                        {lastChannel}
+                      </span>
+                    ) : null}
+                    {pendingApprovalCount > 0 ? (
+                      <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
+                        {pendingApprovalCount}
+                      </span>
+                    ) : null}
+                    {time ? (
+                      <span className="text-2xs text-zaki-muted">{time}</span>
+                    ) : null}
+                  </div>
+                </div>
+              </button>
+            )}
+            {confirmingDeleteKey === normalizedSessionKey && onDeleteSession ? (
+              <InlineConfirm
+                label={t("zakiControls.sessionList.deleteConfirm", {
+                  defaultValue: "Delete \"{{label}}\"? This can't be undone.",
+                  label,
+                })}
+                confirmLabel={t("zakiControls.sessionList.deleteConfirmAction", {
+                  defaultValue: "Delete",
+                })}
+                cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+                onConfirm={() => {
+                  setConfirmingDeleteKey(null);
+                  onDeleteSession(normalizedSessionKey, label);
+                }}
+                onCancel={() => setConfirmingDeleteKey(null)}
+                className="shrink-0"
+              />
+            ) : (
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-60">
               {!isRenaming ? (
                 <button
@@ -190,8 +237,7 @@ export function ZakiSessionList({
                   className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary focus-visible:ring-2 focus-visible:ring-zaki-accent"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setRenamingKey(normalizedSessionKey);
-                    setRenameDraft(label);
+                    startRename(normalizedSessionKey, baseLabel, label);
                   }}
                   aria-label={t("zakiControls.sessionList.renameSessionAria", {
                     defaultValue: "Rename {{label}}",
@@ -263,7 +309,7 @@ export function ZakiSessionList({
                   className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-brand/10 hover:text-zaki-brand focus-visible:ring-2 focus-visible:ring-zaki-brand"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDeleteSession(normalizedSessionKey, label);
+                    setConfirmingDeleteKey(normalizedSessionKey);
                   }}
                   aria-label={t("zakiControls.sessionList.deleteSessionAria", {
                     defaultValue: "Delete {{label}}",
@@ -277,6 +323,7 @@ export function ZakiSessionList({
                 </button>
               ) : null}
             </div>
+            )}
           </div>
         );
       })}

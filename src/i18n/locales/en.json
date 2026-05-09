@@ -350,10 +350,12 @@
     "done": "Done"
   },
   "messageActions": {
-    "thumbsDown": "Mark as bad",
+    "thumbsDown": "Try a different angle",
+    "thumbsDownStreaming": "Wait for the reply to finish before rating.",
+    "thumbsDownNoUser": "No previous prompt to retry.",
     "readAloud": "Read aloud",
     "readAloudStop": "Stop reading",
-    "readAloudError": "Couldn't read aloud — try again."
+    "readAloudError": "Couldn't read aloud. Try again."
   },
   "chat": {
     "thinking": "Thinking",
@@ -723,9 +725,13 @@
         "name": "Discord",
         "tagline": "Add ZAKI as a server bot. Slash commands and thread context."
       },
-      "whatsapp": {
-        "name": "WhatsApp",
-        "tagline": "Reach ZAKI on WhatsApp, including voice notes and media."
+      "teams": {
+        "name": "Microsoft Teams",
+        "tagline": "Reach ZAKI in your Teams workspace — DMs, channels, and meeting follow-ups."
+      },
+      "email": {
+        "name": "Email",
+        "tagline": "Forward an inbox; ZAKI reads, drafts, and replies as you."
       },
       "connectingPill": "CONNECTING…",
       "verifyingPill": "VERIFYING…",
@@ -794,6 +800,7 @@
       "deleteSession": "Delete session",
       "deleteSessionAria": "Delete {{label}}",
       "deleteConfirm": "Delete \"{{label}}\"? This can't be undone.",
+      "deleteConfirmAction": "Delete",
       "deleteSuccess": "Session deleted.",
       "deleteError": "Couldn't delete the session. Try again."
     },

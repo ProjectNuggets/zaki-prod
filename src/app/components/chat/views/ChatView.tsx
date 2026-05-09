@@ -48,6 +48,8 @@ interface ChatViewProps {
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
   onThumbsDownMessage?: (message: Message) => void;
+  /** Resolves the persisted reaction for a message id; null = unmarked. */
+  getReaction?: (messageId: string) => "up" | "down" | null;
   /** S1 (2026-05-08) — fires the chosen prefill as a fresh user message
    *  immediately. Renders one row of chips below the last assistant
    *  message when the chat is idle. */
@@ -81,6 +83,7 @@ export function ChatView({
   onRegenerateMessage,
   onThumbsUpMessage,
   onThumbsDownMessage,
+  getReaction,
   onQuickReply,
   isRtl = false,
 }: ChatViewProps) {
@@ -194,6 +197,7 @@ export function ChatView({
                   onCopy={onCopyMessage}
                   onRegenerate={onRegenerateMessage}
                   onThumbsUp={onThumbsUpMessage}
+                  reaction={getReaction ? getReaction(msg.id) : null}
                 />
               ) : (
                 !botMode && (
@@ -226,6 +230,7 @@ export function ChatView({
               onRegenerate={onRegenerateMessage}
               onThumbsUp={onThumbsUpMessage}
               onThumbsDown={onThumbsDownMessage}
+              reaction={getReaction ? getReaction(msg.id) : null}
             />
             {isLast && msg.role === "assistant"
               ? renderTimelineArtifacts({ phase: "done" })

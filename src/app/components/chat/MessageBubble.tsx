@@ -60,6 +60,9 @@ export interface MessageBubbleProps {
   onRegenerate?: (message: Message) => void;
   onThumbsUp?: (message: Message) => void;
   onThumbsDown?: (message: Message) => void;
+  /** Persisted reaction state — drives the highlight and the reason
+   *  input that appears under thumbed-down messages. */
+  reaction?: "up" | "down" | null;
 }
 
 export function MessageBubble({
@@ -71,6 +74,7 @@ export function MessageBubble({
   onRegenerate,
   onThumbsUp,
   onThumbsDown,
+  reaction = null,
 }: MessageBubbleProps) {
   // isStreaming can be used to show typing indicator or disable actions
   void isStreaming;
@@ -219,6 +223,7 @@ export function MessageBubble({
               onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
               onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}
               onThumbsDown={onThumbsDown ? () => onThumbsDown(message) : undefined}
+              reaction={reaction}
             />
             {memorySources.length > 0 && (
               <button

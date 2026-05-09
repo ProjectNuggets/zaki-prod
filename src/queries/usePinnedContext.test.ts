@@ -65,8 +65,11 @@ describe("buildPinnedContextPrefix", () => {
     expect(out).toContain("- beta: two");
   });
 
-  it("treats label and content as reference-only", () => {
+  it("opens with a labelled fence so the model sees structured data, not instructions", () => {
     const out = buildPinnedContextPrefix([{ id: "m1", label: "x" }]);
-    expect(out.toLowerCase()).toContain("reference only");
+    // Header line should mention "pinned" (the section name) and a
+    // marker indicating these are inputs to the model, not commands.
+    expect(out.split("\n")[0]).toMatch(/pinned/i);
+    expect(out.split("\n")[0]).toMatch(/reference|treat|user-pinned/i);
   });
 });

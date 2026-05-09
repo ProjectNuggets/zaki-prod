@@ -72,6 +72,7 @@ import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
+import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import {
@@ -5432,13 +5433,61 @@ export function ChatArea() {
     [handleSend, isStreaming, messages]
   );
 
-  const handleThumbsUpMessage = useCallback(() => {
-    toast.success("Thanks for the feedback");
-  }, []);
+  // Message reactions live in localStorage scoped to the active thread.
+  // Thumbs-up = persistent green highlight ("good answer", personal
+  // annotation). Thumbs-down = red highlight + immediate regenerate
+  // with a rejection-context wrapper, so the agent gets another swing.
+  const reactionsThreadKey = activeThreadId
+    ? `${activeWorkspaceSlug || "_"}::${activeThreadId}`
+    : null;
+  const { getReaction, setReaction } = useMessageReactions(reactionsThreadKey);
 
-  const handleThumbsDownMessage = useCallback(() => {
-    toast.success("Thanks for the feedback");
-  }, []);
+  const handleThumbsUpMessage = useCallback(
+    (message: Message) => {
+      const current = getReaction(message.id);
+      // Toggle: clicking again clears the reaction.
+      setReaction(message.id, current === "up" ? null : "up");
+    },
+    [getReaction, setReaction],
+  );
+
+  const handleThumbsDownMessage = useCallback(
+    (message: Message) => {
+      if (isStreaming) {
+        toast.error(t("messageActions.thumbsDownStreaming", {
+          defaultValue: "Wait for the reply to finish before rating.",
+        }));
+        return;
+      }
+      // Find the previous user turn so we can re-issue it with a
+      // rejection-context wrapper.
+      const idx = messages.findIndex((m) => m.id === message.id);
+      let userMessage: Message | null = null;
+      for (let i = idx - 1; i >= 0; i -= 1) {
+        const candidate = messages[i];
+        if (candidate && candidate.role === "user") {
+          userMessage = candidate;
+          break;
+        }
+      }
+      if (!userMessage?.content?.trim()) {
+        toast.error(t("messageActions.thumbsDownNoUser", {
+          defaultValue: "No previous prompt to retry.",
+        }));
+        return;
+      }
+      // Mark the rejected reply persistently so the user can scroll back
+      // and see what they previously thumbed-down.
+      setReaction(message.id, "down");
+      const rejected = (message.content || "").trim().slice(0, 400);
+      const wrapped =
+        `${userMessage.content}\n\n` +
+        `[The previous reply was rejected by the user. Try a different angle.\n` +
+        `Rejected reply (truncated): ${rejected}]`;
+      handleSend(wrapped, []);
+    },
+    [getReaction, setReaction, messages, handleSend, isStreaming, t],
+  );
 
   const handleApprovalAction = useCallback(
     async (requestId: string, approved: boolean) => {
@@ -6092,6 +6141,7 @@ export function ChatArea() {
         onRegenerateMessage={handleRegenerateMessage}
         onThumbsUpMessage={handleThumbsUpMessage}
         onThumbsDownMessage={handleThumbsDownMessage}
+        getReaction={getReaction}
         onQuickReply={(prefill) => {
           // S1 — one-click follow-up. Route through the composer handle
           // (not handleSend directly) so the per-turn toggles, drafts,

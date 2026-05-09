@@ -1545,14 +1545,11 @@ export function Sidebar() {
                 new CustomEvent("zaki:open-share", { detail: { sessionKey } }),
               );
             }}
-            onDeleteSession={async (sessionKey, label) => {
-              const confirmed = window.confirm(
-                t("zakiControls.sessionList.deleteConfirm", {
-                  defaultValue: "Delete \"{{label}}\"? This can't be undone.",
-                  label,
-                }),
-              );
-              if (!confirmed) return;
+            onDeleteSession={async (sessionKey, _label) => {
+              // Confirmation surfaces inline in ZakiSessionList via the
+              // app's InlineConfirm pattern; this callback only fires
+              // after the user confirms.
+              void _label;
               try {
                 const { response } = await deleteAgentSession(sessionKey);
                 if (!response.ok) throw new Error(`delete ${response.status}`);
