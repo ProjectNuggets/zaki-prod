@@ -28,7 +28,7 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 | User isolation | PASS-BETA | Local two-user API smoke passed with real ZAKI users `57`/`58`; browser smoke passed with real users `63`/`64`. Nullalis confirmed distinct downstream sessions. `NULLALIS_DEV_USER_ID`/`NULLCLAW_DEV_USER_ID` must remain unset for all multi-user tests and hosted environments. |
 | Quota enforcement | BETA READY / GA GATE | Learning quota endpoint and frontend state exist; broad GA requires billing/unit economics thresholds and production monitoring checks. |
 | Retention/delete/export | PASS-BETA / GA GATE | Local export/delete smoke now completes without account-delete fallback; governance audit and retention tests pass. Production still needs operator policy verification before GA claim. |
-| Monitoring/alerts | GA GATE | Needs production dashboard/alert confirmation before GA claim. |
+| Monitoring/alerts | PASS-BETA / GA GATE | Internal Learn observability endpoint and structured failure counters are live locally. Production dashboard and alert routing still need confirmation before GA claim. |
 | Provider routing/secrets | BETA READY / GA GATE | Operator-managed provider routing is enforced in BFF paths already reviewed; production secrets must be injected through infra, not user UI. |
 | Dev-user bypass | PASS-BETA | `backend/src/index.js` hard-fails in production when the bypass is set. `backend/src/config-validation.js` now also fails `config:check` in production and warns locally. |
 
@@ -48,6 +48,7 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 | Learning quota/cost controls | PASS-BETA: prompt, request bytes, tenant storage bytes, book generation, external search, and concurrent Learn WebSocket gates are enforced by plan/user. Live quota and account-usage endpoints returned current policy/usage. |
 | Account deletion governance | PASS-BETA: repeat Learn two-user isolation smoke run `learniso-moyovhih` completed cleanup without DB-row fallback warnings after export list limits were lowered to the upstream-supported `limit=200`. |
 | Retention and DR governance | PASS-BETA / GA GATE: retention, DR, deployment-readiness, and governance audit tests passed 18/18. Local public-schema database restore verified `zaki_users=134`, `zaki_learning_account_audit_events=16`, `zaki_daily_prompt_usage=79`; tenant-root snapshot/restore verified file counts `758 -> 758 -> 758`. Full production GA still requires an off-host backup target and staging restore drill. |
+| Learn observability | PASS-BETA / GA GATE: focused observability tests passed 37/37. Live `/api/internal/learning/observability` returned configured status, quota enforcement, active WebSocket aggregates, deployment gates, and DR gates. A deliberate missing-session request recorded a bounded `learning_upstream_failure` event. Production alert wiring remains a GA gate. |
 
 ## Current Verdict
 

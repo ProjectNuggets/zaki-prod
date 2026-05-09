@@ -29,7 +29,7 @@ Related source-of-truth documents:
 | 3 | Two-User SaaS Isolation | Prove tenant isolation for data, runtime state, assets, WebSockets, and browser cache. | Two local users can use Learn in parallel with zero cross-user leakage. | PASS-BETA |
 | 4 | Quota, Cost, Entitlement | Make paid/free economics enforceable at BFF/operator level. | Quotas are enforced by plan/user/route/provider and unit economics assumptions are recorded. | PASS-BETA |
 | 5 | Governance | Verify data export, account deletion, retention cleanup, and backup/restore. | Export/delete/retention/restore evidence is green. | PASS-BETA |
-| 6 | Observability And Failure UX | Ensure operators and users see failures clearly. | Health checks, alerts, task states, retries, and long-running progress all work. | PENDING |
+| 6 | Observability And Failure UX | Ensure operators and users see failures clearly. | Health checks, alerts, task states, retries, and long-running progress all work. | PASS-BETA |
 | 7 | Production Deployment Readiness | Validate central auth, internal tokens, image/source pins, secrets, CORS/CSP, and staging/production config. | `/api/internal/learning/deployment-readiness` is ready in the target environment and staging smoke passes. | PENDING |
 | 8 | Final Code And Security Review | Review all Learn changes after gates are green. | No open P0/P1; P2 items either fixed or explicitly accepted with rationale. | PENDING |
 | 9 | Beta/GA Declaration | Declare the highest truthful readiness level based on evidence. | Beta or GA verdict written with exact remaining blockers, if any. | PENDING |
@@ -153,6 +153,26 @@ Minimum covered dimensions:
 - Upload/indexing failures.
 - Long-running book/video/artifact task failures.
 - Quota spikes and provider cost anomalies.
+
+Fresh evidence:
+
+- PASS: focused observability tests: `npm --prefix backend test -- src/learning-observability.test.js src/learning-quota.test.js src/learning-bff-contract.test.js --runInBand` passed 37/37.
+- PASS: backend syntax/lint: `npm --prefix backend run lint`.
+- PASS: frontend typecheck: `npm run typecheck`.
+- PASS: live internal endpoint smoke with super-admin ZAKI JWT: `GET /api/internal/learning/observability` returned `enabled:true`, `configured:true`, quota enforcement truth, active WebSocket aggregates, deployment-readiness gates, and DR gates.
+- PASS: simulated failure signal: `GET /api/learning/sessions/not-real-session-for-observability` returned 404 and the internal observability endpoint recorded one bounded `learning_upstream_failure` event with request id, route, method, status, and sanitized message.
+
+Implemented signals:
+
+- In-memory bounded Learn event store with counters by severity/event and recent events.
+- Internal super-admin observability endpoint: `/api/internal/learning/observability`.
+- Structured event recording for upstream failures, JSON sanitizer fallbacks, long-running background accept/complete/failure/timeout, proxy errors, raw upload byte-limit errors, asset errors, WebSocket open/close, WebSocket upstream/client errors, and WebSocket quota rejections.
+- Active Learn WebSocket aggregate counts only: total, users with sessions, max sessions for any user. User ids are intentionally not exposed.
+
+Remaining GA expansion:
+
+- Wire production alerting to this endpoint/log stream for learning engine down, LLM/search provider failure, quota spikes, and background task failure rates.
+- Confirm production dashboard ownership and alert destinations in Phase 7.
 
 ## Phase 7 Deployment Matrix
 

@@ -174,6 +174,10 @@ import {
   redactLearningOperatorPayload,
 } from "./learning-operator-ai-stack.js";
 import {
+  getLearningObservabilitySnapshot,
+  recordLearningObservabilityEvent,
+} from "./learning-observability.js";
+import {
   getAccessStatus,
   getEffectiveEntitlementState,
   isPaidActive,
@@ -5508,6 +5512,56 @@ app.get("/api/internal/learning/deployment-readiness", async (req, res) => {
   }
 });
 
+app.get("/api/internal/learning/observability", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+    const configured = Boolean(getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN);
+    const disasterRecovery = buildLearningDisasterRecoveryStatus({
+      learningEnabled: ZAKI_LEARNING_ENABLED,
+      learningConfigured: configured,
+    });
+    const deploymentReadiness = buildLearningDeploymentReadinessStatus({
+      learningEnabled: ZAKI_LEARNING_ENABLED,
+      learningConfigured: configured,
+      retentionPolicy: runtimeLearningRetentionPolicy,
+      disasterRecoveryStatus: disasterRecovery,
+    });
+    const quotaStatus = buildLearningQuotaStatus({
+      zakiUser: null,
+      absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+    });
+    res.status(200).json({
+      success: true,
+      status: {
+        enabled: ZAKI_LEARNING_ENABLED,
+        configured,
+        requestTimeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
+        streamTimeoutMs: LEARNING_ENGINE_STREAM_TIMEOUT_MS,
+        maxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+      },
+      observability: getLearningObservabilitySnapshot({
+        activeWebSockets: activeLearningWsByUser,
+      }),
+      quotaPolicy: {
+        policyVersion: quotaStatus.policy.policyVersion,
+        enforcement: quotaStatus.policy.enforcement,
+      },
+      deploymentReadiness: {
+        ready: deploymentReadiness.ready,
+        gates: deploymentReadiness.gates,
+      },
+      disasterRecovery: {
+        ready: disasterRecovery.ready,
+        gates: disasterRecovery.gates,
+      },
+    });
+  } catch (error) {
+    console.error("[LearningObservability] Status error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load learning observability." });
+  }
+});
+
 const LEARNING_OPERATOR_TEST_ROUTES = new Map([
   ["llm", "/api/v1/system/test/llm"],
   ["embeddings", "/api/v1/system/test/embeddings"],
@@ -9524,6 +9578,15 @@ async function pipeLearningResponse(req, res, upstream) {
   if (!upstream.ok) {
     const mapped = mapLearningUpstreamFailure(upstream.status, requestId);
     if (mapped) {
+      recordLearningObservabilityEvent({
+        event: "learning_upstream_failure",
+        severity: upstream.status >= 500 ? "error" : "warn",
+        requestId,
+        route: req.originalUrl,
+        method: req.method,
+        status: upstream.status,
+        message: mapped.body?.code || mapped.body?.error || "learning_upstream_failure",
+      });
       res.status(mapped.status).json(mapped.body);
       return;
     }
@@ -9543,6 +9606,14 @@ async function pipeLearningResponse(req, res, upstream) {
       res.json(sanitizeLearningUpstreamPayload(payload));
       return;
     } catch (error) {
+      recordLearningObservabilityEvent({
+        event: "learning_json_sanitize_fallback",
+        severity: "warn",
+        requestId,
+        route: req.originalUrl,
+        method: req.method,
+        message: error?.message || "Unable to sanitize learning JSON response.",
+      });
       console.warn("[Learning] JSON response sanitizer fallback:", {
         requestId,
         error: error?.message || "Unable to sanitize learning JSON response.",
@@ -9595,8 +9666,26 @@ async function proxyLearningRequest(req, res, targetPath, {
               action: timeoutAcceptedAction,
               status: backgroundUpstream?.status,
             });
+            recordLearningObservabilityEvent({
+              event: "learning_background_completed",
+              severity: backgroundUpstream?.ok === false ? "warn" : "info",
+              requestId: getOrCreateRequestId(req),
+              route: req.originalUrl,
+              method,
+              action: timeoutAcceptedAction,
+              status: backgroundUpstream?.status,
+            });
           })
           .catch((backgroundError) => {
+            recordLearningObservabilityEvent({
+              event: "learning_background_failed",
+              severity: "error",
+              requestId: getOrCreateRequestId(req),
+              route: req.originalUrl,
+              method,
+              action: timeoutAcceptedAction,
+              message: backgroundError?.message || "Learning background action failed.",
+            });
             console.warn("[Learning] Background book action failed:", {
               requestId: getOrCreateRequestId(req),
               action: timeoutAcceptedAction,
@@ -9610,6 +9699,15 @@ async function proxyLearningRequest(req, res, targetPath, {
             poll: acceptedPoll,
           })
         );
+        recordLearningObservabilityEvent({
+          event: "learning_background_accepted",
+          severity: "warn",
+          requestId: getOrCreateRequestId(req),
+          route: req.originalUrl,
+          method,
+          action: timeoutAcceptedAction,
+          message: "BFF accepted long-running learning task after local wait budget.",
+        });
         return;
       }
       await pipeLearningResponse(req, res, upstream);
@@ -9623,10 +9721,27 @@ async function proxyLearningRequest(req, res, targetPath, {
       error?.message === "LEARNING_ENGINE_BASE_URL is not configured." ||
       error?.message === "LEARNING_ENGINE_INTERNAL_TOKEN is not configured."
     ) {
+      recordLearningObservabilityEvent({
+        event: "learning_config_error",
+        severity: "error",
+        requestId,
+        route: req.originalUrl,
+        method,
+        message: error.message,
+      });
       res.status(500).json(buildLearningConfigErrorPayload(error.message, requestId));
       return;
     }
     if (timeoutAcceptedAction && isLearningTimeoutError(error)) {
+      recordLearningObservabilityEvent({
+        event: "learning_background_timeout_accepted",
+        severity: "warn",
+        requestId,
+        route: req.originalUrl,
+        method,
+        action: timeoutAcceptedAction,
+        message: error?.message || "Learning request timed out.",
+      });
       console.warn("[Learning] Long-running upstream task still active after BFF timeout:", {
         requestId,
         action: timeoutAcceptedAction,
@@ -9641,6 +9756,14 @@ async function proxyLearningRequest(req, res, targetPath, {
       );
       return;
     }
+    recordLearningObservabilityEvent({
+      event: "learning_proxy_error",
+      severity: "error",
+      requestId,
+      route: req.originalUrl,
+      method,
+      message: error?.message || "Learning request failed.",
+    });
     console.error("[Learning] Upstream proxy error:", {
       requestId,
       error: error?.message || "Learning request failed.",
@@ -9685,6 +9808,14 @@ async function proxyLearningAssetRequest(req, res, targetPath, label) {
     await pipeLearningResponse(req, res, upstream);
   } catch (error) {
     const requestId = getOrCreateRequestId(req);
+    recordLearningObservabilityEvent({
+      event: "learning_asset_proxy_error",
+      severity: "error",
+      requestId,
+      route: req.originalUrl,
+      method: req.method,
+      message: error?.message || "Learning asset request failed.",
+    });
     console.error("[Learning] Asset proxy error:", {
       requestId,
       error: error?.message || "Learning asset request failed.",
@@ -9726,6 +9857,15 @@ async function proxyLearningRawRequest(req, res, targetPath, {
     const requestId = getOrCreateRequestId(req);
     const sizeError = findLearningRequestSizeError(error);
     if (sizeError) {
+      recordLearningObservabilityEvent({
+        event: "learning_raw_request_too_large",
+        severity: "warn",
+        requestId,
+        route: req.originalUrl,
+        method,
+        status: 413,
+        message: "Learning raw request exceeded byte limit.",
+      });
       res.status(413).json({
         code: "request_too_large",
         error: "Learning request is too large.",
@@ -9735,6 +9875,14 @@ async function proxyLearningRawRequest(req, res, targetPath, {
       });
       return;
     }
+    recordLearningObservabilityEvent({
+      event: "learning_raw_proxy_error",
+      severity: "error",
+      requestId,
+      route: req.originalUrl,
+      method,
+      message: error?.message || "Learning raw request failed.",
+    });
     console.error("[Learning] Raw upstream proxy error:", {
       requestId,
       error: error?.message || "Learning raw request failed.",
@@ -12704,6 +12852,14 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   let outgoingChain = Promise.resolve();
   const pendingClientMessages = [];
   const maxPendingClientMessages = 20;
+  recordLearningObservabilityEvent({
+    event: "learning_ws_open",
+    severity: "info",
+    requestId,
+    route: req.url,
+    method: "WS",
+    action: context.targetPath,
+  });
   const upstreamSocket = new UpstreamWebSocket(upstreamUrl, {
     headers: buildLearningForwardHeaders({
       internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
@@ -12777,6 +12933,15 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   });
 
   upstreamSocket.on("error", (error) => {
+    recordLearningObservabilityEvent({
+      event: "learning_ws_upstream_error",
+      severity: "error",
+      requestId,
+      route: req.url,
+      method: "WS",
+      action: context.targetPath,
+      message: error?.message || "upstream websocket failed",
+    });
     console.error("[LearningProxy] Upstream websocket error:", {
       requestId,
       error: error?.message || "upstream websocket failed",
@@ -12811,6 +12976,15 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
             })
         );
         if (!actionDecision.allowed) {
+          recordLearningObservabilityEvent({
+            event: "learning_ws_action_quota_exceeded",
+            severity: "warn",
+            requestId,
+            route: req.url,
+            method: "WS",
+            action,
+            status: 429,
+          });
           closeClient(1008, "Learning action quota exceeded.");
           closeUpstream(1008, "learning_action_quota_exceeded");
           return;
@@ -12821,6 +12995,14 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
           surface: LEARNING_SURFACE,
         });
         if (!quota?.allowed) {
+          recordLearningObservabilityEvent({
+            event: "learning_ws_prompt_quota_exceeded",
+            severity: "warn",
+            requestId,
+            route: req.url,
+            method: "WS",
+            status: 429,
+          });
           closeClient(1008, "Learning quota exceeded.");
           closeUpstream(1008, "learning_quota_exceeded");
           return;
@@ -12828,6 +13010,14 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
       }
       sendOrQueueUpstream(sanitized.data, sanitized.isBinary);
     }).catch((error) => {
+      recordLearningObservabilityEvent({
+        event: "learning_ws_forward_error",
+        severity: "error",
+        requestId,
+        route: req.url,
+        method: "WS",
+        message: error?.message || "client websocket forward failed",
+      });
       console.error("[LearningProxy] Client websocket forward error:", {
         requestId,
         error: error?.message || "client websocket forward failed",
@@ -12838,6 +13028,14 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   });
 
   clientSocket.on("error", (error) => {
+    recordLearningObservabilityEvent({
+      event: "learning_ws_client_error",
+      severity: "error",
+      requestId,
+      route: req.url,
+      method: "WS",
+      message: error?.message || "client websocket failed",
+    });
     console.error("[LearningProxy] Client websocket error:", {
       requestId,
       error: error?.message || "client websocket failed",
@@ -12846,6 +13044,14 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   });
 
   clientSocket.on("close", () => {
+    recordLearningObservabilityEvent({
+      event: "learning_ws_close",
+      severity: "info",
+      requestId,
+      route: req.url,
+      method: "WS",
+      action: context.targetPath,
+    });
     releaseActiveLearningWs();
     closeUpstream();
   });
