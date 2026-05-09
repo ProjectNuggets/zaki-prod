@@ -4603,7 +4603,7 @@ function LearningSpacePanel({
         </nav>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
         {activeSection === "recent_activity" ? (
           <SpaceContentBlock
             icon={Clock3}
@@ -4934,7 +4934,7 @@ function LearningSpacePanel({
             </div>
           </SpaceContentBlock>
         )}
-      </main>
+      </div>
     </div>
   );
 }
@@ -5246,7 +5246,7 @@ function SourcesPanel({
         </div>
       </aside>
 
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-zaki-base">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-zaki-base">
         <div className="border-b border-zaki-border bg-zaki-raised px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -5622,7 +5622,7 @@ function SourcesPanel({
             </div>
           )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
@@ -6322,7 +6322,7 @@ function WriterPanel({
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 rounded-zaki-lg border border-dashed border-zaki-border bg-zaki-base px-8 py-16 text-center">
             <PenLine className="size-7 text-zaki-muted" />
@@ -6425,7 +6425,7 @@ function WriterPanel({
             })}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }

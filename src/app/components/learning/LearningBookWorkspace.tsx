@@ -815,7 +815,7 @@ export function LearningBookWorkspace({
             }}
             onRebuild={handleRebuild}
           />
-          <main className="min-w-0 flex-1 overflow-hidden bg-zaki-base">
+          <div className="min-w-0 flex-1 overflow-hidden bg-zaki-base">
             {detailQuery.isLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-zaki-muted">
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -954,7 +954,7 @@ export function LearningBookWorkspace({
                 }}
               />
             )}
-          </main>
+          </div>
         </div>
       )}
     </div>
@@ -1019,7 +1019,7 @@ function BookLibraryView({
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <BookStat icon={BookOpen} label="Total books" value={stats.total} />
           <BookStat icon={Sparkles} label="Ready" value={stats.ready} accent="text-emerald-600" />
@@ -1070,7 +1070,7 @@ function BookLibraryView({
             ))}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-# ZAKI Learn UAT Checklist - 2026-05-08
+# ZAKI Learn UAT Checklist - updated 2026-05-09
 
 Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local folder path linking remains intentionally excluded from hosted production; browser file, image, folder, and archive upload are in scope.
 
@@ -36,12 +36,15 @@ Scope: hosted ZAKI Learn parity with DeepTutor where appropriate for SaaS. Local
 
 | Run | Result |
 | --- | --- |
-| Mocked desktop parity E2E | PASS: `npm run test:e2e -- e2e/learning-parity.spec.ts --project=chromium-desktop` — 11/11 passed. |
-| Live route smoke | PASS: 14/14 Learn routes loaded with expected controls, no console errors, and no failed responses. |
+| Mocked desktop parity E2E | PASS: `npm run test:e2e -- e2e/learning-parity.spec.ts --project=chromium-desktop` — 14/14 passed. |
+| Typecheck | PASS: `npm run typecheck`. |
+| Backend learning contracts | PASS: `npm --prefix backend test -- learning-study.test.js learning-bff-contract.test.js --runInBand` — 30/30 passed. |
+| Live route smoke | PASS: 14/14 Learn routes loaded with expected controls and no horizontal overflow. |
+| Accessibility landmark smoke | PASS: imported Learn subpanels no longer render nested `<main>` landmarks inside the ZAKI shell main. |
 | Live two-user API isolation | PASS: two paid local users, zero marker leaks, downstream sessions `agent:zaki-bot:user:57:thread:main` and `agent:zaki-bot:user:58:thread:main`. |
 | Live two-user browser smoke | PASS: two paid local browser users, no visible cross-user marker, no console errors, no failed responses. |
 | Config hardening | PASS: production config now rejects `NULLALIS_DEV_USER_ID`/`NULLCLAW_DEV_USER_ID`; local config check passes with it unset. |
 
 ## Current Verdict
 
-Target state after this run: code-level beta candidate. Automated E2E, typecheck, targeted backend config tests, backend lint, config check, live route smoke, and live two-user isolation smoke pass locally. GA-ready remains intentionally blocked until quota/unit economics, retention, export/delete, backup/recovery, and monitoring gates are verified against production infrastructure.
+Target state after this run: code-level beta candidate. Automated E2E, typecheck, targeted backend contract tests, live route smoke, and live two-user isolation smoke pass locally. GA-ready remains intentionally blocked until quota/unit economics, retention, export/delete, backup/recovery, and monitoring gates are verified against production infrastructure.
