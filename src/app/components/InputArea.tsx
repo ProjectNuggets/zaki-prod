@@ -1355,7 +1355,6 @@ export function InputArea({
                       role="menuitem"
                       onClick={handleToggleQueryMode}
                       disabled={!canToggleQueryMode}
-                      data-onboarding-id="chat-control-query-mode"
                     >
                       <FileText className="size-4 text-zaki-muted" />
                       {t("input.queryMode.label")}

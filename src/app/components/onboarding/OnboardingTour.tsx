@@ -70,7 +70,10 @@ const STAGE_CONFIGS: StageConfig[] = [
     defaultTitle: "ZAKI is learning about you",
     defaultBody:
       "Open your brain to see what ZAKI remembers. You can edit, pin, or forget anything.",
-    gateKey: "brainHasMemories",
+    // Compound gate: the user must have enough memories to make the
+    // tooltip meaningful AND be on the dashboard where the anchor
+    // exists. Otherwise the tooltip would mis-anchor inside a session.
+    gateKey: "brainPanelEligible",
   },
 ];
 
@@ -90,8 +93,17 @@ export function OnboardingTour({
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
 
+  // Welcome is the entry stage (rendered as an inline hero by
+  // ZakiDashboard, not by this orchestrator). Until welcome is "done",
+  // the orchestrator stays silent so the hero card and a spotlight
+  // tooltip never overlap. If welcome is "skipped" the user has opted
+  // out of onboarding entirely until they re-enter via "Show me around"
+  // (which resets all stages back to pending).
+  const welcomeStatus = progress.welcome;
+
   // Pick the highest-priority pending + eligible stage.
   const activeStage = useMemo<StageConfig | null>(() => {
+    if (welcomeStatus !== "done") return null;
     for (const id of ONBOARDING_STAGES) {
       const status = progress[id];
       if (status !== "pending") continue;
@@ -101,7 +113,7 @@ export function OnboardingTour({
       return config;
     }
     return null;
-  }, [progress, gates]);
+  }, [progress, gates, welcomeStatus]);
 
   // When the active stage changes, reopen the tooltip (in case the user
   // re-entered the tour from the settings menu).
@@ -111,8 +123,6 @@ export function OnboardingTour({
 
   if (!activeStage) return null;
 
-  const stepIndex = ONBOARDING_STAGES.indexOf(activeStage.id) + 1;
-
   return (
     <OnboardingTooltip
       open={open}
@@ -120,11 +130,6 @@ export function OnboardingTour({
       placement={activeStage.placement}
       title={t(activeStage.titleKey, { defaultValue: activeStage.defaultTitle })}
       body={t(activeStage.bodyKey, { defaultValue: activeStage.defaultBody })}
-      stepLabel={t("onboarding.tour.stepLabel", {
-        defaultValue: "Step {{n}} of {{total}}",
-        n: stepIndex,
-        total: ONBOARDING_STAGES.length,
-      })}
       spotlight
       onNext={() => {
         setOpen(false);

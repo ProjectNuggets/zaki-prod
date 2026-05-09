@@ -963,15 +963,9 @@
     }
   },
   "onboarding": {
-    "eyebrow": "Welcome",
-    "title": "Set up your workspace, {{userName}}",
-    "subtitle": "Three quick steps to make ZAKI useful from day one.",
-    "softHint": "You can keep chatting while this stays open.",
-    "skip": "Skip for now",
-    "skipTour": "Skip tour",
     "next": "Got it",
-    "back": "Back",
-    "finish": "Finish",
+    "skipTour": "Skip tour",
+    "dismissAria": "Dismiss this step",
     "hero": {
       "eyebrow": "Welcome to ZAKI",
       "title": "Hi {{name}}. Let's get ZAKI to know you.",
@@ -981,7 +975,6 @@
       "dismissAria": "Dismiss welcome card"
     },
     "tour": {
-      "stepLabel": "Step {{n}} of {{total}}",
       "plusMenu": {
         "title": "More than just typing",
         "body": "Tap the plus to schedule follow-ups, pin a memory to this thread, or switch ZAKI between Plan, Execute, and Review modes."
@@ -993,134 +986,6 @@
       "brainPanel": {
         "title": "ZAKI is learning about you",
         "body": "Open your brain to see what ZAKI remembers. You can edit, pin, or forget anything."
-      }
-    },
-    "simple": {
-      "eyebrow": "Getting started",
-      "title": "Start clean, {{userName}}",
-      "subtitle": "Two quick notes before you begin.",
-      "dismissAria": "Close onboarding",
-      "progress": "Step {{current}} of {{total}}",
-      "skip": "Skip",
-      "back": "Back",
-      "next": "Next",
-      "createSpace": "Create a space",
-      "steps": {
-        "model": {
-          "title": "ZAKI holds the relationship. Spaces hold the work.",
-          "body": "Use ZAKI when you want continuity, memory, and direction across time. Use Spaces when the work needs a clean place to be written, researched, or moved forward.",
-          "note": "Think of ZAKI as the long-running thread with you. Think of each Space as a focused work surface."
-        },
-        "spaces": {
-          "title": "Each Space keeps its own context.",
-          "body": "Threads, files, and instructions stay inside the Space they belong to. By default, content does not jump across Spaces.",
-          "note": "That means one Space for one project, topic, client, or stream of work."
-        }
-      }
-    },
-    "steps": {
-      "space": {
-        "title": "Create your first space",
-        "body": "Spaces keep topics clean. Start with one workspace for your current project.",
-        "action": "Create a space"
-      },
-      "memory": {
-        "title": "Tune memory behavior",
-        "body": "Open Memory and review what ZAKI keeps. You stay in control of every memory.",
-        "action": "Open memory"
-      },
-      "settings": {
-        "title": "Set your defaults",
-        "body": "Adjust language, theme, and profile to match how you work.",
-        "action": "Open settings"
-      }
-    },
-    "guided": {
-      "categories": {
-        "spacesThreads": "Spaces + threads",
-        "searchTools": "Search + tools",
-        "memory": "Memory",
-        "helpSettings": "Help + settings"
-      },
-      "fallbackCoachmark": "Open this first. Spaces are used to organize chat threads.",
-      "hintAria": "Onboarding hint",
-      "hideTutorial": "Hide tutorial",
-      "progressComplete": "{{progress}}% complete",
-      "stepSummary": "Step {{current}} of {{total}}",
-      "taskSummary": "Task {{current}} of {{total}}",
-      "followHint": "Use hint",
-      "progressSteps": "{{current}}/{{total}}",
-      "back": "Back",
-      "next": "Next",
-      "completeAction": "Complete",
-      "close": "Close",
-      "finishTutorial": "Finish tutorial",
-      "startChatting": "Start chatting",
-      "completeBadge": "Complete",
-      "completeTitle": "You're ready, {{userName}}",
-      "completeBody": "You have the basics. Memory, Settings, and How to use stay in the profile menu whenever you need them.",
-      "optionalCloseout": "Optional later: settings + help",
-      "tasks": {
-        "spaceScopeOverview": {
-          "label": "Space-wide context",
-          "short": "Instructions and documents added here apply across the whole space. Files you attach inside a chat stay in that thread.",
-          "openLabel": "Open your first space",
-          "openShort": "Open New space first. Then you will see which context applies to the whole space versus one chat."
-        },
-        "spaceCreated": {
-          "label": "Name your space",
-          "short": "Give your space a name, then click Create space.",
-          "openLabel": "Create your first space",
-          "openShort": "Open New space to create a space for one project or topic."
-        },
-        "threadCreated": {
-          "label": "Create a new chat",
-          "short": "Inside your space, click New chat. Each thread is a separate conversation."
-        },
-        "webSearchOpened": {
-          "label": "Web search",
-          "short": "Use this button to trigger a web-assisted reply in chat."
-        },
-        "chatControlsOpened": {
-          "label": "Open chat controls",
-          "short": "Click the + button to reveal the chat controls menu."
-        },
-        "chatToolsOverview": {
-          "label": "Explore chat tools",
-          "short": "From this menu, you can use Query mode, upload files, and access study, image, and agent tools."
-        },
-        "queryModeExplained": {
-          "label": "Query mode",
-          "short": "Use Query mode when you want ZAKI to answer from the current space documents instead of relying on general chat alone."
-        },
-        "uploadFilesExplained": {
-          "label": "Upload images and files",
-          "short": "Use this to add images or files to the current thread."
-        },
-        "studyLearnExplained": {
-          "label": "Study and learn",
-          "short": "Use this when you want document-based help that prioritizes understanding and deeper exploration."
-        },
-        "generateImageExplained": {
-          "label": "Generate image",
-          "short": "Use this to create images directly inside the current chat."
-        },
-        "agentModeExplained": {
-          "label": "Agent mode",
-          "short": "Use this to hand work to an active assistant that can use tools to complete tasks."
-        },
-        "memoryToggleOverview": {
-          "label": "Memory toggle",
-          "short": "Switch between manual memory, where you confirm what ZAKI keeps, and automatic memory, where it saves useful details for you."
-        },
-        "memoryProfileOpened": {
-          "label": "Open the profile menu",
-          "short": "Click your profile card in the bottom-left corner."
-        },
-        "memoryOpened": {
-          "label": "Open Memory",
-          "short": "Open Memory from your profile menu to review what ZAKI keeps and adjust it anytime."
-        }
       }
     }
   },

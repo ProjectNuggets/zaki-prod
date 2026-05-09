@@ -32,8 +32,14 @@ interface OnboardingTooltipProps {
   nextLabel?: string;
   /** Skip CTA text. Defaults to "Skip tour". */
   skipLabel?: string;
+  /** Got it / advance handler. */
   onNext: () => void;
+  /** "Skip tour" handler — user has opted out of the entire tour. */
   onSkip: () => void;
+  /** Optional X-icon dismiss handler. Defaults to onNext (treat the
+   *  X as "got it for this step" rather than "skip the entire tour").
+   *  Provide an explicit handler to differentiate. */
+  onDismiss?: () => void;
   /** When true, dim the rest of the page so the anchor stands out. */
   spotlight?: boolean;
 }
@@ -117,6 +123,7 @@ export function OnboardingTooltip({
   skipLabel,
   onNext,
   onSkip,
+  onDismiss,
   spotlight = false,
 }: OnboardingTooltipProps) {
   const { t } = useTranslation();
@@ -152,7 +159,9 @@ export function OnboardingTooltip({
 
   const tooltipStyle = computeTooltipStyle(rect, placement);
   const resolvedNextLabel = nextLabel ?? t("onboarding.next", { defaultValue: "Got it" });
-  const resolvedSkipLabel = skipLabel ?? t("onboarding.skip", { defaultValue: "Skip tour" });
+  const resolvedSkipLabel = skipLabel ?? t("onboarding.skipTour", { defaultValue: "Skip tour" });
+  const resolvedDismissLabel = t("onboarding.dismissAria", { defaultValue: "Dismiss this step" });
+  const resolvedDismissHandler = onDismiss ?? onNext;
 
   return (
     <div
@@ -199,9 +208,9 @@ export function OnboardingTooltip({
       >
         <button
           type="button"
-          onClick={onSkip}
+          onClick={resolvedDismissHandler}
           className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-full text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
-          aria-label={resolvedSkipLabel}
+          aria-label={resolvedDismissLabel}
         >
           <X className="size-3.5" />
         </button>

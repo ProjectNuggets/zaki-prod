@@ -2208,11 +2208,17 @@ export function Sidebar() {
               onClick={() => {
                 setProfileMenuOpen(false);
                 // Reset all stages to pending so the staged tour replays
-                // from the welcome card. ChatArea listens for this.
+                // from the welcome card. ChatArea listens for this and
+                // clears localStorage. Then navigate the user to the
+                // ZAKI home where the hero card lives — otherwise the
+                // reset is invisible until they happen to come back.
                 window.dispatchEvent(new Event("zaki:reset-onboarding"));
+                setExpandedSpace(ZAKI_BOT_SPACE_ID);
+                setActiveItem(ZAKI_BOT_SPACE_ID);
+                goToZakiHome();
                 toast.success(
                   t("sidebar.profile.howToUseReset", {
-                    defaultValue: "Restarting the tour. Head to ZAKI.",
+                    defaultValue: "Restarting the tour.",
                   }),
                 );
               }}

@@ -75,15 +75,11 @@ import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
-import { OnboardingHeroCard } from "./onboarding/OnboardingHeroCard";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
-import {
-  ZakiBootstrapCard,
-  hasSeenZakiBootstrapCard,
-} from "./ZakiBootstrapCard";
+import { hasSeenZakiBootstrapCard } from "./ZakiBootstrapCard";
 import {
   createZakiBotThread,
   isZakiBotSpaceId,
@@ -2058,6 +2054,16 @@ export function ChatArea() {
     Record<string, NullalisTranscriptEntry[]>
   >({});
   const [firstMessageTransition, setFirstMessageTransition] = useState(false);
+  // Query mode is a Spaces-only feature.
+  //   - InputArea hides the toggle button in zakiBotMode (only renders
+  //     in the non-zakiBotMode branch of the plus menu).
+  //   - InputArea hides the active pill via `!zakiBotMode && queryModeEnabled`.
+  //   - The agent stream body never includes the `mode` field — see the
+  //     `isZakiAgentSpace ? agentBody : spacesBody` branch in handleSend.
+  // The state stays at the ChatArea level so toggling in Spaces is
+  // remembered across route switches; it's intentional that the value
+  // can persist while invisible. Wire path is gated, so a ghost true
+  // never reaches the agent.
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
@@ -6560,7 +6566,11 @@ export function ChatArea() {
               if (!g || !g.tokenCount || !g.contextMax) return false;
               return g.tokenCount / g.contextMax >= 0.6;
             })(),
-            brainHasMemories: onboardingBrainCount >= 5,
+            // Brain panel tooltip anchors at the dashboard's brain
+            // entry. Only fire when both the anchor is in the DOM
+            // (showZakiHome === true) and the user has enough memories
+            // to make the nudge meaningful.
+            brainPanelEligible: showZakiHome && onboardingBrainCount >= 5,
           }}
         />
       ) : null}
