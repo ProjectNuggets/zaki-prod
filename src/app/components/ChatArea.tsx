@@ -75,6 +75,9 @@ import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
+import { OnboardingHeroCard } from "./onboarding/OnboardingHeroCard";
+import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
+import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import {
   ZakiBootstrapCard,
   hasSeenZakiBootstrapCard,
@@ -2154,6 +2157,17 @@ export function ChatArea() {
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
   const isAuthReady = !authLoading && Boolean(authUserId);
+  // Onboarding stage progress lives per-user in localStorage; the hook
+  // resolves the next pending stage for us. The hero card surfaces above
+  // the composer only while welcome is still pending.
+  const { progress: onboardingProgress, setStage: setOnboardingStage } =
+    useOnboardingProgress(authUserId);
+  const [memoryImportOpen, setMemoryImportOpen] = useState(false);
+  const heroCardActive =
+    Boolean(authUserId) && onboardingProgress.welcome === "pending";
+  // Legacy holdover: ZakiExperimentalNotice still keys off this flag,
+  // and the new hero replaces the bootstrap card entirely so once the
+  // user dismisses the hero we treat the legacy flag as completed too.
   const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(() =>
     authUserId ? hasSeenZakiBootstrapCard(authUserId) : true
   );
@@ -6032,6 +6046,19 @@ export function ChatArea() {
         return (
           <ZakiDashboard
             onSendExample={(example) => handleSend(example, [])}
+            heroActive={heroCardActive}
+            onHeroTypeIntro={() => {
+              setOnboardingStage("welcome", "done");
+              setZakiBootstrapCompleted(true);
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("zaki:focus-composer"));
+              }
+            }}
+            onHeroOpenImport={() => setMemoryImportOpen(true)}
+            onHeroDismiss={() => {
+              setOnboardingStage("welcome", "skipped");
+              setZakiBootstrapCompleted(true);
+            }}
           />
         );
       }
@@ -6359,11 +6386,6 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
-              <ZakiBootstrapCard
-                active={isZakiBotActiveSpace && Boolean(authUserId) && !zakiBootstrapCompleted}
-                userId={authUserId}
-                onDismiss={() => setZakiBootstrapCompleted(true)}
-              />
               <ZakiExperimentalNotice
                 active={isZakiBotActiveSpace && zakiBootstrapCompleted}
               />
@@ -6502,6 +6524,16 @@ export function ChatArea() {
         threadSlug={activeThreadId || ""}
         threadTitle={headerThreadName}
         messages={messages}
+      />
+
+      <MemoryImportSheet
+        isOpen={memoryImportOpen}
+        onClose={() => setMemoryImportOpen(false)}
+        onImport={async (dump) => {
+          setOnboardingStage("welcome", "done");
+          setZakiBootstrapCompleted(true);
+          handleSend(dump, []);
+        }}
       />
 
       <CreateSpaceModal

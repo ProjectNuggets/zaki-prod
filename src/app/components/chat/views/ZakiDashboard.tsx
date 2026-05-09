@@ -22,9 +22,16 @@ import { useAuthStore } from "@/stores";
 import { useBrainGraph } from "@/queries";
 import { cn } from "@/lib/utils";
 import { MetaLabel } from "@/app/components/ui/zaki";
+import { OnboardingHeroCard } from "@/app/components/onboarding/OnboardingHeroCard";
 
 interface ZakiDashboardProps {
   onSendExample: (example: string) => void;
+  /** When true, the first-run onboarding hero renders above the
+   *  greeting. Stage 1 of the onboarding tour. */
+  heroActive?: boolean;
+  onHeroTypeIntro?: () => void;
+  onHeroOpenImport?: () => void;
+  onHeroDismiss?: () => void;
 }
 
 type Category = {
@@ -127,7 +134,13 @@ function useLiveGreetingKey(): string {
   return key;
 }
 
-export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
+export function ZakiDashboard({
+  onSendExample,
+  heroActive = false,
+  onHeroTypeIntro,
+  onHeroOpenImport,
+  onHeroDismiss,
+}: ZakiDashboardProps) {
   const { i18n, t } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const navigate = useNavigate();
@@ -172,6 +185,15 @@ export function ZakiDashboard({ onSendExample }: ZakiDashboardProps) {
       )}
     >
       <div className="flex flex-col items-center w-full max-w-[680px]">
+        {heroActive && onHeroTypeIntro && onHeroOpenImport && onHeroDismiss ? (
+          <OnboardingHeroCard
+            userName={userName}
+            isRtl={isRtl}
+            onTypeIntro={onHeroTypeIntro}
+            onOpenImport={onHeroOpenImport}
+            onDismiss={onHeroDismiss}
+          />
+        ) : null}
         {/* Greeting */}
         <div className="flex items-center gap-2.5 mb-8">
           <CenterLogo className="size-7 text-zaki-brand" />

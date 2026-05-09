@@ -967,8 +967,18 @@
     "subtitle": "Three quick steps to make ZAKI useful from day one.",
     "softHint": "You can keep chatting while this stays open.",
     "skip": "Skip for now",
+    "skipTour": "Skip tour",
+    "next": "Got it",
     "back": "Back",
     "finish": "Finish",
+    "hero": {
+      "eyebrow": "Welcome to ZAKI",
+      "title": "Hi {{name}}. Let's get ZAKI to know you.",
+      "body": "Tell ZAKI who you are and what you're working on, in your own words. The more context you share, the more useful ZAKI becomes.",
+      "typeIntro": "Type your intro",
+      "importMemory": "Bring memory from ChatGPT or Claude",
+      "dismissAria": "Dismiss welcome card"
+    },
     "simple": {
       "eyebrow": "Getting started",
       "title": "Start clean, {{userName}}",
@@ -1919,5 +1929,18 @@
     "pinned": "Pinned. ZAKI will keep this in mind.",
     "limitReached": "You can pin up to {{limit}} memories per thread.",
     "unpinAria": "Unpin {{label}}"
+  },
+  "memoryImport": {
+    "title": "Bring your memory",
+    "subtitle": "Ask another assistant for a structured dump, then paste it here. ZAKI will save what matters.",
+    "step1Label": "Step 1: copy this prompt",
+    "step1Hint": "Paste this into ChatGPT, Claude, Gemini, or any assistant that knows you.",
+    "step2Label": "Step 2: paste the response",
+    "placeholder": "Paste the assistant's reply here.",
+    "copyAction": "Copy prompt",
+    "copied": "Copied",
+    "copyError": "Couldn't copy. Select the prompt and copy manually.",
+    "importAction": "Send to ZAKI",
+    "importError": "Couldn't send the import. Try again."
   }
 }
