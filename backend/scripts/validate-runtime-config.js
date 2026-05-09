@@ -9,11 +9,14 @@ const envCandidates = [
   path.resolve(process.cwd(), ".env"),
   path.resolve(process.cwd(), "backend", ".env"),
   path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", ".env"),
+  path.resolve(process.cwd(), ".env.local"),
+  path.resolve(process.cwd(), "backend", ".env.local"),
+  path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", ".env.local"),
 ];
 
 for (const envPath of envCandidates) {
   if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
+    dotenv.config({ path: envPath, override: envPath.endsWith(".env.local") });
   }
 }
 
