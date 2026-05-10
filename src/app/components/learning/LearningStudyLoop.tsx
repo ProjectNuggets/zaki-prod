@@ -178,7 +178,7 @@ export function LearningStudySetupPanel({
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="inline-flex h-8 shrink-0 items-center rounded-full border border-zaki-brand-40 bg-zaki-brand-10 px-3 text-[11px] font-semibold text-zaki-brand transition-colors hover:bg-zaki-brand-15 hover:text-zaki-brand"
+          className="inline-flex h-10 shrink-0 items-center rounded-full border border-zaki-brand-40 bg-zaki-brand-10 px-3 text-[11px] font-semibold text-zaki-brand transition-colors hover:bg-zaki-brand-15 hover:text-zaki-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
         >
           {configured ? "Edit" : "Start"}
         </button>
@@ -300,14 +300,14 @@ export function LearningStudySetupPanel({
           <button
             type="button"
             onClick={onSave}
-            className="inline-flex h-9 items-center rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text transition-colors hover:bg-zaki-hover"
+            className="inline-flex h-10 items-center rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text transition-colors hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
           >
             Save setup
           </button>
           <button
             type="button"
             onClick={onBuildPlan}
-            className="inline-flex h-9 items-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white transition-colors hover:bg-zaki-brand-hover"
+            className="inline-flex h-10 items-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white transition-colors hover:bg-zaki-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
           >
             <Sparkles className="size-3.5" />
             Build study plan
@@ -497,7 +497,7 @@ export function LearningStudyPlanHome({
           <button
             type="button"
             onClick={onOpenSetup}
-            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover"
+            className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
           >
             <PenLine className="size-3.5" />
             Configure setup
@@ -505,7 +505,7 @@ export function LearningStudyPlanHome({
           <button
             type="button"
             onClick={onBuildPlan}
-            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white hover:bg-zaki-brand-hover"
+            className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white hover:bg-zaki-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
           >
             <Sparkles className="size-3.5" />
             Build study plan
@@ -565,7 +565,7 @@ export function LearningStudyPlanHome({
                     <button
                       type="button"
                       onClick={() => onStartTask(task)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2.5 text-[11px] font-semibold text-zaki-text hover:bg-zaki-hover"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2.5 text-[11px] font-semibold text-zaki-text hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
                     >
                       <Play className="size-3.5" />
                       Start
@@ -576,7 +576,7 @@ export function LearningStudyPlanHome({
                       type="button"
                       disabled={completingTaskId === taskId}
                       onClick={() => onCompleteTask(taskId)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-emerald-500/30 px-2.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500/10 disabled:opacity-50"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-emerald-500/30 px-2.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50"
                     >
                       {completingTaskId === taskId ? (
                         <Loader2 className="size-3.5 animate-spin" />
@@ -597,7 +597,7 @@ export function LearningStudyPlanHome({
         <button
           type="button"
           onClick={onOpenSetup}
-          className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover"
+          className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
         >
           <PenLine className="size-3.5" />
           Edit setup
@@ -605,7 +605,7 @@ export function LearningStudyPlanHome({
         <button
           type="button"
           onClick={onBuildPlan}
-          className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-brand/35 bg-zaki-brand/10 px-3 text-[12px] font-semibold text-zaki-brand hover:bg-zaki-brand/15"
+          className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-brand/35 bg-zaki-brand/10 px-3 text-[12px] font-semibold text-zaki-brand hover:bg-zaki-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
         >
           <RefreshCw className="size-3.5" />
           Rebuild plan
