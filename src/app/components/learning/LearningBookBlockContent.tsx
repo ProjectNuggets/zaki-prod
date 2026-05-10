@@ -158,6 +158,7 @@ function escapeXml(value: string) {
 }
 
 function parseMermaidFlowchart(source: string) {
+  const cleanSource = source.replace(/\r/g, "");
   const nodes = new Map<string, string>();
   const edges: Array<[string, string]> = [];
   const addNode = (id: string, label?: string) => {
@@ -168,7 +169,20 @@ function parseMermaidFlowchart(source: string) {
     return cleanId;
   };
 
-  for (const rawLine of source.split(/\r?\n/)) {
+  const labelPattern = /([A-Za-z][\w-]*)\s*(?:\["([^"]+)"\]|\("([^"]+)"\)|\{([^}]+)\})/g;
+  for (const match of cleanSource.matchAll(labelPattern)) {
+    addNode(match[1] || "", match[2] || match[3] || match[4]);
+  }
+
+  const inlineEdgePattern =
+    /([A-Za-z][\w-]*)(?:\s*(?:\["[^"]+"\]|\("[^"]+"\)|\{[^}]+\}))?\s*(?:-->|-\.->|---)\s*([A-Za-z][\w-]*)(?:\s*(?:\["[^"]+"\]|\("[^"]+"\)|\{[^}]+\}))?/g;
+  for (const match of cleanSource.matchAll(inlineEdgePattern)) {
+    const from = addNode(match[1] || "");
+    const to = addNode(match[2] || "");
+    if (from && to) edges.push([from, to]);
+  }
+
+  for (const rawLine of cleanSource.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("%%") || /^(flowchart|graph)\s+/i.test(line)) continue;
 
@@ -960,21 +974,19 @@ function ConceptGraphBlock({ block }: { block: LearningBookContentBlock }) {
   const mermaidSource = textOf(code.content);
   return (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-      <figure className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
+      <div className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
         <header className="mb-2 flex items-center gap-2 text-xs text-zaki-muted">
           <Compass className="size-3.5" />
           Concept map / {nodes.length} concepts / {edges.length} relations
         </header>
         {mermaidSource ? (
-          <pre className="max-h-[60vh] overflow-auto rounded-zaki-md bg-zaki-raised p-4 text-xs text-zaki-text">
-            <code>{mermaidSource}</code>
-          </pre>
+          <MermaidFigure source={mermaidSource} description="Concept map" />
         ) : (
           <div className="rounded-zaki-md border border-dashed border-zaki-border p-4 text-xs text-zaki-muted">
             Concept graph metadata is available, but no diagram source was provided.
           </div>
         )}
-      </figure>
+      </div>
       <aside className="rounded-zaki-lg border border-zaki-border bg-zaki-base p-3">
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-normal text-zaki-muted">
           Concepts

@@ -58,4 +58,34 @@ describe("LearningBookBlockContent", () => {
     expect(image?.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
     expect(container.querySelector("pre")).toHaveTextContent("flowchart TD");
   });
+
+  it("renders one-line concept graph Mermaid source as a diagram preview", () => {
+    const { container } = render(
+      <LearningBookBlockContent
+        block={{
+          id: "concept-1",
+          type: "concept_graph",
+          payload: {
+            graph: {
+              nodes: [
+                { id: "topic", label: "Topic" },
+                { id: "practice", label: "Practice" },
+              ],
+              edges: [{ source: "topic", target: "practice" }],
+            },
+            code: {
+              language: "mermaid",
+              content: 'graph TD topic["Topic"] practice["Practice"] topic -.-> practice',
+            },
+          },
+        }}
+      />,
+    );
+
+    const image = container.querySelector("img");
+    expect(image).toBeInTheDocument();
+    expect(image?.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+    expect(container).toHaveTextContent("Concept map / 2 concepts / 1 relations");
+    expect(container.querySelector("pre")).toHaveTextContent("graph TD");
+  });
 });
