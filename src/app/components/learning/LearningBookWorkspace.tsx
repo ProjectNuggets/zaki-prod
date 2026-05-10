@@ -76,6 +76,18 @@ import { cn } from "@/lib/utils";
 type Item = Record<string, unknown>;
 type BookStatus = "draft" | "spine_ready" | "compiling" | "ready" | "error" | "archived" | string;
 type PageStatus = "pending" | "planning" | "generating" | "ready" | "partial" | "error" | string;
+type BookTaskStatus = "idle" | "running" | "background" | "complete" | "error";
+type BookTaskState = {
+  status: BookTaskStatus;
+  label: string;
+  message: string;
+  bookId: string;
+  startedAt: number;
+  updatedAt: number;
+  error?: string;
+  lastSuccess?: string;
+  retryable?: boolean;
+};
 type BlockType =
   | "text"
   | "callout"
@@ -354,6 +366,17 @@ function learningBookBackgroundPayload(bookId: string, reason: string) {
   };
 }
 
+function idleBookTask(): BookTaskState {
+  return {
+    status: "idle",
+    label: "",
+    message: "",
+    bookId: "",
+    startedAt: 0,
+    updatedAt: 0,
+  };
+}
+
 function bookDetailHasRunningWork(detail: LearningBookDetail | null) {
   if (!detail) return false;
   if (["draft", "spine_ready", "compiling"].includes(detail.book.status)) return true;
@@ -564,8 +587,10 @@ export function LearningBookWorkspace({
   const [selectedSessions, setSelectedSessions] = useState<BookSourceSelection<number>>(() => new Map());
   const [selectedNotebooks, setSelectedNotebooks] = useState<BookSourceSelection<string>>(() => new Map());
   const [selectedQuestions, setSelectedQuestions] = useState<Array<string | number>>([]);
+  const [bookTask, setBookTask] = useState<BookTaskState>(() => idleBookTask());
   const detailPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailPollBookIdRef = useRef<string | null>(null);
+  const retryBookActionRef = useRef<(() => void) | null>(null);
 
   const books = useMemo(() => items.map(normalizeBook), [items]);
   const filteredBooks = useMemo(() => {
@@ -615,6 +640,14 @@ export function LearningBookWorkspace({
     detailPollBookIdRef.current = null;
   };
 
+  const updateBookTask = (patch: Partial<BookTaskState>) => {
+    setBookTask((current) => ({
+      ...current,
+      ...patch,
+      updatedAt: Date.now(),
+    }));
+  };
+
   const pollBookDetailUntilSettled = (bookId: string) => {
     stopDetailPolling();
     detailPollBookIdRef.current = bookId;
@@ -639,15 +672,49 @@ export function LearningBookWorkspace({
               metadata: { book_id: bookId },
             }),
           );
+          setBookTask((current) =>
+            current.bookId === bookId && current.status !== "idle"
+              ? {
+                  ...current,
+                  status: "complete",
+                  message: "Book task finished.",
+                  lastSuccess: new Date().toISOString(),
+                  updatedAt: Date.now(),
+                  retryable: false,
+                }
+              : current,
+          );
           stopDetailPolling();
           return;
         }
         if (attempts >= maxAttempts) {
+          setBookTask((current) =>
+            current.bookId === bookId && current.status !== "idle"
+              ? {
+                  ...current,
+                  status: "background",
+                  message: "Still running. Refresh this book later if progress stops moving.",
+                  updatedAt: Date.now(),
+                  retryable: true,
+                }
+              : current,
+          );
           stopDetailPolling();
           return;
         }
       } catch {
         if (attempts >= maxAttempts) {
+          setBookTask((current) =>
+            current.bookId === bookId && current.status !== "idle"
+              ? {
+                  ...current,
+                  status: "background",
+                  message: "Progress polling paused after repeated refresh errors.",
+                  updatedAt: Date.now(),
+                  retryable: true,
+                }
+              : current,
+          );
           stopDetailPolling();
           return;
         }
@@ -682,6 +749,12 @@ export function LearningBookWorkspace({
       let commandSent = false;
       const timeout = window.setTimeout(() => {
         if (settled) return;
+        updateBookTask({
+          status: "background",
+          message: "This is taking longer than expected. ZAKI will keep refreshing the book in the background.",
+          bookId,
+          retryable: false,
+        });
         setBookProgress((current) =>
           reduceLearningBookProgressEvent(current, {
             type: "progress",
@@ -745,12 +818,35 @@ export function LearningBookWorkspace({
       };
 
       socket.onerror = () => {
+        if (commandSent) {
+          updateBookTask({
+            status: "background",
+            message: "Live progress disconnected. Background refresh is still active.",
+            bookId,
+            retryable: false,
+          });
+          finish(() =>
+            resolve(
+              learningBookBackgroundPayload(
+                bookId,
+                "Live progress disconnected. Background refresh is still active.",
+              ),
+            ),
+          );
+          return;
+        }
         finish(() => reject(new Error("Book progress connection failed.")));
       };
 
       socket.onclose = () => {
         if (!settled) {
           if (commandSent) {
+            updateBookTask({
+              status: "background",
+              message: "Live progress connection closed. ZAKI will keep checking the book.",
+              bookId,
+              retryable: false,
+            });
             finish(() =>
               resolve(
                 learningBookBackgroundPayload(
@@ -768,6 +864,8 @@ export function LearningBookWorkspace({
 
   useEffect(() => {
     setBookProgress(emptyLearningBookProgress());
+    setBookTask(idleBookTask());
+    retryBookActionRef.current = null;
     stopDetailPolling();
   }, [selectedBookId]);
 
@@ -778,25 +876,62 @@ export function LearningBookWorkspace({
       label,
       action,
       afterSuccess,
+      retry,
     }: {
       label: string;
       action: () => Promise<unknown>;
       afterSuccess?: (payload: unknown) => void | Promise<void>;
-    }) => action().then((payload) => ({ label, payload, afterSuccess })),
+      retry?: () => void;
+    }) => {
+      const bookId = selectedBookId || activeBook?.id || "";
+      retryBookActionRef.current = retry || null;
+      setBookTask({
+        status: "running",
+        label,
+        message: label,
+        bookId,
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        retryable: false,
+      });
+      return action().then((payload) => ({ label, payload, afterSuccess, bookId }));
+    },
     onSuccess: async ({ label, payload, afterSuccess }) => {
       if (isLearningAcceptedPayload(payload)) {
         const acceptedBookId = getAcceptedBookId(payload) || selectedBookId || activeBook?.id || "";
-        toast.success("Book task is still running");
+        updateBookTask({
+          status: "background",
+          label,
+          message: textOf(asRecord(payload).message, "Book task is still running in the background."),
+          bookId: acceptedBookId,
+          retryable: false,
+        });
+        toast.success("Book task is running in the background");
         await refreshDetail();
         if (acceptedBookId) pollBookDetailUntilSettled(acceptedBookId);
         await afterSuccess?.(payload);
         return;
       }
+      updateBookTask({
+        status: "complete",
+        label,
+        message: label,
+        lastSuccess: new Date().toISOString(),
+        retryable: false,
+      });
       toast.success(label);
       await refreshDetail();
       await afterSuccess?.(payload);
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => {
+      updateBookTask({
+        status: "error",
+        message: error.message,
+        error: error.message,
+        retryable: Boolean(retryBookActionRef.current),
+      });
+      toast.error(error.message);
+    },
   });
 
   const handleCreate = async () => {
@@ -849,6 +984,7 @@ export function LearningBookWorkspace({
     if (!activeBook) return;
     runBookAction.mutate({
       label: "Book outline requested",
+      retry: handleConfirmProposal,
       action: () =>
         executeBookWsCommand(
           {
@@ -870,6 +1006,7 @@ export function LearningBookWorkspace({
     if (!activeBook || !detail?.spine) return;
     runBookAction.mutate({
       label: "Book compilation started",
+      retry: handleConfirmSpine,
       action: () =>
         executeBookWsCommand(
           {
@@ -892,6 +1029,7 @@ export function LearningBookWorkspace({
     if (!activeBook) return;
     runBookAction.mutate({
       label: force ? "Page regeneration started" : "Page compilation started",
+      retry: () => handleCompilePage(page, force),
       action: () =>
         executeBookWsCommand(
           {
@@ -912,6 +1050,7 @@ export function LearningBookWorkspace({
     if (!window.confirm("Rebuild this book using the current chapter structure?")) return;
     runBookAction.mutate({
       label: "Book rebuild started",
+      retry: handleRebuild,
       action: () => rebuildLearningBook({ book_id: activeBook.id, auto_compile: true }),
     });
   };
@@ -926,6 +1065,18 @@ export function LearningBookWorkspace({
       label,
       action: () => action(activeBook.id, activePage.id, block.id),
     });
+  };
+
+  const handleTaskRefresh = () => {
+    const bookId = bookTask.bookId || selectedBookId || activeBook?.id || "";
+    void refreshDetail();
+    if (bookId && ["running", "background", "error"].includes(bookTask.status)) {
+      pollBookDetailUntilSettled(bookId);
+    }
+  };
+
+  const handleTaskRetry = () => {
+    retryBookActionRef.current?.();
   };
 
   return (
@@ -980,145 +1131,152 @@ export function LearningBookWorkspace({
             }}
             onRebuild={handleRebuild}
           />
-          <div className="min-w-0 flex-1 overflow-hidden bg-zaki-base">
-            {detailQuery.isLoading ? (
-              <div className="flex h-full items-center justify-center text-sm text-zaki-muted">
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Loading book...
-              </div>
-            ) : !detail || !activeBook ? (
-              <div className="flex h-full items-center justify-center text-sm text-zaki-muted">
-                Book not found.
-              </div>
-            ) : detail.book.status === "draft" ? (
-              <BookProposalView
-                book={detail.book}
-                progress={visibleProgress}
-                draft={proposalDraft || jsonText(detail.book.proposal || {})}
-                setDraft={setProposalDraft}
-                loading={runBookAction.isPending}
-                onConfirm={handleConfirmProposal}
-              />
-            ) : detail.book.status === "spine_ready" && detail.spine ? (
-              <BookSpineView
-                spine={detail.spine}
-                progress={visibleProgress}
-                draft={spineDraft || jsonText(detail.spine)}
-                setDraft={setSpineDraft}
-                loading={runBookAction.isPending}
-                onConfirm={handleConfirmSpine}
-              />
-            ) : (
-              <BookReaderView
-                book={detail.book}
-                page={activePage}
-                progress={visibleProgress}
-                health={healthQuery.data}
-                loading={runBookAction.isPending}
-                onRecompile={activePage ? () => handleCompilePage(activePage, true) : undefined}
-                onRefreshFingerprints={() => {
-                  if (!activeBook) return;
-                  runBookAction.mutate({
-                    label: "Source fingerprints refreshed",
-                    action: () => refreshLearningBookFingerprints(activeBook.id),
-                  });
-                }}
-                onRegenerateBlock={(block) =>
-                  handleBlockAction("Block regeneration started", block, (bookId, pageId, blockId) =>
-                    regenerateLearningBookBlock({ book_id: bookId, page_id: pageId, block_id: blockId }),
-                  )
-                }
-                onDeleteBlock={(block) => {
-                  if (!window.confirm(`Delete this ${block.type} block?`)) return;
-                  handleBlockAction("Block deleted", block, (bookId, pageId, blockId) =>
-                    deleteLearningBookBlock({ book_id: bookId, page_id: pageId, block_id: blockId }),
-                  );
-                }}
-                onMoveBlock={(block, direction) => {
-                  if (!activePage) return;
-                  const index = activePage.blocks.findIndex((entry) => entry.id === block.id);
-                  const newPosition = direction === "up" ? index - 1 : index + 1;
-                  if (newPosition < 0 || newPosition >= activePage.blocks.length) return;
-                  handleBlockAction("Block moved", block, (bookId, pageId, blockId) =>
-                    moveLearningBookBlock({
-                      book_id: bookId,
-                      page_id: pageId,
-                      block_id: blockId,
-                      new_position: newPosition,
-                    }),
-                  );
-                }}
-                onChangeBlockType={(block, newType) => {
-                  handleBlockAction("Block type changed", block, (bookId, pageId, blockId) =>
-                    changeLearningBookBlockType({
-                      book_id: bookId,
-                      page_id: pageId,
-                      block_id: blockId,
-                      new_type: newType,
-                    }),
-                  );
-                }}
-                onInsertBlock={(blockType) => {
-                  if (!activeBook || !activePage) return;
-                  runBookAction.mutate({
-                    label: "Block inserted",
-                    action: () =>
-                      insertLearningBookBlock({
-                        book_id: activeBook.id,
-                        page_id: activePage.id,
-                        block_type: blockType,
-                        compile_now: true,
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-zaki-base">
+            <BookTaskStatusBanner
+              task={bookTask}
+              onRefresh={handleTaskRefresh}
+              onRetry={retryBookActionRef.current ? handleTaskRetry : undefined}
+            />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {detailQuery.isLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-zaki-muted">
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Loading book...
+                </div>
+              ) : !detail || !activeBook ? (
+                <div className="flex h-full items-center justify-center text-sm text-zaki-muted">
+                  Book not found.
+                </div>
+              ) : detail.book.status === "draft" ? (
+                <BookProposalView
+                  book={detail.book}
+                  progress={visibleProgress}
+                  draft={proposalDraft || jsonText(detail.book.proposal || {})}
+                  setDraft={setProposalDraft}
+                  loading={runBookAction.isPending}
+                  onConfirm={handleConfirmProposal}
+                />
+              ) : detail.book.status === "spine_ready" && detail.spine ? (
+                <BookSpineView
+                  spine={detail.spine}
+                  progress={visibleProgress}
+                  draft={spineDraft || jsonText(detail.spine)}
+                  setDraft={setSpineDraft}
+                  loading={runBookAction.isPending}
+                  onConfirm={handleConfirmSpine}
+                />
+              ) : (
+                <BookReaderView
+                  book={detail.book}
+                  page={activePage}
+                  progress={visibleProgress}
+                  health={healthQuery.data}
+                  loading={runBookAction.isPending}
+                  onRecompile={activePage ? () => handleCompilePage(activePage, true) : undefined}
+                  onRefreshFingerprints={() => {
+                    if (!activeBook) return;
+                    runBookAction.mutate({
+                      label: "Source fingerprints refreshed",
+                      action: () => refreshLearningBookFingerprints(activeBook.id),
+                    });
+                  }}
+                  onRegenerateBlock={(block) =>
+                    handleBlockAction("Block regeneration started", block, (bookId, pageId, blockId) =>
+                      regenerateLearningBookBlock({ book_id: bookId, page_id: pageId, block_id: blockId }),
+                    )
+                  }
+                  onDeleteBlock={(block) => {
+                    if (!window.confirm(`Delete this ${block.type} block?`)) return;
+                    handleBlockAction("Block deleted", block, (bookId, pageId, blockId) =>
+                      deleteLearningBookBlock({ book_id: bookId, page_id: pageId, block_id: blockId }),
+                    );
+                  }}
+                  onMoveBlock={(block, direction) => {
+                    if (!activePage) return;
+                    const index = activePage.blocks.findIndex((entry) => entry.id === block.id);
+                    const newPosition = direction === "up" ? index - 1 : index + 1;
+                    if (newPosition < 0 || newPosition >= activePage.blocks.length) return;
+                    handleBlockAction("Block moved", block, (bookId, pageId, blockId) =>
+                      moveLearningBookBlock({
+                        book_id: bookId,
+                        page_id: pageId,
+                        block_id: blockId,
+                        new_position: newPosition,
                       }),
-                  });
-                }}
-                onDeepDive={(block, requestedTopic) => {
-                  if (!activeBook || !activePage) return;
-                  const topic =
-                    requestedTopic ||
-                    textOf(block.params?.topic) ||
-                    textOf(block.title) ||
-                    activePage.title ||
-                    "this topic";
-                  setPendingDeepDiveTopic(topic);
-                  runBookAction.mutate({
-                    label: "Deep dive page created",
-                    action: async () => {
-                      try {
-                        return await createLearningBookDeepDive({
+                    );
+                  }}
+                  onChangeBlockType={(block, newType) => {
+                    handleBlockAction("Block type changed", block, (bookId, pageId, blockId) =>
+                      changeLearningBookBlockType({
+                        book_id: bookId,
+                        page_id: pageId,
+                        block_id: blockId,
+                        new_type: newType,
+                      }),
+                    );
+                  }}
+                  onInsertBlock={(blockType) => {
+                    if (!activeBook || !activePage) return;
+                    runBookAction.mutate({
+                      label: "Block inserted",
+                      action: () =>
+                        insertLearningBookBlock({
                           book_id: activeBook.id,
-                          parent_page_id: activePage.id,
-                          topic,
+                          page_id: activePage.id,
+                          block_type: blockType,
+                          compile_now: true,
+                        }),
+                    });
+                  }}
+                  onDeepDive={(block, requestedTopic) => {
+                    if (!activeBook || !activePage) return;
+                    const topic =
+                      requestedTopic ||
+                      textOf(block.params?.topic) ||
+                      textOf(block.title) ||
+                      activePage.title ||
+                      "this topic";
+                    setPendingDeepDiveTopic(topic);
+                    runBookAction.mutate({
+                      label: "Deep dive page created",
+                      action: async () => {
+                        try {
+                          return await createLearningBookDeepDive({
+                            book_id: activeBook.id,
+                            parent_page_id: activePage.id,
+                            topic,
+                            block_id: block.id,
+                            content_type: "concept",
+                          });
+                        } finally {
+                          setPendingDeepDiveTopic(null);
+                        }
+                      },
+                      afterSuccess: (payload) => {
+                        const pageId = itemId(asRecord(asRecord(payload).page));
+                        if (pageId) setSelectedPageId(pageId);
+                      },
+                    });
+                  }}
+                  pendingDeepDiveTopic={pendingDeepDiveTopic}
+                  onQuizAttempt={(block, attempt) => {
+                    if (!activeBook || !activePage) return;
+                    runBookAction.mutate({
+                      label: "Quiz attempt recorded",
+                      action: () =>
+                        recordLearningBookQuizAttempt({
+                          book_id: activeBook.id,
+                          page_id: activePage.id,
                           block_id: block.id,
-                          content_type: "concept",
-                        });
-                      } finally {
-                        setPendingDeepDiveTopic(null);
-                      }
-                    },
-                    afterSuccess: (payload) => {
-                      const pageId = itemId(asRecord(asRecord(payload).page));
-                      if (pageId) setSelectedPageId(pageId);
-                    },
-                  });
-                }}
-                pendingDeepDiveTopic={pendingDeepDiveTopic}
-                onQuizAttempt={(block, attempt) => {
-                  if (!activeBook || !activePage) return;
-                  runBookAction.mutate({
-                    label: "Quiz attempt recorded",
-                    action: () =>
-                      recordLearningBookQuizAttempt({
-                        book_id: activeBook.id,
-                        page_id: activePage.id,
-                        block_id: block.id,
-                        question_id: attempt.questionId,
-                        user_answer: attempt.userAnswer,
-                        is_correct: attempt.isCorrect,
-                      }),
-                  });
-                }}
-              />
-            )}
+                          question_id: attempt.questionId,
+                          user_answer: attempt.userAnswer,
+                          is_correct: attempt.isCorrect,
+                        }),
+                    });
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1235,6 +1393,69 @@ function BookLibraryView({
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function BookTaskStatusBanner({
+  task,
+  onRefresh,
+  onRetry,
+}: {
+  task: BookTaskState;
+  onRefresh: () => void;
+  onRetry?: () => void;
+}) {
+  if (task.status === "idle") return null;
+  const isRunning = task.status === "running";
+  const tone =
+    task.status === "error"
+      ? "border-rose-300/60 bg-rose-500/10 text-rose-800 dark:text-rose-200"
+      : task.status === "complete"
+        ? "border-emerald-300/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+        : "border-zaki-brand/35 bg-zaki-brand/10 text-zaki-text";
+  const title =
+    task.status === "background"
+      ? "Running in background"
+      : task.status === "complete"
+        ? "Last book task finished"
+        : task.status === "error"
+          ? "Book task needs attention"
+          : "Book task running";
+  return (
+    <div className={cn("shrink-0 border-b px-6 py-3", tone)}>
+      <div className="mx-auto flex max-w-[82ch] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal">
+            {isRunning ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {title}
+          </div>
+          <div className="mt-0.5 truncate text-sm font-medium">
+            {task.label || "Book task"}
+            {task.message ? <span className="ml-1 font-normal opacity-80">/ {task.message}</span> : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-current/30 px-2.5 text-xs font-semibold hover:bg-white/20"
+          >
+            <RefreshCw className="size-3.5" />
+            Refresh
+          </button>
+          {task.status === "error" && onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-2.5 text-xs font-semibold text-white hover:opacity-90"
+            >
+              <RotateCcw className="size-3.5" />
+              Retry
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
