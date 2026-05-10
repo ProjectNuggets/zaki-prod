@@ -13,6 +13,7 @@ import {
   Microscope,
   NotebookPen,
   PenLine,
+  Play,
   RefreshCw,
   Sparkles,
   type LucideIcon,
@@ -454,5 +455,162 @@ export function LearningNextActionRow({
         );
       })}
     </div>
+  );
+}
+
+export function LearningStudyPlanHome({
+  plan,
+  onBuildPlan,
+  onOpenSetup,
+  onStartTask,
+  onCompleteTask,
+  completingTaskId = "",
+}: {
+  plan: Item | null | undefined;
+  onBuildPlan: () => void;
+  onOpenSetup: () => void;
+  onStartTask: (task: Item) => void;
+  onCompleteTask: (taskId: string) => void;
+  completingTaskId?: string;
+}) {
+  const tasks = Array.isArray(plan?.tasks) ? (plan.tasks as Item[]) : [];
+  const title = textOf(plan?.title, "Study plan");
+  const planJson = asRecord(plan?.plan);
+  const summary = textOf(planJson.summary) || textOf(plan?.summary);
+  const pendingTasks = tasks.filter((task) => textOf(task.status, "pending") !== "done");
+  const doneTasks = tasks.length - pendingTasks.length;
+  const nextTasks = pendingTasks.slice(0, 4);
+  if (!plan || !tasks.length) {
+    return (
+      <section className="mt-8 w-full max-w-[720px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left">
+        <div className="flex items-start gap-3">
+          <GraduationCap className="mt-0.5 size-5 shrink-0 text-zaki-brand" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[14px] font-semibold text-[var(--foreground)]">Start with a plan</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--muted-foreground)]">
+              Set your course, exam date, weak topics, and weekly time so ZAKI can turn answers,
+              quizzes, notebooks, and books into one study loop.
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onOpenSetup}
+            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover"
+          >
+            <PenLine className="size-3.5" />
+            Configure setup
+          </button>
+          <button
+            type="button"
+            onClick={onBuildPlan}
+            className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white hover:bg-zaki-brand-hover"
+          >
+            <Sparkles className="size-3.5" />
+            Build study plan
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-8 w-full max-w-[760px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="size-4 text-zaki-brand" />
+            <h2 className="truncate text-[14px] font-semibold text-[var(--foreground)]">{title}</h2>
+          </div>
+          {summary ? (
+            <p className="mt-1 text-[12px] leading-5 text-[var(--muted-foreground)]">{summary}</p>
+          ) : null}
+        </div>
+        <div className="rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-[11px] font-semibold text-zaki-text">
+          {doneTasks}/{tasks.length} done
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {(nextTasks.length ? nextTasks : tasks.slice(0, 4)).map((task, index) => {
+          const taskId = textOf(task.id, `task-${index + 1}`);
+          const status = textOf(task.status, "pending");
+          const done = status === "done";
+          return (
+            <div
+              key={taskId}
+              className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2.5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    {done ? (
+                      <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                    ) : (
+                      <Clock3 className="size-3.5 shrink-0 text-zaki-muted" />
+                    )}
+                    <span className="truncate text-[13px] font-semibold text-zaki-text">
+                      {textOf(task.title, `Task ${index + 1}`)}
+                    </span>
+                  </div>
+                  {textOf(task.description) ? (
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zaki-muted">
+                      {textOf(task.description)}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {!done ? (
+                    <button
+                      type="button"
+                      onClick={() => onStartTask(task)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2.5 text-[11px] font-semibold text-zaki-text hover:bg-zaki-hover"
+                    >
+                      <Play className="size-3.5" />
+                      Start
+                    </button>
+                  ) : null}
+                  {!done ? (
+                    <button
+                      type="button"
+                      disabled={completingTaskId === taskId}
+                      onClick={() => onCompleteTask(taskId)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-emerald-500/30 px-2.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500/10 disabled:opacity-50"
+                    >
+                      {completingTaskId === taskId ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="size-3.5" />
+                      )}
+                      Done
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onOpenSetup}
+          className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover"
+        >
+          <PenLine className="size-3.5" />
+          Edit setup
+        </button>
+        <button
+          type="button"
+          onClick={onBuildPlan}
+          className="inline-flex h-8 items-center gap-1.5 rounded-zaki-md border border-zaki-brand/35 bg-zaki-brand/10 px-3 text-[12px] font-semibold text-zaki-brand hover:bg-zaki-brand/15"
+        >
+          <RefreshCw className="size-3.5" />
+          Rebuild plan
+        </button>
+      </div>
+    </section>
   );
 }

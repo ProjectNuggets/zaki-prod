@@ -82,6 +82,7 @@ import {
   addLearningNotebookRecordManual,
   analyzeLearningVision,
   clearLearningMemory,
+  completeLearningStudyTask,
   createLearningStudyTask,
   createLearningStudyPlan,
   createLearningBook,
@@ -185,6 +186,7 @@ import {
   LearningNextActionRow,
   LearningQualityChecklist,
   LearningRunStateStrip,
+  LearningStudyPlanHome,
   LearningStudySetupPanel,
   STUDY_PROFILE_STORAGE_KEY,
   compactMessageExcerpt,
@@ -2914,6 +2916,7 @@ function LearningChatPanel({
   );
   const [studyPanelOpen, setStudyPanelOpen] = useState(false);
   const [studyDraftDirty, setStudyDraftDirty] = useState(false);
+  const [completingStudyTaskId, setCompletingStudyTaskId] = useState("");
   const sessionScope = (requestedView || "chat").trim().toLowerCase() || "chat";
   const sessionStorageKey = `zaki.learn.sessionId.${sessionScope}`;
   const [restoredSessionId, setRestoredSessionId] = useState(
@@ -2996,6 +2999,23 @@ function LearningChatPanel({
     },
     onError: (error) => {
       toast.error(error.message || "Could not add this item to the study plan");
+    },
+  });
+
+  const completeStudyTaskMutation = useMutation({
+    mutationFn: completeLearningStudyTask,
+    onMutate: (taskId) => {
+      setCompletingStudyTaskId(taskId);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: learningKeys.study });
+      toast.success("Study task completed");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Study task could not be completed");
+    },
+    onSettled: () => {
+      setCompletingStudyTaskId("");
     },
   });
 
@@ -3661,6 +3681,36 @@ function LearningChatPanel({
     createStudyPlanMutation.mutate(nextProfile);
   };
 
+  const startStudyTask = (task: Item) => {
+    const source = asRecord(task.source);
+    const route = textOf(source.route, requestedView || "chat");
+    const nextCapability = textOf(source.capability);
+    if (nextCapability && learningCapabilities.some((entry) => entry.value === nextCapability)) {
+      selectCapability(nextCapability);
+    } else {
+      selectCapability("");
+    }
+    const promptParts = [
+      `Help me complete this study task: ${textOf(task.title, "Study task")}.`,
+      textOf(task.description),
+      studyProfile.course ? `Course: ${studyProfile.course}.` : "",
+      studyProfile.topics ? `Topics: ${studyProfile.topics}.` : "",
+      studyProfile.weakTopics ? `Weak topics: ${studyProfile.weakTopics}.` : "",
+      route === "notebooks"
+        ? "Guide me on what to save into my notebook and what to review from it."
+        : "",
+      route === "quiz" ? "Generate answer-keyed questions with explanations." : "",
+      route === "solve" ? "Give me one practice problem first, then solve it step by step." : "",
+      route === "visualize" ? "Create a diagram or animation plan for the hardest concept." : "",
+    ].filter(Boolean);
+    setInput(promptParts.join("\n"));
+  };
+
+  const completeStudyTask = (taskId: string) => {
+    if (!taskId || completeStudyTaskMutation.isPending) return;
+    completeStudyTaskMutation.mutate(taskId);
+  };
+
   const applyStudyAction = (action: LearningStudyAction, message: TutorChatMessage) => {
     if (action === "save") {
       setSaveNotebookOpen(true);
@@ -4041,7 +4091,7 @@ function LearningChatPanel({
           notebooksCount={notebookItems.length}
         />
         {!hasMessages ? (
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+          <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-1 pb-36 pt-8">
             <div className="text-center">
               <h1 className="font-serif text-[36px] font-medium text-[var(--foreground)]">
                 What would you like to learn?
@@ -4062,6 +4112,14 @@ function LearningChatPanel({
                 </button>
               ))}
             </div>
+            <LearningStudyPlanHome
+              plan={studyStateQuery.data?.plan}
+              onBuildPlan={startStudyPlan}
+              onOpenSetup={() => setStudyPanelOpen(true)}
+              onStartTask={startStudyTask}
+              onCompleteTask={completeStudyTask}
+              completingTaskId={completingStudyTaskId}
+            />
           </div>
         ) : (
           <div className="mx-auto min-h-0 w-full flex-1 space-y-7 overflow-y-auto pr-4 [scrollbar-gutter:stable]">
