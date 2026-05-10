@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { buildLearningSpaceReferences } from "./learningSpaceReferences";
 
 describe("buildLearningSpaceReferences", () => {
-  it("builds the DeepTutor-compatible Space payload fields", () => {
+  it("builds learning-engine-compatible Space payload fields", () => {
     expect(
       buildLearningSpaceReferences({
         selectedHistorySessions: [{ id: "session-1" }, { id: "session-2" }],

@@ -173,7 +173,7 @@ export function buildLearningDeploymentReadinessStatus({
     policy,
     gates,
     finalUserSetup: {
-      auth: "ZAKI central auth account; no DeepTutor credentials or provider keys exposed.",
+      auth: "ZAKI central auth account; no learning-provider credentials or provider keys exposed.",
       userManagedSettings: [
         "knowledge sources",
         "documents and images",

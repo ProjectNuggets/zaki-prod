@@ -123,17 +123,17 @@ export function BotPage({ locale }: { locale: Locale }) {
                 ))}
               </ul>
 
-              {/* Nullalis technical block */}
+              {/* Runtime technical block */}
               <div className="mt-auto pt-8">
                 <div className="rounded-[20px] border border-zk-border-strong bg-black/20 p-5">
                   <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
-                    {isArabic ? "مدعوم بـ Nullalis" : "Powered by Nullalis"}
+                    {isArabic ? "مدعوم ببنية زكي الخاصة" : "Powered by ZAKI's private runtime"}
                   </p>
                   <p className="mt-3 text-sm leading-7 text-zk-text-secondary">
-                    {t.nullalis.intro}
+                    {t.privateRuntime.intro}
                   </p>
                   <div className="mt-4 grid gap-2.5">
-                    {t.nullalis.bullets.map((bullet) => (
+                    {t.privateRuntime.bullets.map((bullet) => (
                       <div key={bullet} className="flex items-start gap-3 text-sm leading-7 text-zk-text">
                         <Binary className="mt-1 size-4 shrink-0 text-zk-accent" />
                         <span>{bullet}</span>

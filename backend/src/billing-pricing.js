@@ -1,4 +1,5 @@
 export const BILLING_INTERVALS = ["monthly", "yearly"];
+export const STRIPE_BILLING_PLANS = ["student", "personal", "agent", "learn", "complete"];
 
 function normalizePriceId(value) {
   return String(value || "").trim();
@@ -17,6 +18,9 @@ export function buildStripePricingCatalog({
   studentYearly = "",
   personalMonthly = "",
   personalYearly = "",
+  agentMonthly = "",
+  learnMonthly = "",
+  completeMonthly = "",
 } = {}) {
   const priceByPlanInterval = {
     student: {
@@ -26,6 +30,18 @@ export function buildStripePricingCatalog({
     personal: {
       monthly: normalizePriceId(personalMonthly),
       yearly: normalizePriceId(personalYearly),
+    },
+    agent: {
+      monthly: normalizePriceId(agentMonthly),
+      yearly: "",
+    },
+    learn: {
+      monthly: normalizePriceId(learnMonthly),
+      yearly: "",
+    },
+    complete: {
+      monthly: normalizePriceId(completeMonthly),
+      yearly: "",
     },
   };
 
@@ -40,16 +56,15 @@ export function buildStripePricingCatalog({
     }
   }
 
-  const pricingAvailability = {
-    student: {
-      monthly: Boolean(priceByPlanInterval.student.monthly),
-      yearly: Boolean(priceByPlanInterval.student.yearly),
-    },
-    personal: {
-      monthly: Boolean(priceByPlanInterval.personal.monthly),
-      yearly: Boolean(priceByPlanInterval.personal.yearly),
-    },
-  };
+  const pricingAvailability = Object.fromEntries(
+    STRIPE_BILLING_PLANS.map((plan) => [
+      plan,
+      {
+        monthly: Boolean(priceByPlanInterval[plan]?.monthly),
+        yearly: Boolean(priceByPlanInterval[plan]?.yearly),
+      },
+    ])
+  );
   const hasAnyStripePrice = Object.values(pricingAvailability).some(
     (item) => item.monthly || item.yearly
   );
@@ -69,7 +84,7 @@ export function resolveStripePriceForSelection(
 ) {
   const normalizedPlan = String(plan || "").trim().toLowerCase();
   const normalizedInterval = normalizeBillingInterval(interval, "monthly");
-  if (!["student", "personal"].includes(normalizedPlan)) return "";
+  if (!STRIPE_BILLING_PLANS.includes(normalizedPlan)) return "";
   return (
     normalizePriceId(
       catalog?.priceByPlanInterval?.[normalizedPlan]?.[normalizedInterval]
@@ -84,6 +99,6 @@ export function resolveStripePriceDetailsById(catalog, priceId) {
   if (!found) return null;
   const tier = String(found.tier || "").trim().toLowerCase();
   const interval = normalizeBillingInterval(found.interval, "monthly");
-  if (!["student", "personal"].includes(tier)) return null;
+  if (!STRIPE_BILLING_PLANS.includes(tier)) return null;
   return { tier, interval };
 }

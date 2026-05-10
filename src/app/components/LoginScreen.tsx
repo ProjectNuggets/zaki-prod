@@ -12,12 +12,18 @@ import {
   fetchLegalConsentStatus,
   fetchCurrentUser,
   fetchProfile,
+  buildGoogleOAuthStartUrl,
+  fetchGoogleOAuthStatus,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
 const PRICING_INTENT_SOURCES = new Set([
   "website_pricing",
+  "website_product_agent",
+  "website_product_learn",
+  "website_product_complete",
+  "website_product_spaces",
   "website_nav_pricing",
   "website_footer_pricing",
   "pricing_split",
@@ -92,6 +98,8 @@ const AUTH_COPY = {
       updatingPassword: "Updating password...",
       signIn: "Sign in",
       signingIn: "Signing in...",
+      continueWithGoogle: "Continue with Google",
+      googleUnavailable: "Google sign-in is not configured yet",
       haveAccount: "Have an account? Sign in",
       newHere: "New here? Create an account",
       backToSignIn: "Back to sign in",
@@ -182,6 +190,8 @@ const AUTH_COPY = {
       updatingPassword: "جارٍ تحديث كلمة المرور...",
       signIn: "تسجيل الدخول",
       signingIn: "جارٍ تسجيل الدخول...",
+      continueWithGoogle: "المتابعة باستخدام Google",
+      googleUnavailable: "تسجيل الدخول عبر Google غير مهيأ بعد",
       haveAccount: "لديك حساب؟ سجّل الدخول",
       newHere: "جديد هنا؟ أنشئ حسابًا",
       backToSignIn: "العودة إلى تسجيل الدخول",
@@ -276,6 +286,7 @@ export function LoginScreen() {
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
     getInitialLegalPolicyVersion
   );
+  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
 
   const setModeClean = useCallback(
     (nextMode: "login" | "signup" | "reset-request" | "reset-confirm") => {
@@ -355,6 +366,21 @@ export function LoginScreen() {
       })
       .catch(() => {
         // Keep fallback version on network failures.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGoogleOAuthStatus()
+      .then(({ response, data }) => {
+        if (cancelled || !response.ok) return;
+        setGoogleOAuthEnabled(Boolean(data?.enabled));
+      })
+      .catch(() => {
+        setGoogleOAuthEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -647,6 +673,26 @@ export function LoginScreen() {
               {copy.actions.tabReset}
             </button>
           </div>
+        ) : null}
+
+        {(mode === "login" || mode === "signup") ? (
+          <button
+            type="button"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-zaki-md border border-zaki-strong bg-white px-3 py-2.5 text-sm font-semibold text-zaki-primary transition hover:bg-zaki-hover dark:border-[rgba(240,236,230,0.12)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:hover:bg-[#211c17]"
+            disabled={!googleOAuthEnabled}
+            title={!googleOAuthEnabled ? copy.actions.googleUnavailable : undefined}
+            onClick={() => {
+              if (!googleOAuthEnabled) return;
+              window.location.href = buildGoogleOAuthStartUrl(
+                `${location.pathname}${location.search}${location.hash}`
+              );
+            }}
+          >
+            <span className="flex size-5 items-center justify-center rounded-full border border-zaki-subtle bg-white text-xs font-bold text-[#4285f4]">
+              G
+            </span>
+            {copy.actions.continueWithGoogle}
+          </button>
         ) : null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

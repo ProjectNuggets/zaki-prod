@@ -9,8 +9,7 @@ interface Props {
 
 /**
  * Internal codenames that may surface as community names in the brain
- * data (the runtime had memories tagged with "nullALIS", "panther",
- * etc. during pre-launch development). When the brain's top community
+ * data during pre-launch development. When the brain's top community
  * matches one of these, fall back to a generic copy so the user never
  * sees a developer-facing label on their dashboard.
  */

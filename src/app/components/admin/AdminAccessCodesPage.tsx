@@ -462,7 +462,7 @@ export function AdminAccessCodesPage() {
       return;
     }
     if (!Number.isInteger(zakiBotDailyPromptLimit) || zakiBotDailyPromptLimit < 1) {
-      toast.error("ZAKI BOT daily limit must be at least 1.");
+      toast.error("Agent weekly preview limit must be at least 1.");
       return;
     }
     if (!Number.isInteger(agentPerMinuteLimit) || agentPerMinuteLimit < 1) {
@@ -628,13 +628,14 @@ export function AdminAccessCodesPage() {
                 Rate Limits
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-                Live quota controls for app chat and ZAKI BOT. Changes apply immediately to newly
-                admitted requests.
+                Live quota controls for Spaces, Agent preview, and route throttles. Changes apply
+                immediately to newly admitted requests.
               </p>
             </div>
             {rateLimits ? (
               <span className="rounded-full border border-zaki-subtle px-3 py-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-                Buckets: {rateLimits.appChatDailyPromptBucket} / {rateLimits.zakiBotDailyPromptBucket}
+                Buckets: {rateLimits.appChatDailyPromptBucket} ({rateLimits.appChatPromptPeriod || "day"}) /{" "}
+                {rateLimits.zakiBotDailyPromptBucket} ({rateLimits.zakiBotPromptPeriod || "week"})
               </span>
             ) : null}
           </div>
@@ -657,7 +658,7 @@ export function AdminAccessCodesPage() {
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-                ZAKI BOT daily limit
+                Agent weekly preview limit
                 <input
                   type="number"
                   min={1}

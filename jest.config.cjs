@@ -5,11 +5,11 @@ module.exports = {
   testMatch: ["<rootDir>/src/**/*.test.ts?(x)"],
   setupFilesAfterEnv: ["<rootDir>/src/test/setupTests.ts"],
   moduleNameMapper: {
+    "\\.(css|less|scss|sass)$": "<rootDir>/src/test/styleMock.ts",
     "^@/(.*)$": "<rootDir>/src/$1",
     "^react-markdown$": "<rootDir>/src/test/reactMarkdownMock.tsx",
     "^remark-gfm$": "<rootDir>/src/test/remarkMock.ts",
-    "^rehype-highlight$": "<rootDir>/src/test/rehypeMock.ts",
-    "\\.(css|less|scss|sass)$": "<rootDir>/src/test/styleMock.ts"
+    "^rehype-highlight$": "<rootDir>/src/test/rehypeMock.ts"
   },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],

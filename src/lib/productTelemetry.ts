@@ -16,10 +16,31 @@ export type ProductTelemetryEvent =
 export type ProductTelemetrySource =
   | "website_nav"
   | "website_pricing"
+  | "website_product_agent"
+  | "website_product_learn"
+  | "website_product_complete"
+  | "website_product_spaces"
   | "chat_input"
   | "settings"
   | "pricing_page"
   | "success_page";
+
+export const PRODUCT_TELEMETRY_SOURCES = [
+  "website_nav",
+  "website_pricing",
+  "website_product_agent",
+  "website_product_learn",
+  "website_product_complete",
+  "website_product_spaces",
+  "chat_input",
+  "settings",
+  "pricing_page",
+  "success_page",
+] as const satisfies readonly ProductTelemetrySource[];
+
+export function isProductTelemetrySource(value: string): value is ProductTelemetrySource {
+  return (PRODUCT_TELEMETRY_SOURCES as readonly string[]).includes(value);
+}
 
 export type ProductTelemetryViewport = "mobile" | "tablet" | "desktop";
 
@@ -28,7 +49,7 @@ export type ProductTelemetryPayload = {
   source: ProductTelemetrySource;
   language?: "en" | "ar";
   viewport?: ProductTelemetryViewport;
-  plan?: "free" | "student" | "personal" | null;
+  plan?: "free" | "student" | "personal" | "agent" | "learn" | "complete" | null;
   interval?: "monthly" | "yearly" | null;
   timestamp?: string;
 };

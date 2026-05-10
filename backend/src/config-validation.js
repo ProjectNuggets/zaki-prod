@@ -52,11 +52,19 @@ export function validateRuntimeConfig(env = process.env) {
   const billingProvider = normalize(env.ZAKI_BILLING_PROVIDER || "stripe").toLowerCase();
   const stripePriceStudentYearly = normalize(env.STRIPE_PRICE_STUDENT_YEARLY);
   const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
+  const stripePriceAgentMonthly = normalize(env.STRIPE_PRICE_AGENT_MONTHLY);
+  const stripePriceLearnMonthly = normalize(env.STRIPE_PRICE_LEARN_MONTHLY);
+  const stripePriceCompleteMonthly = normalize(env.STRIPE_PRICE_COMPLETE_MONTHLY);
   const stripePriceAccessCodeMonthly = normalize(env.STRIPE_PRICE_ACCESS_CODE_MONTHLY);
+  const stripeBillingPortalConfiguration = normalize(env.STRIPE_BILLING_PORTAL_CONFIGURATION);
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
   const nullalisDevUserId = normalize(env.NULLALIS_DEV_USER_ID || env.NULLCLAW_DEV_USER_ID);
+  const googleClientId = normalize(env.GOOGLE_CLIENT_ID);
+  const googleClientSecret = normalize(env.GOOGLE_CLIENT_SECRET);
+  const googleRedirectUri = normalize(env.GOOGLE_OAUTH_REDIRECT_URI);
+  const googleStateSecret = normalize(env.GOOGLE_OAUTH_STATE_SECRET || env.ZAKI_JWT_SIGNING_KEY);
 
   const errors = [];
   const warnings = [];
@@ -122,11 +130,45 @@ export function validateRuntimeConfig(env = process.env) {
       "STRIPE_PRICE_PERSONAL_YEARLY is not set. Personal yearly checkout will be unavailable."
     );
   }
+  if (billingProvider === "stripe" && !stripePriceAgentMonthly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_AGENT_MONTHLY",
+      "STRIPE_PRICE_AGENT_MONTHLY is not set. ZAKI Agent checkout will be unavailable."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceLearnMonthly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_LEARN_MONTHLY",
+      "STRIPE_PRICE_LEARN_MONTHLY is not set. ZAKI Learn checkout will be unavailable."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceCompleteMonthly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_COMPLETE_MONTHLY",
+      "STRIPE_PRICE_COMPLETE_MONTHLY is not set. ZAKI Complete checkout will be unavailable."
+    );
+  }
   if (billingProvider === "stripe" && !stripePriceAccessCodeMonthly) {
     pushIssue(
       warnings,
       "STRIPE_PRICE_ACCESS_CODE_MONTHLY",
       "STRIPE_PRICE_ACCESS_CODE_MONTHLY is not set. Access-code purchase checkout will be unavailable."
+    );
+  }
+  if (
+    billingProvider === "stripe" &&
+    stripePriceAgentMonthly &&
+    stripePriceLearnMonthly &&
+    stripePriceCompleteMonthly &&
+    !stripeBillingPortalConfiguration
+  ) {
+    pushIssue(
+      warnings,
+      "STRIPE_BILLING_PORTAL_CONFIGURATION",
+      "STRIPE_BILLING_PORTAL_CONFIGURATION is not set. Agent/Learn to Complete upgrades will be unavailable."
     );
   }
   if (learningEnabled) {
@@ -164,6 +206,23 @@ export function validateRuntimeConfig(env = process.env) {
       "NULLALIS_DEV_USER_ID",
       "NULLALIS_DEV_USER_ID/NULLCLAW_DEV_USER_ID is a local-only agent auth bypass; unset it for multi-user smoke tests."
     );
+  }
+
+  const hasPartialGoogleOAuth =
+    googleClientId || googleClientSecret || googleRedirectUri || normalize(env.GOOGLE_OAUTH_STATE_SECRET);
+  if (hasPartialGoogleOAuth) {
+    if (!googleClientId) {
+      pushIssue(warnings, "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID is required to enable Google OAuth.");
+    }
+    if (!googleClientSecret) {
+      pushIssue(warnings, "GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET is required to enable Google OAuth.");
+    }
+    if (googleRedirectUri && !hasHttpUrl(googleRedirectUri)) {
+      pushIssue(warnings, "GOOGLE_OAUTH_REDIRECT_URI", "GOOGLE_OAUTH_REDIRECT_URI must start with http:// or https://.");
+    }
+    if (!googleStateSecret) {
+      pushIssue(warnings, "GOOGLE_OAUTH_STATE_SECRET", "GOOGLE_OAUTH_STATE_SECRET or ZAKI_JWT_SIGNING_KEY is required for Google OAuth state signing.");
+    }
   }
 
   if (superAdminEmails.length === 0) {

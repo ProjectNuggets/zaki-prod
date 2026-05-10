@@ -9,6 +9,22 @@ import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
 import { BrainPage } from './app/components/brain/BrainPage';
 import { LearningPage } from './app/components/learning/LearningPage';
+import { WebsiteHomePage, WebsiteProductPage, WebsiteShell } from './app/components/WebsitePage';
+import {
+  WebsiteAutismGuidancePage,
+  WebsiteComparisonPage,
+  WebsiteContactPage,
+  WebsiteFaqPage,
+  WebsiteHowToRoute,
+  WebsiteStoryPage,
+  WebsiteStoryPageAr,
+} from './app/components/MarketingContentPages';
+import { useAuthStore } from './stores';
+
+function HomeRoute() {
+  const token = useAuthStore((state) => state.token);
+  return token ? <ChatArea /> : <WebsiteHomePage />;
+}
 
 /**
  * Route structure:
@@ -27,7 +43,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <ChatArea />, // Will show home view by default
+        element: <HomeRoute />, // Public website for guests, app home for signed-in users
       },
       {
         path: 'spaces',
@@ -51,11 +67,111 @@ export const router = createBrowserRouter([
       },
       {
         path: 'pricing',
-        element: <PricingPage />,
+        element: (
+          <WebsiteShell>
+            <PricingPage />
+          </WebsiteShell>
+        ),
       },
       {
         path: 'pricing/success',
         element: <BillingSuccessPage />,
+      },
+      {
+        path: 'products/:productId',
+        element: <WebsiteProductPage />,
+      },
+      {
+        path: 'zaki-bot',
+        element: <Navigate to="/products/agent" replace />,
+      },
+      {
+        path: 'story',
+        element: <WebsiteStoryPage />,
+      },
+      {
+        path: 'faq',
+        element: <WebsiteFaqPage />,
+      },
+      {
+        path: 'contact',
+        element: <WebsiteContactPage />,
+      },
+      {
+        path: 'autism-guidance',
+        element: <WebsiteAutismGuidancePage />,
+      },
+      {
+        path: 'vs-chatgpt',
+        element: <WebsiteComparisonPage slug="vs-chatgpt" />,
+      },
+      {
+        path: 'zaki-vs-spaces',
+        element: <WebsiteComparisonPage slug="zaki-vs-spaces" />,
+      },
+      {
+        path: 'best-arabic-ai-assistant',
+        element: <WebsiteComparisonPage slug="best-arabic-ai-assistant" />,
+      },
+      {
+        path: 'zaki-vs-openclaw',
+        element: <WebsiteComparisonPage slug="zaki-vs-openclaw" />,
+      },
+      {
+        path: 'how-to/:slug',
+        element: <WebsiteHowToRoute />,
+      },
+      {
+        path: 'privacy',
+        element: <Navigate to="/legal" replace />,
+      },
+      {
+        path: 'terms',
+        element: <Navigate to="/legal" replace />,
+      },
+      {
+        path: 'compliance',
+        element: <Navigate to="/legal" replace />,
+      },
+      {
+        path: 'ar',
+        element: <WebsiteHomePage locale="ar" />,
+      },
+      {
+        path: 'ar/products/:productId',
+        element: <WebsiteProductPage locale="ar" />,
+      },
+      {
+        path: 'ar/zaki-bot',
+        element: <Navigate to="/ar/products/agent" replace />,
+      },
+      {
+        path: 'ar/story',
+        element: <WebsiteStoryPageAr />,
+      },
+      {
+        path: 'ar/faq',
+        element: <WebsiteFaqPage locale="ar" />,
+      },
+      {
+        path: 'ar/contact',
+        element: <WebsiteContactPage locale="ar" />,
+      },
+      {
+        path: 'ar/autism-guidance',
+        element: <WebsiteAutismGuidancePage locale="ar" />,
+      },
+      {
+        path: 'ar/privacy',
+        element: <Navigate to="/legal" replace />,
+      },
+      {
+        path: 'ar/terms',
+        element: <Navigate to="/legal" replace />,
+      },
+      {
+        path: 'ar/compliance',
+        element: <Navigate to="/legal" replace />,
       },
       {
         path: 'help',

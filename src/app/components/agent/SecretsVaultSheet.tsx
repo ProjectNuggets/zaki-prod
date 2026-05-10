@@ -146,7 +146,7 @@ export function SecretsVaultSheet({ isOpen, onClose }: Props) {
           </button>
         </div>
         <div className="mb-3 rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 text-[11px] text-zaki-secondary">
-          Secrets are stored encrypted in nullalis. The agent can read them
+          Secrets are stored encrypted in the ZAKI runtime. The agent can read them
           during tool execution. Values are never logged.
         </div>
 

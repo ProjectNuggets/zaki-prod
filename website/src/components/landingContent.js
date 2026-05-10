@@ -121,10 +121,10 @@ export const content = {
       bridgeLine:
         "Most AI still resets the relationship every time you start over. ZAKI is testing what happens when context carries forward instead: not just from prompt to prompt, but across time, channels, and recurring work.",
     },
-    nullalis: {
-      heading: "Powered by Nullalis",
+    privateRuntime: {
+      heading: "Powered by ZAKI's private runtime",
       intro:
-        "Nullalis is the private runtime behind ZAKI. It gives the product continuity, memory discipline, and agentic capability without turning the public product into a fragile demo.",
+        "ZAKI's private runtime gives the product continuity, memory discipline, and agentic capability without turning the public product into a fragile demo.",
       bullets: [
         "Persistent per-user sessions",
         "Durable memory and runtime state",
@@ -594,9 +594,9 @@ export const content = {
             "No. Spaces do not claim to beat the latest GPT or Claude models on raw capability. The case for ZAKI is product shape: organization, pricing, control, workspace structure, and the operator direction. It also works across languages natively.",
         },
         {
-          question: "What does powered by Nullalis mean?",
+          question: "What does powered by ZAKI's private runtime mean?",
           answer:
-            "Nullalis is the private runtime behind ZAKI. It provides the memory continuity, process visibility, trainability, and agentic discipline that let ZAKI behave more like a persistent digital counterpart than an ordinary chat session.",
+            "ZAKI's private runtime provides the memory continuity, process visibility, trainability, and agentic discipline that let ZAKI behave more like a persistent digital counterpart than an ordinary chat session.",
         },
         {
           question: "When will premium subscriptions start?",
@@ -739,10 +739,10 @@ export const content = {
       bridgeLine:
         "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت، لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
     },
-    nullalis: {
-      heading: "مدعوم بـ Nullalis",
+    privateRuntime: {
+      heading: "مدعوم ببنية زكي الخاصة",
       intro:
-        "Nullalis هو المحرك الداخلي الخاص خلف زكي. وهو ما يمنح المنتج الاستمرارية وانضباط الذاكرة والقدرة الـ Agentic دون تحويل المنتج العام إلى عرض هش أو فوضوي.",
+        "بنية زكي الخاصة تمنح المنتج الاستمرارية وانضباط الذاكرة والقدرة الـ Agentic دون تحويل المنتج العام إلى عرض هش أو فوضوي.",
       bullets: [
         "جلسات ثابتة لكل مستخدم",
         "ذاكرة وحالة تشغيلية قابلة للاستمرار",
@@ -1212,9 +1212,9 @@ export const content = {
             "لا. Spaces لا تدّعي التفوق على أحدث GPT أو Claude في القدرة الخام. القيمة الأساسية هي شكل المنتج: التنظيم، السعر، التحكم، ودعم العربية-الإنجليزية، واتجاه المشغّل.",
         },
         {
-          question: "ماذا يعني أنه مدعوم بـ Nullalis؟",
+          question: "ماذا يعني أنه مدعوم ببنية زكي الخاصة؟",
           answer:
-            "Nullalis هو المحرك الداخلي الخاص خلف زكي. وهو ما يوفّر استمرارية الذاكرة، ووضوح مراحل العمل، وقابلية التدريب، والانضباط الـAgentic الذي يجعل زكي أقرب إلى نظير رقمي مستمر منه إلى جلسة دردشة عادية.",
+            "بنية زكي الخاصة توفّر استمرارية الذاكرة، ووضوح مراحل العمل، وقابلية التدريب، والانضباط الـAgentic الذي يجعل زكي أقرب إلى نظير رقمي مستمر منه إلى جلسة دردشة عادية.",
         },
         {
           question: "متى تبدأ الاشتراكات المميزة؟",

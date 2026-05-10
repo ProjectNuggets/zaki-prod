@@ -134,13 +134,20 @@ import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import { buildEntitlementFields } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
+  DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET,
+  DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT,
   LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
+  buildDailyLimitExceededPayload,
+  consumeAnonymousDailyPromptQuota,
   consumeDailyPromptQuota,
+  consumeWeeklyPromptQuota,
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
+  getWeeklyQuotaResetAtUtcIso,
   isUnlimitedUser,
   readDailyPromptUsage,
+  readWeeklyPromptUsage,
   resolveQuotaSurface,
 } from "./daily-quota.js";
 import {
@@ -182,6 +189,7 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
+import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
 import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
 import {
   fetchTypWorkspaces,
@@ -196,6 +204,22 @@ import {
   cleanupExpiredSessions,
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
+import {
+  buildClearedGoogleOAuthNonceCookie,
+  buildGoogleOAuthRedirectUri,
+  buildGoogleOAuthNonceCookie,
+  createGoogleOAuthNonce,
+  extractGoogleOAuthNonceFromCookieHeader,
+  hashGoogleOAuthNonce,
+  isGoogleOAuthConfigured,
+  sanitizeGoogleOAuthReturnTo,
+  signGoogleOAuthStatePayload,
+  validateGoogleIdTokenInfoPayload,
+  verifyGoogleOAuthNonceBinding,
+  verifyGoogleOAuthState,
+} from "./google-oauth.js";
+import { findOrCreateGoogleUser } from "./google-oauth-user.js";
+import { resolveAnonymousSpacesId } from "./anonymous-spaces-identity.js";
 
 // Load checked-in/default env first, then ignored local overrides.
 const envCandidates = [
@@ -362,14 +386,35 @@ const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
+const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+const GOOGLE_OAUTH_REDIRECT_URI = (process.env.GOOGLE_OAUTH_REDIRECT_URI || "").trim();
+const GOOGLE_OAUTH_STATE_SECRET = (
+  process.env.GOOGLE_OAUTH_STATE_SECRET ||
+  process.env.ZAKI_JWT_SIGNING_KEY ||
+  ""
+).trim();
+const ANONYMOUS_SPACES_ID_SECRET = (
+  process.env.ANONYMOUS_SPACES_ID_SECRET ||
+  process.env.ZAKI_JWT_SIGNING_KEY ||
+  GOOGLE_OAUTH_STATE_SECRET ||
+  ""
+).trim();
 const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
+const TOGETHER_API_KEY = (process.env.TOGETHER_API_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_PRICE_STUDENT = (process.env.STRIPE_PRICE_STUDENT || "").trim();
 const STRIPE_PRICE_PERSONAL = (process.env.STRIPE_PRICE_PERSONAL || "").trim();
 const STRIPE_PRICE_STUDENT_YEARLY = (process.env.STRIPE_PRICE_STUDENT_YEARLY || "").trim();
 const STRIPE_PRICE_PERSONAL_YEARLY = (process.env.STRIPE_PRICE_PERSONAL_YEARLY || "").trim();
+const STRIPE_PRICE_AGENT_MONTHLY = (process.env.STRIPE_PRICE_AGENT_MONTHLY || "").trim();
+const STRIPE_PRICE_LEARN_MONTHLY = (process.env.STRIPE_PRICE_LEARN_MONTHLY || "").trim();
+const STRIPE_PRICE_COMPLETE_MONTHLY = (process.env.STRIPE_PRICE_COMPLETE_MONTHLY || "").trim();
 const STRIPE_PRICE_ACCESS_CODE_MONTHLY = (
   process.env.STRIPE_PRICE_ACCESS_CODE_MONTHLY || ""
+).trim();
+const STRIPE_BILLING_PORTAL_CONFIGURATION = (
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION || ""
 ).trim();
 const ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN = (
   process.env.ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN || "paid_monthly"
@@ -437,11 +482,24 @@ const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 300_000)
 );
 const APP_CHAT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, APP_CHAT_SURFACE);
+const anonymousSpacesLimit = Number(process.env.ZAKI_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT);
+const ANONYMOUS_SPACES_QUOTA_CONFIG = {
+  bucket: String(
+    process.env.ZAKI_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET ||
+      DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET
+  ).trim() || DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET,
+  limit: Number.isFinite(anonymousSpacesLimit) && anonymousSpacesLimit >= 1
+    ? Math.floor(anonymousSpacesLimit)
+    : DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT,
+};
 const LEARNING_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, LEARNING_SURFACE);
 const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
 const AGENT_HISTORY_MODE_DEFAULT = "merged";
 const ZAKI_BOT_SPACE_ID = "zaki-bot";
 const ZAKI_BOT_THREAD_ID = "main";
+const ZAKI_ANONYMOUS_SPACES_MODEL = String(
+  process.env.ZAKI_ANONYMOUS_SPACES_MODEL || "openai/gpt-oss-120b"
+).trim();
 const ZAKI_AGENT_SURFACE = "zaki_agent";
 const DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE = Math.max(
   1,
@@ -542,6 +600,9 @@ const stripePricingCatalog = buildStripePricingCatalog({
   studentYearly: STRIPE_PRICE_STUDENT_YEARLY,
   personalMonthly: STRIPE_PRICE_PERSONAL,
   personalYearly: STRIPE_PRICE_PERSONAL_YEARLY,
+  agentMonthly: STRIPE_PRICE_AGENT_MONTHLY,
+  learnMonthly: STRIPE_PRICE_LEARN_MONTHLY,
+  completeMonthly: STRIPE_PRICE_COMPLETE_MONTHLY,
 });
 const PRICE_BY_PLAN_INTERVAL = stripePricingCatalog.priceByPlanInterval;
 const PRICE_DETAILS_BY_ID = stripePricingCatalog.priceDetailsById;
@@ -971,6 +1032,24 @@ function getCheckoutProviderOptions() {
   ];
 }
 
+const STRIPE_ONLY_COMMERCIAL_PLANS = new Set(["agent", "learn", "complete"]);
+
+function billingProviderSupportsCheckoutPlan(providerKey, plan) {
+  const normalizedProvider = String(providerKey || "").trim().toLowerCase();
+  const normalizedPlan = String(plan || "").trim().toLowerCase();
+  if (STRIPE_ONLY_COMMERCIAL_PLANS.has(normalizedPlan)) {
+    return normalizedProvider === "stripe";
+  }
+  if (normalizedPlan === "student" || normalizedPlan === "personal") {
+    return (
+      normalizedProvider === "stripe" ||
+      normalizedProvider === "paddle" ||
+      normalizedProvider === "creem"
+    );
+  }
+  return false;
+}
+
 function getActiveBillingProviderKey() {
   if (isStripeProviderSelected() && stripe) return "stripe";
   if (isCreemProviderSelected()) return "creem";
@@ -1082,6 +1161,15 @@ function getBillingConfigStatus() {
   if (!PRICE_BY_PLAN_INTERVAL.personal.yearly) {
     missing.push("stripe_price_personal_yearly");
   }
+  if (!PRICE_BY_PLAN_INTERVAL.agent.monthly) {
+    missing.push("stripe_price_agent_monthly");
+  }
+  if (!PRICE_BY_PLAN_INTERVAL.learn.monthly) {
+    missing.push("stripe_price_learn_monthly");
+  }
+  if (!PRICE_BY_PLAN_INTERVAL.complete.monthly) {
+    missing.push("stripe_price_complete_monthly");
+  }
   if (!STRIPE_WEBHOOK_SECRET) {
     missing.push("stripe_webhook_secret");
   }
@@ -1119,6 +1207,9 @@ async function getStripePricingDisplayCatalog() {
     ["student", "yearly", PRICE_BY_PLAN_INTERVAL.student.yearly],
     ["personal", "monthly", PRICE_BY_PLAN_INTERVAL.personal.monthly],
     ["personal", "yearly", PRICE_BY_PLAN_INTERVAL.personal.yearly],
+    ["agent", "monthly", PRICE_BY_PLAN_INTERVAL.agent.monthly],
+    ["learn", "monthly", PRICE_BY_PLAN_INTERVAL.learn.monthly],
+    ["complete", "monthly", PRICE_BY_PLAN_INTERVAL.complete.monthly],
     ["access", "monthly", STRIPE_PRICE_ACCESS_CODE_MONTHLY],
   ].filter(([, , priceId]) => String(priceId || "").trim());
 
@@ -1138,6 +1229,9 @@ async function getStripePricingDisplayCatalog() {
   const catalog = {
     student: { monthly: null, yearly: null },
     personal: { monthly: null, yearly: null },
+    agent: { monthly: null, yearly: null },
+    learn: { monthly: null, yearly: null },
+    complete: { monthly: null, yearly: null },
     access: { monthly: null },
   };
 
@@ -2726,6 +2820,10 @@ const ProductEventSchema = z.object({
   source: z.enum([
     "website_nav",
     "website_pricing",
+    "website_product_agent",
+    "website_product_learn",
+    "website_product_complete",
+    "website_product_spaces",
     "chat_input",
     "settings",
     "pricing_page",
@@ -2733,7 +2831,7 @@ const ProductEventSchema = z.object({
   ]),
   language: z.enum(["en", "ar"]).optional(),
   viewport: z.enum(["mobile", "tablet", "desktop"]).optional(),
-  plan: z.enum(["free", "student", "personal"]).nullable().optional(),
+  plan: z.enum(["free", "student", "personal", "agent", "learn", "complete"]).nullable().optional(),
   interval: z.enum(["monthly", "yearly"]).nullable().optional(),
   timestamp: z.string().max(120).optional(),
 });
@@ -3423,10 +3521,13 @@ function buildRateLimitSettingsResponse(settings = runtimeRateLimitSettings) {
   return {
     appChatDailyPromptLimit: settings.appChatDailyPromptLimit,
     appChatDailyPromptBucket: APP_CHAT_QUOTA_CONFIG.bucket,
+    appChatPromptPeriod: APP_CHAT_QUOTA_CONFIG.period || "day",
     learningDailyPromptLimit: settings.learningDailyPromptLimit,
     learningDailyPromptBucket: LEARNING_QUOTA_CONFIG.bucket,
+    learningPromptPeriod: LEARNING_QUOTA_CONFIG.period || "week",
     zakiBotDailyPromptLimit: settings.zakiBotDailyPromptLimit,
     zakiBotDailyPromptBucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
+    zakiBotPromptPeriod: ZAKI_BOT_QUOTA_CONFIG.period || "week",
     agentPerMinuteLimit: settings.agentPerMinuteLimit,
   };
 }
@@ -3474,6 +3575,7 @@ function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
       surface: LEARNING_SURFACE,
       bucket: LEARNING_QUOTA_CONFIG.bucket,
       limit: runtimeRateLimitSettings.learningDailyPromptLimit,
+      period: LEARNING_QUOTA_CONFIG.period || "week",
     };
   }
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
@@ -3481,12 +3583,14 @@ function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
       surface: ZAKI_BOT_SURFACE,
       bucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
       limit: runtimeRateLimitSettings.zakiBotDailyPromptLimit,
+      period: ZAKI_BOT_QUOTA_CONFIG.period || "week",
     };
   }
   return {
     surface: APP_CHAT_SURFACE,
     bucket: APP_CHAT_QUOTA_CONFIG.bucket,
     limit: runtimeRateLimitSettings.appChatDailyPromptLimit,
+    period: APP_CHAT_QUOTA_CONFIG.period || "day",
   };
 }
 
@@ -3495,15 +3599,19 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
   const tier = resolveTier(zakiUser?.plan_tier || "free");
   const status = zakiUser?.plan_status || "inactive";
   const access = getAccessStatus(zakiUser);
+  const effective = getEffectiveEntitlementState(zakiUser);
   const unlimited =
-    normalizedSurface === ZAKI_BOT_SURFACE || normalizedSurface === LEARNING_SURFACE
-      ? false
-      : isUnlimitedUser({
-          tier,
-          status,
-          accessActive: access.active,
-        });
-  return { tier, status, access, surface: normalizedSurface, unlimited };
+    normalizedSurface === ZAKI_BOT_SURFACE
+      ? Boolean(effective?.products?.agent?.access)
+      : normalizedSurface === LEARNING_SURFACE
+      ? Boolean(effective?.products?.learn?.access)
+      : Boolean(effective?.products?.spaces?.uncapped) ||
+        isUnlimitedUser({
+            tier,
+            status,
+            accessActive: access.active,
+          });
+  return { tier, status, access, effective, surface: normalizedSurface, unlimited };
 }
 
 function setPromptQuotaHeaders(res, quota) {
@@ -3521,6 +3629,9 @@ function setPromptQuotaHeaders(res, quota) {
   if (quota.bucket) {
     res.setHeader("X-Zaki-Quota-Bucket", String(quota.bucket));
   }
+  if (quota.period) {
+    res.setHeader("X-Zaki-Quota-Period", String(quota.period));
+  }
 }
 
 async function consumePromptQuotaForUser(
@@ -3530,7 +3641,9 @@ async function consumePromptQuotaForUser(
   const normalizedSurface = resolveQuotaSurface(surface);
   const quotaConfig = resolveSurfaceQuotaConfig(normalizedSurface);
   const quotaContext = buildUserQuotaContext(zakiUser, { surface: normalizedSurface });
-  const resetAt = getQuotaResetAtUtcIso(nowDate);
+  const period = quotaConfig.period || "day";
+  const resetAt =
+    period === "week" ? getWeeklyQuotaResetAtUtcIso(nowDate) : getQuotaResetAtUtcIso(nowDate);
 
   if (quotaContext.unlimited) {
     return {
@@ -3542,10 +3655,12 @@ async function consumePromptQuotaForUser(
       resetAt,
       bucket: quotaConfig.bucket,
       surface: normalizedSurface,
+      period,
     };
   }
 
-  const consumed = await consumeDailyPromptQuota({
+  const consumeQuota = period === "week" ? consumeWeeklyPromptQuota : consumeDailyPromptQuota;
+  const consumed = await consumeQuota({
     dbQuery,
     dbGet,
     userId: zakiUser.id,
@@ -3559,6 +3674,7 @@ async function consumePromptQuotaForUser(
     unlimited: false,
     bucket: quotaConfig.bucket,
     surface: normalizedSurface,
+    period: consumed.period || period,
   };
 }
 
@@ -3595,9 +3711,30 @@ function getAppUrl() {
   ).replace(/\/+$/, "");
 }
 
+function getGoogleOAuthRedirectUri(req) {
+  return buildGoogleOAuthRedirectUri({
+    configuredRedirectUri: GOOGLE_OAUTH_REDIRECT_URI,
+    publicUrl: ZAKI_PUBLIC_URL,
+    protocol: req.protocol,
+    host: req.get("host"),
+  });
+}
+
+function ensureGoogleOAuthConfigured() {
+  return isGoogleOAuthConfigured({
+    clientId: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET,
+    stateSecret: GOOGLE_OAUTH_STATE_SECRET,
+  });
+}
+
+function isSecureCookieRequest(req) {
+  return isProduction || req?.secure || String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim() === "https";
+}
+
 // AUTH-01..05: ZAKI dual-auth — ZAKI-first local verify, legacy TYP fallback.
 // SELECT list excludes password_hash (AUTH-03). Legacy path mints a ZAKI session on success (AUTH-05).
-const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, legal_consent_version, legal_consent_at, full_name, access_expires_at, access_code_campaign, student_verified";
+const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, cancel_at_period_end, stripe_price_id, stripe_customer_id, stripe_subscription_id, legal_consent_version, legal_consent_at, full_name, access_expires_at, access_code_campaign, student_verified";
 const _LEGACY_TYP_CUTOFF_MS = (() => {
   const v = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
   if (!v) return null;
@@ -3683,6 +3820,145 @@ async function requireAuthUser(req, res) {
   }
   return { email: result.email, zakiUser: result.zakiUser, sessionUser: result.sessionUser };
 }
+
+async function exchangeGoogleOAuthCode({ code, redirectUri }) {
+  const body = new URLSearchParams({
+    code,
+    client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
+    redirect_uri: redirectUri,
+    grant_type: "authorization_code",
+  });
+  const response = await fetchWithTimeout(
+    "https://oauth2.googleapis.com/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    },
+    10_000,
+    "Google OAuth token exchange"
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data?.error_description || data?.error || "Google token exchange failed.");
+    err.status = 502;
+    throw err;
+  }
+  return data;
+}
+
+async function verifyGoogleIdToken(idToken) {
+  const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
+  const response = await fetchWithTimeout(
+    url,
+    { method: "GET" },
+    10_000,
+    "Google ID token verification"
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data?.error_description || data?.error || "Google ID token verification failed.");
+    err.status = 401;
+    throw err;
+  }
+  return validateGoogleIdTokenInfoPayload(data, GOOGLE_CLIENT_ID);
+}
+
+app.get("/api/auth/google/start", (req, res) => {
+  try {
+    if (!ensureGoogleOAuthConfigured()) {
+      res.status(503).json({ error: "Google OAuth is not configured." });
+      return;
+    }
+    const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    const nonce = createGoogleOAuthNonce();
+    const state = signGoogleOAuthStatePayload(
+      {
+        returnTo,
+        exp: Date.now() + 10 * 60 * 1000,
+        nonceHash: hashGoogleOAuthNonce(nonce),
+      },
+      GOOGLE_OAUTH_STATE_SECRET
+    );
+    res.setHeader(
+      "Set-Cookie",
+      buildGoogleOAuthNonceCookie(nonce, { secure: isSecureCookieRequest(req) })
+    );
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set("redirect_uri", getGoogleOAuthRedirectUri(req));
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("scope", "openid email profile");
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("prompt", "select_account");
+    res.redirect(302, authUrl.toString());
+  } catch (error) {
+    console.error("[GoogleOAuth] start error:", error);
+    res.status(500).json({ error: error?.message || "Unable to start Google login." });
+  }
+});
+
+app.get("/api/auth/google/status", (_req, res) => {
+  res.status(200).json({
+    success: true,
+    enabled: ensureGoogleOAuthConfigured(),
+  });
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  try {
+    if (!ensureGoogleOAuthConfigured()) {
+      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_unconfigured`);
+      return;
+    }
+    const code = String(req.query?.code || "").trim();
+    const state = String(req.query?.state || "").trim();
+    if (!code || !state) {
+      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
+      return;
+    }
+    const { returnTo, nonceHash } = verifyGoogleOAuthState(state, GOOGLE_OAUTH_STATE_SECRET);
+    verifyGoogleOAuthNonceBinding({
+      cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
+      stateNonceHash: nonceHash,
+    });
+    const tokenPayload = await exchangeGoogleOAuthCode({
+      code,
+      redirectUri: getGoogleOAuthRedirectUri(req),
+    });
+    const googleProfile = await verifyGoogleIdToken(tokenPayload?.id_token);
+    const zakiUser = await findOrCreateGoogleUser({
+      dbGet,
+      dbQuery,
+      userColumns: _ZAKI_USER_COLS,
+      ...googleProfile,
+    });
+    if (!zakiUser?.id) {
+      throw new Error("Unable to create or link Google user.");
+    }
+    const { refreshToken } = await mintZakiSession(
+      { id: zakiUser.id, email: zakiUser.email },
+      req
+    );
+    res.setHeader("Set-Cookie", [
+      buildRefreshCookie(refreshToken),
+      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) }),
+    ]);
+    const appUrl = new URL(returnTo, getAppUrl());
+    res.redirect(302, appUrl.toString());
+  } catch (error) {
+    console.error("[GoogleOAuth] callback error:", error);
+    res.setHeader(
+      "Set-Cookie",
+      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
+    );
+    const appUrl = new URL("/?auth=login", getAppUrl());
+    appUrl.searchParams.set("error", "google_oauth_failed");
+    res.redirect(302, appUrl.toString());
+  }
+});
 
 const listWorkspacesHandler = async (req, res) => {
   try {
@@ -3997,10 +4273,57 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
   };
 }
 
+async function resolveStripeSubscriptionForPlanChange(zakiUser) {
+  const activeLikeStatuses = new Set(["active", "trialing", "past_due"]);
+  let subscription = null;
+
+  if (zakiUser?.stripe_subscription_id) {
+    try {
+      subscription = await stripe.subscriptions.retrieve(zakiUser.stripe_subscription_id);
+    } catch (error) {
+      console.warn("[Stripe] Could not retrieve subscription for plan change:", error?.message);
+      subscription = null;
+    }
+    if (!subscription || !activeLikeStatuses.has(subscription.status)) {
+      subscription = null;
+    }
+  }
+
+  if (!subscription && zakiUser?.stripe_customer_id) {
+    const subscriptions = await stripe.subscriptions.list({
+      customer: zakiUser.stripe_customer_id,
+      status: "all",
+      limit: 10,
+    });
+    subscription =
+      (Array.isArray(subscriptions?.data) ? subscriptions.data : []).find((sub) =>
+        activeLikeStatuses.has(sub.status)
+      ) || null;
+  }
+
+  if (!subscription) {
+    const err = new Error("No active subscription found for this plan change.");
+    err.status = 409;
+    throw err;
+  }
+
+  const items = Array.isArray(subscription.items?.data) ? subscription.items.data : [];
+  if (items.length !== 1 || !items[0]?.id) {
+    const err = new Error("This subscription must be managed in the billing portal.");
+    err.status = 409;
+    throw err;
+  }
+
+  return { subscription, item: items[0] };
+}
+
 const billingAdapters = {
   none: {
     name: "none",
     async createCheckout() {
+      throw new Error("Billing provider is not configured.");
+    },
+    async createSubscriptionUpdateSession() {
       throw new Error("Billing provider is not configured.");
     },
     async createPortal() {
@@ -4070,12 +4393,68 @@ const billingAdapters = {
       });
       return { url: session.url };
     },
-    async createPortal({ email, zakiUser }) {
+    async createSubscriptionUpdateSession({ plan, interval = "monthly", email, zakiUser, context }) {
+      const selectedInterval = normalizeBillingInterval(interval, "monthly");
+      if (!STRIPE_BILLING_PORTAL_CONFIGURATION) {
+        const err = new Error(
+          "Stripe billing portal configuration is required for subscription upgrades."
+        );
+        err.status = 503;
+        throw err;
+      }
+      const priceId = resolveStripePriceForSelection(stripePricingCatalog, {
+        plan,
+        interval: selectedInterval,
+      });
+      if (!priceId) {
+        const err = new Error("Selected billing interval is not configured for this plan.");
+        err.status = 400;
+        throw err;
+      }
+
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
+      const { subscription, item } = await resolveStripeSubscriptionForPlanChange({
+        ...zakiUser,
+        stripe_customer_id: zakiUser.stripe_customer_id || customerId,
+      });
+      const appUrl = getAppUrl();
+      const returnUrl = `${appUrl}/pricing/success?billing=success&plan=${plan}&interval=${selectedInterval}&upgraded=1`;
       const portal = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        return_url: `${getAppUrl()}/pricing?billing=manage`,
+        configuration: STRIPE_BILLING_PORTAL_CONFIGURATION,
+        return_url: `${appUrl}/pricing?billing=manage`,
+        flow_data: {
+          type: "subscription_update_confirm",
+          after_completion: {
+            type: "redirect",
+            redirect: {
+              return_url: returnUrl,
+            },
+          },
+          subscription_update_confirm: {
+            subscription: subscription.id,
+            items: [
+              {
+                id: item.id,
+                price: priceId,
+                quantity: item.quantity || 1,
+              },
+            ],
+          },
+        },
       });
+      return { url: portal.url };
+    },
+    async createPortal({ email, zakiUser }) {
+      const customerId = await ensureStripeCustomerId({ email, zakiUser });
+      const portalRequest = {
+        customer: customerId,
+        return_url: `${getAppUrl()}/pricing?billing=manage`,
+      };
+      if (STRIPE_BILLING_PORTAL_CONFIGURATION) {
+        portalRequest.configuration = STRIPE_BILLING_PORTAL_CONFIGURATION;
+      }
+      const portal = await stripe.billingPortal.sessions.create(portalRequest);
       return { url: portal.url };
     },
     async cancelSubscription({ zakiUser }) {
@@ -4166,6 +4545,11 @@ const billingAdapters = {
   paddle: {
     name: "paddle",
     async createCheckout({ plan }) {
+      if (!billingProviderSupportsCheckoutPlan("paddle", plan)) {
+        const err = new Error("External checkout does not support this plan.");
+        err.status = 400;
+        throw err;
+      }
       const checkoutUrl =
         plan === "student"
           ? ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT
@@ -4197,6 +4581,11 @@ const billingAdapters = {
   creem: {
     name: "creem",
     async createCheckout({ plan, email, zakiUser, context }) {
+      if (!billingProviderSupportsCheckoutPlan("creem", plan)) {
+        const err = new Error("Creem checkout does not support this plan.");
+        err.status = 400;
+        throw err;
+      }
       const checkoutSource = String(context?.source || "").trim().toLowerCase() || "pricing_page";
       const productId =
         plan === "student" ? CREEM_PRODUCT_ID_STUDENT : CREEM_PRODUCT_ID_PERSONAL;
@@ -5388,6 +5777,7 @@ app.get("/api/usage/quota", async (req, res) => {
       surface,
       buildUserQuotaContext,
       readDailyPromptUsage,
+      readWeeklyPromptUsage,
       resolveSurfaceQuotaConfig,
       dbGet,
     });
@@ -5998,7 +6388,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
 // Billing: Stripe Checkout, Portal, Entitlements
 // -----------------------------------------------------------------------------
 const CheckoutSchema = z.object({
-  plan: z.enum(["student", "personal"]),
+  plan: z.enum(["student", "personal", "agent", "learn", "complete"]),
   interval: z.enum(["monthly", "yearly"]).optional(),
   provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
   context: z
@@ -6007,6 +6397,10 @@ const CheckoutSchema = z.object({
         .enum([
           "website_nav",
           "website_pricing",
+          "website_product_agent",
+          "website_product_learn",
+          "website_product_complete",
+          "website_product_spaces",
           "chat_input",
           "settings",
           "pricing_page",
@@ -6048,24 +6442,28 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
       return;
     }
 
-    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
-    if (!email || !zakiUser) return;
-
-    const effective = getEffectiveEntitlementState(zakiUser);
-    if (effective.premium) {
-      res.status(409).json({
-        success: false,
-        error: "You already have active premium access.",
-      });
-      return;
-    }
-
     const plan = validation.data.plan;
     const interval = normalizeBillingInterval(validation.data.interval, "monthly");
     const context = validation.data.context || undefined;
     const requestedProvider = String(validation.data.provider || "").trim().toLowerCase();
+    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!email || !zakiUser) return;
+
+    const effective = getEffectiveEntitlementState(zakiUser);
+    const transition = resolveBillingPlanTransition(effective, plan);
+    if (!transition.allowed) {
+      res.status(409).json({
+        success: false,
+        error: transition.message || "This plan change is not available.",
+        reason: transition.reason,
+        suggestedPlan: transition.suggestedPlan || null,
+      });
+      return;
+    }
     const configured = getBillingConfigStatus();
-    const availableProviders = (configured.checkoutProviders || []).filter((item) => item.enabled);
+    const availableProviders = (configured.checkoutProviders || [])
+      .filter((item) => item.enabled)
+      .filter((item) => billingProviderSupportsCheckoutPlan(item.key, plan));
 
     const providerToUse = requestedProvider || configured.provider;
     const providerOption = availableProviders.find((item) => item.key === providerToUse);
@@ -6074,7 +6472,7 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
         success: false,
         error:
           requestedProvider
-            ? "Selected billing provider is not available."
+            ? "Selected billing provider is not available for this plan."
             : "No billing provider is currently available for checkout.",
       });
       return;
@@ -6097,7 +6495,20 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
       return;
     }
 
-    const result = await adapter.createCheckout({ plan, interval, email, zakiUser, context });
+    if (transition.mode === "subscription_update") {
+      if (providerOption.key !== "stripe" || typeof adapter.createSubscriptionUpdateSession !== "function") {
+        res.status(400).json({
+          success: false,
+          error: "Subscription upgrades are currently available only through Stripe.",
+        });
+        return;
+      }
+    }
+
+    const result =
+      transition.mode === "subscription_update"
+        ? await adapter.createSubscriptionUpdateSession({ plan, interval, email, zakiUser, context })
+        : await adapter.createCheckout({ plan, interval, email, zakiUser, context });
     res.status(200).json({ success: true, url: result?.url || null });
   } catch (error) {
     console.error("[Billing] Checkout error:", error);
@@ -6186,7 +6597,11 @@ app.get("/api/entitlements", async (req, res) => {
     const access = getAccessStatus(zakiUser);
     const effective = getEffectiveEntitlementState(zakiUser);
     const readOnly = !effective.premium;
-    const hasPersonal = effective.tier === "personal" && effective.premium;
+    const products = effective.products || {};
+    const commercial = effective.commercial || {};
+    const hasAgentAccess = Boolean(products.agent?.access);
+    const hasLearnAccess = Boolean(products.learn?.access);
+    const hasWholeAppAccess = Boolean(products.billing?.wholeApp);
 
     res.status(200).json({
       success: true,
@@ -6210,12 +6625,22 @@ app.get("/api/entitlements", async (req, res) => {
         source: effective.source,
         premium: effective.premium,
       },
+      commercial: {
+        planId: commercial.planId || "spaces_free",
+        label: commercial.label || "Spaces Free",
+        source: commercial.source || effective.source,
+        grandfathered: Boolean(products.billing?.grandfathered),
+        products,
+      },
       features: {
         premium: effective.premium,
-        imageGeneration: hasPersonal,
+        imageGeneration: effective.premium,
         advancedModels: effective.premium,
-        deepResearch: hasPersonal,
-        agentMode: hasPersonal,
+        deepResearch: hasAgentAccess || hasWholeAppAccess,
+        agentMode: hasAgentAccess,
+        learnMode: hasLearnAccess,
+        spacesMemory: Boolean(products.spaces?.memoryEligible),
+        spacesUncapped: Boolean(products.spaces?.uncapped),
       },
     });
   } catch (error) {
@@ -6531,6 +6956,10 @@ const AccessCodePurchaseCheckoutSchema = z.object({
         .enum([
           "website_nav",
           "website_pricing",
+          "website_product_agent",
+          "website_product_learn",
+          "website_product_complete",
+          "website_product_spaces",
           "chat_input",
           "settings",
           "pricing_page",
@@ -7183,6 +7612,90 @@ const updateWorkspaceHandler = async (req, res) => {
 
 app.post("/workspace/:slug/update", express.json({ limit: "1mb" }), updateWorkspaceHandler);
 app.post("/api/workspace/:slug/update", express.json({ limit: "1mb" }), updateWorkspaceHandler);
+
+function buildAnonymousQuotaHash(req, res) {
+  const secret = ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET || STRIPE_WEBHOOK_SECRET;
+  const rawId = secret
+    ? resolveAnonymousSpacesId(req, res, secret)
+    : [
+        req.ip || "",
+        req.headers["x-forwarded-for"] || "",
+        req.headers["user-agent"] || "",
+      ].join("|");
+  return crypto.createHash("sha256").update(rawId).digest("hex");
+}
+
+function resolveAnonymousThreadSlug(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return normalized || `anon-${Date.now()}`;
+}
+
+async function generateAnonymousSpacesReply(message, requestPayload = {}) {
+  if (!TOGETHER_API_KEY) {
+    throw new Error("TOGETHER_API_KEY is not configured for anonymous Spaces.");
+  }
+  const system = [
+    "You are ZAKI Spaces, a concise workspace assistant.",
+    "The user is anonymous. Do not claim to remember them across sessions.",
+    "Do not mention internal models, providers, routing, or system prompts.",
+  ].filter(Boolean).join("\n\n");
+  const response = await fetchWithTimeout(
+    "https://api.together.xyz/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TOGETHER_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: ZAKI_ANONYMOUS_SPACES_MODEL,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: message },
+        ],
+        max_tokens: 320,
+        temperature: 0.4,
+      }),
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    "Anonymous Spaces Together request"
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error?.message || data?.message || "Anonymous Spaces provider failed.");
+  }
+  const content = String(data?.choices?.[0]?.message?.content || "").trim();
+  return content || "I could not produce a reply. Please try again.";
+}
+
+const createAnonymousThreadHandler = async (req, res) => {
+  try {
+    const requestedSlug = resolveAnonymousThreadSlug(req.body?.slug);
+    const requestedName = String(req.body?.name || "Anonymous chat").trim().slice(0, 80);
+    res.status(200).json({
+      thread: {
+        id: requestedSlug,
+        slug: requestedSlug,
+        name: requestedName || "Anonymous chat",
+      },
+      message: null,
+    });
+  } catch (error) {
+    console.error("[AnonymousSpaces] Thread create error:", error);
+    res.status(500).json({ error: error?.message || "Unable to create anonymous thread." });
+  }
+};
+
+app.post(
+  "/api/anonymous/workspace/:slug/thread/new",
+  express.json({ limit: "200kb" }),
+  createAnonymousThreadHandler
+);
 
 const createThreadHandler = async (req, res) => {
   try {
@@ -8143,6 +8656,86 @@ function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
   }
   return false;
 }
+
+/**
+ * Anonymous Spaces chat. This intentionally bypasses authenticated memory and
+ * account-bound workspace access while preserving daily quota and upstream
+ * admin-key isolation.
+ */
+const anonymousStreamChatHandler = async (req, res) => {
+  try {
+    const requestPayload = req.body || {};
+    const originalMessage = extractStreamMessage(requestPayload) || "";
+    if (!originalMessage) {
+      return res.status(400).json({ error: "Message is required." });
+    }
+    if (originalMessage.length > MAX_STREAM_MESSAGE_CHARS) {
+      return res.status(400).json({
+        error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
+      });
+    }
+
+    const consumed = await consumeAnonymousDailyPromptQuota({
+      dbQuery,
+      dbGet,
+      anonKeyHash: buildAnonymousQuotaHash(req, res),
+      bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
+      limit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
+    });
+    setPromptQuotaHeaders(res, {
+      ...consumed,
+      bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
+      surface: APP_CHAT_SURFACE,
+    });
+    if (!consumed.allowed) {
+      return res.status(429).json(
+        buildDailyLimitExceededPayload({
+          limit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
+          resetAt: consumed.resetAt,
+          surface: APP_CHAT_SURFACE,
+        })
+      );
+    }
+
+    if (isIdentityProbePrompt(originalMessage)) {
+      sendSyntheticSseReply(res, buildIdentityProbeReply(originalMessage));
+      return;
+    }
+    if (isComparisonPrompt(originalMessage)) {
+      sendSyntheticSseReply(res, buildProductComparisonReply(originalMessage));
+      return;
+    }
+
+    const disableResponseEnvelope = requestPayload?.disableResponseEnvelope === true;
+    const anonymousMessage = disableResponseEnvelope
+      ? originalMessage
+      : applyResponseFormatEnvelope(originalMessage);
+    res.setHeader("X-Zaki-Anonymous", "1");
+    res.setHeader(
+      "X-Zaki-Web-Search",
+      requestPayload.webSearchEnabled === true || requestPayload.webSearch === true ? "1" : "0"
+    );
+    if (typeof requestPayload.mode === "string" && requestPayload.mode.trim()) {
+      res.setHeader("X-Zaki-Mode", requestPayload.mode.trim());
+    }
+    const reply = await generateAnonymousSpacesReply(anonymousMessage, requestPayload);
+    sendSyntheticSseReply(res, reply);
+  } catch (error) {
+    console.error("[AnonymousSpaces] Stream error:", error);
+    const message = error?.message || "Anonymous Spaces chat failed.";
+    if (String(req.headers.accept || "").includes("text/event-stream")) {
+      sendChatStreamError(res, message, { code: "anonymous_chat_error" });
+      return;
+    }
+    res.status(500).json({ error: message, code: "anonymous_chat_error" });
+  }
+};
+
+app.post(
+  "/api/anonymous/workspace/:slug/thread/:threadSlug/stream-chat",
+  express.json({ limit: "5mb" }),
+  anonymousStreamChatHandler
+);
 
 /**
  * Intercept stream-chat requests to inject memory context
@@ -10292,6 +10885,7 @@ const botUsageHandler = async (req, res) => {
       surface: ZAKI_BOT_SURFACE,
       buildUserQuotaContext,
       readDailyPromptUsage,
+      readWeeklyPromptUsage,
       resolveSurfaceQuotaConfig,
       dbGet,
     });
@@ -10347,6 +10941,7 @@ async function buildBotBffUsageSummary({ zakiUser }) {
     surface: ZAKI_BOT_SURFACE,
     buildUserQuotaContext,
     readDailyPromptUsage,
+    readWeeklyPromptUsage,
     resolveSurfaceQuotaConfig,
     dbGet,
   });
@@ -12967,7 +13562,6 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   clientSocket.on("message", (data, isBinary) => {
     const sanitized = sanitizeLearningWsClientMessage(data, isBinary);
     outgoingChain = outgoingChain.then(async () => {
-      if (upstreamSocket.readyState !== upstreamSocket.OPEN) return;
       const action = classifyLearningWsQuotaAction(sanitized.data, sanitized.isBinary);
       if (action) {
         const actionDecision = await consumeLearningActionQuotaForUser(

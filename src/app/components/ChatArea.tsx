@@ -32,6 +32,7 @@ import {
   type UsageQuotaSurface,
 } from "@/lib/api";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
+import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -81,7 +82,6 @@ import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
-import { hasSeenZakiBootstrapCard } from "./ZakiBootstrapCard";
 import {
   createZakiBotThread,
   isZakiBotSpaceId,
@@ -1337,7 +1337,7 @@ export function extractNullalisNarrationFrame(
     numericValue(payload.step_total ?? payload.stepTotal ?? payload.total);
   const durationMs = numericValue(payload.duration_ms ?? payload.durationMs);
   return {
-    id: `nullalis-narration-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `zaki-runtime-narration-${now}-${Math.random().toString(36).slice(2, 8)}`,
     phase,
     label:
       (typeof payload.label === "string" && payload.label.trim()) ||
@@ -1429,7 +1429,7 @@ export function extractNullalisReasoningNarrationFrame(
     ? (summary.phase.trim().toLowerCase() as NullalisNarrationPhase)
     : "thinking";
   return {
-    id: `nullalis-summary-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `zaki-runtime-summary-${now}-${Math.random().toString(36).slice(2, 8)}`,
     phase,
     label: summary.text,
     tool: summary.tool,
@@ -1577,7 +1577,7 @@ function nullalisImportance(input: {
 }
 
 function nullalisEntryId(prefix: string, now: number) {
-  return `nullalis-${prefix}-${now}-${Math.random().toString(36).slice(2, 8)}`;
+  return `zaki-runtime-${prefix}-${now}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function extractNullalisTranscriptEntry(
@@ -1655,7 +1655,7 @@ export function extractNullalisTranscriptEntry(
             ? "status"
             : "narration";
     return {
-      id: frame.id.replace("nullalis-narration", "nullalis-transcript"),
+      id: frame.id.replace("zaki-runtime-narration", "zaki-runtime-transcript"),
       kind,
       intent,
       text,
@@ -1979,15 +1979,15 @@ export function ChatArea() {
     unableToUpload: isRtl ? "تعذر رفع الملفات." : "Unable to upload files.",
     experimentalLimitReached: (resetLabel: string) =>
       isRtl
-        ? `وصلت إلى حد الاستخدام التجريبي المجاني اليوم. الاستخدام المجاني يُعاد يوميًا وقد يتغير حسب الضغط وتعقيد الطلب. جرّب مرة أخرى بعد ${resetLabel}.`
-        : `You reached today's free experimental limit. Free usage resets daily and can vary with traffic and prompt complexity. Try again after ${resetLabel}.`,
+        ? `وصلت إلى حد المعاينة المجانية لهذا الأسبوع. تتم إعادة التعيين أسبوعيًا. جرّب مرة أخرى بعد ${resetLabel}.`
+        : `You reached this week's free Agent preview limit. Preview usage resets weekly. Try again after ${resetLabel}.`,
     appFreeLimitReached: (resetLabel: string) =>
       isRtl
         ? `وصلت إلى حد الاستخدام المجاني اليوم. يتم إعادة التعيين يوميًا. جرّب مرة أخرى بعد ${resetLabel}.`
         : `You reached today's free limit. Free usage resets daily. Try again after ${resetLabel}.`,
-    quotaBadgeNeutral: isRtl ? "وصول تجريبي يومي" : "Daily experimental access",
+    quotaBadgeNeutral: isRtl ? "معاينة أسبوعية" : "Weekly Agent preview",
     quotaBadgeWarning: isRtl ? "الاستخدام المجاني محدود" : "Limited free usage",
-    quotaBadgeDanger: isRtl ? "تم بلوغ الحد التجريبي اليوم" : "Today's experimental limit reached",
+    quotaBadgeDanger: isRtl ? "تم بلوغ حد المعاينة" : "Agent preview limit reached",
   };
   useAuthStore(); // For auth context, values used elsewhere
   const {
@@ -2046,6 +2046,7 @@ export function ChatArea() {
     resetAt: string | null;
     surface: UsageQuotaSurface;
     bucket: string | null;
+    period?: "day" | "week" | string | null;
   } | null>(null);
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
@@ -2190,9 +2191,7 @@ export function ChatArea() {
   // Legacy holdover: ZakiExperimentalNotice still keys off this flag,
   // and the new hero replaces the bootstrap card entirely so once the
   // user dismisses the hero we treat the legacy flag as completed too.
-  const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(() =>
-    authUserId ? hasSeenZakiBootstrapCard(authUserId) : true
-  );
+  const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(true);
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -2346,6 +2345,7 @@ export function ChatArea() {
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const primarySpace = spacesList[0] ?? null;
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
@@ -2458,7 +2458,7 @@ export function ChatArea() {
       setZakiBootstrapCompleted(true);
       return;
     }
-    setZakiBootstrapCompleted(hasSeenZakiBootstrapCard(authUserId));
+    setZakiBootstrapCompleted(true);
   }, [authUserId, isZakiBotActiveSpace]);
   const zakiBotQuotaInfo =
     isZakiBotActiveSpace &&
@@ -2780,8 +2780,8 @@ export function ChatArea() {
   };
 
   const { data: historyData, isLoading: isHistoryLoading } = useMessages(
-    isZakiBotActiveSpace ? null : activeWorkspaceSlug,
-    isZakiBotActiveSpace ? null : activeThreadId
+    isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeWorkspaceSlug,
+    isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeThreadId
   );
   const [isBotHistoryLoading, setIsBotHistoryLoading] = useState(false);
 
@@ -2881,6 +2881,7 @@ export function ChatArea() {
       threadId: string,
       exchange?: { userMessage: string; assistantMessage: string }
     ) => {
+      if (!authUserId) return;
       if (!spaceId || !threadId || isZakiBotSpaceId(spaceId)) return;
       const autoTitleKey = getAutoTitleKey(spaceId, threadId);
       if (autoTitleFinalizedRef.current[autoTitleKey]) return;
@@ -2944,7 +2945,7 @@ export function ChatArea() {
         autoTitleInFlightRef.current[autoTitleKey] = false;
       }
     },
-    [applyThreadLabelUpdate, getAutoTitleKey, getThreadLabel, queryClient]
+    [applyThreadLabelUpdate, authUserId, getAutoTitleKey, getThreadLabel, queryClient]
   );
 
   /**
@@ -3571,7 +3572,7 @@ export function ChatArea() {
         extractNullalisTranscriptEntry("task_update", payload, taskItem.updatedAt)
       );
       setNullalisNarrationFrame({
-        id: `nullalis-task-${taskItem.taskId}-${taskItem.updatedAt}`,
+        id: `zaki-runtime-task-${taskItem.taskId}-${taskItem.updatedAt}`,
         phase: "plan_step",
         label:
           taskItem.status === "running"
@@ -3635,8 +3636,13 @@ export function ChatArea() {
     const resetAtRaw = String(headers.get("x-zaki-quota-reset-at") || "").trim();
     const headerSurface = String(headers.get("x-zaki-quota-surface") || "").trim().toLowerCase();
     const headerBucket = String(headers.get("x-zaki-quota-bucket") || "").trim();
+    const headerPeriod = String(headers.get("x-zaki-quota-period") || "").trim().toLowerCase();
     const normalizedSurface: UsageQuotaSurface =
-      headerSurface === "zaki_bot" ? "zaki_bot" : fallbackSurface;
+      headerSurface === "zaki_bot"
+        ? "zaki_bot"
+        : headerSurface === "learning"
+          ? "learning"
+          : fallbackSurface;
     const unlimited = limitRaw === "unlimited";
     const parsedLimit = Number(limitRaw);
     const parsedRemaining = Number(remainingRaw);
@@ -3654,15 +3660,33 @@ export function ChatArea() {
       resetAt: resetAtRaw || null,
       surface: normalizedSurface,
       bucket: headerBucket || null,
+      period: headerPeriod || null,
     });
   }, []);
 
   const refreshUsageQuota = useCallback(async () => {
+    if (!authUserId) {
+      setFreeDailyQuota({
+        unlimited: false,
+        limit: 10,
+        used: 0,
+        remaining: 10,
+        resetAt: null,
+        surface: "app_chat",
+        bucket: "anonymous_spaces",
+        period: "day",
+      });
+      return;
+    }
     try {
       const { response, data } = await fetchUsageQuota(quotaSurface);
       if (!response.ok) return;
       const normalizedSurface: UsageQuotaSurface =
-        data.surface === "zaki_bot" ? "zaki_bot" : quotaSurface;
+        data.surface === "zaki_bot"
+          ? "zaki_bot"
+          : data.surface === "learning"
+            ? "learning"
+            : quotaSurface;
       setFreeDailyQuota({
         unlimited: data.unlimited === true,
         limit: typeof data.limit === "number" ? data.limit : null,
@@ -3671,11 +3695,12 @@ export function ChatArea() {
         resetAt: typeof data.resetAt === "string" ? data.resetAt : null,
         surface: normalizedSurface,
         bucket: typeof data.bucket === "string" && data.bucket.trim() ? data.bucket.trim() : null,
+        period: typeof data.period === "string" ? data.period : null,
       });
     } catch {
       // Best-effort status sync.
     }
-  }, [quotaSurface]);
+  }, [authUserId, quotaSurface]);
 
   useEffect(() => {
     void refreshUsageQuota();
@@ -3962,9 +3987,12 @@ export function ChatArea() {
       responseFormattingConfig.disableResponseEnvelope || disableResponseEnvelope;
     const isZakiAgentSpace =
       String(workspaceSlug || "").trim().toLowerCase() === ZAKI_BOT_SPACE_ID;
+    const isAnonymousSpaces = !authUserId && !isZakiAgentSpace;
     const requestPath = isZakiAgentSpace
       ? "/api/agent/chat/stream"
-      : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
+      : isAnonymousSpaces
+        ? `/api/anonymous/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`
+        : `/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`;
     const requestBody = isZakiAgentSpace
       ? {
           message,
@@ -3983,6 +4011,7 @@ export function ChatArea() {
       method: "POST",
       body: JSON.stringify(requestBody),
       signal,
+      skipAuth: isAnonymousSpaces,
     });
 
     console.log(`[Chat] Response status: ${response.status}`);
@@ -4005,6 +4034,7 @@ export function ChatArea() {
             limit?: number;
             resetAt?: string;
             surface?: string;
+            period?: string;
           };
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
@@ -4023,10 +4053,12 @@ export function ChatArea() {
             message = data.error;
           } else if (errorCode === "access_expired") {
             message = "Access code required. Redeem a fresh code to keep chatting.";
-          } else if (errorCode === "daily_limit_reached") {
+          } else if (errorCode === "daily_limit_reached" || errorCode === "weekly_limit_reached") {
             const resetLabel = quotaResetAt
               ? new Date(quotaResetAt).toLocaleString()
-              : "tomorrow";
+              : errorCode === "weekly_limit_reached"
+                ? "next week"
+                : "tomorrow";
             const isBotQuota = quotaSurfaceCode === "zaki_bot" || isZakiAgentSpace;
             if (isBotQuota) {
               message = chatCopy.experimentalLimitReached(resetLabel);
@@ -4206,7 +4238,7 @@ export function ChatArea() {
             ? (payload.iterations_used as number)
             : 0;
         // eslint-disable-next-line no-console
-        console.info("[nullalis] tool_only_turn", {
+        console.info("[zaki-runtime] tool_only_turn", {
           tool_calls_executed: toolCount,
           spawned_task_ids: taskIds,
           iterations_used: iters,
@@ -4274,7 +4306,7 @@ export function ChatArea() {
           }
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("approval_required", payload));
           setNullalisNarrationFrame({
-            id: `nullalis-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id: `zaki-runtime-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             phase: "waiting",
             label: "Waiting for tool approval...",
             tool: typeof payload.tool === "string" ? payload.tool : null,
@@ -4613,6 +4645,7 @@ export function ChatArea() {
   }, [
     applyQuotaHeaders,
     applyZakiBotToolResult,
+    authUserId,
     finalizeZakiBotProgress,
     isRtl,
     isZakiBotActiveSpace,
@@ -5247,6 +5280,10 @@ export function ChatArea() {
       return;
     }
     if (isStreaming) return;
+    if (!authUserId && files.length > 0) {
+      toast.error("Sign in to upload files to Spaces.");
+      return;
+    }
     const resolvedWorkspaceSlug = preferredWorkspaceSlug ?? activeWorkspaceSlug ?? primarySpace?.id ?? null;
     if (!resolvedWorkspaceSlug) {
       toast.error("Select a workspace before sending a message");
@@ -5263,9 +5300,18 @@ export function ChatArea() {
     let threadId = activeThreadId || (isZakiBotTarget ? `thread-${Date.now()}` : null);
     if (!threadId) {
       try {
-        const response = await apiRequest(`/workspace/${resolvedWorkspaceSlug}/thread/new`, {
-          method: "POST",
-        });
+        const response = await apiRequest(
+          authUserId
+            ? `/workspace/${resolvedWorkspaceSlug}/thread/new`
+            : `/api/anonymous/workspace/${resolvedWorkspaceSlug}/thread/new`,
+          {
+            method: "POST",
+            skipAuth: !authUserId,
+            body: !authUserId
+              ? JSON.stringify({ slug: `anon-${Date.now()}`, name: DEFAULT_THREAD_LABEL })
+              : undefined,
+          }
+        );
         if (!response.ok) {
           throw new Error("Unable to create thread.");
         }
@@ -5353,7 +5399,7 @@ export function ChatArea() {
       {
         const now = Date.now();
         const frame: NullalisNarrationFrame = {
-          id: `nullalis-start-${now}`,
+          id: `zaki-runtime-start-${now}`,
           phase: "thinking",
           label: "Thinking...",
           tool: null,
@@ -5366,7 +5412,7 @@ export function ChatArea() {
         setNullalisNarrationFrame(frame);
         setNullalisTranscriptEntries([
           {
-            id: `nullalis-start-entry-${now}`,
+            id: `zaki-runtime-start-entry-${now}`,
             kind: "narration",
             intent: "thinking",
             text: "Starting the request",
@@ -6147,6 +6193,14 @@ export function ChatArea() {
           spacesList={spacesList}
           onCreateSpace={() => setCreateSpaceOpen(true)}
           onViewSpace={(id) => {
+            if (!authUserId) {
+              const existingThreadId =
+                spacesList.find((space) => space.id === id)?.threads?.[0]?.id ??
+                createAnonymousThreadId();
+              goToThread(id, existingThreadId);
+              navigate(`/spaces/${encodeURIComponent(id)}/threads/${encodeURIComponent(existingThreadId)}`);
+              return;
+            }
             window.dispatchEvent(new CustomEvent("zaki:view-space", { detail: { id } }));
           }}
         />

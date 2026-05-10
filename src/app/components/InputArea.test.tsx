@@ -26,6 +26,17 @@ jest.mock("@/queries", () => ({
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
   }),
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
+  }),
+}));
+
+jest.mock("@/queries/useBrainSearch", () => ({
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
+  }),
 }));
 
 jest.mock("react-i18next", () => ({

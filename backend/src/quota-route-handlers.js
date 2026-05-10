@@ -2,6 +2,7 @@ import {
   APP_CHAT_SURFACE,
   buildDailyLimitExceededPayload,
   getQuotaResetAtUtcIso,
+  getWeeklyQuotaResetAtUtcIso,
   resolveQuotaSurface,
 } from "./daily-quota.js";
 
@@ -29,6 +30,7 @@ export async function enforcePromptQuotaForIngress({
         limit: promptQuota?.limit || 0,
         resetAt: promptQuota?.resetAt || getQuotaResetAtUtcIso(),
         surface: resolvedSurface,
+        period: promptQuota?.period || "day",
       }),
     };
   }
@@ -42,14 +44,18 @@ export function buildUsageQuotaResponse({
   surface = APP_CHAT_SURFACE,
   buildUserQuotaContext,
   readDailyPromptUsage,
+  readWeeklyPromptUsage,
   resolveSurfaceQuotaConfig,
   dbGet,
   nowDate = new Date(),
 }) {
   const resolvedSurface = resolveQuotaSurface(surface);
-  const { bucket, limit } = resolveSurfaceQuotaConfig(resolvedSurface);
+  const { bucket, limit, period = "day" } = resolveSurfaceQuotaConfig(resolvedSurface);
   const quotaContext = buildUserQuotaContext(zakiUser, { surface: resolvedSurface });
-  const resetAt = getQuotaResetAtUtcIso(nowDate);
+  const resetAt =
+    period === "week"
+      ? getWeeklyQuotaResetAtUtcIso(nowDate)
+      : getQuotaResetAtUtcIso(nowDate);
   if (quotaContext.unlimited) {
     return Promise.resolve({
       success: true,
@@ -60,10 +66,16 @@ export function buildUsageQuotaResponse({
       resetAt,
       bucket,
       surface: resolvedSurface,
+      period,
     });
   }
 
-  return readDailyPromptUsage({
+  const readUsage =
+    period === "week" && typeof readWeeklyPromptUsage === "function"
+      ? readWeeklyPromptUsage
+      : readDailyPromptUsage;
+
+  return readUsage({
     dbGet,
     userId: zakiUser.id,
     bucket,
@@ -77,5 +89,6 @@ export function buildUsageQuotaResponse({
     resetAt,
     bucket,
     surface: resolvedSurface,
+    period,
   }));
 }

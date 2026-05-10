@@ -1,6 +1,6 @@
 import "@/styles/fonts.css";
 import { useEffect, useRef, useState } from "react";
-import { Outlet, useLocation, useParams } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "./components/Sidebar";
 import { MobileSidebar } from "./components/MobileSidebar";
@@ -20,6 +20,33 @@ import {
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+const PUBLIC_WEBSITE_PATHS = new Set([
+  "/",
+  "/pricing",
+  "/story",
+  "/faq",
+  "/contact",
+  "/autism-guidance",
+  "/vs-chatgpt",
+  "/zaki-vs-spaces",
+  "/best-arabic-ai-assistant",
+  "/zaki-vs-openclaw",
+  "/zaki-bot",
+  "/privacy",
+  "/terms",
+  "/compliance",
+  "/ar",
+  "/ar/zaki-bot",
+  "/ar/story",
+  "/ar/faq",
+  "/ar/contact",
+  "/ar/autism-guidance",
+  "/ar/privacy",
+  "/ar/terms",
+  "/ar/compliance",
+]);
+
+const PUBLIC_WEBSITE_PREFIXES = ["/products/", "/how-to/", "/ar/products/"];
 
 function getInitialLegalPolicyVersion() {
   if (typeof window !== "undefined") {
@@ -34,11 +61,20 @@ function getInitialLegalPolicyVersion() {
 
 export default function App() {
   const location = useLocation();
-  const params = useParams();
   const scrollTimerRef = useRef<number | null>(null);
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
+  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
   const isLearningRoute = location.pathname === "/learn";
+  const isPublicWebsiteRoute =
+    PUBLIC_WEBSITE_PATHS.has(normalizedPath) ||
+    PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
+  const isAnonymousAllowedRoute =
+    isPublicWebsiteRoute ||
+    normalizedPath === "/spaces" ||
+    normalizedPath.startsWith("/spaces/") ||
+    normalizedPath === "/pricing/success";
+  const hasExplicitAuthIntent = new URLSearchParams(location.search).has("auth");
   
   // Auth state from Zustand
   const { token, user, isHydrating, setToken, setUser, setHydrating, logout } = useAuthStore();
@@ -61,7 +97,10 @@ export default function App() {
   // Sync navigation store with React Router location (without triggering re-renders)
   useEffect(() => {
     const path = location.pathname;
-    const { spaceId, threadId } = params;
+    const threadMatch = path.match(/^\/spaces\/([^/]+)\/threads\/([^/]+)/);
+    const spaceMatch = path.match(/^\/spaces\/([^/]+)$/);
+    const spaceId = threadMatch?.[1] ?? spaceMatch?.[1] ?? null;
+    const threadId = threadMatch?.[2] ?? null;
     
     // Directly update the store state based on URL
     const store = useNavigationStore.getState();
@@ -73,13 +112,13 @@ export default function App() {
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
     } else if (spaceId && threadId) {
-      store.goToThread(spaceId as string, threadId as string);
+      store.goToThread(decodeURIComponent(spaceId), decodeURIComponent(threadId));
     } else if (spaceId) {
-      store.goToSpace(spaceId as string);
+      store.goToSpace(decodeURIComponent(spaceId));
     } else {
       store.goHome();
     }
-  }, [location.pathname, params]);
+  }, [location.pathname]);
 
   // Sync theme to DOM
   useEffect(() => {
@@ -123,7 +162,9 @@ export default function App() {
     return () => media.removeEventListener("change", handleChange);
   }, [setSystemTheme]);
 
-  // FE-02 + FE-03: Boot hydration — call /api/auth/refresh before rendering protected routes.
+  // FE-02 + FE-03: Boot hydration — call /api/auth/refresh before rendering routes.
+  // Public routes still need this because access tokens are memory-only; a
+  // returning paid user may arrive with only the HttpOnly refresh cookie.
   // The HttpOnly refresh cookie is sent automatically (credentials: include via raw fetch).
   useEffect(() => {
     let isMounted = true;
@@ -233,11 +274,11 @@ export default function App() {
     }
   };
 
-  if (!token && !isHydrating && location.pathname === "/legal") {
+  if (!token && !isHydrating && normalizedPath === "/legal") {
     return <LegalPage />;
   }
 
-  if (!token && !isHydrating) {
+  if (!token && !isHydrating && (hasExplicitAuthIntent || !isAnonymousAllowedRoute)) {
     return <LoginScreen />;
   }
 
@@ -252,6 +293,34 @@ export default function App() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (isPublicWebsiteRoute && normalizedPath !== "/") {
+    return (
+      <>
+        <SkipLink />
+        <main id="main-content" role="main" className="min-h-screen">
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
+        </main>
+        <Toaster />
+      </>
+    );
+  }
+
+  if (!token && normalizedPath === "/") {
+    return (
+      <>
+        <SkipLink />
+        <main id="main-content" role="main" className="min-h-screen">
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
+        </main>
+        <Toaster />
+      </>
     );
   }
 

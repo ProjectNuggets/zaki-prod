@@ -1,6 +1,7 @@
 import { describe, it, expect } from "@jest/globals";
 import {
   BILLING_INTERVALS,
+  STRIPE_BILLING_PLANS,
   buildStripePricingCatalog,
   normalizeBillingInterval,
   resolveStripePriceDetailsById,
@@ -10,6 +11,13 @@ import {
 describe("billing pricing helpers", () => {
   it("normalizes interval values with monthly fallback", () => {
     expect(BILLING_INTERVALS).toEqual(["monthly", "yearly"]);
+    expect(STRIPE_BILLING_PLANS).toEqual([
+      "student",
+      "personal",
+      "agent",
+      "learn",
+      "complete",
+    ]);
     expect(normalizeBillingInterval("yearly")).toBe("yearly");
     expect(normalizeBillingInterval("MONTHLY")).toBe("monthly");
     expect(normalizeBillingInterval("invalid")).toBe("monthly");
@@ -21,17 +29,26 @@ describe("billing pricing helpers", () => {
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
       personalYearly: "",
+      agentMonthly: "price_agent_month",
+      learnMonthly: "price_learn_month",
+      completeMonthly: "price_complete_month",
     });
 
     expect(catalog.hasAnyStripePrice).toBe(true);
     expect(catalog.pricingAvailability).toEqual({
       student: { monthly: true, yearly: true },
       personal: { monthly: true, yearly: false },
+      agent: { monthly: true, yearly: false },
+      learn: { monthly: true, yearly: false },
+      complete: { monthly: true, yearly: false },
     });
     expect(catalog.tierByPrice).toEqual({
       price_student_month: "student",
       price_student_year: "student",
       price_personal_month: "personal",
+      price_agent_month: "agent",
+      price_learn_month: "learn",
+      price_complete_month: "complete",
     });
   });
 
@@ -40,6 +57,9 @@ describe("billing pricing helpers", () => {
       studentMonthly: "price_student_month",
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
+      agentMonthly: "price_agent_month",
+      learnMonthly: "price_learn_month",
+      completeMonthly: "price_complete_month",
     });
 
     expect(
@@ -60,6 +80,24 @@ describe("billing pricing helpers", () => {
         interval: "yearly",
       })
     ).toBe("");
+    expect(
+      resolveStripePriceForSelection(catalog, {
+        plan: "agent",
+        interval: "monthly",
+      })
+    ).toBe("price_agent_month");
+    expect(
+      resolveStripePriceForSelection(catalog, {
+        plan: "learn",
+        interval: "monthly",
+      })
+    ).toBe("price_learn_month");
+    expect(
+      resolveStripePriceForSelection(catalog, {
+        plan: "complete",
+        interval: "monthly",
+      })
+    ).toBe("price_complete_month");
   });
 
   it("resolves price details by price id", () => {
@@ -68,6 +106,9 @@ describe("billing pricing helpers", () => {
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
       personalYearly: "price_personal_year",
+      agentMonthly: "price_agent_month",
+      learnMonthly: "price_learn_month",
+      completeMonthly: "price_complete_month",
     });
 
     expect(resolveStripePriceDetailsById(catalog, "price_student_year")).toEqual({
@@ -76,6 +117,18 @@ describe("billing pricing helpers", () => {
     });
     expect(resolveStripePriceDetailsById(catalog, "price_personal_month")).toEqual({
       tier: "personal",
+      interval: "monthly",
+    });
+    expect(resolveStripePriceDetailsById(catalog, "price_agent_month")).toEqual({
+      tier: "agent",
+      interval: "monthly",
+    });
+    expect(resolveStripePriceDetailsById(catalog, "price_learn_month")).toEqual({
+      tier: "learn",
+      interval: "monthly",
+    });
+    expect(resolveStripePriceDetailsById(catalog, "price_complete_month")).toEqual({
+      tier: "complete",
       interval: "monthly",
     });
     expect(resolveStripePriceDetailsById(catalog, "unknown")).toBeNull();

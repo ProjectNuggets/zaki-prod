@@ -84,12 +84,12 @@ export function FeatureGrid({ locale, t }: { locale: Locale; t: WebsiteContent }
                     ? [
                         { label: "Spaces", desc: "مساحات عمل مباشرة ومدفوعة للتركيز والتنفيذ المنظّم", color: "bg-zk-accent" },
                         { label: "ZAKI", desc: "بيتا تجريبية لوكيل ذكاء شخصي مستمر", color: "bg-zk-warning" },
-                        { label: "Nullalis", desc: "طبقة تشغيل داخلية وراء الاستمرارية والذاكرة", color: "bg-zk-text-secondary" },
+                        { label: "ZAKI Runtime", desc: "طبقة تشغيل خاصة وراء الاستمرارية والذاكرة", color: "bg-zk-text-secondary" },
                       ]
                     : [
                         { label: "Spaces", desc: "live, paid workspaces for focused execution", color: "bg-zk-accent" },
                         { label: "ZAKI", desc: "experimental beta for a persistent personal agent", color: "bg-zk-warning" },
-                        { label: "Nullalis", desc: "private runtime layer behind continuity and memory", color: "bg-zk-text-secondary" },
+                        { label: "ZAKI Runtime", desc: "private runtime layer behind continuity and memory", color: "bg-zk-text-secondary" },
                       ]
                   ).map((item) => (
                     <li key={item.label} className="flex items-center gap-3 text-[13px] leading-6 text-zk-text">

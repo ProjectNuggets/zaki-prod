@@ -12,6 +12,7 @@ import {
   confirmPasswordReset,
   redeemAccessCode,
   fetchLegalConsentStatus,
+  fetchGoogleOAuthStatus,
 } from "@/lib/api";
 
 jest.mock("react-i18next", () => ({
@@ -31,6 +32,8 @@ jest.mock("@/lib/api", () => ({
   confirmPasswordReset: jest.fn(),
   redeemAccessCode: jest.fn(),
   fetchLegalConsentStatus: jest.fn(),
+  fetchGoogleOAuthStatus: jest.fn(),
+  buildGoogleOAuthStartUrl: jest.fn(() => "http://localhost:8787/api/auth/google/start"),
 }));
 
 describe("LoginScreen legal consent", () => {
@@ -48,6 +51,11 @@ describe("LoginScreen legal consent", () => {
     (fetchLegalConsentStatus as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
       data: { success: true, policyVersion },
+    });
+
+    (fetchGoogleOAuthStatus as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: true },
+      data: { success: true, enabled: true },
     });
 
     (requestLogin as unknown as jest.Mock).mockResolvedValue({

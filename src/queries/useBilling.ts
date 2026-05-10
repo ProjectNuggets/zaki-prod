@@ -11,6 +11,7 @@ import {
   resendPurchasedAccessCodeEmail,
   syncBillingSubscription,
 } from "@/lib/api";
+import type { ProductTelemetrySource } from "@/lib/productTelemetry";
 import { useAuthStore } from "@/stores";
 
 export const billingKeys = {
@@ -44,23 +45,17 @@ export function useBillingConfig() {
 
 export function useCheckout() {
   const queryClient = useQueryClient();
+  type CheckoutPlan = "student" | "personal" | "agent" | "learn" | "complete";
   return useMutation({
     mutationFn: async (
       payload:
-        | "student"
-        | "personal"
+        | CheckoutPlan
         | {
-            plan: "student" | "personal";
+            plan: CheckoutPlan;
             provider?: "stripe" | "paddle" | "creem";
             interval?: "monthly" | "yearly";
             context?: {
-              source?:
-                | "website_nav"
-                | "website_pricing"
-                | "chat_input"
-                | "settings"
-                | "pricing_page"
-                | "success_page";
+              source?: ProductTelemetrySource;
             };
           }
     ) => {
@@ -165,13 +160,7 @@ export function useRedeemAccessCode() {
 export function useAccessCodePurchaseCheckout() {
   return useMutation({
     mutationFn: async (context?: {
-      source?:
-        | "website_nav"
-        | "website_pricing"
-        | "chat_input"
-        | "settings"
-        | "pricing_page"
-        | "success_page";
+      source?: ProductTelemetrySource;
     }) => {
       const { response, data } = await createAccessCodePurchaseCheckoutSession(context);
       if (!response.ok || !data.url) {

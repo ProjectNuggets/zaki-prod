@@ -920,7 +920,8 @@
       "usage": {
         "surfaces": {
           "app_chat": "Web chat",
-          "zaki_bot": "Telegram"
+          "zaki_bot": "Agent",
+          "learning": "Learn"
         },
         "states": {
           "normal": "OK",
@@ -931,6 +932,7 @@
         "loading": "Loading usage...",
         "unavailable": "Usage unavailable.",
         "requestsToday": "Requests today",
+        "requestsThisWeek": "Requests this week",
         "usedUnlimited": "{{used}} · unlimited",
         "resets": "Resets",
         "footer": "Soft-limit warning at {{warning}}% used; near-limit at {{near}}%. Hard stops still apply on hit."
@@ -1100,31 +1102,23 @@
   },
   "pricingPage": {
     "eyebrow": "Plans",
-    "title": "Choose how you want to work with ZAKI",
-    "subtitle": "Spaces is where ongoing work gets done. ZAKI is where a new interaction model is still being tested.",
-    "subtitleAccessActive": "Your code already unlocks Personal in Spaces. The ladder stays visible here, but checkout remains paused while that access is active.",
+    "title": "Choose how ZAKI should keep working with you",
+    "subtitle": "Start free in Spaces without an account. Pay when you want memory, learning workflows, follow-through, or the full ZAKI loop with uncapped Spaces.",
+    "subtitleAccessActive": "Your access code unlocks the full app for now. Product-specific codes come later.",
+    "comparisonNote": "Agent and Learn each include a free weekly preview. Complete is the simplest paid path when you want memory, learning, follow-through, and uncapped Spaces together.",
     "highlightsTemplates": {
-      "free": "Free: 10 Spaces chats a day",
-      "personal": "Personal: {{price}} for everyday assistant use",
-      "zaki": "ZAKI: experimental, 10 messages a day"
-    },
-    "productNotes": {
-      "spaces": {
-        "label": "Spaces",
-        "title": "Where work gets structured",
-        "body": "Spaces is for repeat use, projects, and continuity. Personal removes the cap. Student is the same access at a lower rate."
-      },
-      "zaki": {
-        "label": "ZAKI",
-        "title": "Where interaction is being tested",
-        "body": "ZAKI is the experimental surface. Same daily cap for everyone while we keep shaping the behavior."
-      }
+      "free": "Spaces Free: 10 anonymous messages a day",
+      "agent": "Agent: $29/month",
+      "learn": "Learn: $19/month",
+      "complete": "Complete: $39/month"
     },
     "currentPlan": "You’re currently on {{plan}}",
+    "currentPlanSignedOut": "You’re viewing plans signed out",
+    "currentPlanSignInHint": "Pick a paid plan and sign in to continue checkout.",
     "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Start free, then move up the ladder when you need more room in Spaces.",
-    "codeActivePlanLabel": "Code active",
+    "currentPlanFree": "Spaces stays free. Paid products unlock after checkout.",
+    "codeActivePlanLabel": "Access code",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
       "cancel": "Checkout canceled. You can pick a plan anytime.",
@@ -1133,18 +1127,16 @@
     "managePlan": "Manage plan",
     "viewPlans": "View plans",
     "accessActiveCta": "Access active",
-    "intervalLabel": "Billing cycle",
+    "priceWithSuffix": "{{price}} {{suffix}}",
     "interval": {
       "monthly": "Monthly",
       "yearly": "Yearly"
     },
-    "priceWithSuffix": "{{price}} {{suffix}}",
     "priceSuffix": {
       "monthly": "/ month",
       "yearly": "/ year",
       "oneTime": "one-time"
     },
-    "yearlyValueHint": "Yearly gives you stable access all year long.",
     "statusLabel": "Status",
     "statusValues": {
       "active": "Active",
@@ -1155,19 +1147,19 @@
       "code_active": "Code active"
     },
     "access": {
-      "title": "Activation code",
-      "description": "Unlock Personal in Spaces for 30 days. ZAKI stays on the same experimental cap for everyone.",
+      "title": "Access code",
+      "description": "Marketing and gift codes unlock the whole app in V1: Agent, Learn, and uncapped Spaces.",
       "stateActive": "Active",
       "stateInactive": "Inactive",
       "placeholder": "Enter access code",
       "apply": "Apply code",
       "applying": "Applying...",
       "purchase": {
-        "eyebrow": "30-day code",
-        "title": "Buy a 30-day code",
-        "description": "Use it yourself, or pass it on to someone who needs a month of Personal in Spaces.",
+        "eyebrow": "Whole-app code",
+        "title": "Buy an access code",
+        "description": "Use it yourself, or send it to someone else. V1 codes unlock the whole app.",
         "price": "$15 one-time",
-        "cta": "Buy 30-day code",
+        "cta": "Buy access code",
         "processing": "Opening checkout...",
         "unavailable": "Code purchase is not enabled in this environment yet.",
         "checkoutError": "Unable to start code purchase checkout."
@@ -1184,58 +1176,54 @@
     },
     "plans": {
       "free": {
-        "label": "Free",
+        "label": "Spaces Free",
         "price": "$0",
-        "blurb": "For trying the system without committing to it yet.",
+        "blurb": "A focused workspace for drafts, translation, planning, and decisions before you sign up.",
         "features": [
-          "10 Spaces chats per day",
-          "10 ZAKI experimental messages per day",
-          "Memory basics"
-        ]
-      },
-      "student": {
-        "label": "Student",
-        "price": "$8 / month",
-        "priceMonthly": "$8 / month",
-        "priceYearly": "$96 / year",
-        "blurb": "Unlimited Spaces at the student rate.",
-        "features": [
-          "Unlimited chat across Spaces",
-          "Premium models",
-          "Stronger study support"
-        ]
-      },
-      "personal": {
-        "label": "Personal",
-        "price": "$13 / month",
-        "priceMonthly": "$13 / month",
-        "priceYearly": "$156 / year",
-        "blurb": "For repeat work, real continuity, and unlimited Spaces.",
-        "features": [
-          "Unlimited chat across Spaces",
-          "Premium models",
-          "Deeper context and support"
-        ]
-      },
-      "zaki": {
-        "label": "ZAKI",
-        "badge": "Experimental",
-        "price": "Open beta / Free",
-        "blurb": "A state-of-the-art agent surface still being shaped in public.",
-        "features": [
-          "Same daily cap for everyone",
-          "Long-term memory is part of the test",
-          "Behavior is still being benchmarked"
+          "10 Spaces messages per day",
+          "No durable memory while anonymous",
+          "Upgrade when the work should continue with memory"
         ],
-        "cta": "Included in free"
+        "cta": "Open Spaces"
+      },
+      "agent": {
+        "label": "ZAKI Agent",
+        "price": "$29 / month",
+        "blurb": "The paid personal agent for work you should not have to explain twice.",
+        "features": [
+          "10 free preview messages each week",
+          "Memory import and paid Agent access after checkout",
+          "Built for recurring work, decisions, and follow-through"
+        ]
+      },
+      "learn": {
+        "label": "ZAKI Learn",
+        "price": "$19 / month",
+        "blurb": "The learning product that turns material into explanation, practice, research, and recall.",
+        "features": [
+          "10 free preview messages each week",
+          "Paid learning workspace after checkout",
+          "Knowledge files, notebooks, quizzes, Deep Solve, research, and visuals"
+        ]
+      },
+      "complete": {
+        "label": "ZAKI Complete",
+        "price": "$39 / month",
+        "blurb": "The full ZAKI loop: Agent, Learn, and uncapped Spaces with memory.",
+        "features": [
+          "Agent for continuity and follow-through",
+          "Learn for study, research, and practice",
+          "Uncapped Spaces with memory"
+        ]
       }
     },
-    "studentToggle": "I’m a student",
-    "studentEligibilityTitle": "Student plan eligibility:",
-    "studentEligibilityBody": "use your .edu email at checkout, or email any proof of enrollment for manual verification at",
+    "recommendedBadge": "Best value",
     "currentBadge": "Current",
     "included": "Included",
     "alreadySubscribed": "Already subscribed",
+    "upgradeToComplete": "Upgrade to Complete",
+    "signInRequired": "Sign in",
+    "signInToChoose": "Sign in for {{plan}}",
     "choose": "Choose {{plan}}",
     "cancelSubscription": "Cancel subscription",
     "cancellationScheduled": "Cancellation scheduled",
@@ -1243,9 +1231,6 @@
     "cancelScheduled": "Subscription will cancel at period end.",
     "cancelAlreadyScheduled": "Cancellation is already scheduled for period end.",
     "billingUnavailable": "Billing is temporarily unavailable.",
-    "yearlyUnavailableForPlan": "Yearly pricing is not available for this plan yet.",
-    "yearlyUnavailable": "Yearly billing is not available yet for this environment.",
-    "yearlyStripeOnly": "Yearly billing is currently available only through Stripe.",
     "providerModal": {
       "title": "Choose payment provider",
       "description": "Select where you want to complete checkout.",
@@ -1261,24 +1246,24 @@
     "checkoutError": "Checkout failed"
   },
   "billingSuccess": {
-    "badge": "Friends circle unlocked",
+    "badge": "Plan active",
     "defaultName": "friend",
-    "title": "Congrats {{name}}! You are officially in ZAKI’s friends circle 🎉",
-    "subtitle": "You are in. Let’s think, learn, build, and maybe ship something great together.",
+    "title": "You’re set, {{name}}",
+    "subtitle": "Your ZAKI plan is active. Open the product you paid for and continue from there.",
     "planFallback": "Premium",
     "intervalFallback": "Billing active",
     "planLabel": "Plan: {{plan}}",
     "intervalLabel": "Cycle: {{interval}}",
-    "punchlineFallback": "No more generic chatbot energy. We are building personal assistant AI, and you are early on the journey.",
+    "punchlineFallback": "Your paid access is now connected to your account.",
     "punchlines": [
-      "No more generic chatbot energy. You joined early, so you get front-row seats while we build.",
-      "ZAKI just got smarter by one awesome human. Yes, that is you.",
-      "Your subscription = fuel for better memory, better context, and sharper AI-agent workflows."
+      "Your paid access is now connected to your account.",
+      "Open Agent, Learn, or Spaces and continue with the new access level.",
+      "You can manage or cancel the subscription from Pricing at any time."
     ],
     "nextSteps": [
-      "Start a chat and tell ZAKI what you care about so it personalizes faster.",
-      "Share ZAKI with one friend who is done with generic chat AI.",
-      "Drop us feedback anytime. Early friends shape the roadmap."
+      "Open the product included in your plan.",
+      "Use Pricing if you need to manage your subscription.",
+      "Tell ZAKI what you are working on so memory and context can become useful."
     ],
     "actions": {
       "start": "Start chatting",
@@ -1287,8 +1272,8 @@
       "sharing": "Sharing..."
     },
     "shareTitle": "I joined ZAKI",
-    "shareText": "{{name}} just joined ZAKI’s friends circle. Personal assistant AI > generic chat AI. Come in early.",
-    "shareCopied": "Invite message copied. Send it to your people.",
+    "shareText": "{{name}} just activated a ZAKI plan.",
+    "shareCopied": "Invite message copied.",
     "shareManual": "Copy this page link and share it with your friends.",
     "accessCode": {
       "badge": "Access code purchase complete",

@@ -373,6 +373,27 @@ export async function requestLogin({
   return { response, data };
 }
 
+export function buildGoogleOAuthStartUrl(returnTo?: string) {
+  const fallbackReturnTo =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+      : "/spaces";
+  const url = new URL(buildApiUrl("/api/auth/google/start"));
+  url.searchParams.set("returnTo", returnTo || fallbackReturnTo);
+  return url.toString();
+}
+
+export async function fetchGoogleOAuthStatus() {
+  const response = await backendRequest("/api/auth/google/status", { method: "GET" });
+  let data: { success?: boolean; enabled?: boolean } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
 export async function requestPublicSignup({
   email,
   password,
@@ -559,6 +580,36 @@ export async function fetchEntitlements() {
       source?: "free" | "subscription" | "access_code";
       premium?: boolean;
     };
+    commercial?: {
+      planId?: "spaces_free" | "agent" | "learn" | "complete" | "legacy_personal" | "access_code";
+      label?: string;
+      source?: "free" | "subscription" | "access_code";
+      grandfathered?: boolean;
+      products?: {
+        spaces?: {
+          access?: boolean;
+          authenticated?: boolean;
+          memoryEligible?: boolean;
+          uncapped?: boolean;
+          quota?: "metered" | "uncapped";
+        };
+        agent?: {
+          access?: boolean;
+          preview?: boolean;
+          weeklyFreeMessages?: number | null;
+        };
+        learn?: {
+          access?: boolean;
+          preview?: boolean;
+          weeklyFreeActions?: number | null;
+        };
+        billing?: {
+          paid?: boolean;
+          wholeApp?: boolean;
+          grandfathered?: boolean;
+        };
+      };
+    };
     features?: Record<string, boolean>;
     error?: string | null;
   } = {};
@@ -591,6 +642,18 @@ export async function fetchBillingConfig() {
           monthly?: boolean;
           yearly?: boolean;
         };
+        agent?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+        learn?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+        complete?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
       };
       stripeEnabled?: boolean;
       checkoutEnabled?: boolean;
@@ -604,6 +667,18 @@ export async function fetchBillingConfig() {
           yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
         };
         personal?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        agent?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        learn?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        complete?: {
           monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
           yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
         };
@@ -624,7 +699,7 @@ export async function fetchBillingConfig() {
 }
 
 export async function createCheckoutSession(
-  plan: "student" | "personal",
+  plan: "student" | "personal" | "agent" | "learn" | "complete",
   provider?: "stripe" | "paddle" | "creem",
   interval: "monthly" | "yearly" = "monthly",
   context?: {
@@ -797,10 +872,13 @@ export type AdminStudentVerificationUser = {
 export type AdminRateLimitSettings = {
   appChatDailyPromptLimit: number;
   appChatDailyPromptBucket: string;
+  appChatPromptPeriod?: "day" | "week" | string;
   learningDailyPromptLimit?: number;
   learningDailyPromptBucket?: string;
+  learningPromptPeriod?: "day" | "week" | string;
   zakiBotDailyPromptLimit: number;
   zakiBotDailyPromptBucket: string;
+  zakiBotPromptPeriod?: "day" | "week" | string;
   agentPerMinuteLimit: number;
 };
 
@@ -1156,7 +1234,7 @@ async function parseApiJson<T>(response: Response): Promise<T> {
   }
 }
 
-export type UsageQuotaSurface = "app_chat" | "zaki_bot";
+export type UsageQuotaSurface = "app_chat" | "zaki_bot" | "learning";
 export type BotErrorCode =
   | "temporary_contention"
   | "unauthorized"
@@ -1307,6 +1385,7 @@ export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
     remaining?: number | null;
     resetAt?: string;
     bucket?: string;
+    period?: "day" | "week" | string;
     surface?: UsageQuotaSurface;
     error?: string | null;
   }>(response);

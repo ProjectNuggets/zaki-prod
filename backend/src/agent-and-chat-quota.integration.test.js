@@ -27,15 +27,26 @@ function createMockRes() {
 
 function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10 } = {}) {
   const usage = new Map();
-  const resetAt = "2026-03-10T00:00:00.000Z";
+  const dailyResetAt = "2026-03-10T00:00:00.000Z";
+  const weeklyResetAt = "2026-03-16T00:00:00.000Z";
   return {
     async consumePromptQuotaForUser(zakiUser, { surface } = {}) {
       const safeSurface = surface === ZAKI_BOT_SURFACE ? ZAKI_BOT_SURFACE : APP_CHAT_SURFACE;
       const limit = safeSurface === ZAKI_BOT_SURFACE ? botLimit : appLimit;
-      const bucket = safeSurface === ZAKI_BOT_SURFACE ? "zaki_bot" : "app_chat";
-      const isPaid = zakiUser.plan_tier === "student" || zakiUser.plan_tier === "personal";
+      const bucket = safeSurface === ZAKI_BOT_SURFACE ? "zaki_bot_weekly" : "app_chat";
       const hasAccess = Boolean(zakiUser.accessActive);
-      const unlimited = safeSurface === APP_CHAT_SURFACE && (isPaid || hasAccess);
+      const unlimited =
+        safeSurface === APP_CHAT_SURFACE
+          ? zakiUser.plan_tier === "student" ||
+            zakiUser.plan_tier === "personal" ||
+            zakiUser.plan_tier === "complete" ||
+            hasAccess
+          : zakiUser.plan_tier === "personal" ||
+            zakiUser.plan_tier === "agent" ||
+            zakiUser.plan_tier === "complete" ||
+            hasAccess;
+      const resetAt = safeSurface === ZAKI_BOT_SURFACE ? weeklyResetAt : dailyResetAt;
+      const period = safeSurface === ZAKI_BOT_SURFACE ? "week" : "day";
       if (unlimited) {
         return {
           allowed: true,
@@ -46,6 +57,7 @@ function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10 } = {}) {
           resetAt,
           surface: safeSurface,
           bucket,
+          period,
         };
       }
 
@@ -60,6 +72,7 @@ function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10 } = {}) {
           resetAt,
           surface: safeSurface,
           bucket,
+          period,
         };
       }
       const next = used + 1;
@@ -72,6 +85,7 @@ function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10 } = {}) {
         resetAt,
         surface: safeSurface,
         bucket,
+        period,
       };
     },
   };
@@ -86,6 +100,7 @@ function setPromptQuotaHeaders(res, quota) {
   if (quota?.resetAt) res.setHeader("X-Zaki-Quota-Reset-At", quota.resetAt);
   if (quota?.surface) res.setHeader("X-Zaki-Quota-Surface", quota.surface);
   if (quota?.bucket) res.setHeader("X-Zaki-Quota-Bucket", quota.bucket);
+  if (quota?.period) res.setHeader("X-Zaki-Quota-Period", quota.period);
 }
 
 async function runIngressHandler({
@@ -110,7 +125,7 @@ async function runIngressHandler({
 }
 
 describe("agent/chat surface quota integration", () => {
-  it("free users get independent app_chat and zaki_bot daily buckets", async () => {
+  it("free users get independent app_chat daily and zaki_bot weekly buckets", async () => {
     const { consumePromptQuotaForUser } = createInMemoryQuotaConsumer({ appLimit: 10, botLimit: 10 });
     const freeUser = { id: 77, plan_tier: "free", plan_status: "inactive", accessActive: false };
 
@@ -148,15 +163,16 @@ describe("agent/chat surface quota integration", () => {
     expect(botResults[10].statusCode).toBe(429);
     expect(botResults[10].body).toEqual(
       expect.objectContaining({
-        code: "daily_limit_reached",
+        code: "weekly_limit_reached",
         surface: ZAKI_BOT_SURFACE,
+        period: "week",
       })
     );
   });
 
-  it("paid users are unlimited on app_chat but capped on zaki_bot", async () => {
+  it("Agent subscribers unlock zaki_bot without uncapping app_chat", async () => {
     const { consumePromptQuotaForUser } = createInMemoryQuotaConsumer({ appLimit: 10, botLimit: 10 });
-    const paidUser = { id: 88, plan_tier: "personal", plan_status: "active", accessActive: false };
+    const paidUser = { id: 88, plan_tier: "agent", plan_status: "active", accessActive: false };
 
     const appRes = await runIngressHandler({
       zakiUser: paidUser,
@@ -164,26 +180,26 @@ describe("agent/chat surface quota integration", () => {
       consumePromptQuotaForUser,
     });
     expect(appRes.statusCode).toBe(200);
-    expect(appRes.headers["X-Zaki-Quota-Limit"]).toBe("unlimited");
-    expect(appRes.headers["X-Zaki-Quota-Remaining"]).toBe("unlimited");
+    expect(appRes.headers["X-Zaki-Quota-Limit"]).toBe("10");
+    expect(appRes.headers["X-Zaki-Quota-Remaining"]).toBe("9");
     expect(appRes.headers["X-Zaki-Quota-Surface"]).toBe(APP_CHAT_SURFACE);
     expect(appRes.headers["X-Zaki-Quota-Bucket"]).toBe("app_chat");
+    expect(appRes.headers["X-Zaki-Quota-Period"]).toBe("day");
 
-    const botResults = [];
-    for (let i = 0; i < 11; i += 1) {
-      botResults.push(
-        await runIngressHandler({
-          zakiUser: paidUser,
-          surface: ZAKI_BOT_SURFACE,
-          consumePromptQuotaForUser,
-        })
-      );
-    }
-    expect(botResults.slice(0, 10).every((res) => res.statusCode === 200)).toBe(true);
-    expect(botResults[10].statusCode).toBe(429);
+    const botRes = await runIngressHandler({
+      zakiUser: paidUser,
+      surface: ZAKI_BOT_SURFACE,
+      consumePromptQuotaForUser,
+    });
+    expect(botRes.statusCode).toBe(200);
+    expect(botRes.headers["X-Zaki-Quota-Limit"]).toBe("unlimited");
+    expect(botRes.headers["X-Zaki-Quota-Remaining"]).toBe("unlimited");
+    expect(botRes.headers["X-Zaki-Quota-Surface"]).toBe(ZAKI_BOT_SURFACE);
+    expect(botRes.headers["X-Zaki-Quota-Bucket"]).toBe("zaki_bot_weekly");
+    expect(botRes.headers["X-Zaki-Quota-Period"]).toBe("week");
   });
 
-  it("access-code users are unlimited on app_chat but capped on zaki_bot", async () => {
+  it("access-code users are unlimited on app_chat and zaki_bot", async () => {
     const { consumePromptQuotaForUser } = createInMemoryQuotaConsumer({ appLimit: 10, botLimit: 10 });
     const accessUser = {
       id: 99,
@@ -200,34 +216,25 @@ describe("agent/chat surface quota integration", () => {
     expect(appRes.statusCode).toBe(200);
     expect(appRes.headers["X-Zaki-Quota-Limit"]).toBe("unlimited");
 
-    const botResults = [];
-    for (let i = 0; i < 11; i += 1) {
-      botResults.push(
-        await runIngressHandler({
-          zakiUser: accessUser,
-          surface: ZAKI_BOT_SURFACE,
-          consumePromptQuotaForUser,
-        })
-      );
-    }
-    expect(botResults[10].statusCode).toBe(429);
-    expect(botResults[10].body).toEqual(
-      expect.objectContaining({
-        code: "daily_limit_reached",
-        surface: ZAKI_BOT_SURFACE,
-      })
-    );
+    const botRes = await runIngressHandler({
+      zakiUser: accessUser,
+      surface: ZAKI_BOT_SURFACE,
+      consumePromptQuotaForUser,
+    });
+    expect(botRes.statusCode).toBe(200);
+    expect(botRes.headers["X-Zaki-Quota-Limit"]).toBe("unlimited");
   });
 
   it("builds /api/usage/quota payloads by requested surface", async () => {
-    const readDailyPromptUsage = jest.fn(async ({ bucket }) => (bucket === "zaki_bot" ? 4 : 2));
+    const readDailyPromptUsage = jest.fn(async () => 2);
+    const readWeeklyPromptUsage = jest.fn(async () => 4);
     const buildUserQuotaContext = jest.fn((user, { surface }) => ({
       unlimited: Boolean(user?.unlimitedApp && surface === APP_CHAT_SURFACE),
     }));
     const resolveSurfaceQuotaConfig = jest.fn((surface) =>
       surface === ZAKI_BOT_SURFACE
-        ? { surface: ZAKI_BOT_SURFACE, limit: 10, bucket: "zaki_bot" }
-        : { surface: APP_CHAT_SURFACE, limit: 10, bucket: "app_chat" }
+        ? { surface: ZAKI_BOT_SURFACE, limit: 10, bucket: "zaki_bot_weekly", period: "week" }
+        : { surface: APP_CHAT_SURFACE, limit: 10, bucket: "app_chat", period: "day" }
     );
 
     const appPayload = await buildUsageQuotaResponse({
@@ -235,6 +242,7 @@ describe("agent/chat surface quota integration", () => {
       surface: APP_CHAT_SURFACE,
       buildUserQuotaContext,
       readDailyPromptUsage,
+      readWeeklyPromptUsage,
       resolveSurfaceQuotaConfig,
       dbGet: jest.fn(),
       nowDate: new Date("2026-03-09T09:00:00.000Z"),
@@ -253,6 +261,7 @@ describe("agent/chat surface quota integration", () => {
       surface: ZAKI_BOT_SURFACE,
       buildUserQuotaContext,
       readDailyPromptUsage,
+      readWeeklyPromptUsage,
       resolveSurfaceQuotaConfig,
       dbGet: jest.fn(),
       nowDate: new Date("2026-03-09T09:00:00.000Z"),
@@ -261,10 +270,12 @@ describe("agent/chat surface quota integration", () => {
       expect.objectContaining({
         unlimited: false,
         surface: ZAKI_BOT_SURFACE,
-        bucket: "zaki_bot",
+        bucket: "zaki_bot_weekly",
         used: 4,
         remaining: 6,
+        period: "week",
       })
     );
+    expect(readWeeklyPromptUsage).toHaveBeenCalledTimes(1);
   });
 });

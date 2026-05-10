@@ -61,6 +61,9 @@ function createDependencies({ event, constructError = null, markResult = true, r
     tierByPrice: {
       price_student: "student",
       price_personal: "personal",
+      price_agent: "agent",
+      price_learn: "learn",
+      price_complete: "complete",
     },
     fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
   };
@@ -190,6 +193,47 @@ describe("stripe webhook handler integration", () => {
       session: event.data.object,
       eventId: "evt_access_1",
     });
+  });
+
+  it.each([
+    ["price_agent", "agent"],
+    ["price_learn", "learn"],
+    ["price_complete", "complete"],
+  ])("stores %s subscription events as %s entitlements", async (priceId, expectedTier) => {
+    const event = {
+      id: `evt_${expectedTier}_created`,
+      type: "customer.subscription.created",
+      created: 1766710800,
+      data: {
+        object: {
+          id: `sub_${expectedTier}`,
+          customer: `cus_${expectedTier}`,
+          status: "active",
+          cancel_at_period_end: false,
+          current_period_end: 1769302800,
+          items: { data: [{ price: { id: priceId } }] },
+          metadata: {},
+        },
+      },
+    };
+    const deps = createDependencies({
+      event,
+      markResult: true,
+      resolvedUser: {
+        id: 90,
+        email: `${expectedTier}@example.com`,
+        stripe_last_event_created_at: null,
+      },
+    });
+    const handler = createStripeWebhookHandler(deps);
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+    expect(res.statusCode).toBe(200);
+    expect(deps.dbQuery).toHaveBeenCalledWith(
+      expect.stringContaining("plan_tier = $4"),
+      expect.arrayContaining([expectedTier, "active"])
+    );
   });
 });
 

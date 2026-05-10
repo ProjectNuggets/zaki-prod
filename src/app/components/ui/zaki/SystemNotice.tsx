@@ -80,7 +80,7 @@ const KIND_META: Record<SystemNoticeKind, KindMeta> = {
   generic: {
     icon: Info,
     title: "System notice",
-    helper: "Nullalis emitted a notice about this turn.",
+    helper: "ZAKI emitted a notice about this turn.",
     defaultSeverity: "info",
   },
 };

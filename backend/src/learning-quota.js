@@ -170,6 +170,7 @@ function applyTierEnvOverrides(plan, tier, env, absoluteMaxRequestBytes) {
 
 export function resolveLearningQuotaTier(zakiUser, { nowDate = new Date() } = {}) {
   const effective = getEffectiveEntitlementState(zakiUser, nowDate);
+  if (!effective?.products?.learn?.access) return "free";
   return normalizeTier(effective.tier);
 }
 

@@ -36,7 +36,6 @@ import {
   setAgentSessionMode,
 } from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
-import { getZakiBootstrapCardStorageKey } from "./ZakiBootstrapCard";
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(async () => ({
@@ -143,6 +142,35 @@ jest.mock("@/lib/api", () => ({
     },
     data: { ok: true },
   })),
+  fetchUsageQuota: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        unlimited: false,
+        limit: 10,
+        used: 0,
+        remaining: 10,
+        resetAt: "2026-05-10T00:00:00.000Z",
+        bucket: "app_chat",
+        surface: "app_chat",
+        period: "day",
+      }),
+      headers: new Headers(),
+    },
+    data: {
+      success: true,
+      unlimited: false,
+      limit: 10,
+      used: 0,
+      remaining: 10,
+      resetAt: "2026-05-10T00:00:00.000Z",
+      bucket: "app_chat",
+      surface: "app_chat",
+      period: "day",
+    },
+  })),
 }));
 
 jest.mock("@/stores", () => ({
@@ -168,6 +196,10 @@ jest.mock("@/queries", () => ({
   }),
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
+  }),
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
   }),
 }));
 
@@ -416,7 +448,7 @@ describe("ChatArea Component", () => {
     window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
   });
 
-  it("shows the first-time ZAKI bootstrap card before the experimental notice for signed-in users", async () => {
+  it("shows the experimental notice for signed-in ZAKI users without the retired bootstrap gate", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -430,14 +462,7 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.getByText("zakiBootstrapCard.title")).toBeInTheDocument();
-    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "zakiBootstrapCard.actions.continue" }));
-
-    expect(
-      window.localStorage.getItem(getZakiBootstrapCardStorageKey("nova@test.com"))
-    ).toBe("done");
+    expect(screen.queryByText("zakiBootstrapCard.title")).not.toBeInTheDocument();
     expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
   });
 

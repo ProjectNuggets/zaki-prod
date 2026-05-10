@@ -7,11 +7,19 @@ import { useAuthStore } from "@/stores";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { cn } from "@/lib/utils";
 
-type PlanTier = "student" | "personal" | null;
+type PlanTier = "student" | "personal" | "agent" | "learn" | "complete" | null;
 type BillingInterval = "monthly" | "yearly" | null;
 
 function normalizePlan(value: string | null): PlanTier {
-  if (value === "student" || value === "personal") return value;
+  if (
+    value === "student" ||
+    value === "personal" ||
+    value === "agent" ||
+    value === "learn" ||
+    value === "complete"
+  ) {
+    return value;
+  }
   return null;
 }
 

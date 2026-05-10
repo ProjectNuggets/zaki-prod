@@ -35,6 +35,7 @@ export interface PowerUserUsageSurface {
   used: number;
   remaining: number | null;
   resetAt: string | null;
+  period?: "day" | "week" | string | null;
   state: SoftLimitState;
   error?: string | null;
 }
@@ -85,6 +86,7 @@ const TAB_ICONS: Record<PowerUserTab, typeof ShieldCheck> = {
 const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; labelKey: string }> = [
   { surface: "app_chat", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
   { surface: "zaki_bot", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
+  { surface: "learning", labelKey: "zakiControls.powerUser.usage.surfaces.learning" },
 ];
 
 const SOFT_LIMIT_WARNING_THRESHOLD = 0.7;
@@ -272,6 +274,7 @@ export function PowerUserSheet({
         const remaining =
           typeof data?.remaining === "number" ? data.remaining : null;
         const resetAt = typeof data?.resetAt === "string" ? data.resetAt : null;
+        const period = typeof data?.period === "string" ? data.period : null;
         const state = deriveSoftLimitState(used, limit, unlimited);
         const error = response.ok ? null : data?.error || "unavailable";
         return {
@@ -282,6 +285,7 @@ export function PowerUserSheet({
           used,
           remaining,
           resetAt,
+          period,
           state,
           error,
         } satisfies PowerUserUsageSurface;
@@ -818,7 +822,9 @@ export function PowerUserSheet({
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-zaki-secondary">
-                      {t("zakiControls.powerUser.usage.requestsToday")}
+                      {row.period === "week"
+                        ? t("zakiControls.powerUser.usage.requestsThisWeek")
+                        : t("zakiControls.powerUser.usage.requestsToday")}
                     </span>
                     <span className="font-mono-ui">
                       {row.unlimited

@@ -52,12 +52,12 @@ export function EditorialManifesto({ locale, t }: { locale: Locale; t: WebsiteCo
                     ? [
                         { label: "Spaces", desc: "مساحة عمل مباشرة ومدفوعة للتركيز والإنتاجية", color: "bg-zk-accent" },
                         { label: "ZAKI BOT", desc: "بيتا تجريبية لذكاء شخصي مستمر", color: "bg-[#f0a050]" },
-                        { label: "Nullalis", desc: "طبقة تشغيل داخلية وراء الاستمرارية والذاكرة", color: "bg-zk-text-secondary" },
+                        { label: "ZAKI Runtime", desc: "طبقة تشغيل خاصة وراء الاستمرارية والذاكرة", color: "bg-zk-text-secondary" },
                       ]
                     : [
                         { label: "Spaces", desc: "live, paid workspace for focused productivity", color: "bg-zk-accent" },
                         { label: "ZAKI BOT", desc: "experimental beta for persistent personal intelligence", color: "bg-[#f0a050]" },
-                        { label: "Nullalis", desc: "private runtime layer behind continuity and memory", color: "bg-zk-text-secondary" },
+                        { label: "ZAKI Runtime", desc: "private runtime layer behind continuity and memory", color: "bg-zk-text-secondary" },
                       ]
                   ).map((item) => (
                     <li key={item.label} className="flex items-center gap-3 text-[13px] leading-6 text-zk-text">

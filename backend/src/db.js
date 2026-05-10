@@ -127,6 +127,13 @@ export async function initDb() {
 
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS full_name TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS date_of_birth TEXT;");
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS google_sub TEXT;");
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_users_google_sub
+      ON zaki_users (google_sub)
+      WHERE google_sub IS NOT NULL;
+  `);
+  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS auth_provider TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;");
   await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;");
@@ -516,6 +523,22 @@ export async function initDb() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_daily_prompt_usage_date_bucket
     ON zaki_daily_prompt_usage (usage_date, bucket);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_anonymous_prompt_usage (
+      anon_key_hash TEXT NOT NULL,
+      usage_date DATE NOT NULL,
+      bucket TEXT NOT NULL DEFAULT 'anonymous_spaces',
+      used_count INT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (anon_key_hash, usage_date, bucket)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_prompt_usage_date_bucket
+    ON zaki_anonymous_prompt_usage (usage_date, bucket);
   `);
 
   await pool.query(`

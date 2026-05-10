@@ -9,8 +9,13 @@
 // taxonomy clean and keeps product branding on the product side.
 export const TIER_MAP = Object.freeze({
   free: "free",
+  pro: "pro",
   personal: "pro",
   student: "pro",
+  agent: "pro",
+  learn: "pro",
+  complete: "pro",
+  legacy_personal: "pro",
 });
 
 // Stripe subscription statuses zaki stores raw vs. the four states

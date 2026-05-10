@@ -9,14 +9,18 @@ import {
 describe("mapPlanTier", () => {
   it.each([
     ["free", "free"],
+    ["pro", "pro"],
     ["personal", "pro"],
     ["student", "pro"],
+    ["agent", "pro"],
+    ["learn", "pro"],
+    ["complete", "pro"],
+    ["legacy_personal", "pro"],
   ])("maps zaki %p -> nullalis %p", (input, expected) => {
     expect(mapPlanTier(input)).toBe(expected);
   });
 
   it.each([
-    ["pro"],
     ["team"],
     ["enterprise"],
     ["PERSONAL"],

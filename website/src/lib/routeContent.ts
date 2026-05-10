@@ -385,9 +385,9 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     note:
       "This comparison summarizes confirmed internal implementation review and test results as of March 16, 2026. It is a technical positioning note, not a neutral third-party benchmark.",
     definition:
-      "Publicly, users see ZAKI as the persistent agent layer. Underneath, that direction is powered by Nullalis. OpenClaw is a broader tool-rich agent environment. The practical difference is this: ZAKI's stack is currently stronger where persistence, memory discipline, tenant isolation, and safer daily operation matter. OpenClaw is currently stronger where browser automation, media tooling, and richer inter-agent protocol support matter.",
+      "Publicly, users see ZAKI as the persistent agent layer. Underneath, that direction is powered by ZAKI's private runtime. OpenClaw is a broader tool-rich agent environment. The practical difference is this: ZAKI's stack is currently stronger where persistence, memory discipline, tenant isolation, and safer daily operation matter. OpenClaw is currently stronger where browser automation, media tooling, and richer inter-agent protocol support matter.",
     table: {
-      headers: ["Area", "ZAKI / Nullalis", "OpenClaw"],
+      headers: ["Area", "ZAKI runtime", "OpenClaw"],
       rows: [
         {
           feature: "Memory system",
@@ -463,7 +463,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
         title: "Where OpenClaw is stronger",
         items: [
           "Browser automation and media tooling are more mature today.",
-          "ACP-style subagent collaboration is ahead of the current Nullalis model.",
+          "ACP-style subagent collaboration is ahead of the current ZAKI runtime model.",
           "Tool breadth is wider, especially for experimental or power-user workflows.",
           "Interactive UX is richer, with stronger in-session control surfaces.",
         ],
@@ -492,7 +492,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
         "A technical comparison of ZAKI's underlying runtime direction and OpenClaw: memory architecture, multi-tenancy, tooling breadth, ACP, and operational discipline.",
       imageAlt: "ZAKI versus OpenClaw technical comparison page",
       keywords:
-        "ZAKI vs OpenClaw, Nullalis vs OpenClaw, persistent agent comparison, ACP vs subagents, AI memory architecture",
+        "ZAKI vs OpenClaw, persistent agent comparison, ACP vs subagents, AI memory architecture",
     },
   },
 };

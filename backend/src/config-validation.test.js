@@ -12,11 +12,14 @@ function createBaseEnv(overrides = {}) {
 }
 
 describe("runtime config validation", () => {
-  it("warns when yearly Stripe prices are missing without failing startup", () => {
+  it("warns when commercial Stripe prices are missing without failing startup", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_AGENT_MONTHLY: "",
+        STRIPE_PRICE_LEARN_MONTHLY: "",
+        STRIPE_PRICE_COMPLETE_MONTHLY: "",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "",
       })
     );
@@ -27,12 +30,15 @@ describe("runtime config validation", () => {
       expect.arrayContaining([
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_AGENT_MONTHLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_LEARN_MONTHLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_COMPLETE_MONTHLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_ACCESS_CODE_MONTHLY" }),
       ])
     );
   });
 
-  it("does not emit yearly Stripe warnings for non-stripe providers", () => {
+  it("does not emit Stripe price warnings for non-stripe providers", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({
         ZAKI_BILLING_PROVIDER: "paddle",
@@ -42,7 +48,28 @@ describe("runtime config validation", () => {
     const warningKeys = report.warnings.map((warning) => warning.key);
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_AGENT_MONTHLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_LEARN_MONTHLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_COMPLETE_MONTHLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_ACCESS_CODE_MONTHLY");
+  });
+
+  it("warns when commercial Stripe upgrades lack an explicit portal configuration", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        STRIPE_PRICE_AGENT_MONTHLY: "price_agent",
+        STRIPE_PRICE_LEARN_MONTHLY: "price_learn",
+        STRIPE_PRICE_COMPLETE_MONTHLY: "price_complete",
+        STRIPE_BILLING_PORTAL_CONFIGURATION: "",
+      })
+    );
+
+    expect(report.ok).toBe(true);
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "STRIPE_BILLING_PORTAL_CONFIGURATION" }),
+      ])
+    );
   });
 
   it("OATH-09: production missing ZAKI_JWT_SIGNING_KEY pushes an error", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  COMMERCIAL_PLAN_IDS,
   getAccessStatus,
   getEffectiveEntitlementState,
   isPaidActive,
@@ -10,6 +11,9 @@ describe("effective entitlements", () => {
     expect(isPaidActive("student", "active")).toBe(true);
     expect(isPaidActive("personal", "trialing")).toBe(true);
     expect(isPaidActive("pro", "past_due")).toBe(true);
+    expect(isPaidActive("agent", "active")).toBe(true);
+    expect(isPaidActive("learn", "active")).toBe(true);
+    expect(isPaidActive("complete", "active")).toBe(true);
     expect(isPaidActive("free", "active")).toBe(false);
     expect(isPaidActive("student", "inactive")).toBe(false);
   });
@@ -56,8 +60,130 @@ describe("effective entitlements", () => {
         source: "subscription",
         premium: true,
         hasActiveSubscription: true,
+        commercial: expect.objectContaining({
+          planId: COMMERCIAL_PLAN_IDS.LEGACY_PERSONAL,
+        }),
       })
     );
+  });
+
+  it("maps active legacy personal subscriptions to Complete product access", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "personal", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective.commercial).toEqual(
+      expect.objectContaining({
+        planId: COMMERCIAL_PLAN_IDS.LEGACY_PERSONAL,
+        label: "ZAKI Complete",
+      })
+    );
+    expect(effective.products.billing).toEqual(
+      expect.objectContaining({
+        paid: true,
+        wholeApp: true,
+        grandfathered: true,
+      })
+    );
+    expect(effective.products.agent.access).toBe(true);
+    expect(effective.products.learn.access).toBe(true);
+    expect(effective.products.spaces.uncapped).toBe(true);
+  });
+
+  it("keeps canceled legacy personal subscriptions on free access", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "personal", plan_status: "canceled", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective).toEqual(
+      expect.objectContaining({
+        tier: "free",
+        status: "canceled",
+        source: "free",
+        premium: false,
+        hasActiveSubscription: false,
+      })
+    );
+    expect(effective.commercial.planId).toBe(COMMERCIAL_PLAN_IDS.SPACES_FREE);
+    expect(effective.products.billing.wholeApp).toBe(false);
+    expect(effective.products.agent.access).toBe(false);
+    expect(effective.products.learn.access).toBe(false);
+    expect(effective.products.spaces.uncapped).toBe(false);
+  });
+
+  it("keeps expired legacy personal subscriptions on free access even if status is stale-active", () => {
+    const effective = getEffectiveEntitlementState(
+      {
+        plan_tier: "personal",
+        plan_status: "active",
+        current_period_end: "2026-03-16T23:59:59.000Z",
+        access_expires_at: null,
+      },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective.source).toBe("free");
+    expect(effective.premium).toBe(false);
+    expect(effective.commercial.planId).toBe(COMMERCIAL_PLAN_IDS.SPACES_FREE);
+  });
+
+  it("maps new Agent subscriptions to Agent access without uncapped Spaces", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "agent", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective).toEqual(
+      expect.objectContaining({
+        tier: "personal",
+        source: "subscription",
+        premium: true,
+        commercial: expect.objectContaining({
+          planId: COMMERCIAL_PLAN_IDS.AGENT,
+          label: "ZAKI Agent",
+        }),
+      })
+    );
+    expect(effective.products.agent.access).toBe(true);
+    expect(effective.products.learn.access).toBe(false);
+    expect(effective.products.spaces.uncapped).toBe(false);
+  });
+
+  it("maps new Learn subscriptions to Learn access without Agent access", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "learn", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective.commercial).toEqual(
+      expect.objectContaining({
+        planId: COMMERCIAL_PLAN_IDS.LEARN,
+        label: "ZAKI Learn",
+      })
+    );
+    expect(effective.products.learn.access).toBe(true);
+    expect(effective.products.agent.access).toBe(false);
+    expect(effective.products.spaces.uncapped).toBe(false);
+  });
+
+  it("maps new Complete subscriptions to whole-app access", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "complete", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective.commercial).toEqual(
+      expect.objectContaining({
+        planId: COMMERCIAL_PLAN_IDS.COMPLETE,
+        label: "ZAKI Complete",
+      })
+    );
+    expect(effective.products.billing.wholeApp).toBe(true);
+    expect(effective.products.agent.access).toBe(true);
+    expect(effective.products.learn.access).toBe(true);
+    expect(effective.products.spaces.uncapped).toBe(true);
   });
 
   it("treats active access-code users as effective personal access", () => {
@@ -78,6 +204,9 @@ describe("effective entitlements", () => {
         source: "access_code",
         premium: true,
         hasActiveSubscription: false,
+        commercial: expect.objectContaining({
+          planId: COMMERCIAL_PLAN_IDS.ACCESS_CODE,
+        }),
       })
     );
   });

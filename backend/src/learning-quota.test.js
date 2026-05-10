@@ -21,6 +21,12 @@ describe("learning quota policy", () => {
       .toBe("student");
     expect(resolveLearningQuotaTier({ plan_tier: "pro", plan_status: "trialing" }, { nowDate: NOW }))
       .toBe("personal");
+    expect(resolveLearningQuotaTier({ plan_tier: "agent", plan_status: "active" }, { nowDate: NOW }))
+      .toBe("free");
+    expect(resolveLearningQuotaTier({ plan_tier: "learn", plan_status: "active" }, { nowDate: NOW }))
+      .toBe("personal");
+    expect(resolveLearningQuotaTier({ plan_tier: "complete", plan_status: "active" }, { nowDate: NOW }))
+      .toBe("personal");
     expect(
       resolveLearningQuotaTier(
         {

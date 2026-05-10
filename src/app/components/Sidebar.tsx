@@ -26,7 +26,11 @@ import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
 import { spaceKeys, useSpaces } from "@/queries/useSpaces";
 import { useEntitlements, useZakiSessions, zakiSessionKeys } from "@/queries";
-import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
+import {
+  hasActiveSubscription,
+  resolveCommercialPlanId,
+  resolveEffectiveEntitlement,
+} from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
 import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
 import { SessionManagementSheet } from "./agent/SessionManagementSheet";
@@ -39,6 +43,7 @@ import { SidebarModeSwitch } from "./sidebar/SidebarModeSwitch";
 import { ZakiSessionList } from "./sidebar/ZakiSessionList";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
+import { createAnonymousSpaces, createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import {
   isZakiBotSpaceId,
   ZAKI_BOT_LABEL,
@@ -147,7 +152,9 @@ export function Sidebar() {
     setSidebarMode,
   } = useNavigation();
   const { sidebarMode, zakiSessionKey: storedZakiSessionKey } = useNavigationStore();
-  const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(sidebarMode === "zaki");
+  const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(
+    Boolean(user) && sidebarMode === "zaki"
+  );
   const activeSessionKey =
     isZakiBotSpaceId(activeSpaceId) && (activeZakiSessionKey || storedZakiSessionKey)
       ? normalizeZakiSessionKey(activeZakiSessionKey || storedZakiSessionKey || "")
@@ -204,6 +211,7 @@ export function Sidebar() {
   const { data: entitlementsResult } = useEntitlements();
   const entitlements = entitlementsResult?.data ?? null;
   const planTierRaw = entitlements?.plan?.tier ?? "free";
+  const commercialPlanId = resolveCommercialPlanId(entitlements);
   const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
   const hasSubscription = hasActiveSubscription(entitlements);
   const isPremium = effectiveEntitlement.premium;
@@ -211,22 +219,22 @@ export function Sidebar() {
   const planLabel =
     activeViaAccessCode
       ? t("sidebar.profile.planBadge.codeActive")
-      : planTierRaw === "personal"
-      ? t("sidebar.profile.planBadge.personal")
-      : planTierRaw === "student"
-      ? t("sidebar.profile.planBadge.student")
-      : planTierRaw === "pro"
-      ? t("sidebar.profile.planBadge.pro")
+      : commercialPlanId === "agent"
+      ? t("pricingPage.plans.agent.label")
+      : commercialPlanId === "learn"
+      ? t("pricingPage.plans.learn.label")
+      : commercialPlanId === "complete" || commercialPlanId === "legacy_personal" || planTierRaw === "pro" || planTierRaw === "personal" || planTierRaw === "student"
+      ? t("pricingPage.plans.complete.label")
       : t("sidebar.profile.planBadge.free");
   const planDisplay =
     activeViaAccessCode
       ? t("sidebar.profile.planBadge.codeActive")
-      : planTierRaw === "personal"
-      ? t("pricingPage.plans.personal.label")
-      : planTierRaw === "student"
-      ? t("pricingPage.plans.student.label")
-      : planTierRaw === "pro"
-      ? t("billing.plans.pro.label")
+      : commercialPlanId === "agent"
+      ? t("pricingPage.plans.agent.label")
+      : commercialPlanId === "learn"
+      ? t("pricingPage.plans.learn.label")
+      : commercialPlanId === "complete" || commercialPlanId === "legacy_personal" || planTierRaw === "pro" || planTierRaw === "personal" || planTierRaw === "student"
+      ? t("pricingPage.plans.complete.label")
       : t("pricingPage.plans.free.label");
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
   const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);
@@ -543,7 +551,10 @@ export function Sidebar() {
       setExpandedSpace(stored);
     }
     if (!user) {
-      setSpaces([]);
+      const anonymousSpaces = createAnonymousSpaces() as SidebarSpace[];
+      setSpaces(anonymousSpaces);
+      setSpacesError("");
+      setExpandedSpace((prev) => prev ?? anonymousSpaces[0]?.id ?? null);
       return;
     }
     if (!spacesData) {
@@ -1044,6 +1055,31 @@ export function Sidebar() {
           null;
 
     if (!resolvedSpaceId) {
+      return;
+    }
+    if (!user) {
+      const threadId = createAnonymousThreadId();
+      setSpaces((prev) =>
+        prev.map((space) =>
+          space.id === resolvedSpaceId
+            ? {
+                ...space,
+                threads: [
+                  ...space.threads,
+                  { id: threadId, label: DEFAULT_THREAD_LABEL, pinned: false },
+                ],
+              }
+            : space
+        )
+      );
+      setExpandedSpace(resolvedSpaceId);
+      setActiveItem(threadId);
+      goToThread(resolvedSpaceId, threadId);
+      window.dispatchEvent(
+        new CustomEvent("zaki:thread-created", {
+          detail: { id: threadId, label: DEFAULT_THREAD_LABEL, spaceId: resolvedSpaceId },
+        })
+      );
       return;
     }
     try {
