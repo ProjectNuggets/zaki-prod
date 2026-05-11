@@ -20,11 +20,22 @@ jest.mock("@/queries", () => ({
   useEntitlements: () => ({
     data: entitlementsData,
   }),
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
+  }),
   useCheckout: () => ({
     mutateAsync: jest.fn(),
   }),
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock("@/queries/useBrainSearch", () => ({
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
   }),
 }));
 

@@ -36,7 +36,6 @@ import {
   setAgentSessionMode,
 } from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
-import { getZakiBootstrapCardStorageKey } from "./ZakiBootstrapCard";
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(async () => ({
@@ -163,11 +162,22 @@ jest.mock("@/queries", () => ({
       },
     },
   }),
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
+  }),
   useCheckout: () => ({
     mutateAsync: jest.fn(),
   }),
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock("@/queries/useBrainSearch", () => ({
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
   }),
 }));
 
@@ -416,7 +426,7 @@ describe("ChatArea Component", () => {
     window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
   });
 
-  it("shows the first-time ZAKI bootstrap card before the experimental notice for signed-in users", async () => {
+  it("shows the experimental notice for signed-in users who land directly in a ZAKI thread", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -430,14 +440,6 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.getByText("zakiBootstrapCard.title")).toBeInTheDocument();
-    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "zakiBootstrapCard.actions.continue" }));
-
-    expect(
-      window.localStorage.getItem(getZakiBootstrapCardStorageKey("nova@test.com"))
-    ).toBe("done");
     expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
   });
 
