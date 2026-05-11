@@ -19,6 +19,10 @@ async function mockAuthAndPricing(page: Page) {
     await json(route, { success: true });
   });
 
+  await page.route("**/api/auth/refresh", async (route) => {
+    await json(route, { token: state.token });
+  });
+
   await page.route("**/api/legal/consent-status", async (route) => {
     const hasAuth = route.request().headers()["authorization"] === `Bearer ${state.token}`;
     await json(route, {

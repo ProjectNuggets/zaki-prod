@@ -33,6 +33,14 @@ async function bootstrapSession(page: Page) {
 }
 
 async function mockAppShell(page: Page, assistantContent: string = ASSISTANT_CONTENT) {
+  await page.route("**/api/auth/refresh", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ token: "e2e-token" }),
+    }),
+  );
+
   await page.route("**/api/profile", (route) =>
     route.fulfill({
       status: 200,

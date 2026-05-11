@@ -40,6 +40,14 @@ async function mockMediaRecorder(page: Page) {
 }
 
 async function mockAppShell(page: Page) {
+  await page.route("**/api/auth/refresh", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ token: "e2e-token" }),
+    }),
+  );
+
   await page.route("**/api/profile", (route) =>
     route.fulfill({
       status: 200,
@@ -186,14 +194,14 @@ test.describe("voice dictation", () => {
 
     await page.goto("/spaces/zaky/threads/t-1");
 
-    const micButton = page.getByRole("button", { name: /voice input/i });
+    const micButton = page.getByRole("button", { name: /tap to record/i });
     await expect(micButton).toBeVisible();
     await micButton.click();
 
     // Now showing the stop-recording variant
-    const stopButton = page.getByRole("button", { name: /stop recording/i });
-    await expect(stopButton).toBeVisible();
-    await stopButton.click();
+    const stopButtons = page.getByRole("button", { name: "Stop" });
+    await expect(stopButtons).toHaveCount(2);
+    await stopButtons.last().click();
 
     const input = page.locator("#chat-input");
     await expect(input).toHaveValue("hello from voice dictation");
