@@ -2346,6 +2346,8 @@ export function ChatArea() {
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const primarySpace = spacesList[0] ?? null;
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const isZakiHeroVisible =
+    isZakiBotActiveSpace && showZakiHome && sidebarMode === "zaki" && heroCardActive;
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
@@ -6512,7 +6514,7 @@ export function ChatArea() {
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
               <ZakiExperimentalNotice
-                active={isZakiBotActiveSpace && zakiBootstrapCompleted}
+                active={isZakiBotActiveSpace && (zakiBootstrapCompleted || !isZakiHeroVisible)}
               />
               {/* Single source of truth for ApprovalRequiredCard. The
                   timeline copy was dropped in 18328cd so the decided

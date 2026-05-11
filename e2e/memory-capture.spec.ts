@@ -15,6 +15,14 @@ async function bootstrapSession(page: Page) {
 }
 
 async function mockAppShell(page: Page) {
+  await page.route("**/api/auth/refresh", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ token: "e2e-token" }),
+    });
+  });
+
   await page.route("**/api/profile", async (route) => {
     await route.fulfill({
       status: 200,
