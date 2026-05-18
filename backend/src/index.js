@@ -145,6 +145,7 @@ import {
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
   getWeeklyQuotaResetAtUtcIso,
+  hasLocalUnlimitedQuotaBypass,
   isUnlimitedUser,
   readDailyPromptUsage,
   readWeeklyPromptUsage,
@@ -3644,17 +3645,21 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
   const status = zakiUser?.plan_status || "inactive";
   const access = getAccessStatus(zakiUser);
   const effective = getEffectiveEntitlementState(zakiUser);
-  const unlimited =
-    normalizedSurface === ZAKI_BOT_SURFACE
-      ? Boolean(effective?.products?.agent?.access)
-      : normalizedSurface === LEARNING_SURFACE
-      ? Boolean(effective?.products?.learn?.access)
-      : Boolean(effective?.products?.spaces?.uncapped) ||
-        isUnlimitedUser({
-            tier,
-            status,
-            accessActive: access.active,
-          });
+  const localUnlimitedBypass = hasLocalUnlimitedQuotaBypass(zakiUser);
+  let unlimited = localUnlimitedBypass;
+  if (!unlimited && normalizedSurface === ZAKI_BOT_SURFACE) {
+    unlimited = Boolean(effective?.products?.agent?.access);
+  } else if (!unlimited && normalizedSurface === LEARNING_SURFACE) {
+    unlimited = Boolean(effective?.products?.learn?.access);
+  } else if (!unlimited) {
+    unlimited =
+      Boolean(effective?.products?.spaces?.uncapped) ||
+      isUnlimitedUser({
+        tier,
+        status,
+        accessActive: access.active,
+      });
+  }
   return { tier, status, access, effective, surface: normalizedSurface, unlimited };
 }
 
