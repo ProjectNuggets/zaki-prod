@@ -660,16 +660,66 @@ async function withTimeout(promise, timeoutMs, label = "Operation") {
   }
 }
 
+function getErrorCode(error) {
+  let current = error;
+  while (current && typeof current === "object") {
+    if (typeof current.code === "string" && current.code) {
+      return current.code;
+    }
+    current = current.cause;
+  }
+  return "";
+}
+
+function isUpstreamContentLengthMismatch(error) {
+  return getErrorCode(error) === "UND_ERR_RES_CONTENT_LENGTH_MISMATCH";
+}
+
+function finishErroredStreamResponse(res, label, error, options = {}) {
+  const code = getErrorCode(error);
+  const upstreamMismatch = isUpstreamContentLengthMismatch(error);
+  const message = upstreamMismatch
+    ? `${label} upstream response ended with a content-length mismatch.`
+    : `${label} failed.`;
+
+  if (!res.headersSent) {
+    if (options.sse) {
+      res.status(502);
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      if (typeof res.flushHeaders === "function") {
+        res.flushHeaders();
+      }
+    } else {
+      res.status(502).json({
+        error: message,
+        code: code || "upstream_stream_error",
+      });
+      return;
+    }
+  }
+
+  if (options.sse && !res.destroyed && !res.writableEnded) {
+    res.write(
+      `event: error\ndata: ${JSON.stringify({
+        code: code || "upstream_stream_error",
+        message,
+        retryable: true,
+      })}\n\n`
+    );
+    res.write(`event: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`);
+  }
+
+  if (!res.destroyed && !res.writableEnded) {
+    res.end();
+  }
+}
+
 function pipeReadableToResponse(readable, res, label = "Stream") {
   readable.on("error", (error) => {
     console.error(`[${label}] Pipe error:`, error);
-    if (!res.headersSent) {
-      res.status(502).json({ error: `${label} failed.` });
-      return;
-    }
-    if (!res.destroyed) {
-      res.end();
-    }
+    finishErroredStreamResponse(res, label, error);
   });
 
   res.on("close", () => {
@@ -761,13 +811,7 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     }
   } catch (error) {
     console.error(`[${label}] SSE pipe error:`, error);
-    if (!res.headersSent) {
-      res.status(502).json({ error: `${label} failed.` });
-      return;
-    }
-    if (!res.destroyed) {
-      res.end();
-    }
+    finishErroredStreamResponse(res, label, error, { sse: true });
   }
 }
 
@@ -9003,6 +9047,13 @@ ${originalMessage}`;
     console.error("[Chat] Stream error:", error);
     const message = error?.message || "Chat stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
+    if (res.headersSent) {
+      sendChatStreamError(res, message, {
+        code: timedOut ? "upstream_timeout" : getErrorCode(error) || "chat_error",
+        retryable: true,
+      });
+      return;
+    }
     if (String(req.headers.accept || "").includes("text/event-stream")) {
       sendChatStreamError(
         res,
@@ -9288,7 +9339,14 @@ const agentChatStreamHandler = async (req, res) => {
     console.error("[Agent] Stream error:", error);
     const message = error?.message || "Agent stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
-    res.status(timedOut ? 504 : 500).json({ error: message });
+    if (res.headersSent) {
+      finishErroredStreamResponse(res, "Agent stream", error, { sse: true });
+      return;
+    }
+    res.status(timedOut ? 504 : 500).json({
+      error: message,
+      code: timedOut ? "upstream_timeout" : getErrorCode(error) || "agent_stream_error",
+    });
   }
 };
 
@@ -10216,7 +10274,7 @@ async function pipeLearningResponse(req, res, upstream) {
       });
     }
   }
-  Readable.fromWeb(upstream.body).pipe(res);
+  pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Learning upstream response");
 }
 
 async function proxyLearningRequest(req, res, targetPath, {
@@ -10615,7 +10673,7 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     res.end();
     return;
   }
-  Readable.fromWeb(upstream.body).pipe(res);
+  pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw proxy response");
 }
 
 async function loadUserEntitlement(userId) {
@@ -10844,7 +10902,7 @@ const agentTelegramDisconnectHandler = async (req, res) => {
         res.end();
         return;
       }
-      Readable.fromWeb(upstream.body).pipe(res);
+      pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Telegram disconnect response");
       return;
     }
 
@@ -13241,8 +13299,12 @@ app.all("*", async (req, res) => {
       return;
     }
 
-    Readable.fromWeb(upstream.body).pipe(res);
+    pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "NOVA proxy response");
   } catch (error) {
+    if (res.headersSent) {
+      finishErroredStreamResponse(res, "NOVA proxy response", error);
+      return;
+    }
     res.status(500).json({ error: error?.message || "Proxy error." });
   }
 });
