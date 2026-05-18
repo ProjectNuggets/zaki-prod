@@ -187,6 +187,7 @@ import {
 } from "./learning-observability.js";
 import {
   getAccessStatus,
+  getCommercialPlanState,
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
@@ -6643,8 +6644,37 @@ app.get("/api/entitlements", async (req, res) => {
       stripePricingCatalog,
       zakiUser.stripe_price_id || null
     );
-    const access = getAccessStatus(zakiUser);
-    const effective = getEffectiveEntitlementState(zakiUser);
+    const storedAccess = getAccessStatus(zakiUser);
+    const localFullAppBypass = hasLocalUnlimitedQuotaBypass(zakiUser);
+    const baseEffective = getEffectiveEntitlementState(zakiUser);
+    const localCommercial = localFullAppBypass
+      ? getCommercialPlanState({ source: "access_code", accessActive: true })
+      : null;
+    const effective = localFullAppBypass
+      ? {
+          ...baseEffective,
+          tier: "personal",
+          status: "active",
+          source: "access_code",
+          premium: true,
+          access: {
+            ...baseEffective.access,
+            active: true,
+            expiresAt: null,
+            campaign: baseEffective.access?.campaign || "local_unlimited_quota",
+          },
+          commercial: localCommercial,
+          products: localCommercial?.products || baseEffective.products,
+        }
+      : baseEffective;
+    const access = localFullAppBypass
+      ? {
+          ...storedAccess,
+          active: true,
+          expiresAt: null,
+          campaign: storedAccess.campaign || "local_unlimited_quota",
+        }
+      : storedAccess;
     const readOnly = !effective.premium;
     const products = effective.products || {};
     const commercial = effective.commercial || {};
