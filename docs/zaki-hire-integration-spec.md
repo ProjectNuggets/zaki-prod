@@ -68,6 +68,44 @@ engine API is an implementation detail behind the backend-for-frontend.
 - Cost strategy: emit normalized usage events now; central cost accounting can
   later move behind the central auth/account system.
 
+## Pre-Implementation Discovery Gate
+
+Before implementation starts, the team must understand JustHireMe deeply enough
+to explain every user feature, backend dependency, provider credential, runtime
+package, storage assumption, and operator setting needed to make hosted ZAKI Hire
+work without user setup.
+
+This is a hard gate because JustHireMe is currently a local-first desktop
+workbench. Hosted ZAKI has different assumptions: ZAKI owns auth, provider
+credentials, deployment, storage, source policies, quota, telemetry, and user
+onboarding.
+
+The dependency inventory must answer:
+
+- which JustHireMe routes and background tasks power each user-facing workflow
+- which workflows call an LLM and which provider/model capabilities they need
+- which workflows need embeddings and vector search
+- which workflows need external job-board, search, ATS, GitHub, LinkedIn,
+  portfolio, or web-fetch APIs
+- which workflows need PDF parsing, PDF generation, Markdown rendering, or file
+  conversion support
+- which workflows need browser automation or Playwright and whether they are
+  disabled, operator-beta, or production enabled
+- which data must move from SQLite assumptions into PostgreSQL
+- which data belongs in Kuzu, LanceDB, object storage, cache, or task state
+- which settings are user-safe and which must be operator-only
+- which provider API tokens ZAKI must provide centrally
+- which source API tokens or credentials ZAKI must provide centrally
+- which egress domains, rate limits, and source terms must be reviewed
+- which dependencies must be present in the production container image
+- which health/readiness checks prove each dependency is configured
+
+Known provider prerequisites from the upstream repo include optional OpenAI,
+Anthropic, DeepSeek, Groq, NVIDIA, and Ollama-compatible LLM routes. Hosted ZAKI
+must select and configure an operator-owned default LLM route rather than asking
+users for API keys. Embedding, source, and search provider choices must be
+recorded the same way.
+
 ## Product Boundary
 
 `zaki-prod` remains private and proprietary. ZAKI Hire should not copy
@@ -373,14 +411,15 @@ retention, or source adapter policy are incomplete.
 | Phase | Goal | Exit gate |
 | --- | --- | --- |
 | 1. Fork and licensing boundary | Create `zaki-hire-engine`, preserve AGPL notices, define source-offer process, remove misleading MIT claims from ZAKI production before release | Legal/product boundary accepted |
-| 2. Engine SaaS conversion | Replace local-only auth/storage assumptions with internal auth, tenant headers, PostgreSQL primary state, tenant artifacts, and readiness probes | Engine tests prove tenant isolation and PostgreSQL-backed core flows |
-| 3. BFF contract | Add `/api/hire/*` with central auth, internal token forwarding, quotas, errors, usage events, export/delete hooks | Contract tests pass with mocked and live engine |
-| 4. ZAKI-native UI | Port JustHireMe user workflows into `/hire` using ZAKI shell and design system | Route parity UAT passes |
-| 5. Source and automation policy | Build operator-approved source catalog and keep auto-apply disabled | Hosted scan flows work without exposing unsafe controls |
-| 6. Governance | Export, deletion, retention, audit, backup, and restore | Governance tests and restore drill pass |
-| 7. Observability | Health, readiness, failure events, task states, and alerts | Operator dashboard/endpoint shows actionable status |
-| 8. Production deployment | Add infrastructure chart, secrets, validation script, ArgoCD app, staging smoke | Production readiness endpoint is green |
-| 9. Paid-user readiness | Run multi-user SaaS isolation, route UAT, security review, and cost/quota review | No open P0/P1; beta or GA decision recorded |
+| 2. Source and dependency audit | Map JustHireMe capabilities, routes, tasks, env vars, provider/API tokens, runtime packages, source adapters, and data stores | Dependency inventory is complete enough to build from |
+| 3. Engine SaaS conversion | Replace local-only auth/storage assumptions with internal auth, tenant headers, PostgreSQL primary state, tenant artifacts, and readiness probes | Engine tests prove tenant isolation and PostgreSQL-backed core flows |
+| 4. BFF contract | Add `/api/hire/*` with central auth, internal token forwarding, quotas, errors, usage events, export/delete hooks | Contract tests pass with mocked and live engine |
+| 5. ZAKI-native UI | Port JustHireMe user workflows into `/hire` using ZAKI shell and design system | Route parity UAT passes |
+| 6. Source and automation policy | Build operator-approved source catalog and keep auto-apply disabled | Hosted scan flows work without exposing unsafe controls |
+| 7. Governance | Export, deletion, retention, audit, backup, and restore | Governance tests and restore drill pass |
+| 8. Observability | Health, readiness, failure events, task states, and alerts | Operator dashboard/endpoint shows actionable status |
+| 9. Production deployment | Add infrastructure chart, secrets, validation script, ArgoCD app, staging smoke | Production readiness endpoint is green |
+| 10. Paid-user readiness | Run multi-user SaaS isolation, route UAT, security review, and cost/quota review | No open P0/P1; beta or GA decision recorded |
 
 ## Blind Spots To Resolve
 

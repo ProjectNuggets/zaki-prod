@@ -19,6 +19,21 @@ operator policy requires it.
 Do not treat desktop/Tauri packaging, local app settings, local filesystem
 trust, or auto-apply as product requirements for the first hosted release.
 
+## Prerequisite Discovery Matrix
+
+| Dependency Area | Upstream Signal | ZAKI Hire Decision Needed |
+| --- | --- | --- |
+| LLM provider | OpenAI, Anthropic, DeepSeek, Groq, NVIDIA, and Ollama-compatible local routes exist in local configuration | Pick operator-owned production provider/model and hide keys from users |
+| Embeddings | Semantic matching depends on vectorization and LanceDB | Pick embedding provider/model, dimension, quota, and rebuild policy |
+| Source APIs | Discovery can use configured boards, feeds, communities, APIs, and free-source scans | Approve source catalog, credentials, terms review, and rate limits |
+| GitHub import | Profile import can use GitHub evidence | Decide unauthenticated versus operator-token versus user OAuth later |
+| LinkedIn import | Profile import can use LinkedIn export data | Prefer user-uploaded export for v1; avoid live credential automation |
+| Portfolio import | Profile import can fetch portfolio URLs | Define fetch allowlist, size limits, and content extraction behavior |
+| Documents | Resume parsing and generated package output need PDF/Markdown tooling | Install runtime libraries and define artifact storage |
+| Browser automation | Playwright and auto-apply exist as experimental lab paths | Disable for v1 unless operator-beta review approves it |
+| Persistence | Upstream local CRM uses SQLite with Kuzu and LanceDB companion stores | Move hosted primary state to PostgreSQL and scope companions by tenant |
+| Runtime packaging | Upstream bundles a desktop app and Python sidecar | Build production container image with required runtime dependencies |
+
 ## Capability Matrix
 
 | Area | Upstream capability | ZAKI Hire target | V1 status |

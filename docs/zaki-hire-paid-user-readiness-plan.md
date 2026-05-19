@@ -34,6 +34,7 @@ final security/code review has no open P0/P1 findings.
 
 | Phase | Name | Goal | Exit Gate | Status |
 | --- | --- | --- | --- | --- |
+| 0 | Source And Dependency Audit | Understand JustHireMe deeply enough to map features, routes, tasks, env vars, provider/API tokens, source adapters, runtime packages, and data stores. | Dependency inventory is complete and accepted before implementation starts. | NOT STARTED |
 | 1 | Source And License Boundary | Fork JustHireMe into `zaki-hire-engine`, preserve AGPL notices, define proprietary ZAKI boundary, and remove misleading ZAKI MIT release claims before production. | Legal/product owner accepts boundary and source-offer process. | NOT STARTED |
 | 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | NOT STARTED |
 | 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | NOT STARTED |
@@ -46,6 +47,19 @@ final security/code review has no open P0/P1 findings.
 | 10 | Production Deployment Readiness | Add infrastructure chart, ArgoCD app, secrets, validator, staging deployment, and readiness endpoint. | Staging readiness is green with immutable images and source pins. | NOT STARTED |
 | 11 | Final Review | Run code review, security review, UI review, source-policy review, and operational review. | No open P0/P1; accepted P2/P3 items are documented. | NOT STARTED |
 | 12 | Beta/GA Declaration | Record the highest truthful readiness level. | Beta or GA verdict written with exact remaining blockers. | NOT STARTED |
+
+## Phase 0 Checklist
+
+| Check | Evidence Required | Status |
+| --- | --- | --- |
+| Feature map | Every JustHireMe user workflow is mapped to frontend, API route, service, task, and data store | TODO |
+| LLM dependency map | Every LLM-using workflow lists provider capability, model need, token shape, timeout, retry, and fallback | TODO |
+| API token inventory | Required operator-provided API keys are listed, including LLM, embedding, search/source, GitHub, or other external APIs | TODO |
+| Runtime dependency map | Python, Node, system libraries, Kuzu, LanceDB, PDF, Playwright, and browser dependencies are classified as required, optional, or disabled | TODO |
+| Source adapter review | Every discovery adapter is classified as allowed, operator-only, disabled, or needs terms review | TODO |
+| Storage map | SQLite tables, graph data, vectors, generated files, settings, tasks, and activity are mapped to PostgreSQL, companion stores, or artifacts | TODO |
+| Operator settings map | Every upstream local setting is classified as user-safe, operator-only, removed, or deferred | TODO |
+| Readiness probes | Every external dependency has a readiness check or an explicit disabled state | TODO |
 
 ## Phase 1 Checklist
 
@@ -226,4 +240,5 @@ Allowed verdicts:
 
 ZAKI Hire cannot be declared GA-ready while browser automation or auto-apply is
 unreviewed, while SQLite is production primary, while MIT claims remain on the
-proprietary ZAKI production repo, or while backup/restore is unproven.
+proprietary ZAKI production repo, while backup/restore is unproven, or while the
+source and dependency audit is incomplete.
