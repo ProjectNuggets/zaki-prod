@@ -196,6 +196,7 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
+import { buildPlatformEntitlementSummary } from "./platform-policy.js";
 import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
 import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
 import {
@@ -6690,6 +6691,12 @@ app.get("/api/entitlements", async (req, res) => {
     const hasAgentAccess = Boolean(products.agent?.access);
     const hasLearnAccess = Boolean(products.learn?.access);
     const hasWholeAppAccess = Boolean(products.billing?.wholeApp);
+    const platform = buildPlatformEntitlementSummary({
+      commercialPlanId: commercial.planId || "spaces_free",
+      effectiveTier: effective.tier,
+      source: effective.source,
+      premium: effective.premium,
+    });
 
     res.status(200).json({
       success: true,
@@ -6720,6 +6727,7 @@ app.get("/api/entitlements", async (req, res) => {
         grandfathered: Boolean(products.billing?.grandfathered),
         products,
       },
+      platform,
       features: {
         premium: effective.premium,
         imageGeneration: effective.premium,

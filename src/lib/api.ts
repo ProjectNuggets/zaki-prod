@@ -610,6 +610,42 @@ export async function fetchEntitlements() {
         };
       };
     };
+    platform?: {
+      policyVersion?: string;
+      planLadder?: Array<"free" | "personal" | "pro" | "pro_max">;
+      plan?: {
+        id?: "free" | "personal" | "pro" | "pro_max";
+        label?: string;
+        source?: "free" | "subscription" | "access_code";
+        premium?: boolean;
+        legacyPlanId?: string | null;
+        migration?: boolean;
+      };
+      usage?: {
+        model?: "shared_weekly_allowance";
+        weeklyAllowanceUnits?: number | null;
+        weeklyAllowanceConfigured?: boolean;
+        burstWindowHours?: number;
+        productQuotaMode?: "weighted_product_caps";
+        numericLimitsFinalized?: boolean;
+      };
+      products?: Record<
+        string,
+        {
+          label?: string;
+          available?: boolean;
+          lifecycle?: "current" | "future";
+          quotaPolicyId?: string;
+          memoryScope?: string;
+        }
+      >;
+      memory?: {
+        scopes?: string[];
+        personalAuthority?: string;
+        workspaceAuthority?: string;
+        learnerAuthority?: string;
+      };
+    };
     features?: Record<string, boolean>;
     error?: string | null;
   } = {};
