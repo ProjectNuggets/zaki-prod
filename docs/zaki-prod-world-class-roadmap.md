@@ -3,6 +3,10 @@
 Date: 2026-05-19
 Goal: move from current feature-rich app to production-grade ZAKI control plane.
 
+## Current Execution Map
+
+Use `docs/zaki-prod-layered-mece-roadmap.md` as the execution roadmap. This document remains the phase-level strategy; the layered roadmap owns the MECE layer map, slice ordering, dependency graph, and proof strategy.
+
 ## Strategy
 
 Do not start by redesigning screens in isolation. The UI will only become world-class when the platform model underneath is clear.
@@ -287,4 +291,3 @@ Start with Phase 0 and Phase 1 together:
 - Phase 1 creates the code boundaries needed to implement the new platform safely.
 
 Do not start with visual redesign alone. The visual redesign should follow the control-plane decisions so the UI reflects the final commercial and memory architecture.
-
