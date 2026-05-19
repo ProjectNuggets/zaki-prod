@@ -1,25 +1,38 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchBrainMemory, type BrainMemoryDetail, type BrainGraphNode } from "@/lib/api";
+import {
+  BrainApiError,
+  fetchBrainMemory,
+  type BrainMemoryDetail,
+  type BrainGraphNode,
+} from "@/lib/api";
 
 export const brainMemoryKeys = {
-  detail: (key: string) => ["brain", "memory", key] as const,
+  // Memory keys are only unique inside a Nullalis user scope. Include userId
+  // so account switches and local auth bypass tests cannot reuse another
+  // user's cached detail payload.
+  detail: (userId: string, key: string) => ["brain", "memory", userId, key] as const,
 };
 
 /**
  * Fetches the full M3 drilldown for a memory node.
- * Falls back gracefully to null while backend isn't live (404 → null).
- * Panel renders from graph-node data in that case.
+ * Falls back to graph-node data only when the specific memory is missing
+ * (404). Transport/proxy/JSON failures stay visible as query errors.
  */
 export function useBrainMemory(userId: string, key: string | null) {
   return useQuery<BrainMemoryDetail | null>({
-    queryKey: brainMemoryKeys.detail(key ?? ""),
+    queryKey: brainMemoryKeys.detail(userId, key ?? ""),
     queryFn: async () => {
       if (!key) return null;
       try {
         return await fetchBrainMemory(userId, key);
-      } catch {
-        // 404 or not-yet-live backend — caller falls back to graph-node data
-        return null;
+      } catch (error) {
+        // Historical/deleted nodes can legitimately 404 while the graph cache
+        // is still warm. Other failures should render as query errors instead
+        // of silently degrading to stale graph-node summary text.
+        if (error instanceof BrainApiError && error.status === 404) {
+          return null;
+        }
+        throw error;
       }
     },
     enabled: !!userId && !!key,
@@ -37,12 +50,15 @@ export function useBrainMemoryPrefetch(userId: string) {
   return (nodes: Pick<BrainGraphNode, "id">[]) => {
     for (const node of nodes) {
       void queryClient.prefetchQuery({
-        queryKey: brainMemoryKeys.detail(node.id),
+        queryKey: brainMemoryKeys.detail(userId, node.id),
         queryFn: async () => {
           try {
             return await fetchBrainMemory(userId, node.id);
-          } catch {
-            return null;
+          } catch (error) {
+            if (error instanceof BrainApiError && error.status === 404) {
+              return null;
+            }
+            throw error;
           }
         },
         staleTime: 30_000,

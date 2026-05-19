@@ -20,10 +20,10 @@ export interface BrainFilters {
   // similarity above ~0.72 cosine), drowning the typed/session edges
   // that carry actual meaning. A binary on/off toggle was the wrong
   // tool — semantic edges aren't pure noise, they just need a
-  // tighter threshold than the agent uses for storage. The slider
-  // filters semantic edges by weight: 0.0 shows all, 1.0 shows none,
-  // default 0.85 (= top quartile of typical similarity scores) shows
-  // only the strongest cross-conversation connections.
+  // tighter threshold than the agent uses for storage. The server's
+  // semantic graph floor is 0.70, so the slider starts there: 0.70 shows
+  // all semantic links the gateway is willing to emit, 1.0 shows almost
+  // none, and default 0.85 keeps the strongest cross-conversation links.
   semanticEdgeThreshold: number;
   // forces
   nodeRepulsion: number; // cose-bilkent
@@ -95,7 +95,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
         />
         <SliderRow
           label={t("brain.filterPanel.semanticThreshold", { defaultValue: "Similarity link cutoff" })}
-          min={0}
+          min={0.7}
           max={1}
           step={0.05}
           value={filters.semanticEdgeThreshold}

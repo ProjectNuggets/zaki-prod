@@ -998,6 +998,7 @@ export function BrainGraphView({
             node={focusedNodeData.node}
             detail={memoryQuery.data ?? null}
             loading={memoryQuery.isLoading}
+            error={memoryQuery.isError}
             onClose={() => setFocusedNodeId(null)}
             onShowLocal={(key) => enterLocalMode(key)}
             t={t}
@@ -1114,6 +1115,7 @@ function DetailPanel({
   node,
   detail,
   loading,
+  error,
   onClose,
   onShowLocal,
   t,
@@ -1121,6 +1123,7 @@ function DetailPanel({
   node: BrainGraphNode;
   detail: BrainMemoryDetail | null;
   loading: boolean;
+  error: boolean;
   onClose: () => void;
   onShowLocal: (key: string) => void;
   t: ReturnType<typeof useTranslation>["t"];
@@ -1176,6 +1179,12 @@ function DetailPanel({
             <div className="h-3 w-full animate-pulse rounded bg-white/10" />
             <div className="h-3 w-4/5 animate-pulse rounded bg-white/10" />
             <div className="h-3 w-3/5 animate-pulse rounded bg-white/10" />
+          </div>
+        ) : error && !detail ? (
+          <div className="rounded-zaki-md border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-xs leading-relaxed text-red-100">
+            {t("brain.graph.detail.loadFailed", {
+              defaultValue: "Full memory detail failed to load. Showing graph summary only.",
+            })}
           </div>
         ) : (
           <p className="text-sm leading-relaxed text-white/90">{content}</p>

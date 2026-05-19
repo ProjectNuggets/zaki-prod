@@ -2327,6 +2327,18 @@ export class BrainRecomputeConflictError extends Error {
   }
 }
 
+export class BrainApiError extends Error {
+  status: number;
+  endpoint: string;
+
+  constructor(endpoint: string, status: number) {
+    super(`${endpoint} ${status}`);
+    this.name = "BrainApiError";
+    this.endpoint = endpoint;
+    this.status = status;
+  }
+}
+
 export async function postBrainCommunitiesRecompute(
   userId: string
 ): Promise<BrainCommunitiesRecomputeResponse> {
@@ -2521,7 +2533,7 @@ export async function fetchBrainMemory(
     `/api/agent/brain/memory/${encodeURIComponent(key)}`,
     { method: "GET" }
   );
-  if (!response.ok) throw new Error(`brain/memory ${response.status}`);
+  if (!response.ok) throw new BrainApiError("brain/memory", response.status);
   const raw = await parseRequiredApiJson<unknown>(response, "brain/memory");
   return adaptBrainMemoryResponse(raw, key);
 }
