@@ -3,6 +3,8 @@
 Status: planning source of truth.
 Last updated: 2026-05-19.
 
+Related dependency source: `docs/zaki-hire-dependency-inventory.md`.
+
 ## Reader And Action
 
 Reader: a ZAKI production operator.

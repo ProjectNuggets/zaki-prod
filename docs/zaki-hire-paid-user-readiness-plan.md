@@ -15,6 +15,7 @@ multi-user SaaS release.
 Related source-of-truth documents:
 
 - `docs/zaki-hire-integration-spec.md`
+- `docs/zaki-hire-dependency-inventory.md`
 - `docs/zaki-hire-operator-deployment-checklist.md`
 - `docs/zaki-hire-backup-restore-runbook.md`
 - `docs/zaki-hire-upstream-parity-matrix.md`
@@ -34,7 +35,7 @@ final security/code review has no open P0/P1 findings.
 
 | Phase | Name | Goal | Exit Gate | Status |
 | --- | --- | --- | --- | --- |
-| 0 | Source And Dependency Audit | Understand JustHireMe deeply enough to map features, routes, tasks, env vars, provider/API tokens, source adapters, runtime packages, and data stores. | Dependency inventory is complete and accepted before implementation starts. | NOT STARTED |
+| 0 | Source And Dependency Audit | Understand JustHireMe deeply enough to map features, routes, tasks, env vars, provider/API tokens, source adapters, runtime packages, and data stores. | Dependency inventory is complete and accepted before implementation starts. | DRAFTED |
 | 1 | Source And License Boundary | Fork JustHireMe into `zaki-hire-engine`, preserve AGPL notices, define proprietary ZAKI boundary, and remove misleading ZAKI MIT release claims before production. | Legal/product owner accepts boundary and source-offer process. | NOT STARTED |
 | 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | NOT STARTED |
 | 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | NOT STARTED |
@@ -52,14 +53,14 @@ final security/code review has no open P0/P1 findings.
 
 | Check | Evidence Required | Status |
 | --- | --- | --- |
-| Feature map | Every JustHireMe user workflow is mapped to frontend, API route, service, task, and data store | TODO |
-| LLM dependency map | Every LLM-using workflow lists provider capability, model need, token shape, timeout, retry, and fallback | TODO |
-| API token inventory | Required operator-provided API keys are listed, including LLM, embedding, search/source, GitHub, or other external APIs | TODO |
-| Runtime dependency map | Python, Node, system libraries, Kuzu, LanceDB, PDF, Playwright, and browser dependencies are classified as required, optional, or disabled | TODO |
-| Source adapter review | Every discovery adapter is classified as allowed, operator-only, disabled, or needs terms review | TODO |
-| Storage map | SQLite tables, graph data, vectors, generated files, settings, tasks, and activity are mapped to PostgreSQL, companion stores, or artifacts | TODO |
-| Operator settings map | Every upstream local setting is classified as user-safe, operator-only, removed, or deferred | TODO |
-| Readiness probes | Every external dependency has a readiness check or an explicit disabled state | TODO |
+| Feature map | Every JustHireMe user workflow is mapped to frontend, API route, service, task, and data store | DRAFTED in dependency inventory |
+| LLM dependency map | Every LLM-using workflow lists provider capability, model need, token shape, timeout, retry, and fallback | DRAFTED in dependency inventory |
+| API token inventory | Required operator-provided API keys are listed, including LLM, embedding, search/source, GitHub, or other external APIs | DRAFTED in dependency inventory |
+| Runtime dependency map | Python, Node, system libraries, Kuzu, LanceDB, PDF, Playwright, and browser dependencies are classified as required, optional, or disabled | DRAFTED in dependency inventory |
+| Source adapter review | Every discovery adapter is classified as allowed, operator-only, disabled, or needs terms review | DRAFTED in dependency inventory |
+| Storage map | SQLite tables, graph data, vectors, generated files, settings, tasks, and activity are mapped to PostgreSQL, companion stores, or artifacts | DRAFTED in dependency inventory |
+| Operator settings map | Every upstream local setting is classified as user-safe, operator-only, removed, or deferred | DRAFTED in dependency inventory |
+| Readiness probes | Every external dependency has a readiness check or an explicit disabled state | DRAFTED in dependency inventory |
 
 ## Phase 1 Checklist
 

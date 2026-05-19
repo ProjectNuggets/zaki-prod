@@ -35,6 +35,7 @@ engine API is an implementation detail behind the backend-for-frontend.
 
 - `docs/zaki-hire-operator-deployment-checklist.md`
 - `docs/zaki-hire-paid-user-readiness-plan.md`
+- `docs/zaki-hire-dependency-inventory.md`
 - `docs/zaki-hire-backup-restore-runbook.md`
 - `docs/zaki-hire-upstream-parity-matrix.md`
 
@@ -80,7 +81,8 @@ workbench. Hosted ZAKI has different assumptions: ZAKI owns auth, provider
 credentials, deployment, storage, source policies, quota, telemetry, and user
 onboarding.
 
-The dependency inventory must answer:
+The dependency inventory is tracked in
+`docs/zaki-hire-dependency-inventory.md`. It must answer:
 
 - which JustHireMe routes and background tasks power each user-facing workflow
 - which workflows call an LLM and which provider/model capabilities they need
