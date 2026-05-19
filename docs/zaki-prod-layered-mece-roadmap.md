@@ -111,7 +111,7 @@ The slices below are ordered by dependency and risk. Each slice must end with a 
 - [x] **S03: Global Settings usage surface** `risk:medium` `depends:[S02]`
   > After this: main Settings shows platform usage, and Agent Settings is labeled as Agent usage rather than global plan authority.
 
-- [ ] **S04: Authenticated UX baseline audit** `risk:high` `depends:[S03]`
+- [x] **S04: Authenticated UX baseline audit** `risk:high` `depends:[S03]`
   > After this: test user login, dashboard, Settings, Agent Settings, Spaces, Learn, Brain, and logout are browser-verified with screenshots and issue notes.
 
 - [ ] **S05: MECE Settings IA cleanup** `risk:high` `depends:[S04]`
@@ -201,10 +201,11 @@ Completed:
 - S01 platform policy contract.
 - S02 platform usage summary endpoint.
 - S03 Settings usage surface.
+- S04 authenticated UX baseline audit. Evidence and blockers are captured in `docs/audits/zaki-prod-s04-authenticated-ux-baseline.md`.
 
 Next:
 
-1. S04 authenticated UX baseline audit with the local test account.
+1. Fix S04 P0 blockers: server-backed logout, entitlement/usage consistency, and Learn production mode.
 2. S05 MECE Settings IA cleanup.
 3. S06 Dashboard command center v1.
 4. S07 usage ledger schema and repository.
