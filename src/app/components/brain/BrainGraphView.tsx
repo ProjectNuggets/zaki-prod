@@ -205,6 +205,7 @@ function fetchOptsFromFilters(f: BrainGraphFilters): BrainGraphFetchOpts {
     max_nodes: f.maxNodes,
     exclude_orphans: f.excludeOrphans,
     link_types: f.linkTypes.length > 0 ? f.linkTypes.join(",") : undefined,
+    semantic_min_weight: f.semanticEdgeThreshold,
   };
 }
 

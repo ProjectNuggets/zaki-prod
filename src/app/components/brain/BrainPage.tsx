@@ -154,6 +154,7 @@ export function BrainPage() {
   const initialGraphQuery = useBrainGraph(userId, {
     max_nodes: effectiveFilters.maxNodes,
     exclude_orphans: effectiveFilters.excludeOrphans,
+    semantic_min_weight: effectiveFilters.semanticEdgeThreshold,
   });
 
   // Audit (2026-05-08) — canonical "you" anchor from /brain/me. Used

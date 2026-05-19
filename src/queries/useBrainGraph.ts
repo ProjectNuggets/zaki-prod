@@ -17,6 +17,7 @@ export function useBrainGraph(userId: string, opts?: BrainGraphFetchOpts) {
       opts?.search,
       opts?.link_types,
       opts?.exclude_orphans,
+      opts?.semantic_min_weight,
     ],
     queryFn: () => fetchBrainGraph(userId, opts),
     enabled: !!userId,

@@ -1234,6 +1234,24 @@ async function parseApiJson<T>(response: Response): Promise<T> {
   }
 }
 
+async function parseRequiredApiJson<T>(response: Response, label: string): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error(`${label} invalid JSON`);
+  }
+}
+
+function assertBrainGraphResponse(data: BrainGraphResponse): BrainGraphResponse {
+  if (!Array.isArray(data?.nodes) || !Array.isArray(data?.edges)) {
+    throw new Error("brain/graph invalid response");
+  }
+  if (typeof data.total_nodes_in_corpus !== "number") {
+    throw new Error("brain/graph missing total_nodes_in_corpus");
+  }
+  return data;
+}
+
 export type UsageQuotaSurface = "app_chat" | "zaki_bot" | "learning";
 export type BotErrorCode =
   | "temporary_contention"
@@ -2125,6 +2143,7 @@ export interface BrainGraphFetchOpts {
   search?: string;
   link_types?: string;
   exclude_orphans?: boolean;
+  semantic_min_weight?: number;
 }
 
 export async function fetchBrainGraph(
@@ -2139,13 +2158,16 @@ export async function fetchBrainGraph(
       node_kinds: opts?.node_kinds,
       search: opts?.search,
       link_types: opts?.link_types,
+      semantic_min_weight: opts?.semantic_min_weight,
       exclude_orphans:
         opts?.exclude_orphans === undefined ? undefined : String(opts.exclude_orphans),
     }),
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/graph ${response.status}`);
-  return parseApiJson<BrainGraphResponse>(response);
+  return assertBrainGraphResponse(
+    await parseRequiredApiJson<BrainGraphResponse>(response, "brain/graph")
+  );
 }
 
 // ── /brain/local-graph ────────────────────────────────────────
@@ -2195,7 +2217,7 @@ export async function fetchBrainLocalGraph(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/local-graph ${response.status}`);
-  return parseApiJson<BrainLocalGraphResponse>(response);
+  return parseRequiredApiJson<BrainLocalGraphResponse>(response, "brain/local-graph");
 }
 
 // ── /brain/orphans ────────────────────────────────────────────
@@ -2225,7 +2247,7 @@ export async function fetchBrainOrphans(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/orphans ${response.status}`);
-  return parseApiJson<BrainOrphansResponse>(response);
+  return parseRequiredApiJson<BrainOrphansResponse>(response, "brain/orphans");
 }
 
 // ── /brain/diff ───────────────────────────────────────────────
@@ -2258,7 +2280,7 @@ export async function fetchBrainDiff(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/diff ${response.status}`);
-  return parseApiJson<BrainDiffResponse>(response);
+  return parseRequiredApiJson<BrainDiffResponse>(response, "brain/diff");
 }
 
 // ── /brain/communities ────────────────────────────────────────
@@ -2295,7 +2317,7 @@ export async function fetchBrainCommunities(
     method: "GET",
   });
   if (!response.ok) throw new Error(`brain/communities ${response.status}`);
-  return parseApiJson<BrainCommunitiesResponse>(response);
+  return parseRequiredApiJson<BrainCommunitiesResponse>(response, "brain/communities");
 }
 
 export class BrainRecomputeConflictError extends Error {
@@ -2315,7 +2337,10 @@ export async function postBrainCommunitiesRecompute(
   );
   if (response.status === 409) throw new BrainRecomputeConflictError();
   if (!response.ok) throw new Error(`brain/communities/recompute ${response.status}`);
-  return parseApiJson<BrainCommunitiesRecomputeResponse>(response);
+  return parseRequiredApiJson<BrainCommunitiesRecomputeResponse>(
+    response,
+    "brain/communities/recompute"
+  );
 }
 
 export async function fetchBrainTimeline(
@@ -2333,7 +2358,7 @@ export async function fetchBrainTimeline(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/timeline ${response.status}`);
-  return parseApiJson<BrainTimelineResponse>(response);
+  return parseRequiredApiJson<BrainTimelineResponse>(response, "brain/timeline");
 }
 
 export async function postBrainCompose(
@@ -2346,7 +2371,7 @@ export async function postBrainCompose(
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`brain/compose ${response.status}`);
-  return parseApiJson<BrainComposeResponse>(response);
+  return parseRequiredApiJson<BrainComposeResponse>(response, "brain/compose");
 }
 
 export async function fetchBrainSearch(
@@ -2359,7 +2384,7 @@ export async function fetchBrainSearch(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/search ${response.status}`);
-  return parseApiJson<BrainSearchResponse>(response);
+  return parseRequiredApiJson<BrainSearchResponse>(response, "brain/search");
 }
 
 // Audit (2026-05-08) — backend Day 1 #6 changed the response shape from
@@ -2474,7 +2499,7 @@ export async function fetchBrainMe(userId: string): Promise<BrainMeResponse | nu
     method: "GET",
   });
   if (!response.ok) return null;
-  const raw = (await parseApiJson<unknown>(response)) as {
+  const raw = (await parseRequiredApiJson<unknown>(response, "brain/me")) as {
     memory?: { key?: string; kind?: string; summary?: string; valid_to?: number | null };
   } | null;
   const m = raw?.memory;
@@ -2497,6 +2522,6 @@ export async function fetchBrainMemory(
     { method: "GET" }
   );
   if (!response.ok) throw new Error(`brain/memory ${response.status}`);
-  const raw = await parseApiJson<unknown>(response);
+  const raw = await parseRequiredApiJson<unknown>(response, "brain/memory");
   return adaptBrainMemoryResponse(raw, key);
 }

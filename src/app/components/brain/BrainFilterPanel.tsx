@@ -40,7 +40,7 @@ export const DEFAULT_FILTERS: BrainFilters = {
   excludeOrphans: true,
   linkTypes: [],
   search: "",
-  maxNodes: 300,
+  maxNodes: 50,
   // Audit (2026-05-07) — flipped default from "mono" to "kind". Mono is
   // Obsidian-style visual restraint, but Obsidian users have manually
   // organized vaults; ZAKI users haven't organized anything. Color by

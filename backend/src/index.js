@@ -71,6 +71,11 @@ import {
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
+  DEFAULT_NULLCLAW_JSON_PROXY_MAX_BYTES,
+  parseRequiredJson,
+  readResponseTextWithLimit,
+} from "./nullclaw-json-proxy.js";
+import {
   buildLearningAcceptedPayload,
   buildLearningForwardHeaders,
   buildLearningConfigErrorPayload,
@@ -482,6 +487,10 @@ const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
 const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 300_000)
+);
+const NULLCLAW_JSON_PROXY_MAX_BYTES = Math.max(
+  1024 * 1024,
+  Number(process.env.NULLCLAW_JSON_PROXY_MAX_BYTES || DEFAULT_NULLCLAW_JSON_PROXY_MAX_BYTES)
 );
 const APP_CHAT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, APP_CHAT_SURFACE);
 const anonymousSpacesLimit = Number(process.env.ZAKI_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT);
@@ -10640,6 +10649,36 @@ async function callNullclawJson({ method, path, userId, body, requestId }) {
   return { ok: upstream.ok, status: upstream.status, data };
 }
 
+async function sendBufferedNullclawJsonResponse(upstream, res, label = "Nullclaw proxy response") {
+  let text = "";
+  try {
+    text = await readResponseTextWithLimit(upstream, NULLCLAW_JSON_PROXY_MAX_BYTES);
+    parseRequiredJson(text, label);
+  } catch (error) {
+    const code = getErrorCode(error) || "upstream_invalid_json";
+    const upstreamMismatch = isUpstreamContentLengthMismatch(error);
+    const message = upstreamMismatch
+      ? `${label} upstream response ended with a content-length mismatch.`
+      : error?.message || `${label} was not valid JSON.`;
+    console.error(`[${label}] Buffered JSON proxy error:`, {
+      code,
+      message,
+      upstreamStatus: upstream?.status,
+    });
+    return res.status(502).json({
+      error: message,
+      code,
+    });
+  }
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!res.getHeader("Content-Type")) {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  }
+  return res.send(text);
+}
+
 async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (!nullclawBase) {
@@ -10700,6 +10739,14 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
 
   if (typeof options.onUpstreamResponse === "function") {
     await options.onUpstreamResponse(upstream);
+  }
+
+  if (options.responseMode === "json") {
+    return sendBufferedNullclawJsonResponse(
+      upstream,
+      res,
+      options.label || "Nullclaw proxy response"
+    );
   }
 
   res.status(upstream.status);
@@ -10819,7 +10866,7 @@ const makeAgentSecretsTwoPhaseHandler = (action) => async (req, res) => {
 const agentSecretsPutHandler = makeAgentSecretsTwoPhaseHandler("put");
 const agentSecretsDeleteHandler = makeAgentSecretsTwoPhaseHandler("delete");
 
-const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
+const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req, res) => {
   try {
     const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
     if (!authResult) return;
@@ -10828,7 +10875,7 @@ const makeAgentUserProxyHandler = (pathBuilder) => async (req, res) => {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
     }
     const targetPath = pathBuilder(userId, req);
-    await proxyNullclawRequest(req, res, targetPath);
+    await proxyNullclawRequest(req, res, targetPath, proxyOptions);
     return;
   } catch (error) {
     console.error("[Agent] Control proxy error:", error);
@@ -11343,6 +11390,11 @@ app.post(
 // BRAIN ROUTES — proxy to nullalis brain endpoints
 // =============================================================================
 
+const NULLCLAW_BRAIN_JSON_PROXY_OPTIONS = {
+  responseMode: "json",
+  label: "Nullclaw Brain proxy response",
+};
+
 app.get(
   "/api/agent/brain/graph",
   requireAgentContext,
@@ -11353,12 +11405,15 @@ app.get(
     if (req.query.node_kinds) qs.set("node_kinds", req.query.node_kinds);
     if (req.query.search) qs.set("search", req.query.search);
     if (req.query.link_types) qs.set("link_types", req.query.link_types);
+    if (req.query.semantic_min_weight) {
+      qs.set("semantic_min_weight", req.query.semantic_min_weight);
+    }
     if (req.query.exclude_orphans !== undefined) {
       qs.set("exclude_orphans", req.query.exclude_orphans);
     }
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/graph${qstr ? `?${qstr}` : ""}`;
-  })
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
 // V1.7a-7: N-hop local subgraph centered on a node
@@ -11372,7 +11427,7 @@ app.get(
     if (req.query.max_nodes) qs.set("max_nodes", req.query.max_nodes);
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/local-graph${qstr ? `?${qstr}` : ""}`;
-  })
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
 // V1.7a-8a: brain-visible facts with no edges
@@ -11384,7 +11439,7 @@ app.get(
     if (req.query.limit) qs.set("limit", req.query.limit);
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/orphans${qstr ? `?${qstr}` : ""}`;
-  })
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
 // V1.7a-6: births + deaths in a date window
@@ -11397,7 +11452,7 @@ app.get(
     if (req.query.window_days) qs.set("window_days", req.query.window_days);
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/diff${qstr ? `?${qstr}` : ""}`;
-  })
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
 // V1.7a-9d: cluster summaries (id, name, member_count)
@@ -11405,7 +11460,8 @@ app.get(
   "/api/agent/brain/communities",
   requireAgentContext,
   makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/communities`
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/communities`,
+    NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
 );
 
@@ -11416,7 +11472,8 @@ app.post(
   agentJson1mb,
   makeAgentUserProxyHandler(
     (userId) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/brain/communities/recompute`
+      `/api/v1/users/${encodeURIComponent(userId)}/brain/communities/recompute`,
+    NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
 );
 
@@ -11431,7 +11488,7 @@ app.get(
     if (req.query.to) qs.set("to", req.query.to);
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/timeline${qstr ? `?${qstr}` : ""}`;
-  })
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
 app.get(
@@ -11442,7 +11499,7 @@ app.get(
     if (req.query.q) qs.set("q", req.query.q);
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/search${qstr ? `?${qstr}` : ""}`;
-  })
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
 app.get(
@@ -11450,7 +11507,8 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler(
     (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/brain/memory/${encodeURIComponent(req.params.key)}`
+      `/api/v1/users/${encodeURIComponent(userId)}/brain/memory/${encodeURIComponent(req.params.key)}`,
+    NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
 );
 
@@ -11462,7 +11520,8 @@ app.get(
   "/api/agent/brain/me",
   requireAgentContext,
   makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/me`
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/me`,
+    NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
 );
 
@@ -11471,7 +11530,8 @@ app.post(
   requireAgentContext,
   agentJson1mb,
   makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`,
+    NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
 );
 
