@@ -160,6 +160,7 @@ import {
   buildUsageQuotaResponse,
   enforcePromptQuotaForIngress,
 } from "./quota-route-handlers.js";
+import { buildPlatformUsageSummary } from "./platform-usage-summary.js";
 import {
   buildLearningActionLimitPayload,
   buildLearningQuotaStatus,
@@ -5852,6 +5853,47 @@ app.get("/api/usage/quota", async (req, res) => {
   } catch (error) {
     console.error("[Usage] Quota endpoint error:", error);
     res.status(500).json({ error: error?.message || "Unable to load usage quota." });
+  }
+});
+
+app.get("/api/usage/summary", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { zakiUser } = authResult;
+    const effective = getEffectiveEntitlementState(zakiUser);
+    const commercial = effective.commercial || {};
+    const platform = buildPlatformEntitlementSummary({
+      commercialPlanId: commercial.planId || "spaces_free",
+      effectiveTier: effective.tier,
+      source: effective.source,
+      premium: effective.premium,
+    });
+
+    const payload = await buildPlatformUsageSummary({
+      zakiUser,
+      platform,
+      resolveQuotaForSurface: (surface) =>
+        buildUsageQuotaResponse({
+          zakiUser,
+          surface,
+          buildUserQuotaContext,
+          readDailyPromptUsage,
+          readWeeklyPromptUsage,
+          resolveSurfaceQuotaConfig,
+          dbGet,
+        }),
+      buildLearningStatus: (promptQuota) =>
+        buildLearningQuotaStatus({
+          zakiUser,
+          promptQuota,
+          absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+        }),
+    });
+    res.status(200).json(payload);
+  } catch (error) {
+    console.error("[Usage] Summary endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load usage summary." });
   }
 });
 

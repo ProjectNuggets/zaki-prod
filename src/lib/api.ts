@@ -1289,6 +1289,88 @@ function assertBrainGraphResponse(data: BrainGraphResponse): BrainGraphResponse 
 }
 
 export type UsageQuotaSurface = "app_chat" | "zaki_bot" | "learning";
+export type PlatformUsageProductId =
+  | "spaces"
+  | "agent"
+  | "learn"
+  | "brain"
+  | "cli"
+  | "local_app"
+  | "extensions";
+export type PlatformPlanId = "free" | "personal" | "pro" | "pro_max";
+
+export type UsageQuotaSnapshot = {
+  success?: boolean;
+  unavailable?: boolean;
+  unlimited?: boolean;
+  limit?: number | null;
+  used?: number;
+  remaining?: number | null;
+  resetAt?: string | null;
+  bucket?: string | null;
+  period?: "day" | "week" | string | null;
+  surface?: UsageQuotaSurface | null;
+  error?: string | null;
+  metered?: boolean;
+  status?: string | null;
+};
+
+export type PlatformUsageSummary = {
+  success?: boolean;
+  contractVersion?: string;
+  platformPolicyVersion?: string;
+  generatedAt?: string;
+  plan?: {
+    id?: PlatformPlanId;
+    label?: string;
+    source?: "free" | "subscription" | "access_code" | string;
+    premium?: boolean;
+    legacyPlanId?: string | null;
+    migration?: boolean;
+  };
+  allowance?: {
+    model?: "shared_weekly_allowance" | string;
+    ledgerMode?: "legacy_surface_counters" | string;
+    weekly?: {
+      configured?: boolean;
+      limit?: number | null;
+      used?: number | null;
+      remaining?: number | null;
+      resetAt?: string | null;
+      source?: string;
+    };
+    burst?: {
+      windowHours?: number;
+      active?: boolean | null;
+      remainingSeconds?: number | null;
+      source?: string;
+    };
+    productQuotaMode?: "weighted_product_caps" | string;
+    numericLimitsFinalized?: boolean;
+  };
+  products?: Partial<
+    Record<
+      PlatformUsageProductId,
+      {
+        productId?: PlatformUsageProductId;
+        label?: string;
+        available?: boolean;
+        lifecycle?: "current" | "future" | string;
+        memoryScope?: string;
+        quota?: UsageQuotaSnapshot;
+        learning?: unknown;
+      }
+    >
+  >;
+  memory?: {
+    scopes?: string[];
+    personalAuthority?: string;
+    workspaceAuthority?: string;
+    learnerAuthority?: string;
+  } | null;
+  error?: string | null;
+};
+
 export type BotErrorCode =
   | "temporary_contention"
   | "unauthorized"
@@ -1443,6 +1525,14 @@ export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
     surface?: UsageQuotaSurface;
     error?: string | null;
   }>(response);
+  return { response, data };
+}
+
+export async function fetchPlatformUsageSummary() {
+  const response = await backendAuthRequest("/api/usage/summary", {
+    method: "GET",
+  });
+  const data = await parseApiJson<PlatformUsageSummary>(response);
   return { response, data };
 }
 
