@@ -36,6 +36,7 @@ engine API is an implementation detail behind the backend-for-frontend.
 - `docs/zaki-hire-operator-deployment-checklist.md`
 - `docs/zaki-hire-paid-user-readiness-plan.md`
 - `docs/zaki-hire-dependency-inventory.md`
+- `docs/zaki-hire-source-boundary-checkpoint.md`
 - `docs/zaki-hire-backup-restore-runbook.md`
 - `docs/zaki-hire-upstream-parity-matrix.md`
 

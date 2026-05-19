@@ -16,6 +16,7 @@ Related source-of-truth documents:
 
 - `docs/zaki-hire-integration-spec.md`
 - `docs/zaki-hire-dependency-inventory.md`
+- `docs/zaki-hire-source-boundary-checkpoint.md`
 - `docs/zaki-hire-operator-deployment-checklist.md`
 - `docs/zaki-hire-backup-restore-runbook.md`
 - `docs/zaki-hire-upstream-parity-matrix.md`
@@ -36,7 +37,7 @@ final security/code review has no open P0/P1 findings.
 | Phase | Name | Goal | Exit Gate | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Source And Dependency Audit | Understand JustHireMe deeply enough to map features, routes, tasks, env vars, provider/API tokens, source adapters, runtime packages, and data stores. | Dependency inventory is complete and accepted before implementation starts. | DRAFTED |
-| 1 | Source And License Boundary | Fork JustHireMe into `zaki-hire-engine`, preserve AGPL notices, define proprietary ZAKI boundary, and remove misleading ZAKI MIT release claims before production. | Legal/product owner accepts boundary and source-offer process. | NOT STARTED |
+| 1 | Source And License Boundary | Fork JustHireMe into `zaki-hire-engine`, preserve AGPL notices, define proprietary ZAKI boundary, and remove misleading ZAKI MIT release claims before production. | Legal/product owner accepts boundary and source-offer process. | IN PROGRESS |
 | 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | NOT STARTED |
 | 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | NOT STARTED |
 | 4 | ZAKI-Native UI Port | Port JustHireMe workflows into `/hire` using the ZAKI shell and product patterns. | Route-by-route UAT passes and no upstream branding leaks. | NOT STARTED |
@@ -66,11 +67,11 @@ final security/code review has no open P0/P1 findings.
 
 | Check | Evidence Required | Status |
 | --- | --- | --- |
-| Engine fork exists under ProjectNuggets | Repository URL and initial commit recorded | TODO |
-| Upstream AGPL notices preserved | License files and notices reviewed | TODO |
-| ZAKI proprietary boundary documented | Product/legal note accepted | TODO |
-| ZAKI MIT public claims cleaned before release | README/package/license metadata reviewed and updated if approved | TODO |
-| No JustHireMe source copied into ZAKI prod | Diff review confirms service boundary | TODO |
+| Engine fork exists under ProjectNuggets | Repository URL and initial commit recorded | PENDING REMOTE CREATION |
+| Upstream AGPL notices preserved | License files and notices reviewed | LOCALLY VERIFIED |
+| ZAKI proprietary boundary documented | Product/legal note accepted | DRAFTED |
+| ZAKI MIT public claims cleaned before release | README/package/license metadata reviewed and updated if approved | BLOCKED ON WORDING |
+| No JustHireMe source copied into ZAKI prod | Diff review confirms service boundary | VERIFIED AT CHECKPOINT |
 
 ## Phase 2 Checklist
 

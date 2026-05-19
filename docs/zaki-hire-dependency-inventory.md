@@ -19,12 +19,15 @@ This inventory is based on the upstream JustHireMe repository:
 
 - upstream repository: `https://github.com/vasu-devs/justhireme`
 - upstream branch: `main`
-- audited upstream commit: `25b64272a0dbd2f4a3912fef936bd3a7dfe0136d`
-- upstream release marker: `v1.0.14`
+- audited upstream commit: `3831a0f8b1393a8da3c5b6d6511dce52a8ee6381`
+- upstream release marker: `v1.0.15`
 - upstream license: `AGPL-3.0-only`
 
-The implementation plan must re-audit upstream before forking if this commit is
-not the initial source commit used for `ProjectNuggets/zaki-hire-engine`.
+The dependency audit was first drafted against `v1.0.14`. Before creating the
+local engine workspace, upstream advanced to `v1.0.15`; the observed delta was
+release/version metadata only, so this document now pins the newer commit. The
+implementation plan must re-audit upstream before forking if this commit is not
+the initial source commit used for `ProjectNuggets/zaki-hire-engine`.
 
 ## Executive Finding
 
@@ -361,7 +364,7 @@ selected dependencies are either healthy or explicitly disabled.
 
 | Decision | Recommendation | Why it matters |
 | --- | --- | --- |
-| Initial upstream source pin | Fork from `25b64272a0dbd2f4a3912fef936bd3a7dfe0136d` unless re-audit finds a newer accepted commit. | Every deployment needs source traceability and AGPL notice handling. |
+| Initial upstream source pin | Fork from `3831a0f8b1393a8da3c5b6d6511dce52a8ee6381` unless re-audit finds a newer accepted commit. | Every deployment needs source traceability and AGPL notice handling. |
 | Runtime topology | Use one hosted engine service for v1. | Faster to make tenant-safe and production-ready. |
 | Default LLM provider/model | Choose one operator-owned default, then optionally override per step internally. | Users must not bring their own keys for a ready SaaS. |
 | Embedding strategy | Bake local sentence-transformer support first, or route to central embeddings if ZAKI wants cost telemetry from day one. | Vector quality, image size, cold start, and cost accounting depend on this. |
