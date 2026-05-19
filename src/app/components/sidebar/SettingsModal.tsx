@@ -3,7 +3,9 @@ import {
   useCancelSubscription,
   useDeleteAccount,
   useEntitlements,
+  usePlatformUsageSummary,
 } from "@/queries";
+import type { PlatformUsageProductId, UsageQuotaSnapshot } from "@/lib/api";
 import { exportAccountData } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -26,6 +28,53 @@ interface SettingsModalProps {
   saving?: boolean;
 }
 
+const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = ["spaces", "agent", "learn", "brain"];
+
+function formatUsageCount(value?: number | null) {
+  if (value == null || Number.isNaN(value)) return "—";
+  return Intl.NumberFormat().format(Math.max(0, Math.round(value)));
+}
+
+function formatUsageReset(value?: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getUsagePeriodLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  period?: string | null
+) {
+  if (period === "day") return t("settingsModal.usage.period.day");
+  if (period === "week") return t("settingsModal.usage.period.week");
+  return period || t("settingsModal.usage.period.none");
+}
+
+function getQuotaSummaryLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  quota?: UsageQuotaSnapshot
+) {
+  if (!quota) return t("settingsModal.usage.pending");
+  if (quota.unavailable) return t("settingsModal.usage.unavailable");
+  if (quota.metered === false) return t("settingsModal.usage.memoryGoverned");
+  if (quota.unlimited) {
+    return t("settingsModal.usage.usedUnlimited", {
+      used: formatUsageCount(quota.used),
+    });
+  }
+  if (typeof quota.limit === "number") {
+    return t("settingsModal.usage.usedOfLimit", {
+      used: formatUsageCount(quota.used),
+      limit: formatUsageCount(quota.limit),
+    });
+  }
+  return t("settingsModal.usage.pending");
+}
+
 export function SettingsModal({
   isOpen,
   onClose,
@@ -42,9 +91,11 @@ export function SettingsModal({
   const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
+  const { data: platformUsageResult, isLoading: platformUsageLoading } = usePlatformUsageSummary();
   const cancelSubscription = useCancelSubscription();
   const deleteAccountMutation = useDeleteAccount();
   const entitlements = entitlementsResult?.data ?? null;
+  const platformUsage = platformUsageResult?.data ?? null;
   const planTier = entitlements?.plan?.tier ?? "free";
   const accessCampaign = entitlements?.access?.campaign ?? null;
   const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
@@ -84,6 +135,25 @@ export function SettingsModal({
   const currentPlanLabel = activeViaAccessCode
     ? t("sidebar.profile.planBadge.codeActive")
     : t(`sidebar.profile.planBadge.${planTier}`, { defaultValue: planTier });
+  const platformPlanLabel = platformUsage?.plan?.label || currentPlanLabel;
+  const allowance = platformUsage?.allowance;
+  const weeklyAllowanceLabel =
+    allowance?.weekly?.configured && typeof allowance.weekly.limit === "number"
+      ? t("settingsModal.usage.weeklyAllowanceValue", {
+          limit: formatUsageCount(allowance.weekly.limit),
+        })
+      : t("settingsModal.usage.weeklyAllowancePending");
+  const burstWindowLabel =
+    typeof allowance?.burst?.windowHours === "number"
+      ? t("settingsModal.usage.burstWindowValue", {
+          hours: allowance.burst.windowHours,
+        })
+      : t("settingsModal.usage.burstWindowPending");
+  const usageProducts = PLATFORM_USAGE_PRODUCTS.map((productId) => {
+    const product = platformUsage?.products?.[productId];
+    if (!product) return null;
+    return product;
+  }).filter(Boolean);
 
   useEffect(() => {
     if (isOpen) {
@@ -296,6 +366,79 @@ export function SettingsModal({
                   {t("settingsModal.plan.cancelAtPeriodEndNote")}
                 </div>
               )}
+            </div>
+          </section>
+
+          <section className="space-y-3" data-testid="settings-platform-usage">
+            <SectionHeader title={t("settingsModal.sections.usage")} />
+            <div className="grid gap-3 rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:border-zaki-dark-card dark:bg-zaki-dark-card">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 dark:border-zaki-dark-border dark:bg-zaki-dark-panel">
+                  <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                    {t("settingsModal.usage.plan")}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {platformPlanLabel}
+                  </div>
+                </div>
+                <div className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 dark:border-zaki-dark-border dark:bg-zaki-dark-panel">
+                  <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                    {t("settingsModal.usage.weeklyAllowance")}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {weeklyAllowanceLabel}
+                  </div>
+                </div>
+                <div className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 dark:border-zaki-dark-border dark:bg-zaki-dark-panel">
+                  <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                    {t("settingsModal.usage.burstWindow")}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {burstWindowLabel}
+                  </div>
+                </div>
+              </div>
+
+              {platformUsageLoading && !platformUsage ? (
+                <p className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted">
+                  {t("settingsModal.usage.loading")}
+                </p>
+              ) : null}
+
+              <div className="grid gap-2">
+                {usageProducts.map((product) => {
+                  const quota = product?.quota;
+                  const resetLabel = formatUsageReset(quota?.resetAt);
+                  const periodLabel = getUsagePeriodLabel(t, quota?.period);
+                  return (
+                    <div
+                      key={product?.productId}
+                      className="grid gap-1 rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm dark:border-zaki-dark-border dark:bg-zaki-dark-panel"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {product?.label}
+                        </span>
+                        <span className="font-mono-ui text-xs text-zaki-primary dark:text-zaki-dark-primary">
+                          {getQuotaSummaryLabel(t, quota)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                        <span>{periodLabel}</span>
+                        <span>
+                          {resetLabel
+                            ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
+                            : t("settingsModal.usage.resetPending")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                {t("settingsModal.usage.helper")}
+              </p>
             </div>
           </section>
 

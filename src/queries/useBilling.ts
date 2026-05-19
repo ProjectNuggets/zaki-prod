@@ -7,6 +7,7 @@ import {
   deleteAccount,
   fetchBillingConfig,
   fetchEntitlements,
+  fetchPlatformUsageSummary,
   redeemAccessCode,
   resendPurchasedAccessCodeEmail,
   syncBillingSubscription,
@@ -17,6 +18,7 @@ import { useAuthStore } from "@/stores";
 export const billingKeys = {
   entitlements: ["billing", "entitlements"] as const,
   config: ["billing", "config"] as const,
+  platformUsageSummary: ["billing", "platformUsageSummary"] as const,
 };
 
 export function useEntitlements() {
@@ -39,6 +41,17 @@ export function useBillingConfig() {
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
+    retry: false,
+  });
+}
+
+export function usePlatformUsageSummary() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: billingKeys.platformUsageSummary,
+    queryFn: fetchPlatformUsageSummary,
+    enabled: Boolean(token),
+    staleTime: 30_000,
     retry: false,
   });
 }

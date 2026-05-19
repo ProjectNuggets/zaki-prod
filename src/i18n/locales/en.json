@@ -19,6 +19,7 @@
       "profile": "Profile",
       "preferences": "Preferences",
       "planBilling": "Plan & Billing",
+      "usage": "Usage",
       "dataPrivacy": "Data & Privacy"
     },
     "profile": {
@@ -65,6 +66,29 @@
         "cancelAlreadyScheduled": "Cancellation is already scheduled for period end.",
         "cancelScheduled": "Subscription will cancel at period end."
       }
+    },
+    "usage": {
+      "plan": "Plan",
+      "weeklyAllowance": "Weekly allowance",
+      "weeklyAllowanceValue": "{{limit}} units",
+      "weeklyAllowancePending": "Policy pending",
+      "burstWindow": "Burst window",
+      "burstWindowValue": "{{hours}} hours",
+      "burstWindowPending": "Policy pending",
+      "loading": "Loading usage...",
+      "pending": "Pending",
+      "unavailable": "Unavailable",
+      "memoryGoverned": "Memory policy",
+      "usedOfLimit": "{{used}} / {{limit}}",
+      "usedUnlimited": "{{used}} · unlimited",
+      "period": {
+        "day": "Daily",
+        "week": "Weekly",
+        "none": "No reset period"
+      },
+      "resetsAt": "Resets {{reset}}",
+      "resetPending": "Reset pending",
+      "helper": "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings."
     },
     "privacy": {
       "preparingExport": "Preparing export...",
@@ -699,7 +723,7 @@
         "label": "Autonomy"
       },
       "plan": {
-        "label": "Plan & usage"
+        "label": "Agent usage"
       }
     },
     "placeholders": {

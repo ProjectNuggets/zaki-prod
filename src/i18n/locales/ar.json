@@ -19,6 +19,7 @@
       "profile": "الملف الشخصي",
       "preferences": "التفضيلات",
       "planBilling": "الخطة والفوترة",
+      "usage": "الاستخدام",
       "dataPrivacy": "البيانات والخصوصية"
     },
     "profile": {
@@ -65,6 +66,29 @@
         "cancelAlreadyScheduled": "الإلغاء مجدول بالفعل لنهاية الفترة.",
         "cancelScheduled": "سيتم إلغاء الاشتراك بنهاية الفترة."
       }
+    },
+    "usage": {
+      "plan": "الخطة",
+      "weeklyAllowance": "الحصة الأسبوعية",
+      "weeklyAllowanceValue": "{{limit}} وحدة",
+      "weeklyAllowancePending": "السياسة قيد التحديد",
+      "burstWindow": "نافذة الاندفاع",
+      "burstWindowValue": "{{hours}} ساعات",
+      "burstWindowPending": "السياسة قيد التحديد",
+      "loading": "جارٍ تحميل الاستخدام...",
+      "pending": "قيد الانتظار",
+      "unavailable": "غير متاح",
+      "memoryGoverned": "سياسة الذاكرة",
+      "usedOfLimit": "{{used}} / {{limit}}",
+      "usedUnlimited": "{{used}} · غير محدود",
+      "period": {
+        "day": "يومي",
+        "week": "أسبوعي",
+        "none": "لا توجد فترة إعادة ضبط"
+      },
+      "resetsAt": "إعادة الضبط {{reset}}",
+      "resetPending": "إعادة الضبط قيد الانتظار",
+      "helper": "هذه هي واجهة استخدام المنصة. يبقى استخدام تشغيل الوكيل داخل إعدادات الوكيل."
     },
     "privacy": {
       "preparingExport": "جارٍ تجهيز التصدير...",
@@ -699,7 +723,7 @@
         "label": "الاستقلالية"
       },
       "plan": {
-        "label": "الخطة والاستخدام"
+        "label": "استخدام الوكيل"
       }
     },
     "placeholders": {

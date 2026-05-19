@@ -5,6 +5,7 @@ export { useCurrentUser, useLogin, useLogout, authKeys } from "./useAuth";
 export {
   useEntitlements,
   useBillingConfig,
+  usePlatformUsageSummary,
   useCheckout,
   useBillingPortal,
   useCancelSubscription,
