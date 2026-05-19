@@ -13,6 +13,7 @@ async function mockAuthAndPricing(page: Page) {
     token: "paid-user-token-123",
     tier: "free",
     status: "inactive",
+    loggedIn: false,
   };
 
   await page.route("**/api/telemetry/product-event", async (route) => {
@@ -31,9 +32,18 @@ async function mockAuthAndPricing(page: Page) {
     });
   });
 
+  await page.route("**/api/auth/refresh", async (route) => {
+    if (!state.loggedIn) {
+      await json(route, { error: "invalid_refresh_token" }, 401);
+      return;
+    }
+    await json(route, { token: state.token });
+  });
+
   await page.route("**/login", async (route) => {
     const body = route.request().postDataJSON() as { username?: string; password?: string };
     if (body.username === "user@example.com" && body.password === "Password123") {
+      state.loggedIn = true;
       await json(route, { valid: true, token: state.token });
       return;
     }

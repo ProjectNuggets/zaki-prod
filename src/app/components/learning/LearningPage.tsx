@@ -4090,7 +4090,7 @@ function LearningChatPanel({
           onBuildPlan={startStudyPlan}
           notebooksCount={notebookItems.length}
         />
-        {!hasMessages ? (
+        {!hasMessages && !studyPanelOpen ? (
           <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-1 pb-36 pt-8">
             <div className="text-center">
               <h1 className="font-serif text-[36px] font-medium text-[var(--foreground)]">
@@ -4121,7 +4121,7 @@ function LearningChatPanel({
               completingTaskId={completingStudyTaskId}
             />
           </div>
-        ) : (
+        ) : hasMessages ? (
           <div className="mx-auto min-h-0 w-full flex-1 space-y-7 overflow-y-auto pr-4 [scrollbar-gutter:stable]">
             {messages.map((message) =>
               message.role === "user" ? (
@@ -4200,6 +4200,8 @@ function LearningChatPanel({
             ) : null}
             <div ref={bottomRef} className="h-px w-full shrink-0" />
           </div>
+        ) : (
+          <div className="min-h-0 flex-1" />
         )}
 
         <div className={cn("relative z-20 mx-auto w-full shrink-0 pb-5", hasMessages && "pt-1")}>

@@ -191,12 +191,23 @@ jest.mock("@/queries", () => ({
       },
     },
   }),
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
+  }),
   useCheckout: () => ({
     mutateAsync: jest.fn(),
   }),
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
   }),
+  useBrainSearch: () => ({
+    data: null,
+    isLoading: false,
+  }),
+}));
+
+jest.mock("@/queries/useBrainSearch", () => ({
   useBrainSearch: () => ({
     data: null,
     isLoading: false,
@@ -448,7 +459,7 @@ describe("ChatArea Component", () => {
     window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
   });
 
-  it("shows the experimental notice for signed-in ZAKI users without the retired bootstrap gate", async () => {
+  it("shows the experimental notice for signed-in users who land directly in a ZAKI thread", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";

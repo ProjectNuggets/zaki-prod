@@ -13769,6 +13769,13 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   clientSocket.on("message", (data, isBinary) => {
     const sanitized = sanitizeLearningWsClientMessage(data, isBinary);
     outgoingChain = outgoingChain.then(async () => {
+      if (
+        upstreamSocket.readyState !== upstreamSocket.OPEN &&
+        upstreamSocket.readyState !== upstreamSocket.CONNECTING
+      ) {
+        closeClient(1011, "Learning upstream connection is closed.");
+        return;
+      }
       const action = classifyLearningWsQuotaAction(sanitized.data, sanitized.isBinary);
       if (action) {
         const actionDecision = await consumeLearningActionQuotaForUser(
