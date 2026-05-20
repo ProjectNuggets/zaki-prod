@@ -114,6 +114,7 @@ import {
   buildHireConfigErrorPayload,
   buildHireDisabledPayload,
   buildHireRouteUnavailablePayload,
+  classifyHireAutomationConsentRequirement,
   isHireUserFacingPath,
   isHireEnabled,
   mapHireUpstreamFailure,
@@ -122,6 +123,12 @@ import {
   sanitizeHireUpstreamPayload,
   shouldConsumeHireIngressQuota,
 } from "./hire-bff-contract.js";
+import {
+  buildHireAutomationAuditUnavailablePayload,
+  buildHireAutomationConsentRequiredPayload,
+  recordHireAutomationAuditEvent,
+  resolveHireAutomationConsent,
+} from "./hire-automation-consent.js";
 import { recordHireUsageEvent } from "./hire-usage-events.js";
 import {
   fetchHireDeploymentReadiness,
@@ -10046,6 +10053,61 @@ function enforceHireProxyPolicy(req, res, next) {
   res.status(404).json(buildHireRouteUnavailablePayload(getOrCreateRequestId(req)));
 }
 
+async function enforceHireAutomationConsentAudit(req, res, next) {
+  const requirement = classifyHireAutomationConsentRequirement(req);
+  if (!requirement) {
+    next();
+    return;
+  }
+
+  const requestId = getOrCreateRequestId(req);
+  const consent = resolveHireAutomationConsent(req, requirement);
+  if (!consent.accepted) {
+    try {
+      await recordHireAutomationAuditEvent({
+        dbQuery,
+        zakiUser: req.hireAuthResult?.zakiUser,
+        requirement,
+        status: "blocked_consent_missing",
+        requestId,
+        consentSource: consent.source,
+        reason: consent.reason,
+      });
+    } catch (auditError) {
+      logStructured("warn", "hire.automation.audit_blocked_persist_failed", {
+        requestId,
+        action: requirement.action,
+        route: requirement.routeTemplate,
+        message: auditError?.message || String(auditError),
+      });
+    }
+    res.status(428).json(buildHireAutomationConsentRequiredPayload({ requestId, requirement }));
+    return;
+  }
+
+  try {
+    await recordHireAutomationAuditEvent({
+      dbQuery,
+      zakiUser: req.hireAuthResult?.zakiUser,
+      requirement,
+      status: "consented",
+      requestId,
+      consentSource: consent.source,
+    });
+  } catch (auditError) {
+    logStructured("error", "hire.automation.audit_persist_failed", {
+      requestId,
+      action: requirement.action,
+      route: requirement.routeTemplate,
+      message: auditError?.message || String(auditError),
+    });
+    res.status(503).json(buildHireAutomationAuditUnavailablePayload(requestId));
+    return;
+  }
+
+  next();
+}
+
 async function enforceHirePromptQuotaForIngress(req, res, next) {
   if (!shouldConsumeHireIngressQuota(req)) {
     next();
@@ -13669,6 +13731,7 @@ app.all(
   "/api/hire/:hirePath(*)",
   requireHireContext,
   enforceHireProxyPolicy,
+  enforceHireAutomationConsentAudit,
   enforceHirePromptQuotaForIngress,
   async (req, res) => {
     let targetPath;

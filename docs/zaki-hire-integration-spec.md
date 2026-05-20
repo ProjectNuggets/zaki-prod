@@ -311,11 +311,16 @@ Implementation checkpoint on 2026-05-20:
 - ZAKI prod now has a central `zaki_usage_events` ledger and records normalized
   route-level Hire BFF events after successful quota admission for scan,
   ingestion, generation, help, reevaluation, and automation routes.
+- Browser automation routes for form read, apply preview, and auto-apply now
+  require explicit action-scoped user consent at the BFF, write
+  `zaki_hire_audit_events`, strip the BFF-only consent payload before
+  forwarding, and fail closed if a consented automation action cannot be
+  audited.
 - Object-storage provider support, imported-file artifact cataloging,
   signed/proxied artifact access, artifact export/delete/retention, source
-  policy storage, consent/audit records, granular engine usage events for LLM
-  tokens, embeddings, source pages, artifacts, and task duration, storage/task
-  quota classes, and hosted tenant
+  policy storage, source allowlist policy enforcement, granular engine usage
+  events for LLM tokens, embeddings, source pages, artifacts, and task duration,
+  storage/task quota classes, and hosted tenant
   background scheduling are still open implementation work. A future deployment
   decision still needs to decide whether graph/vector remain embedded
   Kuzu/LanceDB or move behind dedicated internal services.

@@ -410,6 +410,30 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_hire_audit_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      request_id TEXT,
+      lead_id TEXT,
+      source_route TEXT,
+      details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_hire_audit_events_user_created
+    ON zaki_hire_audit_events (user_id, created_at DESC, id DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_hire_audit_events_action_created
+    ON zaki_hire_audit_events (action, created_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS website_feedback_posts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       body TEXT NOT NULL,

@@ -48,6 +48,8 @@ const OPERATOR_MANAGED_HIRE_FIELDS = new Set([
   "sourcecredentials",
   "storagekey",
   "token",
+  "hireconsent",
+  "zakihireconsent",
 ]);
 const HIRE_ARTIFACT_REF_FIELDS = new Set([
   "asset",
@@ -197,6 +199,26 @@ const HIRE_QUOTA_ROUTE_ALLOWLIST = Object.freeze([
     pattern: /^\/selectors\/refresh$/,
     action: "automation_selectors_refresh",
     routeTemplate: "/api/hire/selectors/refresh",
+  },
+]);
+const HIRE_AUTOMATION_CONSENT_ROUTES = Object.freeze([
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/(${HIRE_ROUTE_SEGMENT})/form/read$`),
+    action: "form_read",
+    routeTemplate: "/api/hire/leads/:leadId/form/read",
+  },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/(${HIRE_ROUTE_SEGMENT})/apply/preview$`),
+    action: "apply_preview",
+    routeTemplate: "/api/hire/leads/:leadId/apply/preview",
+  },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/fire/(${HIRE_ROUTE_SEGMENT})$`),
+    action: "auto_apply",
+    routeTemplate: "/api/hire/fire/:leadId",
   },
 ]);
 
@@ -449,6 +471,23 @@ export function classifyHireIngressUsageEvent(req = {}) {
     routeTemplate: entry.routeTemplate,
     method,
   };
+}
+
+export function classifyHireAutomationConsentRequirement(req = {}) {
+  const method = normalizeHireRequestMethod(req);
+  const path = normalizeHireRequestPath(req.originalUrl || req.path || req.url || req);
+  for (const entry of HIRE_AUTOMATION_CONSENT_ROUTES) {
+    if (!entry.methods.includes(method)) continue;
+    const match = path.match(entry.pattern);
+    if (!match) continue;
+    return {
+      action: entry.action,
+      routeTemplate: entry.routeTemplate,
+      method,
+      leadId: match[1] || null,
+    };
+  }
+  return null;
 }
 
 function sanitizeHireArtifactRef(key, value) {

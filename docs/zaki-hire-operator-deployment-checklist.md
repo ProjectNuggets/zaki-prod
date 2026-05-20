@@ -312,6 +312,8 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
   automation routes
 - central ZAKI `zaki_usage_events` schema and route-level Hire BFF usage events
   after successful quota admission
+- central ZAKI `zaki_hire_audit_events` schema and BFF consent/audit gate for
+  form read, apply preview, and auto-apply
 
 Still pending before staging deployment:
 
@@ -321,6 +323,8 @@ Still pending before staging deployment:
   signed/proxied access, retention, export, and deletion
 - source policy storage/config bridge and provider runtime probes beyond current
   operator acknowledgements
+- browser-worker sandbox isolation, destination allowlists, task cancellation,
+  screenshot/log redaction, and emergency kill switch verification
 - hosted tenant background scheduler/queue replacement for local ghost mode
 - storage-specific quotas, durable task/concurrency quotas, and granular engine
   usage events for LLM tokens, embeddings, source pages, artifact bytes, and

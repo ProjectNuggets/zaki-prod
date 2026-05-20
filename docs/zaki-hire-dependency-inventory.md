@@ -99,6 +99,8 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
   and automation routes
 - central `zaki_usage_events` ledger plus normalized route-level Hire BFF usage
   event capture after successful quota admission
+- BFF automation consent and audit gate for form read, apply preview, and
+  auto-apply through `zaki_hire_audit_events`
 
 Verified:
 
@@ -113,6 +115,7 @@ Verified:
 - hosted-mode smoke with disposable PostgreSQL 16 confirmed BFF-style Bearer
   token plus `X-Zaki-User-Id` can call engine leads and internal readiness
 - focused ZAKI-prod Hire usage-event tests: 23 passed
+- focused ZAKI-prod Hire automation consent tests: 30 passed
 
 Still open dependency conversions:
 
@@ -122,7 +125,8 @@ Still open dependency conversions:
   export/delete/retention, and production backup policy; imported files still
   need durable tenant-scoped artifact cataloging
 - browser automation still needs sandboxed hosted workers, log/screenshot
-  redaction, consent records, and cleanup
+  redaction, destination allowlists, cancellation controls, and cleanup; BFF
+  action-scoped consent records are now implemented
 - source provider credentials and custom connector definitions still need
   operator-owned configuration storage and runtime probing beyond readiness env
   probes and operator acknowledgements

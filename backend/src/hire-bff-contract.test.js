@@ -5,6 +5,7 @@ import {
   buildHireForwardHeaders,
   buildHireProxyHeaders,
   buildHireRouteUnavailablePayload,
+  classifyHireAutomationConsentRequirement,
   classifyHireIngressUsageEvent,
   getHireBase,
   isHireUserFacingPath,
@@ -140,6 +141,7 @@ describe("hire BFF contract", () => {
     expect(
       sanitizeHireClientPayload({
         title: "Backend role",
+        zakiHireConsent: { accepted: true, action: "auto_apply" },
         provider: "evil",
         settings: {
           api_key: "secret",
@@ -260,6 +262,48 @@ describe("hire BFF contract", () => {
       classifyHireIngressUsageEvent({
         method: "POST",
         originalUrl: "/api/hire/scan/stop",
+      })
+    ).toBeNull();
+  });
+
+  test("classifies hire automation routes that require explicit consent", () => {
+    expect(
+      classifyHireAutomationConsentRequirement({
+        method: "POST",
+        originalUrl: "/api/hire/leads/job_1/form/read?x=1",
+      })
+    ).toEqual({
+      action: "form_read",
+      routeTemplate: "/api/hire/leads/:leadId/form/read",
+      method: "POST",
+      leadId: "job_1",
+    });
+    expect(
+      classifyHireAutomationConsentRequirement({
+        method: "POST",
+        originalUrl: "/api/hire/leads/job_2/apply/preview",
+      })
+    ).toEqual({
+      action: "apply_preview",
+      routeTemplate: "/api/hire/leads/:leadId/apply/preview",
+      method: "POST",
+      leadId: "job_2",
+    });
+    expect(
+      classifyHireAutomationConsentRequirement({
+        method: "POST",
+        originalUrl: "/api/hire/fire/job_3",
+      })
+    ).toEqual({
+      action: "auto_apply",
+      routeTemplate: "/api/hire/fire/:leadId",
+      method: "POST",
+      leadId: "job_3",
+    });
+    expect(
+      classifyHireAutomationConsentRequirement({
+        method: "POST",
+        originalUrl: "/api/hire/selectors/refresh",
       })
     ).toBeNull();
   });
