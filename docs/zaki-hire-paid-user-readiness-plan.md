@@ -79,10 +79,10 @@ final security/code review has no open P0/P1 findings.
 | --- | --- | --- |
 | Hosted internal auth added | Missing or invalid internal token returns 401/403 | DONE for engine HTTP/WebSocket gate |
 | Tenant headers required | Missing tenant context fails closed | DONE for engine protected HTTP routes and WebSocket auth |
-| PostgreSQL primary state added | Leads, profile, generated metadata, activity, settings use PostgreSQL | PARTIAL: leads, profile, settings, events, and gateway jobs implemented; generated metadata still pending |
-| SQLite demoted | SQLite is local-dev or migration-only, not production primary | PARTIAL: hosted startup and core/profile repositories require PostgreSQL; graph/vector compatibility paths still need tenant isolation |
+| PostgreSQL primary state added | Leads, profile, generated metadata, activity, settings use PostgreSQL | PARTIAL: leads, profile, settings, events, gateway jobs, and generated artifact catalog implemented; source policy, audit/consent, quota, and task scheduling state still pending |
+| SQLite demoted | SQLite is local-dev or migration-only, not production primary | PARTIAL: hosted startup and core/profile repositories require PostgreSQL; graph/vector compatibility paths are tenant-scoped but rebuild/service-deployment decisions remain |
 | Kuzu/LanceDB tenant scoped | Companion stores isolate and can rebuild from primary state where practical | PARTIAL: hosted graph/vector paths are tenant-scoped; rebuild jobs and service-isolation decision still pending |
-| Durable artifacts configured | Generated files use tenant-scoped durable storage | TODO |
+| Durable artifacts configured | Generated files use tenant-scoped durable storage | PARTIAL: generated resume/cover-letter paths are tenant-scoped and cataloged in PostgreSQL; object storage, imported artifacts, access, export/delete, and retention still pending |
 | Browser worker configured | Playwright runs in isolated tenant/session workers with state cleanup | TODO |
 | Source connector config added | X, Apify, custom connectors, contact lookup, and broad scan settings are operator-managed | TODO |
 | Health/readiness probes added | Engine reports dependency health without leaking secrets | TODO |
@@ -98,9 +98,11 @@ Phase 2 implementation evidence as of 2026-05-20:
   profiles, settings, events, and gateway jobs.
 - Added hashed tenant-scoped hosted graph/vector base paths and preserved
   tenant context through graph executor calls.
+- Added tenant-scoped hosted generated artifact paths and a PostgreSQL
+  `zaki_hire_artifacts` catalog for generated resume/cover-letter metadata.
 - Added optional real-PostgreSQL integration test
   `backend/tests/test_postgres_repository.py`.
-- Verified with `uv run pytest tests -q`: 312 passed, 1 skipped.
+- Verified with `uv run pytest tests -q`: 314 passed, 1 skipped.
 - Verified optional PostgreSQL integration against a disposable local
   PostgreSQL 16 container: 1 passed.
 - Verified with `uv run ruff check .`: passed.

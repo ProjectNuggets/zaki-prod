@@ -68,17 +68,20 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
 - contextual repository resolution for lower-level upstream code that calls
   `create_repository()` without an explicit request object
 - PostgreSQL schema for `zaki_hire_leads`, `zaki_hire_profiles`,
-  `zaki_hire_settings`, `zaki_hire_events`, and `zaki_hire_gateway_jobs`
+  `zaki_hire_settings`, `zaki_hire_events`, `zaki_hire_gateway_jobs`, and
+  `zaki_hire_artifacts`
 - PostgreSQL repository modules for the same core stores
 - hosted startup path that requires PostgreSQL instead of initializing SQLite
 - optional PostgreSQL integration test using `ZAKI_HIRE_TEST_DATABASE_URL`
 - hashed tenant-scoped graph/vector base paths under `HIRE_TENANT_DATA_ROOT`
 - graph executor context propagation so tenant-bound path resolution survives
   threaded graph work
+- tenant-scoped hosted generated artifact paths and PostgreSQL cataloging for
+  generated resume/cover-letter file metadata
 
 Verified:
 
-- `uv run pytest tests -q`: 312 passed, 1 skipped
+- `uv run pytest tests -q`: 314 passed, 1 skipped
 - `uv run ruff check .`: passed
 - `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
   tests/test_postgres_repository.py -q`: 1 passed against a disposable local
@@ -88,8 +91,9 @@ Still open dependency conversions:
 
 - graph and vector stores still need rebuild jobs and a final embedded-store
   versus internal-service deployment decision
-- generated PDFs and imported files still need durable tenant-scoped artifact
-  storage
+- generated PDFs still need an object-storage provider, signed/proxied access,
+  export/delete/retention, and production backup policy; imported files still
+  need durable tenant-scoped artifact cataloging
 - browser automation still needs sandboxed hosted workers, log/screenshot
   redaction, consent records, and cleanup
 - source provider credentials and custom connector definitions still need

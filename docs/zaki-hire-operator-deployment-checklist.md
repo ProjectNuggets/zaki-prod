@@ -268,13 +268,17 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - PostgreSQL tenant-scoped schema for leads, profiles, settings, events, and
   gateway jobs
 - hashed tenant-scoped graph/vector base paths under `HIRE_TENANT_DATA_ROOT`
+- tenant-scoped generated resume/cover-letter filesystem paths under
+  `HIRE_TENANT_DATA_ROOT` and PostgreSQL artifact metadata cataloging for
+  generated files
 - optional integration test that passes against PostgreSQL 16
 
 Still pending before staging deployment:
 
 - graph/vector rebuild jobs and a final embedded-store versus internal-service
   deployment decision
-- generated artifact object storage
+- generated artifact object storage, imported-file artifact tracking,
+  signed/proxied access, retention, export, and deletion
 - source policy and provider-secret readiness endpoint
 - hosted tenant background scheduler/queue replacement for local ghost mode
 - BFF `/api/hire/*` route implementation in `zaki-prod`
