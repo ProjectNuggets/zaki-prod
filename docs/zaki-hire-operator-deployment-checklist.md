@@ -1,7 +1,7 @@
 # ZAKI Hire Operator Deployment Checklist
 
 Status: planning source of truth.
-Last updated: 2026-05-19.
+Last updated: 2026-05-20.
 
 Related dependency source: `docs/zaki-hire-dependency-inventory.md`.
 
@@ -109,11 +109,15 @@ ZAKI_TENANT_HEADER=X-Zaki-User-Id
 Database:
 
 ```bash
-HIRE_DATABASE_URL=<postgres-or-pgbouncer-connection>
-HIRE_DATABASE_SSL_MODE=require
-HIRE_DATABASE_SCHEMA=zaki_hire
+ZAKI_HIRE_DATABASE_URL=<postgres-or-pgbouncer-connection>
+ZAKI_HIRE_PG_POOL_SIZE=10
 HIRE_SQLITE_COMPAT_MODE=false
 ```
+
+The engine currently also accepts `HIRE_DATABASE_URL`, `DATABASE_URL`, or
+`POSTGRES_DSN` as fallback DSN names. Prefer `ZAKI_HIRE_DATABASE_URL` for new
+ZAKI deployments so Hire does not accidentally bind to an unrelated app
+database variable.
 
 Companion stores:
 
@@ -174,6 +178,7 @@ The engine container must include:
 - Python 3.13 runtime
 - FastAPI and Uvicorn
 - PostgreSQL client libraries
+- `psycopg`, `psycopg-binary`, and `psycopg-pool`
 - Kuzu runtime dependency support
 - LanceDB and PyArrow runtime dependency support
 - sentence-transformers dependency support, or an operator-approved remote
@@ -248,6 +253,29 @@ Blocking gates:
 11. Run route UAT and two-user isolation smoke.
 12. Run backup/restore drill.
 13. Promote immutable tags to production only after all gates are green.
+
+## Current Engine Implementation State
+
+As of 2026-05-20, the local `zaki-hire-engine` branch
+`codex/zaki-hire-engine-hosted` implements these deployment-facing pieces:
+
+- `ZAKI_RUNTIME_MODE=hosted`
+- internal token gate via `ZAKI_INTERNAL_TOKEN`,
+  `HIRE_ENGINE_INTERNAL_TOKEN`, or `JHM_INTERNAL_SERVICE_TOKEN`
+- tenant header gate via `ZAKI_TENANT_HEADER`, defaulting to
+  `X-Zaki-User-Id`
+- PostgreSQL startup requirement in hosted mode
+- PostgreSQL tenant-scoped schema for leads, settings, events, and gateway jobs
+- optional integration test that passes against PostgreSQL 16
+
+Still pending before staging deployment:
+
+- tenant-scoped profile primary store
+- tenant-scoped graph/vector runtime paths or service-backed indexes
+- generated artifact object storage
+- source policy and provider-secret readiness endpoint
+- hosted tenant background scheduler/queue replacement for local ghost mode
+- BFF `/api/hire/*` route implementation in `zaki-prod`
 
 ## Deployment Validator
 

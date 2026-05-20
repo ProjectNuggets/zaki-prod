@@ -1,7 +1,7 @@
 # ZAKI Hire Integration Spec
 
 Status: planning source of truth.
-Last updated: 2026-05-19.
+Last updated: 2026-05-20.
 
 ## Reader And Action
 
@@ -258,6 +258,19 @@ truth. In hosted ZAKI they should be tenant-scoped companion stores:
 - LanceDB stores derived vectors for semantic job/profile matching.
 - Both stores must be rebuildable from PostgreSQL plus object/artifact storage
   whenever practical.
+
+Implementation checkpoint on 2026-05-20:
+
+- The `zaki-hire-engine` branch `codex/zaki-hire-engine-hosted` now has hosted
+  internal-token auth, required tenant headers, request-scoped tenant context,
+  and PostgreSQL-backed leads, settings, events, and gateway job state.
+- Hosted mode now requires PostgreSQL at startup and no longer initializes
+  SQLite as the production primary store.
+- The implemented PostgreSQL schema is tenant-scoped by `tenant_id` on the core
+  write paths above.
+- Profile primary records, generated artifact storage, graph/vector tenant
+  partitioning, source policy storage, consent/audit records, quota events, and
+  hosted tenant background scheduling are still open implementation work.
 
 Generated documents and large artifacts should use tenant-scoped object storage
 or tenant-scoped persistent storage. The database should store metadata,

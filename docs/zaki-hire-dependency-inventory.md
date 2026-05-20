@@ -59,6 +59,45 @@ quota, cost telemetry, audit events, and readiness probes. Normal users should
 see the product capability, not the provider keys, raw cookies, actor ids,
 browser paths, source headers, or internal controls that make it work.
 
+## Implementation Checkpoint 2026-05-20
+
+Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
+
+- hosted internal-token and tenant-header gate
+- request-scoped tenant context propagation
+- contextual repository resolution for lower-level upstream code that calls
+  `create_repository()` without an explicit request object
+- PostgreSQL schema for `zaki_hire_leads`, `zaki_hire_settings`,
+  `zaki_hire_events`, and `zaki_hire_gateway_jobs`
+- PostgreSQL repository modules for the same core stores
+- hosted startup path that requires PostgreSQL instead of initializing SQLite
+- optional PostgreSQL integration test using `ZAKI_HIRE_TEST_DATABASE_URL`
+
+Verified:
+
+- `uv run pytest tests -q`: 309 passed, 1 skipped
+- `uv run ruff check .`: passed
+- `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
+  tests/test_postgres_repository.py -q`: 1 passed against a disposable local
+  PostgreSQL 16 container
+
+Still open dependency conversions:
+
+- profile primary storage still uses the upstream graph/settings path and must
+  move to PostgreSQL as the product source of truth
+- graph and vector stores still need tenant-scoped runtime paths or service
+  isolation
+- generated PDFs and imported files still need durable tenant-scoped artifact
+  storage
+- browser automation still needs sandboxed hosted workers, log/screenshot
+  redaction, consent records, and cleanup
+- source provider credentials and custom connector definitions still need
+  operator-owned readiness/configuration storage
+- hosted background automation needs a tenant-aware scheduler or durable queue;
+  the local ghost scheduler is not a safe production multi-tenant scheduler
+- normalized quota/cost telemetry remains pending until the BFF and usage event
+  schema are implemented
+
 ## Release Classification
 
 | Capability area | V1 treatment | Reason |

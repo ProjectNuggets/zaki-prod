@@ -1,8 +1,8 @@
 # ZAKI Hire Paid-User Readiness Plan
 
-Status: frozen for planning; not yet executed.
+Status: execution started; planning gates remain active.
 Owner: Codex in this local workspace.
-Date frozen: 2026-05-19.
+Last updated: 2026-05-20.
 
 ## Reader And Action
 
@@ -38,7 +38,7 @@ final security/code review has no open P0/P1 findings.
 | --- | --- | --- | --- | --- |
 | 0 | Source And Dependency Audit | Understand JustHireMe deeply enough to map features, routes, tasks, env vars, provider/API tokens, source adapters, runtime packages, and data stores. | Dependency inventory is complete and accepted before implementation starts. | DRAFTED |
 | 1 | Source And License Boundary | Fork JustHireMe into `zaki-hire-engine`, preserve AGPL notices, define proprietary ZAKI boundary, and remove misleading ZAKI MIT release claims before production. | Legal/product owner accepts boundary and source-offer process. | IN PROGRESS |
-| 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | NOT STARTED |
+| 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | IN PROGRESS |
 | 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | NOT STARTED |
 | 4 | ZAKI-Native UI Port | Port JustHireMe workflows into `/hire` using the ZAKI shell and product patterns. | Route-by-route UAT passes and no upstream branding leaks. | NOT STARTED |
 | 5 | Source Policy And Discovery | Make every upstream discovery source safe for hosted SaaS with operator-managed credentials, source policies, egress controls, quotas, and audit. | Manual, feed/API, broad scan, X, Apify, custom connector, and logged-in/source-provider lanes all pass readiness or report controlled degradation. | NOT STARTED |
@@ -77,15 +77,31 @@ final security/code review has no open P0/P1 findings.
 
 | Check | Evidence Required | Status |
 | --- | --- | --- |
-| Hosted internal auth added | Missing or invalid internal token returns 401/403 | TODO |
-| Tenant headers required | Missing tenant context fails closed | TODO |
-| PostgreSQL primary state added | Leads, profile, generated metadata, activity, settings use PostgreSQL | TODO |
-| SQLite demoted | SQLite is local-dev or migration-only, not production primary | TODO |
+| Hosted internal auth added | Missing or invalid internal token returns 401/403 | DONE for engine HTTP/WebSocket gate |
+| Tenant headers required | Missing tenant context fails closed | DONE for engine protected HTTP routes and WebSocket auth |
+| PostgreSQL primary state added | Leads, profile, generated metadata, activity, settings use PostgreSQL | PARTIAL: leads, settings, events, and gateway jobs implemented; profile/generated metadata still pending |
+| SQLite demoted | SQLite is local-dev or migration-only, not production primary | PARTIAL: hosted startup requires PostgreSQL; remaining profile/graph compatibility paths still need conversion |
 | Kuzu/LanceDB tenant scoped | Companion stores isolate and can rebuild from primary state where practical | TODO |
 | Durable artifacts configured | Generated files use tenant-scoped durable storage | TODO |
 | Browser worker configured | Playwright runs in isolated tenant/session workers with state cleanup | TODO |
 | Source connector config added | X, Apify, custom connectors, contact lookup, and broad scan settings are operator-managed | TODO |
 | Health/readiness probes added | Engine reports dependency health without leaking secrets | TODO |
+
+Phase 2 implementation evidence as of 2026-05-20:
+
+- Engine branch: `/Users/nova/Desktop/zaki-hire-engine` on
+  `codex/zaki-hire-engine-hosted`.
+- Added hosted tenant context propagation and contextual repository resolution
+  so lower-level JustHireMe code can resolve tenant-bound repositories inside
+  request/background-task context.
+- Added PostgreSQL schema and repository modules for tenant-scoped leads,
+  settings, events, and gateway jobs.
+- Added optional real-PostgreSQL integration test
+  `backend/tests/test_postgres_repository.py`.
+- Verified with `uv run pytest tests -q`: 309 passed, 1 skipped.
+- Verified optional PostgreSQL integration against a disposable local
+  PostgreSQL 16 container: 1 passed.
+- Verified with `uv run ruff check .`: passed.
 
 ## Phase 3 Checklist
 
