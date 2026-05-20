@@ -229,6 +229,34 @@ curl "$ZAKI_BACKEND_URL/api/internal/hire/deployment-readiness" \
 
 `deploymentReadiness.ready` must be `true` before paid-user rollout.
 
+## Live Smoke Secrets
+
+The backend CI workflow includes optional live ZAKI Hire smoke gates. They are
+skipped unless the matching repository secrets are configured.
+
+Readiness smoke:
+
+```bash
+HIRE_SMOKE_BASE_URL=https://api.chatzaki.com
+HIRE_SMOKE_ADMIN_EMAIL=<super-admin-email>
+HIRE_SMOKE_ADMIN_PASSWORD=<super-admin-password>
+HIRE_SMOKE_USER_EMAIL=<paid-user-email>
+HIRE_SMOKE_USER_PASSWORD=<paid-user-password>
+```
+
+Two-user isolation smoke:
+
+```bash
+HIRE_SMOKE_USER_A_EMAIL=<paid-user-a-email>
+HIRE_SMOKE_USER_A_PASSWORD=<paid-user-a-password>
+HIRE_SMOKE_USER_B_EMAIL=<paid-user-b-email>
+HIRE_SMOKE_USER_B_PASSWORD=<paid-user-b-password>
+```
+
+The isolation smoke creates one manual lead for each user through `/api/hire`,
+verifies each tenant can only see its own marker, then deletes the created
+leads unless `HIRE_ISOLATION_CLEANUP=false` is set for manual debugging.
+
 Blocking gates:
 
 - `hire_enabled_configured`: Hire is enabled only when base URL and internal
