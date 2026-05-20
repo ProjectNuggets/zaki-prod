@@ -10055,6 +10055,11 @@ function enforceHireProxyPolicy(req, res, next) {
   res.status(404).json(buildHireRouteUnavailablePayload(getOrCreateRequestId(req)));
 }
 
+function enforceHireRouteEnabled(req, res, next) {
+  if (!assertHireRouteEnabled(req, res)) return;
+  next();
+}
+
 async function enforceHireAutomationConsentAudit(req, res, next) {
   const requirement = classifyHireAutomationConsentRequirement(req);
   if (!requirement) {
@@ -13743,6 +13748,7 @@ app.get("/api/hire/status", requireHireContext, async (req, res) => {
 app.all(
   "/api/hire/:hirePath(*)",
   requireHireContext,
+  enforceHireRouteEnabled,
   enforceHireProxyPolicy,
   enforceHireAutomationConsentAudit,
   enforceHirePromptQuotaForIngress,
