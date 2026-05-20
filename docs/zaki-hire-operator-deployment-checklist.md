@@ -155,6 +155,8 @@ PROXYCURL_API_KEY=<operator-secret-if-contact-lookup-enabled>
 HIRE_CUSTOM_CONNECTOR_CATALOG=<operator-catalog-id-or-path>
 HIRE_SOURCE_CONFIG_RUNTIME_READY=true
 HIRE_BROWSER_AUTOMATION_ENABLED=true
+HIRE_AUTOMATION_BLOCK_PRIVATE_TARGETS=true
+HIRE_AUTOMATION_ALLOW_HTTP=false
 PLAYWRIGHT_BROWSERS_PATH=<baked-browser-runtime-path>
 HIRE_AUTO_APPLY_ENABLED=true
 HIRE_AUTO_APPLY_CONSENT_REQUIRED=true
@@ -360,8 +362,8 @@ Still pending before staging deployment:
   signed/proxied access, retention, export, and deletion
 - source policy storage/config bridge and provider runtime probes beyond current
   operator acknowledgements
-- browser-worker sandbox isolation, destination allowlists, task cancellation,
-  screenshot/log redaction, and emergency kill switch verification
+- browser-worker sandbox isolation, optional destination allowlists, task
+  cancellation, screenshot/log redaction, and emergency kill switch verification
 - hosted tenant background scheduler/queue replacement for local ghost mode
 - storage-specific quotas, durable task/concurrency quotas, and granular engine
   usage events for LLM tokens, embeddings, source pages, artifact bytes, and
