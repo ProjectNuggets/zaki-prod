@@ -67,8 +67,8 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
 - request-scoped tenant context propagation
 - contextual repository resolution for lower-level upstream code that calls
   `create_repository()` without an explicit request object
-- PostgreSQL schema for `zaki_hire_leads`, `zaki_hire_settings`,
-  `zaki_hire_events`, and `zaki_hire_gateway_jobs`
+- PostgreSQL schema for `zaki_hire_leads`, `zaki_hire_profiles`,
+  `zaki_hire_settings`, `zaki_hire_events`, and `zaki_hire_gateway_jobs`
 - PostgreSQL repository modules for the same core stores
 - hosted startup path that requires PostgreSQL instead of initializing SQLite
 - optional PostgreSQL integration test using `ZAKI_HIRE_TEST_DATABASE_URL`
@@ -83,8 +83,6 @@ Verified:
 
 Still open dependency conversions:
 
-- profile primary storage still uses the upstream graph/settings path and must
-  move to PostgreSQL as the product source of truth
 - graph and vector stores still need tenant-scoped runtime paths or service
   isolation
 - generated PDFs and imported files still need durable tenant-scoped artifact

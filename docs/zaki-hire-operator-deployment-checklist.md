@@ -265,12 +265,12 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - tenant header gate via `ZAKI_TENANT_HEADER`, defaulting to
   `X-Zaki-User-Id`
 - PostgreSQL startup requirement in hosted mode
-- PostgreSQL tenant-scoped schema for leads, settings, events, and gateway jobs
+- PostgreSQL tenant-scoped schema for leads, profiles, settings, events, and
+  gateway jobs
 - optional integration test that passes against PostgreSQL 16
 
 Still pending before staging deployment:
 
-- tenant-scoped profile primary store
 - tenant-scoped graph/vector runtime paths or service-backed indexes
 - generated artifact object storage
 - source policy and provider-secret readiness endpoint
