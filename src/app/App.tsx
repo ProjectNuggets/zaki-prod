@@ -65,7 +65,7 @@ export default function App() {
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
   const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
-  const isLearningRoute = location.pathname === "/learn";
+  const isWorkspaceRoute = location.pathname === "/learn" || location.pathname === "/hire";
   const isPublicWebsiteRoute =
     PUBLIC_WEBSITE_PATHS.has(normalizedPath) ||
     PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
@@ -109,6 +109,8 @@ export default function App() {
       store.goToAbout();
     } else if (path === '/learn') {
       store.setSidebarMode("learning");
+    } else if (path === '/hire') {
+      store.setSidebarMode("hire");
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
     } else if (spaceId && threadId) {
@@ -340,8 +342,8 @@ export default function App() {
         </div>
         
         <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 zaki-shell-surface">
-          <div className={isLearningRoute ? "zaki-main-shell zaki-main-shell--workspace" : "zaki-main-shell"}>
-            <div className={isLearningRoute ? "zaki-main-panel zaki-main-panel--workspace" : "zaki-main-panel"}>
+          <div className={isWorkspaceRoute ? "zaki-main-shell zaki-main-shell--workspace" : "zaki-main-shell"}>
+            <div className={isWorkspaceRoute ? "zaki-main-panel zaki-main-panel--workspace" : "zaki-main-panel"}>
               <div className="zaki-main-inner">
                 <ErrorBoundary>
                   <Outlet />

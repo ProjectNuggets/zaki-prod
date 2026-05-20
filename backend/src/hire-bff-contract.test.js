@@ -13,6 +13,7 @@ import {
   mapHireUpstreamFailure,
   resolveCanonicalHireUserId,
   sanitizeHireClientPayload,
+  sanitizeHireHealthPayload,
   sanitizeHirePath,
   sanitizeHireProviderText,
   sanitizeHireUpstreamPayload,
@@ -306,5 +307,35 @@ describe("hire BFF contract", () => {
         originalUrl: "/api/hire/selectors/refresh",
       })
     ).toBeNull();
+  });
+
+  test("sanitizes user-facing hire health payloads", () => {
+    expect(
+      sanitizeHireHealthPayload({
+        status: "alive",
+        uptime_seconds: 12.5,
+        timestamp: "2026-05-20T10:00:00.000Z",
+        log_level: "DEBUG",
+        components: {
+          llm: {
+            status: "ok",
+            provider: "openai",
+            key_source: "environment",
+          },
+        },
+        checks: {
+          graph: { error: "internal graph detail" },
+        },
+        services: {
+          profile: { url: "http://zaki-hire-engine-profile:8010" },
+        },
+        details_available: true,
+      })
+    ).toEqual({
+      status: "alive",
+      uptime_seconds: 12.5,
+      timestamp: "2026-05-20T10:00:00.000Z",
+      details_available: false,
+    });
   });
 });

@@ -447,6 +447,28 @@ export function sanitizeHireUpstreamPayload(value, key = "") {
   return output;
 }
 
+export function sanitizeHireHealthPayload(value) {
+  const payload = sanitizeHireUpstreamPayload(value);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {
+      status: "unknown",
+      details_available: false,
+    };
+  }
+  const status = String(payload.status || "unknown").trim() || "unknown";
+  const output = {
+    status,
+    details_available: false,
+  };
+  if (typeof payload.uptime_seconds === "number") {
+    output.uptime_seconds = payload.uptime_seconds;
+  }
+  if (typeof payload.timestamp === "string") {
+    output.timestamp = payload.timestamp;
+  }
+  return output;
+}
+
 export function isHireUserFacingPath(req = {}) {
   const method = normalizeHireRequestMethod(req);
   const path = normalizeHireRequestPath(req.originalUrl || req.path || req.url || req);

@@ -120,6 +120,7 @@ import {
   mapHireUpstreamFailure,
   resolveCanonicalHireUserId,
   sanitizeHireClientPayload,
+  sanitizeHireHealthPayload,
   sanitizeHireUpstreamPayload,
   shouldConsumeHireIngressQuota,
 } from "./hire-bff-contract.js";
@@ -10176,7 +10177,11 @@ async function pipeHireResponse(req, res, upstream) {
     try {
       const raw = await upstream.text();
       const payload = raw ? JSON.parse(raw) : null;
-      res.status(upstream.status).json(sanitizeHireUpstreamPayload(payload));
+      const sanitizedPayload =
+        normalizeHireProxyPath(req) === "/health"
+          ? sanitizeHireHealthPayload(payload)
+          : sanitizeHireUpstreamPayload(payload);
+      res.status(upstream.status).json(sanitizedPayload);
       return;
     } catch (error) {
       console.warn("[Hire] JSON response sanitizer failed:", {

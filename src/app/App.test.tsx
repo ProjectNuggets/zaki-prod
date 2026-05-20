@@ -24,6 +24,7 @@ function renderAppAt(path: string) {
           <Route path="/" element={<App />}>
             <Route index element={<div>public home</div>} />
             <Route path="spaces" element={<div>anonymous spaces</div>} />
+            <Route path="hire" element={<div>hire workspace</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -93,5 +94,18 @@ describe("App route hydration", () => {
 
     expect(await screen.findByRole("button", { name: /continue/i })).toBeInTheDocument();
     expect(screen.queryByText("public home")).not.toBeInTheDocument();
+  });
+
+  it("requires authentication for the Hire workspace route", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    renderAppAt("/hire");
+
+    expect(await screen.findByRole("button", { name: /continue/i })).toBeInTheDocument();
+    expect(screen.queryByText("hire workspace")).not.toBeInTheDocument();
   });
 });
