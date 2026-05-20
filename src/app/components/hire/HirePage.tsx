@@ -896,7 +896,7 @@ function LeadDetail({
           </div>
         </div>
       </div>
-      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid gap-4 p-4">
         <div className="min-w-0 space-y-4">
           <section>
             <h3 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Why it matched</h3>
