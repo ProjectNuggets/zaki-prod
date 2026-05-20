@@ -66,7 +66,8 @@ ZAKI_HIRE_ENGINE_SOURCE_COMMIT=<40-character-source-commit>
 Quota and limits:
 
 ```bash
-ZAKI_HIRE_DAILY_PROMPT_LIMIT=<plan-calibrated-limit>
+ZAKI_HIRE_WEEKLY_PROMPT_BUCKET=hire_weekly
+ZAKI_HIRE_WEEKLY_PROMPT_LIMIT=<plan-calibrated-limit>
 ZAKI_HIRE_DAILY_SCAN_LIMIT=<plan-calibrated-limit>
 ZAKI_HIRE_MAX_UPLOAD_BYTES=<hosted-upload-cap>
 ZAKI_HIRE_MAX_GENERATED_ARTIFACT_BYTES=<hosted-artifact-cap>
@@ -234,25 +235,22 @@ Blocking gates:
   token are configured.
 - `hire_internal_token`: token is present, dedicated, and not reused from Learn
   or Agent.
-- `central_auth_configured`: ZAKI auth signing and session config are production
-  ready.
-- `postgres_primary_ready`: engine can read/write PostgreSQL and SQLite is not
-  production primary.
-- `tenant_isolation_enabled`: engine requires tenant headers and rejects missing
-  tenant context.
-- `artifact_storage_ready`: generated documents and tenant artifacts use
-  configured durable storage.
-- `source_policy_configured`: enabled source adapters have an operator-approved
-  policy version.
-- `auto_apply_safety_lane_ready`: auto-apply has consent, allowlist, audit,
-  cancellation, quota, browser isolation, and kill-switch controls.
-- `operator_ai_stack_configured`: LLM and embedding routing are operator-owned.
+- `central_auth_signing_key`: ZAKI auth signing config is production-strength.
 - `zaki_image_immutable`: ZAKI API/web image references are immutable.
 - `hire_engine_image_immutable`: engine image reference is immutable.
-- `hire_source_pin_present`: engine source repository and source commit are
+- `hire_source_mirror_pinned`: engine source repository and source commit are
   recorded.
-- `backup_restore_ready`: backup target and recent restore drill are recorded.
-- `retention_policy_enabled`: cleanup policy is enabled.
+- `operator_ai_stack_configured`: LLM routing is operator-owned.
+- `source_policy_configured`: enabled source adapters have an operator-approved
+  policy version.
+- `automation_controls_configured`: browser automation, auto-apply, consent,
+  and audit controls are explicitly recorded.
+- `quota_policy_configured`: Hire quota bucket and weekly prompt limit are
+  explicit until central OATH cost controls replace product-local caps.
+- `downstream_hire_engine_ready`: the engine readiness probe is green. The
+  engine probe covers PostgreSQL, tenant headers, artifact paths, graph/vector
+  paths, hosted LLM config, embedding route, source policy credentials, and
+  browser automation safety acknowledgements.
 
 ## Deployment Sequence
 
@@ -268,8 +266,9 @@ Blocking gates:
 8. Deploy to staging through infrastructure.
 9. Run deployment validator.
 10. Run readiness endpoint as super-admin. ZAKI backend should expose
-    `/api/internal/hire/deployment-readiness` and proxy the engine internal
-    endpoint `/internal/v1/deployment-readiness`.
+    `/api/internal/hire/deployment-readiness`, verify ZAKI-side release gates,
+    and include the engine internal readiness summary from
+    `/internal/v1/deployment-readiness`.
 11. Run route UAT and two-user isolation smoke.
 12. Run backup/restore drill.
 13. Promote immutable tags to production only after all gates are green.
@@ -315,6 +314,15 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
   after successful quota admission
 - central ZAKI `zaki_hire_audit_events` schema and BFF consent/audit gate for
   form read, apply preview, and auto-apply
+- ZAKI-side Hire deployment readiness policy for immutable images, pinned source
+  commit, operator LLM/source policy metadata, automation controls, quota policy,
+  and downstream engine readiness
+- first-class authenticated `/hire` workspace route in the ZAKI shell with
+  dashboard, lead workbench, profile/import panels, activity, and consent-gated
+  automation controls
+- production image Dockerfile and GHCR image workflow for the hosted Hire engine
+- `zaki-infra` Helm chart, ArgoCD application, zaki-api service-discovery env,
+  dedicated secret contract, and `scripts/validate-hire-deploy.sh`
 
 Still pending before staging deployment:
 
@@ -330,12 +338,12 @@ Still pending before staging deployment:
 - storage-specific quotas, durable task/concurrency quotas, and granular engine
   usage events for LLM tokens, embeddings, source pages, artifact bytes, and
   task duration
-- typed ZAKI-native `/hire` frontend route and route-specific UAT
+- route-specific browser UAT against a live hosted engine and staging smoke with
+  real operator secrets
 
 ## Deployment Validator
 
-Add a validator equivalent to the Learn deployment validator. It should fail
-when:
+Run `zaki-infra/scripts/validate-hire-deploy.sh`. It fails when:
 
 - ArgoCD does not define `zaki-hire-engine`.
 - the engine chart is missing.
@@ -346,7 +354,7 @@ when:
 - SQLite is configured as production primary.
 - image tags are mutable.
 - source repository or source commit is missing.
-- auto-apply is enabled for paid-user rollout.
+- auto-apply is enabled without recorded consent/audit controls.
 - Helm templates fail to render.
 
 ## Final User Setup
