@@ -60,6 +60,9 @@ export function validateRuntimeConfig(env = process.env) {
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
+  const hireEnabled = isTruthyBoolean(env.ZAKI_HIRE_ENABLED);
+  const hireBaseUrl = normalize(env.HIRE_ENGINE_BASE_URL || env.ZAKI_HIRE_ENGINE_BASE_URL);
+  const hireInternalToken = normalize(env.HIRE_ENGINE_INTERNAL_TOKEN || env.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN);
   const nullalisDevUserId = normalize(env.NULLALIS_DEV_USER_ID || env.NULLCLAW_DEV_USER_ID);
   const googleClientId = normalize(env.GOOGLE_CLIENT_ID);
   const googleClientSecret = normalize(env.GOOGLE_CLIENT_SECRET);
@@ -197,6 +200,35 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_LEARNING_ENABLED",
       "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
+    );
+  }
+
+  if (hireEnabled) {
+    if (!hireBaseUrl) {
+      pushIssue(
+        errors,
+        "HIRE_ENGINE_BASE_URL",
+        "HIRE_ENGINE_BASE_URL is required when ZAKI_HIRE_ENABLED=true."
+      );
+    } else if (!hasHttpUrl(hireBaseUrl)) {
+      pushIssue(
+        errors,
+        "HIRE_ENGINE_BASE_URL",
+        "HIRE_ENGINE_BASE_URL must start with http:// or https://."
+      );
+    }
+    if (!hireInternalToken) {
+      pushIssue(
+        errors,
+        "HIRE_ENGINE_INTERNAL_TOKEN",
+        "HIRE_ENGINE_INTERNAL_TOKEN is required when ZAKI_HIRE_ENABLED=true."
+      );
+    }
+  } else if (hireBaseUrl || hireInternalToken) {
+    pushIssue(
+      warnings,
+      "ZAKI_HIRE_ENABLED",
+      "Hire engine config is present, but ZAKI_HIRE_ENABLED is not true."
     );
   }
 

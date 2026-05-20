@@ -105,13 +105,15 @@ Phase 2 implementation evidence as of 2026-05-20:
   paths outside the active tenant artifact root.
 - Added internal `/internal/v1/deployment-readiness` endpoint and hosted LLM
   operator env resolution through `HIRE_LLM_PROVIDER` / `HIRE_LLM_MODEL`.
+- Hardened the engine gateway so hosted internal routes use the operator-provided
+  internal token instead of a random process-local token.
 - Hardened hosted LLM routing so engine calls use only operator environment
   provider/model/API-key configuration and never fall back to user/repo-stored
   provider credentials.
 - Added bounded PostgreSQL connect timeout for dependency probes.
 - Added optional real-PostgreSQL integration test
   `backend/tests/test_postgres_repository.py`.
-- Verified with `uv run pytest tests -q`: 319 passed, 1 skipped.
+- Verified with `uv run pytest tests -q`: 320 passed, 1 skipped.
 - Verified optional PostgreSQL integration against a disposable local
   PostgreSQL 16 container: 1 passed.
 - Verified with `uv run ruff check .`: passed.
@@ -120,14 +122,37 @@ Phase 2 implementation evidence as of 2026-05-20:
 
 | Check | Evidence Required | Status |
 | --- | --- | --- |
-| `/api/hire/*` auth gate | Unauthenticated browser requests rejected | TODO |
-| Internal token forwarding | Engine receives token only from ZAKI backend | TODO |
-| Tenant forwarding | Engine receives canonical user/account id from auth session | TODO |
-| Error normalization | User-safe errors returned for engine failures | TODO |
+| `/api/hire/*` auth gate | Unauthenticated browser requests rejected | PARTIAL: backend BFF requires central ZAKI auth before proxying `/api/hire/*`; browser route and E2E login smoke still pending |
+| Internal token forwarding | Engine receives token only from ZAKI backend | DONE for initial BFF proxy: forwards operator token as Bearer and `X-Internal-Token`; browser auth/cookies are stripped |
+| Tenant forwarding | Engine receives canonical user/account id from auth session | DONE for user-id tenancy: BFF derives canonical ZAKI user id and forwards `X-Zaki-User-Id`; account/team tenancy remains future if product account tenancy is added |
+| Error normalization | User-safe errors returned for engine failures | DONE for initial BFF proxy: auth, missing config, unavailable, invalid JSON, conflicts, not found, and oversized requests normalize to Hire error codes |
 | Quota hooks | Prompt, scan, upload, generation, storage, and task limits enforced | TODO |
 | Usage events | Normalized events emitted for LLM, embedding, scan, artifact, and task work | TODO |
 | Automation consent hooks | Form read, preview, and auto-apply require user consent and audit records | TODO |
 | Export/delete hooks | Account governance includes Hire resources | TODO |
+
+Phase 3 implementation evidence as of 2026-05-20:
+
+- Added `backend/src/hire-bff-contract.js` and `backend/src/hire-client.js` in
+  ZAKI prod for the Hire BFF boundary.
+- Added ZAKI runtime config validation for `ZAKI_HIRE_ENABLED`,
+  `HIRE_ENGINE_BASE_URL`, and `HIRE_ENGINE_INTERNAL_TOKEN`.
+- Added super-admin `/api/internal/hire/status` and
+  `/api/internal/hire/deployment-readiness` endpoints. The readiness endpoint
+  proxies the engine `/internal/v1/deployment-readiness` route.
+- Added authenticated `/api/hire/health`, `/api/hire/status`, and generic
+  `/api/hire/*` proxying to the engine `/api/v1/*` surface.
+- BFF strips browser `Authorization`, cookies, tenant headers, and internal
+  token spoofing before injecting the operator token and canonical ZAKI tenant.
+- BFF strips provider/model/API-key/source credential fields from user JSON
+  payloads and sanitizes upstream JSON before browser display.
+- Verified ZAKI backend with `npm --prefix backend test -- --runInBand`: 477
+  passed.
+- Verified ZAKI backend with `npm --prefix backend run lint`: passed.
+- Live hosted-mode smoke against disposable PostgreSQL 16 and local engine:
+  `/health` 200, `/api/v1/leads` 200 with BFF-style Bearer token plus
+  `X-Zaki-User-Id`, `/internal/v1/deployment-readiness` 200, and the new
+  `hire-client` returned 200 for both leads and readiness.
 
 ## Phase 4 Route UAT Matrix
 

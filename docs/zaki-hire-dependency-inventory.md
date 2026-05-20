@@ -86,14 +86,23 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
   `HIRE_LLM_MODEL`, and provider-specific API key envs, without falling back to
   user/repo-stored provider credentials in hosted mode
 - bounded PostgreSQL connect timeout via `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
+- hosted engine internal routes now use the operator internal token at gateway
+  startup
+- initial ZAKI-prod Hire BFF boundary for central-auth `/api/hire/*`, internal
+  token forwarding, tenant forwarding, sanitized JSON proxying, and super-admin
+  readiness proxying
 
 Verified:
 
-- `uv run pytest tests -q`: 319 passed, 1 skipped
+- `uv run pytest tests -q`: 320 passed, 1 skipped
 - `uv run ruff check .`: passed
+- `npm --prefix backend test -- --runInBand`: 477 passed in ZAKI prod
+- `npm --prefix backend run lint`: passed in ZAKI prod
 - `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
   tests/test_postgres_repository.py -q`: 1 passed against a disposable local
   PostgreSQL 16 container
+- hosted-mode smoke with disposable PostgreSQL 16 confirmed BFF-style Bearer
+  token plus `X-Zaki-User-Id` can call engine leads and internal readiness
 
 Still open dependency conversions:
 

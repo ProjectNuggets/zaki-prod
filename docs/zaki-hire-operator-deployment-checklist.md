@@ -295,11 +295,16 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
   tenant artifact root
 - internal `/internal/v1/deployment-readiness` endpoint protected by the engine
   internal token
+- hosted gateway startup uses the configured operator internal token for
+  internal routes
 - hosted LLM operator env resolution through `HIRE_LLM_PROVIDER` and
   `HIRE_LLM_MODEL`, with provider keys taken only from operator environment in
   hosted mode
 - bounded PostgreSQL connect timeout through `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
 - optional integration test that passes against PostgreSQL 16
+- initial ZAKI-prod BFF routes for `/api/hire/health`, `/api/hire/status`,
+  generic `/api/hire/*`, `/api/internal/hire/status`, and
+  `/api/internal/hire/deployment-readiness`
 
 Still pending before staging deployment:
 
@@ -310,7 +315,9 @@ Still pending before staging deployment:
 - source policy storage/config bridge and provider runtime probes beyond current
   operator acknowledgements
 - hosted tenant background scheduler/queue replacement for local ghost mode
-- BFF `/api/hire/*` route implementation in `zaki-prod`
+- quota/usage hooks in the ZAKI BFF for prompt, scan, generation, storage, and
+  task events
+- typed ZAKI-native `/hire` frontend route and route-specific UAT
 
 ## Deployment Validator
 

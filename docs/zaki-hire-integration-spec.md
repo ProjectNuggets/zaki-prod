@@ -289,6 +289,16 @@ Implementation checkpoint on 2026-05-20:
   `HIRE_LLM_PROVIDER` and `HIRE_LLM_MODEL`, with provider-specific API key envs
   such as `OPENAI_API_KEY`. In hosted mode, the engine no longer falls back to
   user/repo-stored provider credentials or models.
+- ZAKI prod now has an initial Hire BFF boundary: `/api/hire/health`,
+  `/api/hire/status`, generic `/api/hire/*` proxying to `/api/v1/*`, and
+  super-admin `/api/internal/hire/status` plus
+  `/api/internal/hire/deployment-readiness`.
+- The BFF uses central ZAKI auth, derives the canonical ZAKI user id, strips
+  browser auth/cookies/internal spoofing headers, forwards the operator token as
+  Bearer and `X-Internal-Token`, and sends `X-Zaki-User-Id` downstream.
+- The BFF sanitizes user JSON payloads and upstream JSON responses so
+  operator-managed provider/model/API-key/source credential fields do not become
+  browser-visible contract.
 - Object-storage provider support, imported-file artifact cataloging,
   signed/proxied artifact access, artifact export/delete/retention, source
   policy storage, consent/audit records, quota events, and hosted tenant
@@ -313,7 +323,8 @@ Minimum tenant controls:
 
 - BFF injects `X-Zaki-User-Id`.
 - BFF injects `X-Zaki-Account-Id` if account/team tenancy exists.
-- Engine validates `X-Internal-Token`.
+- Engine validates the operator internal token; the BFF sends it as Bearer and
+  `X-Internal-Token` for compatibility.
 - Engine rejects requests with missing or malformed tenant headers.
 - Engine stores tenant id on every durable row.
 - Engine scopes graph, vector, file, cache, task, and event stores by tenant.

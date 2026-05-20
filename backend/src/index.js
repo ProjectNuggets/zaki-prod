@@ -111,6 +111,21 @@ import {
   probeLearningReady,
 } from "./learning-client.js";
 import {
+  buildHireConfigErrorPayload,
+  buildHireDisabledPayload,
+  isHireEnabled,
+  mapHireUpstreamFailure,
+  resolveCanonicalHireUserId,
+  sanitizeHireClientPayload,
+  sanitizeHireUpstreamPayload,
+} from "./hire-bff-contract.js";
+import {
+  fetchHireDeploymentReadiness,
+  fetchHirePath,
+  fetchHireProxyPath,
+  getHireBase,
+} from "./hire-client.js";
+import {
   completeLearningStudyTask,
   createLearningStudyTask,
   createLearningStudyPlan,
@@ -391,6 +406,25 @@ const LEARNING_ENGINE_STREAM_TIMEOUT_MS = Math.max(
   Number(process.env.LEARNING_ENGINE_STREAM_TIMEOUT_MS || 300_000)
 );
 const ZAKI_LEARNING_MAX_REQUEST_BYTES = resolveLearningMaxRequestBytes(process.env);
+const HIRE_ENGINE_BASE_URL = (
+  process.env.HIRE_ENGINE_BASE_URL ||
+  process.env.ZAKI_HIRE_ENGINE_BASE_URL ||
+  ""
+).trim().replace(/\/+$/, "");
+const HIRE_ENGINE_INTERNAL_TOKEN = (
+  process.env.HIRE_ENGINE_INTERNAL_TOKEN ||
+  process.env.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN ||
+  ""
+).trim();
+const ZAKI_HIRE_ENABLED = isHireEnabled(process.env.ZAKI_HIRE_ENABLED);
+const HIRE_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
+  1_000,
+  Number(process.env.HIRE_ENGINE_REQUEST_TIMEOUT_MS || 30_000)
+);
+const HIRE_ENGINE_STREAM_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.HIRE_ENGINE_STREAM_TIMEOUT_MS || 300_000)
+);
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
@@ -9840,6 +9874,210 @@ function assertLearningRouteEnabled(req, res) {
   return true;
 }
 
+async function requireHireContext(req, res, next) {
+  const existingUserId = String(req.hireUserId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return;
+
+  const userId = resolveCanonicalHireUserId(authResult);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    return;
+  }
+
+  req.hireAuthResult = authResult;
+  req.hireUserId = userId;
+  next();
+}
+
+function assertHireRouteEnabled(req, res) {
+  const requestId = getOrCreateRequestId(req);
+  if (!ZAKI_HIRE_ENABLED) {
+    res.status(404).json(buildHireDisabledPayload(requestId));
+    return false;
+  }
+  if (!getHireBase(HIRE_ENGINE_BASE_URL)) {
+    res
+      .status(500)
+      .json(buildHireConfigErrorPayload("HIRE_ENGINE_BASE_URL is not configured.", requestId));
+    return false;
+  }
+  if (!HIRE_ENGINE_INTERNAL_TOKEN) {
+    res
+      .status(500)
+      .json(buildHireConfigErrorPayload("HIRE_ENGINE_INTERNAL_TOKEN is not configured.", requestId));
+    return false;
+  }
+  return true;
+}
+
+function hireClientOptions(req, label) {
+  return {
+    baseUrl: HIRE_ENGINE_BASE_URL,
+    internalToken: HIRE_ENGINE_INTERNAL_TOKEN,
+    userId: String(req.hireUserId || ""),
+    requestId: getOrCreateRequestId(req),
+    fetchWithTimeout,
+    timeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+    label,
+  };
+}
+
+function hireForwardQueryString(req, blockedKeys = []) {
+  const blocked = new Set(blockedKeys.map((key) => String(key).toLowerCase()));
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query || {})) {
+    if (blocked.has(String(key).toLowerCase())) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) qs.append(key, String(item));
+      }
+    } else if (value !== undefined && value !== null) {
+      qs.set(key, String(value));
+    }
+  }
+  const qstr = qs.toString();
+  return qstr ? `?${qstr}` : "";
+}
+
+function normalizeHireProxyPath(req) {
+  const raw = String(req.originalUrl || req.path || req.url || "").split("?")[0].split("#")[0];
+  const pathValue = raw.startsWith("/") ? raw : `/${raw}`;
+  return pathValue.startsWith("/api/hire")
+    ? pathValue.slice("/api/hire".length) || "/"
+    : pathValue;
+}
+
+function hireTargetPathFromRequest(req) {
+  const hirePath = normalizeHireProxyPath(req);
+  if (hirePath === "/internal" || hirePath.startsWith("/internal/")) {
+    throw new Error("invalid_hire_path");
+  }
+  const targetPath = hirePath === "/" ? "/api/v1" : `/api/v1${hirePath}`;
+  return `${targetPath}${hireForwardQueryString(req)}`;
+}
+
+function shouldProxyHireRawBody(req) {
+  const method = String(req.method || "").trim().toUpperCase();
+  if (["GET", "HEAD"].includes(method)) return false;
+  const contentType = String(req.headers?.["content-type"] || "").toLowerCase();
+  return (
+    contentType.includes("multipart/form-data") ||
+    contentType.includes("application/octet-stream")
+  );
+}
+
+async function pipeHireResponse(req, res, upstream) {
+  const requestId = getOrCreateRequestId(req);
+  if (!upstream.ok) {
+    const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+    if (mapped) {
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+  }
+
+  const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      const raw = await upstream.text();
+      const payload = raw ? JSON.parse(raw) : null;
+      res.status(upstream.status).json(sanitizeHireUpstreamPayload(payload));
+      return;
+    } catch (error) {
+      console.warn("[Hire] JSON response sanitizer failed:", {
+        requestId,
+        status: upstream.status,
+        error: error?.message || "Unable to sanitize Hire JSON response.",
+      });
+      res.status(502).json({
+        code: "hire_invalid_upstream_json",
+        error: "Hire upstream returned invalid JSON.",
+        message: "Hire is temporarily unavailable.",
+        retryable: true,
+        requestId,
+      });
+      return;
+    }
+  }
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Hire upstream response");
+}
+
+async function proxyHireRequest(req, res, targetPath, {
+  method = req.method,
+  body = undefined,
+  label = "Hire upstream request",
+  timeoutMs = HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+} = {}) {
+  if (!assertHireRouteEnabled(req, res)) return;
+  const verb = String(method || req.method || "GET").toUpperCase();
+  try {
+    const upstream = shouldProxyHireRawBody(req) && body === undefined
+      ? await fetchHireProxyPath({
+          ...hireClientOptions(req, label),
+          path: targetPath,
+          req,
+          method: verb,
+          timeoutMs,
+        })
+      : await fetchHirePath({
+          ...hireClientOptions(req, label),
+          path: targetPath,
+          method: verb,
+          body: ["GET", "HEAD"].includes(verb)
+            ? undefined
+            : body === undefined
+              ? sanitizeHireClientPayload(req.body || {})
+              : body,
+          timeoutMs,
+        });
+    await pipeHireResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    if (
+      error?.message === "HIRE_ENGINE_BASE_URL is not configured." ||
+      error?.message === "HIRE_ENGINE_INTERNAL_TOKEN is not configured."
+    ) {
+      res.status(500).json(buildHireConfigErrorPayload(error.message, requestId));
+      return;
+    }
+    if (error?.message === "invalid_hire_path") {
+      res.status(400).json({
+        code: "invalid_hire_path",
+        error: "Invalid Hire path.",
+        message: "The requested Hire path is invalid.",
+        requestId,
+      });
+      return;
+    }
+    console.error("[Hire] Upstream proxy error:", {
+      requestId,
+      route: req.originalUrl,
+      method: verb,
+      error: error?.message || "Hire request failed.",
+    });
+    res.status(503).json({
+      code: "hire_unavailable",
+      error: "Hire is unavailable.",
+      message: "Hire is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+}
+
 function learningClientOptions(req, label) {
   return {
     baseUrl: LEARNING_ENGINE_BASE_URL,
@@ -13168,6 +13406,156 @@ registerLearningJsonProxyRoute(
     ),
   { label: "Learning tutor agent history request" }
 );
+
+// =============================================================================
+// HIRE ENGINE BFF
+// =============================================================================
+
+app.get("/api/internal/hire/status", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    res.status(200).json({
+      success: true,
+      hire: {
+        enabled: ZAKI_HIRE_ENABLED,
+        configured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN),
+        baseUrlConfigured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL)),
+        internalTokenConfigured: Boolean(HIRE_ENGINE_INTERNAL_TOKEN),
+        requestTimeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+        streamTimeoutMs: HIRE_ENGINE_STREAM_TIMEOUT_MS,
+        requestId: getOrCreateRequestId(req),
+      },
+    });
+  } catch (error) {
+    console.error("[Hire] Internal status error:", error);
+    res.status(500).json({ error: error?.message || "Hire status failed." });
+  }
+});
+
+app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const userId = resolveCanonicalHireUserId(authResult);
+    const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+    const basePayload = {
+      success: true,
+      enabled: ZAKI_HIRE_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(HIRE_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+      requestId,
+    };
+
+    if (!ZAKI_HIRE_ENABLED || !configured || !userId) {
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        deploymentReadiness: {
+          ready: false,
+          status: "not_ready",
+          checks: {
+            zaki_hire_bff: {
+              status: "blocked",
+              message: !ZAKI_HIRE_ENABLED
+                ? "ZAKI_HIRE_ENABLED is not true."
+                : !configured
+                  ? "Hire engine base URL or internal token is not configured."
+                  : "Super-admin request did not resolve to a canonical ZAKI user id.",
+            },
+          },
+        },
+      });
+    }
+
+    const upstream = await fetchHireDeploymentReadiness({
+      baseUrl: HIRE_ENGINE_BASE_URL,
+      internalToken: HIRE_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+    });
+    const payload = await upstream.json().catch(() => null);
+    const sanitized = sanitizeHireUpstreamPayload(payload || {});
+    if (!upstream.ok) {
+      const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        upstreamStatus: upstream.status,
+        deploymentReadiness: {
+          ready: false,
+          status: "not_ready",
+          checks: {
+            hire_engine: {
+              status: "blocked",
+              message: mapped?.body?.message || "Hire engine readiness request failed.",
+            },
+          },
+        },
+      });
+    }
+
+    return res.status(200).json({
+      ...basePayload,
+      ok: Boolean(sanitized?.ready),
+      upstreamStatus: upstream.status,
+      deploymentReadiness: sanitized,
+    });
+  } catch (error) {
+    console.error("[Hire] Deployment readiness error:", {
+      requestId: getOrCreateRequestId(req),
+      error: error?.message || "Unable to load Hire deployment readiness.",
+    });
+    res.status(503).json({
+      code: "hire_unavailable",
+      error: "Hire is unavailable.",
+      message: "Hire deployment readiness could not be checked.",
+      retryable: true,
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+});
+
+app.get("/api/hire/health", requireHireContext, async (req, res) => {
+  await proxyHireRequest(req, res, "/health", {
+    method: "GET",
+    label: "Hire health probe",
+    timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+  });
+});
+
+app.get("/api/hire/status", requireHireContext, async (req, res) => {
+  await proxyHireRequest(req, res, `/api/v1/status${hireForwardQueryString(req)}`, {
+    method: "GET",
+    label: "Hire status request",
+  });
+});
+
+app.all("/api/hire/:hirePath(*)", requireHireContext, async (req, res) => {
+  let targetPath;
+  try {
+    targetPath = hireTargetPathFromRequest(req);
+  } catch (error) {
+    res.status(400).json({
+      code: "invalid_hire_path",
+      error: "Invalid Hire path.",
+      message: "The requested Hire path is invalid.",
+      requestId: getOrCreateRequestId(req),
+    });
+    return;
+  }
+  await proxyHireRequest(req, res, targetPath, {
+    label: `Hire ${req.method} proxy request`,
+    timeoutMs: HIRE_ENGINE_STREAM_TIMEOUT_MS,
+  });
+});
 
 // =============================================================================
 // SHARE CONVERSATION ROUTES

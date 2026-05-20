@@ -207,4 +207,49 @@ describe("runtime config validation", () => {
       expect.arrayContaining([expect.objectContaining({ key: "ZAKI_LEARNING_ENABLED" })])
     );
   });
+
+  it("requires hire engine base and token when hire is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_HIRE_ENABLED: "true",
+        HIRE_ENGINE_BASE_URL: "",
+        HIRE_ENGINE_INTERNAL_TOKEN: "",
+      })
+    );
+
+    expect(report.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "HIRE_ENGINE_BASE_URL" }),
+        expect.objectContaining({ key: "HIRE_ENGINE_INTERNAL_TOKEN" }),
+      ])
+    );
+  });
+
+  it("accepts hire engine config when enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_HIRE_ENABLED: "true",
+        HIRE_ENGINE_BASE_URL: "http://hire:8002",
+        HIRE_ENGINE_INTERNAL_TOKEN: "secret",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "HIRE_ENGINE_BASE_URL")).toBeUndefined();
+    expect(report.errors.find((e) => e.key === "HIRE_ENGINE_INTERNAL_TOKEN")).toBeUndefined();
+  });
+
+  it("warns when hire config is present but disabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_HIRE_ENABLED: "false",
+        HIRE_ENGINE_BASE_URL: "http://hire:8002",
+        HIRE_ENGINE_INTERNAL_TOKEN: "secret",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "HIRE_ENGINE_BASE_URL")).toBeUndefined();
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "ZAKI_HIRE_ENABLED" })])
+    );
+  });
 });
