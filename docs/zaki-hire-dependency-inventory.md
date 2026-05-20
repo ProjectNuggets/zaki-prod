@@ -91,12 +91,19 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
 - initial ZAKI-prod Hire BFF boundary for central-auth `/api/hire/*`, internal
   token forwarding, tenant forwarding, sanitized JSON proxying, and super-admin
   readiness proxying
+- initial ZAKI-prod Hire BFF route allowlist that exposes only user-facing Hire
+  routes and blocks engine-local operator routes such as settings, provider
+  model probing, runtime status/installation, shutdown, and diagnostics
+- first-class central `hire` product/quota/usage surface with weekly BFF quota
+  enforcement for cost-bearing manual lead, scan, ingestion, generation, help,
+  and automation routes
 
 Verified:
 
 - `uv run pytest tests -q`: 320 passed, 1 skipped
 - `uv run ruff check .`: passed
-- `npm --prefix backend test -- --runInBand`: 477 passed in ZAKI prod
+- focused ZAKI-prod Hire BFF/quota/policy tests: 53 passed
+- `npm --prefix backend test -- --runInBand`: 480 passed in ZAKI prod
 - `npm --prefix backend run lint`: passed in ZAKI prod
 - `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
   tests/test_postgres_repository.py -q`: 1 passed against a disposable local
@@ -118,8 +125,9 @@ Still open dependency conversions:
   probes and operator acknowledgements
 - hosted background automation needs a tenant-aware scheduler or durable queue;
   the local ghost scheduler is not a safe production multi-tenant scheduler
-- normalized quota/cost telemetry remains pending until the BFF and usage event
-  schema are implemented
+- normalized cost usage events remain pending; the first BFF quota surface is
+  implemented, but storage-specific quotas and durable task/concurrency quotas
+  still need their own classes
 
 ## Release Classification
 
@@ -245,8 +253,8 @@ families are:
 | Profile | profile candidate, identity, skills, experience, projects, education, certifications, achievements | Keep user profile editing; use PostgreSQL primary state. |
 | Ingestion | resume, LinkedIn export, GitHub, JSON profile, template, portfolio | Keep with upload, egress, and task limits. |
 | Activity | `/api/v1/events`, websocket `/ws` | Tenant-scope and normalize through ZAKI event/task UI. |
-| Settings | template, settings, validation, provider models | Do not expose provider/source keys to normal users; retain operator admin equivalents only if needed. |
-| Runtime | vector runtime status/install | Do not expose runtime install controls to users. Bake production dependencies into images. |
+| Settings | template, settings, validation, provider models | User proxy currently allows template only; provider/source settings, validation, and provider model probing are blocked from normal users and need ZAKI-native user-safe preferences/operator admin equivalents. |
+| Runtime | vector runtime status/install | Do not expose runtime status/install controls to users. Bake production dependencies into images and surface user-safe readiness through ZAKI-owned views only. |
 | Automation | form read, preview apply, fire, selector refresh, identity | Expose through sandboxed browser workers and BFF task controls. |
 | Misc | graph, help chat, errors, shutdown | Keep graph/help only if productized; remove shutdown from hosted user surface. |
 | Internal services | generation, automation, discovery, profile, graph, ranking internal routes | Either package as an internal engine monolith for v1 or deploy explicit internal service workloads. Do not use local child-process supervision in Kubernetes. |
@@ -443,7 +451,7 @@ with user-safe failure UX.
 | Source policy | Enabled source adapters match an approved policy version. |
 | High-risk sources | X, Apify, broad scanning, LinkedIn connectors, custom connectors, and auto-apply each report a healthy safety lane with policy version, quota, audit, and kill switch. |
 | Task store | Scan/generation/reevaluation tasks survive restart and are tenant-scoped. |
-| Quota hooks | Scan, import, generation, LLM, embedding, artifact, and task quotas reject over-limit requests. |
+| Quota hooks | Scan, import, generation, LLM, embedding, artifact, and task quotas reject over-limit requests. Initial BFF weekly prompt quota covers cost-bearing Hire routes; storage, embedding, artifact, and task classes remain. |
 | Usage telemetry | LLM/source/artifact/task events emit normalized tenant-aware usage records. |
 | Export/delete | Export and deletion include PostgreSQL, graph, vector, artifacts, tasks, and events. |
 | Backup/restore | PostgreSQL and artifacts are backed up and a recent restore drill is recorded. |

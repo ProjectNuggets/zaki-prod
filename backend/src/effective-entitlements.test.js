@@ -13,6 +13,7 @@ describe("effective entitlements", () => {
     expect(isPaidActive("pro", "past_due")).toBe(true);
     expect(isPaidActive("agent", "active")).toBe(true);
     expect(isPaidActive("learn", "active")).toBe(true);
+    expect(isPaidActive("hire", "active")).toBe(true);
     expect(isPaidActive("complete", "active")).toBe(true);
     expect(isPaidActive("free", "active")).toBe(false);
     expect(isPaidActive("student", "inactive")).toBe(false);
@@ -88,6 +89,7 @@ describe("effective entitlements", () => {
     );
     expect(effective.products.agent.access).toBe(true);
     expect(effective.products.learn.access).toBe(true);
+    expect(effective.products.hire.access).toBe(true);
     expect(effective.products.spaces.uncapped).toBe(true);
   });
 
@@ -110,6 +112,7 @@ describe("effective entitlements", () => {
     expect(effective.products.billing.wholeApp).toBe(false);
     expect(effective.products.agent.access).toBe(false);
     expect(effective.products.learn.access).toBe(false);
+    expect(effective.products.hire.access).toBe(false);
     expect(effective.products.spaces.uncapped).toBe(false);
   });
 
@@ -148,6 +151,7 @@ describe("effective entitlements", () => {
     );
     expect(effective.products.agent.access).toBe(true);
     expect(effective.products.learn.access).toBe(false);
+    expect(effective.products.hire.access).toBe(false);
     expect(effective.products.spaces.uncapped).toBe(false);
   });
 
@@ -165,6 +169,25 @@ describe("effective entitlements", () => {
     );
     expect(effective.products.learn.access).toBe(true);
     expect(effective.products.agent.access).toBe(false);
+    expect(effective.products.hire.access).toBe(false);
+    expect(effective.products.spaces.uncapped).toBe(false);
+  });
+
+  it("maps new Hire subscriptions to Hire access without Agent or Learn access", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "hire", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective.commercial).toEqual(
+      expect.objectContaining({
+        planId: COMMERCIAL_PLAN_IDS.HIRE,
+        label: "ZAKI Hire",
+      })
+    );
+    expect(effective.products.hire.access).toBe(true);
+    expect(effective.products.agent.access).toBe(false);
+    expect(effective.products.learn.access).toBe(false);
     expect(effective.products.spaces.uncapped).toBe(false);
   });
 
@@ -183,6 +206,7 @@ describe("effective entitlements", () => {
     expect(effective.products.billing.wholeApp).toBe(true);
     expect(effective.products.agent.access).toBe(true);
     expect(effective.products.learn.access).toBe(true);
+    expect(effective.products.hire.access).toBe(true);
     expect(effective.products.spaces.uncapped).toBe(true);
   });
 

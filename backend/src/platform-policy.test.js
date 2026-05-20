@@ -21,6 +21,7 @@ describe("platform policy", () => {
     expect(normalizePlatformPlanId("spaces_free")).toBe("free");
     expect(normalizePlatformPlanId("agent")).toBe("personal");
     expect(normalizePlatformPlanId("learn")).toBe("personal");
+    expect(normalizePlatformPlanId("hire")).toBe("personal");
     expect(normalizePlatformPlanId("access_code")).toBe("personal");
     expect(normalizePlatformPlanId("complete")).toBe("pro");
     expect(normalizePlatformPlanId("pro_max")).toBe("pro_max");
@@ -32,6 +33,7 @@ describe("platform policy", () => {
       expect(policy.plans[planId].products[ZAKI_PRODUCT_IDS.SPACES].available).toBe(true);
       expect(policy.plans[planId].products[ZAKI_PRODUCT_IDS.AGENT].available).toBe(true);
       expect(policy.plans[planId].products[ZAKI_PRODUCT_IDS.LEARN].available).toBe(true);
+      expect(policy.plans[planId].products[ZAKI_PRODUCT_IDS.HIRE].available).toBe(true);
       expect(policy.plans[planId].products[ZAKI_PRODUCT_IDS.BRAIN].available).toBe(true);
       expect(policy.plans[planId].products[ZAKI_PRODUCT_IDS.CLI].available).toBe(false);
     }
@@ -68,6 +70,9 @@ describe("platform policy", () => {
     );
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.LEARN)).toEqual(
       expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY })
+    );
+    expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.HIRE)).toEqual(
+      expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.CANDIDATE_MEMORY })
     );
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.CLI)).toEqual(
       expect.objectContaining({ lifecycle: "future" })

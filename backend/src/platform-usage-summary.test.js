@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   APP_CHAT_SURFACE,
+  HIRE_SURFACE,
   LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
 } from "./daily-quota.js";
@@ -60,6 +61,16 @@ describe("platform usage summary", () => {
           limit: 20,
           used: 5,
           remaining: 15,
+          resetAt: "2026-05-25T00:00:00.000Z",
+        },
+        [HIRE_SURFACE]: {
+          success: true,
+          surface,
+          bucket: "hire_weekly",
+          period: "week",
+          limit: 10,
+          used: 3,
+          remaining: 7,
           resetAt: "2026-05-25T00:00:00.000Z",
         },
       };
@@ -125,6 +136,14 @@ describe("platform usage summary", () => {
     expect(summary.products[ZAKI_PRODUCT_IDS.LEARN].learning).toEqual(
       expect.objectContaining({ policyTier: "free" })
     );
+    expect(summary.products[ZAKI_PRODUCT_IDS.HIRE].quota).toEqual(
+      expect.objectContaining({
+        surface: HIRE_SURFACE,
+        bucket: "hire_weekly",
+        remaining: 7,
+        period: "week",
+      })
+    );
     expect(summary.products[ZAKI_PRODUCT_IDS.BRAIN]).toEqual(
       expect.objectContaining({
         memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
@@ -134,7 +153,7 @@ describe("platform usage summary", () => {
         }),
       })
     );
-    expect(resolveQuotaForSurface).toHaveBeenCalledTimes(3);
+    expect(resolveQuotaForSurface).toHaveBeenCalledTimes(4);
   });
 
   it("marks one product unavailable without failing the full summary", async () => {

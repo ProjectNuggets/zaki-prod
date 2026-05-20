@@ -18,6 +18,7 @@ export const ZAKI_PRODUCT_IDS = Object.freeze({
   SPACES: "spaces",
   AGENT: "agent",
   LEARN: "learn",
+  HIRE: "hire",
   BRAIN: "brain",
   CLI: "cli",
   LOCAL_APP: "local_app",
@@ -28,6 +29,7 @@ export const MEMORY_SCOPE_IDS = Object.freeze({
   PERSONAL_BRAIN: "personal_brain",
   WORKSPACE_MEMORY: "workspace_memory",
   LEARNER_MEMORY: "learner_memory",
+  CANDIDATE_MEMORY: "candidate_memory",
   SESSION_MEMORY: "session_memory",
 });
 
@@ -47,6 +49,7 @@ const LEGACY_PLATFORM_PLAN_ALIASES = Object.freeze({
   access_code: PLATFORM_PLAN_IDS.PERSONAL,
   agent: PLATFORM_PLAN_IDS.PERSONAL,
   learn: PLATFORM_PLAN_IDS.PERSONAL,
+  hire: PLATFORM_PLAN_IDS.PERSONAL,
   complete: PLATFORM_PLAN_IDS.PRO,
 });
 
@@ -54,6 +57,7 @@ const CURRENT_PRODUCTS = Object.freeze([
   ZAKI_PRODUCT_IDS.SPACES,
   ZAKI_PRODUCT_IDS.AGENT,
   ZAKI_PRODUCT_IDS.LEARN,
+  ZAKI_PRODUCT_IDS.HIRE,
   ZAKI_PRODUCT_IDS.BRAIN,
 ]);
 
@@ -78,6 +82,13 @@ const PRODUCT_DEFINITIONS = Object.freeze({
     lifecycle: "current",
     quotaPolicyId: "learn_learner",
     memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY,
+  }),
+  [ZAKI_PRODUCT_IDS.HIRE]: Object.freeze({
+    id: ZAKI_PRODUCT_IDS.HIRE,
+    label: "ZAKI Hire",
+    lifecycle: "current",
+    quotaPolicyId: "hire_candidate",
+    memoryScope: MEMORY_SCOPE_IDS.CANDIDATE_MEMORY,
   }),
   [ZAKI_PRODUCT_IDS.BRAIN]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.BRAIN,

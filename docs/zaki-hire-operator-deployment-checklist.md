@@ -305,6 +305,11 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - initial ZAKI-prod BFF routes for `/api/hire/health`, `/api/hire/status`,
   generic `/api/hire/*`, `/api/internal/hire/status`, and
   `/api/internal/hire/deployment-readiness`
+- initial BFF route allowlist that keeps engine-local operator/runtime routes
+  hidden from normal users while preserving the user-facing Hire product routes
+- first-class ZAKI Hire platform/quota surface and weekly BFF quota enforcement
+  for cost-bearing manual lead, scan, ingestion, generation, help, and
+  automation routes
 
 Still pending before staging deployment:
 
@@ -315,8 +320,8 @@ Still pending before staging deployment:
 - source policy storage/config bridge and provider runtime probes beyond current
   operator acknowledgements
 - hosted tenant background scheduler/queue replacement for local ghost mode
-- quota/usage hooks in the ZAKI BFF for prompt, scan, generation, storage, and
-  task events
+- storage-specific quotas, durable task/concurrency quotas, and normalized
+  usage events for central cost telemetry
 - typed ZAKI-native `/hire` frontend route and route-specific UAT
 
 ## Deployment Validator

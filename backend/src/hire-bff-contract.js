@@ -13,6 +13,7 @@ const HOP_BY_HOP_HEADERS = new Set([
 
 const STRIPPED_BROWSER_HEADERS = new Set([
   "authorization",
+  "accept-encoding",
   "content-type",
   "cookie",
   "host",
@@ -54,6 +55,84 @@ const HIRE_ARTIFACT_REF_FIELDS = new Set([
   "coverletterasset",
   "coverletterpath",
   "resumeasset",
+]);
+const HIRE_ROUTE_SEGMENT = "[^/?#]+";
+const HIRE_USER_ROUTE_ALLOWLIST = Object.freeze([
+  { methods: ["GET"], pattern: /^\/events$/ },
+  { methods: ["GET"], pattern: /^\/followups\/due$/ },
+  { methods: ["GET"], pattern: /^\/graph$/ },
+  { methods: ["GET", "POST"], pattern: /^\/template$/ },
+  { methods: ["POST"], pattern: /^\/help\/chat$/ },
+  { methods: ["POST"], pattern: /^\/errors$/ },
+  { methods: ["GET"], pattern: /^\/identity$/ },
+  { methods: ["GET"], pattern: /^\/leads$/ },
+  { methods: ["GET"], pattern: /^\/leads\/export\.csv$/ },
+  {
+    methods: ["GET", "DELETE"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}$`),
+  },
+  {
+    methods: ["GET"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/(?:versions|pdf)$`),
+  },
+  {
+    methods: ["PUT"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/(?:status|feedback|followup)$`),
+  },
+  { methods: ["POST"], pattern: /^\/leads\/manual$/ },
+  { methods: ["POST"], pattern: /^\/leads\/manual\/generate\/start$/ },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/(?:generate|generate/start|pipeline/run|form/read|apply/preview)$`),
+  },
+  { methods: ["GET"], pattern: /^\/profile$/ },
+  { methods: ["PUT"], pattern: /^\/profile\/(?:candidate|identity)$/ },
+  {
+    methods: ["POST"],
+    pattern: /^\/profile\/(?:skill|experience|project|education|certification|achievement)$/,
+  },
+  {
+    methods: ["PUT"],
+    pattern: new RegExp(`^/profile/(?:skill|experience|project)/${HIRE_ROUTE_SEGMENT}$`),
+  },
+  {
+    methods: ["DELETE"],
+    pattern: /^\/profile\/(?:skill|experience|project|education|certification|achievement)\/.+$/,
+  },
+  { methods: ["POST"], pattern: /^\/ingest$/ },
+  {
+    methods: ["POST"],
+    pattern: /^\/ingest\/(?:linkedin|github|profile|portfolio)$/,
+  },
+  { methods: ["GET"], pattern: /^\/ingest\/profile\/template$/ },
+  { methods: ["POST"], pattern: /^\/scan$/ },
+  { methods: ["POST"], pattern: /^\/scan\/stop$/ },
+  { methods: ["GET"], pattern: /^\/status$/ },
+  { methods: ["POST"], pattern: /^\/leads\/reevaluate$/ },
+  { methods: ["POST"], pattern: /^\/leads\/reevaluate\/stop$/ },
+  { methods: ["POST"], pattern: /^\/leads\/cleanup$/ },
+  { methods: ["POST"], pattern: /^\/free-sources\/scan$/ },
+  { methods: ["POST"], pattern: new RegExp(`^/fire/${HIRE_ROUTE_SEGMENT}$`) },
+  { methods: ["POST"], pattern: /^\/selectors\/refresh$/ },
+]);
+const HIRE_QUOTA_ROUTE_ALLOWLIST = Object.freeze([
+  { methods: ["POST"], pattern: /^\/help\/chat$/ },
+  { methods: ["POST"], pattern: /^\/leads\/manual$/ },
+  { methods: ["POST"], pattern: /^\/leads\/manual\/generate\/start$/ },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/(?:generate|generate/start|pipeline/run|form/read|apply/preview)$`),
+  },
+  { methods: ["POST"], pattern: /^\/ingest$/ },
+  {
+    methods: ["POST"],
+    pattern: /^\/ingest\/(?:linkedin|github|portfolio)$/,
+  },
+  { methods: ["POST"], pattern: /^\/scan$/ },
+  { methods: ["POST"], pattern: /^\/leads\/reevaluate$/ },
+  { methods: ["POST"], pattern: /^\/free-sources\/scan$/ },
+  { methods: ["POST"], pattern: new RegExp(`^/fire/${HIRE_ROUTE_SEGMENT}$`) },
+  { methods: ["POST"], pattern: /^\/selectors\/refresh$/ },
 ]);
 
 export function isHireEnabled(value) {
@@ -155,6 +234,15 @@ export function buildHireConfigErrorPayload(message, requestId) {
     code: "hire_config_missing",
     error: message,
     message,
+    requestId,
+  };
+}
+
+export function buildHireRouteUnavailablePayload(requestId) {
+  return {
+    code: "hire_route_unavailable",
+    error: "Hire route is unavailable.",
+    message: "This Hire route is not available through ZAKI.",
     requestId,
   };
 }
@@ -272,6 +360,22 @@ export function sanitizeHireUpstreamPayload(value, key = "") {
   return output;
 }
 
+export function isHireUserFacingPath(req = {}) {
+  const method = normalizeHireRequestMethod(req);
+  const path = normalizeHireRequestPath(req.originalUrl || req.path || req.url || req);
+  return HIRE_USER_ROUTE_ALLOWLIST.some((entry) =>
+    entry.methods.includes(method) && entry.pattern.test(path)
+  );
+}
+
+export function shouldConsumeHireIngressQuota(req = {}) {
+  const method = normalizeHireRequestMethod(req);
+  const path = normalizeHireRequestPath(req.originalUrl || req.path || req.url || req);
+  return HIRE_QUOTA_ROUTE_ALLOWLIST.some((entry) =>
+    entry.methods.includes(method) && entry.pattern.test(path)
+  );
+}
+
 function sanitizeHireArtifactRef(key, value) {
   const normalizedKey = normalizeHirePayloadKey(key);
   if (!HIRE_ARTIFACT_REF_FIELDS.has(normalizedKey)) return value;
@@ -282,6 +386,22 @@ function sanitizeHireArtifactRef(key, value) {
   }
   if (text.length > 240) return "";
   return text;
+}
+
+function normalizeHireRequestMethod(req = {}) {
+  return String(req?.method || "GET").trim().toUpperCase();
+}
+
+function normalizeHireRequestPath(value) {
+  const raw = String(value || "").trim().split("?")[0].split("#")[0] || "/";
+  let path = raw.startsWith("/") ? raw : `/${raw}`;
+  if (path.startsWith("/api/hire")) {
+    path = path.slice("/api/hire".length) || "/";
+  }
+  if (path.startsWith("/api/v1")) {
+    path = path.slice("/api/v1".length) || "/";
+  }
+  return path.replace(/\/+$/, "") || "/";
 }
 
 function normalizeHirePayloadKey(key) {

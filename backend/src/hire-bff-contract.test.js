@@ -4,7 +4,9 @@ import {
   buildHireDisabledPayload,
   buildHireForwardHeaders,
   buildHireProxyHeaders,
+  buildHireRouteUnavailablePayload,
   getHireBase,
+  isHireUserFacingPath,
   isHireEnabled,
   mapHireUpstreamFailure,
   resolveCanonicalHireUserId,
@@ -12,6 +14,7 @@ import {
   sanitizeHirePath,
   sanitizeHireProviderText,
   sanitizeHireUpstreamPayload,
+  shouldConsumeHireIngressQuota,
 } from "./hire-bff-contract.js";
 
 describe("hire BFF contract", () => {
@@ -65,6 +68,7 @@ describe("hire BFF contract", () => {
       {
         headers: {
           authorization: "Bearer browser-token",
+          "accept-encoding": "gzip",
           cookie: "refresh=secret",
           "x-internal-token": "evil",
           "x-zaki-user-id": "999",
@@ -79,6 +83,7 @@ describe("hire BFF contract", () => {
       }
     );
     expect(headers.authorization).toBeUndefined();
+    expect(headers["accept-encoding"]).toBeUndefined();
     expect(headers.cookie).toBeUndefined();
     expect(headers["x-internal-token"]).toBeUndefined();
     expect(headers["x-zaki-user-id"]).toBeUndefined();
@@ -104,6 +109,10 @@ describe("hire BFF contract", () => {
       code: "hire_config_missing",
       error: "missing",
       requestId: "req-4",
+    });
+    expect(buildHireRouteUnavailablePayload("req-5")).toMatchObject({
+      code: "hire_route_unavailable",
+      requestId: "req-5",
     });
   });
 
@@ -166,5 +175,62 @@ describe("hire BFF contract", () => {
         message: "Ready",
       },
     });
+  });
+
+  test("allows only user-facing hire proxy routes", () => {
+    expect(isHireUserFacingPath({ method: "GET", originalUrl: "/api/hire/leads" })).toBe(true);
+    expect(isHireUserFacingPath({ method: "POST", originalUrl: "/api/hire/scan" })).toBe(true);
+    expect(
+      isHireUserFacingPath({
+        method: "POST",
+        originalUrl: "/api/hire/leads/job_1/generate/start",
+      })
+    ).toBe(true);
+    expect(isHireUserFacingPath({ method: "GET", originalUrl: "/api/hire/settings" })).toBe(false);
+    expect(
+      isHireUserFacingPath({
+        method: "POST",
+        originalUrl: "/api/hire/settings/models/openai",
+      })
+    ).toBe(false);
+    expect(
+      isHireUserFacingPath({
+        method: "POST",
+        originalUrl: "/api/hire/runtime/vector/install",
+      })
+    ).toBe(false);
+    expect(isHireUserFacingPath({ method: "GET", originalUrl: "/api/hire/runtime/vector" })).toBe(false);
+    expect(isHireUserFacingPath({ method: "POST", originalUrl: "/api/hire/shutdown" })).toBe(false);
+    expect(isHireUserFacingPath({ method: "GET", originalUrl: "/api/hire/diagnostics" })).toBe(false);
+  });
+
+  test("identifies hire routes that consume central prompt quota", () => {
+    expect(shouldConsumeHireIngressQuota({ method: "GET", originalUrl: "/api/hire/leads" })).toBe(false);
+    expect(shouldConsumeHireIngressQuota({ method: "POST", originalUrl: "/api/hire/leads/manual" })).toBe(true);
+    expect(
+      shouldConsumeHireIngressQuota({
+        method: "POST",
+        originalUrl: "/api/hire/leads/job_1/generate",
+      })
+    ).toBe(true);
+    expect(shouldConsumeHireIngressQuota({ method: "POST", originalUrl: "/api/hire/scan" })).toBe(true);
+    expect(
+      shouldConsumeHireIngressQuota({
+        method: "POST",
+        originalUrl: "/api/hire/scan/stop",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeHireIngressQuota({
+        method: "POST",
+        originalUrl: "/api/hire/ingest/profile",
+      })
+    ).toBe(false);
+    expect(
+      shouldConsumeHireIngressQuota({
+        method: "POST",
+        originalUrl: "/api/hire/ingest/portfolio",
+      })
+    ).toBe(true);
   });
 });

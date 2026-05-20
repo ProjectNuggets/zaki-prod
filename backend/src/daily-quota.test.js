@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 import {
   APP_CHAT_SURFACE,
+  HIRE_SURFACE,
   LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
   buildDailyLimitExceededPayload,
@@ -21,6 +22,7 @@ import {
 describe("daily quota helpers", () => {
   it("resolves quota surface with app_chat default", () => {
     expect(resolveQuotaSurface(APP_CHAT_SURFACE)).toBe(APP_CHAT_SURFACE);
+    expect(resolveQuotaSurface(HIRE_SURFACE)).toBe(HIRE_SURFACE);
     expect(resolveQuotaSurface(LEARNING_SURFACE)).toBe(LEARNING_SURFACE);
     expect(resolveQuotaSurface(ZAKI_BOT_SURFACE)).toBe(ZAKI_BOT_SURFACE);
     expect(resolveQuotaSurface("unknown")).toBe(APP_CHAT_SURFACE);
@@ -33,6 +35,8 @@ describe("daily quota helpers", () => {
       ZAKI_APP_CHAT_DAILY_PROMPT_BUCKET: "chat_bucket",
       ZAKI_LEARNING_WEEKLY_PROMPT_LIMIT: "12",
       ZAKI_LEARNING_WEEKLY_PROMPT_BUCKET: "learning_bucket",
+      ZAKI_HIRE_WEEKLY_PROMPT_LIMIT: "6",
+      ZAKI_HIRE_WEEKLY_PROMPT_BUCKET: "hire_bucket",
       ZAKI_BOT_WEEKLY_PROMPT_LIMIT: "3",
       ZAKI_BOT_WEEKLY_PROMPT_BUCKET: "bot_bucket",
     };
@@ -54,6 +58,12 @@ describe("daily quota helpers", () => {
       bucket: "learning_bucket",
       period: "week",
     });
+    expect(getSurfaceQuotaConfig(env, HIRE_SURFACE)).toEqual({
+      surface: HIRE_SURFACE,
+      limit: 6,
+      bucket: "hire_bucket",
+      period: "week",
+    });
     expect(getSurfaceQuotaConfig({}, APP_CHAT_SURFACE)).toEqual({
       surface: APP_CHAT_SURFACE,
       limit: 10,
@@ -70,6 +80,12 @@ describe("daily quota helpers", () => {
       surface: LEARNING_SURFACE,
       limit: 10,
       bucket: "learning_weekly",
+      period: "week",
+    });
+    expect(getSurfaceQuotaConfig({}, HIRE_SURFACE)).toEqual({
+      surface: HIRE_SURFACE,
+      limit: 10,
+      bucket: "hire_weekly",
       period: "week",
     });
   });
@@ -141,6 +157,22 @@ describe("daily quota helpers", () => {
       expect.objectContaining({
         code: "weekly_limit_reached",
         surface: LEARNING_SURFACE,
+        limit: 10,
+        period: "week",
+        remaining: 0,
+      })
+    );
+    expect(
+      buildDailyLimitExceededPayload({
+        limit: 10,
+        resetAt: "2026-03-16T00:00:00.000Z",
+        surface: HIRE_SURFACE,
+        period: "week",
+      })
+    ).toEqual(
+      expect.objectContaining({
+        code: "weekly_limit_reached",
+        surface: HIRE_SURFACE,
         limit: 10,
         period: "week",
         remaining: 0,

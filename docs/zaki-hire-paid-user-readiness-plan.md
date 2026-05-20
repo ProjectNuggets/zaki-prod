@@ -39,11 +39,11 @@ final security/code review has no open P0/P1 findings.
 | 0 | Source And Dependency Audit | Understand JustHireMe deeply enough to map features, routes, tasks, env vars, provider/API tokens, source adapters, runtime packages, and data stores. | Dependency inventory is complete and accepted before implementation starts. | DRAFTED |
 | 1 | Source And License Boundary | Fork JustHireMe into `zaki-hire-engine`, preserve AGPL notices, define proprietary ZAKI boundary, and remove misleading ZAKI MIT release claims before production. | Legal/product owner accepts boundary and source-offer process. | IN PROGRESS |
 | 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | IN PROGRESS |
-| 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | NOT STARTED |
+| 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | IN PROGRESS |
 | 4 | ZAKI-Native UI Port | Port JustHireMe workflows into `/hire` using the ZAKI shell and product patterns. | Route-by-route UAT passes and no upstream branding leaks. | NOT STARTED |
 | 5 | Source Policy And Discovery | Make every upstream discovery source safe for hosted SaaS with operator-managed credentials, source policies, egress controls, quotas, and audit. | Manual, feed/API, broad scan, X, Apify, custom connector, and logged-in/source-provider lanes all pass readiness or report controlled degradation. | NOT STARTED |
 | 6 | Multi-User Isolation | Prove users cannot cross-read profile, leads, generated documents, graph/vector state, events, tasks, or artifacts. | Two-user smoke passes with zero marker leakage. | NOT STARTED |
-| 7 | Quota And Cost Telemetry | Enforce BFF limits and emit normalized usage events for central cost telemetry. | Quota tests and usage-event tests pass. | NOT STARTED |
+| 7 | Quota And Cost Telemetry | Enforce BFF limits and emit normalized usage events for central cost telemetry. | Quota tests and usage-event tests pass. | IN PROGRESS |
 | 8 | Governance | Implement account export, deletion, retention cleanup, audit, backup, and restore for all Hire stores. | Governance tests and staging restore drill pass. | NOT STARTED |
 | 9 | Observability And Failure UX | Add health, readiness, task state, sanitized failures, operator status, and alerts. | Internal observability endpoint and user failure states are verified. | NOT STARTED |
 | 10 | Production Deployment Readiness | Add infrastructure chart, ArgoCD app, secrets, validator, staging deployment, and readiness endpoint. | Staging readiness is green with immutable images and source pins. | NOT STARTED |
@@ -126,7 +126,8 @@ Phase 2 implementation evidence as of 2026-05-20:
 | Internal token forwarding | Engine receives token only from ZAKI backend | DONE for initial BFF proxy: forwards operator token as Bearer and `X-Internal-Token`; browser auth/cookies are stripped |
 | Tenant forwarding | Engine receives canonical user/account id from auth session | DONE for user-id tenancy: BFF derives canonical ZAKI user id and forwards `X-Zaki-User-Id`; account/team tenancy remains future if product account tenancy is added |
 | Error normalization | User-safe errors returned for engine failures | DONE for initial BFF proxy: auth, missing config, unavailable, invalid JSON, conflicts, not found, and oversized requests normalize to Hire error codes |
-| Quota hooks | Prompt, scan, upload, generation, storage, and task limits enforced | TODO |
+| Route allowlist | User proxy exposes only user-facing Hire routes; operator settings and shutdown/runtime status/install/diagnostics stay hidden | DONE for initial BFF proxy route policy |
+| Quota hooks | Prompt, scan, upload, generation, storage, and task limits enforced | PARTIAL: central `hire` quota surface added; manual lead, scan, free-source scan, reevaluation, ingest, generation, help, and automation routes consume weekly Hire prompt quota; storage/task-specific quotas still pending |
 | Usage events | Normalized events emitted for LLM, embedding, scan, artifact, and task work | TODO |
 | Automation consent hooks | Form read, preview, and auto-apply require user consent and audit records | TODO |
 | Export/delete hooks | Account governance includes Hire resources | TODO |
@@ -144,9 +145,19 @@ Phase 3 implementation evidence as of 2026-05-20:
   `/api/hire/*` proxying to the engine `/api/v1/*` surface.
 - BFF strips browser `Authorization`, cookies, tenant headers, and internal
   token spoofing before injecting the operator token and canonical ZAKI tenant.
+- BFF denies non-user-facing engine routes through the browser proxy, including
+  `/settings`, `/settings/models/*`, `/runtime/vector`,
+  `/runtime/vector/install`, `/shutdown`, and `/diagnostics`.
 - BFF strips provider/model/API-key/source credential fields from user JSON
   payloads and sanitizes upstream JSON before browser display.
-- Verified ZAKI backend with `npm --prefix backend test -- --runInBand`: 477
+- Added first-class platform policy/usage/quota identifiers for ZAKI Hire and
+  central BFF quota enforcement on cost-bearing Hire routes.
+- Verified focused Hire BFF/quota/policy tests with `npm --prefix backend test
+  -- src/hire-bff-contract.test.js src/daily-quota.test.js
+  src/agent-and-chat-quota.integration.test.js src/platform-policy.test.js
+  src/platform-usage-summary.test.js src/effective-entitlements.test.js
+  --runInBand`: 53 passed.
+- Verified ZAKI backend with `npm --prefix backend test -- --runInBand`: 480
   passed.
 - Verified ZAKI backend with `npm --prefix backend run lint`: passed.
 - Live hosted-mode smoke against disposable PostgreSQL 16 and local engine:

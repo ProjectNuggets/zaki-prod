@@ -113,11 +113,14 @@ import {
 import {
   buildHireConfigErrorPayload,
   buildHireDisabledPayload,
+  buildHireRouteUnavailablePayload,
+  isHireUserFacingPath,
   isHireEnabled,
   mapHireUpstreamFailure,
   resolveCanonicalHireUserId,
   sanitizeHireClientPayload,
   sanitizeHireUpstreamPayload,
+  shouldConsumeHireIngressQuota,
 } from "./hire-bff-contract.js";
 import {
   fetchHireDeploymentReadiness,
@@ -156,6 +159,7 @@ import {
   APP_CHAT_SURFACE,
   DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET,
   DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT,
+  HIRE_SURFACE,
   LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
   buildDailyLimitExceededPayload,
@@ -540,6 +544,7 @@ const ANONYMOUS_SPACES_QUOTA_CONFIG = {
     : DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT,
 };
 const LEARNING_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, LEARNING_SURFACE);
+const HIRE_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, HIRE_SURFACE);
 const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
 const AGENT_HISTORY_MODE_DEFAULT = "merged";
 const ZAKI_BOT_SPACE_ID = "zaki-bot";
@@ -612,6 +617,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
   learningDailyPromptLimit: LEARNING_QUOTA_CONFIG.limit,
+  hireWeeklyPromptLimit: HIRE_QUOTA_CONFIG.limit,
   zakiBotDailyPromptLimit: ZAKI_BOT_QUOTA_CONFIG.limit,
   agentPerMinuteLimit: DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE,
 };
@@ -2706,6 +2712,30 @@ function copyResponseHeaders(upstream, res) {
   });
 }
 
+function copyHireResponseHeaders(upstream, res) {
+  upstream.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (
+      [
+        "connection",
+        "transfer-encoding",
+        "content-encoding",
+        "content-length",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "set-cookie",
+        "te",
+        "trailers",
+        "upgrade",
+      ].includes(lower)
+    ) {
+      return;
+    }
+    res.setHeader(key, value);
+  });
+}
+
 function sanitizeAgentUpstreamPayload(payload) {
   if (payload == null) return null;
   if (typeof payload === "string") {
@@ -2882,6 +2912,7 @@ const AdminRateLimitsUpdateSchema = z
   .object({
     appChatDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     learningDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    hireWeeklyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     zakiBotDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     agentPerMinuteLimit: z.coerce.number().int().min(1).max(10000).optional(),
   })
@@ -2913,6 +2944,7 @@ const ProductEventSchema = z.object({
     "website_pricing",
     "website_product_agent",
     "website_product_learn",
+    "website_product_hire",
     "website_product_complete",
     "website_product_spaces",
     "chat_input",
@@ -2922,7 +2954,7 @@ const ProductEventSchema = z.object({
   ]),
   language: z.enum(["en", "ar"]).optional(),
   viewport: z.enum(["mobile", "tablet", "desktop"]).optional(),
-  plan: z.enum(["free", "student", "personal", "agent", "learn", "complete"]).nullable().optional(),
+  plan: z.enum(["free", "student", "personal", "agent", "learn", "hire", "complete"]).nullable().optional(),
   interval: z.enum(["monthly", "yearly"]).nullable().optional(),
   timestamp: z.string().max(120).optional(),
 });
@@ -3597,6 +3629,10 @@ function sanitizeRuntimeRateLimitSettings(raw = null) {
       source.learningDailyPromptLimit,
       LEARNING_QUOTA_CONFIG.limit
     ),
+    hireWeeklyPromptLimit: normalizeRateLimitValue(
+      source.hireWeeklyPromptLimit,
+      HIRE_QUOTA_CONFIG.limit
+    ),
     zakiBotDailyPromptLimit: normalizeRateLimitValue(
       source.zakiBotDailyPromptLimit,
       ZAKI_BOT_QUOTA_CONFIG.limit
@@ -3616,6 +3652,9 @@ function buildRateLimitSettingsResponse(settings = runtimeRateLimitSettings) {
     learningDailyPromptLimit: settings.learningDailyPromptLimit,
     learningDailyPromptBucket: LEARNING_QUOTA_CONFIG.bucket,
     learningPromptPeriod: LEARNING_QUOTA_CONFIG.period || "week",
+    hireWeeklyPromptLimit: settings.hireWeeklyPromptLimit,
+    hirePromptBucket: HIRE_QUOTA_CONFIG.bucket,
+    hirePromptPeriod: HIRE_QUOTA_CONFIG.period || "week",
     zakiBotDailyPromptLimit: settings.zakiBotDailyPromptLimit,
     zakiBotDailyPromptBucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
     zakiBotPromptPeriod: ZAKI_BOT_QUOTA_CONFIG.period || "week",
@@ -3669,6 +3708,14 @@ function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
       period: LEARNING_QUOTA_CONFIG.period || "week",
     };
   }
+  if (normalizedSurface === HIRE_SURFACE) {
+    return {
+      surface: HIRE_SURFACE,
+      bucket: HIRE_QUOTA_CONFIG.bucket,
+      limit: runtimeRateLimitSettings.hireWeeklyPromptLimit,
+      period: HIRE_QUOTA_CONFIG.period || "week",
+    };
+  }
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
     return {
       surface: ZAKI_BOT_SURFACE,
@@ -3697,6 +3744,8 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
     unlimited = Boolean(effective?.products?.agent?.access);
   } else if (!unlimited && normalizedSurface === LEARNING_SURFACE) {
     unlimited = Boolean(effective?.products?.learn?.access);
+  } else if (!unlimited && normalizedSurface === HIRE_SURFACE) {
+    unlimited = Boolean(effective?.products?.hire?.access);
   } else if (!unlimited) {
     unlimited =
       Boolean(effective?.products?.spaces?.uncapped) ||
@@ -6535,6 +6584,7 @@ const CheckoutSchema = z.object({
           "website_pricing",
           "website_product_agent",
           "website_product_learn",
+          "website_product_hire",
           "website_product_complete",
           "website_product_spaces",
           "chat_input",
@@ -6864,6 +6914,9 @@ app.patch("/api/admin/rate-limits", express.json({ limit: "50kb" }), async (req,
     }
     if (validation.data.learningDailyPromptLimit !== undefined) {
       patch.learningDailyPromptLimit = validation.data.learningDailyPromptLimit;
+    }
+    if (validation.data.hireWeeklyPromptLimit !== undefined) {
+      patch.hireWeeklyPromptLimit = validation.data.hireWeeklyPromptLimit;
     }
     if (validation.data.zakiBotDailyPromptLimit !== undefined) {
       patch.zakiBotDailyPromptLimit = validation.data.zakiBotDailyPromptLimit;
@@ -9972,6 +10025,51 @@ function shouldProxyHireRawBody(req) {
   );
 }
 
+function enforceHireProxyPolicy(req, res, next) {
+  if (isHireUserFacingPath(req)) {
+    next();
+    return;
+  }
+  res.status(404).json(buildHireRouteUnavailablePayload(getOrCreateRequestId(req)));
+}
+
+async function enforceHirePromptQuotaForIngress(req, res, next) {
+  if (!shouldConsumeHireIngressQuota(req)) {
+    next();
+    return;
+  }
+  if (!assertHireRouteEnabled(req, res)) return;
+  try {
+    const quotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser: req.hireAuthResult?.zakiUser,
+      res,
+      surface: HIRE_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!quotaDecision.allowed) {
+      res.status(quotaDecision.status).json(quotaDecision.payload);
+      return;
+    }
+    req.hireQuotaChecked = true;
+    next();
+  } catch (error) {
+    console.error("[Hire] Quota check error:", {
+      requestId: getOrCreateRequestId(req),
+      route: req.originalUrl,
+      method: req.method,
+      error: error?.message || "Hire quota check failed.",
+    });
+    res.status(503).json({
+      code: "hire_quota_unavailable",
+      error: "Hire quota is unavailable.",
+      message: "Hire is temporarily unable to check usage safely.",
+      retryable: true,
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+}
+
 async function pipeHireResponse(req, res, upstream) {
   const requestId = getOrCreateRequestId(req);
   if (!upstream.ok) {
@@ -10007,7 +10105,7 @@ async function pipeHireResponse(req, res, upstream) {
   }
 
   res.status(upstream.status);
-  copyResponseHeaders(upstream, res);
+  copyHireResponseHeaders(upstream, res);
   if (!upstream.body) {
     res.end();
     return;
@@ -13538,24 +13636,30 @@ app.get("/api/hire/status", requireHireContext, async (req, res) => {
   });
 });
 
-app.all("/api/hire/:hirePath(*)", requireHireContext, async (req, res) => {
-  let targetPath;
-  try {
-    targetPath = hireTargetPathFromRequest(req);
-  } catch (error) {
-    res.status(400).json({
-      code: "invalid_hire_path",
-      error: "Invalid Hire path.",
-      message: "The requested Hire path is invalid.",
-      requestId: getOrCreateRequestId(req),
+app.all(
+  "/api/hire/:hirePath(*)",
+  requireHireContext,
+  enforceHireProxyPolicy,
+  enforceHirePromptQuotaForIngress,
+  async (req, res) => {
+    let targetPath;
+    try {
+      targetPath = hireTargetPathFromRequest(req);
+    } catch (error) {
+      res.status(400).json({
+        code: "invalid_hire_path",
+        error: "Invalid Hire path.",
+        message: "The requested Hire path is invalid.",
+        requestId: getOrCreateRequestId(req),
+      });
+      return;
+    }
+    await proxyHireRequest(req, res, targetPath, {
+      label: `Hire ${req.method} proxy request`,
+      timeoutMs: HIRE_ENGINE_STREAM_TIMEOUT_MS,
     });
-    return;
   }
-  await proxyHireRequest(req, res, targetPath, {
-    label: `Hire ${req.method} proxy request`,
-    timeoutMs: HIRE_ENGINE_STREAM_TIMEOUT_MS,
-  });
-});
+);
 
 // =============================================================================
 // SHARE CONVERSATION ROUTES

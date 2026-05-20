@@ -2,6 +2,7 @@ export const COMMERCIAL_PLAN_IDS = Object.freeze({
   SPACES_FREE: "spaces_free",
   AGENT: "agent",
   LEARN: "learn",
+  HIRE: "hire",
   COMPLETE: "complete",
   LEGACY_PERSONAL: "legacy_personal",
   ACCESS_CODE: "access_code",
@@ -9,7 +10,7 @@ export const COMMERCIAL_PLAN_IDS = Object.freeze({
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
 const LEGACY_PAID_TIERS = new Set(["student", "personal", "pro"]);
-const COMMERCIAL_SUBSCRIPTION_PLANS = new Set(["agent", "learn", "complete"]);
+const COMMERCIAL_SUBSCRIPTION_PLANS = new Set(["agent", "learn", "hire", "complete"]);
 
 function normalizeRawTier(tier) {
   const normalized = String(tier || "").trim().toLowerCase();
@@ -52,6 +53,7 @@ function resolveSubscriptionCommercialPlanId(tier) {
   const normalized = normalizeRawTier(tier);
   if (normalized === "agent") return COMMERCIAL_PLAN_IDS.AGENT;
   if (normalized === "learn") return COMMERCIAL_PLAN_IDS.LEARN;
+  if (normalized === "hire") return COMMERCIAL_PLAN_IDS.HIRE;
   if (normalized === "complete") return COMMERCIAL_PLAN_IDS.COMPLETE;
   if (LEGACY_PAID_TIERS.has(normalized)) return COMMERCIAL_PLAN_IDS.LEGACY_PERSONAL;
   return COMMERCIAL_PLAN_IDS.SPACES_FREE;
@@ -74,7 +76,8 @@ function buildProductPermissions(planId, { authenticated = true } = {}) {
   const hasWholeAppAccess = viaComplete || viaLegacy || viaAccessCode;
   const hasAgent = planId === COMMERCIAL_PLAN_IDS.AGENT || hasWholeAppAccess;
   const hasLearn = planId === COMMERCIAL_PLAN_IDS.LEARN || hasWholeAppAccess;
-  const hasPaidProduct = hasAgent || hasLearn || hasWholeAppAccess;
+  const hasHire = planId === COMMERCIAL_PLAN_IDS.HIRE || hasWholeAppAccess;
+  const hasPaidProduct = hasAgent || hasLearn || hasHire || hasWholeAppAccess;
 
   return {
     spaces: {
@@ -93,6 +96,11 @@ function buildProductPermissions(planId, { authenticated = true } = {}) {
       access: hasLearn,
       preview: !hasLearn,
       weeklyFreeActions: hasLearn ? null : 10,
+    },
+    hire: {
+      access: hasHire,
+      preview: !hasHire,
+      weeklyFreeActions: hasHire ? null : 10,
     },
     billing: {
       paid: hasPaidProduct,
@@ -122,6 +130,7 @@ export function getCommercialPlanState({
     const labelByPlanId = {
       [COMMERCIAL_PLAN_IDS.AGENT]: "ZAKI Agent",
       [COMMERCIAL_PLAN_IDS.LEARN]: "ZAKI Learn",
+      [COMMERCIAL_PLAN_IDS.HIRE]: "ZAKI Hire",
       [COMMERCIAL_PLAN_IDS.COMPLETE]: "ZAKI Complete",
       [COMMERCIAL_PLAN_IDS.LEGACY_PERSONAL]: "ZAKI Complete",
     };

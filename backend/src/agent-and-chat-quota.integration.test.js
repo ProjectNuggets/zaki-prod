@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { APP_CHAT_SURFACE, ZAKI_BOT_SURFACE } from "./daily-quota.js";
+import { APP_CHAT_SURFACE, HIRE_SURFACE, ZAKI_BOT_SURFACE } from "./daily-quota.js";
 import {
   buildUsageQuotaResponse,
   enforcePromptQuotaForIngress,
@@ -25,15 +25,30 @@ function createMockRes() {
   };
 }
 
-function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10 } = {}) {
+function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10, hireLimit = 10 } = {}) {
   const usage = new Map();
   const dailyResetAt = "2026-03-10T00:00:00.000Z";
   const weeklyResetAt = "2026-03-16T00:00:00.000Z";
   return {
     async consumePromptQuotaForUser(zakiUser, { surface } = {}) {
-      const safeSurface = surface === ZAKI_BOT_SURFACE ? ZAKI_BOT_SURFACE : APP_CHAT_SURFACE;
-      const limit = safeSurface === ZAKI_BOT_SURFACE ? botLimit : appLimit;
-      const bucket = safeSurface === ZAKI_BOT_SURFACE ? "zaki_bot_weekly" : "app_chat";
+      const safeSurface =
+        surface === ZAKI_BOT_SURFACE
+          ? ZAKI_BOT_SURFACE
+          : surface === HIRE_SURFACE
+            ? HIRE_SURFACE
+            : APP_CHAT_SURFACE;
+      const limit =
+        safeSurface === ZAKI_BOT_SURFACE
+          ? botLimit
+          : safeSurface === HIRE_SURFACE
+            ? hireLimit
+            : appLimit;
+      const bucket =
+        safeSurface === ZAKI_BOT_SURFACE
+          ? "zaki_bot_weekly"
+          : safeSurface === HIRE_SURFACE
+            ? "hire_weekly"
+            : "app_chat";
       const hasAccess = Boolean(zakiUser.accessActive);
       const unlimited =
         safeSurface === APP_CHAT_SURFACE
@@ -41,12 +56,23 @@ function createInMemoryQuotaConsumer({ appLimit = 10, botLimit = 10 } = {}) {
             zakiUser.plan_tier === "personal" ||
             zakiUser.plan_tier === "complete" ||
             hasAccess
-          : zakiUser.plan_tier === "personal" ||
+          : safeSurface === HIRE_SURFACE
+            ? zakiUser.plan_tier === "personal" ||
+              zakiUser.plan_tier === "hire" ||
+              zakiUser.plan_tier === "complete" ||
+              hasAccess
+            : zakiUser.plan_tier === "personal" ||
             zakiUser.plan_tier === "agent" ||
             zakiUser.plan_tier === "complete" ||
             hasAccess;
-      const resetAt = safeSurface === ZAKI_BOT_SURFACE ? weeklyResetAt : dailyResetAt;
-      const period = safeSurface === ZAKI_BOT_SURFACE ? "week" : "day";
+      const resetAt =
+        safeSurface === ZAKI_BOT_SURFACE || safeSurface === HIRE_SURFACE
+          ? weeklyResetAt
+          : dailyResetAt;
+      const period =
+        safeSurface === ZAKI_BOT_SURFACE || safeSurface === HIRE_SURFACE
+          ? "week"
+          : "day";
       if (unlimited) {
         return {
           allowed: true,
@@ -126,7 +152,11 @@ async function runIngressHandler({
 
 describe("agent/chat surface quota integration", () => {
   it("free users get independent app_chat daily and zaki_bot weekly buckets", async () => {
-    const { consumePromptQuotaForUser } = createInMemoryQuotaConsumer({ appLimit: 10, botLimit: 10 });
+    const { consumePromptQuotaForUser } = createInMemoryQuotaConsumer({
+      appLimit: 10,
+      botLimit: 10,
+      hireLimit: 10,
+    });
     const freeUser = { id: 77, plan_tier: "free", plan_status: "inactive", accessActive: false };
 
     const appResults = [];
@@ -149,6 +179,16 @@ describe("agent/chat surface quota integration", () => {
         })
       );
     }
+    const hireResults = [];
+    for (let i = 0; i < 11; i += 1) {
+      hireResults.push(
+        await runIngressHandler({
+          zakiUser: freeUser,
+          surface: HIRE_SURFACE,
+          consumePromptQuotaForUser,
+        })
+      );
+    }
 
     expect(appResults.slice(0, 10).every((res) => res.statusCode === 200)).toBe(true);
     expect(appResults[10].statusCode).toBe(429);
@@ -165,6 +205,16 @@ describe("agent/chat surface quota integration", () => {
       expect.objectContaining({
         code: "weekly_limit_reached",
         surface: ZAKI_BOT_SURFACE,
+        period: "week",
+      })
+    );
+
+    expect(hireResults.slice(0, 10).every((res) => res.statusCode === 200)).toBe(true);
+    expect(hireResults[10].statusCode).toBe(429);
+    expect(hireResults[10].body).toEqual(
+      expect.objectContaining({
+        code: "weekly_limit_reached",
+        surface: HIRE_SURFACE,
         period: "week",
       })
     );
@@ -234,7 +284,9 @@ describe("agent/chat surface quota integration", () => {
     const resolveSurfaceQuotaConfig = jest.fn((surface) =>
       surface === ZAKI_BOT_SURFACE
         ? { surface: ZAKI_BOT_SURFACE, limit: 10, bucket: "zaki_bot_weekly", period: "week" }
-        : { surface: APP_CHAT_SURFACE, limit: 10, bucket: "app_chat", period: "day" }
+        : surface === HIRE_SURFACE
+          ? { surface: HIRE_SURFACE, limit: 10, bucket: "hire_weekly", period: "week" }
+          : { surface: APP_CHAT_SURFACE, limit: 10, bucket: "app_chat", period: "day" }
     );
 
     const appPayload = await buildUsageQuotaResponse({
@@ -277,5 +329,26 @@ describe("agent/chat surface quota integration", () => {
       })
     );
     expect(readWeeklyPromptUsage).toHaveBeenCalledTimes(1);
+
+    const hirePayload = await buildUsageQuotaResponse({
+      zakiUser: { id: 1, unlimitedApp: false },
+      surface: HIRE_SURFACE,
+      buildUserQuotaContext,
+      readDailyPromptUsage,
+      readWeeklyPromptUsage,
+      resolveSurfaceQuotaConfig,
+      dbGet: jest.fn(),
+      nowDate: new Date("2026-03-09T09:00:00.000Z"),
+    });
+    expect(hirePayload).toEqual(
+      expect.objectContaining({
+        surface: HIRE_SURFACE,
+        bucket: "hire_weekly",
+        used: 4,
+        remaining: 6,
+        period: "week",
+      })
+    );
+    expect(readWeeklyPromptUsage).toHaveBeenCalledTimes(2);
   });
 });

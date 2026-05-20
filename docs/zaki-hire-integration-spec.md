@@ -299,9 +299,19 @@ Implementation checkpoint on 2026-05-20:
 - The BFF sanitizes user JSON payloads and upstream JSON responses so
   operator-managed provider/model/API-key/source credential fields do not become
   browser-visible contract.
+- The BFF now applies an explicit user-facing route allowlist before proxying.
+  The browser can reach the Hire product surfaces needed for leads, profile,
+  ingestion, discovery, generation, automation, graph, template, activity, and
+  help; it cannot reach engine-local operator routes such as `/settings`,
+  `/settings/models/*`, `/runtime/vector`, `/runtime/vector/install`,
+  `/shutdown`, or `/diagnostics`.
+- The BFF registers `hire` as a first-class central quota and platform usage
+  surface. Cost-bearing Hire mutations consume the weekly Hire quota and return
+  the standard `X-Zaki-Quota-*` headers.
 - Object-storage provider support, imported-file artifact cataloging,
   signed/proxied artifact access, artifact export/delete/retention, source
-  policy storage, consent/audit records, quota events, and hosted tenant
+  policy storage, consent/audit records, normalized usage events, storage/task
+  quota classes, and hosted tenant
   background scheduling are still open implementation work. A future deployment
   decision still needs to decide whether graph/vector remain embedded
   Kuzu/LanceDB or move behind dedicated internal services.
@@ -410,8 +420,10 @@ normalized usage events for:
 - provider, model, feature, tenant, user, and request id
 
 The central auth/account system can later aggregate these events into plan
-limits, billing analytics, and operator dashboards. Until then, ZAKI Hire should
-still enforce conservative route-level quotas in the BFF.
+limits, billing analytics, and operator dashboards. Until then, ZAKI Hire
+enforces conservative route-level weekly quotas in the BFF for cost-bearing
+manual lead, scan, free-source scan, reevaluation, ingestion, generation, help,
+and automation routes.
 
 ## Security And Privacy
 
