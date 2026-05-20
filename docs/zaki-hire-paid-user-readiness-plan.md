@@ -128,7 +128,7 @@ Phase 2 implementation evidence as of 2026-05-20:
 | Error normalization | User-safe errors returned for engine failures | DONE for initial BFF proxy: auth, missing config, unavailable, invalid JSON, conflicts, not found, and oversized requests normalize to Hire error codes |
 | Route allowlist | User proxy exposes only user-facing Hire routes; operator settings and shutdown/runtime status/install/diagnostics stay hidden | DONE for initial BFF proxy route policy |
 | Quota hooks | Prompt, scan, upload, generation, storage, and task limits enforced | PARTIAL: central `hire` quota surface added; manual lead, scan, free-source scan, reevaluation, ingest, generation, help, and automation routes consume weekly Hire prompt quota; storage/task-specific quotas still pending |
-| Usage events | Normalized events emitted for LLM, embedding, scan, artifact, and task work | TODO |
+| Usage events | Normalized events emitted for LLM, embedding, scan, artifact, and task work | PARTIAL: ZAKI prod writes central route-level `zaki_usage_events` after successful BFF quota admission; granular engine LLM token, embedding, source page, artifact byte, and task duration events still pending |
 | Automation consent hooks | Form read, preview, and auto-apply require user consent and audit records | TODO |
 | Export/delete hooks | Account governance includes Hire resources | TODO |
 
@@ -152,11 +152,17 @@ Phase 3 implementation evidence as of 2026-05-20:
   payloads and sanitizes upstream JSON before browser display.
 - Added first-class platform policy/usage/quota identifiers for ZAKI Hire and
   central BFF quota enforcement on cost-bearing Hire routes.
+- Added central `zaki_usage_events` ledger schema and route-level Hire BFF
+  usage events for successful quota-admitted scan, ingestion, generation, help,
+  reevaluation, and automation routes.
+- Exposed standard `X-Zaki-Quota-*` headers through CORS so the `/hire` UI can
+  render quota state from BFF responses.
 - Verified focused Hire BFF/quota/policy tests with `npm --prefix backend test
   -- src/hire-bff-contract.test.js src/daily-quota.test.js
   src/agent-and-chat-quota.integration.test.js src/platform-policy.test.js
   src/platform-usage-summary.test.js src/effective-entitlements.test.js
   --runInBand`: 53 passed.
+- Verified focused Hire usage-event tests with `npm --prefix backend test -- src/hire-bff-contract.test.js src/usage-events.test.js src/hire-usage-events.test.js --runInBand`: 23 passed.
 - Verified ZAKI backend with `npm --prefix backend test -- --runInBand`: 480
   passed.
 - Verified ZAKI backend with `npm --prefix backend run lint`: passed.

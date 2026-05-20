@@ -308,9 +308,13 @@ Implementation checkpoint on 2026-05-20:
 - The BFF registers `hire` as a first-class central quota and platform usage
   surface. Cost-bearing Hire mutations consume the weekly Hire quota and return
   the standard `X-Zaki-Quota-*` headers.
+- ZAKI prod now has a central `zaki_usage_events` ledger and records normalized
+  route-level Hire BFF events after successful quota admission for scan,
+  ingestion, generation, help, reevaluation, and automation routes.
 - Object-storage provider support, imported-file artifact cataloging,
   signed/proxied artifact access, artifact export/delete/retention, source
-  policy storage, consent/audit records, normalized usage events, storage/task
+  policy storage, consent/audit records, granular engine usage events for LLM
+  tokens, embeddings, source pages, artifacts, and task duration, storage/task
   quota classes, and hosted tenant
   background scheduling are still open implementation work. A future deployment
   decision still needs to decide whether graph/vector remain embedded
@@ -405,8 +409,9 @@ behind operator controls.
 ## Cost And Usage Telemetry
 
 Cost telemetry can be centralized later behind the central auth/account system,
-but the engine must emit usable events from the start. The BFF should record
-normalized usage events for:
+but the engine must emit usable events from the start. ZAKI prod now records
+route-level Hire BFF usage events into `zaki_usage_events` after quota
+admission. The next telemetry slices should add granular engine events for:
 
 - LLM prompt and completion tokens
 - embedding tokens and vector writes

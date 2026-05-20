@@ -116,23 +116,88 @@ const HIRE_USER_ROUTE_ALLOWLIST = Object.freeze([
   { methods: ["POST"], pattern: /^\/selectors\/refresh$/ },
 ]);
 const HIRE_QUOTA_ROUTE_ALLOWLIST = Object.freeze([
-  { methods: ["POST"], pattern: /^\/help\/chat$/ },
-  { methods: ["POST"], pattern: /^\/leads\/manual$/ },
-  { methods: ["POST"], pattern: /^\/leads\/manual\/generate\/start$/ },
+  { methods: ["POST"], pattern: /^\/help\/chat$/, action: "help_chat", routeTemplate: "/api/hire/help/chat" },
+  { methods: ["POST"], pattern: /^\/leads\/manual$/, action: "manual_lead", routeTemplate: "/api/hire/leads/manual" },
   {
     methods: ["POST"],
-    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/(?:generate|generate/start|pipeline/run|form/read|apply/preview)$`),
+    pattern: /^\/leads\/manual\/generate\/start$/,
+    action: "manual_lead_generation",
+    routeTemplate: "/api/hire/leads/manual/generate/start",
   },
-  { methods: ["POST"], pattern: /^\/ingest$/ },
   {
     methods: ["POST"],
-    pattern: /^\/ingest\/(?:linkedin|github|portfolio)$/,
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/generate$`),
+    action: "generated_package",
+    routeTemplate: "/api/hire/leads/:leadId/generate",
   },
-  { methods: ["POST"], pattern: /^\/scan$/ },
-  { methods: ["POST"], pattern: /^\/leads\/reevaluate$/ },
-  { methods: ["POST"], pattern: /^\/free-sources\/scan$/ },
-  { methods: ["POST"], pattern: new RegExp(`^/fire/${HIRE_ROUTE_SEGMENT}$`) },
-  { methods: ["POST"], pattern: /^\/selectors\/refresh$/ },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/generate/start$`),
+    action: "generated_package_task",
+    routeTemplate: "/api/hire/leads/:leadId/generate/start",
+  },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/pipeline/run$`),
+    action: "pipeline_run",
+    routeTemplate: "/api/hire/leads/:leadId/pipeline/run",
+  },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/form/read$`),
+    action: "form_read",
+    routeTemplate: "/api/hire/leads/:leadId/form/read",
+  },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/leads/${HIRE_ROUTE_SEGMENT}/apply/preview$`),
+    action: "apply_preview",
+    routeTemplate: "/api/hire/leads/:leadId/apply/preview",
+  },
+  { methods: ["POST"], pattern: /^\/ingest$/, action: "resume_ingest", routeTemplate: "/api/hire/ingest" },
+  {
+    methods: ["POST"],
+    pattern: /^\/ingest\/linkedin$/,
+    action: "linkedin_ingest",
+    routeTemplate: "/api/hire/ingest/linkedin",
+  },
+  {
+    methods: ["POST"],
+    pattern: /^\/ingest\/github$/,
+    action: "github_ingest",
+    routeTemplate: "/api/hire/ingest/github",
+  },
+  {
+    methods: ["POST"],
+    pattern: /^\/ingest\/portfolio$/,
+    action: "portfolio_ingest",
+    routeTemplate: "/api/hire/ingest/portfolio",
+  },
+  { methods: ["POST"], pattern: /^\/scan$/, action: "source_scan", routeTemplate: "/api/hire/scan" },
+  {
+    methods: ["POST"],
+    pattern: /^\/leads\/reevaluate$/,
+    action: "lead_reevaluation",
+    routeTemplate: "/api/hire/leads/reevaluate",
+  },
+  {
+    methods: ["POST"],
+    pattern: /^\/free-sources\/scan$/,
+    action: "free_source_scan",
+    routeTemplate: "/api/hire/free-sources/scan",
+  },
+  {
+    methods: ["POST"],
+    pattern: new RegExp(`^/fire/${HIRE_ROUTE_SEGMENT}$`),
+    action: "auto_apply",
+    routeTemplate: "/api/hire/fire/:leadId",
+  },
+  {
+    methods: ["POST"],
+    pattern: /^\/selectors\/refresh$/,
+    action: "automation_selectors_refresh",
+    routeTemplate: "/api/hire/selectors/refresh",
+  },
 ]);
 
 export function isHireEnabled(value) {
@@ -369,11 +434,21 @@ export function isHireUserFacingPath(req = {}) {
 }
 
 export function shouldConsumeHireIngressQuota(req = {}) {
+  return Boolean(classifyHireIngressUsageEvent(req));
+}
+
+export function classifyHireIngressUsageEvent(req = {}) {
   const method = normalizeHireRequestMethod(req);
   const path = normalizeHireRequestPath(req.originalUrl || req.path || req.url || req);
-  return HIRE_QUOTA_ROUTE_ALLOWLIST.some((entry) =>
-    entry.methods.includes(method) && entry.pattern.test(path)
+  const entry = HIRE_QUOTA_ROUTE_ALLOWLIST.find((candidate) =>
+    candidate.methods.includes(method) && candidate.pattern.test(path)
   );
+  if (!entry) return null;
+  return {
+    action: entry.action,
+    routeTemplate: entry.routeTemplate,
+    method,
+  };
 }
 
 function sanitizeHireArtifactRef(key, value) {

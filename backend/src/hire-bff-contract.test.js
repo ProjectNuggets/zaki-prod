@@ -5,6 +5,7 @@ import {
   buildHireForwardHeaders,
   buildHireProxyHeaders,
   buildHireRouteUnavailablePayload,
+  classifyHireIngressUsageEvent,
   getHireBase,
   isHireUserFacingPath,
   isHireEnabled,
@@ -232,5 +233,34 @@ describe("hire BFF contract", () => {
         originalUrl: "/api/hire/ingest/portfolio",
       })
     ).toBe(true);
+  });
+
+  test("classifies metered hire routes into normalized usage events", () => {
+    expect(
+      classifyHireIngressUsageEvent({
+        method: "POST",
+        originalUrl: "/api/hire/leads/job_1/generate?debug=true",
+      })
+    ).toEqual({
+      action: "generated_package",
+      routeTemplate: "/api/hire/leads/:leadId/generate",
+      method: "POST",
+    });
+    expect(
+      classifyHireIngressUsageEvent({
+        method: "POST",
+        originalUrl: "/api/hire/fire/job_1",
+      })
+    ).toEqual({
+      action: "auto_apply",
+      routeTemplate: "/api/hire/fire/:leadId",
+      method: "POST",
+    });
+    expect(
+      classifyHireIngressUsageEvent({
+        method: "POST",
+        originalUrl: "/api/hire/scan/stop",
+      })
+    ).toBeNull();
   });
 });

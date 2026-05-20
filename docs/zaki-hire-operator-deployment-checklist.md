@@ -310,6 +310,8 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - first-class ZAKI Hire platform/quota surface and weekly BFF quota enforcement
   for cost-bearing manual lead, scan, ingestion, generation, help, and
   automation routes
+- central ZAKI `zaki_usage_events` schema and route-level Hire BFF usage events
+  after successful quota admission
 
 Still pending before staging deployment:
 
@@ -320,8 +322,9 @@ Still pending before staging deployment:
 - source policy storage/config bridge and provider runtime probes beyond current
   operator acknowledgements
 - hosted tenant background scheduler/queue replacement for local ghost mode
-- storage-specific quotas, durable task/concurrency quotas, and normalized
-  usage events for central cost telemetry
+- storage-specific quotas, durable task/concurrency quotas, and granular engine
+  usage events for LLM tokens, embeddings, source pages, artifact bytes, and
+  task duration
 - typed ZAKI-native `/hire` frontend route and route-specific UAT
 
 ## Deployment Validator

@@ -97,6 +97,8 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
 - first-class central `hire` product/quota/usage surface with weekly BFF quota
   enforcement for cost-bearing manual lead, scan, ingestion, generation, help,
   and automation routes
+- central `zaki_usage_events` ledger plus normalized route-level Hire BFF usage
+  event capture after successful quota admission
 
 Verified:
 
@@ -110,6 +112,7 @@ Verified:
   PostgreSQL 16 container
 - hosted-mode smoke with disposable PostgreSQL 16 confirmed BFF-style Bearer
   token plus `X-Zaki-User-Id` can call engine leads and internal readiness
+- focused ZAKI-prod Hire usage-event tests: 23 passed
 
 Still open dependency conversions:
 
@@ -125,9 +128,10 @@ Still open dependency conversions:
   probes and operator acknowledgements
 - hosted background automation needs a tenant-aware scheduler or durable queue;
   the local ghost scheduler is not a safe production multi-tenant scheduler
-- normalized cost usage events remain pending; the first BFF quota surface is
-  implemented, but storage-specific quotas and durable task/concurrency quotas
-  still need their own classes
+- granular cost usage events for LLM tokens, embedding tokens, source pages,
+  artifact bytes, and task duration remain pending; the first BFF quota surface
+  and route-level central usage events are implemented, but storage-specific
+  quotas and durable task/concurrency quotas still need their own classes
 
 ## Release Classification
 

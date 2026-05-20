@@ -122,6 +122,7 @@ import {
   sanitizeHireUpstreamPayload,
   shouldConsumeHireIngressQuota,
 } from "./hire-bff-contract.js";
+import { recordHireUsageEvent } from "./hire-usage-events.js";
 import {
   fetchHireDeploymentReadiness,
   fetchHirePath,
@@ -1944,7 +1945,19 @@ app.use(
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
-    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search", "X-Zaki-Session-Upgrade"],
+    exposedHeaders: [
+      "X-Request-Id",
+      "X-Zaki-Agent-Base",
+      "X-Zaki-Mode",
+      "X-Zaki-Web-Search",
+      "X-Zaki-Session-Upgrade",
+      "X-Zaki-Quota-Limit",
+      "X-Zaki-Quota-Remaining",
+      "X-Zaki-Quota-Reset-At",
+      "X-Zaki-Quota-Surface",
+      "X-Zaki-Quota-Bucket",
+      "X-Zaki-Quota-Period",
+    ],
   })
 );
 
@@ -10050,6 +10063,22 @@ async function enforceHirePromptQuotaForIngress(req, res, next) {
     if (!quotaDecision.allowed) {
       res.status(quotaDecision.status).json(quotaDecision.payload);
       return;
+    }
+    try {
+      await recordHireUsageEvent({
+        req,
+        quotaDecision,
+        requestId: getOrCreateRequestId(req),
+        dbQuery,
+        logStructured,
+      });
+    } catch (usageError) {
+      logStructured("error", "hire.usage.record_failed", {
+        requestId: getOrCreateRequestId(req),
+        route: String(req.originalUrl || req.path || "").split("?")[0].split("#")[0],
+        method: req.method,
+        message: usageError?.message || String(usageError),
+      });
     }
     req.hireQuotaChecked = true;
     next();
