@@ -116,6 +116,11 @@ Verified:
   token plus `X-Zaki-User-Id` can call engine leads and internal readiness
 - focused ZAKI-prod Hire usage-event tests: 23 passed
 - focused ZAKI-prod Hire automation consent tests: 30 passed
+- hosted engine dependency hardening removed unused Python-Markdown from the
+  default backend install and moved `sentence-transformers`/PyTorch/Transformers
+  behind the optional `ml-embeddings` extra plus
+  `HIRE_EMBEDDING_BACKEND=sentence-transformers`; the hosted default remains
+  full-featured through the deterministic hashing embedder and audits clean
 
 Still open dependency conversions:
 
@@ -154,7 +159,7 @@ Still open dependency conversions:
 | Custom JSON connectors | Enabled through curated connector catalog | Users select configured connectors; operators own secrets and schemas. |
 | Deterministic ranking | Enabled | Low cost and useful baseline. |
 | LLM-assisted ranking | Enabled behind quota | Improves fit explanations; requires operator LLM routing. |
-| Semantic matching | Enabled | Core fit value; requires consistent embedding and vector strategy. |
+| Semantic matching | Enabled | Core fit value; hosted default uses the built-in hashing embedder, with transformer embeddings available only through an operator-approved extra. |
 | Document generation | Enabled behind quota | Core monetizable workflow; requires LLM and artifact storage. |
 | Contact lookup | Enabled through operator credential lane | Hunter/Proxycurl keys stay hidden; contact sourcing is audited. |
 | Form read and preview apply | Enabled through sandboxed browser lane | Requires Playwright workers, tenant isolation, screenshots/log redaction, and retries. |
@@ -194,7 +199,7 @@ provider-degraded state.
 | Artifact storage | Yes | Generated documents, imported source files, and export bundles. |
 | LLM provider/model/key | Yes | Operator-owned default for scout, ingestor, evaluator, generator, and help. |
 | LLM quota policy | Yes | Per user/account limits for generation, scan, ingestion, and evaluator calls. |
-| Embedding route | Yes | Baked local model or central embedding service; vector dimension recorded. |
+| Embedding route | Yes | Hosted default uses the built-in hashing embedder and records dimension; optional transformer or central embedding routes require operator approval and a clean dependency audit. |
 | Vector store | Yes for semantic matching | LanceDB or replacement, tenant-scoped and rebuildable. |
 | Graph store | Yes for graph intelligence | Kuzu or replacement, tenant-scoped and rebuildable where practical. |
 | Source policy version | Yes | Explicit enabled-lane classification for every adapter and provider. |
@@ -280,7 +285,7 @@ families are:
 | OpenAI-compatible providers | xAI, Kimi, Mistral, OpenRouter, Together, Fireworks, Cerebras, Perplexity, HuggingFace, Cohere, SambaNova, Qwen, Azure, custom | LLM global/step routing | Operator | Keep available only if deliberately configured. |
 | Ollama | `ollama_url` | local LLM default | Operator only | Not a user default in SaaS. Use only if ZAKI operates an internal compatible endpoint. |
 | Step-specific LLM keys | scout, evaluator, generator, ingestor, actuator provider/key/model settings | query generation, scoring, document generation, profile parsing, automation | Operator | Replace with central operator routing and per-step quota; do not expose to users. |
-| Embeddings | local sentence-transformer model or hash fallback | profile/job semantic matching, vector store | Operator | No API key required upstream; production must choose baked local model or central embedding service. |
+| Embeddings | built-in hash embedder by default; optional sentence-transformer extra or central embedding route | profile/job semantic matching, vector store | Operator | Hosted SaaS should default to hashing until transformer/model-loading risk and cost telemetry are explicitly accepted. |
 | GitHub REST API | optional user token in import flow | GitHub profile import and GitHub job search | Product/operator decision | Start without user token or with operator/app token; user OAuth can be later. |
 | X/Twitter API | `x_bearer_token`, `X_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN` | X job lead scan | Operator | Enabled through ZAKI-managed credential, rate limits, and source policy. |
 | Apify | `apify_token`, `apify_actor` | external actor-based board scans | Operator | Enabled through pinned actors, budget caps, and source policy. |
@@ -322,9 +327,9 @@ emit consistent events from day one.
 | Workflow libraries | langchain-core, langgraph | Present upstream; validate whether still needed after hosted conversion. |
 | Graph store | Kuzu | Companion store; tenant-scope and make rebuildable where practical. |
 | Vector store | LanceDB and PyArrow runtime support | Companion store; tenant-scope and avoid local runtime installers. |
-| Embeddings | sentence-transformers or central embedding route | Local model `all-MiniLM-L6-v2` is upstream default; hash fallback exists but should not be the quality target. |
-| File parsing | pypdf, DOCX ZIP parsing, text/Markdown parsing | Required for resume/profile ingestion. |
-| PDF/document generation | fpdf2, markdown | Required for generated resume and cover letter artifacts. |
+| Embeddings | built-in hashing embedder by default; optional `ml-embeddings` extra or central embedding route | Hosted-safe default avoids PyTorch/Transformers checkpoint-loading risk while preserving semantic matching behavior. |
+| File parsing | pypdf, DOCX ZIP parsing, text parsing | Required for resume/profile ingestion. |
+| PDF/document generation | fpdf2 plus internal Markdown-like renderer | Required for generated resume and cover letter artifacts; Python-Markdown is not part of the hosted default dependency set. |
 | Browser automation | Playwright and browser system libraries | Required for full parity; run in sandboxed worker image. |
 | Scheduling | APScheduler | Upstream ghost/background jobs exist; hosted tasks should move to durable task state. |
 | Frontend source | React, Vite, Tailwind, Tauri dependencies | Port UX into ZAKI frontend; do not ship Tauri/Rust/updater in ZAKI prod. |
@@ -472,7 +477,7 @@ with user-safe failure UX.
 | Initial upstream source pin | Fork from `3831a0f8b1393a8da3c5b6d6511dce52a8ee6381` unless re-audit finds a newer accepted commit. | Every deployment needs source traceability and AGPL notice handling. |
 | Runtime topology | Use one hosted engine service for v1. | Faster to make tenant-safe and production-ready. |
 | Default LLM provider/model | Choose one operator-owned default, then optionally override per step internally. | Users must not bring their own keys for a ready SaaS. |
-| Embedding strategy | Bake local sentence-transformer support first, or route to central embeddings if ZAKI wants cost telemetry from day one. | Vector quality, image size, cold start, and cost accounting depend on this. |
+| Embedding strategy | Use hosted-safe hashing for v1, then add transformer embeddings or a central embedding service only after operator approval, audit, and telemetry design. | Keeps all semantic matching features live while avoiding default PyTorch/Transformers model-loading risk, image bloat, cold start, and fragmented cost accounting. |
 | Artifact storage provider | Use the same production object-storage pattern as other ZAKI services if available. | Generated documents must be durable, private, exportable, and deletable. |
 | Source catalog | Ship all source classes through enabled safety lanes, starting with the lowest-risk adapters but not removing high-risk features from scope. | Discovery is valuable; source risk is handled through policy and controls, not feature removal. |
 | GitHub import token model | Use operator/app token first; add user OAuth only if product needs private repo access. | Avoid collecting arbitrary personal tokens while keeping the feature enabled. |

@@ -198,8 +198,9 @@ The engine container must include:
 - `psycopg`, `psycopg-binary`, and `psycopg-pool`
 - Kuzu runtime dependency support
 - LanceDB and PyArrow runtime dependency support
-- sentence-transformers dependency support, or an operator-approved remote
-  embedding route
+- built-in hashing embedding support by default; optional
+  `sentence-transformers`/PyTorch support only when installed with the engine
+  `ml-embeddings` extra and `HIRE_EMBEDDING_BACKEND=sentence-transformers`
 - PDF parsing support
 - document generation support
 - HTTP client and retry dependencies
