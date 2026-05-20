@@ -290,10 +290,14 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - tenant-scoped generated resume/cover-letter filesystem paths under
   `HIRE_TENANT_DATA_ROOT` and PostgreSQL artifact metadata cataloging for
   generated files
+- hosted artifact path hardening: API and WebSocket payloads return safe
+  artifact references, and file-serving routes reject paths outside the active
+  tenant artifact root
 - internal `/internal/v1/deployment-readiness` endpoint protected by the engine
   internal token
 - hosted LLM operator env resolution through `HIRE_LLM_PROVIDER` and
-  `HIRE_LLM_MODEL`
+  `HIRE_LLM_MODEL`, with provider keys taken only from operator environment in
+  hosted mode
 - bounded PostgreSQL connect timeout through `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
 - optional integration test that passes against PostgreSQL 16
 

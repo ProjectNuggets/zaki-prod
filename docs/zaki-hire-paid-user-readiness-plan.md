@@ -82,7 +82,7 @@ final security/code review has no open P0/P1 findings.
 | PostgreSQL primary state added | Leads, profile, generated metadata, activity, settings use PostgreSQL | PARTIAL: leads, profile, settings, events, gateway jobs, and generated artifact catalog implemented; source policy, audit/consent, quota, and task scheduling state still pending |
 | SQLite demoted | SQLite is local-dev or migration-only, not production primary | PARTIAL: hosted startup and core/profile repositories require PostgreSQL; graph/vector compatibility paths are tenant-scoped but rebuild/service-deployment decisions remain |
 | Kuzu/LanceDB tenant scoped | Companion stores isolate and can rebuild from primary state where practical | PARTIAL: hosted graph/vector paths are tenant-scoped; rebuild jobs and service-isolation decision still pending |
-| Durable artifacts configured | Generated files use tenant-scoped durable storage | PARTIAL: generated resume/cover-letter paths are tenant-scoped and cataloged in PostgreSQL; object storage, imported artifacts, access, export/delete, and retention still pending |
+| Durable artifacts configured | Generated files use tenant-scoped durable storage | PARTIAL: generated resume/cover-letter paths are tenant-scoped and cataloged in PostgreSQL; hosted API/WebSocket responses are sanitized and cross-tenant file paths are rejected; object storage, imported artifacts, signed/proxied access, export/delete, and retention still pending |
 | Browser worker configured | Playwright runs in isolated tenant/session workers with state cleanup | TODO |
 | Source connector config added | X, Apify, custom connectors, contact lookup, and broad scan settings are operator-managed | TODO |
 | Health/readiness probes added | Engine reports dependency health without leaking secrets | PARTIAL: internal deployment readiness endpoint implemented for runtime, token, tenant headers, PostgreSQL, artifacts, companion paths, LLM operator env, embeddings, source policy env, and browser env prerequisites; BFF proxy, source runtime probes, and browser worker probes still pending |
@@ -100,12 +100,18 @@ Phase 2 implementation evidence as of 2026-05-20:
   tenant context through graph executor calls.
 - Added tenant-scoped hosted generated artifact paths and a PostgreSQL
   `zaki_hire_artifacts` catalog for generated resume/cover-letter metadata.
+- Added hosted artifact reference hardening: API/WebSocket payloads expose safe
+  artifact references instead of server filesystem paths, and file routes reject
+  paths outside the active tenant artifact root.
 - Added internal `/internal/v1/deployment-readiness` endpoint and hosted LLM
   operator env resolution through `HIRE_LLM_PROVIDER` / `HIRE_LLM_MODEL`.
+- Hardened hosted LLM routing so engine calls use only operator environment
+  provider/model/API-key configuration and never fall back to user/repo-stored
+  provider credentials.
 - Added bounded PostgreSQL connect timeout for dependency probes.
 - Added optional real-PostgreSQL integration test
   `backend/tests/test_postgres_repository.py`.
-- Verified with `uv run pytest tests -q`: 318 passed, 1 skipped.
+- Verified with `uv run pytest tests -q`: 319 passed, 1 skipped.
 - Verified optional PostgreSQL integration against a disposable local
   PostgreSQL 16 container: 1 passed.
 - Verified with `uv run ruff check .`: passed.

@@ -276,6 +276,10 @@ Implementation checkpoint on 2026-05-20:
   artifact directories, and generated artifact metadata is cataloged in
   PostgreSQL with tenant id, job id, kind, storage key, MIME type, size, and
   checksum.
+- Hosted API/WebSocket responses now sanitize generated artifact references so
+  normal browser payloads do not expose server filesystem paths. File-serving
+  routes reject requested artifact paths that resolve outside the active tenant
+  artifact root.
 - The engine now exposes internal `/internal/v1/deployment-readiness`, protected
   by the engine internal token. It reports required production gates without
   returning tokens, API keys, database passwords, resumes, profiles, or other
@@ -283,7 +287,8 @@ Implementation checkpoint on 2026-05-20:
   acknowledgement envs until provider-specific runtime probes are implemented.
 - Hosted LLM calls can resolve operator-owned provider/model env defaults via
   `HIRE_LLM_PROVIDER` and `HIRE_LLM_MODEL`, with provider-specific API key envs
-  such as `OPENAI_API_KEY`.
+  such as `OPENAI_API_KEY`. In hosted mode, the engine no longer falls back to
+  user/repo-stored provider credentials or models.
 - Object-storage provider support, imported-file artifact cataloging,
   signed/proxied artifact access, artifact export/delete/retention, source
   policy storage, consent/audit records, quota events, and hosted tenant

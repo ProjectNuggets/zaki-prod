@@ -78,15 +78,18 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
   threaded graph work
 - tenant-scoped hosted generated artifact paths and PostgreSQL cataloging for
   generated resume/cover-letter file metadata
+- hosted artifact response sanitization so browser/API payloads expose only
+  safe artifact references and reject cross-tenant filesystem paths
 - internal deployment readiness endpoint at `/internal/v1/deployment-readiness`
   protected by the engine internal token
 - hosted LLM operator env resolution through `HIRE_LLM_PROVIDER`,
-  `HIRE_LLM_MODEL`, and provider-specific API key envs
+  `HIRE_LLM_MODEL`, and provider-specific API key envs, without falling back to
+  user/repo-stored provider credentials in hosted mode
 - bounded PostgreSQL connect timeout via `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
 
 Verified:
 
-- `uv run pytest tests -q`: 318 passed, 1 skipped
+- `uv run pytest tests -q`: 319 passed, 1 skipped
 - `uv run ruff check .`: passed
 - `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
   tests/test_postgres_repository.py -q`: 1 passed against a disposable local
