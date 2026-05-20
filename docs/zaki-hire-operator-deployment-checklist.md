@@ -90,7 +90,7 @@ ZAKI_HIRE_LLM_PROVIDER=<operator-provider>
 ZAKI_HIRE_LLM_MODEL=<operator-model>
 ZAKI_HIRE_EMBEDDING_PROVIDER=<operator-provider>
 ZAKI_HIRE_EMBEDDING_MODEL=<operator-model>
-ZAKI_HIRE_SEARCH_PROVIDER=<operator-provider-or-disabled>
+ZAKI_HIRE_SEARCH_PROVIDER=<operator-provider>
 ZAKI_HIRE_SOURCE_POLICY_VERSION=<policy-version>
 ```
 
@@ -134,7 +134,7 @@ HIRE_LLM_API_KEY=<operator-secret>
 HIRE_EMBEDDING_PROVIDER=<operator-provider>
 HIRE_EMBEDDING_MODEL=<operator-model>
 HIRE_EMBEDDING_API_KEY=<operator-secret>
-HIRE_SEARCH_PROVIDER=<operator-provider-or-disabled>
+HIRE_SEARCH_PROVIDER=<operator-provider>
 HIRE_SEARCH_API_KEY=<operator-secret-if-enabled>
 HIRE_SOURCE_POLICY_VERSION=<policy-version>
 HIRE_AUTO_APPLY_ENABLED=false
@@ -154,10 +154,10 @@ it immediately while operators pre-provide every required dependency.
 | Job sources | Source adapters, terms/rate limits, credentials, enabled regions | source policy, source credentials, egress allowlist |
 | Search/web fetch | Whether discovery uses search APIs, direct fetch, ATS APIs, or feeds | search API key if enabled, fetch limits |
 | GitHub import | API mode, rate limits, required scopes if authenticated | GitHub token only if needed |
-| LinkedIn import | Export upload versus live scraping or login automation | no live credential collection for v1 unless reviewed |
+| LinkedIn import | Export upload plus approved live authorization/provider lane | connector policy and credential handling |
 | Portfolio import | Allowed URL fetch behavior and content extraction limits | egress policy, fetch limits |
 | Documents | Resume parsing, PDF rendering, Markdown conversion, generated package formats | container libraries and artifact storage |
-| Browser automation | Playwright/browser dependencies, selectors, account-risk controls | disabled by default; explicit operator-beta only |
+| Browser automation | Playwright/browser dependencies, selectors, account-risk controls | sandboxed workers, consent, audit, and kill switch |
 | Persistence | PostgreSQL tables, graph store, vector store, artifacts, cache, task state | database, storage, backup policy |
 | Observability | Health, readiness, provider failures, source failures, task failures | logs, metrics, alert destinations |
 
@@ -221,7 +221,8 @@ Blocking gates:
   configured durable storage.
 - `source_policy_configured`: enabled source adapters have an operator-approved
   policy version.
-- `auto_apply_disabled`: auto-apply is disabled for v1 paid-user rollout.
+- `auto_apply_safety_lane_ready`: auto-apply has consent, allowlist, audit,
+  cancellation, quota, browser isolation, and kill-switch controls.
 - `operator_ai_stack_configured`: LLM and embedding routing are operator-owned.
 - `zaki_image_immutable`: ZAKI API/web image references are immutable.
 - `hire_engine_image_immutable`: engine image reference is immutable.

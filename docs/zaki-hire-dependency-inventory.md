@@ -45,13 +45,19 @@ and deployment. Normal users should never configure model keys, source
 credentials, browser runtimes, internal URLs, storage paths, or automation
 switches.
 
-The first paid-user release should include profile ingestion, approved source
-discovery, lead scoring, pipeline management, document generation, activity,
-follow-ups, export/delete hooks, tenant isolation, and production readiness
-checks. Browser automation, auto-apply, live LinkedIn cookies, broad logged-in
-job-board scraping, X scanning, Apify actors, and arbitrary custom connectors
-should remain disabled or operator-only until legal, reliability, and cost
-controls pass.
+The first paid-user release should aim for full upstream feature parity:
+profile ingestion, source discovery, broad source scanning, X and Apify-backed
+sources, custom connectors, lead scoring, pipeline management, document
+generation, contact lookup, form reading, apply preview, auto-apply,
+background automation, activity, follow-ups, export/delete hooks, tenant
+isolation, and production readiness checks.
+
+The implementation rule is not to disable risky features. The rule is to give
+each risky feature a hosted safety lane: operator-managed credentials, source
+policy, egress controls, sandboxed browser workers, explicit user consent,
+quota, cost telemetry, audit events, and readiness probes. Normal users should
+see the product capability, not the provider keys, raw cookies, actor ids,
+browser paths, source headers, or internal controls that make it work.
 
 ## Release Classification
 
@@ -64,23 +70,42 @@ controls pass.
 | Portfolio URL import | Enabled only with strict fetch policy | Valuable, but needs SSRF protection, egress limits, and crawler caps. |
 | Manual lead entry | Enabled | Low risk and useful fallback. |
 | Approved ATS/feed discovery | Enabled after source policy review | Reuses stable public APIs/feeds and direct ATS adapters. |
-| Broad `site:` scraping | Disabled for paid v1 | Terms, blocking, freshness, and reliability risk. |
-| X/Twitter source scan | Operator-only or disabled | Requires bearer token, rate limits, and terms review. |
-| Apify actor scan | Operator-only or disabled | External execution, cost, and source policy risk. |
-| Custom JSON connectors | Operator-only | Secrets and private source configuration must not be user-managed. |
+| Broad `site:` scraping | Enabled through source-policy lane | Requires approved domains, egress controls, rate limits, and extraction audit. |
+| X/Twitter source scan | Enabled through operator credential lane | Requires ZAKI-provided bearer token, rate limits, and source-policy review. |
+| Apify actor scan | Enabled through pinned actor lane | Requires approved actor ids, budget caps, source policy, and usage events. |
+| Custom JSON connectors | Enabled through curated connector catalog | Users select configured connectors; operators own secrets and schemas. |
 | Deterministic ranking | Enabled | Low cost and useful baseline. |
 | LLM-assisted ranking | Enabled behind quota | Improves fit explanations; requires operator LLM routing. |
 | Semantic matching | Enabled | Core fit value; requires consistent embedding and vector strategy. |
 | Document generation | Enabled behind quota | Core monetizable workflow; requires LLM and artifact storage. |
-| Contact lookup | Disabled or operator-only for v1 | Hunter/Proxycurl keys and sourcing rules need explicit policy. |
-| Form read and preview apply | Deferred/operator beta | Requires Playwright, browser runtime, and site-specific behavior. |
-| Auto-apply | Disabled | Compliance, reliability, and user-consent risk. |
-| Ghost/background automation | Disabled | Local desktop lab feature, not a hosted SaaS control. |
+| Contact lookup | Enabled through operator credential lane | Hunter/Proxycurl keys stay hidden; contact sourcing is audited. |
+| Form read and preview apply | Enabled through sandboxed browser lane | Requires Playwright workers, tenant isolation, screenshots/log redaction, and retries. |
+| Auto-apply | Enabled through consented apply lane | Requires per-run user consent, allowlisted domains, audit trail, and emergency kill switch. |
+| Ghost/background automation | Enabled as hosted background automation | Requires durable task state, user-visible controls, quotas, and operator kill switch. |
+
+## Full Feature Enablement Contract
+
+Every upstream feature must be available in the product unless a specific
+external provider outage makes it temporarily degraded. A feature may not be
+removed simply because it needs credentials, browser automation, or source
+review. Instead, implementation must add the missing hosted controls.
+
+| Feature lane | User experience | Hidden operator/platform work |
+| --- | --- | --- |
+| LLM work | Users get generated queries, scoring, documents, help, and extraction. | ZAKI routes all LLM calls through configured provider/model lanes with quota and telemetry. |
+| Source discovery | Users choose goals/sources and run scans. | ZAKI owns source policies, credentials, domain allowlists, rate limits, retries, and extraction logs. |
+| Logged-in or protected sources | Users can connect or authorize sources where permitted. | ZAKI uses official APIs, approved partner providers, or ephemeral browser sessions; raw cookie paste is not exposed. |
+| Custom connectors | Users choose configured connectors by name. | Operators define connector schemas, headers, secrets, response limits, and health checks. |
+| Browser automation | Users can read forms, preview applications, and run apply flows. | Sandboxed browser workers isolate tenant sessions, record audits, redact logs, cap runtime, and clean state after each task. |
+| Auto-apply | Users explicitly authorize an apply run. | ZAKI enforces consent, domain allowlists, replayable audit, task cancellation, and kill switches. |
+| Contact lookup | Users receive contact suggestions and outreach drafts. | Operators provide enrichment providers, sourcing policy, cost caps, and opt-out/delete handling. |
+| Background automation | Users can schedule or trigger job-search work. | Durable task state, per-user concurrency, stale-task recovery, and operator controls replace local ghost mode. |
 
 ## Minimum Operator Provisioning Bundle
 
 ZAKI Hire should not reach users until operators can pre-provide this bundle and
-the readiness endpoint can prove it is present or deliberately disabled.
+the readiness endpoint can prove each lane is healthy or in a controlled
+provider-degraded state.
 
 | Bundle item | Required for v1 | Notes |
 | --- | --- | --- |
@@ -94,13 +119,13 @@ the readiness endpoint can prove it is present or deliberately disabled.
 | Embedding route | Yes | Baked local model or central embedding service; vector dimension recorded. |
 | Vector store | Yes for semantic matching | LanceDB or replacement, tenant-scoped and rebuildable. |
 | Graph store | Yes for graph intelligence | Kuzu or replacement, tenant-scoped and rebuildable where practical. |
-| Source policy version | Yes | Explicit allow/disable/operator-only classification for every adapter. |
+| Source policy version | Yes | Explicit enabled-lane classification for every adapter and provider. |
 | Egress allowlist | Yes | LLM providers, approved sources, GitHub if enabled, artifact storage. |
 | Upload and fetch limits | Yes | File size, page count, response bytes, timeout, redirect, and SSRF rules. |
 | Usage event schema | Yes | Normalized cost/usage events emitted before central cost aggregation exists. |
 | Backup/restore policy | Yes | PostgreSQL and artifacts must have a tested restore path. |
-| High-risk source credentials | No by default | X, Apify, Hunter, Proxycurl, and custom connector credentials stay absent unless approved. |
-| Browser runtime | No by default | Playwright/browser dependencies are omitted or disabled unless operator beta enables them. |
+| High-risk source credentials | Yes for full parity | X, Apify, Hunter, Proxycurl, custom connector, and approved source credentials are operator-managed. |
+| Browser runtime | Yes for full parity | Playwright/browser dependencies are baked into worker images and enabled behind sandbox controls. |
 
 ## Workflow Map
 
@@ -111,17 +136,17 @@ the readiness endpoint can prove it is present or deliberately disabled.
 | Manual lead creation | manual lead route and deterministic lead intelligence | lead normalizer, quality signals, repository | Keep enabled; enforce tenant id, URL validation, and rate limits. |
 | Profile editing | profile CRUD routes | Kuzu profile graph, SQLite profile snapshot settings, vector sync | Make PostgreSQL the primary profile store, then derive graph/vector state per tenant. |
 | Resume import | resume/text/file ingest route | upload parsing, pypdf, DOCX parsing, LLM ingestor, graph/vector sync | Add upload caps, malware/content checks if available, tenant-scoped transient storage, and LLM quota. |
-| LinkedIn export import | LinkedIn ZIP ingest route | ZIP/CSV parsing, profile graph import | Allow only user-uploaded export ZIPs in v1; do not collect live LinkedIn cookies. |
+| LinkedIn export import | LinkedIn ZIP ingest route | ZIP/CSV parsing, profile graph import | Keep export upload and add an approved connector path for live authorization where permitted. |
 | GitHub import | GitHub username ingest route | GitHub REST API, optional token, LLM ingestor | Start with username import and tight caps; decide whether ZAKI provides an operator token or later adds user OAuth. |
 | Portfolio import | portfolio URL ingest route | HTTP fetch, optional Playwright crawl, optional LLM ingestor | Allow only through SSRF-safe fetch policy, domain/IP blocking, page caps, timeouts, and quota. |
 | Source scan | scan route | query generation, source adapters, HTTP egress, quality gate, task state | Use an operator-approved source catalog; do not expose raw job-board strings or API credentials to users. |
-| Free-source scan | free-source route | HN, GitHub issues, Reddit, direct ATS, custom connectors | Enable only reviewed sources; custom connectors stay operator-only. |
+| Free-source scan | free-source route | HN, GitHub issues, Reddit, direct ATS, custom connectors | Enable all source classes through reviewed source lanes; connector secrets stay operator-managed. |
 | Reevaluate leads | reevaluation routes | deterministic ranking, optional LLM evaluator, vector matching | Tenant-scope tasks, apply quota, and persist task/result state in PostgreSQL. |
 | Generate package | generation routes | LLM generator, PDF renderer, Markdown renderer, artifact files, optional contact lookup | Store generated files in durable object storage and metadata in PostgreSQL; gate by quota and usage telemetry. |
 | Activity and follow-ups | events and follow-up routes | events table, lead timestamps, websocket broadcast | Tenant-scope events and websocket channels; include activity in export/delete. |
 | Settings | settings UI and settings routes | local settings, provider keys, source credentials | Split into user preferences and operator-only configuration; remove provider/source secrets from user UI. |
-| Form read and apply preview | automation routes | Playwright, browser runtime, selectors, candidate identity, optional vision LLM | Keep disabled for paid v1 unless an operator beta environment explicitly enables it. |
-| Auto-apply | fire route | Playwright, form filling, browser session, vision fallback | Disabled for paid v1. Do not show normal users an enable switch. |
+| Form read and apply preview | automation routes | Playwright, browser runtime, selectors, candidate identity, optional vision LLM | Enable through sandboxed browser workers with tenant isolation and audit. |
+| Auto-apply | fire route | Playwright, form filling, browser session, vision fallback | Enable through explicit user consent, allowlisted destinations, cancellation, and audit trail. |
 
 ## Engine Service Ownership Map
 
@@ -138,7 +163,7 @@ engine topology changes later.
 | Ranking and reevaluation | ranking service/module | deterministic score records, optional LLM evaluator usage, vector reads. |
 | Generation packages | generation service/module | LLM usage, generated metadata, durable artifacts, optional contact lookup. |
 | Graph intelligence | graph service/module | tenant graph partitions, repair/sync tasks, rebuild from primary state. |
-| Automation/form handling | automation service/module | disabled for v1; if enabled later, browser session isolation and audit records. |
+| Automation/form handling | automation service/module | browser session isolation, consent records, audit logs, cancellation, and kill switches. |
 | Event delivery | gateway event bus/websocket | tenant-scoped event channels and durable activity history. |
 | Background jobs | gateway job store and in-memory task registries | PostgreSQL task table or durable queue safe across restarts and replicas. |
 
@@ -160,7 +185,7 @@ families are:
 | Activity | `/api/v1/events`, websocket `/ws` | Tenant-scope and normalize through ZAKI event/task UI. |
 | Settings | template, settings, validation, provider models | Do not expose provider/source keys to normal users; retain operator admin equivalents only if needed. |
 | Runtime | vector runtime status/install | Do not expose runtime install controls to users. Bake production dependencies into images. |
-| Automation | form read, preview apply, fire, selector refresh, identity | Disabled for paid v1 or operator beta only. |
+| Automation | form read, preview apply, fire, selector refresh, identity | Expose through sandboxed browser workers and BFF task controls. |
 | Misc | graph, help chat, errors, shutdown | Keep graph/help only if productized; remove shutdown from hosted user surface. |
 | Internal services | generation, automation, discovery, profile, graph, ranking internal routes | Either package as an internal engine monolith for v1 or deploy explicit internal service workloads. Do not use local child-process supervision in Kubernetes. |
 
@@ -179,13 +204,13 @@ families are:
 | Step-specific LLM keys | scout, evaluator, generator, ingestor, actuator provider/key/model settings | query generation, scoring, document generation, profile parsing, automation | Operator | Replace with central operator routing and per-step quota; do not expose to users. |
 | Embeddings | local sentence-transformer model or hash fallback | profile/job semantic matching, vector store | Operator | No API key required upstream; production must choose baked local model or central embedding service. |
 | GitHub REST API | optional user token in import flow | GitHub profile import and GitHub job search | Product/operator decision | Start without user token or with operator/app token; user OAuth can be later. |
-| X/Twitter API | `x_bearer_token`, `X_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN` | X job lead scan | Operator | Disabled for paid v1 unless source review approves it. |
-| Apify | `apify_token`, `apify_actor` | external actor-based board scans | Operator | Disabled or operator-only for paid v1. |
-| LinkedIn cookie | `linkedin_cookie` | local scraping settings | None | Disabled. Do not collect user session cookies. |
-| Hunter.io | `hunter_api_key`, `HUNTER_API_KEY` | contact lookup after package generation | Operator | Disabled or operator-only until sourcing policy is accepted. |
-| Proxycurl | `proxycurl_api_key`, `PROXYCURL_API_KEY` | optional LinkedIn/contact enrichment | Operator | Disabled or operator-only until sourcing policy is accepted. |
+| X/Twitter API | `x_bearer_token`, `X_BEARER_TOKEN`, `TWITTER_BEARER_TOKEN` | X job lead scan | Operator | Enabled through ZAKI-managed credential, rate limits, and source policy. |
+| Apify | `apify_token`, `apify_actor` | external actor-based board scans | Operator | Enabled through pinned actors, budget caps, and source policy. |
+| LinkedIn cookie | `linkedin_cookie` | local scraping settings | Connector service | Replace raw cookie entry with approved live authorization or partner/provider connector. |
+| Hunter.io | `hunter_api_key`, `HUNTER_API_KEY` | contact lookup after package generation | Operator | Enabled through ZAKI-managed credential, sourcing policy, and usage caps. |
+| Proxycurl | `proxycurl_api_key`, `PROXYCURL_API_KEY` | optional LinkedIn/contact enrichment | Operator | Enabled through ZAKI-managed credential, sourcing policy, and usage caps. |
 | Custom connector headers | `custom_connector_headers` | private JSON lead connectors | Operator | Operator-only catalog; never raw user settings. |
-| Browser runtime download | `JHM_BROWSER_RUNTIME_URL`, GitHub latest release fallback | browser automation/runtime install | Operator | Do not download latest at production startup; bake or disable. |
+| Browser runtime download | `JHM_BROWSER_RUNTIME_URL`, GitHub latest release fallback | browser automation/runtime install | Operator | Do not download latest at production startup; bake browsers into immutable worker images. |
 | Vector runtime download | `JHM_VECTOR_RUNTIME_URL`, `JHM_RUNTIME_PACK_URL` | local packaged LanceDB runtime | Operator | Do not download latest at production startup; bake into image. |
 | Error telemetry file | `JHM_LOCAL_ERROR_TELEMETRY`, `JHM_ERRORS_JSONL` | local error capture | Operator | Replace with central logs/metrics and redaction. |
 
@@ -194,14 +219,14 @@ families are:
 | Step | Uses LLM | Model needs | Required fallback |
 | --- | --- | --- | --- |
 | Query generation | Yes | cheap text model that can produce targeted source queries | deterministic/default target generation. |
-| Source page extraction | Yes for generic web and some browser-crawled targets | text extraction from noisy page content | disable risky sources or use direct adapters. |
+| Source page extraction | Yes for generic web and some browser-crawled targets | text extraction from noisy page content | source-policy lane, extraction audit, and fallback to direct adapters. |
 | Profile resume import | Yes for structured profile extraction | reliable JSON/profile extraction | manual profile editing and import error states. |
 | GitHub profile import | Yes for repository/project summarization | code/project summarization | cap repos and import deterministic metadata if LLM fails. |
 | Portfolio import | Optional LLM enrichment | portfolio summarization from crawled text | import raw extracted evidence or skip enrichment. |
 | Ranking evaluator | Optional | reasoning/fit explanation | deterministic scorer and semantic match. |
 | Document generation | Yes | high-quality long-form writing with structured output | deterministic package fallback and retry. |
-| Help chat | Yes | general support response | static help or disabled. |
-| Automation actuator vision | Only if automation enabled | vision-capable model | disabled for v1. |
+| Help chat | Yes | general support response | static help fallback when provider is degraded. |
+| Automation actuator vision | Yes | vision-capable model for browser fallback | route to approved vision model with audit and quota. |
 
 All LLM calls need normalized usage events with tenant id, user id, feature,
 provider, model, input units, output units, duration, success state, and error
@@ -222,7 +247,7 @@ emit consistent events from day one.
 | Embeddings | sentence-transformers or central embedding route | Local model `all-MiniLM-L6-v2` is upstream default; hash fallback exists but should not be the quality target. |
 | File parsing | pypdf, DOCX ZIP parsing, text/Markdown parsing | Required for resume/profile ingestion. |
 | PDF/document generation | fpdf2, markdown | Required for generated resume and cover letter artifacts. |
-| Browser automation | Playwright and browser system libraries | Disabled for paid v1 unless operator beta explicitly enables it. |
+| Browser automation | Playwright and browser system libraries | Required for full parity; run in sandboxed worker image. |
 | Scheduling | APScheduler | Upstream ghost/background jobs exist; hosted tasks should move to durable task state. |
 | Frontend source | React, Vite, Tailwind, Tauri dependencies | Port UX into ZAKI frontend; do not ship Tauri/Rust/updater in ZAKI prod. |
 | Packaging | PyInstaller/Tauri release tooling | Not part of hosted runtime. |
@@ -244,7 +269,7 @@ emit consistent events from day one.
 | Gateway jobs | SQLite `gateway_jobs` table | PostgreSQL task table or central durable queue/task store. |
 | In-process scan and generation state | memory plus SQLite job records | Durable task records safe across restarts and replicas. |
 | Error log | SQLite `error_log` and optional JSONL file | Central logs/metrics with redaction and tenant-aware support tooling. |
-| Browser runtime/cache | local runtime directories | Disabled for v1; if enabled later, isolate per tenant/session and wipe after use. |
+| Browser runtime/cache | local runtime directories | Ephemeral tenant/session browser storage wiped after each task. |
 
 PostgreSQL must be the production source of truth. SQLite can remain for local
 development compatibility, migration fixtures, or upstream parity tests, but it
@@ -261,12 +286,12 @@ must not be production primary.
 | GitHub issues search | GitHub REST API | Limited beta | rate limits, optional token strategy, query caps. |
 | Reddit search | public Reddit JSON search | Operator-reviewed beta | terms review, caps, failure handling. |
 | Portfolio URLs | HTTP/browser crawl | Limited beta | SSRF protection, DNS/IP blocking, size/page/time caps. |
-| Generic `site:` web targets | browser/LLM extraction | Disabled for paid v1 | source-specific approval required. |
-| LinkedIn, Indeed, Glassdoor, Naukri, Wellfound broad scraping | search/browser targets | Disabled for paid v1 | legal/source review required before enabling. |
-| X/Twitter | recent search API | Disabled or operator-only | bearer token, source terms, cost/rate controls. |
-| Apify actors | Apify run-sync dataset API | Disabled or operator-only | actor pin, cost cap, source policy, secret isolation. |
-| Custom JSON connectors | operator JSON definitions plus headers | Operator-only | connector catalog, secret storage, schema validation. |
-| Auto-apply/form submission | Playwright actuator | Disabled | explicit future consent, audit, site policy, reliability gates. |
+| Generic `site:` web targets | browser/LLM extraction | Enabled through policy lane | source-specific approval, domain allowlist, extraction logs. |
+| LinkedIn, Indeed, Glassdoor, Naukri, Wellfound broad scanning | search/browser/provider targets | Enabled through approved lanes | official APIs, partner providers, or consented browser sessions where permitted. |
+| X/Twitter | recent search API | Enabled through operator credential lane | bearer token, source terms, cost/rate controls. |
+| Apify actors | Apify run-sync dataset API | Enabled through pinned actor lane | actor pin, cost cap, source policy, secret isolation. |
+| Custom JSON connectors | operator JSON definitions plus headers | Enabled through connector catalog | connector catalog, secret storage, schema validation. |
+| Auto-apply/form submission | Playwright actuator | Enabled through consented apply lane | explicit consent, audit, site policy, reliability gates. |
 
 ## Operator Settings Versus User Settings
 
@@ -297,8 +322,9 @@ Operators must own:
   readiness probes
 
 Any upstream setting that stores a key, token, cookie, provider, model, runtime
-path, source header, source adapter definition, or automation switch is
-operator-only unless product/security explicitly reclassifies it.
+path, source header, source adapter definition, or automation switch is hidden
+from normal users. The underlying feature remains enabled through a ZAKI-owned
+configuration or connector lane.
 
 ## Hosted Runtime Shape
 
@@ -338,21 +364,22 @@ and assumes one desktop user.
 ## Readiness Checks
 
 The deployment readiness endpoint should block paid-user rollout unless all
-selected dependencies are either healthy or explicitly disabled.
+selected dependencies are healthy or in a controlled provider-degraded state
+with user-safe failure UX.
 
 | Check | Healthy condition |
 | --- | --- |
 | BFF auth | `/api/hire/*` rejects unauthenticated browser requests. |
 | Internal token | Engine accepts only ZAKI backend calls with the dedicated internal token. |
 | Tenant header | Engine rejects missing tenant/user context and never accepts browser-supplied tenant ids directly. |
-| PostgreSQL primary | Engine can migrate/read/write PostgreSQL and production SQLite primary is disabled. |
+| PostgreSQL primary | Engine can migrate/read/write PostgreSQL and production SQLite is local-dev or migration-only. |
 | Artifact storage | Engine can write, read, delete, and generate signed or proxied artifact access for tenant-owned documents. |
-| Kuzu graph | Graph store is available or explicitly disabled with degraded feature flags. |
-| LanceDB vector | Vector store is available or semantic matching is explicitly disabled. |
+| Kuzu graph | Graph store is available, tenant-scoped, and rebuildable where practical. |
+| LanceDB vector | Vector store is available, tenant-scoped, and semantic matching is healthy. |
 | Embeddings | Chosen embedding route is available and dimension is recorded. |
 | LLM route | Operator provider/model/key validates with a low-cost probe and records model id. |
 | Source policy | Enabled source adapters match an approved policy version. |
-| High-risk sources | X, Apify, broad scraping, LinkedIn cookies, custom connectors, and auto-apply are disabled unless an operator-beta flag is present. |
+| High-risk sources | X, Apify, broad scanning, LinkedIn connectors, custom connectors, and auto-apply each report a healthy safety lane with policy version, quota, audit, and kill switch. |
 | Task store | Scan/generation/reevaluation tasks survive restart and are tenant-scoped. |
 | Quota hooks | Scan, import, generation, LLM, embedding, artifact, and task quotas reject over-limit requests. |
 | Usage telemetry | LLM/source/artifact/task events emit normalized tenant-aware usage records. |
@@ -369,10 +396,10 @@ selected dependencies are either healthy or explicitly disabled.
 | Default LLM provider/model | Choose one operator-owned default, then optionally override per step internally. | Users must not bring their own keys for a ready SaaS. |
 | Embedding strategy | Bake local sentence-transformer support first, or route to central embeddings if ZAKI wants cost telemetry from day one. | Vector quality, image size, cold start, and cost accounting depend on this. |
 | Artifact storage provider | Use the same production object-storage pattern as other ZAKI services if available. | Generated documents must be durable, private, exportable, and deletable. |
-| Source catalog | Start with manual, direct ATS, HN, RemoteOK, Remotive, Jobicy, and WWR after terms review. | Discovery is valuable but source risk is the main product blind spot. |
-| GitHub import token model | Start tokenless or operator-token; defer user OAuth. | Avoid collecting arbitrary personal tokens in v1. |
-| Contact lookup | Disable for v1 unless ZAKI accepts Hunter/Proxycurl sourcing policy. | Contact enrichment can create legal, cost, and trust risk. |
-| Portfolio crawler mode | Prefer HTTP-only fetch first; Playwright later. | Browser crawling increases runtime and abuse risk. |
+| Source catalog | Ship all source classes through enabled safety lanes, starting with the lowest-risk adapters but not removing high-risk features from scope. | Discovery is valuable; source risk is handled through policy and controls, not feature removal. |
+| GitHub import token model | Use operator/app token first; add user OAuth only if product needs private repo access. | Avoid collecting arbitrary personal tokens while keeping the feature enabled. |
+| Contact lookup | Enable with ZAKI-managed Hunter/Proxycurl or equivalent provider plus sourcing policy. | Contact enrichment is part of full parity and needs audit/cost controls. |
+| Portfolio crawler mode | Enable HTTP and Playwright paths through SSRF-safe fetch and browser worker controls. | Browser crawling is required for full parity and must be sandboxed. |
 | Central cost telemetry | Emit normalized events now; aggregate centrally later with auth/account work. | Avoid another fragmented downstream cost island. |
 | PostgreSQL schema ownership | Engine owns Hire schema, BFF owns account/entitlement/quota joins. | Prevents proprietary ZAKI state from drifting into AGPL engine code. |
 
@@ -385,7 +412,7 @@ selected dependencies are either healthy or explicitly disabled.
 | LLM dependency map | Drafted | LLM workflows and provider/key inventory are identified. |
 | API token inventory | Drafted | LLM, source, GitHub, X, Apify, Hunter, Proxycurl, custom connector, and runtime download inputs are identified. |
 | Runtime dependency map | Drafted | Python, backend libraries, graph/vector, documents, browser, and frontend packaging dependencies are classified. |
-| Source adapter review | Drafted | Source policy table classifies allowed, beta, operator-only, and disabled adapters. |
+| Source adapter review | Drafted | Source policy table classifies enabled safety lanes and required controls. |
 | Storage map | Drafted | SQLite, Kuzu, LanceDB, local files, jobs, events, and errors are mapped to hosted stores. |
 | Operator settings map | Drafted | User-safe and operator-only settings are split. |
 | Readiness probes | Drafted | Required readiness checks are listed. |
@@ -396,5 +423,6 @@ selected dependencies are either healthy or explicitly disabled.
 A new engineer can use this document to start implementation only if they also
 have the integration spec, operator checklist, and paid-user readiness plan. The
 remaining blocker is not missing source context; it is product/operator
-acceptance of the implementation decisions above, especially default LLM route,
-embedding route, artifact storage, source catalog, and contact lookup policy.
+implementation of the safety lanes above, especially default LLM route,
+embedding route, artifact storage, source catalog, browser worker sandbox,
+auto-apply consent/audit, and contact lookup policy.

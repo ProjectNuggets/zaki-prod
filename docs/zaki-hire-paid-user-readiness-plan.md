@@ -41,13 +41,13 @@ final security/code review has no open P0/P1 findings.
 | 2 | Engine Hosted Runtime | Convert local-first sidecar assumptions into hosted service assumptions: internal auth, tenant headers, PostgreSQL primary state, durable artifacts, health/readiness. | Engine local tests prove hosted auth, tenant isolation, and PostgreSQL-backed core flows. | NOT STARTED |
 | 3 | BFF Contract | Add ZAKI backend `/api/hire/*`, errors, internal token forwarding, quotas, usage events, task normalization, export/delete hooks. | Contract tests pass with mocked engine and live local engine. | NOT STARTED |
 | 4 | ZAKI-Native UI Port | Port JustHireMe workflows into `/hire` using the ZAKI shell and product patterns. | Route-by-route UAT passes and no upstream branding leaks. | NOT STARTED |
-| 5 | Source Policy And Discovery | Make job discovery safe for hosted SaaS with an operator-approved source catalog and conservative limits. | Scan flows work using allowed sources; high-risk adapters stay operator-only. | NOT STARTED |
+| 5 | Source Policy And Discovery | Make every upstream discovery source safe for hosted SaaS with operator-managed credentials, source policies, egress controls, quotas, and audit. | Manual, feed/API, broad scan, X, Apify, custom connector, and logged-in/source-provider lanes all pass readiness or report controlled degradation. | NOT STARTED |
 | 6 | Multi-User Isolation | Prove users cannot cross-read profile, leads, generated documents, graph/vector state, events, tasks, or artifacts. | Two-user smoke passes with zero marker leakage. | NOT STARTED |
 | 7 | Quota And Cost Telemetry | Enforce BFF limits and emit normalized usage events for central cost telemetry. | Quota tests and usage-event tests pass. | NOT STARTED |
 | 8 | Governance | Implement account export, deletion, retention cleanup, audit, backup, and restore for all Hire stores. | Governance tests and staging restore drill pass. | NOT STARTED |
 | 9 | Observability And Failure UX | Add health, readiness, task state, sanitized failures, operator status, and alerts. | Internal observability endpoint and user failure states are verified. | NOT STARTED |
 | 10 | Production Deployment Readiness | Add infrastructure chart, ArgoCD app, secrets, validator, staging deployment, and readiness endpoint. | Staging readiness is green with immutable images and source pins. | NOT STARTED |
-| 11 | Final Review | Run code review, security review, UI review, source-policy review, and operational review. | No open P0/P1; accepted P2/P3 items are documented. | NOT STARTED |
+| 11 | Final Review | Run code review, security review, UI review, source-policy review, browser automation review, auto-apply consent/audit review, and operational review. | No open P0/P1; accepted P2/P3 items are documented. | NOT STARTED |
 | 12 | Beta/GA Declaration | Record the highest truthful readiness level. | Beta or GA verdict written with exact remaining blockers. | NOT STARTED |
 
 ## Phase 0 Checklist
@@ -57,11 +57,11 @@ final security/code review has no open P0/P1 findings.
 | Feature map | Every JustHireMe user workflow is mapped to frontend, API route, service, task, and data store | DRAFTED in dependency inventory |
 | LLM dependency map | Every LLM-using workflow lists provider capability, model need, token shape, timeout, retry, and fallback | DRAFTED in dependency inventory |
 | API token inventory | Required operator-provided API keys are listed, including LLM, embedding, search/source, GitHub, or other external APIs | DRAFTED in dependency inventory |
-| Runtime dependency map | Python, Node, system libraries, Kuzu, LanceDB, PDF, Playwright, and browser dependencies are classified as required, optional, or disabled | DRAFTED in dependency inventory |
-| Source adapter review | Every discovery adapter is classified as allowed, operator-only, disabled, or needs terms review | DRAFTED in dependency inventory |
+| Runtime dependency map | Python, Node, system libraries, Kuzu, LanceDB, PDF, Playwright, and browser dependencies are classified as required for full parity or as degraded-provider fallbacks | DRAFTED in dependency inventory |
+| Source adapter review | Every discovery adapter is assigned an enabled safety lane, provider prerequisite, and readiness check | DRAFTED in dependency inventory |
 | Storage map | SQLite tables, graph data, vectors, generated files, settings, tasks, and activity are mapped to PostgreSQL, companion stores, or artifacts | DRAFTED in dependency inventory |
-| Operator settings map | Every upstream local setting is classified as user-safe, operator-only, removed, or deferred | DRAFTED in dependency inventory |
-| Readiness probes | Every external dependency has a readiness check or an explicit disabled state | DRAFTED in dependency inventory |
+| Operator settings map | Every upstream local setting is classified as user-safe or hidden operator/connector configuration while preserving the user-facing feature | DRAFTED in dependency inventory |
+| Readiness probes | Every external dependency has a readiness check and controlled degradation state | DRAFTED in dependency inventory |
 
 ## Phase 1 Checklist
 
@@ -83,6 +83,8 @@ final security/code review has no open P0/P1 findings.
 | SQLite demoted | SQLite is local-dev or migration-only, not production primary | TODO |
 | Kuzu/LanceDB tenant scoped | Companion stores isolate and can rebuild from primary state where practical | TODO |
 | Durable artifacts configured | Generated files use tenant-scoped durable storage | TODO |
+| Browser worker configured | Playwright runs in isolated tenant/session workers with state cleanup | TODO |
+| Source connector config added | X, Apify, custom connectors, contact lookup, and broad scan settings are operator-managed | TODO |
 | Health/readiness probes added | Engine reports dependency health without leaking secrets | TODO |
 
 ## Phase 3 Checklist
@@ -95,6 +97,7 @@ final security/code review has no open P0/P1 findings.
 | Error normalization | User-safe errors returned for engine failures | TODO |
 | Quota hooks | Prompt, scan, upload, generation, storage, and task limits enforced | TODO |
 | Usage events | Normalized events emitted for LLM, embedding, scan, artifact, and task work | TODO |
+| Automation consent hooks | Form read, preview, and auto-apply require user consent and audit records | TODO |
 | Export/delete hooks | Account governance includes Hire resources | TODO |
 
 ## Phase 4 Route UAT Matrix
@@ -106,10 +109,11 @@ final security/code review has no open P0/P1 findings.
 | `/hire/leads/:leadId` | Details, fit score, evidence, generated packages, and activity render | TODO |
 | `/hire/profile` | User can edit candidate profile | TODO |
 | `/hire/profile/import` | Resume, LinkedIn, GitHub, portfolio, and JSON import flows work | TODO |
-| `/hire/sources` | Approved source catalog and scan controls work | TODO |
+| `/hire/sources` | All source classes are visible through user-safe controls; credentials and raw policy are hidden | TODO |
 | `/hire/generated` | Generated documents can be reviewed, exported, and deleted | TODO |
 | `/hire/activity` | Events, task state, failures, and follow-ups are visible | TODO |
 | `/hire/settings` | Only user-safe preferences appear | TODO |
+| `/hire/apply` | Form read, apply preview, and consented auto-apply work through sandboxed browser tasks | TODO |
 
 ## Phase 5 Source Policy Matrix
 
@@ -119,9 +123,13 @@ final security/code review has no open P0/P1 findings.
 | Manual lead entry | Allowed | TODO |
 | Approved ATS pages | Allowed after adapter review | TODO |
 | Public feeds/APIs | Allowed where terms permit | TODO |
-| Broad scraping | Operator-only until reviewed | TODO |
-| Logged-in job-board automation | Disabled for v1 | TODO |
-| Auto-apply | Disabled for v1 | TODO |
+| Broad scraping | Enabled through approved source lanes, egress controls, and extraction audit | TODO |
+| X/Twitter scan | Enabled through operator bearer token, rate limits, and source policy | TODO |
+| Apify actors | Enabled through pinned actors, cost caps, and source policy | TODO |
+| Custom connectors | Enabled through curated connector catalog; secrets hidden from users | TODO |
+| Logged-in job-board automation | Enabled through approved APIs/providers or consented browser sessions | TODO |
+| Contact lookup | Enabled through operator enrichment credentials and audit | TODO |
+| Auto-apply | Enabled through explicit consent, allowlists, audit, cancellation, and kill switch | TODO |
 
 ## Phase 6 Isolation Matrix
 
@@ -160,7 +168,9 @@ Minimum covered dimensions:
 - document generation
 - generated artifact storage
 - source page fetch
-- browser automation session if later enabled
+- browser automation session
+- contact lookup
+- auto-apply task
 
 Required event fields:
 

@@ -64,9 +64,10 @@ engine API is an implementation detail behind the backend-for-frontend.
   repository.
 - UI strategy: port the JustHireMe user experience into a ZAKI-native `/hire`
   product surface, as ZAKI Learn did with DeepTutor.
-- Automation strategy: browser automation and auto-apply are not part of the
-  first paid-user release. They stay disabled or operator-beta only until
-  compliance, user-consent, and reliability gates pass.
+- Automation strategy: browser automation and auto-apply are first-class ZAKI
+  Hire capabilities. They must run through hosted safety lanes with sandboxed
+  browser workers, explicit user consent, destination allowlists, audit logs,
+  cancellation, quota, and operator kill switches.
 - Cost strategy: emit normalized usage events now; central cost accounting can
   later move behind the central auth/account system.
 
@@ -92,8 +93,8 @@ The dependency inventory is tracked in
   portfolio, or web-fetch APIs
 - which workflows need PDF parsing, PDF generation, Markdown rendering, or file
   conversion support
-- which workflows need browser automation or Playwright and whether they are
-  disabled, operator-beta, or production enabled
+- which workflows need browser automation or Playwright and which hosted safety
+  lane makes them production enabled
 - which data must move from SQLite assumptions into PostgreSQL
 - which data belongs in Kuzu, LanceDB, object storage, cache, or task state
 - which settings are user-safe and which must be operator-only
@@ -190,7 +191,7 @@ adapters, browser drivers, or internal services.
 | Generation | Resume, cover letter, outreach, follow-up packages | `/hire/leads/:id/generate` |
 | Activity | Logs, events, follow-ups, job history | `/hire/activity` |
 | Settings | Local API keys and model/source configuration | Split into user preferences and operator controls |
-| Browser automation | Experimental auto-apply lab | Disabled for v1; operator-beta later |
+| Browser automation | Experimental auto-apply lab | Production capability through sandboxed browser workers and consented apply flows |
 | Desktop/Tauri packaging | Local app distribution | Not shipped in hosted ZAKI |
 
 ## Product Shape
@@ -418,7 +419,7 @@ retention, or source adapter policy are incomplete.
 | 3. Engine SaaS conversion | Replace local-only auth/storage assumptions with internal auth, tenant headers, PostgreSQL primary state, tenant artifacts, and readiness probes | Engine tests prove tenant isolation and PostgreSQL-backed core flows |
 | 4. BFF contract | Add `/api/hire/*` with central auth, internal token forwarding, quotas, errors, usage events, export/delete hooks | Contract tests pass with mocked and live engine |
 | 5. ZAKI-native UI | Port JustHireMe user workflows into `/hire` using ZAKI shell and design system | Route parity UAT passes |
-| 6. Source and automation policy | Build operator-approved source catalog and keep auto-apply disabled | Hosted scan flows work without exposing unsafe controls |
+| 6. Source and automation policy | Build enabled source, browser, and auto-apply safety lanes | Hosted scan and apply flows work without exposing unsafe controls |
 | 7. Governance | Export, deletion, retention, audit, backup, and restore | Governance tests and restore drill pass |
 | 8. Observability | Health, readiness, failure events, task states, and alerts | Operator dashboard/endpoint shows actionable status |
 | 9. Production deployment | Add infrastructure chart, secrets, validation script, ArgoCD app, staging smoke | Production readiness endpoint is green |

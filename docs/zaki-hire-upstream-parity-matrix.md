@@ -7,8 +7,8 @@ Last updated: 2026-05-19.
 
 Reader: the engineer porting JustHireMe into ZAKI Hire.
 
-Post-read action: track which upstream capabilities are shipped, adapted,
-deferred, or intentionally disabled in hosted ZAKI.
+Post-read action: track which upstream capabilities are shipped or adapted
+through hosted safety lanes in ZAKI.
 
 ## Parity Rule
 
@@ -16,8 +16,9 @@ Use as much of the JustHireMe product as possible inside `zaki-hire-engine`.
 Only rebuild where hosted SaaS, ZAKI auth, ZAKI design, tenancy, PostgreSQL, or
 operator policy requires it.
 
-Do not treat desktop/Tauri packaging, local app settings, local filesystem
-trust, or auto-apply as product requirements for the first hosted release.
+Do not treat desktop/Tauri packaging, local app settings, or local filesystem
+trust as hosted product requirements. Do treat upstream browser automation and
+auto-apply as product capabilities that need ZAKI safety lanes.
 
 ## Prerequisite Discovery Matrix
 
@@ -27,10 +28,10 @@ trust, or auto-apply as product requirements for the first hosted release.
 | Embeddings | Semantic matching depends on vectorization and LanceDB | Pick embedding provider/model, dimension, quota, and rebuild policy |
 | Source APIs | Discovery can use configured boards, feeds, communities, APIs, and free-source scans | Approve source catalog, credentials, terms review, and rate limits |
 | GitHub import | Profile import can use GitHub evidence | Decide unauthenticated versus operator-token versus user OAuth later |
-| LinkedIn import | Profile import can use LinkedIn export data | Prefer user-uploaded export for v1; avoid live credential automation |
+| LinkedIn import | Profile import can use LinkedIn export data and local live credential settings | Keep export upload and replace raw credential entry with approved connector/session lanes |
 | Portfolio import | Profile import can fetch portfolio URLs | Define fetch allowlist, size limits, and content extraction behavior |
 | Documents | Resume parsing and generated package output need PDF/Markdown tooling | Install runtime libraries and define artifact storage |
-| Browser automation | Playwright and auto-apply exist as experimental lab paths | Disable for v1 unless operator-beta review approves it |
+| Browser automation | Playwright and auto-apply exist as experimental lab paths | Enable through sandboxed browser workers, consent, and audit |
 | Persistence | Upstream local CRM uses SQLite with Kuzu and LanceDB companion stores | Move hosted primary state to PostgreSQL and scope companions by tenant |
 | Runtime packaging | Upstream bundles a desktop app and Python sidecar | Build production container image with required runtime dependencies |
 
@@ -43,8 +44,8 @@ trust, or auto-apply as product requirements for the first hosted release.
 | Lead ingestion | Manual lead creation | Manual lead creation through BFF | Port |
 | Lead ingestion | Job URL ingestion | Manual URL import with validation and quota | Port |
 | Lead discovery | Board/source scans | Operator-approved source catalog | Adapt |
-| Lead discovery | Free-source scan | Enabled only for reviewed source adapters | Adapt |
-| Lead discovery | Broad scraping | Operator-only or deferred | Defer |
+| Lead discovery | Free-source scan | Enabled through reviewed source lanes | Adapt |
+| Lead discovery | Broad scraping | Enabled through policy lane | Adapt |
 | Quality gate | Deterministic stale/thin/spam/seniority checks | Ingestion gate with user-visible reasons | Port |
 | Ranking | Deterministic score | Explainable fit score panel | Port |
 | Ranking | LLM-assisted evaluation | Operator-routed LLM evaluation with quota | Port |
@@ -70,9 +71,9 @@ trust, or auto-apply as product requirements for the first hosted release.
 | Settings | User behavior preferences | `/hire/settings` | Port |
 | Diagnostics | Local subsystem diagnostics | Super-admin internal status | Adapt |
 | Runtime install | Local vector runtime installer | Image-build/runtime dependency concern | Do not expose |
-| Browser automation | Form read and apply preview | Operator-beta only after review | Defer |
-| Auto-apply | Automated submission | Disabled for v1 | Disable |
-| MCP/server tools | Job scoring tool endpoints | Possible future internal capability | Defer |
+| Browser automation | Form read and apply preview | Sandboxed browser worker with consent and audit | Adapt |
+| Auto-apply | Automated submission | Consented apply lane with allowlists, cancellation, and kill switch | Adapt |
+| MCP/server tools | Job scoring tool endpoints | Internal tool/API capability after BFF contract exists | Adapt |
 | Release packaging | Windows/macOS/Linux installers | Not applicable to hosted ZAKI | Drop |
 
 ## API Parity Targets
@@ -112,7 +113,8 @@ Hosted ZAKI changes these upstream assumptions:
 - direct browser-to-sidecar calls become BFF calls
 - local API keys become operator secrets
 - desktop runtime installation becomes container image responsibility
-- auto-apply moves behind a future compliance and reliability review
+- auto-apply moves behind a ZAKI consent, compliance, audit, and reliability
+  safety lane
 
 ## User-Facing Acceptance
 
@@ -126,6 +128,7 @@ inside ZAKI without knowing the engine exists. The user should be able to:
 - generate job-specific materials
 - export or download generated materials
 - review activity and follow-ups
+- read forms, preview applications, and run consented auto-apply
 - change user-safe Hire preferences
 - export and delete their account data through ZAKI governance flows
 
@@ -136,22 +139,24 @@ For parity to count in hosted production, an operator must be able to:
 - deploy engine through infrastructure GitOps
 - pin image and source commit
 - configure provider/source credentials without browser exposure
-- disable unsafe source adapters globally
-- confirm auto-apply is disabled
+- inspect and control source safety lanes globally
+- confirm auto-apply safety lane is healthy or intentionally degraded
 - inspect readiness and health
 - see source-scan and provider failures
 - back up and restore all Hire data stores
 - rotate internal token and provider secrets
 
-## Deferred Items
+## Controlled Safety Lanes
 
-Deferred does not mean forgotten. These items require explicit later planning:
+No upstream feature is intentionally removed from the target product. The items
+below require explicit safety-lane implementation:
 
-- auto-apply
-- logged-in browser automation
-- broad scraping across sites without source policy
-- user-supplied provider keys
-- user-supplied arbitrary job-board credentials
+- auto-apply consent, audit, cancellation, and kill switch
+- logged-in browser automation through approved APIs/providers or ephemeral
+  browser sessions
+- broad scanning through source policy, egress allowlist, and extraction audit
+- user-facing provider choice without exposing raw provider keys
+- user-facing source choice without exposing arbitrary job-board credentials
 - shared team hiring workspaces
 - recruiter/team workflows
 - central cost dashboard integration
@@ -160,7 +165,7 @@ Deferred does not mean forgotten. These items require explicit later planning:
 
 ## Parity Release Gate
 
-The parity matrix is green for v1 when every `Port` or `Adapt` row has passing
-route UAT, BFF contract coverage, tenant isolation evidence, and no exposed
-operator controls. `Defer`, `Disable`, and `Drop` rows must have product-owner
-acceptance before beta.
+The parity matrix is green when every `Port` or `Adapt` row has passing route
+UAT, BFF contract coverage, tenant isolation evidence, safety-lane readiness
+where needed, and no exposed operator controls. `Drop` rows must be
+non-product packaging/runtime items, not upstream user features.
