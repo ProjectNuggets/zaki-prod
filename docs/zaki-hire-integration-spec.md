@@ -276,6 +276,14 @@ Implementation checkpoint on 2026-05-20:
   artifact directories, and generated artifact metadata is cataloged in
   PostgreSQL with tenant id, job id, kind, storage key, MIME type, size, and
   checksum.
+- The engine now exposes internal `/internal/v1/deployment-readiness`, protected
+  by the engine internal token. It reports required production gates without
+  returning tokens, API keys, database passwords, resumes, profiles, or other
+  sensitive values. Source and browser lanes require explicit operator
+  acknowledgement envs until provider-specific runtime probes are implemented.
+- Hosted LLM calls can resolve operator-owned provider/model env defaults via
+  `HIRE_LLM_PROVIDER` and `HIRE_LLM_MODEL`, with provider-specific API key envs
+  such as `OPENAI_API_KEY`.
 - Object-storage provider support, imported-file artifact cataloging,
   signed/proxied artifact access, artifact export/delete/retention, source
   policy storage, consent/audit records, quota events, and hosted tenant
@@ -424,7 +432,8 @@ pattern:
 - PostgreSQL connection through the existing production database path
 - persistent tenant artifact storage
 - HPA only after storage and task-safety assumptions are satisfied
-- readiness checks exposed to ZAKI backend
+- readiness checks exposed to ZAKI backend through the engine internal
+  `/internal/v1/deployment-readiness` endpoint
 
 The ZAKI backend should expose a super-admin readiness endpoint:
 

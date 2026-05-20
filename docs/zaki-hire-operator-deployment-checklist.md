@@ -111,6 +111,7 @@ Database:
 ```bash
 ZAKI_HIRE_DATABASE_URL=<postgres-or-pgbouncer-connection>
 ZAKI_HIRE_PG_POOL_SIZE=10
+ZAKI_HIRE_PG_CONNECT_TIMEOUT=5
 HIRE_SQLITE_COMPAT_MODE=false
 ```
 
@@ -125,24 +126,40 @@ Companion stores:
 HIRE_GRAPH_BACKEND=kuzu
 HIRE_VECTOR_BACKEND=lancedb
 HIRE_TENANT_DATA_ROOT=/data/users
-HIRE_ARTIFACT_STORAGE_PROVIDER=s3
-HIRE_ARTIFACT_STORAGE_BUCKET=zaki-hire-prod
+HIRE_ARTIFACT_STORAGE_PROVIDER=filesystem
+HIRE_ARTIFACT_FILESYSTEM_DURABLE=true
 ```
+
+Current engine code supports tenant-scoped filesystem artifact storage under
+`HIRE_TENANT_DATA_ROOT`. Use it only with durable persistent storage in
+production. S3/object-storage provider support remains a production-readiness
+gap, not an implemented provider.
 
 Provider and source configuration:
 
 ```bash
 HIRE_LLM_PROVIDER=<operator-provider>
 HIRE_LLM_MODEL=<operator-model>
-HIRE_LLM_API_KEY=<operator-secret>
+OPENAI_API_KEY=<operator-secret-if-openai-selected>
 HIRE_EMBEDDING_PROVIDER=<operator-provider>
 HIRE_EMBEDDING_MODEL=<operator-model>
 HIRE_EMBEDDING_API_KEY=<operator-secret>
 HIRE_SEARCH_PROVIDER=<operator-provider>
 HIRE_SEARCH_API_KEY=<operator-secret-if-enabled>
 HIRE_SOURCE_POLICY_VERSION=<policy-version>
-HIRE_AUTO_APPLY_ENABLED=false
-HIRE_BROWSER_AUTOMATION_ENABLED=false
+X_BEARER_TOKEN=<operator-secret-if-x-enabled>
+APIFY_TOKEN=<operator-secret-if-apify-enabled>
+HUNTER_API_KEY=<operator-secret-if-contact-lookup-enabled>
+PROXYCURL_API_KEY=<operator-secret-if-contact-lookup-enabled>
+HIRE_CUSTOM_CONNECTOR_CATALOG=<operator-catalog-id-or-path>
+HIRE_SOURCE_CONFIG_RUNTIME_READY=true
+HIRE_BROWSER_AUTOMATION_ENABLED=true
+PLAYWRIGHT_BROWSERS_PATH=<baked-browser-runtime-path>
+HIRE_AUTO_APPLY_ENABLED=true
+HIRE_AUTO_APPLY_CONSENT_REQUIRED=true
+HIRE_BROWSER_SANDBOX_READY=true
+HIRE_AUTO_APPLY_AUDIT_READY=true
+HIRE_AUTO_APPLY_KILL_SWITCH_READY=true
 ```
 
 ## Prerequisite Inventory Gate
@@ -249,7 +266,9 @@ Blocking gates:
 7. Configure ZAKI API with `/api/hire/*` routing to the internal service.
 8. Deploy to staging through infrastructure.
 9. Run deployment validator.
-10. Run readiness endpoint as super-admin.
+10. Run readiness endpoint as super-admin. ZAKI backend should expose
+    `/api/internal/hire/deployment-readiness` and proxy the engine internal
+    endpoint `/internal/v1/deployment-readiness`.
 11. Run route UAT and two-user isolation smoke.
 12. Run backup/restore drill.
 13. Promote immutable tags to production only after all gates are green.
@@ -271,6 +290,11 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - tenant-scoped generated resume/cover-letter filesystem paths under
   `HIRE_TENANT_DATA_ROOT` and PostgreSQL artifact metadata cataloging for
   generated files
+- internal `/internal/v1/deployment-readiness` endpoint protected by the engine
+  internal token
+- hosted LLM operator env resolution through `HIRE_LLM_PROVIDER` and
+  `HIRE_LLM_MODEL`
+- bounded PostgreSQL connect timeout through `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
 - optional integration test that passes against PostgreSQL 16
 
 Still pending before staging deployment:
@@ -279,7 +303,8 @@ Still pending before staging deployment:
   deployment decision
 - generated artifact object storage, imported-file artifact tracking,
   signed/proxied access, retention, export, and deletion
-- source policy and provider-secret readiness endpoint
+- source policy storage/config bridge and provider runtime probes beyond current
+  operator acknowledgements
 - hosted tenant background scheduler/queue replacement for local ghost mode
 - BFF `/api/hire/*` route implementation in `zaki-prod`
 

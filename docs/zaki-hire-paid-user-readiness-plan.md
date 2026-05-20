@@ -85,7 +85,7 @@ final security/code review has no open P0/P1 findings.
 | Durable artifacts configured | Generated files use tenant-scoped durable storage | PARTIAL: generated resume/cover-letter paths are tenant-scoped and cataloged in PostgreSQL; object storage, imported artifacts, access, export/delete, and retention still pending |
 | Browser worker configured | Playwright runs in isolated tenant/session workers with state cleanup | TODO |
 | Source connector config added | X, Apify, custom connectors, contact lookup, and broad scan settings are operator-managed | TODO |
-| Health/readiness probes added | Engine reports dependency health without leaking secrets | TODO |
+| Health/readiness probes added | Engine reports dependency health without leaking secrets | PARTIAL: internal deployment readiness endpoint implemented for runtime, token, tenant headers, PostgreSQL, artifacts, companion paths, LLM operator env, embeddings, source policy env, and browser env prerequisites; BFF proxy, source runtime probes, and browser worker probes still pending |
 
 Phase 2 implementation evidence as of 2026-05-20:
 
@@ -100,9 +100,12 @@ Phase 2 implementation evidence as of 2026-05-20:
   tenant context through graph executor calls.
 - Added tenant-scoped hosted generated artifact paths and a PostgreSQL
   `zaki_hire_artifacts` catalog for generated resume/cover-letter metadata.
+- Added internal `/internal/v1/deployment-readiness` endpoint and hosted LLM
+  operator env resolution through `HIRE_LLM_PROVIDER` / `HIRE_LLM_MODEL`.
+- Added bounded PostgreSQL connect timeout for dependency probes.
 - Added optional real-PostgreSQL integration test
   `backend/tests/test_postgres_repository.py`.
-- Verified with `uv run pytest tests -q`: 314 passed, 1 skipped.
+- Verified with `uv run pytest tests -q`: 318 passed, 1 skipped.
 - Verified optional PostgreSQL integration against a disposable local
   PostgreSQL 16 container: 1 passed.
 - Verified with `uv run ruff check .`: passed.

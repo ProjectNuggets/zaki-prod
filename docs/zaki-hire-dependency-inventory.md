@@ -78,10 +78,15 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
   threaded graph work
 - tenant-scoped hosted generated artifact paths and PostgreSQL cataloging for
   generated resume/cover-letter file metadata
+- internal deployment readiness endpoint at `/internal/v1/deployment-readiness`
+  protected by the engine internal token
+- hosted LLM operator env resolution through `HIRE_LLM_PROVIDER`,
+  `HIRE_LLM_MODEL`, and provider-specific API key envs
+- bounded PostgreSQL connect timeout via `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
 
 Verified:
 
-- `uv run pytest tests -q`: 314 passed, 1 skipped
+- `uv run pytest tests -q`: 318 passed, 1 skipped
 - `uv run ruff check .`: passed
 - `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
   tests/test_postgres_repository.py -q`: 1 passed against a disposable local
@@ -97,7 +102,8 @@ Still open dependency conversions:
 - browser automation still needs sandboxed hosted workers, log/screenshot
   redaction, consent records, and cleanup
 - source provider credentials and custom connector definitions still need
-  operator-owned readiness/configuration storage
+  operator-owned configuration storage and runtime probing beyond readiness env
+  probes and operator acknowledgements
 - hosted background automation needs a tenant-aware scheduler or durable queue;
   the local ghost scheduler is not a safe production multi-tenant scheduler
 - normalized quota/cost telemetry remains pending until the BFF and usage event
@@ -459,7 +465,7 @@ with user-safe failure UX.
 | Source adapter review | Drafted | Source policy table classifies enabled safety lanes and required controls. |
 | Storage map | Drafted | SQLite, Kuzu, LanceDB, local files, jobs, events, and errors are mapped to hosted stores. |
 | Operator settings map | Drafted | User-safe and operator-only settings are split. |
-| Readiness probes | Drafted | Required readiness checks are listed. |
+| Readiness probes | Started | Engine internal deployment readiness endpoint is implemented; BFF proxy, provider-specific runtime probes, and browser worker probes remain pending. |
 | Acceptance | Pending | Product/engineering must accept this inventory before implementation begins. |
 
 ## Cold-Read Result
@@ -467,6 +473,6 @@ with user-safe failure UX.
 A new engineer can use this document to start implementation only if they also
 have the integration spec, operator checklist, and paid-user readiness plan. The
 remaining blocker is not missing source context; it is product/operator
-implementation of the safety lanes above, especially default LLM route,
-embedding route, artifact storage, source catalog, browser worker sandbox,
-auto-apply consent/audit, and contact lookup policy.
+implementation of the safety lanes above, especially embedding route, artifact
+storage, source catalog runtime bridging, browser worker sandbox, auto-apply
+consent/audit, and contact lookup policy.
