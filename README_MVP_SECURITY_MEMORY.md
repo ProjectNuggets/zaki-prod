@@ -424,7 +424,11 @@ grep "\[Memory\]" /var/log/zaki/app.log
 
 ## 📜 License
 
-MIT License - See LICENSE file
+ZAKI production is proprietary, private software. All rights reserved. No
+open-source license is granted for this repository unless a separate written
+license says otherwise.
+
+Third-party components keep their own licenses and notices.
 
 ---
 

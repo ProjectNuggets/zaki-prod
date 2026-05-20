@@ -1,7 +1,7 @@
 # ZAKI 🤖💭
 
 [![BETA](https://img.shields.io/badge/status-BETA-orange)](https://github.com/yourusername/zaki)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](#-license)
 
 > **The AI that actually remembers you.**
 
@@ -440,7 +440,12 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guideline
 
 ## 📄 License
 
-MIT License - see [LICENSE](./LICENSE)
+ZAKI production is proprietary, private software. All rights reserved. No
+open-source license is granted for this repository unless a separate written
+license says otherwise.
+
+Third-party components keep their own licenses and notices. See
+[ATTRIBUTIONS.md](./ATTRIBUTIONS.md) for attribution notes.
 
 ---
 

@@ -70,7 +70,7 @@ final security/code review has no open P0/P1 findings.
 | Engine fork exists under ProjectNuggets | Repository URL and initial commit recorded | PENDING REMOTE CREATION |
 | Upstream AGPL notices preserved | License files and notices reviewed | LOCALLY VERIFIED |
 | ZAKI proprietary boundary documented | Product/legal note accepted | DRAFTED |
-| ZAKI MIT public claims cleaned before release | README/package/license metadata reviewed and updated if approved | BLOCKED ON WORDING |
+| ZAKI MIT public claims cleaned before release | README/package/license metadata reviewed and updated | DONE LOCALLY: package and lockfile metadata plus README sections now state proprietary/private; final legal wording still needs owner acceptance |
 | No JustHireMe source copied into ZAKI prod | Diff review confirms service boundary | VERIFIED AT CHECKPOINT |
 
 ## Phase 2 Checklist
@@ -327,6 +327,6 @@ Allowed verdicts:
   residual risk documented.
 
 ZAKI Hire cannot be declared GA-ready while browser automation or auto-apply is
-unreviewed, while SQLite is production primary, while MIT claims remain on the
-proprietary ZAKI production repo, while backup/restore is unproven, or while the
+unreviewed, while SQLite is production primary, while final proprietary license
+wording is not owner-accepted, while backup/restore is unproven, or while the
 source and dependency audit is incomplete.

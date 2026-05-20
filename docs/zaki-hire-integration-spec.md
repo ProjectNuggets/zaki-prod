@@ -134,10 +134,11 @@ The safe boundary is service isolation:
 - Any AGPL source-offer obligations are handled at the engine boundary, not by
   relicensing the whole ZAKI product.
 
-The existing MIT references in ZAKI production must be treated as a release
-blocker for proprietary distribution. Before shipping ZAKI Hire, ZAKI production
-needs a licensing cleanup decision: remove MIT public claims, add the intended
-proprietary notice, and keep AGPL notices attached to the engine fork.
+The previous MIT references in ZAKI production were treated as a release
+blocker for proprietary distribution. On 2026-05-20 this branch changed root
+package and lockfile metadata to `UNLICENSED`, and replaced README MIT language
+with a proprietary/private notice. Final legal wording still needs owner
+acceptance, and AGPL notices must remain attached to the engine fork.
 
 ## Non-Negotiables
 

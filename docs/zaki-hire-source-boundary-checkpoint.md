@@ -55,20 +55,21 @@ ZAKI production remains separate:
 - `zaki-hire-engine` owns upstream-derived Hire product logic
 - browser clients must call ZAKI backend, not the engine directly
 
-## ZAKI Production License Blocker
+## ZAKI Production License Cleanup
 
-The current ZAKI production worktree still has public MIT signals:
+The ZAKI production worktree previously had public MIT signals:
 
 | File | Signal |
 | --- | --- |
-| root `package.json` | `"license": "MIT"` |
-| root `README.md` | MIT badge and License section point to `LICENSE` |
+| root `package.json` | MIT package license metadata |
+| root `README.md` | MIT badge and License section pointing to `LICENSE` |
 | `README_MVP_SECURITY_MEMORY.md` | MIT License section |
 
-No root `LICENSE` file was found in the checked worktree. Before paid-user
-production, ZAKI must make an explicit proprietary license decision and remove
-or replace the MIT public claims. This checkpoint does not change those files;
-it records the blocker for the release gate.
+No root `LICENSE` file was found in the checked worktree. On 2026-05-20 this
+branch replaced the root package and lockfile license metadata with
+`UNLICENSED` and changed the README license sections to a proprietary/private
+all-rights-reserved notice. Third-party attribution notes remain in
+`ATTRIBUTIONS.md`.
 
 ## Phase 1 Remaining Work
 
@@ -77,5 +78,5 @@ it records the blocker for the release gate.
 | Engine fork exists under ProjectNuggets | Pending remote creation | Create the GitHub repository or fork target, then push only after local verification is accepted. |
 | Upstream AGPL notices preserved | Locally verified | Keep `LICENSE`, `NOTICE`, and package metadata in the engine fork. |
 | ZAKI proprietary boundary documented | Drafted | Keep source split: proprietary ZAKI BFF/UI, AGPL-derived engine. |
-| ZAKI MIT public claims cleaned before release | Blocked on product/legal wording | Replace MIT claims with intended proprietary notice when approved. |
+| ZAKI MIT public claims cleaned before release | Done locally | Package and lockfile metadata plus README license sections now state proprietary/private; confirm final legal wording before production. |
 | No JustHireMe source copied into ZAKI prod | Verified at checkpoint | Continue using service boundary and avoid source copying. |
