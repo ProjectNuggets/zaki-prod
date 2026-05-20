@@ -33,6 +33,7 @@ jobs:
         run: |
           node --check backend/src/memory/telemetry.js
           node --check scripts/smoke-v01.mjs
+          node --check scripts/smoke-hire-readiness.mjs
           node --check scripts/load-memory.mjs
           node --check scripts/backup-restore-drill.mjs
 

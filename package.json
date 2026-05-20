@@ -31,6 +31,7 @@
     "smoke:agent-multiuser": "node scripts/multiuser-agent-smoke.mjs",
     "smoke:agent-isolation": "node scripts/multiuser-agent-isolation.mjs",
     "smoke:learning-isolation": "node scripts/multiuser-learning-isolation.mjs",
+    "smoke:hire-readiness": "node scripts/smoke-hire-readiness.mjs",
     "stress:agent-multiuser": "node scripts/multiuser-agent-stress.mjs",
     "smoke:agent-suite": "node scripts/multiuser-agent-run-all.mjs",
     "smoke:memory-session": "node scripts/smoke-memory-session.mjs",
