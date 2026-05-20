@@ -211,6 +211,7 @@ import {
 } from "./learning-retention.js";
 import { buildLearningDisasterRecoveryStatus } from "./learning-disaster-recovery.js";
 import { buildLearningDeploymentReadinessStatus } from "./learning-deployment-readiness.js";
+import { buildHireDeploymentReadinessStatus } from "./hire-deployment-readiness.js";
 import {
   normalizeLearningOperatorTestResult,
   redactLearningOperatorPayload,
@@ -13636,6 +13637,12 @@ app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
     const requestId = getOrCreateRequestId(req);
     const userId = resolveCanonicalHireUserId(authResult);
     const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+    const buildZakiReadiness = (engineReadiness) =>
+      buildHireDeploymentReadinessStatus({
+        hireEnabled: ZAKI_HIRE_ENABLED,
+        hireConfigured: configured,
+        engineReadiness,
+      });
     const basePayload = {
       success: true,
       enabled: ZAKI_HIRE_ENABLED,
@@ -13650,20 +13657,18 @@ app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
       return res.status(200).json({
         ...basePayload,
         ok: false,
-        deploymentReadiness: {
+        deploymentReadiness: buildZakiReadiness({
           ready: false,
           status: "not_ready",
-          checks: {
-            zaki_hire_bff: {
-              status: "blocked",
-              message: !ZAKI_HIRE_ENABLED
-                ? "ZAKI_HIRE_ENABLED is not true."
-                : !configured
-                  ? "Hire engine base URL or internal token is not configured."
-                  : "Super-admin request did not resolve to a canonical ZAKI user id.",
-            },
-          },
-        },
+          blocking: [
+            !ZAKI_HIRE_ENABLED
+              ? "zaki_hire_disabled"
+              : !configured
+                ? "zaki_hire_bff_config"
+                : "zaki_hire_user_id",
+          ],
+          degraded: [],
+        }),
       });
     }
 
@@ -13679,28 +13684,31 @@ app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
     const sanitized = sanitizeHireUpstreamPayload(payload || {});
     if (!upstream.ok) {
       const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+      const deploymentReadiness = buildZakiReadiness({
+        ready: false,
+        status: "not_ready",
+        blocking: ["hire_engine_upstream"],
+        degraded: [],
+      });
       return res.status(200).json({
         ...basePayload,
         ok: false,
         upstreamStatus: upstream.status,
-        deploymentReadiness: {
-          ready: false,
-          status: "not_ready",
-          checks: {
-            hire_engine: {
-              status: "blocked",
-              message: mapped?.body?.message || "Hire engine readiness request failed.",
-            },
-          },
+        deploymentReadiness,
+        upstreamError: {
+          status: upstream.status,
+          message: mapped?.body?.message || "Hire engine readiness request failed.",
         },
       });
     }
 
+    const deploymentReadiness = buildZakiReadiness(sanitized);
     return res.status(200).json({
       ...basePayload,
-      ok: Boolean(sanitized?.ready),
+      ok: Boolean(deploymentReadiness?.ready),
       upstreamStatus: upstream.status,
-      deploymentReadiness: sanitized,
+      deploymentReadiness,
+      upstreamDeploymentReadiness: sanitized,
     });
   } catch (error) {
     console.error("[Hire] Deployment readiness error:", {
