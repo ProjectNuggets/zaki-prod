@@ -72,10 +72,13 @@ Completed in the local engine branch `codex/zaki-hire-engine-hosted`:
 - PostgreSQL repository modules for the same core stores
 - hosted startup path that requires PostgreSQL instead of initializing SQLite
 - optional PostgreSQL integration test using `ZAKI_HIRE_TEST_DATABASE_URL`
+- hashed tenant-scoped graph/vector base paths under `HIRE_TENANT_DATA_ROOT`
+- graph executor context propagation so tenant-bound path resolution survives
+  threaded graph work
 
 Verified:
 
-- `uv run pytest tests -q`: 309 passed, 1 skipped
+- `uv run pytest tests -q`: 312 passed, 1 skipped
 - `uv run ruff check .`: passed
 - `ZAKI_HIRE_TEST_DATABASE_URL=postgresql://... uv run pytest
   tests/test_postgres_repository.py -q`: 1 passed against a disposable local
@@ -83,8 +86,8 @@ Verified:
 
 Still open dependency conversions:
 
-- graph and vector stores still need tenant-scoped runtime paths or service
-  isolation
+- graph and vector stores still need rebuild jobs and a final embedded-store
+  versus internal-service deployment decision
 - generated PDFs and imported files still need durable tenant-scoped artifact
   storage
 - browser automation still needs sandboxed hosted workers, log/screenshot

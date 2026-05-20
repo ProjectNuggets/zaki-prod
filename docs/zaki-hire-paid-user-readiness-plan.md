@@ -81,7 +81,7 @@ final security/code review has no open P0/P1 findings.
 | Tenant headers required | Missing tenant context fails closed | DONE for engine protected HTTP routes and WebSocket auth |
 | PostgreSQL primary state added | Leads, profile, generated metadata, activity, settings use PostgreSQL | PARTIAL: leads, profile, settings, events, and gateway jobs implemented; generated metadata still pending |
 | SQLite demoted | SQLite is local-dev or migration-only, not production primary | PARTIAL: hosted startup and core/profile repositories require PostgreSQL; graph/vector compatibility paths still need tenant isolation |
-| Kuzu/LanceDB tenant scoped | Companion stores isolate and can rebuild from primary state where practical | TODO |
+| Kuzu/LanceDB tenant scoped | Companion stores isolate and can rebuild from primary state where practical | PARTIAL: hosted graph/vector paths are tenant-scoped; rebuild jobs and service-isolation decision still pending |
 | Durable artifacts configured | Generated files use tenant-scoped durable storage | TODO |
 | Browser worker configured | Playwright runs in isolated tenant/session workers with state cleanup | TODO |
 | Source connector config added | X, Apify, custom connectors, contact lookup, and broad scan settings are operator-managed | TODO |
@@ -96,9 +96,11 @@ Phase 2 implementation evidence as of 2026-05-20:
   request/background-task context.
 - Added PostgreSQL schema and repository modules for tenant-scoped leads,
   profiles, settings, events, and gateway jobs.
+- Added hashed tenant-scoped hosted graph/vector base paths and preserved
+  tenant context through graph executor calls.
 - Added optional real-PostgreSQL integration test
   `backend/tests/test_postgres_repository.py`.
-- Verified with `uv run pytest tests -q`: 309 passed, 1 skipped.
+- Verified with `uv run pytest tests -q`: 312 passed, 1 skipped.
 - Verified optional PostgreSQL integration against a disposable local
   PostgreSQL 16 container: 1 passed.
 - Verified with `uv run ruff check .`: passed.

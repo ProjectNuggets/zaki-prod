@@ -269,9 +269,14 @@ Implementation checkpoint on 2026-05-20:
   SQLite as the production primary store.
 - The implemented PostgreSQL schema is tenant-scoped by `tenant_id` on the core
   write paths above.
-- Generated artifact storage, graph/vector tenant partitioning, source policy
-  storage, consent/audit records, quota events, and hosted tenant background
-  scheduling are still open implementation work.
+- Hosted graph and vector companion store paths now resolve under hashed
+  tenant-specific directories, and graph executor calls preserve request tenant
+  context.
+- Generated artifact storage, source policy storage, consent/audit records,
+  quota events, and hosted tenant background scheduling are still open
+  implementation work. A future deployment decision still needs to decide
+  whether graph/vector remain embedded Kuzu/LanceDB or move behind dedicated
+  internal services.
 
 Generated documents and large artifacts should use tenant-scoped object storage
 or tenant-scoped persistent storage. The database should store metadata,

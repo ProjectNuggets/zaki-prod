@@ -267,11 +267,13 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
 - PostgreSQL startup requirement in hosted mode
 - PostgreSQL tenant-scoped schema for leads, profiles, settings, events, and
   gateway jobs
+- hashed tenant-scoped graph/vector base paths under `HIRE_TENANT_DATA_ROOT`
 - optional integration test that passes against PostgreSQL 16
 
 Still pending before staging deployment:
 
-- tenant-scoped graph/vector runtime paths or service-backed indexes
+- graph/vector rebuild jobs and a final embedded-store versus internal-service
+  deployment decision
 - generated artifact object storage
 - source policy and provider-secret readiness endpoint
 - hosted tenant background scheduler/queue replacement for local ghost mode
