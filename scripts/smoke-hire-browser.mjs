@@ -141,6 +141,7 @@ async function main() {
     logStep("Checking Hire shell and engine status");
     await page.getByRole("heading", { name: "Job pipeline" }).waitFor({ state: "visible", timeout: 20_000 });
     await page.getByText("ZAKI Hire").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("Product ready").waitFor({ state: "visible", timeout: 15_000 });
     await page.getByText("Engine online").waitFor({ state: "visible", timeout: 15_000 });
     assert(await page.getByText("JustHireMe").count() === 0, "legacy JustHireMe branding is visible");
 

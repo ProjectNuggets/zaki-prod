@@ -1,6 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import {
   buildHireDeploymentReadinessStatus,
+  buildHireUserReadinessStatus,
   resolveHireDeploymentPolicy,
 } from "./hire-deployment-readiness.js";
 
@@ -114,6 +115,73 @@ describe("hire deployment readiness", () => {
       downstream: {
         status: "degraded",
         degraded: ["source_policy"],
+      },
+    });
+  });
+
+  test("builds sanitized user-facing readiness without operator details", () => {
+    const payload = buildHireUserReadinessStatus({
+      hireEnabled: true,
+      hireConfigured: true,
+      engineHealth: { status: "alive", details_available: false },
+      engineStatus: { scanning: false, reevaluating: true },
+      deploymentReadiness: {
+        ready: true,
+        status: "ready",
+        blocking: [],
+        degraded: [],
+        policy: {
+          automation: {
+            browserAutomationEnabled: true,
+            autoApplyEnabled: true,
+            autoApplyConsentRequired: true,
+            autoApplyAuditRequired: true,
+          },
+        },
+      },
+      requestId: "req_123",
+      nowDate: new Date("2026-05-20T12:00:00.000Z"),
+    });
+
+    expect(payload).toMatchObject({
+      available: true,
+      status: "ready",
+      message: "ZAKI Hire is ready.",
+      engine: {
+        online: true,
+        status: "alive",
+        scanning: false,
+        reevaluating: true,
+      },
+      capabilities: {
+        pipeline: true,
+        browserAutomation: true,
+        autoApply: true,
+      },
+      operations: {
+        operatorManagedSettings: true,
+        userProviderSettingsExposed: false,
+        billingManagedCentrally: true,
+        quotaManagedCentrally: true,
+      },
+    });
+    const raw = JSON.stringify(payload);
+    expect(raw).not.toMatch(/token|secret|baseUrl|providerSecret|database/i);
+  });
+
+  test("marks user-facing readiness pending when Hire is not configured", () => {
+    const payload = buildHireUserReadinessStatus({
+      hireEnabled: true,
+      hireConfigured: false,
+    });
+
+    expect(payload).toMatchObject({
+      available: false,
+      status: "not_configured",
+      message: "ZAKI Hire activation is pending.",
+      capabilities: {
+        pipeline: false,
+        autoApply: false,
       },
     });
   });

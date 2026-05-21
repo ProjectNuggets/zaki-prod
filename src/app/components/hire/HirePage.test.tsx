@@ -21,12 +21,14 @@ jest.mock("@/lib/api", () => ({
 
 jest.mock("@/lib/hireApi", () => ({
   hireKeys: {
+    readiness: ["hire", "readiness"],
     health: ["hire", "health"],
     status: ["hire", "status"],
     leads: ["hire", "leads"],
     profile: ["hire", "profile"],
     quota: ["hire", "quota"],
   },
+  getHireReadiness: jest.fn(),
   getHireHealth: jest.fn(),
   getHireStatus: jest.fn(),
   listHireLeads: jest.fn(),
@@ -81,6 +83,27 @@ function renderHirePage() {
 describe("HirePage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (hireApi.getHireReadiness as jest.Mock).mockResolvedValue({
+      available: true,
+      status: "ready",
+      message: "ZAKI Hire is ready.",
+      capabilities: {
+        dashboard: true,
+        pipeline: true,
+        profile: true,
+        imports: true,
+        sourceScan: true,
+        generation: true,
+        browserAutomation: true,
+        autoApply: true,
+      },
+      operations: {
+        operatorManagedSettings: true,
+        userProviderSettingsExposed: false,
+        billingManagedCentrally: true,
+        quotaManagedCentrally: true,
+      },
+    });
     (hireApi.getHireHealth as jest.Mock).mockResolvedValue({ status: "alive" });
     (hireApi.getHireStatus as jest.Mock).mockResolvedValue({ scanning: false, reevaluating: false });
     (hireApi.listHireLeads as jest.Mock).mockResolvedValue([lead]);
@@ -114,6 +137,7 @@ describe("HirePage", () => {
 
     expect(await screen.findByText("ZAKI Hire")).toBeInTheDocument();
     expect(await screen.findAllByText("Senior Product Engineer")).toHaveLength(2);
+    expect(screen.getByText("Product ready")).toBeInTheDocument();
     expect(screen.getByText("Engine online")).toBeInTheDocument();
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(fetchUsageQuotaMock).toHaveBeenCalledWith("hire");
@@ -124,6 +148,7 @@ describe("HirePage", () => {
     renderHirePage();
 
     await screen.findAllByText("Senior Product Engineer");
+    await screen.findByText("Product ready");
     await user.type(screen.getByPlaceholderText("Job URL"), "https://jobs.example/new");
     await user.type(screen.getByPlaceholderText("Paste job text"), "Build workflow automation.");
     await user.click(screen.getByRole("button", { name: /add to pipeline/i }));
@@ -141,6 +166,7 @@ describe("HirePage", () => {
     renderHirePage();
 
     await screen.findAllByText("Senior Product Engineer");
+    await screen.findByText("Product ready");
     expect(screen.getByRole("button", { name: /auto-apply/i })).toBeDisabled();
 
     await user.click(screen.getByRole("checkbox"));
@@ -149,5 +175,31 @@ describe("HirePage", () => {
     await waitFor(() => {
       expect(hireApi.fireHireApplication).toHaveBeenCalledWith("job_123");
     });
+  });
+
+  it("disables high-impact actions when central Hire activation is pending", async () => {
+    const user = userEvent.setup();
+    (hireApi.getHireReadiness as jest.Mock).mockResolvedValueOnce({
+      available: false,
+      status: "not_configured",
+      message: "ZAKI Hire activation is pending.",
+      operations: {
+        operatorManagedSettings: true,
+        userProviderSettingsExposed: false,
+        billingManagedCentrally: true,
+        quotaManagedCentrally: true,
+      },
+    });
+
+    renderHirePage();
+
+    expect(await screen.findByText("Activation pending")).toBeInTheDocument();
+    expect(screen.getByText("ZAKI Hire activation is pending.")).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("Job URL"), "https://jobs.example/new");
+    await user.type(screen.getByPlaceholderText("Paste job text"), "Build workflow automation.");
+    expect(screen.getByRole("button", { name: /run scan/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /add to pipeline/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /generate package/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /auto-apply/i })).toBeDisabled();
   });
 });

@@ -211,7 +211,10 @@ import {
 } from "./learning-retention.js";
 import { buildLearningDisasterRecoveryStatus } from "./learning-disaster-recovery.js";
 import { buildLearningDeploymentReadinessStatus } from "./learning-deployment-readiness.js";
-import { buildHireDeploymentReadinessStatus } from "./hire-deployment-readiness.js";
+import {
+  buildHireDeploymentReadinessStatus,
+  buildHireUserReadinessStatus,
+} from "./hire-deployment-readiness.js";
 import {
   normalizeLearningOperatorTestResult,
   redactLearningOperatorPayload,
@@ -13727,6 +13730,86 @@ app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
       retryable: true,
       requestId: getOrCreateRequestId(req),
     });
+  }
+});
+
+app.get("/api/hire/readiness", requireHireContext, async (req, res) => {
+  const requestId = getOrCreateRequestId(req);
+  const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+  const base = {
+    hireEnabled: ZAKI_HIRE_ENABLED,
+    hireConfigured: configured,
+    requestId,
+  };
+
+  if (!ZAKI_HIRE_ENABLED || !configured) {
+    return res.status(200).json(buildHireUserReadinessStatus(base));
+  }
+
+  try {
+    const options = hireClientOptions(req, "Hire user readiness request");
+    const [healthResult, statusResult, readinessResult] = await Promise.allSettled([
+      fetchHirePath({
+        ...options,
+        path: "/health",
+        label: "Hire user readiness health probe",
+        timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+      }),
+      fetchHirePath({
+        ...options,
+        path: "/api/v1/status",
+        label: "Hire user readiness task status probe",
+        timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+      }),
+      fetchHireDeploymentReadiness({
+        ...options,
+        label: "Hire user readiness deployment probe",
+        timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+      }),
+    ]);
+
+    let engineHealth = null;
+    let engineStatus = null;
+    let deploymentReadiness = null;
+    let error = null;
+
+    if (healthResult.status === "fulfilled" && healthResult.value.ok) {
+      engineHealth = sanitizeHireUpstreamPayload(await healthResult.value.json().catch(() => ({})));
+    } else {
+      error = "hire_engine_health_unavailable";
+    }
+
+    if (statusResult.status === "fulfilled" && statusResult.value.ok) {
+      engineStatus = sanitizeHireUpstreamPayload(await statusResult.value.json().catch(() => ({})));
+    }
+
+    if (readinessResult.status === "fulfilled" && readinessResult.value.ok) {
+      deploymentReadiness = sanitizeHireUpstreamPayload(await readinessResult.value.json().catch(() => ({})));
+    } else {
+      deploymentReadiness = {
+        ready: false,
+        status: "not_ready",
+        blocking: ["hire_engine_readiness_unavailable"],
+        degraded: [],
+      };
+    }
+
+    return res.status(200).json(buildHireUserReadinessStatus({
+      ...base,
+      engineHealth,
+      engineStatus,
+      deploymentReadiness,
+      error,
+    }));
+  } catch (error) {
+    console.error("[Hire] User readiness error:", {
+      requestId,
+      error: error?.message || "Unable to load Hire readiness.",
+    });
+    return res.status(200).json(buildHireUserReadinessStatus({
+      ...base,
+      error: "hire_unavailable",
+    }));
   }
 });
 

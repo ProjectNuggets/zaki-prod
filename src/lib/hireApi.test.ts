@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { backendAuthRequest } from "@/lib/api";
 import {
   fireHireApplication,
+  getHireReadiness,
   hireRequest,
   ingestHireGithub,
   ingestHireResume,
@@ -93,6 +94,26 @@ describe("hireApi", () => {
         method: "POST",
         body: JSON.stringify({ username: "nova", max_repos: 25 }),
       }),
+    );
+  });
+
+  it("reads sanitized central Hire readiness from the BFF", async () => {
+    backendAuthRequestMock.mockResolvedValueOnce(jsonResponse({
+      available: true,
+      status: "ready",
+      operations: { userProviderSettingsExposed: false },
+    }));
+
+    const readiness = await getHireReadiness();
+
+    expect(readiness).toMatchObject({
+      available: true,
+      status: "ready",
+      operations: { userProviderSettingsExposed: false },
+    });
+    expect(backendAuthRequestMock).toHaveBeenCalledWith(
+      "/api/hire/readiness",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 

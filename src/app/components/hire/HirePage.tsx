@@ -29,6 +29,7 @@ import {
   generateHireLead,
   getHireHealth,
   getHireProfile,
+  getHireReadiness,
   getHireStatus,
   hireKeys,
   ingestHireGithub,
@@ -50,6 +51,7 @@ import {
   type HireLead,
   type HireLeadStatus,
   type HireProfile,
+  type HireReadiness,
 } from "@/lib/hireApi";
 
 type HireView = "dashboard" | "pipeline" | "profile" | "import" | "activity";
@@ -165,6 +167,32 @@ function isHealthy(health: HireHealth | undefined) {
   return ["alive", "ok"].includes(String(health?.status || "").toLowerCase());
 }
 
+function hireReady(readiness: HireReadiness | undefined) {
+  return readiness?.available !== false;
+}
+
+function readinessTone(readiness: HireReadiness | undefined) {
+  if (!readiness) {
+    return "border-zaki-subtle bg-zaki-base text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4]";
+  }
+  if (readiness.available) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200";
+  }
+  if (["disabled", "not_configured", "activating"].includes(String(readiness.status || ""))) {
+    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200";
+  }
+  return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200";
+}
+
+function readinessLabel(readiness: HireReadiness | undefined, loading: boolean) {
+  if (loading && !readiness) return "Checking activation";
+  if (readiness?.available) return "Product ready";
+  if (readiness?.status === "activating") return "Activation running";
+  if (readiness?.status === "disabled" || readiness?.status === "not_configured") return "Activation pending";
+  if (readiness) return "Product unavailable";
+  return "Activation unknown";
+}
+
 function extractError(error: unknown) {
   return error instanceof Error ? error.message : "Request failed";
 }
@@ -238,6 +266,13 @@ export function HirePage() {
     retry: 1,
     staleTime: 30_000,
   });
+  const readinessQuery = useQuery({
+    queryKey: hireKeys.readiness,
+    queryFn: getHireReadiness,
+    retry: 1,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
   const statusQuery = useQuery({
     queryKey: hireKeys.status,
     queryFn: getHireStatus,
@@ -302,6 +337,8 @@ export function HirePage() {
   }).length;
   const profileSignals = profileSignalCount(profileQuery.data);
   const quota = quotaQuery.data;
+  const readiness = readinessQuery.data;
+  const hireActionsDisabled = readinessQuery.isLoading || readinessQuery.isError || !hireReady(readiness);
 
   useEffect(() => {
     if (!selectedLeadId || !filteredLeads.some((lead) => leadId(lead) === selectedLeadId)) {
@@ -517,7 +554,7 @@ export function HirePage() {
             <button
               type="button"
               className="zaki-btn-sm zaki-btn-secondary inline-flex items-center gap-2"
-              disabled={stopScanMutation.isPending}
+              disabled={hireActionsDisabled || stopScanMutation.isPending}
               onClick={() => stopScanMutation.mutate()}
             >
               <Square className="size-4" />
@@ -526,7 +563,7 @@ export function HirePage() {
             <button
               type="button"
               className="zaki-btn-sm zaki-btn-primary inline-flex items-center gap-2"
-              disabled={scanMutation.isPending}
+              disabled={hireActionsDisabled || scanMutation.isPending}
               onClick={() => scanMutation.mutate()}
             >
               {scanMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
@@ -550,6 +587,15 @@ export function HirePage() {
         <section className="rounded-zaki-md border border-zaki-subtle bg-white p-3 dark:border-[#2a2018] dark:bg-[#14100d]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-zaki-md border px-2.5 py-1.5 text-xs font-semibold",
+                  readinessTone(readiness),
+                )}
+              >
+                {readiness?.available ? <CheckCircle2 className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+                {readinessLabel(readiness, readinessQuery.isLoading)}
+              </span>
               <span
                 className={cn(
                   "inline-flex items-center gap-2 rounded-zaki-md border px-2.5 py-1.5 text-xs font-semibold",
@@ -578,6 +624,11 @@ export function HirePage() {
             </div>
             {healthQuery.error ? (
               <div className="text-xs text-zaki-brand">{extractError(healthQuery.error)}</div>
+            ) : null}
+            {readiness?.message || readinessQuery.error ? (
+              <div className="text-xs text-zaki-secondary dark:text-[#c9b8a4]">
+                {readiness?.message || extractError(readinessQuery.error)}
+              </div>
             ) : null}
           </div>
         </section>
@@ -610,6 +661,7 @@ export function HirePage() {
               leadSearch={leadSearch}
               statusFilter={statusFilter}
               minScore={minScore}
+              actionsDisabled={hireActionsDisabled}
               isLoading={leadsQuery.isLoading}
               onSearch={setLeadSearch}
               onStatusFilter={setStatusFilter}
@@ -625,6 +677,7 @@ export function HirePage() {
                 text={manualLeadText}
                 url={manualLeadUrl}
                 isPending={manualLeadMutation.isPending}
+                disabled={hireActionsDisabled}
                 onText={setManualLeadText}
                 onUrl={setManualLeadUrl}
                 onSubmit={() => manualLeadMutation.mutate()}
@@ -632,7 +685,8 @@ export function HirePage() {
               <AutomationPanel
                 lead={selectedLead}
                 consent={automationConsent}
-                disabled={automationDisabled}
+                disabled={automationDisabled || hireActionsDisabled}
+                serviceDisabled={hireActionsDisabled}
                 busy={formReadMutation.isPending || previewMutation.isPending || fireMutation.isPending}
                 onConsent={setAutomationConsent}
                 onReadForm={(id, url) => formReadMutation.mutate({ id, url })}
@@ -651,6 +705,7 @@ export function HirePage() {
             leadSearch={leadSearch}
             statusFilter={statusFilter}
             minScore={minScore}
+            actionsDisabled={hireActionsDisabled}
             isLoading={leadsQuery.isLoading}
             onSearch={setLeadSearch}
             onStatusFilter={setStatusFilter}
@@ -669,6 +724,7 @@ export function HirePage() {
             identity={identityDraft}
             profile={profileQuery.data}
             isSaving={saveProfileMutation.isPending}
+            disabled={hireActionsDisabled}
             onCandidate={setCandidateDraft}
             onIdentity={setIdentityDraft}
             onSave={() => saveProfileMutation.mutate()}
@@ -684,6 +740,7 @@ export function HirePage() {
             resumePending={resumeIngestMutation.isPending}
             githubPending={githubIngestMutation.isPending}
             portfolioPending={portfolioIngestMutation.isPending}
+            disabled={hireActionsDisabled}
             onResumeRaw={setResumeRaw}
             onResumeFile={setResumeFile}
             onGithubUsername={setGithubUsername}
@@ -701,6 +758,7 @@ export function HirePage() {
             status={statusQuery.data}
             lastResult={lastResult}
             busy={busy}
+            disabled={hireActionsDisabled}
             onFreeSourceScan={() => freeScanMutation.mutate()}
             onReevaluate={() => reevaluateMutation.mutate()}
           />
@@ -717,6 +775,7 @@ function LeadWorkbench({
   leadSearch,
   statusFilter,
   minScore,
+  actionsDisabled,
   isLoading,
   onSearch,
   onStatusFilter,
@@ -733,6 +792,7 @@ function LeadWorkbench({
   leadSearch: string;
   statusFilter: string;
   minScore: number;
+  actionsDisabled: boolean;
   isLoading: boolean;
   onSearch: (value: string) => void;
   onStatusFilter: (value: string) => void;
@@ -833,6 +893,7 @@ function LeadWorkbench({
 
       <LeadDetail
         lead={selectedLead}
+        disabled={actionsDisabled}
         onStatusChange={onStatusChange}
         onGenerate={onGenerate}
         onPipeline={onPipeline}
@@ -844,12 +905,14 @@ function LeadWorkbench({
 
 function LeadDetail({
   lead,
+  disabled,
   onStatusChange,
   onGenerate,
   onPipeline,
   onFollowup,
 }: {
   lead: HireLead | null;
+  disabled: boolean;
   onStatusChange: (id: string, status: HireLeadStatus) => void;
   onGenerate: (id: string) => void;
   onPipeline: (id: string) => void;
@@ -918,6 +981,7 @@ function LeadDetail({
             <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zaki-muted dark:text-[#a89684]">Status</span>
             <select
               value={String(lead.status || "discovered")}
+              disabled={disabled}
               onChange={(event) => onStatusChange(id, event.target.value as HireLeadStatus)}
               className="mt-1 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm text-zaki-primary outline-none dark:border-[#3a3026] dark:bg-[#0c0a09] dark:text-[#efe6d9]"
             >
@@ -928,15 +992,15 @@ function LeadDetail({
               ))}
             </select>
           </label>
-          <button type="button" className="zaki-btn-sm zaki-btn-primary flex w-full items-center justify-center gap-2" onClick={() => onGenerate(id)}>
+          <button type="button" disabled={disabled} className="zaki-btn-sm zaki-btn-primary flex w-full items-center justify-center gap-2" onClick={() => onGenerate(id)}>
             <Sparkles className="size-4" />
             Generate package
           </button>
-          <button type="button" className="zaki-btn-sm zaki-btn-secondary flex w-full items-center justify-center gap-2" onClick={() => onPipeline(id)}>
+          <button type="button" disabled={disabled} className="zaki-btn-sm zaki-btn-secondary flex w-full items-center justify-center gap-2" onClick={() => onPipeline(id)}>
             <Wand2 className="size-4" />
             Run pipeline
           </button>
-          <button type="button" className="zaki-btn-sm zaki-btn-secondary flex w-full items-center justify-center gap-2" onClick={() => onFollowup(id)}>
+          <button type="button" disabled={disabled} className="zaki-btn-sm zaki-btn-secondary flex w-full items-center justify-center gap-2" onClick={() => onFollowup(id)}>
             <Clock3 className="size-4" />
             Follow up in 5 days
           </button>
@@ -977,6 +1041,7 @@ function ManualLeadPanel({
   text,
   url,
   isPending,
+  disabled,
   onText,
   onUrl,
   onSubmit,
@@ -984,6 +1049,7 @@ function ManualLeadPanel({
   text: string;
   url: string;
   isPending: boolean;
+  disabled: boolean;
   onText: (value: string) => void;
   onUrl: (value: string) => void;
   onSubmit: () => void;
@@ -1006,7 +1072,7 @@ function ManualLeadPanel({
         />
         <button
           type="button"
-          disabled={isPending || (!text.trim() && !url.trim())}
+          disabled={disabled || isPending || (!text.trim() && !url.trim())}
           className="zaki-btn-sm zaki-btn-primary flex w-full items-center justify-center gap-2"
           onClick={onSubmit}
         >
@@ -1022,6 +1088,7 @@ function AutomationPanel({
   lead,
   consent,
   disabled,
+  serviceDisabled,
   busy,
   onConsent,
   onReadForm,
@@ -1031,6 +1098,7 @@ function AutomationPanel({
   lead: HireLead | null;
   consent: boolean;
   disabled: boolean;
+  serviceDisabled: boolean;
   busy: boolean;
   onConsent: (value: boolean) => void;
   onReadForm: (id: string, url: string) => void;
@@ -1045,6 +1113,7 @@ function AutomationPanel({
         <input
           type="checkbox"
           checked={consent}
+          disabled={serviceDisabled || !id}
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-0.5 size-4 accent-[var(--zaki-brand)]"
         />
@@ -1088,6 +1157,7 @@ function ProfilePanel({
   identity,
   profile,
   isSaving,
+  disabled,
   onCandidate,
   onIdentity,
   onSave,
@@ -1096,6 +1166,7 @@ function ProfilePanel({
   identity: HireIdentityDraft;
   profile: HireProfile | undefined;
   isSaving: boolean;
+  disabled: boolean;
   onCandidate: (value: { n: string; s: string }) => void;
   onIdentity: (value: HireIdentityDraft) => void;
   onSave: () => void;
@@ -1107,7 +1178,7 @@ function ProfilePanel({
           <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Candidate profile</h2>
           <button
             type="button"
-            disabled={isSaving || (!candidate.n.trim() && !candidate.s.trim())}
+            disabled={disabled || isSaving || (!candidate.n.trim() && !candidate.s.trim())}
             className="zaki-btn-sm zaki-btn-primary inline-flex items-center gap-2"
             onClick={onSave}
           >
@@ -1175,6 +1246,7 @@ function ImportPanel({
   resumePending,
   githubPending,
   portfolioPending,
+  disabled,
   onResumeRaw,
   onResumeFile,
   onGithubUsername,
@@ -1190,6 +1262,7 @@ function ImportPanel({
   resumePending: boolean;
   githubPending: boolean;
   portfolioPending: boolean;
+  disabled: boolean;
   onResumeRaw: (value: string) => void;
   onResumeFile: (file: File | null) => void;
   onGithubUsername: (value: string) => void;
@@ -1217,7 +1290,7 @@ function ImportPanel({
           />
           <button
             type="button"
-            disabled={resumePending || (!resumeRaw.trim() && !resumeFile)}
+            disabled={disabled || resumePending || (!resumeRaw.trim() && !resumeFile)}
             onClick={onResumeSubmit}
             className="zaki-btn-sm zaki-btn-primary inline-flex items-center justify-center gap-2"
           >
@@ -1237,7 +1310,7 @@ function ImportPanel({
           />
           <button
             type="button"
-            disabled={githubPending || !githubUsername.trim()}
+            disabled={disabled || githubPending || !githubUsername.trim()}
             onClick={onGithubSubmit}
             className="zaki-btn-sm zaki-btn-secondary mt-3 flex w-full items-center justify-center gap-2"
           >
@@ -1255,7 +1328,7 @@ function ImportPanel({
           />
           <button
             type="button"
-            disabled={portfolioPending || !portfolioUrl.trim()}
+            disabled={disabled || portfolioPending || !portfolioUrl.trim()}
             onClick={onPortfolioSubmit}
             className="zaki-btn-sm zaki-btn-secondary mt-3 flex w-full items-center justify-center gap-2"
           >
@@ -1274,6 +1347,7 @@ function ActivityPanel({
   status,
   lastResult,
   busy,
+  disabled,
   onFreeSourceScan,
   onReevaluate,
 }: {
@@ -1282,6 +1356,7 @@ function ActivityPanel({
   status: { scanning?: boolean; reevaluating?: boolean } | undefined;
   lastResult: { title: string; payload: unknown } | null;
   busy: boolean;
+  disabled: boolean;
   onFreeSourceScan: () => void;
   onReevaluate: () => void;
 }) {
@@ -1292,11 +1367,11 @@ function ActivityPanel({
         <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
           <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Operations</h2>
           <div className="mt-3 grid gap-2">
-            <button type="button" disabled={busy} className="zaki-btn-sm zaki-btn-secondary inline-flex items-center justify-center gap-2" onClick={onFreeSourceScan}>
+            <button type="button" disabled={disabled || busy} className="zaki-btn-sm zaki-btn-secondary inline-flex items-center justify-center gap-2" onClick={onFreeSourceScan}>
               <Search className="size-4" />
               Scan free sources
             </button>
-            <button type="button" disabled={busy} className="zaki-btn-sm zaki-btn-secondary inline-flex items-center justify-center gap-2" onClick={onReevaluate}>
+            <button type="button" disabled={disabled || busy} className="zaki-btn-sm zaki-btn-secondary inline-flex items-center justify-center gap-2" onClick={onReevaluate}>
               <RefreshCw className="size-4" />
               Re-evaluate leads
             </button>

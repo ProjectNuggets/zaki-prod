@@ -93,6 +93,10 @@ async function main() {
   assertNoInternalHealthDetails(health.data);
 
   logStep("Checking user-facing Hire status and lead list");
+  const userReadiness = await request("/api/hire/readiness", { token: userToken });
+  assert(userReadiness.status === 200, `Hire readiness failed: ${userReadiness.status} ${userReadiness.raw}`);
+  assert(userReadiness.data?.available === true, `Hire user readiness is not available: ${userReadiness.raw}`);
+  assert(userReadiness.data?.operations?.userProviderSettingsExposed === false, "Hire readiness exposed user provider settings");
   const status = await request("/api/hire/status", { token: userToken });
   assert(status.status === 200, `Hire status failed: ${status.status} ${status.raw}`);
   const leads = await request("/api/hire/leads", { token: userToken });

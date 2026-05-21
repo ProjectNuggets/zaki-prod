@@ -82,6 +82,48 @@ export type HireTaskStatus = {
   reevaluating?: boolean;
 };
 
+export type HireReadinessStatus =
+  | "ready"
+  | "disabled"
+  | "not_configured"
+  | "activating"
+  | "unavailable"
+  | "checking";
+
+export type HireReadiness = {
+  success?: boolean;
+  surface?: "hire" | string;
+  enabled?: boolean;
+  configured?: boolean;
+  available?: boolean;
+  status?: HireReadinessStatus | string;
+  message?: string;
+  generatedAt?: string;
+  requestId?: string;
+  engine?: {
+    online?: boolean;
+    status?: string;
+    scanning?: boolean;
+    reevaluating?: boolean;
+  };
+  capabilities?: {
+    dashboard?: boolean;
+    pipeline?: boolean;
+    profile?: boolean;
+    imports?: boolean;
+    sourceScan?: boolean;
+    generation?: boolean;
+    browserAutomation?: boolean;
+    autoApply?: boolean;
+  };
+  operations?: {
+    operatorManagedSettings?: boolean;
+    userProviderSettingsExposed?: boolean;
+    billingManagedCentrally?: boolean;
+    quotaManagedCentrally?: boolean;
+  };
+};
+
 export type HireHealth = {
   status?: string;
   uptime_seconds?: number;
@@ -100,6 +142,7 @@ type HireRequestOptions = {
 const HIRE_PATH_PATTERN = /^\/api\/hire(?:\/[A-Za-z0-9/_:.,~@?&=%+\-[\]]*)?$/;
 
 export const hireKeys = {
+  readiness: ["hire", "readiness"] as const,
   health: ["hire", "health"] as const,
   status: ["hire", "status"] as const,
   leads: ["hire", "leads"] as const,
@@ -177,6 +220,10 @@ function consentHeaders(action: HireConsentAction) {
 
 export function getHireHealth() {
   return hireRequest<HireHealth>("/api/hire/health");
+}
+
+export function getHireReadiness() {
+  return hireRequest<HireReadiness>("/api/hire/readiness");
 }
 
 export function getHireStatus() {

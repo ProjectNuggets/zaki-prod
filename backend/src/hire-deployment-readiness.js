@@ -22,6 +22,30 @@ function buildGate(id, ok, message, detail = {}) {
   };
 }
 
+function publicStatusMessage(status) {
+  switch (status) {
+    case "ready":
+      return "ZAKI Hire is ready.";
+    case "disabled":
+      return "ZAKI Hire is not enabled for this deployment.";
+    case "not_configured":
+      return "ZAKI Hire activation is pending.";
+    case "activating":
+      return "ZAKI Hire is online but still completing operator readiness checks.";
+    case "unavailable":
+      return "ZAKI Hire is temporarily unavailable.";
+    default:
+      return "ZAKI Hire status is being checked.";
+  }
+}
+
+function publicEngineStatus(engineHealth) {
+  const status = normalizeString(engineHealth?.status).toLowerCase();
+  if (["alive", "ok", "ready", "healthy", "degraded"].includes(status)) return status;
+  if (status) return "unavailable";
+  return "unknown";
+}
+
 function summarizeEngineReadiness(engineReadiness) {
   if (!engineReadiness || typeof engineReadiness !== "object") {
     return {
@@ -38,6 +62,79 @@ function summarizeEngineReadiness(engineReadiness) {
     status: normalizeString(engineReadiness.status) || (engineReadiness.ready ? "ready" : "not_ready"),
     blocking,
     degraded,
+  };
+}
+
+export function buildHireUserReadinessStatus({
+  hireEnabled = false,
+  hireConfigured = false,
+  engineHealth = null,
+  engineStatus = null,
+  deploymentReadiness = null,
+  error = null,
+  requestId = "",
+  nowDate = new Date(),
+} = {}) {
+  const healthStatus = publicEngineStatus(engineHealth);
+  const engineOnline = ["alive", "ok", "ready", "healthy", "degraded"].includes(healthStatus);
+  const deployStatus = deploymentReadiness && typeof deploymentReadiness === "object"
+    ? summarizeEngineReadiness(deploymentReadiness)
+    : null;
+  const deploymentReady = deployStatus ? deployStatus.ready : engineOnline;
+  const available = Boolean(hireEnabled && hireConfigured && engineOnline && deploymentReady && !error);
+  const status = !hireEnabled
+    ? "disabled"
+    : !hireConfigured
+      ? "not_configured"
+      : error
+        ? "unavailable"
+        : !engineOnline
+          ? "unavailable"
+          : !deploymentReady
+            ? "activating"
+            : "ready";
+  const automation = deploymentReadiness?.policy?.automation || null;
+  const browserAutomationAvailable = available && (
+    automation ? Boolean(automation.browserAutomationEnabled) : true
+  );
+  const autoApplyAvailable = browserAutomationAvailable && (
+    automation
+      ? Boolean(automation.autoApplyEnabled && automation.autoApplyConsentRequired && automation.autoApplyAuditRequired)
+      : true
+  );
+
+  return {
+    success: true,
+    surface: "hire",
+    enabled: Boolean(hireEnabled),
+    configured: Boolean(hireConfigured),
+    available,
+    status,
+    message: publicStatusMessage(status),
+    generatedAt: (nowDate instanceof Date ? nowDate : new Date(nowDate)).toISOString(),
+    requestId: normalizeString(requestId),
+    engine: {
+      online: engineOnline,
+      status: healthStatus,
+      scanning: Boolean(engineStatus?.scanning),
+      reevaluating: Boolean(engineStatus?.reevaluating),
+    },
+    capabilities: {
+      dashboard: available,
+      pipeline: available,
+      profile: available,
+      imports: available,
+      sourceScan: available,
+      generation: available,
+      browserAutomation: browserAutomationAvailable,
+      autoApply: autoApplyAvailable,
+    },
+    operations: {
+      operatorManagedSettings: true,
+      userProviderSettingsExposed: false,
+      billingManagedCentrally: true,
+      quotaManagedCentrally: true,
+    },
   };
 }
 

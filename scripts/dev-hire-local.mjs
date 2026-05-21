@@ -463,6 +463,11 @@ async function verifyHireActivation() {
   if (!status.response.ok) {
     throw new Error(`User-facing Hire status is unavailable: ${status.response.status} ${status.raw}`);
   }
+
+  const userReadiness = await requestJson("/api/hire/readiness", { token: userToken });
+  if (!userReadiness.response.ok || userReadiness.data?.available !== true) {
+    throw new Error(`User-facing Hire readiness is not available: ${userReadiness.response.status} ${userReadiness.raw}`);
+  }
 }
 
 async function startAppProcesses() {
