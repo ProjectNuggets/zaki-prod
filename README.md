@@ -137,6 +137,54 @@ npm run dev
 
 Visit `http://localhost:5173` 🎉
 
+### ZAKI Hire Local Activation
+
+Use this when validating the first-class `/hire` product locally. It starts the
+ZAKI web app, ZAKI backend, a local TYP mock for workspace/sidebar data, local
+PostgreSQL containers, and the internal `zaki-hire-engine` container.
+
+```bash
+npm run dev:hire:local
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5174/hire
+```
+
+Local test login:
+
+```text
+zaki-e2e-user-a@example.com
+ZakiE2E!2026
+```
+
+Run the browser smoke in another terminal:
+
+```bash
+npm run smoke:hire-browser
+```
+
+Useful variants:
+
+```bash
+npm run dev:hire:local:restart
+npm run dev:hire:local:check
+npm run smoke:hire-readiness
+npm run smoke:hire-isolation
+```
+
+Defaults can be overridden with environment variables:
+
+```bash
+ZAKI_HIRE_ENGINE_IMAGE=zaki-hire-engine:codex-smoke-arm64
+ZAKI_HIRE_ENGINE_REPO=../zaki-hire-engine
+ZAKI_HIRE_LOCAL_BACKEND_PORT=8787
+ZAKI_HIRE_LOCAL_FRONTEND_PORT=5174
+ZAKI_HIRE_LOCAL_ENGINE_PORT=18002
+```
+
 ---
 
 ## 🚀 Deployment
