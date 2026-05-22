@@ -39,7 +39,7 @@ describe("hire usage events", () => {
       userId: 42,
       productId: ZAKI_PRODUCT_IDS.HIRE,
       surface: HIRE_SURFACE,
-      eventType: "hire.generated_package",
+      eventType: "hire.resume.tailor",
       usageUnitType: "request",
       usageUnits: 1,
       planId: "hire",
@@ -54,7 +54,8 @@ describe("hire usage events", () => {
       metadata: {
         schemaVersion: USAGE_EVENTS_SCHEMA_VERSION,
         hireUsageVersion: HIRE_USAGE_EVENTS_VERSION,
-        action: "generated_package",
+        action: "hire.resume.tailor",
+        sourceAction: "generated_package",
         method: "POST",
         routeTemplate: "/api/hire/leads/:leadId/generate",
         quotaSurface: HIRE_SURFACE,
@@ -92,7 +93,7 @@ describe("hire usage events", () => {
 
     expect(event).toEqual(
       expect.objectContaining({
-        eventType: "hire.auto_apply",
+        eventType: "hire.outreach.send",
         entitlement: "unlimited",
         quotaLimit: null,
         quotaUsed: 0,
@@ -152,7 +153,7 @@ describe("hire usage events", () => {
         "42",
         ZAKI_PRODUCT_IDS.HIRE,
         HIRE_SURFACE,
-        "hire.source_scan",
+        "hire.job.search",
         "request",
         1,
         "free",

@@ -76,6 +76,39 @@ describe("hire client", () => {
     );
   });
 
+  test("forwards central meter grant headers to Hire", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    await fetchHirePath({
+      baseUrl: "http://hire:8002",
+      internalToken: "secret",
+      userId: "9",
+      requestId: "req-meter",
+      path: "/api/v1/scan",
+      method: "POST",
+      body: {},
+      fetchWithTimeout,
+      timeoutMs: 10000,
+      extraHeaders: {
+        "X-Zaki-Meter-Grant-Id": "hmg_123",
+        "X-Zaki-Meter-Grant": "signed-grant",
+        "X-Zaki-Meter-Action": "hire.job.search",
+      },
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://hire:8002/api/v1/scan",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "X-Zaki-Meter-Grant-Id": "hmg_123",
+          "X-Zaki-Meter-Grant": "signed-grant",
+          "X-Zaki-Meter-Action": "hire.job.search",
+        }),
+      }),
+      10000,
+      "Hire upstream request"
+    );
+  });
+
   test("proxies multipart upload streams without leaking browser auth", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     const req = {

@@ -1,5 +1,5 @@
 import { HIRE_SURFACE } from "./daily-quota.js";
-import { classifyHireIngressUsageEvent } from "./hire-bff-contract.js";
+import { classifyHireMeterAction } from "./hire-metering-contract.js";
 import { ZAKI_PRODUCT_IDS } from "./platform-policy.js";
 import {
   USAGE_EVENTS_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function buildHireUsageEvent({
   quotaDecision,
   requestId,
 } = {}) {
-  const usage = classifyHireIngressUsageEvent(req || {});
+  const usage = classifyHireMeterAction(req || {});
   if (!usage) return null;
 
   const quota = quotaDecision?.quota || quotaDecision || {};
@@ -50,7 +50,7 @@ export function buildHireUsageEvent({
     userId: zakiUser.id,
     productId: ZAKI_PRODUCT_IDS.HIRE,
     surface: HIRE_SURFACE,
-    eventType: `hire.${usage.action}`,
+    eventType: usage.eventType,
     usageUnitType: "request",
     usageUnits: 1,
     planId: resolveHireUsagePlanId(zakiUser),
@@ -66,6 +66,7 @@ export function buildHireUsageEvent({
       schemaVersion: USAGE_EVENTS_SCHEMA_VERSION,
       hireUsageVersion: HIRE_USAGE_EVENTS_VERSION,
       action: usage.action,
+      sourceAction: usage.sourceAction,
       method: usage.method,
       routeTemplate: usage.routeTemplate,
       quotaSurface: quota?.surface || HIRE_SURFACE,

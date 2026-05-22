@@ -134,6 +134,8 @@ export function buildHireUserReadinessStatus({
       userProviderSettingsExposed: false,
       billingManagedCentrally: true,
       quotaManagedCentrally: true,
+      meterGrantsRequired: true,
+      usageReceiptsRequired: true,
     },
   };
 }
@@ -157,6 +159,9 @@ export function resolveHireDeploymentPolicy(env = process.env) {
     normalizeString(env?.HIRE_SOURCE_POLICY_VERSION);
   const quotaBucket = normalizeString(env?.ZAKI_HIRE_WEEKLY_PROMPT_BUCKET);
   const quotaLimit = normalizeString(env?.ZAKI_HIRE_WEEKLY_PROMPT_LIMIT);
+  const hireMeterSigningKey = normalizeString(
+    env?.ZAKI_METER_GRANT_SIGNING_SECRET || env?.ZAKI_HIRE_METER_SIGNING_KEY
+  );
 
   const automation = {
     browserAutomationEnabled: truthy(
@@ -186,6 +191,7 @@ export function resolveHireDeploymentPolicy(env = process.env) {
     zakiAuthSigningKeyConfigured: normalizeString(env?.ZAKI_JWT_SIGNING_KEY).length >= 64,
     hireBaseUrlConfigured: Boolean(normalizeString(env?.HIRE_ENGINE_BASE_URL || env?.ZAKI_HIRE_ENGINE_BASE_URL)),
     hireInternalTokenConfigured: Boolean(normalizeString(env?.HIRE_ENGINE_INTERNAL_TOKEN || env?.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN)),
+    hireMeterSigningKeyConfigured: hireMeterSigningKey.length >= 32,
     sourceRepositoryConfigured: Boolean(sourceRepository),
     sourceCommitPinned: /^[a-f0-9]{40,64}$/i.test(sourceCommit),
     aiStackConfigured: Boolean(llmProvider && llmModel),
@@ -237,6 +243,11 @@ export function buildHireDeploymentReadinessStatus({
       "hire_internal_token",
       !hireEnabled || policy.hireInternalTokenConfigured,
       "Hire engine internal token must be configured and operator-managed."
+    ),
+    buildGate(
+      "hire_meter_signing_key",
+      !hireEnabled || policy.hireMeterSigningKeyConfigured,
+      "Central meter grant signing secret must be configured; do not reuse auth or internal service tokens."
     ),
     buildGate(
       "zaki_image_immutable",
@@ -308,6 +319,7 @@ export function buildHireDeploymentReadinessStatus({
         "browser automation runtime",
         "auto-apply kill switch, consent, and audit policy",
         "Hire engine internal token",
+        "central meter grant signing secret",
         "PostgreSQL DSN and tenant storage root",
         "quota policy and unit-economics caps",
         "immutable deployment image references",

@@ -63,6 +63,9 @@ export function validateRuntimeConfig(env = process.env) {
   const hireEnabled = isTruthyBoolean(env.ZAKI_HIRE_ENABLED);
   const hireBaseUrl = normalize(env.HIRE_ENGINE_BASE_URL || env.ZAKI_HIRE_ENGINE_BASE_URL);
   const hireInternalToken = normalize(env.HIRE_ENGINE_INTERNAL_TOKEN || env.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN);
+  const hireMeterSigningKey = normalize(
+    env.ZAKI_METER_GRANT_SIGNING_SECRET || env.ZAKI_HIRE_METER_SIGNING_KEY
+  );
   const nullalisDevUserId = normalize(env.NULLALIS_DEV_USER_ID || env.NULLCLAW_DEV_USER_ID);
   const googleClientId = normalize(env.GOOGLE_CLIENT_ID);
   const googleClientSecret = normalize(env.GOOGLE_CLIENT_SECRET);
@@ -222,6 +225,13 @@ export function validateRuntimeConfig(env = process.env) {
         errors,
         "HIRE_ENGINE_INTERNAL_TOKEN",
         "HIRE_ENGINE_INTERNAL_TOKEN is required when ZAKI_HIRE_ENABLED=true."
+      );
+    }
+    if (isProduction && hireMeterSigningKey.length < 32) {
+      pushIssue(
+        errors,
+        "ZAKI_METER_GRANT_SIGNING_SECRET",
+        "ZAKI_METER_GRANT_SIGNING_SECRET must be set to a dedicated 32+ character central meter secret in production when Hire is enabled."
       );
     }
   } else if (hireBaseUrl || hireInternalToken) {

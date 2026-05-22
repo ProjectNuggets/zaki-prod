@@ -132,6 +132,13 @@ import {
 } from "./hire-automation-consent.js";
 import { recordHireUsageEvent } from "./hire-usage-events.js";
 import {
+  HIRE_METERING_CONTRACT_VERSION,
+  buildHireMeterForwardHeaders,
+  buildHireMeterGrant,
+  buildHireMeterUnavailablePayload,
+  recordHireMeterReceipt,
+} from "./hire-metering-contract.js";
+import {
   fetchHireDeploymentReadiness,
   fetchHirePath,
   fetchHireProxyPath,
@@ -442,6 +449,11 @@ const HIRE_ENGINE_STREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.HIRE_ENGINE_STREAM_TIMEOUT_MS || 300_000)
 );
+const HIRE_METER_GRANT_SIGNING_KEY = (
+  process.env.ZAKI_METER_GRANT_SIGNING_SECRET ||
+  process.env.ZAKI_HIRE_METER_SIGNING_KEY ||
+  ""
+).trim();
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
@@ -10003,7 +10015,18 @@ function hireClientOptions(req, label) {
     fetchWithTimeout,
     timeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
     label,
+    extraHeaders: buildHireMeterForwardHeaders(req.hireMeterGrant),
   };
+}
+
+function setHireMeterGrantHeaders(res, grant) {
+  if (!grant?.grantId) return;
+  res.setHeader("X-Zaki-Meter-Contract", HIRE_METERING_CONTRACT_VERSION);
+  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
+  res.setHeader("X-Zaki-Meter-Action", grant.action || "");
+  if (grant.expiresAt) {
+    res.setHeader("X-Zaki-Meter-Grant-Expires-At", grant.expiresAt);
+  }
 }
 
 function hireForwardQueryString(req, blockedKeys = []) {
@@ -10124,6 +10147,8 @@ async function enforceHirePromptQuotaForIngress(req, res, next) {
     return;
   }
   if (!assertHireRouteEnabled(req, res)) return;
+  const requestId = getOrCreateRequestId(req);
+  req.requestId = requestId;
   try {
     const quotaDecision = await enforcePromptQuotaForIngress({
       zakiUser: req.hireAuthResult?.zakiUser,
@@ -10136,17 +10161,30 @@ async function enforceHirePromptQuotaForIngress(req, res, next) {
       res.status(quotaDecision.status).json(quotaDecision.payload);
       return;
     }
+    const meterGrant = buildHireMeterGrant({
+      req,
+      quotaDecision,
+      signingKey: HIRE_METER_GRANT_SIGNING_KEY,
+      productState: "enabled",
+    });
+    if (!meterGrant) {
+      throw new Error("hire_meter_grant_not_applicable");
+    }
+    req.hireMeterGrant = meterGrant;
+    req.hireQuotaDecision = quotaDecision;
+    req.hireMeterReceiptStartedAt = Date.now();
+    setHireMeterGrantHeaders(res, meterGrant);
     try {
       await recordHireUsageEvent({
         req,
         quotaDecision,
-        requestId: getOrCreateRequestId(req),
+        requestId,
         dbQuery,
         logStructured,
       });
     } catch (usageError) {
       logStructured("error", "hire.usage.record_failed", {
-        requestId: getOrCreateRequestId(req),
+        requestId,
         route: String(req.originalUrl || req.path || "").split("?")[0].split("#")[0],
         method: req.method,
         message: usageError?.message || String(usageError),
@@ -10156,17 +10194,45 @@ async function enforceHirePromptQuotaForIngress(req, res, next) {
     next();
   } catch (error) {
     console.error("[Hire] Quota check error:", {
-      requestId: getOrCreateRequestId(req),
+      requestId,
       route: req.originalUrl,
       method: req.method,
       error: error?.message || "Hire quota check failed.",
     });
     res.status(503).json({
-      code: "hire_quota_unavailable",
-      error: "Hire quota is unavailable.",
-      message: "Hire is temporarily unable to check usage safely.",
-      retryable: true,
+      ...buildHireMeterUnavailablePayload(requestId),
+    });
+  }
+}
+
+async function maybeRecordHireMeterReceipt({
+  req,
+  upstreamStatus,
+  finalStatus,
+  responsePayload = null,
+  upstreamHeaders = null,
+} = {}) {
+  if (!req?.hireMeterGrant || req.hireMeterReceiptRecorded) return;
+  req.hireMeterReceiptRecorded = true;
+  try {
+    await recordHireMeterReceipt({
+      req,
+      grant: req.hireMeterGrant,
+      quotaDecision: req.hireQuotaDecision,
+      upstreamStatus,
+      finalStatus,
+      responsePayload,
+      upstreamHeaders,
+      durationMs: Date.now() - Number(req.hireMeterReceiptStartedAt || Date.now()),
+      dbQuery,
+      logStructured,
+    });
+  } catch (receiptError) {
+    logStructured("error", "hire.meter.receipt_failed", {
       requestId: getOrCreateRequestId(req),
+      grantId: req.hireMeterGrant?.grantId || null,
+      action: req.hireMeterGrant?.action || null,
+      message: receiptError?.message || String(receiptError),
     });
   }
 }
@@ -10176,6 +10242,11 @@ async function pipeHireResponse(req, res, upstream) {
   if (!upstream.ok) {
     const mapped = mapHireUpstreamFailure(upstream.status, requestId);
     if (mapped) {
+      await maybeRecordHireMeterReceipt({
+        req,
+        upstreamStatus: upstream.status,
+        upstreamHeaders: upstream.headers,
+      });
       res.status(mapped.status).json(mapped.body);
       return;
     }
@@ -10190,9 +10261,21 @@ async function pipeHireResponse(req, res, upstream) {
         normalizeHireProxyPath(req) === "/health"
           ? sanitizeHireHealthPayload(payload)
           : sanitizeHireUpstreamPayload(payload);
+      await maybeRecordHireMeterReceipt({
+        req,
+        upstreamStatus: upstream.status,
+        responsePayload: payload,
+        upstreamHeaders: upstream.headers,
+      });
       res.status(upstream.status).json(sanitizedPayload);
       return;
     } catch (error) {
+      await maybeRecordHireMeterReceipt({
+        req,
+        upstreamStatus: upstream.status,
+        finalStatus: 502,
+        upstreamHeaders: upstream.headers,
+      });
       console.warn("[Hire] JSON response sanitizer failed:", {
         requestId,
         status: upstream.status,
@@ -10209,6 +10292,11 @@ async function pipeHireResponse(req, res, upstream) {
     }
   }
 
+  await maybeRecordHireMeterReceipt({
+    req,
+    upstreamStatus: upstream.status,
+    upstreamHeaders: upstream.headers,
+  });
   res.status(upstream.status);
   copyHireResponseHeaders(upstream, res);
   if (!upstream.body) {

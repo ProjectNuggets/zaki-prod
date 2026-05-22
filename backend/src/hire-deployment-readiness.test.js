@@ -20,6 +20,7 @@ describe("hire deployment readiness", () => {
       "central_auth_signing_key",
       "hire_enabled_configured",
       "hire_internal_token",
+      "hire_meter_signing_key",
       "zaki_image_immutable",
       "hire_engine_image_immutable",
       "hire_source_mirror_pinned",
@@ -35,6 +36,7 @@ describe("hire deployment readiness", () => {
   test("reports ready with pinned images, source mirror, automation controls, quotas, and downstream readiness", () => {
     const env = {
       ZAKI_JWT_SIGNING_KEY: "a".repeat(64),
+      ZAKI_METER_GRANT_SIGNING_SECRET: "hire-meter-signing-key-production-2026",
       HIRE_ENGINE_BASE_URL: "http://hire:8002",
       HIRE_ENGINE_INTERNAL_TOKEN: "internal-token",
       ZAKI_APP_IMAGE_TAG: "ghcr.io/projectnuggets/zaki:sha-abcdef123456",
@@ -65,6 +67,7 @@ describe("hire deployment readiness", () => {
     expect(status.gates.every((gate) => gate.ok)).toBe(true);
     expect(resolveHireDeploymentPolicy(env)).toMatchObject({
       zakiAuthSigningKeyConfigured: true,
+      hireMeterSigningKeyConfigured: true,
       hireBaseUrlConfigured: true,
       hireInternalTokenConfigured: true,
       hireImageRefImmutable: true,
@@ -80,6 +83,7 @@ describe("hire deployment readiness", () => {
   test("keeps ZAKI release gate blocked when downstream engine reports degraded", () => {
     const readyEnv = {
       ZAKI_JWT_SIGNING_KEY: "a".repeat(64),
+      ZAKI_METER_GRANT_SIGNING_SECRET: "hire-meter-signing-key-production-2026",
       HIRE_ENGINE_BASE_URL: "http://hire:8002",
       HIRE_ENGINE_INTERNAL_TOKEN: "internal-token",
       ZAKI_BACKEND_IMAGE_TAG: "ghcr.io/projectnuggets/zaki-api:sha-abcdef123456",
