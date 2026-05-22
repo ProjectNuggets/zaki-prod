@@ -31,3 +31,4 @@ export {
   useBrainCommunitiesRecompute,
   BrainRecomputeConflictError,
 } from "./useBrainCommunities";
+export { useProductRegistry, productKeys } from "./useProducts";

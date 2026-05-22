@@ -103,9 +103,12 @@
         "entryPoint": "نقطة الدخول"
       },
       "states": {
-        "available": "متاح",
+        "enabled": "مفعّل",
         "disabled": "معطّل",
-        "planned": "مخطط"
+        "maintenance": "صيانة",
+        "degraded": "متدهور",
+        "hidden": "مخفي",
+        "readOnly": "للقراءة فقط"
       },
       "lifecycle": {
         "current": "حالي",
@@ -123,7 +126,7 @@
       "entryPoints": {
         "spaces": "المساحات / المحادثة",
         "agent": "واجهة الوكيل",
-        "learn": "التعلّم",
+        "learning": "التعلّم",
         "hire": "التوظيف",
         "design": "التصميم",
         "brain": "لوحة تحكم الذاكرة",

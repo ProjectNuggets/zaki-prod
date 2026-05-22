@@ -1,4 +1,5 @@
 export const PLATFORM_POLICY_VERSION = "2026-05-19.platform.v1";
+export const PRODUCT_REGISTRY_VERSION = "2026-05-22.product-registry.v1";
 
 export const PLATFORM_PLAN_IDS = Object.freeze({
   FREE: "free",
@@ -35,6 +36,17 @@ export const MEMORY_SCOPE_IDS = Object.freeze({
   SESSION_MEMORY: "session_memory",
 });
 
+export const PRODUCT_OPERATIONAL_STATES = Object.freeze({
+  ENABLED: "enabled",
+  DISABLED: "disabled",
+  MAINTENANCE: "maintenance",
+  DEGRADED: "degraded",
+  HIDDEN: "hidden",
+  READ_ONLY: "readOnly",
+});
+
+const PRODUCT_STATE_VALUES = new Set(Object.values(PRODUCT_OPERATIONAL_STATES));
+
 const PLAN_LABELS = Object.freeze({
   [PLATFORM_PLAN_IDS.FREE]: "Free",
   [PLATFORM_PLAN_IDS.PERSONAL]: "Personal",
@@ -64,67 +76,133 @@ const CURRENT_PRODUCTS = Object.freeze([
 const PRODUCT_DEFINITIONS = Object.freeze({
   [ZAKI_PRODUCT_IDS.SPACES]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.SPACES,
+    registryId: "spaces",
     label: "ZAKI Spaces",
+    productKind: "product",
     lifecycle: "current",
+    defaultState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+    visibleInSettings: true,
+    route: "/spaces",
+    entryPoint: "Spaces / Chat",
     quotaPolicyId: "spaces_workspace",
     memoryScope: MEMORY_SCOPE_IDS.WORKSPACE_MEMORY,
   }),
   [ZAKI_PRODUCT_IDS.AGENT]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.AGENT,
+    registryId: "agent",
     label: "ZAKI Agent",
+    productKind: "product",
     lifecycle: "current",
+    defaultState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+    visibleInSettings: true,
+    route: "/",
+    entryPoint: "Agent home",
     quotaPolicyId: "agent_personal",
     memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
   }),
   [ZAKI_PRODUCT_IDS.LEARN]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.LEARN,
+    registryId: "learning",
     label: "ZAKI Learn",
+    productKind: "product",
     lifecycle: "current",
+    defaultState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+    visibleInSettings: true,
+    route: "/learn",
+    entryPoint: "Learning",
     quotaPolicyId: "learn_learner",
     memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY,
   }),
   [ZAKI_PRODUCT_IDS.HIRE]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.HIRE,
+    registryId: "hire",
     label: "ZAKI Hire",
+    productKind: "product",
     lifecycle: "future",
+    defaultState: PRODUCT_OPERATIONAL_STATES.DISABLED,
+    visibleInSettings: true,
+    route: "/hire",
+    entryPoint: "Hire",
     quotaPolicyId: "hire_pipeline",
     memoryScope: MEMORY_SCOPE_IDS.HIRE_MEMORY,
   }),
   [ZAKI_PRODUCT_IDS.DESIGN]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.DESIGN,
+    registryId: "design",
     label: "ZAKI Design",
+    productKind: "product",
     lifecycle: "future",
+    defaultState: PRODUCT_OPERATIONAL_STATES.DISABLED,
+    visibleInSettings: true,
+    route: "/design",
+    entryPoint: "Design",
     quotaPolicyId: "design_studio",
     memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY,
   }),
   [ZAKI_PRODUCT_IDS.BRAIN]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.BRAIN,
+    registryId: "brain",
     label: "ZAKI Brain",
+    productKind: "control_plane",
     lifecycle: "current",
+    defaultState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+    visibleInSettings: true,
+    route: "/brain",
+    entryPoint: "Memory control plane",
     quotaPolicyId: "brain_memory",
     memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
   }),
   [ZAKI_PRODUCT_IDS.CLI]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.CLI,
+    registryId: "cli",
     label: "ZAKI CLI",
+    productKind: "client",
     lifecycle: "future",
+    defaultState: PRODUCT_OPERATIONAL_STATES.HIDDEN,
+    visibleInSettings: false,
+    route: null,
+    entryPoint: "CLI",
     quotaPolicyId: "cli_agent",
     memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
   }),
   [ZAKI_PRODUCT_IDS.LOCAL_APP]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.LOCAL_APP,
+    registryId: "local_app",
     label: "ZAKI Local App",
+    productKind: "client",
     lifecycle: "future",
+    defaultState: PRODUCT_OPERATIONAL_STATES.HIDDEN,
+    visibleInSettings: false,
+    route: null,
+    entryPoint: "Local app",
     quotaPolicyId: "local_app_agent",
     memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
   }),
   [ZAKI_PRODUCT_IDS.EXTENSIONS]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.EXTENSIONS,
+    registryId: "extensions",
     label: "ZAKI Extensions",
+    productKind: "client",
     lifecycle: "future",
+    defaultState: PRODUCT_OPERATIONAL_STATES.HIDDEN,
+    visibleInSettings: false,
+    route: null,
+    entryPoint: "Extensions",
     quotaPolicyId: "extension_agent",
     memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
   }),
+});
+
+const PRODUCT_STATE_ENV_KEYS = Object.freeze({
+  [ZAKI_PRODUCT_IDS.SPACES]: "ZAKI_PRODUCT_STATE_SPACES",
+  [ZAKI_PRODUCT_IDS.AGENT]: "ZAKI_PRODUCT_STATE_AGENT",
+  [ZAKI_PRODUCT_IDS.LEARN]: "ZAKI_PRODUCT_STATE_LEARNING",
+  [ZAKI_PRODUCT_IDS.HIRE]: "ZAKI_PRODUCT_STATE_HIRE",
+  [ZAKI_PRODUCT_IDS.DESIGN]: "ZAKI_PRODUCT_STATE_DESIGN",
+  [ZAKI_PRODUCT_IDS.BRAIN]: "ZAKI_PRODUCT_STATE_BRAIN",
+  [ZAKI_PRODUCT_IDS.CLI]: "ZAKI_PRODUCT_STATE_CLI",
+  [ZAKI_PRODUCT_IDS.LOCAL_APP]: "ZAKI_PRODUCT_STATE_LOCAL_APP",
+  [ZAKI_PRODUCT_IDS.EXTENSIONS]: "ZAKI_PRODUCT_STATE_EXTENSIONS",
 });
 
 function normalizeId(value) {
@@ -150,6 +228,19 @@ function cloneProductDefinition(product) {
   return { ...product };
 }
 
+function normalizeProductOperationalState(value, fallback) {
+  const normalized = String(value || "").trim();
+  return PRODUCT_STATE_VALUES.has(normalized) ? normalized : fallback;
+}
+
+function resolveProductOperationalState(product, env = process.env) {
+  const envKey = PRODUCT_STATE_ENV_KEYS[product.id];
+  return normalizeProductOperationalState(
+    envKey ? env?.[envKey] : null,
+    product.defaultState || PRODUCT_OPERATIONAL_STATES.DISABLED
+  );
+}
+
 export function normalizePlatformPlanId(value, fallback = PLATFORM_PLAN_IDS.FREE) {
   const normalized = normalizeId(value);
   if (PLATFORM_PLAN_LADDER.includes(normalized)) return normalized;
@@ -169,6 +260,44 @@ export function buildPlatformProductCatalog({ includeFuture = true } = {}) {
     ? Object.values(ZAKI_PRODUCT_IDS)
     : CURRENT_PRODUCTS;
   return productIds.map((id) => cloneProductDefinition(PRODUCT_DEFINITIONS[id]));
+}
+
+export function buildPlatformProductRegistry({
+  env = process.env,
+  includeHidden = true,
+  nowDate = new Date(),
+} = {}) {
+  const date = nowDate instanceof Date ? nowDate : new Date(nowDate);
+  const generatedAt = Number.isFinite(date.getTime())
+    ? date.toISOString()
+    : new Date().toISOString();
+  const products = buildPlatformProductCatalog()
+    .map((product) => {
+      const state = resolveProductOperationalState(product, env);
+      return {
+        productId: product.registryId || product.id,
+        legacyProductId:
+          product.registryId && product.registryId !== product.id ? product.id : null,
+        label: product.label,
+        productKind: product.productKind || "product",
+        state,
+        lifecycle: product.lifecycle,
+        visibleInSettings: Boolean(product.visibleInSettings),
+        route: product.route || null,
+        entryPoint: product.entryPoint || product.label,
+        quotaPolicyId: product.quotaPolicyId,
+        memoryScope: product.memoryScope,
+      };
+    })
+    .filter((product) => includeHidden || product.state !== PRODUCT_OPERATIONAL_STATES.HIDDEN);
+
+  return {
+    success: true,
+    contractVersion: PRODUCT_REGISTRY_VERSION,
+    policyVersion: PLATFORM_POLICY_VERSION,
+    generatedAt,
+    products,
+  };
 }
 
 function buildProductAccessMap(products) {

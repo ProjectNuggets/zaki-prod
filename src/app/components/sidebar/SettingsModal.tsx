@@ -4,8 +4,15 @@ import {
   useDeleteAccount,
   useEntitlements,
   usePlatformUsageSummary,
+  useProductRegistry,
 } from "@/queries";
-import type { PlatformUsageProductId, UsageQuotaSnapshot } from "@/lib/api";
+import type {
+  PlatformUsageProductId,
+  ProductOperationalState,
+  ProductRegistryItem,
+  ProductRegistryProductId,
+  UsageQuotaSnapshot,
+} from "@/lib/api";
 import { exportAccountData } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -28,20 +35,11 @@ interface SettingsModalProps {
   saving?: boolean;
 }
 
-const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = ["spaces", "agent", "learn", "brain"];
-const PLATFORM_ACCESS_PRODUCTS: PlatformUsageProductId[] = [
-  "spaces",
-  "agent",
-  "learn",
-  "hire",
-  "design",
-  "brain",
-];
-
-const PRODUCT_ENTRY_POINT_KEYS: Partial<Record<PlatformUsageProductId, string>> = {
+const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = ["spaces", "agent", "learn"];
+const PRODUCT_ENTRY_POINT_KEYS: Partial<Record<ProductRegistryProductId, string>> = {
   spaces: "settingsModal.productsAccess.entryPoints.spaces",
   agent: "settingsModal.productsAccess.entryPoints.agent",
-  learn: "settingsModal.productsAccess.entryPoints.learn",
+  learning: "settingsModal.productsAccess.entryPoints.learning",
   hire: "settingsModal.productsAccess.entryPoints.hire",
   design: "settingsModal.productsAccess.entryPoints.design",
   brain: "settingsModal.productsAccess.entryPoints.brain",
@@ -106,12 +104,12 @@ function getQuotaSummaryLabel(
 
 function getProductStateLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
-  available?: boolean,
-  lifecycle?: string
+  state?: ProductOperationalState
 ) {
-  if (lifecycle === "future") return t("settingsModal.productsAccess.states.planned");
-  if (available === false) return t("settingsModal.productsAccess.states.disabled");
-  return t("settingsModal.productsAccess.states.available");
+  if (!state) return t("settingsModal.productsAccess.states.disabled");
+  return t(`settingsModal.productsAccess.states.${state}`, {
+    defaultValue: state,
+  });
 }
 
 function getProductLifecycleLabel(
@@ -126,11 +124,14 @@ function getProductLifecycleLabel(
 
 function getProductEntryPointLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
-  productId?: PlatformUsageProductId
+  product?: ProductRegistryItem
 ) {
+  const productId = product?.productId;
   if (!productId) return t("settingsModal.productsAccess.pending");
   const key = PRODUCT_ENTRY_POINT_KEYS[productId];
-  return key ? t(key) : productId;
+  return key
+    ? t(key, { defaultValue: product?.entryPoint || productId })
+    : product?.entryPoint || productId;
 }
 
 function getMemoryScopeLabel(
@@ -159,10 +160,12 @@ export function SettingsModal({
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
   const { data: platformUsageResult, isLoading: platformUsageLoading } = usePlatformUsageSummary();
+  const { data: productRegistryResult, isLoading: productRegistryLoading } = useProductRegistry();
   const cancelSubscription = useCancelSubscription();
   const deleteAccountMutation = useDeleteAccount();
   const entitlements = entitlementsResult?.data ?? null;
   const platformUsage = platformUsageResult?.data ?? null;
+  const productRegistry = productRegistryResult?.data ?? null;
   const planTier = entitlements?.plan?.tier ?? "free";
   const accessCampaign = entitlements?.access?.campaign ?? null;
   const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
@@ -221,20 +224,10 @@ export function SettingsModal({
     if (!product) return null;
     return product;
   }).filter(Boolean);
-  const orderedProductAccessRows = PLATFORM_ACCESS_PRODUCTS.map((productId) => {
-    const product = platformUsage?.products?.[productId];
-    if (!product) return null;
-    return product;
-  }).filter(Boolean);
-  const extraProductAccessRows = Object.values(platformUsage?.products ?? {}).filter((product) => {
-    const productId = product?.productId;
-    return (
-      productId &&
-      !PLATFORM_ACCESS_PRODUCTS.includes(productId) &&
-      product?.lifecycle !== "future"
-    );
-  });
-  const productAccessRows = [...orderedProductAccessRows, ...extraProductAccessRows];
+  const productAccessRows =
+    productRegistry?.products?.filter(
+      (product) => product.visibleInSettings !== false && product.state !== "hidden"
+    ) ?? [];
 
   useEffect(() => {
     if (isOpen) {
@@ -457,7 +450,7 @@ export function SettingsModal({
                 {t("settingsModal.productsAccess.subtitle")}
               </p>
 
-              {platformUsageLoading && !platformUsage ? (
+              {productRegistryLoading && !productRegistry ? (
                 <p className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted">
                   {t("settingsModal.productsAccess.loading")}
                 </p>
@@ -466,12 +459,8 @@ export function SettingsModal({
               <div className="grid gap-2">
                 {productAccessRows.map((product) => {
                   const productId = product?.productId;
-                  const stateLabel = getProductStateLabel(
-                    t,
-                    product?.available,
-                    product?.lifecycle
-                  );
-                  const stateIsOpen = product?.available !== false && product?.lifecycle !== "future";
+                  const stateLabel = getProductStateLabel(t, product?.state);
+                  const stateIsOpen = product?.state === "enabled";
                   return (
                     <div
                       key={productId || product?.label}
@@ -516,7 +505,7 @@ export function SettingsModal({
                             {t("settingsModal.productsAccess.fields.entryPoint")}
                           </span>
                           <span className="text-xs font-medium text-zaki-primary dark:text-zaki-dark-primary">
-                            {getProductEntryPointLabel(t, productId)}
+                            {getProductEntryPointLabel(t, product)}
                           </span>
                         </div>
                       </div>
@@ -525,7 +514,7 @@ export function SettingsModal({
                 })}
               </div>
 
-              {productAccessRows.length === 0 && !platformUsageLoading ? (
+              {productAccessRows.length === 0 && !productRegistryLoading ? (
                 <p className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted">
                   {t("settingsModal.productsAccess.empty")}
                 </p>

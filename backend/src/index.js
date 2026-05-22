@@ -197,7 +197,10 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
-import { buildPlatformEntitlementSummary } from "./platform-policy.js";
+import {
+  buildPlatformEntitlementSummary,
+  buildPlatformProductRegistry,
+} from "./platform-policy.js";
 import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
 import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
 import {
@@ -5894,6 +5897,15 @@ app.get("/api/usage/summary", async (req, res) => {
   } catch (error) {
     console.error("[Usage] Summary endpoint error:", error);
     res.status(500).json({ error: error?.message || "Unable to load usage summary." });
+  }
+});
+
+app.get("/api/products/registry", (_req, res) => {
+  try {
+    res.status(200).json(buildPlatformProductRegistry());
+  } catch (error) {
+    console.error("[Products] Registry endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Unable to load product registry." });
   }
 });
 

@@ -90,26 +90,6 @@ function buildBrainUsageProduct(platformProducts = {}) {
   };
 }
 
-function buildAccessOnlyUsageProduct(productId, platformProduct = {}) {
-  return {
-    productId,
-    label: platformProduct.label || productId,
-    available: platformProduct.available !== false,
-    lifecycle: platformProduct.lifecycle || "future",
-    memoryScope: platformProduct.memoryScope || null,
-    quota: {
-      success: true,
-      unavailable: false,
-      metered: false,
-      surface: null,
-      status:
-        platformProduct.lifecycle === "future"
-          ? "planned_not_launched"
-          : "access_managed_by_platform_policy",
-    },
-  };
-}
-
 export async function buildPlatformUsageSummary({
   zakiUser,
   platform,
@@ -169,15 +149,6 @@ export async function buildPlatformUsageSummary({
     productEntries.push([
       ZAKI_PRODUCT_IDS.BRAIN,
       buildBrainUsageProduct(platform.products || {}),
-    ]);
-  }
-
-  const includedProductIds = new Set(productEntries.map(([productId]) => productId));
-  for (const [productId, platformProduct] of Object.entries(platform.products || {})) {
-    if (includedProductIds.has(productId)) continue;
-    productEntries.push([
-      productId,
-      buildAccessOnlyUsageProduct(productId, platformProduct),
     ]);
   }
 

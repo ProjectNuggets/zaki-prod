@@ -134,26 +134,8 @@ describe("platform usage summary", () => {
         }),
       })
     );
-    expect(summary.products[ZAKI_PRODUCT_IDS.HIRE]).toEqual(
-      expect.objectContaining({
-        label: "ZAKI Hire",
-        available: false,
-        lifecycle: "future",
-        memoryScope: MEMORY_SCOPE_IDS.HIRE_MEMORY,
-        quota: expect.objectContaining({
-          metered: false,
-          status: "planned_not_launched",
-        }),
-      })
-    );
-    expect(summary.products[ZAKI_PRODUCT_IDS.DESIGN]).toEqual(
-      expect.objectContaining({
-        label: "ZAKI Design",
-        available: false,
-        lifecycle: "future",
-        memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY,
-      })
-    );
+    expect(summary.products[ZAKI_PRODUCT_IDS.HIRE]).toBeUndefined();
+    expect(summary.products[ZAKI_PRODUCT_IDS.DESIGN]).toBeUndefined();
     expect(resolveQuotaForSurface).toHaveBeenCalledTimes(3);
   });
 

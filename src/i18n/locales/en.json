@@ -103,9 +103,12 @@
         "entryPoint": "Entry point"
       },
       "states": {
-        "available": "Available",
+        "enabled": "Enabled",
         "disabled": "Disabled",
-        "planned": "Planned"
+        "maintenance": "Maintenance",
+        "degraded": "Degraded",
+        "hidden": "Hidden",
+        "readOnly": "Read only"
       },
       "lifecycle": {
         "current": "Current",
@@ -123,7 +126,7 @@
       "entryPoints": {
         "spaces": "Spaces / Chat",
         "agent": "Agent home",
-        "learn": "Learning",
+        "learning": "Learning",
         "hire": "Hire",
         "design": "Design",
         "brain": "Memory control plane",

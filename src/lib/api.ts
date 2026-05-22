@@ -1300,6 +1300,46 @@ export type PlatformUsageProductId =
   | "local_app"
   | "extensions";
 export type PlatformPlanId = "free" | "personal" | "pro" | "pro_max";
+export type ProductRegistryProductId =
+  | "spaces"
+  | "agent"
+  | "learning"
+  | "hire"
+  | "design"
+  | "brain"
+  | "cli"
+  | "local_app"
+  | "extensions";
+export type ProductOperationalState =
+  | "enabled"
+  | "disabled"
+  | "maintenance"
+  | "degraded"
+  | "hidden"
+  | "readOnly";
+
+export type ProductRegistryItem = {
+  productId: ProductRegistryProductId;
+  legacyProductId?: PlatformUsageProductId | null;
+  label: string;
+  productKind?: "product" | "control_plane" | "client" | string;
+  state: ProductOperationalState;
+  lifecycle?: "current" | "future" | string;
+  visibleInSettings?: boolean;
+  route?: string | null;
+  entryPoint?: string | null;
+  quotaPolicyId?: string | null;
+  memoryScope?: string | null;
+};
+
+export type ProductRegistryResponse = {
+  success?: boolean;
+  contractVersion?: string;
+  policyVersion?: string;
+  generatedAt?: string;
+  products?: ProductRegistryItem[];
+  error?: string | null;
+};
 
 export type UsageQuotaSnapshot = {
   success?: boolean;
@@ -1535,6 +1575,15 @@ export async function fetchPlatformUsageSummary() {
     method: "GET",
   });
   const data = await parseApiJson<PlatformUsageSummary>(response);
+  return { response, data };
+}
+
+export async function fetchProductRegistry() {
+  const response = await apiRequest("/api/products/registry", {
+    method: "GET",
+    skipAuth: true,
+  });
+  const data = await parseApiJson<ProductRegistryResponse>(response);
   return { response, data };
 }
 

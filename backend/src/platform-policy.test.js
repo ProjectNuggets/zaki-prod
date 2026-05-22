@@ -3,10 +3,13 @@ import {
   MEMORY_SCOPE_IDS,
   PLATFORM_PLAN_IDS,
   PLATFORM_PLAN_LADDER,
+  PRODUCT_OPERATIONAL_STATES,
+  PRODUCT_REGISTRY_VERSION,
   ZAKI_PRODUCT_IDS,
   buildPlatformEntitlementSummary,
   buildPlatformPlanPolicy,
   buildPlatformProductCatalog,
+  buildPlatformProductRegistry,
   normalizePlatformPlanId,
   resolvePlatformPlanForCommercialState,
 } from "./platform-policy.js";
@@ -69,8 +72,57 @@ describe("platform policy", () => {
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.LEARN)).toEqual(
       expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY })
     );
+    expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.HIRE)).toEqual(
+      expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.HIRE_MEMORY, lifecycle: "future" })
+    );
+    expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.DESIGN)).toEqual(
+      expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY, lifecycle: "future" })
+    );
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.CLI)).toEqual(
       expect.objectContaining({ lifecycle: "future" })
+    );
+  });
+
+  it("builds the central operational product registry", () => {
+    const registry = buildPlatformProductRegistry({
+      env: {
+        ZAKI_PRODUCT_STATE_AGENT: PRODUCT_OPERATIONAL_STATES.DEGRADED,
+        ZAKI_PRODUCT_STATE_HIRE: PRODUCT_OPERATIONAL_STATES.READ_ONLY,
+      },
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    expect(registry).toEqual(
+      expect.objectContaining({
+        success: true,
+        contractVersion: PRODUCT_REGISTRY_VERSION,
+        generatedAt: "2026-05-22T10:00:00.000Z",
+      })
+    );
+    expect(registry.products.find((product) => product.productId === "learning")).toEqual(
+      expect.objectContaining({
+        legacyProductId: ZAKI_PRODUCT_IDS.LEARN,
+        state: PRODUCT_OPERATIONAL_STATES.ENABLED,
+        route: "/learn",
+        visibleInSettings: true,
+        memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY,
+      })
+    );
+    expect(registry.products.find((product) => product.productId === "agent")).toEqual(
+      expect.objectContaining({ state: PRODUCT_OPERATIONAL_STATES.DEGRADED })
+    );
+    expect(registry.products.find((product) => product.productId === "hire")).toEqual(
+      expect.objectContaining({
+        state: PRODUCT_OPERATIONAL_STATES.READ_ONLY,
+        lifecycle: "future",
+        visibleInSettings: true,
+      })
+    );
+    expect(registry.products.find((product) => product.productId === "cli")).toEqual(
+      expect.objectContaining({
+        state: PRODUCT_OPERATIONAL_STATES.HIDDEN,
+        visibleInSettings: false,
+      })
     );
   });
 

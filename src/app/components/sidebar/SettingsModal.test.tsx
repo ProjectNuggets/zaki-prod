@@ -73,9 +73,12 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.fields.lifecycle": "Lifecycle",
     "settingsModal.productsAccess.fields.memory": "Memory scope",
     "settingsModal.productsAccess.fields.entryPoint": "Entry point",
-    "settingsModal.productsAccess.states.available": "Available",
+    "settingsModal.productsAccess.states.enabled": "Enabled",
     "settingsModal.productsAccess.states.disabled": "Disabled",
-    "settingsModal.productsAccess.states.planned": "Planned",
+    "settingsModal.productsAccess.states.maintenance": "Maintenance",
+    "settingsModal.productsAccess.states.degraded": "Degraded",
+    "settingsModal.productsAccess.states.hidden": "Hidden",
+    "settingsModal.productsAccess.states.readOnly": "Read only",
     "settingsModal.productsAccess.lifecycle.current": "Current",
     "settingsModal.productsAccess.lifecycle.future": "Future",
     "settingsModal.productsAccess.lifecycle.unknown": "Unknown",
@@ -87,7 +90,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
     "settingsModal.productsAccess.entryPoints.spaces": "Spaces / Chat",
     "settingsModal.productsAccess.entryPoints.agent": "Agent home",
-    "settingsModal.productsAccess.entryPoints.learn": "Learning",
+    "settingsModal.productsAccess.entryPoints.learning": "Learning",
     "settingsModal.productsAccess.entryPoints.hire": "Hire",
     "settingsModal.productsAccess.entryPoints.design": "Design",
     "settingsModal.productsAccess.entryPoints.brain": "Memory control plane",
@@ -254,6 +257,94 @@ jest.mock("@/queries", () => ({
     },
     isLoading: false,
   }),
+  useProductRegistry: () => ({
+    data: {
+      data: {
+        success: true,
+        products: [
+          {
+            productId: "spaces",
+            label: "ZAKI Spaces",
+            productKind: "product",
+            state: "enabled",
+            lifecycle: "current",
+            visibleInSettings: true,
+            route: "/spaces",
+            entryPoint: "Spaces / Chat",
+            memoryScope: "workspace_memory",
+          },
+          {
+            productId: "agent",
+            label: "ZAKI Agent",
+            productKind: "product",
+            state: "enabled",
+            lifecycle: "current",
+            visibleInSettings: true,
+            route: "/",
+            entryPoint: "Agent home",
+            memoryScope: "personal_brain",
+          },
+          {
+            productId: "learning",
+            legacyProductId: "learn",
+            label: "ZAKI Learn",
+            productKind: "product",
+            state: "enabled",
+            lifecycle: "current",
+            visibleInSettings: true,
+            route: "/learn",
+            entryPoint: "Learning",
+            memoryScope: "learner_memory",
+          },
+          {
+            productId: "hire",
+            label: "ZAKI Hire",
+            productKind: "product",
+            state: "disabled",
+            lifecycle: "future",
+            visibleInSettings: true,
+            route: "/hire",
+            entryPoint: "Hire",
+            memoryScope: "hire_memory",
+          },
+          {
+            productId: "design",
+            label: "ZAKI Design",
+            productKind: "product",
+            state: "disabled",
+            lifecycle: "future",
+            visibleInSettings: true,
+            route: "/design",
+            entryPoint: "Design",
+            memoryScope: "design_memory",
+          },
+          {
+            productId: "brain",
+            label: "ZAKI Brain",
+            productKind: "control_plane",
+            state: "enabled",
+            lifecycle: "current",
+            visibleInSettings: true,
+            route: "/brain",
+            entryPoint: "Memory control plane",
+            memoryScope: "personal_brain",
+          },
+          {
+            productId: "cli",
+            label: "ZAKI CLI",
+            productKind: "client",
+            state: "hidden",
+            lifecycle: "future",
+            visibleInSettings: false,
+            route: null,
+            entryPoint: "CLI",
+            memoryScope: "personal_brain",
+          },
+        ],
+      },
+    },
+    isLoading: false,
+  }),
   useCancelSubscription: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useDeleteAccount: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
@@ -292,8 +383,8 @@ describe("SettingsModal", () => {
     expect(within(usage).getByText("2 / 10")).toBeInTheDocument();
     expect(within(usage).getByText("ZAKI Agent")).toBeInTheDocument();
     expect(within(usage).getByText("7 · unlimited")).toBeInTheDocument();
-    expect(within(usage).getByText("ZAKI Brain")).toBeInTheDocument();
-    expect(within(usage).getByText("Memory policy")).toBeInTheDocument();
+    expect(within(usage).queryByText("ZAKI Brain")).not.toBeInTheDocument();
+    expect(within(usage).queryByText("Memory policy")).not.toBeInTheDocument();
     expect(within(usage).queryByText("ZAKI Hire")).not.toBeInTheDocument();
     expect(productsAccess).toBeInTheDocument();
   });
@@ -311,7 +402,9 @@ describe("SettingsModal", () => {
     expect(within(productsAccess).getByText("Hire memory")).toBeInTheDocument();
     expect(within(productsAccess).getByText("ZAKI Design")).toBeInTheDocument();
     expect(within(productsAccess).getByText("Design memory")).toBeInTheDocument();
-    expect(within(productsAccess).getAllByText("Planned")).toHaveLength(2);
+    expect(within(productsAccess).getByText("ZAKI Brain")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("Memory control plane")).toBeInTheDocument();
+    expect(within(productsAccess).getAllByText("Disabled")).toHaveLength(2);
     expect(within(productsAccess).queryByText("ZAKI CLI")).not.toBeInTheDocument();
   });
 });
