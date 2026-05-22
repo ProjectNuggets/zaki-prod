@@ -1293,6 +1293,8 @@ export type PlatformUsageProductId =
   | "spaces"
   | "agent"
   | "learn"
+  | "hire"
+  | "design"
   | "brain"
   | "cli"
   | "local_app"

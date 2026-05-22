@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { SettingsModal } from "./SettingsModal";
 
@@ -26,6 +26,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.sections.profile": "Profile",
     "settingsModal.sections.preferences": "Preferences",
     "settingsModal.sections.planBilling": "Plan & Billing",
+    "settingsModal.sections.productsAccess": "Products & Access",
     "settingsModal.sections.usage": "Usage",
     "settingsModal.sections.dataPrivacy": "Data & Privacy",
     "settingsModal.profile.displayName": "Display name",
@@ -62,6 +63,37 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.usage.resetPending": "Reset pending",
     "settingsModal.usage.helper":
       "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings.",
+    "settingsModal.productsAccess.subtitle":
+      "Product availability, memory ownership, and entry surfaces stay separate from billing and usage meters.",
+    "settingsModal.productsAccess.loading": "Loading product access...",
+    "settingsModal.productsAccess.empty": "Product access has not been published yet.",
+    "settingsModal.productsAccess.pending": "Pending",
+    "settingsModal.productsAccess.helper":
+      "Product state controls routing and availability. Billing entitlement and meter debits remain separate.",
+    "settingsModal.productsAccess.fields.lifecycle": "Lifecycle",
+    "settingsModal.productsAccess.fields.memory": "Memory scope",
+    "settingsModal.productsAccess.fields.entryPoint": "Entry point",
+    "settingsModal.productsAccess.states.available": "Available",
+    "settingsModal.productsAccess.states.disabled": "Disabled",
+    "settingsModal.productsAccess.states.planned": "Planned",
+    "settingsModal.productsAccess.lifecycle.current": "Current",
+    "settingsModal.productsAccess.lifecycle.future": "Future",
+    "settingsModal.productsAccess.lifecycle.unknown": "Unknown",
+    "settingsModal.productsAccess.memoryScopes.personalBrain": "Personal brain",
+    "settingsModal.productsAccess.memoryScopes.workspaceMemory": "Workspace memory",
+    "settingsModal.productsAccess.memoryScopes.learnerMemory": "Learner memory",
+    "settingsModal.productsAccess.memoryScopes.hireMemory": "Hire memory",
+    "settingsModal.productsAccess.memoryScopes.designMemory": "Design memory",
+    "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
+    "settingsModal.productsAccess.entryPoints.spaces": "Spaces / Chat",
+    "settingsModal.productsAccess.entryPoints.agent": "Agent home",
+    "settingsModal.productsAccess.entryPoints.learn": "Learning",
+    "settingsModal.productsAccess.entryPoints.hire": "Hire",
+    "settingsModal.productsAccess.entryPoints.design": "Design",
+    "settingsModal.productsAccess.entryPoints.brain": "Memory control plane",
+    "settingsModal.productsAccess.entryPoints.cli": "CLI",
+    "settingsModal.productsAccess.entryPoints.localApp": "Local app",
+    "settingsModal.productsAccess.entryPoints.extensions": "Extensions",
     "settingsModal.privacy.exportAllData": "Export all data",
     "settingsModal.privacy.exportHelper": "Download your chats and files",
     "settingsModal.privacy.deleteAccount": "Delete account",
@@ -133,6 +165,9 @@ jest.mock("@/queries", () => ({
           spaces: {
             productId: "spaces",
             label: "ZAKI Spaces",
+            available: true,
+            lifecycle: "current",
+            memoryScope: "workspace_memory",
             quota: {
               surface: "app_chat",
               period: "day",
@@ -145,6 +180,9 @@ jest.mock("@/queries", () => ({
           agent: {
             productId: "agent",
             label: "ZAKI Agent",
+            available: true,
+            lifecycle: "current",
+            memoryScope: "personal_brain",
             quota: {
               surface: "zaki_bot",
               period: "week",
@@ -156,6 +194,9 @@ jest.mock("@/queries", () => ({
           learn: {
             productId: "learn",
             label: "ZAKI Learn",
+            available: true,
+            lifecycle: "current",
+            memoryScope: "learner_memory",
             quota: {
               surface: "learning",
               period: "week",
@@ -164,9 +205,45 @@ jest.mock("@/queries", () => ({
               remaining: 15,
             },
           },
+          hire: {
+            productId: "hire",
+            label: "ZAKI Hire",
+            available: false,
+            lifecycle: "future",
+            memoryScope: "hire_memory",
+            quota: {
+              metered: false,
+              status: "planned_not_launched",
+            },
+          },
+          design: {
+            productId: "design",
+            label: "ZAKI Design",
+            available: false,
+            lifecycle: "future",
+            memoryScope: "design_memory",
+            quota: {
+              metered: false,
+              status: "planned_not_launched",
+            },
+          },
+          cli: {
+            productId: "cli",
+            label: "ZAKI CLI",
+            available: false,
+            lifecycle: "future",
+            memoryScope: "personal_brain",
+            quota: {
+              metered: false,
+              status: "planned_not_launched",
+            },
+          },
           brain: {
             productId: "brain",
             label: "ZAKI Brain",
+            available: true,
+            lifecycle: "current",
+            memoryScope: "personal_brain",
             quota: {
               metered: false,
               status: "governed_by_memory_policy",
@@ -203,16 +280,38 @@ describe("SettingsModal", () => {
   it("renders the platform usage summary as the global usage surface", () => {
     renderSettingsModal();
 
-    expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
+    const usage = screen.getByTestId("settings-platform-usage");
+    const productsAccess = screen.getByTestId("settings-products-access");
+
+    expect(usage).toBeInTheDocument();
     expect(screen.getByText("Usage")).toBeInTheDocument();
-    expect(screen.getByText("Pro")).toBeInTheDocument();
-    expect(screen.getByText("1,500 units")).toBeInTheDocument();
-    expect(screen.getByText("5 hours")).toBeInTheDocument();
-    expect(screen.getByText("ZAKI Spaces")).toBeInTheDocument();
-    expect(screen.getByText("2 / 10")).toBeInTheDocument();
-    expect(screen.getByText("ZAKI Agent")).toBeInTheDocument();
-    expect(screen.getByText("7 · unlimited")).toBeInTheDocument();
-    expect(screen.getByText("ZAKI Brain")).toBeInTheDocument();
-    expect(screen.getByText("Memory policy")).toBeInTheDocument();
+    expect(within(usage).getByText("Pro")).toBeInTheDocument();
+    expect(within(usage).getByText("1,500 units")).toBeInTheDocument();
+    expect(within(usage).getByText("5 hours")).toBeInTheDocument();
+    expect(within(usage).getByText("ZAKI Spaces")).toBeInTheDocument();
+    expect(within(usage).getByText("2 / 10")).toBeInTheDocument();
+    expect(within(usage).getByText("ZAKI Agent")).toBeInTheDocument();
+    expect(within(usage).getByText("7 · unlimited")).toBeInTheDocument();
+    expect(within(usage).getByText("ZAKI Brain")).toBeInTheDocument();
+    expect(within(usage).getByText("Memory policy")).toBeInTheDocument();
+    expect(within(usage).queryByText("ZAKI Hire")).not.toBeInTheDocument();
+    expect(productsAccess).toBeInTheDocument();
+  });
+
+  it("renders product ownership separately from usage meters", () => {
+    renderSettingsModal();
+
+    const productsAccess = screen.getByTestId("settings-products-access");
+
+    expect(within(productsAccess).getByText("Products & Access")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("ZAKI Spaces")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("Workspace memory")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("Agent home")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("ZAKI Hire")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("Hire memory")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("ZAKI Design")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("Design memory")).toBeInTheDocument();
+    expect(within(productsAccess).getAllByText("Planned")).toHaveLength(2);
+    expect(within(productsAccess).queryByText("ZAKI CLI")).not.toBeInTheDocument();
   });
 });

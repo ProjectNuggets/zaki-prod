@@ -19,6 +19,7 @@
       "profile": "Profile",
       "preferences": "Preferences",
       "planBilling": "Plan & Billing",
+      "productsAccess": "Products & Access",
       "usage": "Usage",
       "dataPrivacy": "Data & Privacy"
     },
@@ -89,6 +90,47 @@
       "resetsAt": "Resets {{reset}}",
       "resetPending": "Reset pending",
       "helper": "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings."
+    },
+    "productsAccess": {
+      "subtitle": "Product availability, memory ownership, and entry surfaces stay separate from billing and usage meters.",
+      "loading": "Loading product access...",
+      "empty": "Product access has not been published yet.",
+      "pending": "Pending",
+      "helper": "Product state controls routing and availability. Billing entitlement and meter debits remain separate.",
+      "fields": {
+        "lifecycle": "Lifecycle",
+        "memory": "Memory scope",
+        "entryPoint": "Entry point"
+      },
+      "states": {
+        "available": "Available",
+        "disabled": "Disabled",
+        "planned": "Planned"
+      },
+      "lifecycle": {
+        "current": "Current",
+        "future": "Future",
+        "unknown": "Unknown"
+      },
+      "memoryScopes": {
+        "personalBrain": "Personal brain",
+        "workspaceMemory": "Workspace memory",
+        "learnerMemory": "Learner memory",
+        "hireMemory": "Hire memory",
+        "designMemory": "Design memory",
+        "sessionMemory": "Session memory"
+      },
+      "entryPoints": {
+        "spaces": "Spaces / Chat",
+        "agent": "Agent home",
+        "learn": "Learning",
+        "hire": "Hire",
+        "design": "Design",
+        "brain": "Memory control plane",
+        "cli": "CLI",
+        "localApp": "Local app",
+        "extensions": "Extensions"
+      }
     },
     "privacy": {
       "preparingExport": "Preparing export...",

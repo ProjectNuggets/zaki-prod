@@ -18,6 +18,8 @@ export const ZAKI_PRODUCT_IDS = Object.freeze({
   SPACES: "spaces",
   AGENT: "agent",
   LEARN: "learn",
+  HIRE: "hire",
+  DESIGN: "design",
   BRAIN: "brain",
   CLI: "cli",
   LOCAL_APP: "local_app",
@@ -28,6 +30,8 @@ export const MEMORY_SCOPE_IDS = Object.freeze({
   PERSONAL_BRAIN: "personal_brain",
   WORKSPACE_MEMORY: "workspace_memory",
   LEARNER_MEMORY: "learner_memory",
+  HIRE_MEMORY: "hire_memory",
+  DESIGN_MEMORY: "design_memory",
   SESSION_MEMORY: "session_memory",
 });
 
@@ -78,6 +82,20 @@ const PRODUCT_DEFINITIONS = Object.freeze({
     lifecycle: "current",
     quotaPolicyId: "learn_learner",
     memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY,
+  }),
+  [ZAKI_PRODUCT_IDS.HIRE]: Object.freeze({
+    id: ZAKI_PRODUCT_IDS.HIRE,
+    label: "ZAKI Hire",
+    lifecycle: "future",
+    quotaPolicyId: "hire_pipeline",
+    memoryScope: MEMORY_SCOPE_IDS.HIRE_MEMORY,
+  }),
+  [ZAKI_PRODUCT_IDS.DESIGN]: Object.freeze({
+    id: ZAKI_PRODUCT_IDS.DESIGN,
+    label: "ZAKI Design",
+    lifecycle: "future",
+    quotaPolicyId: "design_studio",
+    memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY,
   }),
   [ZAKI_PRODUCT_IDS.BRAIN]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.BRAIN,
@@ -277,6 +295,8 @@ export function buildPlatformEntitlementSummary({
         MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
         MEMORY_SCOPE_IDS.WORKSPACE_MEMORY,
         MEMORY_SCOPE_IDS.LEARNER_MEMORY,
+        MEMORY_SCOPE_IDS.HIRE_MEMORY,
+        MEMORY_SCOPE_IDS.DESIGN_MEMORY,
         MEMORY_SCOPE_IDS.SESSION_MEMORY,
       ],
       personalAuthority: ZAKI_PRODUCT_IDS.AGENT,
