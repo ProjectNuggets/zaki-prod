@@ -1,7 +1,10 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  ANONYMOUS_METER_COOKIE_NAME,
   ANONYMOUS_SPACES_COOKIE_NAME,
+  buildAnonymousMeterCookie,
   buildAnonymousSpacesCookie,
+  resolveAnonymousMeterId,
   resolveAnonymousSpacesId,
   verifyAnonymousSpacesCookie,
 } from "./anonymous-spaces-identity.js";
@@ -10,6 +13,10 @@ const SECRET = "a".repeat(64);
 
 function cookieValue(setCookie) {
   return setCookie.match(new RegExp(`${ANONYMOUS_SPACES_COOKIE_NAME}=([^;]+)`))?.[1] || "";
+}
+
+function meterCookieValue(setCookie) {
+  return setCookie.match(new RegExp(`${ANONYMOUS_METER_COOKIE_NAME}=([^;]+)`))?.[1] || "";
 }
 
 describe("anonymous Spaces identity", () => {
@@ -42,5 +49,32 @@ describe("anonymous Spaces identity", () => {
 
     expect(id).not.toBe("caller-controlled");
     expect(headers["Set-Cookie"]).toContain(`${ANONYMOUS_SPACES_COOKIE_NAME}=`);
+  });
+
+  it("sets a durable anonymous meter cookie across api routes", () => {
+    const headers = {};
+    const res = {
+      setHeader(name, value) {
+        headers[name] = value;
+      },
+    };
+    const id = resolveAnonymousMeterId({ headers: {} }, res, SECRET, 1_000);
+
+    expect(id).toBeTruthy();
+    expect(headers["Set-Cookie"]).toContain(`${ANONYMOUS_METER_COOKIE_NAME}=`);
+    expect(headers["Set-Cookie"]).toContain("Path=/api;");
+    expect(
+      verifyAnonymousSpacesCookie(
+        decodeURIComponent(meterCookieValue(headers["Set-Cookie"])),
+        SECRET,
+        2_000
+      )
+    ).toBe(id);
+  });
+
+  it("builds meter cookies with the central api path", () => {
+    const setCookie = buildAnonymousMeterCookie("anon-meter-1", SECRET, 1_000);
+    expect(setCookie).toContain(`${ANONYMOUS_METER_COOKIE_NAME}=`);
+    expect(setCookie).toContain("Path=/api;");
   });
 });

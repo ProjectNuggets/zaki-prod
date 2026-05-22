@@ -199,8 +199,21 @@ import {
 } from "./effective-entitlements.js";
 import {
   buildPlatformEntitlementSummary,
+  buildPlatformMeterPolicy,
   buildPlatformProductRegistry,
 } from "./platform-policy.js";
+import {
+  CENTRAL_METER_CONTRACT_VERSION,
+  buildMeterGrantDecision,
+  buildMeterReceiptDebit,
+  buildMeterStatusPayload,
+  resolveMeterProduct,
+  verifyMeterGrantSignature,
+} from "./meter-contract.js";
+import {
+  hashAnonymousSessionId,
+  readMeterSnapshotForIdentity,
+} from "./platform-meter.js";
 import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
 import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
 import {
@@ -231,7 +244,10 @@ import {
   verifyGoogleOAuthState,
 } from "./google-oauth.js";
 import { findOrCreateGoogleUser } from "./google-oauth-user.js";
-import { resolveAnonymousSpacesId } from "./anonymous-spaces-identity.js";
+import {
+  resolveAnonymousMeterId,
+  resolveAnonymousSpacesId,
+} from "./anonymous-spaces-identity.js";
 
 // Load checked-in/default env first, then ignored local overrides.
 const envCandidates = [
@@ -412,6 +428,24 @@ const ANONYMOUS_SPACES_ID_SECRET = (
   GOOGLE_OAUTH_STATE_SECRET ||
   ""
 ).trim();
+const ZAKI_METER_GRANT_SIGNING_SECRET = (
+  process.env.ZAKI_METER_GRANT_SIGNING_SECRET ||
+  ANONYMOUS_SPACES_ID_SECRET ||
+  GOOGLE_OAUTH_STATE_SECRET ||
+  ""
+).trim();
+const ZAKI_METER_SERVICE_TOKEN = (
+  process.env.ZAKI_METER_SERVICE_TOKEN ||
+  process.env.ZAKI_METER_RECEIPT_SERVICE_TOKEN ||
+  ""
+).trim();
+const ZAKI_METER_RECEIPT_SERVICE_TOKEN = (
+  process.env.ZAKI_METER_RECEIPT_SERVICE_TOKEN || ""
+).trim();
+const ZAKI_METER_GRANT_TTL_SECONDS = Math.max(
+  30,
+  Math.min(3600, Number(process.env.ZAKI_METER_GRANT_TTL_SECONDS || 300))
+);
 const STRIPE_SECRET_KEY = (process.env.STRIPE_SECRET_KEY || "").trim();
 const TOGETHER_API_KEY = (process.env.TOGETHER_API_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
@@ -5771,6 +5805,39 @@ const ProfileSchema = z.object({
   fullName: z.string().trim().max(80).optional(),
 });
 
+const MeterGrantSchema = z.object({
+  tenantId: z.string().trim().min(1).max(120).default("default"),
+  userId: z.union([z.string(), z.number()]).optional().nullable(),
+  anonymousSessionId: z.string().trim().max(160).optional().nullable(),
+  product: z.string().trim().min(1).max(80),
+  action: z.string().trim().min(1).max(120),
+  estimatedUnits: z.coerce.number().positive().max(1_000_000).default(1),
+  requestId: z.string().trim().max(160).optional().nullable(),
+  idempotencyKey: z.string().trim().max(180).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+});
+
+const MeterReceiptSchema = z.object({
+  grantId: z.string().uuid(),
+  signedGrant: z.string().trim().max(8000).optional().nullable(),
+  product: z.string().trim().min(1).max(80),
+  action: z.string().trim().min(1).max(120),
+  idempotencyKey: z.string().trim().min(1).max(180),
+  rawUsageFacts: z
+    .object({
+      inputTokens: z.coerce.number().nonnegative().optional(),
+      outputTokens: z.coerce.number().nonnegative().optional(),
+      toolCalls: z.coerce.number().nonnegative().optional(),
+      externalApiCalls: z.coerce.number().nonnegative().optional(),
+      durationMs: z.coerce.number().nonnegative().optional(),
+      storageBytes: z.coerce.number().nonnegative().optional(),
+      jobRuntimeMs: z.coerce.number().nonnegative().optional(),
+      model: z.string().trim().max(120).optional(),
+    })
+    .default({}),
+  status: z.enum(["success", "failed", "cancelled"]).default("success"),
+});
+
 const getProfileHandler = async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
@@ -5906,6 +5973,547 @@ app.get("/api/products/registry", (_req, res) => {
   } catch (error) {
     console.error("[Products] Registry endpoint error:", error);
     res.status(500).json({ error: error?.message || "Unable to load product registry." });
+  }
+});
+
+function meterSigningSecret() {
+  return ZAKI_METER_GRANT_SIGNING_SECRET || ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET;
+}
+
+function configuredMeterServiceToken() {
+  return ZAKI_METER_SERVICE_TOKEN || ZAKI_METER_RECEIPT_SERVICE_TOKEN;
+}
+
+function readMeterServiceToken(req) {
+  return String(
+    req?.headers?.["x-zaki-meter-service-token"] ||
+      req?.headers?.["x-zaki-meter-receipt-token"] ||
+      ""
+  ).trim();
+}
+
+function hasValidMeterServiceToken(req) {
+  const expected = configuredMeterServiceToken();
+  if (!expected) return false;
+  return safeTimingEqualText(readMeterServiceToken(req), expected);
+}
+
+function normalizeMeterTenantId(value) {
+  return String(value || "default").trim().slice(0, 120) || "default";
+}
+
+function buildPlatformForMeterIdentity(identity) {
+  if (identity?.type === "user") {
+    const effective = getEffectiveEntitlementState(identity.zakiUser);
+    const commercial = effective.commercial || {};
+    return buildPlatformEntitlementSummary({
+      commercialPlanId: commercial.planId || "spaces_free",
+      effectiveTier: effective.tier,
+      source: effective.source,
+      premium: effective.premium,
+    });
+  }
+  return buildPlatformEntitlementSummary({
+    commercialPlanId: "spaces_free",
+    effectiveTier: "free",
+    source: "anonymous",
+    premium: false,
+  });
+}
+
+async function resolveMeterIdentity(
+  req,
+  res,
+  { tenantId = "default", body = {}, trustedServiceRequest = false } = {}
+) {
+  if (_extractBearer(req)) {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return null;
+    const requestedUserId = body?.userId == null ? "" : String(body.userId).trim();
+    if (requestedUserId && requestedUserId !== String(authResult.zakiUser?.id || "")) {
+      res.status(403).json({
+        success: false,
+        error: "user_id_mismatch",
+        message: "Meter grants cannot be requested for another user.",
+      });
+      return null;
+    }
+    return {
+      type: "user",
+      tenantId,
+      userId: authResult.zakiUser.id,
+      zakiUser: authResult.zakiUser,
+      anonymousSessionId: null,
+      anonymousKeyHash: null,
+    };
+  }
+
+  const requestedUserId = body?.userId == null ? "" : String(body.userId).trim();
+  if (trustedServiceRequest && requestedUserId) {
+    const numericUserId = Number(requestedUserId);
+    if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) {
+      res.status(400).json({
+        success: false,
+        error: "invalid_meter_user_id",
+        message: "Meter userId must be a positive integer.",
+      });
+      return null;
+    }
+    const zakiUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [
+      numericUserId,
+    ]);
+    if (!zakiUser) {
+      res.status(404).json({
+        success: false,
+        error: "meter_user_not_found",
+      });
+      return null;
+    }
+    return {
+      type: "user",
+      tenantId,
+      userId: zakiUser.id,
+      zakiUser,
+      anonymousSessionId: null,
+      anonymousKeyHash: null,
+    };
+  }
+
+  const secret = ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET || meterSigningSecret();
+  if (!secret) {
+    res.status(503).json({
+      success: false,
+      error: "anonymous_session_unavailable",
+      message: "Anonymous metering is not configured.",
+    });
+    return null;
+  }
+  const providedAnonymousSessionId = String(body?.anonymousSessionId || "").trim();
+  const anonymousSessionId =
+    trustedServiceRequest && providedAnonymousSessionId
+      ? providedAnonymousSessionId
+      : resolveAnonymousMeterId(req, res, secret);
+  return {
+    type: "anonymous",
+    tenantId,
+    userId: null,
+    zakiUser: null,
+    anonymousSessionId,
+    anonymousKeyHash: hashAnonymousSessionId(anonymousSessionId),
+  };
+}
+
+function findRegistryProduct(registry, productId) {
+  const resolved = resolveMeterProduct(productId);
+  if (!resolved) return null;
+  return (registry?.products || []).find(
+    (product) =>
+      product.productId === resolved.productId ||
+      product.legacyProductId === resolved.internalProductId
+  ) || null;
+}
+
+async function readMeterSnapshotForRequest(identity, platform, policy) {
+  return readMeterSnapshotForIdentity({
+    dbGet,
+    identity,
+    platform,
+    policy,
+  });
+}
+
+function normalizeMeterGrantRow(row) {
+  if (!row) return null;
+  return {
+    grantId: String(row.id),
+    tenantId: row.tenant_id,
+    identityType: row.identity_type,
+    userId: row.user_id == null ? null : Number(row.user_id),
+    anonymousKeyHash: row.anonymous_key_hash || null,
+    productId: row.product_id,
+    internalProductId: row.internal_product_id,
+    action: row.action,
+    planTier: row.plan_id,
+    productState: row.product_state,
+    estimatedUnits: Number(row.estimated_units || 0),
+    maxUnits: Number(row.max_units || 0),
+    requestId: row.request_id || null,
+    idempotencyKey: row.idempotency_key || null,
+    signedGrant: row.signed_grant,
+    metadata: row.metadata_json || {},
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
+function normalizeMeterReceiptRow(row) {
+  if (!row) return null;
+  return {
+    receiptId: String(row.id),
+    grantId: String(row.grant_id),
+    productId: row.product_id,
+    internalProductId: row.internal_product_id,
+    action: row.action,
+    status: row.status,
+    rawUnits: Number(row.raw_units || 0),
+    weightedUnits: Number(row.weighted_units || 0),
+    maxUnits: row.max_units == null ? null : Number(row.max_units),
+    maxExceeded: Boolean(row.max_exceeded),
+    idempotencyKey: row.idempotency_key,
+    rawUsageFacts: row.raw_facts_json || {},
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
+async function findExistingMeterGrant({ identity, tenantId, productId, idempotencyKey }) {
+  if (!idempotencyKey) return null;
+  const row =
+    identity.type === "user"
+      ? await dbGet(
+          `
+            SELECT *
+            FROM zaki_meter_grants
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND product_id = $3
+              AND idempotency_key = $4
+            LIMIT 1
+          `,
+          [tenantId, identity.userId, productId, idempotencyKey]
+        )
+      : await dbGet(
+          `
+            SELECT *
+            FROM zaki_meter_grants
+            WHERE tenant_id = $1
+              AND anonymous_key_hash = $2
+              AND product_id = $3
+              AND idempotency_key = $4
+            LIMIT 1
+          `,
+          [tenantId, identity.anonymousKeyHash, productId, idempotencyKey]
+        );
+  return normalizeMeterGrantRow(row);
+}
+
+async function insertMeterGrant({ identity, decision, tenantId }) {
+  const result = await dbQuery(
+    `
+      INSERT INTO zaki_meter_grants
+        (id, tenant_id, identity_type, user_id, anonymous_key_hash, product_id,
+         internal_product_id, action, plan_id, product_state, estimated_units,
+         max_units, request_id, idempotency_key, signed_grant, metadata_json,
+         expires_at, created_at)
+      VALUES
+        ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+         $13, $14, $15, $16::jsonb, $17::timestamptz, NOW())
+      RETURNING *
+    `,
+    [
+      decision.grantId,
+      tenantId,
+      identity.type,
+      identity.type === "user" ? identity.userId : null,
+      identity.type === "anonymous" ? identity.anonymousKeyHash : null,
+      decision.productId,
+      decision.internalProductId,
+      decision.action,
+      decision.planTier,
+      decision.productState,
+      decision.estimatedRawUnits,
+      decision.maxUnits,
+      decision.requestId,
+      decision.idempotencyKey,
+      decision.signedGrant,
+      JSON.stringify(decision.metadata || {}),
+      decision.expiresAt,
+    ]
+  );
+  return normalizeMeterGrantRow(result?.rows?.[0]);
+}
+
+async function findExistingMeterReceipt({ grantId, idempotencyKey }) {
+  const row = await dbGet(
+    `
+      SELECT *
+      FROM zaki_meter_receipts
+      WHERE grant_id = $1::uuid
+        AND idempotency_key = $2
+      LIMIT 1
+    `,
+    [grantId, idempotencyKey]
+  );
+  return normalizeMeterReceiptRow(row);
+}
+
+async function insertMeterReceipt({ grant, debit, idempotencyKey }) {
+  const result = await dbQuery(
+    `
+      INSERT INTO zaki_meter_receipts
+        (grant_id, product_id, internal_product_id, action, status, raw_units,
+         weighted_units, max_units, max_exceeded, idempotency_key, raw_facts_json,
+         created_at)
+      VALUES
+        ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW())
+      ON CONFLICT (grant_id, idempotency_key) DO NOTHING
+      RETURNING *
+    `,
+    [
+      grant.grantId,
+      debit.productId,
+      debit.internalProductId,
+      debit.action,
+      debit.status,
+      debit.rawUnits,
+      debit.weightedUnits,
+      debit.maxUnits,
+      debit.maxExceeded,
+      idempotencyKey,
+      JSON.stringify(debit.facts || {}),
+    ]
+  );
+  return normalizeMeterReceiptRow(result?.rows?.[0]);
+}
+
+async function buildMeterResponsePayload(identity, platform, registry, policy) {
+  const meterSnapshot = await readMeterSnapshotForRequest(identity, platform, policy);
+  return buildMeterStatusPayload({
+    identity,
+    platform,
+    meterSnapshot,
+    productRegistry: registry,
+  });
+}
+
+app.get("/api/meter/status", async (req, res) => {
+  try {
+    const tenantId = normalizeMeterTenantId(req.query?.tenantId);
+    const identity = await resolveMeterIdentity(req, res, { tenantId });
+    if (!identity || res.headersSent) return;
+    const platform = buildPlatformForMeterIdentity(identity);
+    const registry = buildPlatformProductRegistry();
+    const policy = buildPlatformMeterPolicy({ env: process.env });
+    res.status(200).json(await buildMeterResponsePayload(identity, platform, registry, policy));
+  } catch (error) {
+    console.error("[Meter] Status endpoint error:", error);
+    res.status(500).json({ success: false, error: error?.message || "Unable to load meter." });
+  }
+});
+
+app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) => {
+  try {
+    const validation = validateInput(MeterGrantSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({ success: false, error: "invalid_meter_grant", details: validation.errors });
+      return;
+    }
+    const data = validation.data;
+    const tenantId = normalizeMeterTenantId(data.tenantId);
+    const idempotencyKey = data.idempotencyKey || data.requestId || crypto.randomUUID();
+    const signingSecret = meterSigningSecret();
+    if (!signingSecret) {
+      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
+      return;
+    }
+    const providedServiceToken = readMeterServiceToken(req);
+    const trustedServiceRequest = hasValidMeterServiceToken(req);
+    if (providedServiceToken && !trustedServiceRequest) {
+      res.status(401).json({ success: false, error: "invalid_meter_service_token" });
+      return;
+    }
+    const identity = await resolveMeterIdentity(req, res, {
+      tenantId,
+      body: data,
+      trustedServiceRequest,
+    });
+    if (!identity || res.headersSent) return;
+    const platform = buildPlatformForMeterIdentity(identity);
+    const registry = buildPlatformProductRegistry();
+    const policy = buildPlatformMeterPolicy({ env: process.env });
+    const product = findRegistryProduct(registry, data.product);
+    if (!product) {
+      res.status(400).json({ success: false, error: "invalid_product" });
+      return;
+    }
+    const meter = await buildMeterResponsePayload(identity, platform, registry, policy);
+    const existing = await findExistingMeterGrant({
+      identity,
+      tenantId,
+      productId: product.productId,
+      idempotencyKey,
+    });
+    if (existing) {
+      res.status(200).json({
+        success: true,
+        contractVersion: CENTRAL_METER_CONTRACT_VERSION,
+        idempotent: true,
+        grantId: existing.grantId,
+        signedGrant: existing.signedGrant,
+        expiresAt: existing.expiresAt,
+        maxUnits: existing.maxUnits,
+        planTier: existing.planTier,
+        productState: existing.productState,
+        product: existing.productId,
+        meter,
+      });
+      return;
+    }
+    const decision = buildMeterGrantDecision({
+      tenantId,
+      identity,
+      product: product.productId,
+      productState: product.state,
+      action: data.action,
+      estimatedUnits: data.estimatedUnits,
+      requestId: data.requestId,
+      idempotencyKey,
+      metadata: data.metadata,
+      platform,
+      meterSnapshot: {
+        rolling: meter.rolling,
+        weekly: meter.weekly,
+      },
+      policy,
+      signingSecret,
+      ttlSeconds: ZAKI_METER_GRANT_TTL_SECONDS,
+    });
+    if (!decision.allowed) {
+      res.status(decision.status || 403).json({
+        success: false,
+        error: decision.reason || "meter_grant_denied",
+        product: decision.productId || product.productId,
+        productState: decision.productState || product.state,
+        meter,
+      });
+      return;
+    }
+    const grant = await insertMeterGrant({ identity, decision, tenantId });
+    res.status(201).json({
+      success: true,
+      contractVersion: CENTRAL_METER_CONTRACT_VERSION,
+      grantId: grant.grantId,
+      signedGrant: grant.signedGrant,
+      expiresAt: grant.expiresAt,
+      maxUnits: grant.maxUnits,
+      planTier: grant.planTier,
+      productState: grant.productState,
+      product: grant.productId,
+      meter,
+    });
+  } catch (error) {
+    console.error("[Meter] Grant endpoint error:", error);
+    res.status(500).json({ success: false, error: error?.message || "Unable to create grant." });
+  }
+});
+
+app.post("/api/meter/receipts", express.json({ limit: "1mb" }), async (req, res) => {
+  try {
+    const validation = validateInput(MeterReceiptSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({ success: false, error: "invalid_meter_receipt", details: validation.errors });
+      return;
+    }
+    if (configuredMeterServiceToken()) {
+      if (!hasValidMeterServiceToken(req)) {
+        res.status(401).json({ success: false, error: "invalid_receipt_service_token" });
+        return;
+      }
+    } else if (!req.body?.signedGrant) {
+      res.status(401).json({ success: false, error: "signed_grant_required" });
+      return;
+    }
+    const data = validation.data;
+    const grant = normalizeMeterGrantRow(
+      await dbGet("SELECT * FROM zaki_meter_grants WHERE id = $1::uuid", [data.grantId])
+    );
+    if (!grant) {
+      res.status(404).json({ success: false, error: "grant_not_found" });
+      return;
+    }
+    if (grant.productId !== findRegistryProduct(buildPlatformProductRegistry(), data.product)?.productId) {
+      res.status(400).json({ success: false, error: "grant_product_mismatch" });
+      return;
+    }
+    if (grant.action !== data.action.trim().toLowerCase().replace(/[^a-z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "")) {
+      res.status(400).json({ success: false, error: "grant_action_mismatch" });
+      return;
+    }
+    if (data.signedGrant) {
+      const verified = verifyMeterGrantSignature(data.signedGrant, meterSigningSecret(), {
+        nowDate: new Date(),
+      });
+      if (!verified.valid || verified.payload?.grantId !== grant.grantId) {
+        res.status(401).json({ success: false, error: "invalid_signed_grant" });
+        return;
+      }
+    }
+    const existing = await findExistingMeterReceipt({
+      grantId: grant.grantId,
+      idempotencyKey: data.idempotencyKey,
+    });
+    const identity =
+      grant.identityType === "user"
+        ? {
+            type: "user",
+            tenantId: grant.tenantId,
+            userId: grant.userId,
+            zakiUser: await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [grant.userId]),
+          }
+        : {
+            type: "anonymous",
+            tenantId: grant.tenantId,
+            userId: null,
+            zakiUser: null,
+            anonymousSessionId: null,
+            anonymousKeyHash: grant.anonymousKeyHash,
+          };
+    if (identity.type === "user" && !identity.zakiUser) {
+      res.status(404).json({ success: false, error: "grant_user_not_found" });
+      return;
+    }
+    const platform = buildPlatformForMeterIdentity(identity);
+    const registry = buildPlatformProductRegistry();
+    const policy = buildPlatformMeterPolicy({ env: process.env });
+    if (existing) {
+      res.status(200).json({
+        success: true,
+        contractVersion: CENTRAL_METER_CONTRACT_VERSION,
+        idempotent: true,
+        receipt: existing,
+        meter: await buildMeterResponsePayload(identity, platform, registry, policy),
+      });
+      return;
+    }
+    const debit = buildMeterReceiptDebit({
+      product: grant.productId,
+      action: grant.action,
+      status: data.status,
+      usageFacts: data.rawUsageFacts,
+      maxUnits: grant.maxUnits,
+      policy,
+    });
+    if (!debit.valid) {
+      res.status(400).json({ success: false, error: debit.reason || "invalid_meter_receipt" });
+      return;
+    }
+    const receipt =
+      (await insertMeterReceipt({ grant, debit, idempotencyKey: data.idempotencyKey })) ||
+      (await findExistingMeterReceipt({ grantId: grant.grantId, idempotencyKey: data.idempotencyKey }));
+    res.status(201).json({
+      success: true,
+      contractVersion: CENTRAL_METER_CONTRACT_VERSION,
+      receipt,
+      debit: {
+        rawUnits: debit.rawUnits,
+        weightedUnits: debit.weightedUnits,
+        maxUnits: debit.maxUnits,
+        maxExceeded: debit.maxExceeded,
+      },
+      meter: await buildMeterResponsePayload(identity, platform, registry, policy),
+    });
+  } catch (error) {
+    console.error("[Meter] Receipt endpoint error:", error);
+    res.status(500).json({ success: false, error: error?.message || "Unable to record receipt." });
   }
 });
 

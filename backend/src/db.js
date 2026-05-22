@@ -542,6 +542,81 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_meter_grants (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      identity_type TEXT NOT NULL CHECK (identity_type IN ('user', 'anonymous')),
+      user_id BIGINT REFERENCES zaki_users(id) ON DELETE CASCADE,
+      anonymous_key_hash TEXT,
+      product_id TEXT NOT NULL,
+      internal_product_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      product_state TEXT NOT NULL,
+      estimated_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+      max_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+      request_id TEXT,
+      idempotency_key TEXT,
+      signed_grant TEXT NOT NULL,
+      metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (
+        (identity_type = 'user' AND user_id IS NOT NULL AND anonymous_key_hash IS NULL) OR
+        (identity_type = 'anonymous' AND anonymous_key_hash IS NOT NULL AND user_id IS NULL)
+      )
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_meter_grants_user_created
+    ON zaki_meter_grants (user_id, created_at DESC)
+    WHERE user_id IS NOT NULL;
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_meter_grants_anonymous_created
+    ON zaki_meter_grants (anonymous_key_hash, created_at DESC)
+    WHERE anonymous_key_hash IS NOT NULL;
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_meter_grants_user_idempotency
+    ON zaki_meter_grants (tenant_id, user_id, product_id, idempotency_key)
+    WHERE user_id IS NOT NULL AND idempotency_key IS NOT NULL;
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_meter_grants_anonymous_idempotency
+    ON zaki_meter_grants (tenant_id, anonymous_key_hash, product_id, idempotency_key)
+    WHERE anonymous_key_hash IS NOT NULL AND idempotency_key IS NOT NULL;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_meter_receipts (
+      id BIGSERIAL PRIMARY KEY,
+      grant_id UUID NOT NULL REFERENCES zaki_meter_grants(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL,
+      internal_product_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'cancelled')),
+      raw_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+      weighted_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+      max_units DOUBLE PRECISION,
+      max_exceeded BOOLEAN NOT NULL DEFAULT FALSE,
+      idempotency_key TEXT NOT NULL,
+      raw_facts_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (grant_id, idempotency_key)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_meter_receipts_grant_created
+    ON zaki_meter_receipts (grant_id, created_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_runtime_settings (
       setting_key TEXT PRIMARY KEY,
       value_json JSONB NOT NULL,

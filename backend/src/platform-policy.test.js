@@ -3,10 +3,12 @@ import {
   MEMORY_SCOPE_IDS,
   PLATFORM_PLAN_IDS,
   PLATFORM_PLAN_LADDER,
+  PLATFORM_METER_CAPABILITIES,
   PRODUCT_OPERATIONAL_STATES,
   PRODUCT_REGISTRY_VERSION,
   ZAKI_PRODUCT_IDS,
   buildPlatformEntitlementSummary,
+  buildPlatformMeterPolicy,
   buildPlatformPlanPolicy,
   buildPlatformProductCatalog,
   buildPlatformProductRegistry,
@@ -41,11 +43,13 @@ describe("platform policy", () => {
     expect(policy.plans.free.products).not.toBe(policy.plans.personal.products);
   });
 
-  it("keeps numeric quota values configurable until pricing is finalized", () => {
-    const incompletePolicy = buildPlatformPlanPolicy({ env: {} });
-    expect(incompletePolicy.numericLimitsFinalized).toBe(false);
-    expect(incompletePolicy.plans.free.weeklyAllowanceUnits).toBeNull();
-    expect(incompletePolicy.burstWindowHours).toBe(5);
+  it("provides provisional quota defaults and keeps them configurable", () => {
+    const defaultPolicy = buildPlatformPlanPolicy({ env: {} });
+    expect(defaultPolicy.numericLimitsFinalized).toBe(true);
+    expect(defaultPolicy.plans.free.weeklyAllowanceUnits).toBe(100);
+    expect(defaultPolicy.plans.free.rollingAllowanceUnits).toBe(20);
+    expect(defaultPolicy.plans.pro.weeklyAllowanceUnits).toBe(1500);
+    expect(defaultPolicy.burstWindowHours).toBe(5);
 
     const configuredPolicy = buildPlatformPlanPolicy({
       env: {
@@ -53,12 +57,30 @@ describe("platform policy", () => {
         ZAKI_PLATFORM_PERSONAL_WEEKLY_ALLOWANCE_UNITS: "500",
         ZAKI_PLATFORM_PRO_WEEKLY_ALLOWANCE_UNITS: "1500",
         ZAKI_PLATFORM_PRO_MAX_WEEKLY_ALLOWANCE_UNITS: "5000",
+        ZAKI_PLATFORM_FREE_ROLLING_ALLOWANCE_UNITS: "20",
+        ZAKI_PLATFORM_PERSONAL_ROLLING_ALLOWANCE_UNITS: "100",
+        ZAKI_PLATFORM_PRO_ROLLING_ALLOWANCE_UNITS: "300",
+        ZAKI_PLATFORM_PRO_MAX_ROLLING_ALLOWANCE_UNITS: "1000",
         ZAKI_PLATFORM_BURST_WINDOW_HOURS: "6",
       },
     });
     expect(configuredPolicy.numericLimitsFinalized).toBe(true);
     expect(configuredPolicy.burstWindowHours).toBe(6);
     expect(configuredPolicy.plans.pro.weeklyAllowanceUnits).toBe(1500);
+    expect(configuredPolicy.plans.pro.rollingAllowanceUnits).toBe(300);
+  });
+
+  it("defines weighted product and capability meter policy", () => {
+    const policy = buildPlatformMeterPolicy({
+      env: {
+        ZAKI_METER_PRODUCT_WEIGHT_HIRE: "1.4",
+        ZAKI_METER_CAPABILITY_WEIGHT_DEEP_RESEARCH: "3.5",
+      },
+    });
+
+    expect(policy.products[ZAKI_PRODUCT_IDS.HIRE].weight).toBe(1.4);
+    expect(policy.products[ZAKI_PRODUCT_IDS.SPACES].weight).toBe(0.5);
+    expect(policy.capabilities[PLATFORM_METER_CAPABILITIES.DEEP_RESEARCH].weight).toBe(3.5);
   });
 
   it("models current and future product memory scopes", () => {

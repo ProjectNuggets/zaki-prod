@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 
 export const ANONYMOUS_SPACES_COOKIE_NAME = "zaki_anon";
+export const ANONYMOUS_METER_COOKIE_NAME = "zaki_meter_anon";
 const ANONYMOUS_SPACES_COOKIE_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
 function isProduction() {
@@ -50,6 +51,15 @@ export function buildAnonymousSpacesCookie(id, secret, nowMs = Date.now()) {
   return `${ANONYMOUS_SPACES_COOKIE_NAME}=${encodeURIComponent(payload)}; HttpOnly; ${secure}SameSite=Lax; ${domain}Path=/api/anonymous; Expires=${expires.toUTCString()}`;
 }
 
+export function buildAnonymousMeterCookie(id, secret, nowMs = Date.now()) {
+  const issuedAt = String(nowMs);
+  const payload = `${base64Url(id)}.${issuedAt}.${signAnonymousId(id, issuedAt, secret)}`;
+  const expires = new Date(nowMs + ANONYMOUS_SPACES_COOKIE_TTL_MS);
+  const secure = isProduction() ? "Secure; " : "";
+  const domain = isProduction() ? "Domain=.chatzaki.com; " : "";
+  return `${ANONYMOUS_METER_COOKIE_NAME}=${encodeURIComponent(payload)}; HttpOnly; ${secure}SameSite=Lax; ${domain}Path=/api; Expires=${expires.toUTCString()}`;
+}
+
 export function verifyAnonymousSpacesCookie(value, secret, nowMs = Date.now()) {
   const [encodedId, issuedAt, signature] = String(value || "").split(".");
   if (!encodedId || !issuedAt || !signature || !secret) return null;
@@ -83,6 +93,22 @@ export function resolveAnonymousSpacesId(req, res, secret, nowMs = Date.now()) {
   const id = crypto.randomUUID();
   if (res && secret) {
     res.setHeader("Set-Cookie", buildAnonymousSpacesCookie(id, secret, nowMs));
+  }
+  return id;
+}
+
+export function resolveAnonymousMeterId(req, res, secret, nowMs = Date.now()) {
+  const cookies = parseCookieHeader(req?.headers?.cookie);
+  const existing = verifyAnonymousSpacesCookie(
+    cookies[ANONYMOUS_METER_COOKIE_NAME],
+    secret,
+    nowMs
+  );
+  if (existing) return existing;
+
+  const id = crypto.randomUUID();
+  if (res && secret) {
+    res.setHeader("Set-Cookie", buildAnonymousMeterCookie(id, secret, nowMs));
   }
   return id;
 }
