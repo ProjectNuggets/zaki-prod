@@ -13,14 +13,31 @@
     },
     "header": {
       "title": "Settings",
-      "subtitle": "Profile, preferences, and data controls"
+      "subtitle": "Account, billing, usage, memory, and access controls"
+    },
+    "nav": {
+      "label": "Settings sections",
+      "account": "Account",
+      "connections": "Connections",
+      "billing": "Billing",
+      "products": "Products",
+      "usage": "Usage",
+      "memoryData": "Memory",
+      "developerAccess": "Developer",
+      "privacy": "Privacy"
     },
     "sections": {
+      "account": "Account",
       "profile": "Profile",
       "preferences": "Preferences",
+      "connections": "Connected accounts",
+      "billing": "Billing",
       "planBilling": "Plan & Billing",
       "productsAccess": "Products & Access",
       "usage": "Usage",
+      "memoryData": "Memory & Data",
+      "developerAccess": "Developer Access",
+      "privacy": "Privacy",
       "dataPrivacy": "Data & Privacy"
     },
     "profile": {
@@ -34,6 +51,13 @@
         "dark": "Dark",
         "system": "System"
       }
+    },
+    "connections": {
+      "google": "Google",
+      "googleHelper": "Sign-in provider",
+      "checking": "Checking",
+      "available": "Available",
+      "notConfigured": "Not configured"
     },
     "plan": {
       "currentPlan": "Current plan",
@@ -136,6 +160,9 @@
         "localApp": "Local app",
         "extensions": "Extensions"
       }
+    },
+    "memoryData": {
+      "openMemory": "Open memory controls"
     },
     "privacy": {
       "preparingExport": "Preparing export...",

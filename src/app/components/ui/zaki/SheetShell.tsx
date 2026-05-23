@@ -22,9 +22,9 @@ interface SheetShellProps {
 }
 
 const WIDTH_CLASSES: Record<NonNullable<SheetShellProps["width"]>, string> = {
-  sm: "w-full sm:w-[380px]",
-  md: "w-full sm:w-[420px]",
-  lg: "w-full sm:w-[540px]",
+  sm: "w-full sm:w-[380px] sm:max-w-[380px]",
+  md: "w-full sm:w-[420px] sm:max-w-[420px]",
+  lg: "w-full sm:w-[540px] sm:max-w-[540px]",
 };
 
 /**

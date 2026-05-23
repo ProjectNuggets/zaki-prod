@@ -114,7 +114,7 @@ The slices below are ordered by dependency and risk. Each slice must end with a 
 - [x] **S04: Authenticated UX baseline audit** `risk:high` `depends:[S03]`
   > After this: test user login, dashboard, Settings, Agent Settings, Spaces, Learn, Brain, and logout are browser-verified with screenshots and issue notes.
 
-- [ ] **S05: MECE Settings IA cleanup** `risk:high` `depends:[S04]`
+- [x] **S05: MECE Settings IA cleanup** `risk:high` `depends:[S04]`
   > After this: main Settings has clean sections for Account, OAuth, Billing, Usage, Memory/Data, Privacy, and future Developer Access; product settings only link back to global controls.
 
 - [ ] **S06: Dashboard command center v1** `risk:high` `depends:[S02,S05]`
@@ -210,10 +210,16 @@ Completed:
   - Agent direct stream and Bot BFF stream.
 - Frontend `useMeterStatus()` and Settings usage cards now read `/api/meter/status` for plan, weekly allowance, and five-hour window state.
 - `/api/meter/status` now includes per-product weighted usage windows from the central receipt ledger, and Settings usage rows consume that meter-ledger breakdown with legacy rows as fallback only.
+- S05 Settings IA cleanup:
+  - Main Settings is split into Account, Connections, Billing, Products, Usage, Memory & Data, Developer Access, and Privacy.
+  - Memory & Data lists product memory scopes and links to `/brain`.
+  - Developer Access lists future CLI/local app/extensions clients from the product registry without exposing them in product launch rows.
+  - Privacy no longer owns export; export lives with Memory & Data.
+  - Frontend anonymous meter status client/query exists for no-registration dashboard entry work.
 
 Next:
 
-1. S05 MECE Settings IA cleanup.
-2. S06 Dashboard command center v1 against `/api/meter/status` and `/api/products/registry`.
-3. Anonymous meter status client and free/no-registration dashboard entry.
-4. Memory Control Plane governance slices S12-S15.
+1. S06 Dashboard command center v1 against `/api/meter/status`, anonymous meter status, and `/api/products/registry`.
+2. Memory Control Plane governance slices S12-S15.
+3. Pricing/checkout migration to Free/Personal/Pro/Pro MAX.
+4. Product surface polish wave after Claude V2 design files land.

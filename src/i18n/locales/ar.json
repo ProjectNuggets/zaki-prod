@@ -13,14 +13,31 @@
     },
     "header": {
       "title": "الإعدادات",
-      "subtitle": "الملف الشخصي والتفضيلات وتحكم البيانات"
+      "subtitle": "الحساب والفوترة والاستخدام والذاكرة والوصول"
+    },
+    "nav": {
+      "label": "أقسام الإعدادات",
+      "account": "الحساب",
+      "connections": "الاتصالات",
+      "billing": "الفوترة",
+      "products": "المنتجات",
+      "usage": "الاستخدام",
+      "memoryData": "الذاكرة",
+      "developerAccess": "المطور",
+      "privacy": "الخصوصية"
     },
     "sections": {
+      "account": "الحساب",
       "profile": "الملف الشخصي",
       "preferences": "التفضيلات",
+      "connections": "الحسابات المتصلة",
+      "billing": "الفوترة",
       "planBilling": "الخطة والفوترة",
       "productsAccess": "المنتجات والوصول",
       "usage": "الاستخدام",
+      "memoryData": "الذاكرة والبيانات",
+      "developerAccess": "وصول المطور",
+      "privacy": "الخصوصية",
       "dataPrivacy": "البيانات والخصوصية"
     },
     "profile": {
@@ -34,6 +51,13 @@
         "dark": "داكن",
         "system": "حسب النظام"
       }
+    },
+    "connections": {
+      "google": "Google",
+      "googleHelper": "مزود تسجيل الدخول",
+      "checking": "جارٍ الفحص",
+      "available": "متاح",
+      "notConfigured": "غير مهيأ"
     },
     "plan": {
       "currentPlan": "الخطة الحالية",
@@ -136,6 +160,9 @@
         "localApp": "التطبيق المحلي",
         "extensions": "الإضافات"
       }
+    },
+    "memoryData": {
+      "openMemory": "فتح عناصر تحكم الذاكرة"
     },
     "privacy": {
       "preparingExport": "جارٍ تجهيز التصدير...",

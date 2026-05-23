@@ -245,3 +245,29 @@ describe("apiRequest — credentials include", () => {
     );
   });
 });
+
+describe("fetchAnonymousMeterStatus", () => {
+  it("calls meter status without auth headers and keeps cookies attached", async () => {
+    _storeToken = "signed-in-token";
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        success: true,
+        identity: { type: "anonymous", anonymousSessionId: "anon-1" },
+      })
+    );
+
+    const { fetchAnonymousMeterStatus } = await import("@/lib/api");
+    const { data } = await fetchAnonymousMeterStatus();
+
+    expect(data.identity?.type).toBe("anonymous");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/meter/status",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
+    const headers = mockFetch.mock.calls[0][1]?.headers as Headers;
+    expect(headers.has("Authorization")).toBe(false);
+  });
+});

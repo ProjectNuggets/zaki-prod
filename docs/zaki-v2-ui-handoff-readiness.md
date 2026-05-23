@@ -46,6 +46,8 @@ Frontend clients now include:
 
 - `fetchMeterStatus()`
 - `useMeterStatus()`
+- `fetchAnonymousMeterStatus()`
+- `useAnonymousMeterStatus()`
 - `fetchProductRegistry()`
 - `useProductRegistry()`
 - `fetchPlatformUsageSummary()` as compatibility only.
@@ -61,6 +63,19 @@ Central metering is wired as follows:
 
 Failed upstream calls write failed receipts with zero weighted debit.
 Settings now reads product usage rows from `/api/meter/status`; `GET /api/usage/summary` is fallback compatibility only.
+
+## Current Settings IA
+
+Settings V1 has been reorganized into the same MECE buckets V2 should target:
+
+- Account: profile, theme, language.
+- Connections: connected identity/provider status, currently Google.
+- Billing: current plan, billing portal, cancellation.
+- Products: product access, operational state, lifecycle, entry point, and memory scope.
+- Usage: platform weekly allowance, five-hour window, and per-product weighted usage.
+- Memory & Data: memory scope ownership and account export, with a link to Brain/Memory controls.
+- Developer Access: future CLI, local app, and extensions clients from the product registry.
+- Privacy: destructive account deletion only.
 
 ## What Claude Design Files Should Provide
 
@@ -93,7 +108,7 @@ The design files should focus on:
 These are acceptable while receiving design files, but must be closed before final launch:
 
 - Dashboard V2 still needs implementation against the new contracts.
-- Anonymous/free dashboard usage needs a frontend client that can call meter status without an auth token.
+- Anonymous/free dashboard usage needs to wire the existing anonymous meter client into the dashboard entry flow.
 - Full Memory Control Plane governance is not complete.
 - Pricing/checkout still needs final Free/Personal/Pro/Pro MAX migration.
 - Auth future-surface foundation for CLI/local/extensions remains a later slice.

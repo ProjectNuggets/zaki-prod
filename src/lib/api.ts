@@ -1643,6 +1643,14 @@ export async function fetchMeterStatus() {
   return { response, data };
 }
 
+export async function fetchAnonymousMeterStatus() {
+  const response = await backendRequest("/api/meter/status", {
+    method: "GET",
+  });
+  const data = await parseApiJson<MeterStatusResponse>(response);
+  return { response, data };
+}
+
 export async function provisionBot(payload: Record<string, unknown> = {}) {
   const response = await backendAuthRequest("/v1/me/bot/provision", {
     method: "POST",

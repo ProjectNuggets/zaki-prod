@@ -7,6 +7,7 @@ export {
   useBillingConfig,
   usePlatformUsageSummary,
   useMeterStatus,
+  useAnonymousMeterStatus,
   useCheckout,
   useBillingPortal,
   useCancelSubscription,

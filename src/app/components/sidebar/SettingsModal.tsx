@@ -16,12 +16,14 @@ import type {
   ProductRegistryProductId,
   UsageQuotaSnapshot,
 } from "@/lib/api";
-import { exportAccountData } from "@/lib/api";
+import { exportAccountData, fetchGoogleOAuthStatus } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useNavigate } from "react-router-dom";
+import { Boxes, CreditCard, Database, Gauge, KeyRound, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { SheetShell, SectionHeader, TypeToConfirmDialog } from "@/app/components/ui/zaki";
 
@@ -63,6 +65,76 @@ const MEMORY_SCOPE_KEYS: Record<string, string> = {
   design_memory: "settingsModal.productsAccess.memoryScopes.designMemory",
   session_memory: "settingsModal.productsAccess.memoryScopes.sessionMemory",
 };
+const MEMORY_SCOPE_ORDER = [
+  "personal_brain",
+  "workspace_memory",
+  "learner_memory",
+  "hire_memory",
+  "design_memory",
+  "session_memory",
+] as const;
+
+const SETTINGS_NAV_ITEMS = [
+  { href: "#settings-account", key: "account", icon: UserRound },
+  { href: "#settings-connections", key: "connections", icon: KeyRound },
+  { href: "#settings-billing", key: "billing", icon: CreditCard },
+  { href: "#settings-products", key: "products", icon: Boxes },
+  { href: "#settings-usage", key: "usage", icon: Gauge },
+  { href: "#settings-memory-data", key: "memoryData", icon: Database },
+  { href: "#settings-developer-access", key: "developerAccess", icon: LockKeyhole },
+  { href: "#settings-privacy", key: "privacy", icon: ShieldCheck },
+] as const;
+
+function SettingsNav() {
+  const { t } = useTranslation();
+  return (
+    <nav
+      aria-label={t("settingsModal.nav.label")}
+      className="grid grid-cols-2 gap-2 rounded-zaki-lg border border-zaki-subtle bg-white p-2 dark:border-zaki-dark-border dark:bg-zaki-dark-card sm:grid-cols-4"
+    >
+      {SETTINGS_NAV_ITEMS.map(({ href, key, icon: Icon }) => (
+        <a
+          key={key}
+          href={href}
+          className="flex items-center gap-2 rounded-zaki-md px-2 py-2 text-xs font-medium text-zaki-secondary transition-colors hover:bg-zaki-hover hover:text-zaki-primary dark:text-zaki-dark-muted dark:hover:bg-zaki-dark-panel dark:hover:text-zaki-dark-primary"
+        >
+          <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{t(`settingsModal.nav.${key}`)}</span>
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function SettingsPanel({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid gap-3 rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:border-zaki-dark-card dark:bg-zaki-dark-card">
+      {children}
+    </div>
+  );
+}
+
+function StatusPill({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode;
+  tone?: "good" | "warning" | "neutral";
+}) {
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+        tone === "good"
+          ? "border-zaki-success/30 text-zaki-success dark:border-[#8fe6cf]/30 dark:text-[#8fe6cf]"
+          : tone === "warning"
+            ? "border-zaki-brand/30 text-zaki-brand dark:border-[#ff9c86]/30 dark:text-[#ff9c86]"
+            : "border-zaki-subtle text-zaki-muted dark:border-zaki-dark-border dark:text-zaki-dark-muted"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
 
 function formatUsageCount(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -227,6 +299,7 @@ export function SettingsModal({
       : null;
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean | null>(null);
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const accessExpiryLabel = useMemo(() => {
     if (!accessExpiresAt) return null;
@@ -271,6 +344,28 @@ export function SettingsModal({
     productRegistry?.products?.filter(
       (product) => product.visibleInSettings !== false && product.state !== "hidden"
     ) ?? [];
+  const developerAccessRows =
+    productRegistry?.products?.filter((product) => product.productKind === "client") ?? [];
+  const memoryScopeRows = useMemo(() => {
+    const rows = new Map<string, { scope: string; products: string[] }>();
+    for (const product of productAccessRows) {
+      const scope = String(product.memoryScope || "").trim();
+      if (!scope) continue;
+      const row = rows.get(scope) || { scope, products: [] };
+      row.products.push(product.label || product.productId || scope);
+      rows.set(scope, row);
+    }
+    return [...rows.values()].sort((a, b) => {
+      const aIndex = MEMORY_SCOPE_ORDER.indexOf(a.scope as (typeof MEMORY_SCOPE_ORDER)[number]);
+      const bIndex = MEMORY_SCOPE_ORDER.indexOf(b.scope as (typeof MEMORY_SCOPE_ORDER)[number]);
+      if (aIndex !== -1 || bIndex !== -1) {
+        const normalizedAIndex = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+        const normalizedBIndex = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+        return normalizedAIndex - normalizedBIndex;
+      }
+      return a.scope.localeCompare(b.scope);
+    });
+  }, [productAccessRows]);
   const meterUsageRows: MeterUsageRow[] = meterStatus
     ? productAccessRows
         .filter((product) => product.productKind !== "control_plane")
@@ -285,6 +380,23 @@ export function SettingsModal({
       return;
     }
     setDeleteConfirmOpen(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    setGoogleOAuthEnabled(null);
+    fetchGoogleOAuthStatus()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setGoogleOAuthEnabled(Boolean(response.ok && data?.enabled));
+      })
+      .catch(() => {
+        if (active) setGoogleOAuthEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -322,10 +434,12 @@ export function SettingsModal({
           </div>
         }
       >
-        <div className="space-y-8">
-          <section className="space-y-3">
-            <SectionHeader title={t("settingsModal.sections.profile")} />
-            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
+        <div className="space-y-7">
+          <SettingsNav />
+
+          <section id="settings-account" className="space-y-3" data-testid="settings-account">
+            <SectionHeader title={t("settingsModal.sections.account")} />
+            <SettingsPanel>
               <label className="flex flex-col gap-1 text-xs text-zaki-muted dark:text-[#c9b8a4]">
                 {t("settingsModal.profile.displayName")}
                 <input
@@ -342,12 +456,6 @@ export function SettingsModal({
                   readOnly
                 />
               </label>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <SectionHeader title={t("settingsModal.sections.preferences")} />
-            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
               <label className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-secondary dark:text-[#d7c9b7]">
                 {t("settingsModal.preferences.theme")}
                 <select
@@ -373,12 +481,35 @@ export function SettingsModal({
                   <option value="ar">{t("language.arabic")}</option>
                 </select>
               </label>
-            </div>
+            </SettingsPanel>
           </section>
 
-          <section className="space-y-3">
-            <SectionHeader title={t("settingsModal.sections.planBilling")} />
-            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
+          <section id="settings-connections" className="space-y-3" data-testid="settings-connections">
+            <SectionHeader title={t("settingsModal.sections.connections")} />
+            <SettingsPanel>
+              <div className="flex items-center justify-between gap-3 rounded-zaki-lg border border-zaki-subtle bg-white px-3 py-3 text-sm dark:border-zaki-dark-border dark:bg-zaki-dark-panel">
+                <div className="min-w-0">
+                  <div className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {t("settingsModal.connections.google")}
+                  </div>
+                  <div className="mt-0.5 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                    {t("settingsModal.connections.googleHelper")}
+                  </div>
+                </div>
+                <StatusPill tone={googleOAuthEnabled ? "good" : "neutral"}>
+                  {googleOAuthEnabled === null
+                    ? t("settingsModal.connections.checking")
+                    : googleOAuthEnabled
+                      ? t("settingsModal.connections.available")
+                      : t("settingsModal.connections.notConfigured")}
+                </StatusPill>
+              </div>
+            </SettingsPanel>
+          </section>
+
+          <section id="settings-billing" className="space-y-3" data-testid="settings-billing">
+            <SectionHeader title={t("settingsModal.sections.billing")} />
+            <SettingsPanel>
               <div className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-secondary dark:text-[#d7c9b7]">
                 <span>{t("settingsModal.plan.currentPlan")}</span>
                 <span className="text-zaki-primary dark:text-[#efe6d9] font-semibold uppercase text-xs tracking-wider">
@@ -491,12 +622,12 @@ export function SettingsModal({
                   {t("settingsModal.plan.cancelAtPeriodEndNote")}
                 </div>
               )}
-            </div>
+            </SettingsPanel>
           </section>
 
-          <section className="space-y-3" data-testid="settings-products-access">
+          <section id="settings-products" className="space-y-3" data-testid="settings-products-access">
             <SectionHeader title={t("settingsModal.sections.productsAccess")} />
-            <div className="grid gap-3 rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:border-zaki-dark-card dark:bg-zaki-dark-card">
+            <SettingsPanel>
               <p className="text-sm leading-6 text-zaki-muted dark:text-zaki-dark-muted">
                 {t("settingsModal.productsAccess.subtitle")}
               </p>
@@ -574,12 +705,12 @@ export function SettingsModal({
               <p className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
                 {t("settingsModal.productsAccess.helper")}
               </p>
-            </div>
+            </SettingsPanel>
           </section>
 
-          <section className="space-y-3" data-testid="settings-platform-usage">
+          <section id="settings-usage" className="space-y-3" data-testid="settings-platform-usage">
             <SectionHeader title={t("settingsModal.sections.usage")} />
-            <div className="grid gap-3 rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:border-zaki-dark-card dark:bg-zaki-dark-card">
+            <SettingsPanel>
               <div className="grid gap-2 sm:grid-cols-3">
                 <div className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 dark:border-zaki-dark-border dark:bg-zaki-dark-panel">
                   <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
@@ -674,54 +805,114 @@ export function SettingsModal({
               <p className="text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
                 {t("settingsModal.usage.helper")}
               </p>
-            </div>
+            </SettingsPanel>
           </section>
 
-          <section className="space-y-3">
-            <SectionHeader title={t("settingsModal.sections.dataPrivacy")} />
-            <div className="grid gap-3 rounded-2xl border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#17110d] px-4 py-4 shadow-[0px_10px_24px_rgba(15,15,15,0.04)] dark:shadow-[0px_14px_30px_rgba(0,0,0,0.32)]">
-              <button
-                type="button"
-                disabled={isExporting}
-                className="flex items-center justify-between rounded-zaki-lg border border-zaki-subtle dark:border-[#2e241b] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-secondary dark:text-[#d7c9b7] hover:bg-zaki-elevated dark:hover:bg-[#251b14] transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={async () => {
-                  if (isExporting) return;
-                  setIsExporting(true);
-                  try {
-                    const { response, data } = await exportAccountData();
-                    if (!response.ok || !data.success || !data.export) {
-                      throw new Error(data.error ?? t("settingsModal.privacy.errors.exportData"));
-                    }
+          <section id="settings-memory-data" className="space-y-3" data-testid="settings-memory-data">
+            <SectionHeader title={t("settingsModal.sections.memoryData")} />
+            <SettingsPanel>
+              <div className="grid gap-2">
+                {memoryScopeRows.map((row) => (
+                  <div
+                    key={row.scope}
+                    className="grid gap-1 rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm dark:border-zaki-dark-border dark:bg-zaki-dark-panel"
+                  >
+                    <div className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                      {getMemoryScopeLabel(t, row.scope)}
+                    </div>
+                    <div className="text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                      {row.products.join(" · ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="zaki-btn-sm zaki-btn-secondary"
+                  onClick={() => {
+                    onClose();
+                    navigate("/brain");
+                  }}
+                >
+                  {t("settingsModal.memoryData.openMemory")}
+                </button>
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  className="zaki-btn-sm zaki-btn-secondary disabled:opacity-60"
+                  onClick={async () => {
+                    if (isExporting) return;
+                    setIsExporting(true);
+                    try {
+                      const { response, data } = await exportAccountData();
+                      if (!response.ok || !data.success || !data.export) {
+                        throw new Error(data.error ?? t("settingsModal.privacy.errors.exportData"));
+                      }
 
-                    const blob = new Blob([JSON.stringify(data.export, null, 2)], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    const datePart = new Date().toISOString().slice(0, 10);
-                    link.href = url;
-                    link.download = `zaki-account-export-${datePart}.json`;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    URL.revokeObjectURL(url);
-                    toast.success(t("settingsModal.privacy.success.exportDownloaded"));
-                  } catch (err) {
-                    toast.error(
-                      err instanceof Error ? err.message : t("settingsModal.privacy.errors.exportData")
-                    );
-                  } finally {
-                    setIsExporting(false);
-                  }
-                }}
-              >
-                {isExporting
-                  ? t("settingsModal.privacy.preparingExport")
-                  : t("settingsModal.privacy.exportAllData")}
-                <span className="text-xs text-zaki-disabled dark:text-[#aa947b]">
-                  {t("settingsModal.privacy.exportHelper")}
-                </span>
-              </button>
+                      const blob = new Blob([JSON.stringify(data.export, null, 2)], {
+                        type: "application/json",
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      const datePart = new Date().toISOString().slice(0, 10);
+                      link.href = url;
+                      link.download = `zaki-account-export-${datePart}.json`;
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      URL.revokeObjectURL(url);
+                      toast.success(t("settingsModal.privacy.success.exportDownloaded"));
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error ? err.message : t("settingsModal.privacy.errors.exportData")
+                      );
+                    } finally {
+                      setIsExporting(false);
+                    }
+                  }}
+                >
+                  {isExporting
+                    ? t("settingsModal.privacy.preparingExport")
+                    : t("settingsModal.privacy.exportAllData")}
+                </button>
+              </div>
+            </SettingsPanel>
+          </section>
+
+          <section
+            id="settings-developer-access"
+            className="space-y-3"
+            data-testid="settings-developer-access"
+          >
+            <SectionHeader title={t("settingsModal.sections.developerAccess")} />
+            <SettingsPanel>
+              <div className="grid gap-2">
+                {developerAccessRows.map((product) => (
+                  <div
+                    key={product.productId}
+                    className="flex items-center justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm dark:border-zaki-dark-border dark:bg-zaki-dark-panel"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        {product.label}
+                      </div>
+                      <div className="mt-0.5 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                        {getProductEntryPointLabel(t, product)}
+                      </div>
+                    </div>
+                    <StatusPill tone={product.state === "enabled" ? "good" : "neutral"}>
+                      {getProductStateLabel(t, product.state)}
+                    </StatusPill>
+                  </div>
+                ))}
+              </div>
+            </SettingsPanel>
+          </section>
+
+          <section id="settings-privacy" className="space-y-3" data-testid="settings-privacy">
+            <SectionHeader title={t("settingsModal.sections.privacy")} />
+            <SettingsPanel>
               <button
                 className="flex items-center justify-between rounded-zaki-lg border border-zaki-strong dark:border-[#643126] bg-white dark:bg-[#1d1611] px-3 py-2 text-sm text-zaki-brand dark:text-[#ff9c86] hover:bg-zaki-error dark:hover:bg-[rgba(241,2,2,0.15)] transition-colors text-left"
                 onClick={() => setDeleteConfirmOpen(true)}
@@ -732,7 +923,7 @@ export function SettingsModal({
                   {t("settingsModal.privacy.deleteWarning")}
                 </span>
               </button>
-            </div>
+            </SettingsPanel>
           </section>
         </div>
       </SheetShell>

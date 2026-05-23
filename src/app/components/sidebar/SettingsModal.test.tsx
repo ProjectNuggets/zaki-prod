@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { SettingsModal } from "./SettingsModal";
 
@@ -13,6 +13,10 @@ jest.mock("sonner", () => ({
 
 jest.mock("@/lib/api", () => ({
   exportAccountData: jest.fn(),
+  fetchGoogleOAuthStatus: jest.fn(async () => ({
+    response: { ok: true },
+    data: { enabled: true },
+  })),
 }));
 
 jest.mock("@/lib/productTelemetry", () => ({
@@ -22,12 +26,27 @@ jest.mock("@/lib/productTelemetry", () => ({
 const tMock = (key: string, options?: Record<string, unknown>) => {
   const dictionary: Record<string, string> = {
     "settingsModal.header.title": "Settings",
-    "settingsModal.header.subtitle": "Profile, preferences, and data controls",
+    "settingsModal.header.subtitle": "Account, billing, usage, memory, and access controls",
+    "settingsModal.nav.label": "Settings sections",
+    "settingsModal.nav.account": "Account",
+    "settingsModal.nav.connections": "Connections",
+    "settingsModal.nav.billing": "Billing",
+    "settingsModal.nav.products": "Products",
+    "settingsModal.nav.usage": "Usage",
+    "settingsModal.nav.memoryData": "Memory",
+    "settingsModal.nav.developerAccess": "Developer",
+    "settingsModal.nav.privacy": "Privacy",
+    "settingsModal.sections.account": "Account",
     "settingsModal.sections.profile": "Profile",
     "settingsModal.sections.preferences": "Preferences",
+    "settingsModal.sections.connections": "Connected accounts",
+    "settingsModal.sections.billing": "Billing",
     "settingsModal.sections.planBilling": "Plan & Billing",
     "settingsModal.sections.productsAccess": "Products & Access",
     "settingsModal.sections.usage": "Usage",
+    "settingsModal.sections.memoryData": "Memory & Data",
+    "settingsModal.sections.developerAccess": "Developer Access",
+    "settingsModal.sections.privacy": "Privacy",
     "settingsModal.sections.dataPrivacy": "Data & Privacy",
     "settingsModal.profile.displayName": "Display name",
     "settingsModal.profile.email": "Email",
@@ -38,6 +57,11 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settings.language": "Language",
     "language.english": "English",
     "language.arabic": "Arabic",
+    "settingsModal.connections.google": "Google",
+    "settingsModal.connections.googleHelper": "Sign-in provider",
+    "settingsModal.connections.checking": "Checking",
+    "settingsModal.connections.available": "Available",
+    "settingsModal.connections.notConfigured": "Not configured",
     "settingsModal.plan.currentPlan": "Current plan",
     "settingsModal.plan.status": "Status",
     "settingsModal.plan.statusValues.active": "active",
@@ -99,6 +123,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.entryPoints.cli": "CLI",
     "settingsModal.productsAccess.entryPoints.localApp": "Local app",
     "settingsModal.productsAccess.entryPoints.extensions": "Extensions",
+    "settingsModal.memoryData.openMemory": "Open memory controls",
     "settingsModal.privacy.exportAllData": "Export all data",
     "settingsModal.privacy.exportHelper": "Download your chats and files",
     "settingsModal.privacy.deleteAccount": "Delete account",
@@ -392,6 +417,28 @@ jest.mock("@/queries", () => ({
             entryPoint: "CLI",
             memoryScope: "personal_brain",
           },
+          {
+            productId: "local_app",
+            label: "ZAKI Local App",
+            productKind: "client",
+            state: "hidden",
+            lifecycle: "future",
+            visibleInSettings: false,
+            route: null,
+            entryPoint: "Local app",
+            memoryScope: "personal_brain",
+          },
+          {
+            productId: "extensions",
+            label: "ZAKI Extensions",
+            productKind: "client",
+            state: "hidden",
+            lifecycle: "future",
+            visibleInSettings: false,
+            route: null,
+            entryPoint: "Extensions",
+            memoryScope: "personal_brain",
+          },
         ],
       },
     },
@@ -420,14 +467,67 @@ function renderSettingsModal() {
 }
 
 describe("SettingsModal", () => {
-  it("renders the platform usage summary as the global usage surface", () => {
+  it("renders the settings control plane as MECE sections", async () => {
+    renderSettingsModal();
+
+    const account = screen.getByTestId("settings-account");
+    const connections = screen.getByTestId("settings-connections");
+    const billing = screen.getByTestId("settings-billing");
+    const products = screen.getByTestId("settings-products-access");
+    const usage = screen.getByTestId("settings-platform-usage");
+    const memoryData = screen.getByTestId("settings-memory-data");
+    const developerAccess = screen.getByTestId("settings-developer-access");
+    const privacy = screen.getByTestId("settings-privacy");
+
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+    for (const label of [
+      "Account",
+      "Connections",
+      "Billing",
+      "Products",
+      "Usage",
+      "Memory",
+      "Developer",
+      "Privacy",
+    ]) {
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+    }
+
+    expect(within(account).getByText("Display name")).toBeInTheDocument();
+    expect(within(account).getByText("Theme")).toBeInTheDocument();
+    expect(within(billing).getByText("Current plan")).toBeInTheDocument();
+    expect(products).toBeInTheDocument();
+    expect(usage).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(within(connections).getByText("Available")).toBeInTheDocument();
+    });
+    expect(within(connections).getByText("Google")).toBeInTheDocument();
+
+    expect(within(memoryData).getByText("Personal brain")).toBeInTheDocument();
+    expect(within(memoryData).getByText("Workspace memory")).toBeInTheDocument();
+    expect(within(memoryData).getByText("Learner memory")).toBeInTheDocument();
+    expect(within(memoryData).getByText("Hire memory")).toBeInTheDocument();
+    expect(within(memoryData).getByText("Design memory")).toBeInTheDocument();
+    expect(within(memoryData).getByText("Open memory controls")).toBeInTheDocument();
+    expect(within(memoryData).getByText("Export all data")).toBeInTheDocument();
+
+    expect(within(developerAccess).getByText("ZAKI CLI")).toBeInTheDocument();
+    expect(within(developerAccess).getByText("ZAKI Local App")).toBeInTheDocument();
+    expect(within(developerAccess).getByText("ZAKI Extensions")).toBeInTheDocument();
+
+    expect(within(privacy).getByText("Delete account")).toBeInTheDocument();
+    expect(within(privacy).queryByText("Export all data")).not.toBeInTheDocument();
+  });
+
+  it("renders the platform usage summary as the global usage surface", async () => {
     renderSettingsModal();
 
     const usage = screen.getByTestId("settings-platform-usage");
     const productsAccess = screen.getByTestId("settings-products-access");
 
     expect(usage).toBeInTheDocument();
-    expect(screen.getByText("Usage")).toBeInTheDocument();
+    expect(within(usage).getByText("Usage")).toBeInTheDocument();
     expect(within(usage).getByText("Pro")).toBeInTheDocument();
     expect(within(usage).getByText("1,420 / 1,500 left")).toBeInTheDocument();
     expect(within(usage).getByText("80 / 100 left")).toBeInTheDocument();
@@ -442,9 +542,12 @@ describe("SettingsModal", () => {
     expect(within(usage).queryByText("ZAKI Brain")).not.toBeInTheDocument();
     expect(within(usage).queryByText("Memory policy")).not.toBeInTheDocument();
     expect(productsAccess).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
+    });
   });
 
-  it("renders product ownership separately from usage meters", () => {
+  it("renders product ownership separately from usage meters", async () => {
     renderSettingsModal();
 
     const productsAccess = screen.getByTestId("settings-products-access");
@@ -461,5 +564,8 @@ describe("SettingsModal", () => {
     expect(within(productsAccess).getByText("Memory control plane")).toBeInTheDocument();
     expect(within(productsAccess).getAllByText("Disabled")).toHaveLength(2);
     expect(within(productsAccess).queryByText("ZAKI CLI")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
+    });
   });
 });

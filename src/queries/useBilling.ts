@@ -7,6 +7,7 @@ import {
   deleteAccount,
   fetchBillingConfig,
   fetchEntitlements,
+  fetchAnonymousMeterStatus,
   fetchMeterStatus,
   fetchPlatformUsageSummary,
   redeemAccessCode,
@@ -21,6 +22,7 @@ export const billingKeys = {
   config: ["billing", "config"] as const,
   platformUsageSummary: ["billing", "platformUsageSummary"] as const,
   meterStatus: ["billing", "meterStatus"] as const,
+  anonymousMeterStatus: ["billing", "anonymousMeterStatus"] as const,
 };
 
 export function useEntitlements() {
@@ -64,6 +66,16 @@ export function useMeterStatus() {
     queryKey: billingKeys.meterStatus,
     queryFn: fetchMeterStatus,
     enabled: Boolean(token),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useAnonymousMeterStatus(enabled = true) {
+  return useQuery({
+    queryKey: billingKeys.anonymousMeterStatus,
+    queryFn: fetchAnonymousMeterStatus,
+    enabled,
     staleTime: 30_000,
     retry: false,
   });
