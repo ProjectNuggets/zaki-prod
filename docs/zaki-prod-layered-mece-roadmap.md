@@ -123,7 +123,7 @@ The slices below are ordered by dependency and risk. Each slice must end with a 
 - [x] **S07: Central usage ledger schema and repository** `risk:high` `depends:[S02]`
   > After this: usage events can be written/read from a canonical ledger without changing enforcement.
 
-- [ ] **S08: Weekly allowance aggregation** `risk:high` `depends:[S07]`
+- [x] **S08: Weekly allowance aggregation** `risk:high` `depends:[S07]`
   > After this: `/api/usage/summary` reports real weekly used/remaining/reset values from ledger aggregation.
 
 - [ ] **S09: Five-hour burst window persistence** `risk:high` `depends:[S07]`
@@ -222,10 +222,15 @@ Completed:
   - Anonymous/free dashboard data uses the anonymous meter status contract when no auth token exists.
   - Product launch cards read `/api/products/registry`, respect operational state, and keep future products visible in architecture while disabled in UI.
   - Memory scope rows are derived from product registry metadata so product surfaces remain downstream of the central memory model.
+- S08 weekly allowance aggregation and reset rule:
+  - `/api/usage/summary` now reports weekly used, remaining, and reset data from central meter receipts.
+  - Weekly allowance is a fixed UTC-week bucket with `fixed_window_no_rollover`.
+  - Unused allowance expires at reset and does not add to the next week.
+  - Current-week aggregation counts receipts from week start through now; `resetAt` remains the next Monday UTC.
 
 Next:
 
-1. S08-S10 central meter authority: weekly aggregation, five-hour persistence, product weights, and enforcement bridge.
+1. S09-S10 central meter authority: five-hour persistence, product weights, and enforcement bridge.
 2. S11 pricing/checkout migration to Free, Personal, Pro, and Pro MAX.
 3. S12-S15 Memory Control Plane governance across personal Brain, workspace memory, learner memory, and future product memory.
 4. S16 product router policy metadata so every route declares auth, entitlement, meter, memory, and audit behavior.

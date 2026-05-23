@@ -43,6 +43,10 @@ describe("platform meter", () => {
     );
     expect(snapshot.weekly).toEqual(
       expect.objectContaining({
+        period: "utc_week",
+        resetPolicy: "fixed_window_no_rollover",
+        rollover: false,
+        unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
         used: 7,
         receipts: 5,
         limit: 100,
@@ -55,6 +59,54 @@ describe("platform meter", () => {
     expect(dbGet.mock.calls[0][0]).toMatch(/g\.tenant_id = \$1/);
     expect(dbGet.mock.calls[0][1][0]).toBe("tenant-a");
     expect(dbGet.mock.calls[0][1][1]).toBe(42);
+    expect(dbGet.mock.calls[1][1]).toEqual([
+      "tenant-a",
+      42,
+      "2026-05-18T00:00:00.000Z",
+      "2026-05-22T10:00:00.000Z",
+    ]);
+  });
+
+  it("resets weekly allowance without carrying unused units into the next week", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 })
+      .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 });
+
+    const snapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: {
+        plan: { id: "personal", label: "Personal" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 20,
+          weeklyAllowanceUnits: 100,
+        },
+      },
+      nowDate: new Date("2026-05-25T00:01:00.000Z"),
+    });
+
+    expect(snapshot.weekly).toEqual(
+      expect.objectContaining({
+        period: "utc_week",
+        resetPolicy: "fixed_window_no_rollover",
+        rollover: false,
+        unusedUnitsExpireAt: "2026-06-01T00:00:00.000Z",
+        used: 0,
+        limit: 100,
+        remaining: 100,
+        startedAt: "2026-05-25T00:00:00.000Z",
+        resetAt: "2026-06-01T00:00:00.000Z",
+      })
+    );
+    expect(snapshot.weekly.remaining).toBeLessThanOrEqual(snapshot.weekly.limit);
+    expect(dbGet.mock.calls[1][1]).toEqual([
+      "tenant-a",
+      42,
+      "2026-05-25T00:00:00.000Z",
+      "2026-05-25T00:01:00.000Z",
+    ]);
   });
 
   it("keeps tenant usage windows isolated for anonymous sessions", async () => {
@@ -138,5 +190,11 @@ describe("platform meter", () => {
     });
     expect(dbAll).toHaveBeenCalledTimes(2);
     expect(dbAll.mock.calls[0][0]).toMatch(/GROUP BY r\.product_id/);
+    expect(dbAll.mock.calls[1][1]).toEqual([
+      "tenant-a",
+      42,
+      "2026-05-18T00:00:00.000Z",
+      "2026-05-22T10:00:00.000Z",
+    ]);
   });
 });

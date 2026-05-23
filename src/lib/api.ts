@@ -1342,6 +1342,10 @@ export type ProductRegistryResponse = {
 };
 
 export type MeterWindowSnapshot = {
+  period?: string | null;
+  resetPolicy?: string | null;
+  rollover?: boolean | null;
+  unusedUnitsExpireAt?: string | null;
   windowHours?: number;
   used?: number | null;
   receipts?: number;
@@ -1420,13 +1424,18 @@ export type PlatformUsageSummary = {
   };
   allowance?: {
     model?: "shared_weekly_allowance" | string;
-    ledgerMode?: "legacy_surface_counters" | string;
+    ledgerMode?: "legacy_surface_counters" | "central_meter_receipts" | string;
     weekly?: {
       configured?: boolean;
       limit?: number | null;
       used?: number | null;
       remaining?: number | null;
       resetAt?: string | null;
+      startedAt?: string | null;
+      period?: string | null;
+      resetPolicy?: string | null;
+      rollover?: boolean | null;
+      unusedUnitsExpireAt?: string | null;
       source?: string;
     };
     burst?: {

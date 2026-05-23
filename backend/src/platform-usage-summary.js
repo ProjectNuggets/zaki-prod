@@ -93,6 +93,7 @@ function buildBrainUsageProduct(platformProducts = {}) {
 export async function buildPlatformUsageSummary({
   zakiUser,
   platform,
+  meterSnapshot = null,
   resolveQuotaForSurface,
   buildLearningStatus,
   surfaces = PLATFORM_USAGE_PRODUCT_SURFACES,
@@ -108,6 +109,12 @@ export async function buildPlatformUsageSummary({
     throw new Error("buildPlatformUsageSummary requires resolveQuotaForSurface");
   }
 
+  const weeklyMeter = meterSnapshot?.weekly || null;
+  const hasWeeklyMeter =
+    weeklyMeter &&
+    (typeof weeklyMeter.used === "number" ||
+      typeof weeklyMeter.remaining === "number" ||
+      typeof weeklyMeter.resetAt === "string");
   const productEntries = [];
   for (const productSurface of surfaces) {
     let quota;
@@ -167,14 +174,24 @@ export async function buildPlatformUsageSummary({
     },
     allowance: {
       model: platform.usage.model || "shared_weekly_allowance",
-      ledgerMode: "legacy_surface_counters",
+      ledgerMode: hasWeeklyMeter ? "central_meter_receipts" : "legacy_surface_counters",
       weekly: {
         configured: Boolean(platform.usage.weeklyAllowanceConfigured),
-        limit: platform.usage.weeklyAllowanceUnits ?? null,
-        used: null,
-        remaining: null,
-        resetAt: null,
-        source: "pending_central_usage_ledger",
+        limit: weeklyMeter?.limit ?? platform.usage.weeklyAllowanceUnits ?? null,
+        used: typeof weeklyMeter?.used === "number" ? weeklyMeter.used : null,
+        remaining:
+          typeof weeklyMeter?.remaining === "number" ? weeklyMeter.remaining : null,
+        resetAt: weeklyMeter?.resetAt || null,
+        startedAt: weeklyMeter?.startedAt || null,
+        period: weeklyMeter?.period || "utc_week",
+        resetPolicy:
+          weeklyMeter?.resetPolicy || platform.usage.weeklyAllowanceResetPolicy || null,
+        rollover:
+          typeof weeklyMeter?.rollover === "boolean"
+            ? weeklyMeter.rollover
+            : platform.usage.weeklyAllowanceRollover ?? null,
+        unusedUnitsExpireAt: weeklyMeter?.unusedUnitsExpireAt || weeklyMeter?.resetAt || null,
+        source: hasWeeklyMeter ? "central_meter_receipts" : "pending_central_usage_ledger",
       },
       burst: {
         windowHours: platform.usage.burstWindowHours || 5,

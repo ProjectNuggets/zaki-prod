@@ -34,13 +34,15 @@ V2 UI should consume these contracts first:
 - `GET /api/meter/status`
   - Plan tier, rolling five-hour window, weekly allowance, reset times, product states, grant policies, and per-product weighted usage windows.
   - Supports authenticated users and anonymous sessions.
+  - Weekly allowance uses a fixed UTC-week reset with no rollover; unused units expire at reset.
 - `POST /api/meter/grants`
   - Central grant contract for downstream products such as Hire.
 - `POST /api/meter/receipts`
   - Central receipt contract. Products report raw facts; central app computes weighted debit.
 - `GET /api/usage/summary`
   - Transitional compatibility endpoint for current Settings per-product rows.
-  - Do not treat it as the final source of truth for the V2 usage dashboard.
+  - Weekly allowance fields now come from central meter receipts with the same no-rollover reset policy.
+  - Do not treat product rows as the final source of truth for the V2 usage dashboard.
 
 Frontend clients now include:
 

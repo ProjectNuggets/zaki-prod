@@ -155,7 +155,7 @@ export async function readMeterSnapshotForIdentity({
     dbGet,
     identity,
     startedAtIso: weekStartedAtIso,
-    endedAtIso: weekEndedAtIso,
+    endedAtIso: nowIso,
   });
   const rollingProducts = await readMeterProductWindow({
     dbAll,
@@ -167,7 +167,7 @@ export async function readMeterSnapshotForIdentity({
     dbAll,
     identity,
     startedAtIso: weekStartedAtIso,
-    endedAtIso: weekEndedAtIso,
+    endedAtIso: nowIso,
   });
   const productIds = new Set([
     ...Object.keys(rollingProducts),
@@ -189,6 +189,10 @@ export async function readMeterSnapshotForIdentity({
       resetAt: nowIso,
     },
     weekly: {
+      period: "utc_week",
+      resetPolicy: "fixed_window_no_rollover",
+      rollover: false,
+      unusedUnitsExpireAt: weekEndedAtIso,
       used: weeklyUsage.weightedUnits,
       receipts: weeklyUsage.receipts,
       limit: weeklyLimit,

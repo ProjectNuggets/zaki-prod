@@ -68,6 +68,8 @@ Use two layers:
 
 All product usage counts toward the user’s weekly allowance. Product-specific caps prevent one product from consuming the whole plan if that would damage cost or fairness.
 
+Weekly allowance is a fixed UTC week bucket. Unused allowance expires at the weekly reset and does not roll over or add to the next week’s allowance.
+
 ### Usage Units
 
 Do not meter only by message count. Meter in normalized ZAKI Compute Units.

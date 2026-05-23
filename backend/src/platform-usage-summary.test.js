@@ -168,6 +168,58 @@ describe("platform usage summary", () => {
     expect(summary.products[ZAKI_PRODUCT_IDS.SPACES].quota.success).toBe(true);
   });
 
+  it("uses central meter weekly aggregation with no rollover when provided", async () => {
+    const summary = await buildPlatformUsageSummary({
+      zakiUser: { id: 42 },
+      platform: buildPlatform(),
+      meterSnapshot: {
+        weekly: {
+          period: "utc_week",
+          resetPolicy: "fixed_window_no_rollover",
+          rollover: false,
+          unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
+          limit: 1500,
+          used: 37.5,
+          remaining: 1462.5,
+          startedAt: "2026-05-18T00:00:00.000Z",
+          resetAt: "2026-05-25T00:00:00.000Z",
+        },
+      },
+      resolveQuotaForSurface: jest.fn(async (surface) => ({
+        success: true,
+        surface,
+        bucket: surface,
+        period: "week",
+        limit: 10,
+        used: 1,
+        remaining: 9,
+      })),
+    });
+
+    expect(summary.allowance).toEqual(
+      expect.objectContaining({
+        ledgerMode: "central_meter_receipts",
+      })
+    );
+    expect(summary.allowance.weekly).toEqual(
+      expect.objectContaining({
+        limit: 1500,
+        used: 37.5,
+        remaining: 1462.5,
+        startedAt: "2026-05-18T00:00:00.000Z",
+        resetAt: "2026-05-25T00:00:00.000Z",
+        period: "utc_week",
+        resetPolicy: "fixed_window_no_rollover",
+        rollover: false,
+        unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
+        source: "central_meter_receipts",
+      })
+    );
+    expect(summary.allowance.weekly.remaining).toBeLessThanOrEqual(
+      summary.allowance.weekly.limit
+    );
+  });
+
   it("requires canonical user and platform context", async () => {
     await expect(
       buildPlatformUsageSummary({

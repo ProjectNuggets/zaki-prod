@@ -228,6 +228,11 @@ export function buildExpiredMeterGrantResponse(grant, meter = null) {
 
 function buildProductWindowSnapshot(windowSnapshot = {}, productWindow = {}) {
   return {
+    period: windowSnapshot?.period || null,
+    resetPolicy: windowSnapshot?.resetPolicy || null,
+    rollover:
+      typeof windowSnapshot?.rollover === "boolean" ? windowSnapshot.rollover : null,
+    unusedUnitsExpireAt: windowSnapshot?.unusedUnitsExpireAt || null,
     windowHours: windowSnapshot?.windowHours,
     used: productWindow?.used ?? 0,
     receipts: productWindow?.receipts ?? 0,

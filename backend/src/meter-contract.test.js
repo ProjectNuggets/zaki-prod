@@ -143,6 +143,10 @@ describe("central meter contract", () => {
           resetAt: "2026-05-22T10:00:00.000Z",
         },
         weekly: {
+          period: "utc_week",
+          resetPolicy: "fixed_window_no_rollover",
+          rollover: false,
+          unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
           used: 40,
           receipts: 9,
           limit: 1000,
@@ -181,6 +185,10 @@ describe("central meter contract", () => {
 
     expect(payload.products.hire.weekly).toEqual(
       expect.objectContaining({
+        period: "utc_week",
+        resetPolicy: "fixed_window_no_rollover",
+        rollover: false,
+        unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
         used: 7,
         receipts: 3,
         limit: null,

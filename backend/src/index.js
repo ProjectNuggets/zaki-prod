@@ -6012,10 +6012,21 @@ app.get("/api/usage/summary", async (req, res) => {
       source: effective.source,
       premium: effective.premium,
     });
+    const meterSnapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      dbAll,
+      identity: {
+        type: "user",
+        tenantId: "default",
+        userId: zakiUser.id,
+      },
+      platform,
+    });
 
     const payload = await buildPlatformUsageSummary({
       zakiUser,
       platform,
+      meterSnapshot,
       resolveQuotaForSurface: (surface) =>
         buildUsageQuotaResponse({
           zakiUser,
