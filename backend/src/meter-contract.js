@@ -45,7 +45,7 @@ function normalizeKey(value) {
     .replace(/^_+|_+$/g, "");
 }
 
-function normalizeAction(value) {
+export function normalizeMeterAction(value) {
   return normalizeKey(value).slice(0, 120) || "request";
 }
 
@@ -81,7 +81,7 @@ export function getProductGrantPolicy(productState, action = "") {
     return { allowed: true, reason: null, status: 200 };
   }
   if (state === PRODUCT_OPERATIONAL_STATES.READ_ONLY) {
-    const normalizedAction = normalizeAction(action);
+    const normalizedAction = normalizeMeterAction(action);
     const readOnlyAllowed =
       normalizedAction === "status" ||
       normalizedAction === "health" ||
@@ -102,7 +102,7 @@ export function getProductGrantPolicy(productState, action = "") {
 }
 
 export function resolveMeterCapabilityForAction(action = "") {
-  const normalized = normalizeAction(action);
+  const normalized = normalizeMeterAction(action);
   if (normalized.includes("research") || normalized.includes("deep")) {
     return PLATFORM_METER_CAPABILITIES.DEEP_RESEARCH;
   }
@@ -271,7 +271,7 @@ export function buildMeterGrantDecision({
 } = {}) {
   const resolvedProduct = resolveMeterProduct(product);
   if (!resolvedProduct) return { allowed: false, status: 400, reason: "invalid_product" };
-  const normalizedAction = normalizeAction(action);
+  const normalizedAction = normalizeMeterAction(action);
   const grantPolicy = getProductGrantPolicy(productState, normalizedAction);
   if (!grantPolicy.allowed) {
     return {
@@ -364,7 +364,7 @@ export function buildMeterReceiptDebit({
 } = {}) {
   const resolvedProduct = resolveMeterProduct(product);
   if (!resolvedProduct) return { valid: false, reason: "invalid_product" };
-  const normalizedAction = normalizeAction(action);
+  const normalizedAction = normalizeMeterAction(action);
   const normalizedStatus = normalizeKey(status) || "success";
   if (!["success", "failed", "cancelled"].includes(normalizedStatus)) {
     return { valid: false, reason: "invalid_status" };

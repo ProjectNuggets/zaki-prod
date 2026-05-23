@@ -207,6 +207,7 @@ import {
   buildMeterGrantDecision,
   buildMeterReceiptDebit,
   buildMeterStatusPayload,
+  normalizeMeterAction,
   resolveMeterProduct,
   verifyMeterGrantSignature,
 } from "./meter-contract.js";
@@ -6049,6 +6050,16 @@ async function resolveMeterIdentity(
   }
 
   const requestedUserId = body?.userId == null ? "" : String(body.userId).trim();
+  const providedAnonymousSessionId = String(body?.anonymousSessionId || "").trim();
+  if (!trustedServiceRequest && (requestedUserId || providedAnonymousSessionId)) {
+    res.status(401).json({
+      success: false,
+      error: "meter_service_token_required",
+      message: "Service identity fields require a valid meter service token.",
+    });
+    return null;
+  }
+
   if (trustedServiceRequest && requestedUserId) {
     const numericUserId = Number(requestedUserId);
     if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) {
@@ -6088,7 +6099,6 @@ async function resolveMeterIdentity(
     });
     return null;
   }
-  const providedAnonymousSessionId = String(body?.anonymousSessionId || "").trim();
   const anonymousSessionId =
     trustedServiceRequest && providedAnonymousSessionId
       ? providedAnonymousSessionId
@@ -6207,6 +6217,7 @@ async function insertMeterGrant({ identity, decision, tenantId }) {
       VALUES
         ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
          $13, $14, $15, $16::jsonb, $17::timestamptz, NOW())
+      ON CONFLICT DO NOTHING
       RETURNING *
     `,
     [
@@ -6387,7 +6398,34 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
       });
       return;
     }
-    const grant = await insertMeterGrant({ identity, decision, tenantId });
+    const insertedGrant = await insertMeterGrant({ identity, decision, tenantId });
+    const grant =
+      insertedGrant ||
+      (await findExistingMeterGrant({
+        identity,
+        tenantId,
+        productId: product.productId,
+        idempotencyKey,
+      }));
+    if (!grant) {
+      throw new Error("Meter grant insert did not return a grant.");
+    }
+    if (!insertedGrant) {
+      res.status(200).json({
+        success: true,
+        contractVersion: CENTRAL_METER_CONTRACT_VERSION,
+        idempotent: true,
+        grantId: grant.grantId,
+        signedGrant: grant.signedGrant,
+        expiresAt: grant.expiresAt,
+        maxUnits: grant.maxUnits,
+        planTier: grant.planTier,
+        productState: grant.productState,
+        product: grant.productId,
+        meter,
+      });
+      return;
+    }
     res.status(201).json({
       success: true,
       contractVersion: CENTRAL_METER_CONTRACT_VERSION,
@@ -6434,7 +6472,7 @@ app.post("/api/meter/receipts", express.json({ limit: "1mb" }), async (req, res)
       res.status(400).json({ success: false, error: "grant_product_mismatch" });
       return;
     }
-    if (grant.action !== data.action.trim().toLowerCase().replace(/[^a-z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "")) {
+    if (grant.action !== normalizeMeterAction(data.action)) {
       res.status(400).json({ success: false, error: "grant_action_mismatch" });
       return;
     }

@@ -19,7 +19,7 @@ describe("platform meter", () => {
 
     const snapshot = await readMeterSnapshotForIdentity({
       dbGet,
-      identity: { type: "user", userId: 42 },
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
       platform: {
         plan: { id: "pro", label: "Pro" },
         usage: {
@@ -52,5 +52,42 @@ describe("platform meter", () => {
       })
     );
     expect(dbGet).toHaveBeenCalledTimes(2);
+    expect(dbGet.mock.calls[0][0]).toMatch(/g\.tenant_id = \$1/);
+    expect(dbGet.mock.calls[0][1][0]).toBe("tenant-a");
+    expect(dbGet.mock.calls[0][1][1]).toBe(42);
+  });
+
+  it("keeps tenant usage windows isolated for anonymous sessions", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ weighted_units: 1, receipts: 1 })
+      .mockResolvedValueOnce({ weighted_units: 3, receipts: 2 });
+
+    await readMeterSnapshotForIdentity({
+      dbGet,
+      identity: {
+        type: "anonymous",
+        tenantId: "tenant-b",
+        anonymousKeyHash: "hash-1",
+      },
+      platform: {
+        plan: { id: "free", label: "Free" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 20,
+          weeklyAllowanceUnits: 100,
+        },
+      },
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    expect(dbGet.mock.calls[0][0]).toMatch(/g\.tenant_id = \$1/);
+    expect(dbGet.mock.calls[0][0]).toMatch(/g\.anonymous_key_hash = \$2/);
+    expect(dbGet.mock.calls[0][1]).toEqual([
+      "tenant-b",
+      "hash-1",
+      "2026-05-22T05:00:00.000Z",
+      "2026-05-22T10:00:00.000Z",
+    ]);
   });
 });

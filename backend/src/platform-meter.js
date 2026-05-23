@@ -53,10 +53,11 @@ async function readMeterWindow({
   endedAtIso,
 }) {
   if (typeof dbGet !== "function") return { weightedUnits: 0, receipts: 0 };
+  const tenantId = String(identity?.tenantId || "default").trim() || "default";
   const identityPredicate =
     identity.type === "user"
-      ? "g.user_id = $1"
-      : "g.anonymous_key_hash = $1";
+      ? "g.user_id = $2"
+      : "g.anonymous_key_hash = $2";
   const identityValue =
     identity.type === "user" ? identity.userId : identity.anonymousKeyHash;
   const row = await dbGet(
@@ -66,11 +67,12 @@ async function readMeterWindow({
         COUNT(r.id)::int AS receipts
       FROM zaki_meter_receipts r
       JOIN zaki_meter_grants g ON g.id = r.grant_id
-      WHERE ${identityPredicate}
-        AND r.created_at >= $2::timestamptz
-        AND r.created_at < $3::timestamptz
+      WHERE g.tenant_id = $1
+        AND ${identityPredicate}
+        AND r.created_at >= $3::timestamptz
+        AND r.created_at < $4::timestamptz
     `,
-    [identityValue, startedAtIso, endedAtIso]
+    [tenantId, identityValue, startedAtIso, endedAtIso]
   );
   return {
     weightedUnits: roundUnits(row?.weighted_units),

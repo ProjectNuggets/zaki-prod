@@ -3,6 +3,7 @@ import {
   buildMeterGrantDecision,
   buildMeterReceiptDebit,
   calculateRawUnitsFromUsageFacts,
+  normalizeMeterAction,
   resolveMeterCapabilityForAction,
   signMeterGrant,
   verifyMeterGrantSignature,
@@ -162,5 +163,33 @@ describe("central meter contract", () => {
     expect(resolveMeterCapabilityForAction("spaces.chat.query")).toBe(
       PLATFORM_METER_CAPABILITIES.TOOL_CALL
     );
+  });
+
+  it("normalizes grant and receipt actions through one contract path", () => {
+    expect(normalizeMeterAction("hire:candidate-screen")).toBe("hire_candidate_screen");
+
+    const decision = buildMeterGrantDecision({
+      identity: { type: "user", userId: 42 },
+      product: "hire",
+      productState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+      action: "hire:candidate-screen",
+      platform: platformFor("pro"),
+      meterSnapshot: meterSnapshotFor(),
+      policy: buildPlatformMeterPolicy({ env: {} }),
+      signingSecret: SECRET,
+      grantId: "00000000-0000-4000-8000-000000000002",
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+    const debit = buildMeterReceiptDebit({
+      product: "hire",
+      action: "hire:candidate-screen",
+      status: "success",
+      usageFacts: { inputTokens: 10, outputTokens: 5 },
+      maxUnits: decision.maxUnits,
+      policy: buildPlatformMeterPolicy({ env: {} }),
+    });
+
+    expect(decision.action).toBe("hire_candidate_screen");
+    expect(debit.action).toBe(decision.action);
   });
 });
