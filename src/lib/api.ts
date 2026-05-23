@@ -1341,6 +1341,52 @@ export type ProductRegistryResponse = {
   error?: string | null;
 };
 
+export type MeterWindowSnapshot = {
+  windowHours?: number;
+  used?: number | null;
+  receipts?: number;
+  limit?: number | null;
+  remaining?: number | null;
+  startedAt?: string | null;
+  resetAt?: string | null;
+};
+
+export type MeterStatusProduct = {
+  id?: ProductRegistryProductId;
+  state?: ProductOperationalState;
+  lifecycle?: "current" | "future" | string;
+  route?: string | null;
+  quotaPolicyId?: string | null;
+  grantPolicy?: {
+    allowed?: boolean;
+    reason?: string | null;
+    status?: number;
+  };
+};
+
+export type MeterStatusResponse = {
+  success?: boolean;
+  contractVersion?: string;
+  productRegistryVersion?: string;
+  platformPolicyVersion?: string;
+  generatedAt?: string;
+  identity?: {
+    type?: "user" | "anonymous" | string;
+    tenantId?: string;
+    userId?: string | number | null;
+    anonymousSessionId?: string | null;
+  };
+  plan?: {
+    tier?: PlatformPlanId | string;
+    label?: string;
+    source?: string;
+  };
+  rolling?: MeterWindowSnapshot | null;
+  weekly?: MeterWindowSnapshot | null;
+  products?: Partial<Record<ProductRegistryProductId, MeterStatusProduct>>;
+  error?: string | null;
+};
+
 export type UsageQuotaSnapshot = {
   success?: boolean;
   unavailable?: boolean;
@@ -1584,6 +1630,14 @@ export async function fetchProductRegistry() {
     skipAuth: true,
   });
   const data = await parseApiJson<ProductRegistryResponse>(response);
+  return { response, data };
+}
+
+export async function fetchMeterStatus() {
+  const response = await backendAuthRequest("/api/meter/status", {
+    method: "GET",
+  });
+  const data = await parseApiJson<MeterStatusResponse>(response);
   return { response, data };
 }
 

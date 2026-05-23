@@ -76,6 +76,7 @@
       "burstWindow": "نافذة الاندفاع",
       "burstWindowValue": "{{hours}} ساعات",
       "burstWindowPending": "السياسة قيد التحديد",
+      "remainingOfLimit": "{{remaining}} / {{limit}} متبقية",
       "loading": "جارٍ تحميل الاستخدام...",
       "pending": "قيد الانتظار",
       "unavailable": "غير متاح",

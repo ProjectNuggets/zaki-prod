@@ -120,7 +120,7 @@ The slices below are ordered by dependency and risk. Each slice must end with a 
 - [ ] **S06: Dashboard command center v1** `risk:high` `depends:[S02,S05]`
   > After this: authenticated dashboard shows plan, weekly allowance, burst window, product launchers, product usage, and memory health from platform contracts.
 
-- [ ] **S07: Central usage ledger schema and repository** `risk:high` `depends:[S02]`
+- [x] **S07: Central usage ledger schema and repository** `risk:high` `depends:[S02]`
   > After this: usage events can be written/read from a canonical ledger without changing enforcement.
 
 - [ ] **S08: Weekly allowance aggregation** `risk:high` `depends:[S07]`
@@ -202,10 +202,17 @@ Completed:
 - S02 platform usage summary endpoint.
 - S03 Settings usage surface.
 - S04 authenticated UX baseline audit. Evidence and blockers are captured in `docs/audits/zaki-prod-s04-authenticated-ux-baseline.md`.
+- S07 central meter ledger foundation through `zaki_meter_grants` and `zaki_meter_receipts`, plus grant/receipt repository helpers.
+- Central meter bridge for current product ingress:
+  - Hire downstream contract through `/api/meter/grants` and `/api/meter/receipts`.
+  - Learning HTTP and websocket ingress.
+  - Spaces/Chat authenticated and anonymous chat.
+  - Agent direct stream and Bot BFF stream.
+- Frontend `useMeterStatus()` and Settings usage cards now read `/api/meter/status` for plan, weekly allowance, and five-hour window state.
 
 Next:
 
-1. Fix S04 P0 blockers: server-backed logout, entitlement/usage consistency, and Learn production mode.
+1. Move per-product weighted usage rows from compatibility counters into meter-ledger aggregation.
 2. S05 MECE Settings IA cleanup.
-3. S06 Dashboard command center v1.
-4. S07 usage ledger schema and repository.
+3. S06 Dashboard command center v1 against `/api/meter/status` and `/api/products/registry`.
+4. Memory Control Plane governance slices S12-S15.

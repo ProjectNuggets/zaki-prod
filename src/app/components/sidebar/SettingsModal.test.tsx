@@ -51,6 +51,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.usage.weeklyAllowancePending": "Policy pending",
     "settingsModal.usage.burstWindow": "Burst window",
     "settingsModal.usage.burstWindowValue": "{{hours}} hours",
+    "settingsModal.usage.remainingOfLimit": "{{remaining}} / {{limit}} left",
     "settingsModal.usage.loading": "Loading usage...",
     "settingsModal.usage.pending": "Pending",
     "settingsModal.usage.unavailable": "Unavailable",
@@ -114,6 +115,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   const value = dictionary[key] || key;
   return value
     .replace("{{limit}}", String(options?.limit ?? ""))
+    .replace("{{remaining}}", String(options?.remaining ?? ""))
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
     .replace("{{reset}}", String(options?.reset ?? ""));
@@ -257,6 +259,33 @@ jest.mock("@/queries", () => ({
     },
     isLoading: false,
   }),
+  useMeterStatus: () => ({
+    data: {
+      data: {
+        success: true,
+        plan: { tier: "pro", label: "Pro", source: "subscription" },
+        rolling: {
+          windowHours: 5,
+          limit: 100,
+          used: 20,
+          remaining: 80,
+          resetAt: "2026-05-20T12:00:00.000Z",
+        },
+        weekly: {
+          limit: 1500,
+          used: 80,
+          remaining: 1420,
+          resetAt: "2026-05-25T00:00:00.000Z",
+        },
+        products: {
+          spaces: { id: "spaces", state: "enabled" },
+          agent: { id: "agent", state: "enabled" },
+          learning: { id: "learning", state: "enabled" },
+        },
+      },
+    },
+    isLoading: false,
+  }),
   useProductRegistry: () => ({
     data: {
       data: {
@@ -377,8 +406,8 @@ describe("SettingsModal", () => {
     expect(usage).toBeInTheDocument();
     expect(screen.getByText("Usage")).toBeInTheDocument();
     expect(within(usage).getByText("Pro")).toBeInTheDocument();
-    expect(within(usage).getByText("1,500 units")).toBeInTheDocument();
-    expect(within(usage).getByText("5 hours")).toBeInTheDocument();
+    expect(within(usage).getByText("1,420 / 1,500 left")).toBeInTheDocument();
+    expect(within(usage).getByText("80 / 100 left")).toBeInTheDocument();
     expect(within(usage).getByText("ZAKI Spaces")).toBeInTheDocument();
     expect(within(usage).getByText("2 / 10")).toBeInTheDocument();
     expect(within(usage).getByText("ZAKI Agent")).toBeInTheDocument();

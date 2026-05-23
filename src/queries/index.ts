@@ -6,6 +6,7 @@ export {
   useEntitlements,
   useBillingConfig,
   usePlatformUsageSummary,
+  useMeterStatus,
   useCheckout,
   useBillingPortal,
   useCancelSubscription,

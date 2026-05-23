@@ -3,10 +3,12 @@ import {
   useCancelSubscription,
   useDeleteAccount,
   useEntitlements,
+  useMeterStatus,
   usePlatformUsageSummary,
   useProductRegistry,
 } from "@/queries";
 import type {
+  MeterWindowSnapshot,
   PlatformUsageProductId,
   ProductOperationalState,
   ProductRegistryItem,
@@ -62,6 +64,13 @@ function formatUsageCount(value?: number | null) {
   return Intl.NumberFormat().format(Math.max(0, Math.round(value)));
 }
 
+function formatUsageUnits(value?: number | null) {
+  if (value == null || Number.isNaN(value)) return "—";
+  return Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 1,
+  }).format(Math.max(0, Number(value)));
+}
+
 function formatUsageReset(value?: string | null) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -100,6 +109,26 @@ function getQuotaSummaryLabel(
     });
   }
   return t("settingsModal.usage.pending");
+}
+
+function getMeterWindowLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  snapshot?: MeterWindowSnapshot | null
+) {
+  if (!snapshot) return null;
+  if (typeof snapshot.limit === "number" && typeof snapshot.remaining === "number") {
+    return t("settingsModal.usage.remainingOfLimit", {
+      remaining: formatUsageUnits(snapshot.remaining),
+      limit: formatUsageUnits(snapshot.limit),
+    });
+  }
+  if (typeof snapshot.limit === "number" && typeof snapshot.used === "number") {
+    return t("settingsModal.usage.usedOfLimit", {
+      used: formatUsageUnits(snapshot.used),
+      limit: formatUsageUnits(snapshot.limit),
+    });
+  }
+  return null;
 }
 
 function getProductStateLabel(
@@ -159,6 +188,7 @@ export function SettingsModal({
   const navigate = useNavigate();
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
+  const { data: meterStatusResult, isLoading: meterStatusLoading } = useMeterStatus();
   const { data: platformUsageResult, isLoading: platformUsageLoading } = usePlatformUsageSummary();
   const { data: productRegistryResult, isLoading: productRegistryLoading } = useProductRegistry();
   const cancelSubscription = useCancelSubscription();
@@ -205,20 +235,23 @@ export function SettingsModal({
   const currentPlanLabel = activeViaAccessCode
     ? t("sidebar.profile.planBadge.codeActive")
     : t(`sidebar.profile.planBadge.${planTier}`, { defaultValue: planTier });
-  const platformPlanLabel = platformUsage?.plan?.label || currentPlanLabel;
+  const meterStatus = meterStatusResult?.data ?? null;
+  const platformPlanLabel = meterStatus?.plan?.label || platformUsage?.plan?.label || currentPlanLabel;
   const allowance = platformUsage?.allowance;
   const weeklyAllowanceLabel =
-    allowance?.weekly?.configured && typeof allowance.weekly.limit === "number"
+    getMeterWindowLabel(t, meterStatus?.weekly) ||
+    (allowance?.weekly?.configured && typeof allowance.weekly.limit === "number"
       ? t("settingsModal.usage.weeklyAllowanceValue", {
           limit: formatUsageCount(allowance.weekly.limit),
         })
-      : t("settingsModal.usage.weeklyAllowancePending");
+      : t("settingsModal.usage.weeklyAllowancePending"));
   const burstWindowLabel =
-    typeof allowance?.burst?.windowHours === "number"
+    getMeterWindowLabel(t, meterStatus?.rolling) ||
+    (typeof allowance?.burst?.windowHours === "number"
       ? t("settingsModal.usage.burstWindowValue", {
           hours: allowance.burst.windowHours,
         })
-      : t("settingsModal.usage.burstWindowPending");
+      : t("settingsModal.usage.burstWindowPending"));
   const usageProducts = PLATFORM_USAGE_PRODUCTS.map((productId) => {
     const product = platformUsage?.products?.[productId];
     if (!product) return null;
@@ -556,7 +589,7 @@ export function SettingsModal({
                 </div>
               </div>
 
-              {platformUsageLoading && !platformUsage ? (
+              {(platformUsageLoading || meterStatusLoading) && !platformUsage && !meterStatus ? (
                 <p className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted">
                   {t("settingsModal.usage.loading")}
                 </p>

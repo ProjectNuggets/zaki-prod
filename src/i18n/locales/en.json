@@ -76,6 +76,7 @@
       "burstWindow": "Burst window",
       "burstWindowValue": "{{hours}} hours",
       "burstWindowPending": "Policy pending",
+      "remainingOfLimit": "{{remaining}} / {{limit}} left",
       "loading": "Loading usage...",
       "pending": "Pending",
       "unavailable": "Unavailable",

@@ -7,6 +7,7 @@ import {
   deleteAccount,
   fetchBillingConfig,
   fetchEntitlements,
+  fetchMeterStatus,
   fetchPlatformUsageSummary,
   redeemAccessCode,
   resendPurchasedAccessCodeEmail,
@@ -19,6 +20,7 @@ export const billingKeys = {
   entitlements: ["billing", "entitlements"] as const,
   config: ["billing", "config"] as const,
   platformUsageSummary: ["billing", "platformUsageSummary"] as const,
+  meterStatus: ["billing", "meterStatus"] as const,
 };
 
 export function useEntitlements() {
@@ -56,6 +58,23 @@ export function usePlatformUsageSummary() {
   });
 }
 
+export function useMeterStatus() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: billingKeys.meterStatus,
+    queryFn: fetchMeterStatus,
+    enabled: Boolean(token),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+function invalidateCommercialState(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+  queryClient.invalidateQueries({ queryKey: billingKeys.platformUsageSummary });
+  queryClient.invalidateQueries({ queryKey: billingKeys.meterStatus });
+}
+
 export function useCheckout() {
   const queryClient = useQueryClient();
   type CheckoutPlan = "student" | "personal" | "agent" | "learn" | "complete";
@@ -83,7 +102,7 @@ export function useCheckout() {
       return data.url;
     },
     onSuccess: (url) => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+      invalidateCommercialState(queryClient);
       if (typeof window !== "undefined") {
         window.location.href = url;
       }
@@ -102,7 +121,7 @@ export function useBillingPortal() {
       return data.url;
     },
     onSuccess: (url) => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+      invalidateCommercialState(queryClient);
       if (typeof window !== "undefined") {
         window.location.href = url;
       }
@@ -121,7 +140,7 @@ export function useCancelSubscription() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+      invalidateCommercialState(queryClient);
     },
   });
 }
@@ -137,7 +156,7 @@ export function useSyncBilling() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+      invalidateCommercialState(queryClient);
     },
   });
 }
@@ -165,7 +184,7 @@ export function useRedeemAccessCode() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.entitlements });
+      invalidateCommercialState(queryClient);
     },
   });
 }
