@@ -8,12 +8,13 @@
 // Stages currently surfaced from this component:
 //   - plus_menu: anchor on the composer plus button.
 //   - compaction: anchor on the context meter when armed.
-//   - brain_panel: anchor on the brain entry in the dashboard or
+//   - brain_panel: anchor on the memory control in the dashboard or
 //     sidebar (whichever is visible).
 //
-// The welcome stage (hero card) renders inline in ZakiDashboard, not
-// from here, because it lives inside the dashboard layout. The
-// first_message celebration is similarly inline in the chat thread.
+// The old welcome hero no longer renders because the signed-in root is
+// now the commercial command center. ChatArea auto-completes that
+// legacy stage so the remaining tour can still run.
+// The first_message celebration is similarly inline in the chat thread.
 // channels stage is wired when the BE lands.
 
 import { useEffect, useMemo, useState } from "react";
@@ -93,12 +94,9 @@ export function OnboardingTour({
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
 
-  // Welcome is the entry stage (rendered as an inline hero by
-  // ZakiDashboard, not by this orchestrator). Until welcome is "done",
-  // the orchestrator stays silent so the hero card and a spotlight
-  // tooltip never overlap. If welcome is "skipped" the user has opted
-  // out of onboarding entirely until they re-enter via "Show me around"
-  // (which resets all stages back to pending).
+  // Welcome is a legacy entry stage. ChatArea marks it done because the
+  // dashboard no longer renders a welcome hero; keeping this guard avoids
+  // surprising older localStorage states.
   const welcomeStatus = progress.welcome;
 
   // Pick the highest-priority pending + eligible stage.

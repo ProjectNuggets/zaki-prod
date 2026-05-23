@@ -1066,14 +1066,6 @@
     "next": "Got it",
     "skipTour": "Skip tour",
     "dismissAria": "Dismiss this step",
-    "hero": {
-      "eyebrow": "Welcome to ZAKI",
-      "title": "Hi {{name}}. Let's get ZAKI to know you.",
-      "body": "Tell ZAKI who you are and what you're working on, in your own words. The more context you share, the more useful ZAKI becomes.",
-      "typeIntro": "Type your intro",
-      "importMemory": "Bring memory from ChatGPT or Claude",
-      "dismissAria": "Dismiss welcome card"
-    },
     "tour": {
       "plusMenu": {
         "title": "More than just typing",
@@ -1761,74 +1753,63 @@
     "messageCount_other": "{{count}} messages in session"
   },
   "zakiDashboard": {
-    "greeting": {
-      "nightEarly": "Still up, night owl",
-      "morning": "Good morning",
-      "afternoon": "Good afternoon",
-      "evening": "Good evening",
-      "nightLate": "Hello, night owl"
+    "eyebrow": "Command center",
+    "title": "ZAKI, {{name}}",
+    "subtitle": "Launch products, inspect plan usage, and see which memory scope each surface owns. Billing, usage, routing, and memory stay centralized here.",
+    "agentPrompt": "Look at my ZAKI products and help me choose the best next step.",
+    "identity": {
+      "signedIn": "Signed-in account",
+      "anonymous": "Anonymous free session"
     },
-    "categories": {
-      "write": {
-        "label": "Write",
-        "suggestions": [
-          "Create blog article series",
-          "Research topics for my writing",
-          "Create interview questions",
-          "Write video scripts",
-          "Improve my writing style"
-        ]
-      },
-      "learn": {
-        "label": "Learn",
-        "suggestions": [
-          "Explain a complex topic simply",
-          "Create a study plan for a new skill",
-          "Quiz me on what I am learning",
-          "Summarize a research paper",
-          "Break down a difficult concept"
-        ]
-      },
-      "code": {
-        "label": "Code",
-        "suggestions": [
-          "Debug my code and explain the fix",
-          "Review my code for best practices",
-          "Help me design a system architecture",
-          "Write unit tests for my function",
-          "Optimize my database queries"
-        ]
-      },
-      "life": {
-        "label": "Life stuff",
-        "suggestions": [
-          "Plan my week for balance and focus",
-          "Help me make a decision with pros and cons",
-          "Draft a message I have been putting off",
-          "Create a meal plan for the week",
-          "Help me organize my thoughts on something"
-        ]
-      },
-      "zaki": {
-        "label": "ZAKI picks",
-        "suggestions": [
-          "Plan my day for focus, energy, and calm",
-          "Teach me something useful in 5 minutes",
-          "Give me three smart ideas I can use today",
-          "Help me think through a problem step by step",
-          "Summarize what we have been working on"
-        ]
+    "actions": {
+      "askAgent": "Ask Agent",
+      "openChat": "Open Chat"
+    },
+    "meter": {
+      "label": "Platform meter",
+      "plan": "Plan",
+      "weekly": "Weekly allowance",
+      "rolling": "{{hours}}h window",
+      "loading": "Loading",
+      "pending": "Pending",
+      "remainingOfLimit": "{{remaining}} / {{limit}} left",
+      "usedOfLimit": "{{used}} / {{limit}} used",
+      "usedUnits": "{{used}} used",
+      "resets": "Resets {{reset}}",
+      "resetPending": "Reset pending"
+    },
+    "products": {
+      "title": "Products",
+      "subtitle": "Product state controls launch and routing. The central meter owns allowance and debits.",
+      "loading": "Loading products...",
+      "empty": "No products published yet.",
+      "memory": "Memory",
+      "usage": "Weekly usage",
+      "open": "Open",
+      "notAvailable": "Not available",
+      "descriptions": {
+        "agent": "Personal agent for planning, follow-through, tools, channels, and durable brain memory.",
+        "spaces": "Workspace chat for threads, files, and focused shared context.",
+        "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
+        "hire": "Hiring workflow surface for candidates, jobs, evaluations, and hire memory.",
+        "design": "Future design surface for briefs, assets, iterations, and design memory."
       }
     },
-    "import": {
-      "trigger": "Bring your memory from ChatGPT, Claude, or Gemini",
-      "title": "Memory import",
-      "showFull": "Show full prompt",
-      "showLess": "Show less",
-      "copy": "Copy prompt",
-      "copied": "Copied",
-      "instructions": "Paste it into ChatGPT, Claude, or Gemini. Then paste the answer into ZAKI's chat box below and send. ZAKI will save the facts into memory and confirm.",
-      "copyError": "Could not copy. Select the text manually."
+    "memory": {
+      "title": "Memory scopes",
+      "subtitle": "Every product writes to a known memory owner.",
+      "pending": "Pending",
+      "loading": "Memory scopes are loading.",
+      "open": "Open memory controls",
+      "import": "Import memory"
+    },
+    "readiness": {
+      "title": "Commercial plumbing",
+      "subtitle": "These contracts are the V2 app and website foundation.",
+      "registry": "Product registry drives launch cards",
+      "meter": "Central meter drives plan usage",
+      "routing": "Routes honor product state",
+      "memory": "Memory is scoped by product"
     }
   },
   "task": {

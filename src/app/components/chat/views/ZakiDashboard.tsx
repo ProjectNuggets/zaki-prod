@@ -1,416 +1,573 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 import {
+  ArrowRight,
   Brain,
-  Check,
-  Pencil,
-  Compass,
-  Code2,
-  Copy,
-  Heart,
+  BriefcaseBusiness,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Gauge,
+  GraduationCap,
+  MessageSquareText,
+  PenTool,
   Sparkles,
   Upload,
-  X,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
+  Wrench,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import { CenterLogo } from "../../icons";
+import {
+  useAnonymousMeterStatus,
+  useMeterStatus,
+  useProductRegistry,
+} from "@/queries";
+import type {
+  MeterStatusProduct,
+  MeterWindowSnapshot,
+  ProductOperationalState,
+  ProductRegistryItem,
+  ProductRegistryProductId,
+} from "@/lib/api";
+import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 import { useAuthStore } from "@/stores";
-import { useBrainGraph } from "@/queries";
 import { cn } from "@/lib/utils";
-import { MetaLabel } from "@/app/components/ui/zaki";
-import { OnboardingHeroCard } from "@/app/components/onboarding/OnboardingHeroCard";
+import { CenterLogo } from "../../icons";
 
 interface ZakiDashboardProps {
   onSendExample: (example: string) => void;
-  /** When true, the first-run onboarding hero renders above the
-   *  greeting. Stage 1 of the onboarding tour. */
-  heroActive?: boolean;
-  onHeroTypeIntro?: () => void;
-  onHeroOpenImport?: () => void;
-  onHeroDismiss?: () => void;
+  onOpenMemoryImport?: () => void;
 }
 
-type Category = {
-  id: string;
-  label: string;
-  icon: typeof Pencil;
-  suggestions: string[];
+type DashboardProduct = {
+  product: ProductRegistryItem;
+  meterProduct: MeterStatusProduct | null;
 };
 
-const CATEGORY_DEFS: Array<{ id: string; icon: typeof Pencil }> = [
-  { id: "write", icon: Pencil },
-  { id: "learn", icon: Compass },
-  { id: "code", icon: Code2 },
-  { id: "life", icon: Heart },
-  { id: "zaki", icon: Sparkles },
+const PRODUCT_ORDER: ProductRegistryProductId[] = [
+  "agent",
+  "spaces",
+  "learning",
+  "hire",
+  "design",
 ];
 
-// Greeting buckets, tuned to the user's local wall-clock hour.
-// getHours() returns the browser's local timezone, so users in any tz get
-// a greeting that matches their actual time of day.
-function getGreetingKey(date: Date = new Date()): string {
-  const hour = date.getHours();
-  if (hour < 5) return "nightEarly";
-  if (hour < 12) return "morning";
-  if (hour < 17) return "afternoon";
-  if (hour < 22) return "evening";
-  return "nightLate";
-}
+const MEMORY_SCOPE_ORDER = [
+  "personal_brain",
+  "workspace_memory",
+  "learner_memory",
+  "hire_memory",
+  "design_memory",
+  "session_memory",
+] as const;
 
-const MEMORY_IMPORT_PROMPT = `Export all of my stored memories and any context you have learned about me from past conversations. Preserve my words verbatim where possible, especially for instructions and preferences.
+const PRODUCT_ICONS: Partial<Record<ProductRegistryProductId, LucideIcon>> = {
+  agent: Sparkles,
+  spaces: MessageSquareText,
+  learning: GraduationCap,
+  hire: BriefcaseBusiness,
+  design: PenTool,
+  brain: Brain,
+};
 
-Categories (output in this order):
+const STATE_TONE: Record<ProductOperationalState, string> = {
+  enabled:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200",
+  degraded:
+    "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-200",
+  readOnly:
+    "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-200",
+  maintenance:
+    "border-zaki-brand/25 bg-zaki-brand/10 text-zaki-brand dark:border-[#ff9c86]/25 dark:bg-[#ff9c86]/10 dark:text-[#ffb39f]",
+  disabled:
+    "border-zaki-subtle bg-zaki-raised text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted",
+  hidden:
+    "border-zaki-subtle bg-zaki-raised text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted",
+};
 
-1. Instructions: Rules I have explicitly asked you to follow going forward — tone, format, style, "always do X", "never do Y", and corrections to your behavior. Only from stored memories, not from conversation transcripts.
-
-2. Identity: Name, age, location, time zone, languages, education, family, relationships, personal interests, and any accessibility or health context relevant to helping me.
-
-3. Career: Current and past roles, companies, industries, and general skill areas.
-
-4. Projects: Projects I meaningfully built or committed to. Ideally ONE entry per project. Include what it does, current status, and key decisions. Start each entry with the project name or a short descriptor.
-
-5. Preferences: Opinions, tastes, and working-style preferences that apply broadly — including tools, languages, frameworks I use, and how I prefer to communicate.
-
-Format:
-
-Use section headers for each category. Within each category, one entry per line, sorted oldest first:
-
-[YYYY-MM-DD] - Entry content here.
-
-Use [unknown] when no date is available. Skip anything that would leak private information about someone other than me.
-
-Output:
-
-Begin with exactly this line (include it inside the code block too):
-
-Zaki: here are my facts. Save and update your memory accordingly.
-
-Then wrap the entire export in a single code block. After the code block, state whether this is the complete set or if more entries remain.`;
-
-function BrainNodeCluster() {
-  return (
-    <div className="relative size-10 opacity-70 transition-opacity group-hover:opacity-100">
-      {[
-        { top: "10%", left: "20%", delay: "0s" },
-        { top: "55%", left: "10%", delay: "0.4s" },
-        { top: "30%", left: "60%", delay: "0.8s" },
-        { top: "70%", left: "65%", delay: "1.2s" },
-        { top: "20%", left: "80%", delay: "1.6s" },
-      ].map((s, i) => (
-        <span
-          key={i}
-          className="absolute size-1.5 rounded-full bg-[#f10202]"
-          style={{
-            top: s.top,
-            left: s.left,
-            animation: `brainPulse 2s ease-in-out ${s.delay} infinite`,
-          }}
-        />
-      ))}
-      <style>{`
-        @keyframes brainPulse {
-          0%, 100% { opacity: 0.35; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.3); }
-        }
-      `}</style>
-    </div>
+function formatNumber(value?: number | null) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
+    Math.max(0, Number(value))
   );
 }
 
-// Recompute the greeting each minute so a session that spans a boundary
-// (e.g. 04:59 → 05:01) updates without a page refresh.
-function useLiveGreetingKey(): string {
-  const [key, setKey] = useState(() => getGreetingKey());
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setKey(getGreetingKey());
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-  return key;
+function formatReset(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatWindowLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  window?: MeterWindowSnapshot | null
+) {
+  if (!window) return t("zakiDashboard.meter.pending");
+  if (typeof window.remaining === "number" && typeof window.limit === "number") {
+    return t("zakiDashboard.meter.remainingOfLimit", {
+      remaining: formatNumber(window.remaining),
+      limit: formatNumber(window.limit),
+    });
+  }
+  if (typeof window.used === "number" && typeof window.limit === "number") {
+    return t("zakiDashboard.meter.usedOfLimit", {
+      used: formatNumber(window.used),
+      limit: formatNumber(window.limit),
+    });
+  }
+  if (typeof window.used === "number") {
+    return t("zakiDashboard.meter.usedUnits", {
+      used: formatNumber(window.used),
+    });
+  }
+  return t("zakiDashboard.meter.pending");
+}
+
+function getProductStateLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  state?: ProductOperationalState
+) {
+  if (!state) return t("settingsModal.productsAccess.states.disabled");
+  return t(`settingsModal.productsAccess.states.${state}`, { defaultValue: state });
+}
+
+function getMemoryScopeLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  memoryScope?: string | null
+) {
+  if (!memoryScope) return t("zakiDashboard.memory.pending");
+  const keys: Record<string, string> = {
+    personal_brain: "settingsModal.productsAccess.memoryScopes.personalBrain",
+    workspace_memory: "settingsModal.productsAccess.memoryScopes.workspaceMemory",
+    learner_memory: "settingsModal.productsAccess.memoryScopes.learnerMemory",
+    hire_memory: "settingsModal.productsAccess.memoryScopes.hireMemory",
+    design_memory: "settingsModal.productsAccess.memoryScopes.designMemory",
+    session_memory: "settingsModal.productsAccess.memoryScopes.sessionMemory",
+  };
+  return keys[memoryScope] ? t(keys[memoryScope]) : memoryScope;
+}
+
+function getProductDescriptionKey(productId: ProductRegistryProductId) {
+  return `zakiDashboard.products.descriptions.${productId}`;
+}
+
+function getProductRoute(product: ProductRegistryItem) {
+  if (product.productId === "agent") {
+    return `/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`;
+  }
+  if (product.productId === "spaces") return "/spaces";
+  if (product.productId === "learning") return "/learn";
+  if (product.productId === "brain") return "/brain";
+  return product.route || null;
+}
+
+function canOpenProduct(product: ProductRegistryItem) {
+  return (
+    product.state === "enabled" ||
+    product.state === "degraded" ||
+    product.state === "readOnly"
+  );
+}
+
+function sortProducts(products: ProductRegistryItem[]) {
+  return [...products].sort((a, b) => {
+    const aIndex = PRODUCT_ORDER.indexOf(a.productId);
+    const bIndex = PRODUCT_ORDER.indexOf(b.productId);
+    if (aIndex !== -1 || bIndex !== -1) {
+      const normalizedAIndex = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+      const normalizedBIndex = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+      return normalizedAIndex - normalizedBIndex;
+    }
+    return a.label.localeCompare(b.label);
+  });
 }
 
 export function ZakiDashboard({
   onSendExample,
-  heroActive = false,
-  onHeroTypeIntro,
-  onHeroOpenImport,
-  onHeroDismiss,
+  onOpenMemoryImport,
 }: ZakiDashboardProps) {
   const { i18n, t } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const userName = user?.fullName?.split(" ")[0] || user?.username || "there";
-  const userId = String(user?.id ?? "");
-  const { data: brainGraph } = useBrainGraph(userId);
-  const memoryCount = brainGraph?.total_nodes_in_corpus ?? 0;
-  const greetingKey = useLiveGreetingKey();
+  const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
+  const { data: productRegistryResult, isLoading: productRegistryLoading } = useProductRegistry();
+  const { data: meterStatusResult, isLoading: meterStatusLoading } = useMeterStatus();
+  const { data: anonymousMeterStatusResult, isLoading: anonymousMeterStatusLoading } =
+    useAnonymousMeterStatus(!token);
 
-  const categories = useMemo<Category[]>(
-    () => CATEGORY_DEFS.map((def) => ({
-      ...def,
-      label: t(`zakiDashboard.categories.${def.id}.label`),
-      suggestions: t(`zakiDashboard.categories.${def.id}.suggestions`, { returnObjects: true }) as string[],
-    })),
-    [t],
-  );
+  const productRegistry = productRegistryResult?.data;
+  const meterStatus = token
+    ? meterStatusResult?.data
+    : anonymousMeterStatusResult?.data;
+  const meterLoading = token ? meterStatusLoading : anonymousMeterStatusLoading;
+  const displayName =
+    user?.fullName?.trim() || user?.username?.trim() || t("home.guestName");
+  const identityLabel =
+    meterStatus?.identity?.type === "anonymous"
+      ? t("zakiDashboard.identity.anonymous")
+      : t("zakiDashboard.identity.signedIn");
 
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importFullView, setImportFullView] = useState(false);
-  const [importCopied, setImportCopied] = useState(false);
+  const dashboardProducts = useMemo<DashboardProduct[]>(() => {
+    const products = productRegistry?.products ?? [];
+    return sortProducts(
+      products.filter(
+        (product) =>
+          product.productKind === "product" &&
+          product.visibleInSettings !== false &&
+          product.state !== "hidden"
+      )
+    ).map((product) => ({
+      product,
+      meterProduct: product.productId
+        ? meterStatus?.products?.[product.productId] ?? null
+        : null,
+    }));
+  }, [meterStatus?.products, productRegistry?.products]);
 
-  const activeCat = categories.find((c) => c.id === activeCategory);
-
-  const handleCopyImportPrompt = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(MEMORY_IMPORT_PROMPT);
-      setImportCopied(true);
-      window.setTimeout(() => setImportCopied(false), 2000);
-    } catch {
-      toast.error(t("zakiDashboard.import.copyError"));
+  const memoryScopes = useMemo(() => {
+    const rows = new Map<string, { scope: string; products: string[] }>();
+    for (const product of productRegistry?.products ?? []) {
+      if (product.productKind === "client") continue;
+      const scope = String(product.memoryScope || "").trim();
+      if (!scope) continue;
+      const row = rows.get(scope) || { scope, products: [] };
+      row.products.push(product.label);
+      rows.set(scope, row);
     }
-  }, [t]);
+    return [...rows.values()].sort((a, b) => {
+      const aIndex = MEMORY_SCOPE_ORDER.indexOf(a.scope as (typeof MEMORY_SCOPE_ORDER)[number]);
+      const bIndex = MEMORY_SCOPE_ORDER.indexOf(b.scope as (typeof MEMORY_SCOPE_ORDER)[number]);
+      if (aIndex !== -1 || bIndex !== -1) {
+        const normalizedAIndex = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+        const normalizedBIndex = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+        return normalizedAIndex - normalizedBIndex;
+      }
+      return a.scope.localeCompare(b.scope);
+    });
+  }, [productRegistry?.products]);
+
+  const weeklyReset = formatReset(meterStatus?.weekly?.resetAt);
+  const rollingReset = formatReset(meterStatus?.rolling?.resetAt);
 
   return (
-    <div
+    <section
       className={cn(
-        "flex flex-col items-center justify-center px-6 w-full h-full",
+        "h-full w-full overflow-y-auto px-4 pb-44 pt-5 sm:px-6 lg:px-8",
         isRtl && "rtl"
       )}
+      aria-labelledby="zaki-command-center-title"
+      data-testid="zaki-command-center"
     >
-      <div className="flex flex-col items-center w-full max-w-[680px]">
-        {heroActive && onHeroTypeIntro && onHeroOpenImport && onHeroDismiss ? (
-          <OnboardingHeroCard
-            userName={userName}
-            isRtl={isRtl}
-            onTypeIntro={onHeroTypeIntro}
-            onOpenImport={onHeroOpenImport}
-            onDismiss={onHeroDismiss}
-          />
-        ) : null}
-        {/* Greeting */}
-        <div className="flex items-center gap-2.5 mb-8">
-          <CenterLogo className="size-7 text-zaki-brand" />
-          <h1
-            className={cn(
-              "text-2xl md:text-3xl font-bold text-zaki-primary",
-              "tracking-tight leading-tight",
-              isRtl && "font-arabic"
-            )}
-          >
-            {t(`zakiDashboard.greeting.${greetingKey}`)}, {userName}
-          </h1>
-        </div>
-
-        {/* Suggestion pills */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
-          {categories.map((cat) => {
-            const Icon = cat.icon;
-            const isActive = activeCategory === cat.id;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() =>
-                  setActiveCategory(isActive ? null : cat.id)
-                }
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-200",
-                  "border",
-                  isActive
-                    ? "bg-zaki-selected border-zaki-brand/20 text-zaki-primary"
-                    : "bg-transparent border-zaki-strong text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary"
-                )}
-              >
-                <Icon className="size-3.5" />
-                {cat.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Brain entry card */}
-        {!activeCat && (
-          <button
-            type="button"
-            onClick={() => navigate("/brain")}
-            data-onboarding-id="zaki-dashboard-brain-entry"
-            className="group mt-3 flex w-full items-center justify-between gap-3 rounded-zaki-lg border border-zaki-border bg-zaki-raised px-4 py-3 text-left transition-colors hover:border-[#f10202]/40 hover:bg-zaki-raised/80"
-          >
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+        <header className="flex flex-col gap-4 border-b border-zaki-subtle pb-5 dark:border-zaki-dark-border lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <Brain className="size-5 text-[#f10202]" />
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-zaki-lg border border-zaki-subtle bg-white text-zaki-brand dark:border-zaki-dark-border dark:bg-zaki-dark-card">
+                <CenterLogo className="size-6" />
+              </span>
               <div>
-                <div className="text-sm font-semibold text-zaki-text">
-                  {t("brain.dashboard.title")}
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted">
+                  {t("zakiDashboard.eyebrow")}
                 </div>
-                <div className="text-xs text-zaki-muted">
-                  {memoryCount > 0
-                    ? t("brain.dashboard.memoryCount", { count: memoryCount })
-                    : t("brain.dashboard.memoryCountZero")}
-                </div>
+                <h1
+                  id="zaki-command-center-title"
+                  className="mt-1 text-2xl font-semibold tracking-normal text-zaki-primary dark:text-zaki-dark-primary md:text-3xl"
+                >
+                  {t("zakiDashboard.title", { name: displayName })}
+                </h1>
               </div>
             </div>
-            <BrainNodeCluster />
-          </button>
-        )}
-
-        {/* Memory import — bring your context from another AI */}
-        {!activeCat && (
-          <div className="w-full flex flex-col items-center">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+              {t("zakiDashboard.subtitle")}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setImportOpen((v) => !v);
-                setImportFullView(false);
-              }}
-              aria-expanded={importOpen}
-              className={cn(
-                "mt-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                "text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover",
-                isRtl && "flex-row-reverse"
-              )}
-              data-testid="zaki-memory-import-trigger"
+              className="zaki-btn zaki-btn-secondary"
+              onClick={() =>
+                onSendExample(
+                  t("zakiDashboard.agentPrompt", {
+                    defaultValue:
+                      "Look at my ZAKI products and help me choose the best next step.",
+                  })
+                )
+              }
             >
-              <Upload className="size-3.5" />
-              {t("zakiDashboard.import.trigger")}
-              {importOpen ? (
-                <ChevronUp className="size-3.5" />
-              ) : (
-                <ChevronDown className="size-3.5" />
-              )}
+              <Sparkles className="size-4" />
+              {t("zakiDashboard.actions.askAgent")}
             </button>
+            <button
+              type="button"
+              className="zaki-btn zaki-btn-primary"
+              onClick={() => navigate("/spaces")}
+            >
+              <MessageSquareText className="size-4" />
+              {t("zakiDashboard.actions.openChat")}
+            </button>
+          </div>
+        </header>
 
-            {importOpen && (
-              <div
-                className={cn(
-                  "w-full mt-3 rounded-zaki-xl border border-zaki bg-zaki-raised overflow-hidden",
-                  "dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
-                )}
-                data-testid="zaki-memory-import-panel"
-              >
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-zaki dark:border-[rgba(240,236,230,0.06)]">
-                  <MetaLabel icon={<Upload className="size-3.5" />}>
-                    {t("zakiDashboard.import.title")}
-                  </MetaLabel>
-                  <button
-                    type="button"
-                    onClick={() => setImportOpen(false)}
-                    className="size-6 rounded-md flex items-center justify-center text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover transition-colors"
-                    aria-label={t("common.dismiss")}
-                  >
-                    <X className="size-3.5" />
-                  </button>
+        <div
+          className="grid gap-3 md:grid-cols-3"
+          data-testid="zaki-dashboard-meter"
+          aria-label={t("zakiDashboard.meter.label")}
+        >
+          <div className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 dark:border-zaki-dark-border dark:bg-zaki-dark-card">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:text-zaki-dark-muted">
+              <Gauge className="size-4" />
+              {t("zakiDashboard.meter.plan")}
+            </div>
+            <div className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {meterLoading ? t("zakiDashboard.meter.loading") : meterStatus?.plan?.label || "Free"}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+              {identityLabel}
+            </div>
+          </div>
+
+          <div className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 dark:border-zaki-dark-border dark:bg-zaki-dark-card">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:text-zaki-dark-muted">
+              <Database className="size-4" />
+              {t("zakiDashboard.meter.weekly")}
+            </div>
+            <div className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {meterLoading
+                ? t("zakiDashboard.meter.loading")
+                : formatWindowLabel(t, meterStatus?.weekly)}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+              {weeklyReset
+                ? t("zakiDashboard.meter.resets", { reset: weeklyReset })
+                : t("zakiDashboard.meter.resetPending")}
+            </div>
+          </div>
+
+          <div className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 dark:border-zaki-dark-border dark:bg-zaki-dark-card">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:text-zaki-dark-muted">
+              <Clock3 className="size-4" />
+              {t("zakiDashboard.meter.rolling", {
+                hours: meterStatus?.rolling?.windowHours ?? 5,
+              })}
+            </div>
+            <div className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+              {meterLoading
+                ? t("zakiDashboard.meter.loading")
+                : formatWindowLabel(t, meterStatus?.rolling)}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+              {rollingReset
+                ? t("zakiDashboard.meter.resets", { reset: rollingReset })
+                : t("zakiDashboard.meter.resetPending")}
+            </div>
+          </div>
+        </div>
+
+        <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-3" data-testid="zaki-dashboard-products">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                  {t("zakiDashboard.products.title")}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                  {t("zakiDashboard.products.subtitle")}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {productRegistryLoading ? (
+                <div className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 text-sm text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-card dark:text-zaki-dark-muted md:col-span-2">
+                  {t("zakiDashboard.products.loading")}
                 </div>
-
-                <div className="px-4 py-3 flex flex-col gap-3">
-                  <div
-                    className={cn(
-                      "rounded-zaki-md border border-zaki bg-zaki-sunken p-3",
-                      "font-mono text-xs leading-relaxed text-zaki-secondary whitespace-pre-wrap",
-                      !importFullView && "max-h-[120px] overflow-hidden relative"
-                    )}
+              ) : null}
+              {!productRegistryLoading && dashboardProducts.length === 0 ? (
+                <div className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 text-sm text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-card dark:text-zaki-dark-muted md:col-span-2">
+                  {t("zakiDashboard.products.empty")}
+                </div>
+              ) : null}
+              {dashboardProducts.map(({ product, meterProduct }) => {
+                const Icon = PRODUCT_ICONS[product.productId] ?? Sparkles;
+                const route = getProductRoute(product);
+                const isOpenable = Boolean(route && canOpenProduct(product));
+                const productWeekly = formatWindowLabel(t, meterProduct?.weekly);
+                return (
+                  <article
+                    key={product.productId}
+                    className="flex min-h-[190px] flex-col justify-between rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 dark:border-zaki-dark-border dark:bg-zaki-dark-card"
+                    data-testid={`zaki-product-card-${product.productId}`}
                   >
-                    {importFullView
-                      ? MEMORY_IMPORT_PROMPT
-                      : MEMORY_IMPORT_PROMPT.slice(0, 260) + "..."}
-                    {!importFullView && (
-                      <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-zaki-sunken to-transparent pointer-events-none" />
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-zaki-md border border-zaki-subtle bg-zaki-raised text-zaki-primary dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-primary">
+                            <Icon className="size-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                              {product.label}
+                            </h3>
+                            <div className="mt-1 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                              {product.entryPoint || product.route || product.productId}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                            STATE_TONE[product.state]
+                          )}
+                        >
+                          {getProductStateLabel(t, product.state)}
+                        </span>
+                      </div>
+                      <p className="mt-4 min-h-[42px] text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle">
+                        {t(getProductDescriptionKey(product.productId), {
+                          defaultValue: product.entryPoint || product.label,
+                        })}
+                      </p>
+                      <div className="mt-3 grid gap-2 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{t("zakiDashboard.products.memory")}</span>
+                          <span className="text-right font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {getMemoryScopeLabel(t, product.memoryScope)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{t("zakiDashboard.products.usage")}</span>
+                          <span className="text-right font-medium text-zaki-secondary dark:text-zaki-dark-subtle">
+                            {productWeekly}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setImportFullView((v) => !v)}
-                      className="text-xs font-medium text-zaki-brand hover:underline"
-                    >
-                      {importFullView ? t("zakiDashboard.import.showLess") : t("zakiDashboard.import.showFull")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyImportPrompt}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                        "bg-zaki-brand text-white hover:bg-zaki-brand/90"
+                        "mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-zaki-md px-3 text-sm font-semibold transition-colors",
+                        isOpenable
+                          ? "bg-zaki-primary text-white hover:bg-zaki-brand-hover"
+                          : "cursor-not-allowed border border-zaki-subtle bg-zaki-raised text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted"
                       )}
-                      data-testid="zaki-memory-import-copy"
+                      disabled={!isOpenable}
+                      onClick={() => {
+                        if (route && isOpenable) navigate(route);
+                      }}
                     >
-                      {importCopied ? (
-                        <>
-                          <Check className="size-3.5" /> {t("zakiDashboard.import.copied")}
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="size-3.5" /> {t("zakiDashboard.import.copy")}
-                        </>
-                      )}
+                      {isOpenable
+                        ? t("zakiDashboard.products.open")
+                        : t("zakiDashboard.products.notAvailable")}
+                      {isOpenable ? <ArrowRight className="size-4" /> : null}
                     </button>
-                  </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
 
-                  <p className="text-xs text-zaki-muted leading-relaxed">
-                    {t("zakiDashboard.import.instructions")}
+          <aside className="space-y-3">
+            <section
+              className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 dark:border-zaki-dark-border dark:bg-zaki-dark-card"
+              data-testid="zaki-dashboard-memory"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                    {t("zakiDashboard.memory.title")}
+                  </h2>
+                  <p className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                    {t("zakiDashboard.memory.subtitle")}
                   </p>
                 </div>
+                <Brain className="size-5 text-zaki-brand" />
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Expanded sub-suggestions */}
-        {activeCat && (
-          <div className="w-full mt-4 rounded-zaki-xl border border-zaki bg-zaki-raised dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-zaki dark:border-[rgba(240,236,230,0.06)]">
-              <MetaLabel
-                icon={(() => {
-                  const Icon = activeCat.icon;
-                  return <Icon className="size-3.5" />;
-                })()}
-              >
-                {activeCat.label}
-              </MetaLabel>
+              <div className="mt-4 grid gap-2">
+                {memoryScopes.length > 0 ? (
+                  memoryScopes.map((row) => (
+                    <div
+                      key={row.scope}
+                      className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 dark:border-zaki-dark-border dark:bg-zaki-dark-panel"
+                    >
+                      <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                        {getMemoryScopeLabel(t, row.scope)}
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                        {row.products.join(" · ")}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-xs text-zaki-muted dark:border-zaki-dark-border dark:bg-zaki-dark-panel dark:text-zaki-dark-muted">
+                    {t("zakiDashboard.memory.loading")}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setActiveCategory(null)}
-                className="size-6 rounded-md flex items-center justify-center text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover transition-colors"
+                className="zaki-btn-sm zaki-btn-secondary mt-4 w-full justify-center"
+                data-onboarding-id="zaki-dashboard-brain-entry"
+                onClick={() => navigate("/brain")}
               >
-                <X className="size-3.5" />
+                <Brain className="size-4" />
+                {t("zakiDashboard.memory.open")}
               </button>
-            </div>
-            <div className="flex flex-col">
-              {activeCat.suggestions.map((suggestion, index) => (
+              {onOpenMemoryImport ? (
                 <button
-                  key={index}
                   type="button"
-                  className={cn(
-                    "w-full flex items-center justify-between px-4 py-3 text-sm text-zaki-secondary text-left transition-colors",
-                    "hover:bg-zaki-hover hover:text-zaki-primary",
-                    "dark:hover:bg-[#1a1714]",
-                    index < activeCat.suggestions.length - 1 &&
-                      "border-b border-zaki dark:border-[rgba(240,236,230,0.04)]",
-                    isRtl && "text-right flex-row-reverse"
-                  )}
-                  onClick={() => onSendExample(suggestion)}
+                  className="zaki-btn-sm zaki-btn-ghost mt-2 w-full justify-center"
+                  onClick={onOpenMemoryImport}
                 >
-                  <span>{suggestion}</span>
-                  <ChevronRight
-                    className={cn(
-                      "size-4 text-zaki-muted opacity-0 transition-opacity",
-                      "group-hover:opacity-100",
-                      isRtl && "rotate-180"
-                    )}
-                  />
+                  <Upload className="size-4" />
+                  {t("zakiDashboard.memory.import")}
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
+              ) : null}
+            </section>
+
+            <section className="rounded-zaki-lg border border-zaki-subtle bg-white px-4 py-4 dark:border-zaki-dark-border dark:bg-zaki-dark-card">
+              <h2 className="text-base font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                {t("zakiDashboard.readiness.title")}
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
+                {t("zakiDashboard.readiness.subtitle")}
+              </p>
+              <div className="mt-4 grid gap-2">
+                {[
+                  {
+                    icon: CheckCircle2,
+                    label: t("zakiDashboard.readiness.registry"),
+                  },
+                  {
+                    icon: Gauge,
+                    label: t("zakiDashboard.readiness.meter"),
+                  },
+                  {
+                    icon: Wrench,
+                    label: t("zakiDashboard.readiness.routing"),
+                  },
+                  {
+                    icon: Database,
+                    label: t("zakiDashboard.readiness.memory"),
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex items-center gap-2 text-xs font-medium text-zaki-secondary dark:text-zaki-dark-subtle"
+                    >
+                      <Icon className="size-4 text-zaki-brand" />
+                      <span>{item.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </aside>
+        </section>
       </div>
-    </div>
+    </section>
   );
 }

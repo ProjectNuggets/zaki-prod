@@ -117,7 +117,7 @@ The slices below are ordered by dependency and risk. Each slice must end with a 
 - [x] **S05: MECE Settings IA cleanup** `risk:high` `depends:[S04]`
   > After this: main Settings has clean sections for Account, OAuth, Billing, Usage, Memory/Data, Privacy, and future Developer Access; product settings only link back to global controls.
 
-- [ ] **S06: Dashboard command center v1** `risk:high` `depends:[S02,S05]`
+- [x] **S06: Dashboard command center v1** `risk:high` `depends:[S02,S05]`
   > After this: authenticated dashboard shows plan, weekly allowance, burst window, product launchers, product usage, and memory health from platform contracts.
 
 - [x] **S07: Central usage ledger schema and repository** `risk:high` `depends:[S02]`
@@ -216,10 +216,17 @@ Completed:
   - Developer Access lists future CLI/local app/extensions clients from the product registry without exposing them in product launch rows.
   - Privacy no longer owns export; export lives with Memory & Data.
   - Frontend anonymous meter status client/query exists for no-registration dashboard entry work.
+- S06 Dashboard command center v1:
+  - The signed-in root surface is now a platform command center instead of a product-local welcome card.
+  - Dashboard allowance cards read `/api/meter/status` for plan, weekly allowance, and five-hour window state.
+  - Anonymous/free dashboard data uses the anonymous meter status contract when no auth token exists.
+  - Product launch cards read `/api/products/registry`, respect operational state, and keep future products visible in architecture while disabled in UI.
+  - Memory scope rows are derived from product registry metadata so product surfaces remain downstream of the central memory model.
 
 Next:
 
-1. S06 Dashboard command center v1 against `/api/meter/status`, anonymous meter status, and `/api/products/registry`.
-2. Memory Control Plane governance slices S12-S15.
-3. Pricing/checkout migration to Free/Personal/Pro/Pro MAX.
-4. Product surface polish wave after Claude V2 design files land.
+1. S08-S10 central meter authority: weekly aggregation, five-hour persistence, product weights, and enforcement bridge.
+2. S11 pricing/checkout migration to Free, Personal, Pro, and Pro MAX.
+3. S12-S15 Memory Control Plane governance across personal Brain, workspace memory, learner memory, and future product memory.
+4. S16 product router policy metadata so every route declares auth, entitlement, meter, memory, and audit behavior.
+5. Product surface polish and Website V2 after Claude V2 design files land.

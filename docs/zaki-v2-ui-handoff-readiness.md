@@ -64,6 +64,22 @@ Central metering is wired as follows:
 Failed upstream calls write failed receipts with zero weighted debit.
 Settings now reads product usage rows from `/api/meter/status`; `GET /api/usage/summary` is fallback compatibility only.
 
+## Current Dashboard IA
+
+The signed-in root surface is now the global command center. V2 should preserve this responsibility and replace the visual system around it:
+
+- Plan card from `/api/meter/status`.
+- Weekly allowance card from `/api/meter/status`.
+- Five-hour rolling window card from `/api/meter/status`.
+- Product launch cards from `/api/products/registry`.
+- Product usage rows from the central meter product breakdown.
+- Product state badges from registry and meter status.
+- Memory scope rows from product registry metadata.
+- Agent launcher routes to the Agent product surface, not back to the command center.
+- Spaces/Chat and Learn launch directly to their product routes.
+- Hire and Design remain visible as product-family members but are gated by operational state until ready.
+- Anonymous/free dashboard data uses the anonymous meter status client when there is no auth token.
+
 ## Current Settings IA
 
 Settings V1 has been reorganized into the same MECE buckets V2 should target:
@@ -107,8 +123,8 @@ The design files should focus on:
 
 These are acceptable while receiving design files, but must be closed before final launch:
 
-- Dashboard V2 still needs implementation against the new contracts.
-- Anonymous/free dashboard usage needs to wire the existing anonymous meter client into the dashboard entry flow.
+- Dashboard V1 is contract-wired; visual V2 replacement and responsive polish are still pending.
+- Anonymous/free dashboard data is wired at component level; public entry routing beyond Spaces still needs final product decision.
 - Full Memory Control Plane governance is not complete.
 - Pricing/checkout still needs final Free/Personal/Pro/Pro MAX migration.
 - Auth future-surface foundation for CLI/local/extensions remains a later slice.

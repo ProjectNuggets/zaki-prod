@@ -2169,8 +2169,8 @@ export function ChatArea() {
   }, [authUser]);
   const isAuthReady = !authLoading && Boolean(authUserId);
   // Onboarding stage progress lives per-user in localStorage; the hook
-  // resolves the next pending stage for us. The hero card surfaces above
-  // the composer only while welcome is still pending.
+  // resolves the next pending stage for us. The old welcome hero has
+  // been retired so the dashboard can stay a commercial command center.
   const { progress: onboardingProgress, setStage: setOnboardingStage, reset: resetOnboarding } =
     useOnboardingProgress(authUserId);
   useEffect(() => {
@@ -2186,12 +2186,14 @@ export function ChatArea() {
   const onboardingBrainCount =
     onboardingBrainGraph.data?.total_nodes_in_corpus ?? 0;
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
-  const heroCardActive =
-    Boolean(authUserId) && onboardingProgress.welcome === "pending";
-  // Legacy holdover: ZakiExperimentalNotice still keys off this flag,
-  // and the new hero replaces the bootstrap card entirely so once the
-  // user dismisses the hero we treat the legacy flag as completed too.
+  // Legacy holdover: ZakiExperimentalNotice still keys off this flag.
+  // The welcome hero is retired, so it remains complete for the bot surface.
   const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(true);
+  useEffect(() => {
+    if (!authUserId || onboardingProgress.welcome !== "pending") return;
+    setOnboardingStage("welcome", "done");
+    setZakiBootstrapCompleted(true);
+  }, [authUserId, onboardingProgress.welcome, setOnboardingStage]);
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -2346,8 +2348,6 @@ export function ChatArea() {
   const primarySpace = spacesList[0] ?? null;
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
   const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
-  const isZakiHeroVisible =
-    isZakiBotActiveSpace && showZakiHome && sidebarMode === "zaki" && heroCardActive;
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
@@ -6227,19 +6227,7 @@ export function ChatArea() {
         return (
           <ZakiDashboard
             onSendExample={(example) => handleSend(example, [])}
-            heroActive={heroCardActive}
-            onHeroTypeIntro={() => {
-              setOnboardingStage("welcome", "done");
-              setZakiBootstrapCompleted(true);
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new Event("zaki:focus-composer"));
-              }
-            }}
-            onHeroOpenImport={() => setMemoryImportOpen(true)}
-            onHeroDismiss={() => {
-              setOnboardingStage("welcome", "skipped");
-              setZakiBootstrapCompleted(true);
-            }}
+            onOpenMemoryImport={() => setMemoryImportOpen(true)}
           />
         );
       }
@@ -6568,7 +6556,7 @@ export function ChatArea() {
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
               <ZakiExperimentalNotice
-                active={isZakiBotActiveSpace && (zakiBootstrapCompleted || !isZakiHeroVisible)}
+                active={isZakiBotActiveSpace && zakiBootstrapCompleted}
               />
               {/* Single source of truth for ApprovalRequiredCard. The
                   timeline copy was dropped in 18328cd so the decided

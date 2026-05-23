@@ -6,8 +6,8 @@
 // so this is just a structured first-message shortcut.
 //
 // Surfaces:
-//   - First-run hero (Stage 1 of the onboarding tour)
-//   - Dashboard "Bring your memory from ChatGPT, Claude, or Gemini"
+//   - Dashboard memory-scope panel
+//   - Future Memory Control Plane import action
 //
 // The canonical prompt was previously inlined in ZakiDashboard;
 // hoisting it here lets the dashboard simply open this sheet.
