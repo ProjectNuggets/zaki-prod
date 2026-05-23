@@ -64,6 +64,13 @@ import {
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
 import {
+  buildAgentMeterUsageFacts,
+  classifyAgentMeterAction,
+  createAgentStreamMeterMetrics,
+  estimateAgentMeterUnits,
+  updateAgentStreamMeterMetrics,
+} from "./agent-metering.js";
+import {
   fetchNullclawPath,
   fetchNullclawUserHistory,
   getNullclawBase,
@@ -10338,11 +10345,159 @@ app.post(
   streamChatHandler
 );
 
+function buildAgentMeterIdentity(authContext) {
+  const zakiUser = authContext?.zakiUser || authContext;
+  if (!zakiUser?.id) return null;
+  return {
+    type: "user",
+    tenantId: "default",
+    userId: zakiUser.id,
+    zakiUser,
+    anonymousSessionId: null,
+    anonymousKeyHash: null,
+  };
+}
+
+function readAgentIdempotencyKey(req, action) {
+  const headerValue =
+    req.headers?.["idempotency-key"] ||
+    req.headers?.["x-idempotency-key"];
+  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const normalizedHeader = String(raw || "").trim();
+  if (normalizedHeader) return normalizedHeader.slice(0, 180);
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  return [
+    getOrCreateRequestId(req),
+    payload.spaceId || payload.space_id || "agent",
+    payload.threadId || payload.thread_id || "main",
+    normalizeMeterAction(action),
+  ].join(":").slice(0, 180);
+}
+
+function setAgentMeterHeaders(res, grant, meter) {
+  if (!grant || res.headersSent) return;
+  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
+  res.setHeader("X-Zaki-Meter-Product", "agent");
+  res.setHeader("X-Zaki-Meter-Action", grant.action);
+  if (meter?.plan?.tier) res.setHeader("X-Zaki-Meter-Plan", meter.plan.tier);
+  if (meter?.rolling?.remaining !== null && meter?.rolling?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Rolling-Remaining", String(meter.rolling.remaining));
+  }
+  if (meter?.weekly?.remaining !== null && meter?.weekly?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Weekly-Remaining", String(meter.weekly.remaining));
+  }
+}
+
+function buildAgentMeterDenialPayload(result, requestId) {
+  return {
+    code: result?.error || "agent_meter_denied",
+    error: "Agent usage is not available.",
+    message: result?.message || "Agent usage is not currently available.",
+    product: result?.product || "agent",
+    productState: result?.productState || null,
+    meter: result?.meter || null,
+    requestId,
+  };
+}
+
+async function requireAgentMeterGrantForChat({
+  req,
+  res,
+  identity,
+  action,
+  message,
+  payload = {},
+  source = "agent_chat_stream",
+} = {}) {
+  const requestId = getOrCreateRequestId(req);
+  if (!identity) {
+    const result = {
+      allowed: false,
+      status: 401,
+      error: "agent_meter_identity_required",
+      message: "Agent usage requires an authenticated ZAKI user.",
+    };
+    res.status(result.status).json(buildAgentMeterDenialPayload(result, requestId));
+    return result;
+  }
+  const result = await issueMeterGrantForIdentity({
+    identity,
+    product: "agent",
+    action,
+    estimatedUnits: estimateAgentMeterUnits(message, action, payload),
+    requestId,
+    idempotencyKey: readAgentIdempotencyKey(req, action),
+    metadata: {
+      surface: "agent",
+      route: String(req.originalUrl || req.url || "").split("?")[0],
+      method: req.method,
+      source,
+      spaceId: payload?.spaceId || payload?.space_id || null,
+      threadId: payload?.threadId || payload?.thread_id || null,
+      userScopedMemory: true,
+    },
+  });
+  if (!result.allowed) {
+    res
+      .status(result.status || 403)
+      .json(buildAgentMeterDenialPayload(result, requestId));
+    return { ...result, action };
+  }
+  req.agentMeterGrant = result.grant;
+  req.agentMeterAction = result.grant?.action || normalizeMeterAction(action);
+  req.agentMeterIssuedAtMs = Date.now();
+  setAgentMeterHeaders(res, result.grant, result.meter);
+  return { ...result, action };
+}
+
+async function recordAgentMeterReceiptBestEffort(req, {
+  grant = req.agentMeterGrant,
+  action = req.agentMeterAction || grant?.action,
+  status = "success",
+  durationMs = 0,
+  message = "",
+  outputText = "",
+  streamMetrics = null,
+  payload = req.body && typeof req.body === "object" ? req.body : {},
+  idempotencySuffix = "receipt",
+  model = "nullalis-agent",
+} = {}) {
+  if (!grant?.grantId) return null;
+  try {
+    const normalizedAction = normalizeMeterAction(action || grant.action);
+    return await recordMeterReceiptForGrant({
+      grant,
+      product: "agent",
+      action: normalizedAction,
+      status,
+      rawUsageFacts: buildAgentMeterUsageFacts({
+        action: normalizedAction,
+        message,
+        outputText,
+        streamMetrics,
+        status,
+        durationMs,
+        model,
+        payload,
+      }),
+      idempotencyKey: `${grant.idempotencyKey || getOrCreateRequestId(req)}:${idempotencySuffix}`.slice(0, 180),
+    });
+  } catch (error) {
+    console.warn("[Agent] Meter receipt failed:", {
+      requestId: getOrCreateRequestId(req),
+      action,
+      error: error?.message || "Agent meter receipt failed.",
+    });
+    return null;
+  }
+}
+
 /**
  * Proxy authenticated ZAKI agent chat traffic to Nullclaw.
  * Route: POST /api/agent/chat/stream
  */
 const agentChatStreamHandler = async (req, res) => {
+  const meterStartedAtMs = Date.now();
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
@@ -10376,6 +10531,20 @@ const agentChatStreamHandler = async (req, res) => {
       });
     }
 
+    const meterAction = classifyAgentMeterAction(payload, originalMessage);
+    const meterDecision = await requireAgentMeterGrantForChat({
+      req,
+      res,
+      identity: buildAgentMeterIdentity(authResult),
+      action: meterAction,
+      message: originalMessage,
+      payload,
+      source: "agent_direct_chat_stream",
+    });
+    if (!meterDecision.allowed || res.headersSent) {
+      return;
+    }
+
     try {
       const readyProbe = await probeNullclawReady({
         baseUrl: nullclawBase,
@@ -10386,6 +10555,13 @@ const agentChatStreamHandler = async (req, res) => {
         timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
       });
       if (!readyProbe.ok) {
+        await recordAgentMeterReceiptBestEffort(req, {
+          status: "failed",
+          durationMs: Date.now() - meterStartedAtMs,
+          message: originalMessage,
+          payload,
+          idempotencySuffix: "ready_failed",
+        });
         if (String(req.headers.accept || "").includes("text/event-stream")) {
           sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
             code: "agent_unavailable",
@@ -10400,6 +10576,13 @@ const agentChatStreamHandler = async (req, res) => {
       }
     } catch (error) {
       trackAgentStreamDiagnostic(userId, error);
+      await recordAgentMeterReceiptBestEffort(req, {
+        status: "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        payload,
+        idempotencySuffix: "ready_error",
+      });
       if (String(req.headers.accept || "").includes("text/event-stream")) {
         sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
           code: "agent_unavailable",
@@ -10451,6 +10634,13 @@ const agentChatStreamHandler = async (req, res) => {
       payload: normalizedPayload,
     });
     if (!sessionKey.success) {
+      await recordAgentMeterReceiptBestEffort(req, {
+        status: "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        payload: normalizedPayload,
+        idempotencySuffix: "invalid_session_key",
+      });
       return res.status(400).json({ error: sessionKey.message, code: "invalid_chat_payload" });
     }
     upstreamPayload.session_key = sessionKey.sessionKey;
@@ -10483,6 +10673,13 @@ const agentChatStreamHandler = async (req, res) => {
       const payloadError = await upstream.json().catch(() => null);
       if (isChatSessionKeyValidationFailure(payloadError)) {
         setPromptQuotaHeaders(res, promptQuota);
+        await recordAgentMeterReceiptBestEffort(req, {
+          status: "failed",
+          durationMs: Date.now() - meterStartedAtMs,
+          message: originalMessage,
+          payload: normalizedPayload,
+          idempotencySuffix: "upstream_invalid_session_key",
+        });
         return res
           .status(400)
           .json({ error: "invalid chat payload or session_key", code: "invalid_chat_payload" });
@@ -10494,6 +10691,13 @@ const agentChatStreamHandler = async (req, res) => {
     setPromptQuotaHeaders(res, promptQuota);
 
     if (!upstream.body) {
+      await recordAgentMeterReceiptBestEffort(req, {
+        status: upstream.ok ? "success" : "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        payload: normalizedPayload,
+        idempotencySuffix: "empty_body",
+      });
       const retryPayload = buildAgentRetrySsePayload(upstream.status);
       if (retryPayload) {
         res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -10512,6 +10716,13 @@ const agentChatStreamHandler = async (req, res) => {
 
     if (!isSse) {
       const nodeStream = Readable.fromWeb(upstream.body);
+      await recordAgentMeterReceiptBestEffort(req, {
+        status: upstream.ok ? "success" : "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        payload: normalizedPayload,
+        model: "nullalis-agent-non-sse",
+      });
       pipeReadableToResponse(nodeStream, res, "Agent stream");
       return;
     }
@@ -10520,8 +10731,10 @@ const agentChatStreamHandler = async (req, res) => {
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
     let assistantAccumulated = "";
+    const streamMetrics = createAgentStreamMeterMetrics();
 
     const processSseBlock = async (block) => {
+      updateAgentStreamMeterMetrics(streamMetrics, block);
       if (!isZakiBotSpace) return;
       const normalized = String(block || "").replace(/\r/g, "");
       const lines = normalized.split("\n");
@@ -10583,8 +10796,22 @@ const agentChatStreamHandler = async (req, res) => {
       );
     }
 
+    await recordAgentMeterReceiptBestEffort(req, {
+      status: upstream.ok && !streamMetrics.sawError ? "success" : "failed",
+      durationMs: Date.now() - meterStartedAtMs,
+      message: originalMessage,
+      streamMetrics,
+      payload: normalizedPayload,
+    });
     res.end();
   } catch (error) {
+    await recordAgentMeterReceiptBestEffort(req, {
+      status: "failed",
+      durationMs: Date.now() - meterStartedAtMs,
+      message: extractStreamMessage(req.body || {}) || "",
+      payload: req.body && typeof req.body === "object" ? req.body : {},
+      idempotencySuffix: "exception",
+    });
     const trackedUserId = String(req.agentUserId || "").trim();
     if (trackedUserId) {
       trackAgentStreamDiagnostic(trackedUserId, error);
@@ -12560,6 +12787,38 @@ const botBffHandlers = createBotBffHandlers({
   createIdempotencyKey: getOrCreateIdempotencyKey,
 });
 
+const meteredBotBffChatStreamHandler = async (req, res) => {
+  const meterStartedAtMs = Date.now();
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const message = extractStreamMessage(payload) || String(payload.prompt || "").trim();
+  const action = classifyAgentMeterAction(payload, message);
+
+  if (message) {
+    const meterDecision = await requireAgentMeterGrantForChat({
+      req,
+      res,
+      identity: buildAgentMeterIdentity(req.botBffContext?.zakiUser),
+      action,
+      message,
+      payload,
+      source: "agent_bot_bff_chat_stream",
+    });
+    if (!meterDecision.allowed || res.headersSent) {
+      return;
+    }
+  }
+
+  await botBffHandlers.chatStream(req, res);
+
+  await recordAgentMeterReceiptBestEffort(req, {
+    status: res.statusCode < 400 ? "success" : "failed",
+    durationMs: Date.now() - meterStartedAtMs,
+    message,
+    payload,
+    model: "nullalis-agent-bff",
+  });
+};
+
 const agentJson30mb = express.json({ limit: "30mb" });
 const agentJson10mb = express.json({ limit: "10mb" });
 const agentJson1mb = express.json({ limit: "1mb" });
@@ -12710,7 +12969,7 @@ registerBotBffAliases(app, {
   provisionHandler: botBffHandlers.provision,
   onboardingGetHandler: botBffHandlers.getOnboarding,
   onboardingPutHandler: botBffHandlers.putOnboarding,
-  chatStreamHandler: botBffHandlers.chatStream,
+  chatStreamHandler: meteredBotBffChatStreamHandler,
   settingsGetHandler: botBffHandlers.getSettings,
   settingsPatchHandler: botBffHandlers.patchSettings,
   heartbeatGetHandler: botBffHandlers.getHeartbeat,
