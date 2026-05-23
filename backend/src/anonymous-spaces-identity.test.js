@@ -72,6 +72,28 @@ describe("anonymous Spaces identity", () => {
     ).toBe(id);
   });
 
+  it("appends anonymous meter and spaces cookies without overwriting", () => {
+    const headers = {};
+    const res = {
+      getHeader(name) {
+        return headers[name];
+      },
+      setHeader(name, value) {
+        headers[name] = value;
+      },
+    };
+
+    resolveAnonymousMeterId({ headers: {} }, res, SECRET, 1_000);
+    resolveAnonymousSpacesId({ headers: {} }, res, SECRET, 1_000);
+
+    expect(headers["Set-Cookie"]).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`${ANONYMOUS_METER_COOKIE_NAME}=`),
+        expect.stringContaining(`${ANONYMOUS_SPACES_COOKIE_NAME}=`),
+      ])
+    );
+  });
+
   it("builds meter cookies with the central api path", () => {
     const setCookie = buildAnonymousMeterCookie("anon-meter-1", SECRET, 1_000);
     expect(setCookie).toContain(`${ANONYMOUS_METER_COOKIE_NAME}=`);

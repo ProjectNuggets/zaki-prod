@@ -790,6 +790,11 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
   const agentWsBase = getPublicAgentWsBase(req);
   const decoder = new TextDecoder();
   let buffer = "";
+  const metrics = {
+    assistantOutputChars: 0,
+    events: 0,
+    sawError: false,
+  };
 
   res.on("close", () => {
     if (!readable.destroyed) {
@@ -828,6 +833,21 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
             payload.agentInvocationUrl = agentUrl;
             payload.websocketUrl = agentUrl;
           }
+          const assistantChunk =
+            (typeof payload?.delta === "string" && payload.delta) ||
+            (typeof payload?.textResponse === "string" && payload.textResponse) ||
+            (typeof payload?.content === "string" && payload.content) ||
+            (typeof payload?.message === "string" && payload.message) ||
+            (typeof payload?.message?.content === "string" && payload.message.content) ||
+            "";
+          if (assistantChunk) {
+            metrics.assistantOutputChars += assistantChunk.length;
+          }
+          metrics.events += 1;
+          metrics.sawError =
+            metrics.sawError ||
+            payload?.type === "error" ||
+            payload?.error === true;
           outLines.push(`data: ${JSON.stringify(payload)}`);
           wrote = true;
         } catch {
@@ -864,9 +884,14 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     if (!res.destroyed && !res.writableEnded) {
       res.end();
     }
+    return metrics;
   } catch (error) {
     console.error(`[${label}] SSE pipe error:`, error);
     finishErroredStreamResponse(res, label, error, { sse: true });
+    return {
+      ...metrics,
+      sawError: true,
+    };
   }
 }
 
@@ -9599,12 +9624,229 @@ function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
   return false;
 }
 
+function buildAuthenticatedSpacesMeterIdentity(zakiUser) {
+  if (!zakiUser?.id) return null;
+  return {
+    type: "user",
+    tenantId: "default",
+    userId: zakiUser.id,
+    zakiUser,
+    anonymousSessionId: null,
+    anonymousKeyHash: null,
+  };
+}
+
+function buildAnonymousSpacesMeterIdentity(req, res) {
+  const secret = ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET || meterSigningSecret();
+  if (!secret) return null;
+  const anonymousSessionId = resolveAnonymousMeterId(req, res, secret);
+  return {
+    type: "anonymous",
+    tenantId: "default",
+    userId: null,
+    zakiUser: null,
+    anonymousSessionId,
+    anonymousKeyHash: hashAnonymousSessionId(anonymousSessionId),
+  };
+}
+
+function classifySpacesChatMeterAction(message = "", requestPayload = {}) {
+  if (isIdentityProbePrompt(message) || getIntrospectionMode(message)) {
+    return "memory_read";
+  }
+  if (isComparisonPrompt(message)) {
+    return "spaces_chat_synthetic";
+  }
+  if (requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true) {
+    return "spaces_chat_search";
+  }
+  const mode = String(requestPayload?.mode || "").trim().toLowerCase();
+  if (mode === "query") return "spaces_chat_query";
+  return "spaces_chat_turn";
+}
+
+function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn") {
+  const normalizedAction = normalizeMeterAction(action);
+  const estimatedTokenUnits = Math.max(0, String(message || "").length / 4000);
+  const baseUnits = normalizedAction === "memory_read"
+    ? 0.25
+    : normalizedAction.includes("search")
+      ? 1.5
+      : normalizedAction.includes("query")
+        ? 1.25
+        : normalizedAction.includes("synthetic")
+          ? 0.5
+          : 1;
+  return Math.round(Math.max(baseUnits, estimatedTokenUnits) * 10_000) / 10_000;
+}
+
+function readSpacesIdempotencyKey(req, action) {
+  const headerValue =
+    req.headers?.["idempotency-key"] ||
+    req.headers?.["x-idempotency-key"];
+  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const normalizedHeader = String(raw || "").trim();
+  if (normalizedHeader) return normalizedHeader.slice(0, 180);
+  return [
+    getOrCreateRequestId(req),
+    req.params?.slug || "workspace",
+    req.params?.threadSlug || "thread",
+    normalizeMeterAction(action),
+  ].join(":").slice(0, 180);
+}
+
+function setSpacesMeterHeaders(res, grant, meter) {
+  if (!grant || res.headersSent) return;
+  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
+  res.setHeader("X-Zaki-Meter-Product", "spaces");
+  res.setHeader("X-Zaki-Meter-Action", grant.action);
+  if (meter?.plan?.tier) res.setHeader("X-Zaki-Meter-Plan", meter.plan.tier);
+  if (meter?.rolling?.remaining !== null && meter?.rolling?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Rolling-Remaining", String(meter.rolling.remaining));
+  }
+  if (meter?.weekly?.remaining !== null && meter?.weekly?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Weekly-Remaining", String(meter.weekly.remaining));
+  }
+}
+
+function buildSpacesMeterDenialPayload(result, requestId) {
+  return {
+    code: result?.error || "spaces_meter_denied",
+    error: "Chat usage is not available.",
+    message: result?.message || "Chat usage is not currently available.",
+    product: result?.product || "spaces",
+    productState: result?.productState || null,
+    meter: result?.meter || null,
+    requestId,
+  };
+}
+
+async function requireSpacesMeterGrantForChat({
+  req,
+  res,
+  identity,
+  action,
+  message,
+  anonymous = false,
+} = {}) {
+  const requestId = getOrCreateRequestId(req);
+  if (!identity) {
+    const result = {
+      allowed: false,
+      status: anonymous ? 503 : 401,
+      error: anonymous ? "anonymous_session_unavailable" : "spaces_meter_identity_required",
+      message: anonymous
+        ? "Anonymous chat metering is not configured."
+        : "Chat usage requires an authenticated ZAKI user.",
+    };
+    res.status(result.status).json(buildSpacesMeterDenialPayload(result, requestId));
+    return result;
+  }
+  const result = await issueMeterGrantForIdentity({
+    identity,
+    product: "spaces",
+    action,
+    estimatedUnits: estimateSpacesChatMeterUnits(message, action),
+    requestId,
+    idempotencyKey: readSpacesIdempotencyKey(req, action),
+    metadata: {
+      surface: "spaces",
+      route: String(req.originalUrl || req.url || "").split("?")[0],
+      method: req.method,
+      workspaceSlug: req.params?.slug || null,
+      threadSlug: req.params?.threadSlug || null,
+      anonymous,
+      source: anonymous ? "spaces_anonymous_chat" : "spaces_authenticated_chat",
+    },
+  });
+  if (!result.allowed) {
+    res
+      .status(result.status || 403)
+      .json(buildSpacesMeterDenialPayload(result, requestId));
+    return { ...result, action };
+  }
+  req.spacesMeterGrant = result.grant;
+  req.spacesMeterAction = result.grant?.action || normalizeMeterAction(action);
+  req.spacesMeterIssuedAtMs = Date.now();
+  setSpacesMeterHeaders(res, result.grant, result.meter);
+  return { ...result, action };
+}
+
+function buildSpacesMeterUsageFacts({
+  action = "",
+  message = "",
+  outputText = "",
+  streamMetrics = null,
+  status = "success",
+  durationMs = 0,
+  model = "spaces-chat",
+} = {}) {
+  const facts = { model };
+  if (status !== "success") return facts;
+  const normalizedAction = normalizeMeterAction(action);
+  facts.durationMs = Math.max(0, Math.floor(Number(durationMs || 0)));
+  const inputChars = String(message || "").length;
+  const outputChars = streamMetrics
+    ? Number(streamMetrics.assistantOutputChars || 0)
+    : String(outputText || "").length;
+  if (inputChars > 0) facts.inputTokens = Math.ceil(inputChars / 4);
+  if (outputChars > 0) facts.outputTokens = Math.ceil(outputChars / 4);
+  if (normalizedAction.includes("search") || normalizedAction.includes("query")) {
+    facts.toolCalls = 1;
+  }
+  if (normalizedAction.includes("search")) {
+    facts.externalApiCalls = 1;
+  }
+  return facts;
+}
+
+async function recordSpacesMeterReceiptBestEffort(req, {
+  grant = req.spacesMeterGrant,
+  action = req.spacesMeterAction || grant?.action,
+  status = "success",
+  durationMs = 0,
+  message = "",
+  outputText = "",
+  streamMetrics = null,
+  idempotencySuffix = "receipt",
+  model = "spaces-chat",
+} = {}) {
+  if (!grant?.grantId) return null;
+  try {
+    const normalizedAction = normalizeMeterAction(action || grant.action);
+    return await recordMeterReceiptForGrant({
+      grant,
+      product: "spaces",
+      action: normalizedAction,
+      status,
+      rawUsageFacts: buildSpacesMeterUsageFacts({
+        action: normalizedAction,
+        message,
+        outputText,
+        streamMetrics,
+        status,
+        durationMs,
+        model,
+      }),
+      idempotencyKey: `${grant.idempotencyKey || getOrCreateRequestId(req)}:${idempotencySuffix}`.slice(0, 180),
+    });
+  } catch (error) {
+    console.warn("[Spaces] Meter receipt failed:", {
+      requestId: getOrCreateRequestId(req),
+      action,
+      error: error?.message || "Spaces meter receipt failed.",
+    });
+    return null;
+  }
+}
+
 /**
  * Anonymous Spaces chat. This intentionally bypasses authenticated memory and
  * account-bound workspace access while preserving daily quota and upstream
  * admin-key isolation.
  */
 const anonymousStreamChatHandler = async (req, res) => {
+  const meterStartedAtMs = Date.now();
   try {
     const requestPayload = req.body || {};
     const originalMessage = extractStreamMessage(requestPayload) || "";
@@ -9615,6 +9857,19 @@ const anonymousStreamChatHandler = async (req, res) => {
       return res.status(400).json({
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
+    }
+
+    const meterAction = classifySpacesChatMeterAction(originalMessage, requestPayload);
+    const meterDecision = await requireSpacesMeterGrantForChat({
+      req,
+      res,
+      identity: buildAnonymousSpacesMeterIdentity(req, res),
+      action: meterAction,
+      message: originalMessage,
+      anonymous: true,
+    });
+    if (!meterDecision.allowed || res.headersSent) {
+      return;
     }
 
     const consumed = await consumeAnonymousDailyPromptQuota({
@@ -9640,11 +9895,27 @@ const anonymousStreamChatHandler = async (req, res) => {
     }
 
     if (isIdentityProbePrompt(originalMessage)) {
-      sendSyntheticSseReply(res, buildIdentityProbeReply(originalMessage));
+      const reply = buildIdentityProbeReply(originalMessage);
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: "success",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        outputText: reply,
+        model: "spaces-synthetic",
+      });
+      sendSyntheticSseReply(res, reply);
       return;
     }
     if (isComparisonPrompt(originalMessage)) {
-      sendSyntheticSseReply(res, buildProductComparisonReply(originalMessage));
+      const reply = buildProductComparisonReply(originalMessage);
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: "success",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        outputText: reply,
+        model: "spaces-synthetic",
+      });
+      sendSyntheticSseReply(res, reply);
       return;
     }
 
@@ -9661,8 +9932,21 @@ const anonymousStreamChatHandler = async (req, res) => {
       res.setHeader("X-Zaki-Mode", requestPayload.mode.trim());
     }
     const reply = await generateAnonymousSpacesReply(anonymousMessage, requestPayload);
+    await recordSpacesMeterReceiptBestEffort(req, {
+      status: "success",
+      durationMs: Date.now() - meterStartedAtMs,
+      message: originalMessage,
+      outputText: reply,
+      model: ZAKI_ANONYMOUS_SPACES_MODEL,
+    });
     sendSyntheticSseReply(res, reply);
   } catch (error) {
+    await recordSpacesMeterReceiptBestEffort(req, {
+      status: "failed",
+      durationMs: Date.now() - meterStartedAtMs,
+      message: extractStreamMessage(req.body || {}) || "",
+      model: ZAKI_ANONYMOUS_SPACES_MODEL,
+    });
     console.error("[AnonymousSpaces] Stream error:", error);
     const message = error?.message || "Anonymous Spaces chat failed.";
     if (String(req.headers.accept || "").includes("text/event-stream")) {
@@ -9685,6 +9969,7 @@ app.post(
  */
 const streamChatHandler = async (req, res) => {
   console.log(`[Chat] Received message request for ${req.params.slug}/${req.params.threadSlug}`);
+  const meterStartedAtMs = Date.now();
   try {
     const apiBase = getApiBase();
     if (!apiBase) {
@@ -9720,6 +10005,19 @@ const streamChatHandler = async (req, res) => {
       });
     }
 
+    const meterAction = classifySpacesChatMeterAction(originalMessage, requestPayload);
+    const meterDecision = await requireSpacesMeterGrantForChat({
+      req,
+      res,
+      identity: buildAuthenticatedSpacesMeterIdentity(zakiUser),
+      action: meterAction,
+      message: originalMessage,
+      anonymous: false,
+    });
+    if (!meterDecision.allowed || res.headersSent) {
+      return;
+    }
+
     const streamQuotaDecision = await enforcePromptQuotaForIngress({
       zakiUser,
       res,
@@ -9732,12 +10030,28 @@ const streamChatHandler = async (req, res) => {
     }
 
     if (isIdentityProbePrompt(originalMessage)) {
-      sendSyntheticSseReply(res, buildIdentityProbeReply(originalMessage));
+      const reply = buildIdentityProbeReply(originalMessage);
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: "success",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        outputText: reply,
+        model: "spaces-synthetic",
+      });
+      sendSyntheticSseReply(res, reply);
       return;
     }
 
     if (isComparisonPrompt(originalMessage)) {
-      sendSyntheticSseReply(res, buildProductComparisonReply(originalMessage));
+      const reply = buildProductComparisonReply(originalMessage);
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: "success",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        outputText: reply,
+        model: "spaces-synthetic",
+      });
+      sendSyntheticSseReply(res, reply);
       return;
     }
 
@@ -9764,17 +10078,33 @@ const streamChatHandler = async (req, res) => {
           content: source.content,
           type: source.type,
         }));
+        const reply = buildIntrospectionReply(introspectionMode, memorySources, originalMessage);
+        await recordSpacesMeterReceiptBestEffort(req, {
+          status: "success",
+          durationMs: Date.now() - meterStartedAtMs,
+          message: originalMessage,
+          outputText: reply,
+          model: "spaces-memory",
+        });
         sendSyntheticSseReply(
           res,
-          buildIntrospectionReply(introspectionMode, memorySources, originalMessage),
+          reply,
           { sources: memorySources }
         );
         return;
       } catch (error) {
         console.warn("[Memory] Introspection response fallback failed:", error?.message || error);
+        const reply = buildIntrospectionReply(introspectionMode, [], originalMessage);
+        await recordSpacesMeterReceiptBestEffort(req, {
+          status: "success",
+          durationMs: Date.now() - meterStartedAtMs,
+          message: originalMessage,
+          outputText: reply,
+          model: "spaces-memory",
+        });
         sendSyntheticSseReply(
           res,
-          buildIntrospectionReply(introspectionMode, [], originalMessage),
+          reply,
           { sources: [] }
         );
         return;
@@ -9910,6 +10240,12 @@ ${originalMessage}`;
     }
 
     if (!upstreamResponse.body) {
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: upstreamResponse.ok ? "success" : "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        model: "typ-chat",
+      });
       res.end();
       return;
     }
@@ -9937,11 +10273,30 @@ ${originalMessage}`;
     }
 
     if (isSse) {
-      await pipeSseWithAgentLinks(nodeStream, res, req, "Chat stream");
+      const streamMetrics = await pipeSseWithAgentLinks(nodeStream, res, req, "Chat stream");
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: upstreamResponse.ok && !streamMetrics?.sawError ? "success" : "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        streamMetrics,
+        model: "typ-chat",
+      });
     } else {
       pipeReadableToResponse(nodeStream, res, "Chat stream");
+      await recordSpacesMeterReceiptBestEffort(req, {
+        status: upstreamResponse.ok ? "success" : "failed",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        model: "typ-chat",
+      });
     }
   } catch (error) {
+    await recordSpacesMeterReceiptBestEffort(req, {
+      status: "failed",
+      durationMs: Date.now() - meterStartedAtMs,
+      message: extractStreamMessage(req.body || {}) || "",
+      model: "typ-chat",
+    });
     console.error("[Chat] Stream error:", error);
     const message = error?.message || "Chat stream failed.";
     const timedOut = /\btimed out\b/i.test(message);

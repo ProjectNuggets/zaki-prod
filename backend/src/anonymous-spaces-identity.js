@@ -42,6 +42,20 @@ function signAnonymousId(id, issuedAt, secret) {
     .digest("base64url");
 }
 
+function appendSetCookie(res, cookie) {
+  if (!res || !cookie) return;
+  const existing = res.getHeader?.("Set-Cookie");
+  if (Array.isArray(existing)) {
+    res.setHeader("Set-Cookie", [...existing, cookie]);
+    return;
+  }
+  if (typeof existing === "string" && existing) {
+    res.setHeader("Set-Cookie", [existing, cookie]);
+    return;
+  }
+  res.setHeader("Set-Cookie", cookie);
+}
+
 export function buildAnonymousSpacesCookie(id, secret, nowMs = Date.now()) {
   const issuedAt = String(nowMs);
   const payload = `${base64Url(id)}.${issuedAt}.${signAnonymousId(id, issuedAt, secret)}`;
@@ -92,7 +106,7 @@ export function resolveAnonymousSpacesId(req, res, secret, nowMs = Date.now()) {
 
   const id = crypto.randomUUID();
   if (res && secret) {
-    res.setHeader("Set-Cookie", buildAnonymousSpacesCookie(id, secret, nowMs));
+    appendSetCookie(res, buildAnonymousSpacesCookie(id, secret, nowMs));
   }
   return id;
 }
@@ -108,7 +122,7 @@ export function resolveAnonymousMeterId(req, res, secret, nowMs = Date.now()) {
 
   const id = crypto.randomUUID();
   if (res && secret) {
-    res.setHeader("Set-Cookie", buildAnonymousMeterCookie(id, secret, nowMs));
+    appendSetCookie(res, buildAnonymousMeterCookie(id, secret, nowMs));
   }
   return id;
 }
