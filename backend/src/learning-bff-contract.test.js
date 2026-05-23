@@ -29,8 +29,13 @@ import {
   sanitizeLearningUpstreamPayload,
   sanitizeLearningPath,
   sanitizeLearningWsClientMessage,
+  classifyLearningMeterActionForIngress,
+  classifyLearningMeterActionForWs,
   classifyLearningIngressQuotaAction,
   classifyLearningWsQuotaAction,
+  estimateLearningMeterUnitsForAction,
+  estimateLearningMeterUnitsForIngress,
+  estimateLearningMeterUnitsForWs,
   shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
@@ -438,6 +443,51 @@ describe("learning BFF contract", () => {
     ).toBeNull();
   });
 
+  test("classifies central meter actions for learning HTTP ingress", () => {
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "POST",
+        originalUrl: "/api/learning/books",
+      })
+    ).toBe("book_generation");
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "POST",
+        originalUrl: "/api/learning/books/deep-dive",
+      })
+    ).toBe("deep_research");
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "POST",
+        originalUrl: "/api/learning/knowledge/main/upload",
+      })
+    ).toBe("file_upload");
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "POST",
+        originalUrl: "/api/learning/knowledge/main/reindex",
+      })
+    ).toBe("file_ingest");
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "PUT",
+        originalUrl: "/api/learning/memory",
+      })
+    ).toBe("memory_write");
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "PATCH",
+        originalUrl: "/api/learning/tutor-agents/bot-1",
+      })
+    ).toBe("tutor_agent_config_write");
+    expect(
+      classifyLearningMeterActionForIngress({
+        method: "GET",
+        originalUrl: "/api/learning/books",
+      })
+    ).toBeNull();
+  });
+
   test("classifies external search websocket actions", () => {
     expect(
       classifyLearningWsQuotaAction(
@@ -465,6 +515,47 @@ describe("learning BFF contract", () => {
         false
       )
     ).toBeNull();
+  });
+
+  test("classifies and estimates central meter websocket actions", () => {
+    const deepResearchTurn = JSON.stringify({
+      type: "start_turn",
+      capability: "deep_research",
+      config: { sources: ["web"] },
+    });
+    expect(
+      classifyLearningMeterActionForWs(deepResearchTurn, false, {
+        targetPath: "/api/v1/chat",
+      })
+    ).toBe("learning_ws_deep_research");
+    expect(
+      classifyLearningMeterActionForWs(JSON.stringify({ content: "solve it" }), false, {
+        targetPath: "/api/v1/solve",
+      })
+    ).toBe("learning_ws_tool_call");
+    expect(
+      classifyLearningMeterActionForWs(JSON.stringify({ type: "subscribe", book_id: "b1" }), false)
+    ).toBeNull();
+    expect(estimateLearningMeterUnitsForWs(deepResearchTurn, false)).toBe(3);
+  });
+
+  test("estimates learning meter units with stable action weights", () => {
+    expect(estimateLearningMeterUnitsForAction("book_generation")).toBe(5);
+    expect(estimateLearningMeterUnitsForAction("memory_write")).toBe(0.5);
+    expect(
+      estimateLearningMeterUnitsForIngress({
+        method: "POST",
+        originalUrl: "/api/learning/knowledge/main/upload",
+        headers: { "content-length": String(30 * 1024 * 1024) },
+      })
+    ).toBe(3);
+    expect(
+      estimateLearningMeterUnitsForIngress({
+        method: "GET",
+        originalUrl: "/api/learning/books",
+        headers: {},
+      })
+    ).toBe(0);
   });
 
   test("filters tutor agent channels to the ZAKI hosted allowlist", () => {

@@ -97,8 +97,12 @@ import {
   sanitizeLearningUpstreamPayload,
   sanitizeLearningTutorAgentPayload,
   sanitizeLearningWsClientMessage,
+  classifyLearningMeterActionForIngress,
+  classifyLearningMeterActionForWs,
   classifyLearningIngressQuotaAction,
   classifyLearningWsQuotaAction,
+  estimateLearningMeterUnitsForIngress,
+  estimateLearningMeterUnitsForWs,
   shouldConsumeLearningIngressQuota,
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
@@ -6296,6 +6300,148 @@ async function buildMeterResponsePayload(identity, platform, registry, policy) {
   });
 }
 
+async function issueMeterGrantForIdentity({
+  identity,
+  tenantId = "default",
+  product,
+  action,
+  estimatedUnits = 1,
+  requestId = null,
+  idempotencyKey = null,
+  metadata = {},
+} = {}) {
+  const normalizedTenantId = normalizeMeterTenantId(tenantId);
+  const normalizedIdempotencyKey = String(idempotencyKey || requestId || crypto.randomUUID())
+    .trim()
+    .slice(0, 180);
+  const signingSecret = meterSigningSecret();
+  if (!signingSecret) {
+    return {
+      allowed: false,
+      status: 503,
+      error: "meter_grant_signing_unavailable",
+      message: "Meter grant signing is not configured.",
+    };
+  }
+  const platform = buildPlatformForMeterIdentity(identity);
+  const registry = buildPlatformProductRegistry();
+  const policy = buildPlatformMeterPolicy({ env: process.env });
+  const registryProduct = findRegistryProduct(registry, product);
+  if (!registryProduct) {
+    return {
+      allowed: false,
+      status: 400,
+      error: "invalid_product",
+      message: "The requested product is not registered.",
+    };
+  }
+  const meter = await buildMeterResponsePayload(identity, platform, registry, policy);
+  const existing = await findExistingMeterGrant({
+    identity,
+    tenantId: normalizedTenantId,
+    productId: registryProduct.productId,
+    idempotencyKey: normalizedIdempotencyKey,
+  });
+  if (existing) {
+    return {
+      allowed: true,
+      idempotent: true,
+      grant: existing,
+      meter,
+      registryProduct,
+      platform,
+      policy,
+    };
+  }
+  const decision = buildMeterGrantDecision({
+    tenantId: normalizedTenantId,
+    identity,
+    product: registryProduct.productId,
+    productState: registryProduct.state,
+    action,
+    estimatedUnits,
+    requestId,
+    idempotencyKey: normalizedIdempotencyKey,
+    metadata,
+    platform,
+    meterSnapshot: {
+      rolling: meter.rolling,
+      weekly: meter.weekly,
+    },
+    policy,
+    signingSecret,
+    ttlSeconds: ZAKI_METER_GRANT_TTL_SECONDS,
+  });
+  if (!decision.allowed) {
+    return {
+      allowed: false,
+      status: decision.status || 403,
+      error: decision.reason || "meter_grant_denied",
+      message: "Usage is not currently allowed for this product.",
+      product: decision.productId || registryProduct.productId,
+      productState: decision.productState || registryProduct.state,
+      meter,
+    };
+  }
+  const insertedGrant = await insertMeterGrant({
+    identity,
+    decision,
+    tenantId: normalizedTenantId,
+  });
+  const grant =
+    insertedGrant ||
+    (await findExistingMeterGrant({
+      identity,
+      tenantId: normalizedTenantId,
+      productId: registryProduct.productId,
+      idempotencyKey: normalizedIdempotencyKey,
+    }));
+  if (!grant) {
+    throw new Error("Meter grant insert did not return a grant.");
+  }
+  return {
+    allowed: true,
+    idempotent: !insertedGrant,
+    grant,
+    meter,
+    registryProduct,
+    platform,
+    policy,
+  };
+}
+
+async function recordMeterReceiptForGrant({
+  grant,
+  product,
+  action,
+  status = "success",
+  rawUsageFacts = {},
+  idempotencyKey,
+} = {}) {
+  if (!grant?.grantId) return null;
+  const existing = await findExistingMeterReceipt({
+    grantId: grant.grantId,
+    idempotencyKey,
+  });
+  const policy = buildPlatformMeterPolicy({ env: process.env });
+  const debit = buildMeterReceiptDebit({
+    product: product || grant.productId,
+    action: action || grant.action,
+    status,
+    usageFacts: rawUsageFacts,
+    maxUnits: grant.maxUnits,
+    policy,
+  });
+  if (!debit.valid) {
+    throw new Error(debit.reason || "invalid_meter_receipt");
+  }
+  const receipt =
+    existing ||
+    (await insertMeterReceipt({ grant, debit, idempotencyKey })) ||
+    (await findExistingMeterReceipt({ grantId: grant.grantId, idempotencyKey }));
+  return { receipt, debit, idempotent: Boolean(existing) };
+}
+
 app.get("/api/meter/status", async (req, res) => {
   try {
     const tenantId = normalizeMeterTenantId(req.query?.tenantId);
@@ -10553,6 +10699,209 @@ async function fetchLearningStorageUsageForRequest(req) {
   };
 }
 
+function buildLearningMeterIdentity(req) {
+  const zakiUser = req.learningAuthResult?.zakiUser;
+  if (!zakiUser?.id) return null;
+  return {
+    type: "user",
+    tenantId: "default",
+    userId: zakiUser.id,
+    zakiUser,
+    anonymousSessionId: null,
+    anonymousKeyHash: null,
+  };
+}
+
+function readLearningIdempotencyKey(req, action) {
+  const headerValue =
+    req.headers?.["idempotency-key"] ||
+    req.headers?.["x-idempotency-key"];
+  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const normalizedHeader = String(raw || "").trim();
+  if (normalizedHeader) return normalizedHeader.slice(0, 180);
+  return `${getOrCreateRequestId(req)}:${normalizeMeterAction(action)}`.slice(0, 180);
+}
+
+function setLearningMeterHeaders(res, grant, meter) {
+  if (!grant || res.headersSent) return;
+  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
+  res.setHeader("X-Zaki-Meter-Product", "learning");
+  res.setHeader("X-Zaki-Meter-Action", grant.action);
+  if (meter?.plan?.tier) res.setHeader("X-Zaki-Meter-Plan", meter.plan.tier);
+  if (meter?.rolling?.remaining !== null && meter?.rolling?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Rolling-Remaining", String(meter.rolling.remaining));
+  }
+  if (meter?.weekly?.remaining !== null && meter?.weekly?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Weekly-Remaining", String(meter.weekly.remaining));
+  }
+}
+
+function buildLearningMeterDenialPayload(result, requestId) {
+  return {
+    code: result?.error || "learning_meter_denied",
+    error: "Learning usage is not available.",
+    message: result?.message || "Learning usage is not currently available.",
+    product: result?.product || "learning",
+    productState: result?.productState || null,
+    meter: result?.meter || null,
+    requestId,
+  };
+}
+
+async function requireLearningMeterGrantForIngress(req, res) {
+  const action = classifyLearningMeterActionForIngress(req);
+  if (!action) return { allowed: true, action: null, grant: null };
+
+  const identity = buildLearningMeterIdentity(req);
+  const requestId = getOrCreateRequestId(req);
+  if (!identity) {
+    return {
+      allowed: false,
+      status: 401,
+      error: "learning_meter_identity_required",
+      message: "Learning usage requires an authenticated ZAKI user.",
+    };
+  }
+
+  const result = await issueMeterGrantForIdentity({
+    identity,
+    product: "learning",
+    action,
+    estimatedUnits: estimateLearningMeterUnitsForIngress(req, action),
+    requestId,
+    idempotencyKey: readLearningIdempotencyKey(req, action),
+    metadata: {
+      surface: "learning",
+      route: String(req.originalUrl || req.url || "").split("?")[0],
+      method: req.method,
+      source: "learning_bff_http",
+    },
+  });
+  if (!result.allowed) {
+    res
+      .status(result.status || 403)
+      .json(buildLearningMeterDenialPayload(result, requestId));
+    return { ...result, action };
+  }
+
+  req.learningMeterGrant = result.grant;
+  req.learningMeterAction = result.grant?.action || normalizeMeterAction(action);
+  req.learningMeterIssuedAtMs = Date.now();
+  setLearningMeterHeaders(res, result.grant, result.meter);
+  return { ...result, action };
+}
+
+async function issueLearningMeterGrantForWs({ req, context, data, isBinary, sequence }) {
+  const action = classifyLearningMeterActionForWs(data, isBinary, {
+    targetPath: context?.targetPath,
+  });
+  if (!action) return { allowed: true, action: null, grant: null };
+  const zakiUser = context?.authResult?.zakiUser;
+  if (!zakiUser?.id) {
+    return {
+      allowed: false,
+      status: 401,
+      error: "learning_meter_identity_required",
+      message: "Learning websocket usage requires an authenticated ZAKI user.",
+    };
+  }
+  const requestId = getOrCreateRequestId(req);
+  const identity = {
+    type: "user",
+    tenantId: "default",
+    userId: zakiUser.id,
+    zakiUser,
+    anonymousSessionId: null,
+    anonymousKeyHash: null,
+  };
+  return issueMeterGrantForIdentity({
+    identity,
+    product: "learning",
+    action,
+    estimatedUnits: estimateLearningMeterUnitsForWs(data, isBinary, { action }),
+    requestId,
+    idempotencyKey: `${requestId}:ws:${sequence}:${normalizeMeterAction(action)}`.slice(0, 180),
+    metadata: {
+      surface: "learning",
+      route: String(req.url || ""),
+      method: "WS",
+      targetPath: context?.targetPath || null,
+      source: "learning_bff_ws",
+    },
+  });
+}
+
+function buildLearningMeterUsageFacts({ req, action = null, status, durationMs = 0, storageBytes = null, model = "learning-engine" } = {}) {
+  const resolvedAction = String(action || req?.learningMeterAction || req?.learningMeterGrant?.action || "");
+  const facts = {
+    model,
+  };
+  if (status !== "success") {
+    return facts;
+  }
+  facts.durationMs = Math.max(0, Math.floor(Number(durationMs || 0)));
+  const contentLength = Number(req?.headers?.["content-length"] || req?.headers?.["Content-Length"] || 0);
+  if (Number.isFinite(contentLength) && contentLength > 0) {
+    facts.inputTokens = Math.ceil(contentLength / 4);
+  }
+  if (storageBytes !== null && storageBytes !== undefined) {
+    facts.storageBytes = Math.max(0, Math.floor(Number(storageBytes || 0)));
+  }
+  if (resolvedAction.includes("tool") || resolvedAction.includes("search") || resolvedAction.includes("research")) {
+    facts.toolCalls = 1;
+  }
+  if (resolvedAction.includes("research") || resolvedAction.includes("search")) {
+    facts.externalApiCalls = status === "success" ? 1 : 0;
+  }
+  return facts;
+}
+
+async function recordLearningMeterReceiptBestEffort(req, {
+  grant = req.learningMeterGrant,
+  action = req.learningMeterAction || grant?.action,
+  status = "success",
+  durationMs = 0,
+  storageBytes = null,
+  idempotencySuffix = "receipt",
+  model = "learning-engine",
+} = {}) {
+  if (!grant?.grantId) return null;
+  try {
+    const normalizedAction = normalizeMeterAction(action || grant.action);
+    return await recordMeterReceiptForGrant({
+      grant,
+      product: "learning",
+      action: normalizedAction,
+      status,
+      rawUsageFacts: buildLearningMeterUsageFacts({
+        req,
+        action: normalizedAction,
+        status,
+        durationMs,
+        storageBytes,
+        model,
+      }),
+      idempotencyKey: `${grant.idempotencyKey || getOrCreateRequestId(req)}:${idempotencySuffix}`.slice(0, 180),
+    });
+  } catch (error) {
+    recordLearningObservabilityEvent({
+      event: "learning_meter_receipt_failed",
+      severity: "error",
+      requestId: getOrCreateRequestId(req),
+      route: req.originalUrl || req.url,
+      method: req.method || "WS",
+      action,
+      message: error?.message || "Learning meter receipt failed.",
+    });
+    console.warn("[Learning] Meter receipt failed:", {
+      requestId: getOrCreateRequestId(req),
+      action,
+      error: error?.message || "Learning meter receipt failed.",
+    });
+    return null;
+  }
+}
+
 async function requireLearningQuotaForIngress(req, res, next) {
   const isMutation = ["POST", "PUT", "PATCH"].includes(String(req.method || "").toUpperCase());
   if (!isMutation) {
@@ -10631,6 +10980,10 @@ async function requireLearningQuotaForIngress(req, res, next) {
         return;
       }
       req.learningStorageUsage = usage;
+    }
+    const meterDecision = await requireLearningMeterGrantForIngress(req, res);
+    if (!meterDecision.allowed || res.headersSent) {
+      return;
     }
     const action = classifyLearningIngressQuotaAction(req);
     if (action) {
@@ -11039,6 +11392,17 @@ async function proxyLearningRequest(req, res, targetPath, {
   acceptedPoll = null,
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
+  const meterStartedAtMs = Date.now();
+  let learningMeterReceiptRecorded = false;
+  const recordLearningHttpReceipt = async (status = "success", extra = {}) => {
+    if (learningMeterReceiptRecorded || !req.learningMeterGrant) return;
+    learningMeterReceiptRecorded = true;
+    await recordLearningMeterReceiptBestEffort(req, {
+      status,
+      durationMs: Date.now() - meterStartedAtMs,
+      ...extra,
+    });
+  };
   try {
     const upstreamPromise = fetchLearningPath({
       ...learningClientOptions(req, label),
@@ -11067,6 +11431,10 @@ async function proxyLearningRequest(req, res, targetPath, {
             if (backgroundUpstream?.body) {
               await backgroundUpstream.arrayBuffer().catch(() => null);
             }
+            await recordLearningHttpReceipt(backgroundUpstream?.ok === false ? "failed" : "success", {
+              idempotencySuffix: "background_receipt",
+              model: "learning-engine-background",
+            });
             console.info("[Learning] Background book action completed:", {
               requestId: getOrCreateRequestId(req),
               action: timeoutAcceptedAction,
@@ -11082,7 +11450,11 @@ async function proxyLearningRequest(req, res, targetPath, {
               status: backgroundUpstream?.status,
             });
           })
-          .catch((backgroundError) => {
+          .catch(async (backgroundError) => {
+            await recordLearningHttpReceipt("failed", {
+              idempotencySuffix: "background_receipt",
+              model: "learning-engine-background",
+            });
             recordLearningObservabilityEvent({
               event: "learning_background_failed",
               severity: "error",
@@ -11116,10 +11488,12 @@ async function proxyLearningRequest(req, res, targetPath, {
         });
         return;
       }
+      await recordLearningHttpReceipt(upstream.ok ? "success" : "failed");
       await pipeLearningResponse(req, res, upstream);
       return;
     }
     const upstream = await upstreamPromise;
+    await recordLearningHttpReceipt(upstream.ok ? "success" : "failed");
     await pipeLearningResponse(req, res, upstream);
   } catch (error) {
     const requestId = getOrCreateRequestId(req);
@@ -11139,6 +11513,10 @@ async function proxyLearningRequest(req, res, targetPath, {
       return;
     }
     if (timeoutAcceptedAction && isLearningTimeoutError(error)) {
+      await recordLearningHttpReceipt("success", {
+        idempotencySuffix: "timeout_accepted_receipt",
+        model: "learning-engine-timeout-accepted",
+      });
       recordLearningObservabilityEvent({
         event: "learning_background_timeout_accepted",
         severity: "warn",
@@ -11162,6 +11540,7 @@ async function proxyLearningRequest(req, res, targetPath, {
       );
       return;
     }
+    await recordLearningHttpReceipt("failed");
     recordLearningObservabilityEvent({
       event: "learning_proxy_error",
       severity: "error",
@@ -11241,6 +11620,18 @@ async function proxyLearningRawRequest(req, res, targetPath, {
   label = "Learning upstream raw request",
 } = {}) {
   if (!assertLearningRouteEnabled(req, res)) return;
+  const meterStartedAtMs = Date.now();
+  let learningMeterReceiptRecorded = false;
+  const recordLearningRawReceipt = async (status = "success", extra = {}) => {
+    if (learningMeterReceiptRecorded || !req.learningMeterGrant) return;
+    learningMeterReceiptRecorded = true;
+    await recordLearningMeterReceiptBestEffort(req, {
+      status,
+      durationMs: Date.now() - meterStartedAtMs,
+      storageBytes: Number(req.headers?.["content-length"] || req.headers?.["Content-Length"] || 0) || null,
+      ...extra,
+    });
+  };
   const maxRequestBytes =
     req.learningQuotaPolicy?.uploads?.maxRequestBytes || ZAKI_LEARNING_MAX_REQUEST_BYTES;
   const limitedBody = createLearningByteLimitedStream(req, maxRequestBytes);
@@ -11258,11 +11649,15 @@ async function proxyLearningRawRequest(req, res, targetPath, {
       timeoutMs: LEARNING_ENGINE_REQUEST_TIMEOUT_MS,
       label,
     });
+    await recordLearningRawReceipt(upstream.ok ? "success" : "failed");
     await pipeLearningResponse(req, res, upstream);
   } catch (error) {
     const requestId = getOrCreateRequestId(req);
     const sizeError = findLearningRequestSizeError(error);
     if (sizeError) {
+      await recordLearningRawReceipt("failed", {
+        storageBytes: sizeError.contentLength || null,
+      });
       recordLearningObservabilityEvent({
         event: "learning_raw_request_too_large",
         severity: "warn",
@@ -11281,6 +11676,7 @@ async function proxyLearningRawRequest(req, res, targetPath, {
       });
       return;
     }
+    await recordLearningRawReceipt("failed");
     recordLearningObservabilityEvent({
       event: "learning_raw_proxy_error",
       severity: "error",
@@ -14313,6 +14709,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
   const requestId = getOrCreateRequestId(req);
   const releaseActiveLearningWs = incrementActiveLearningWs(context.userId);
   let outgoingChain = Promise.resolve();
+  let learningWsMessageSequence = 0;
   const pendingClientMessages = [];
   const maxPendingClientMessages = 20;
   recordLearningObservabilityEvent({
@@ -14434,6 +14831,28 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
         closeClient(1011, "Learning upstream connection is closed.");
         return;
       }
+      const meterSequence = ++learningWsMessageSequence;
+      const meterGrantResult = await issueLearningMeterGrantForWs({
+        req,
+        context,
+        data: sanitized.data,
+        isBinary: sanitized.isBinary,
+        sequence: meterSequence,
+      });
+      if (!meterGrantResult.allowed) {
+        recordLearningObservabilityEvent({
+          event: "learning_ws_meter_denied",
+          severity: "warn",
+          requestId,
+          route: req.url,
+          method: "WS",
+          action: meterGrantResult.action || null,
+          status: meterGrantResult.status || 403,
+        });
+        closeClient(1008, "Learning usage limit exceeded.");
+        closeUpstream(1008, "learning_meter_denied");
+        return;
+      }
       const action = classifyLearningWsQuotaAction(sanitized.data, sanitized.isBinary);
       if (action) {
         const actionDecision = await consumeLearningActionQuotaForUser(
@@ -14478,6 +14897,16 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
         }
       }
       sendOrQueueUpstream(sanitized.data, sanitized.isBinary);
+      if (meterGrantResult.grant) {
+        await recordLearningMeterReceiptBestEffort(req, {
+          grant: meterGrantResult.grant,
+          action: meterGrantResult.grant.action,
+          status: "success",
+          durationMs: 0,
+          idempotencySuffix: `ws_receipt_${meterSequence}`,
+          model: "learning-engine-ws",
+        });
+      }
     }).catch((error) => {
       recordLearningObservabilityEvent({
         event: "learning_ws_forward_error",

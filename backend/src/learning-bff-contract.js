@@ -141,6 +141,27 @@ const LEARNING_TUTOR_AGENT_CHANNEL_NESTED_USER_FIELDS = Object.freeze({
     dm: new Set(["enabled", "policy", "allow_from"]),
   }),
 });
+const LEARNING_METER_MB = 1024 * 1024;
+const LEARNING_METER_DEFAULT_ACTION_UNITS = Object.freeze({
+  book_generation: 5,
+  book_edit: 2,
+  deep_research: 3,
+  co_writer_tool_call: 1.5,
+  document_write: 1,
+  file_upload: 1,
+  file_ingest: 2,
+  memory_write: 0.5,
+  notebook_summary: 1.5,
+  notebook_write: 0.75,
+  image_analysis: 2,
+  tutor_agent_tool_call: 1.5,
+  tutor_agent_config_write: 0.75,
+  learning_ws_deep_research: 3,
+  learning_ws_image_analysis: 2,
+  learning_ws_tool_call: 1.25,
+  learning_ws_turn: 1,
+  learning_request: 1,
+});
 
 export function isLearningEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -671,14 +692,18 @@ function normalizeLearningRequestPath(value) {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+function resolveLearningRequestPath(req = {}) {
+  const path = normalizeLearningRequestPath(req.originalUrl || req.path || req.url);
+  return path.startsWith("/api/learning")
+    ? path.slice("/api/learning".length) || "/"
+    : path;
+}
+
 export function shouldConsumeLearningIngressQuota(req = {}) {
   const method = String(req.method || "").trim().toUpperCase();
   if (!["POST", "PUT", "PATCH"].includes(method)) return false;
 
-  const path = normalizeLearningRequestPath(req.originalUrl || req.path || req.url);
-  const learningPath = path.startsWith("/api/learning")
-    ? path.slice("/api/learning".length) || "/"
-    : path;
+  const learningPath = resolveLearningRequestPath(req);
 
   if (method === "POST") {
     if (learningPath === "/books") return true;
@@ -718,12 +743,46 @@ export function shouldConsumeLearningIngressQuota(req = {}) {
 export function classifyLearningIngressQuotaAction(req = {}) {
   const method = String(req.method || "").trim().toUpperCase();
   if (method !== "POST") return null;
-  const path = normalizeLearningRequestPath(req.originalUrl || req.path || req.url);
-  const learningPath = path.startsWith("/api/learning")
-    ? path.slice("/api/learning".length) || "/"
-    : path;
+  const learningPath = resolveLearningRequestPath(req);
   if (learningPath === "/books") return "book_generation";
   return null;
+}
+
+export function classifyLearningMeterActionForIngress(req = {}) {
+  const method = String(req.method || "").trim().toUpperCase();
+  if (!["POST", "PUT", "PATCH"].includes(method)) return null;
+
+  const learningPath = resolveLearningRequestPath(req);
+  if (learningPath === "/books") return "book_generation";
+  if (/^\/books\/(?:deep-dive|supplement|rebuild)$/.test(learningPath)) return "deep_research";
+  if (learningPath.startsWith("/books/")) return "book_edit";
+
+  if (/^\/co-writer\/(?:edit|edit-react|edit-react\/stream|automark)$/.test(learningPath)) {
+    return "co_writer_tool_call";
+  }
+  if (learningPath.startsWith("/co-writer/documents")) return "document_write";
+
+  if (learningPath === "/knowledge/create") return "file_upload";
+  if (/^\/knowledge\/[^/]+\/(?:upload|upload-folder|upload-archive)$/.test(learningPath)) {
+    return "file_upload";
+  }
+  if (/^\/knowledge\/[^/]+\/reindex$/.test(learningPath)) return "file_ingest";
+
+  if (learningPath === "/memory/refresh" || learningPath.startsWith("/memory")) {
+    return "memory_write";
+  }
+  if (learningPath.startsWith("/skills")) return "memory_write";
+
+  if (learningPath === "/notebooks/records/with-summary") return "notebook_summary";
+  if (learningPath.startsWith("/notebooks")) return "notebook_write";
+
+  if (learningPath === "/vision/analyze") return "image_analysis";
+
+  if (learningPath.startsWith("/tutor-agents")) {
+    return method === "POST" ? "tutor_agent_tool_call" : "tutor_agent_config_write";
+  }
+
+  return shouldConsumeLearningIngressQuota(req) ? "learning_request" : null;
 }
 
 export function classifyLearningWsQuotaAction(data, isBinary) {
@@ -748,6 +807,82 @@ export function classifyLearningWsQuotaAction(data, isBinary) {
     return null;
   }
   return null;
+}
+
+export function classifyLearningMeterActionForWs(data, isBinary, { targetPath = "" } = {}) {
+  if (!shouldConsumeLearningWsQuota(data, isBinary)) return null;
+  if (isBinary) return "file_upload";
+
+  const normalizedTargetPath = String(targetPath || "").trim().toLowerCase();
+  const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data || "");
+  let payload = null;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return "learning_ws_turn";
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "learning_ws_turn";
+
+  const capability = String(payload.capability || payload.mode || "").trim().toLowerCase();
+  if (classifyLearningWsQuotaAction(data, isBinary) === "external_search") {
+    return "learning_ws_deep_research";
+  }
+  if (capability.includes("deep") || capability.includes("research")) {
+    return "learning_ws_deep_research";
+  }
+  if (normalizedTargetPath.includes("vision")) return "learning_ws_image_analysis";
+  if (
+    normalizedTargetPath.includes("tutorbot") ||
+    normalizedTargetPath.includes("solve") ||
+    Array.isArray(payload.tools) ||
+    payload.tool
+  ) {
+    return "learning_ws_tool_call";
+  }
+  return "learning_ws_turn";
+}
+
+function readContentLength(headers = {}) {
+  const raw = headers["content-length"] ?? headers["Content-Length"];
+  if (raw === undefined || raw === null || raw === "") return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function roundLearningMeterUnits(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.round(parsed * 10_000) / 10_000;
+}
+
+export function estimateLearningMeterUnitsForAction(action, { contentLength = 0 } = {}) {
+  const normalizedAction = String(action || "learning_request").trim() || "learning_request";
+  const baseUnits = LEARNING_METER_DEFAULT_ACTION_UNITS[normalizedAction] || 1;
+  const bytes = Math.max(0, Number(contentLength || 0));
+  if (normalizedAction.includes("upload") || normalizedAction.includes("file")) {
+    return roundLearningMeterUnits(Math.max(baseUnits, (bytes / LEARNING_METER_MB) * 0.1));
+  }
+  if (normalizedAction.includes("ingest")) {
+    return roundLearningMeterUnits(Math.max(baseUnits, (bytes / LEARNING_METER_MB) * 0.1));
+  }
+  return roundLearningMeterUnits(baseUnits);
+}
+
+export function estimateLearningMeterUnitsForIngress(req = {}, action = null) {
+  const resolvedAction = action || classifyLearningMeterActionForIngress(req);
+  if (!resolvedAction) return 0;
+  return estimateLearningMeterUnitsForAction(resolvedAction, {
+    contentLength: readContentLength(req.headers || {}),
+  });
+}
+
+export function estimateLearningMeterUnitsForWs(data, isBinary, { action = null } = {}) {
+  const resolvedAction = action || classifyLearningMeterActionForWs(data, isBinary);
+  if (!resolvedAction) return 0;
+  const contentLength = isBinary
+    ? Buffer.byteLength(data || "")
+    : Buffer.byteLength(Buffer.isBuffer(data) ? data : String(data || ""), "utf8");
+  return estimateLearningMeterUnitsForAction(resolvedAction, { contentLength });
 }
 
 export function resolveLearningMaxRequestBytes(env = process.env) {
