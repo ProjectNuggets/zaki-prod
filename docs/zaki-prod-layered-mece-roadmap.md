@@ -209,10 +209,11 @@ Completed:
   - Spaces/Chat authenticated and anonymous chat.
   - Agent direct stream and Bot BFF stream.
 - Frontend `useMeterStatus()` and Settings usage cards now read `/api/meter/status` for plan, weekly allowance, and five-hour window state.
+- `/api/meter/status` now includes per-product weighted usage windows from the central receipt ledger, and Settings usage rows consume that meter-ledger breakdown with legacy rows as fallback only.
 
 Next:
 
-1. Move per-product weighted usage rows from compatibility counters into meter-ledger aggregation.
-2. S05 MECE Settings IA cleanup.
-3. S06 Dashboard command center v1 against `/api/meter/status` and `/api/products/registry`.
+1. S05 MECE Settings IA cleanup.
+2. S06 Dashboard command center v1 against `/api/meter/status` and `/api/products/registry`.
+3. Anonymous meter status client and free/no-registration dashboard entry.
 4. Memory Control Plane governance slices S12-S15.

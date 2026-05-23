@@ -32,7 +32,7 @@ V2 UI should consume these contracts first:
 - `GET /api/products/registry`
   - Product catalog, lifecycle, operational state, route, entry point, and memory scope.
 - `GET /api/meter/status`
-  - Plan tier, rolling five-hour window, weekly allowance, reset times, product states, grant policies.
+  - Plan tier, rolling five-hour window, weekly allowance, reset times, product states, grant policies, and per-product weighted usage windows.
   - Supports authenticated users and anonymous sessions.
 - `POST /api/meter/grants`
   - Central grant contract for downstream products such as Hire.
@@ -60,6 +60,7 @@ Central metering is wired as follows:
 - Agent: direct `/api/agent/chat/stream` and `/v1/me/bot/chat/stream` issue central grants and write receipts.
 
 Failed upstream calls write failed receipts with zero weighted debit.
+Settings now reads product usage rows from `/api/meter/status`; `GET /api/usage/summary` is fallback compatibility only.
 
 ## What Claude Design Files Should Provide
 
@@ -91,8 +92,8 @@ The design files should focus on:
 
 These are acceptable while receiving design files, but must be closed before final launch:
 
-- Per-product weighted usage breakdown should move from legacy `usage/summary` rows to meter-ledger aggregation.
 - Dashboard V2 still needs implementation against the new contracts.
+- Anonymous/free dashboard usage needs a frontend client that can call meter status without an auth token.
 - Full Memory Control Plane governance is not complete.
 - Pricing/checkout still needs final Free/Personal/Pro/Pro MAX migration.
 - Auth future-surface foundation for CLI/local/extensions remains a later slice.

@@ -90,4 +90,53 @@ describe("platform meter", () => {
       "2026-05-22T10:00:00.000Z",
     ]);
   });
+
+  it("aggregates product usage windows from the central receipt ledger", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ weighted_units: 3, receipts: 2 })
+      .mockResolvedValueOnce({ weighted_units: 8, receipts: 4 });
+    const dbAll = jest
+      .fn()
+      .mockResolvedValueOnce([
+        { product_id: "spaces", weighted_units: 1.5, receipts: 1 },
+        { product_id: "agent", weighted_units: 1.5, receipts: 1 },
+      ])
+      .mockResolvedValueOnce([
+        { product_id: "spaces", weighted_units: 2, receipts: 2 },
+        { product_id: "learning", weighted_units: 6, receipts: 2 },
+      ]);
+
+    const snapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      dbAll,
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: {
+        plan: { id: "pro", label: "Pro" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 20,
+          weeklyAllowanceUnits: 100,
+        },
+      },
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    expect(snapshot.products).toEqual({
+      spaces: {
+        rolling: { used: 1.5, receipts: 1 },
+        weekly: { used: 2, receipts: 2 },
+      },
+      agent: {
+        rolling: { used: 1.5, receipts: 1 },
+        weekly: { used: 0, receipts: 0 },
+      },
+      learning: {
+        rolling: { used: 0, receipts: 0 },
+        weekly: { used: 6, receipts: 2 },
+      },
+    });
+    expect(dbAll).toHaveBeenCalledTimes(2);
+    expect(dbAll.mock.calls[0][0]).toMatch(/GROUP BY r\.product_id/);
+  });
 });

@@ -208,6 +208,36 @@ export function verifyMeterGrantSignature(signedGrant, secret, { nowDate = new D
   return { valid: true, reason: null, payload };
 }
 
+export function isMeterGrantExpired(grant, { nowDate = new Date() } = {}) {
+  const expiresAt = new Date(grant?.expiresAt || 0).getTime();
+  const nowMs = (nowDate instanceof Date ? nowDate : new Date(nowDate)).getTime();
+  return !Number.isFinite(expiresAt) || !Number.isFinite(nowMs) || expiresAt <= nowMs;
+}
+
+export function buildExpiredMeterGrantResponse(grant, meter = null) {
+  return {
+    allowed: false,
+    status: 409,
+    error: "meter_grant_expired",
+    message: "The meter grant for this idempotency key has expired. Retry with a new idempotency key.",
+    product: grant?.productId || null,
+    productState: grant?.productState || null,
+    meter,
+  };
+}
+
+function buildProductWindowSnapshot(windowSnapshot = {}, productWindow = {}) {
+  return {
+    windowHours: windowSnapshot?.windowHours,
+    used: productWindow?.used ?? 0,
+    receipts: productWindow?.receipts ?? 0,
+    limit: null,
+    remaining: null,
+    startedAt: windowSnapshot?.startedAt || null,
+    resetAt: windowSnapshot?.resetAt || null,
+  };
+}
+
 export function buildMeterStatusPayload({
   identity,
   platform,
@@ -216,6 +246,7 @@ export function buildMeterStatusPayload({
   nowDate = new Date(),
 } = {}) {
   const products = Array.isArray(productRegistry?.products) ? productRegistry.products : [];
+  const productUsage = meterSnapshot?.products || {};
   return {
     success: true,
     contractVersion: CENTRAL_METER_CONTRACT_VERSION,
@@ -245,6 +276,14 @@ export function buildMeterStatusPayload({
           route: product.route || null,
           quotaPolicyId: product.quotaPolicyId || null,
           grantPolicy: getProductGrantPolicy(product.state),
+          rolling: buildProductWindowSnapshot(
+            meterSnapshot?.rolling,
+            productUsage?.[product.productId]?.rolling
+          ),
+          weekly: buildProductWindowSnapshot(
+            meterSnapshot?.weekly,
+            productUsage?.[product.productId]?.weekly
+          ),
         },
       ])
     ),

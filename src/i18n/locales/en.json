@@ -82,6 +82,7 @@
       "unavailable": "Unavailable",
       "memoryGoverned": "Memory policy",
       "usedOfLimit": "{{used}} / {{limit}}",
+      "usedUnits": "{{used}} used",
       "usedUnlimited": "{{used}} · unlimited",
       "period": {
         "day": "Daily",

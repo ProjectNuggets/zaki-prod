@@ -82,6 +82,7 @@
       "unavailable": "غير متاح",
       "memoryGoverned": "سياسة الذاكرة",
       "usedOfLimit": "{{used}} / {{limit}}",
+      "usedUnits": "{{used}} مستخدمة",
       "usedUnlimited": "{{used}} · غير محدود",
       "period": {
         "day": "يومي",

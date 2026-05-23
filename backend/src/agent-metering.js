@@ -18,6 +18,14 @@ function numericByteValue(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function encodedBase64ByteValue(value) {
+  if (typeof value !== "string") return 0;
+  const normalized = value.replace(/\s/g, "");
+  if (!normalized) return 0;
+  const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
+}
+
 export function estimateAgentPayloadStorageBytes(payload = {}) {
   if (!isPlainObject(payload)) return 0;
   let total = 0;
@@ -35,12 +43,12 @@ export function estimateAgentPayloadStorageBytes(payload = {}) {
     );
     let encodedBytes = 0;
     if (typeof item.content_b64 === "string") {
-      encodedBytes = Math.max(encodedBytes, Math.ceil(item.content_b64.length * 0.75));
+      encodedBytes = Math.max(encodedBytes, encodedBase64ByteValue(item.content_b64));
     }
     if (typeof item.contentBase64 === "string") {
-      encodedBytes = Math.max(encodedBytes, Math.ceil(item.contentBase64.length * 0.75));
+      encodedBytes = Math.max(encodedBytes, encodedBase64ByteValue(item.contentBase64));
     }
-    total += explicitBytes || encodedBytes;
+    total += Math.max(explicitBytes, encodedBytes);
   }
 
   total += Math.max(

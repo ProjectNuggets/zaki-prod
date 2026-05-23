@@ -80,8 +80,50 @@ async function readMeterWindow({
   };
 }
 
+async function readMeterProductWindow({
+  dbAll,
+  identity,
+  startedAtIso,
+  endedAtIso,
+}) {
+  if (typeof dbAll !== "function") return {};
+  const tenantId = String(identity?.tenantId || "default").trim() || "default";
+  const identityPredicate =
+    identity.type === "user"
+      ? "g.user_id = $2"
+      : "g.anonymous_key_hash = $2";
+  const identityValue =
+    identity.type === "user" ? identity.userId : identity.anonymousKeyHash;
+  const rows = await dbAll(
+    `
+      SELECT
+        r.product_id,
+        COALESCE(SUM(r.weighted_units), 0)::float8 AS weighted_units,
+        COUNT(r.id)::int AS receipts
+      FROM zaki_meter_receipts r
+      JOIN zaki_meter_grants g ON g.id = r.grant_id
+      WHERE g.tenant_id = $1
+        AND ${identityPredicate}
+        AND r.created_at >= $3::timestamptz
+        AND r.created_at < $4::timestamptz
+      GROUP BY r.product_id
+    `,
+    [tenantId, identityValue, startedAtIso, endedAtIso]
+  );
+  return Object.fromEntries(
+    (Array.isArray(rows) ? rows : []).map((row) => [
+      String(row?.product_id || ""),
+      {
+        used: roundUnits(row?.weighted_units),
+        receipts: Math.max(0, Math.floor(Number(row?.receipts || 0))),
+      },
+    ]).filter(([productId]) => productId)
+  );
+}
+
 export async function readMeterSnapshotForIdentity({
   dbGet,
+  dbAll,
   identity,
   platform,
   nowDate = new Date(),
@@ -115,6 +157,22 @@ export async function readMeterSnapshotForIdentity({
     startedAtIso: weekStartedAtIso,
     endedAtIso: weekEndedAtIso,
   });
+  const rollingProducts = await readMeterProductWindow({
+    dbAll,
+    identity,
+    startedAtIso: rollingStartedAtIso,
+    endedAtIso: nowIso,
+  });
+  const weeklyProducts = await readMeterProductWindow({
+    dbAll,
+    identity,
+    startedAtIso: weekStartedAtIso,
+    endedAtIso: weekEndedAtIso,
+  });
+  const productIds = new Set([
+    ...Object.keys(rollingProducts),
+    ...Object.keys(weeklyProducts),
+  ]);
 
   return {
     plan: {
@@ -138,5 +196,14 @@ export async function readMeterSnapshotForIdentity({
       startedAt: weekStartedAtIso,
       resetAt: weekEndedAtIso,
     },
+    products: Object.fromEntries(
+      [...productIds].map((productId) => [
+        productId,
+        {
+          rolling: rollingProducts[productId] || { used: 0, receipts: 0 },
+          weekly: weeklyProducts[productId] || { used: 0, receipts: 0 },
+        },
+      ])
+    ),
   };
 }

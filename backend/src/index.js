@@ -215,9 +215,11 @@ import {
 } from "./platform-policy.js";
 import {
   CENTRAL_METER_CONTRACT_VERSION,
+  buildExpiredMeterGrantResponse,
   buildMeterGrantDecision,
   buildMeterReceiptDebit,
   buildMeterStatusPayload,
+  isMeterGrantExpired,
   normalizeMeterAction,
   resolveMeterProduct,
   verifyMeterGrantSignature,
@@ -791,6 +793,40 @@ function pipeReadableToResponse(readable, res, label = "Stream") {
   });
 
   readable.pipe(res);
+}
+
+function pipeReadableToResponseWithCompletion(readable, res, label = "Stream") {
+  return new Promise((resolve) => {
+    let settled = false;
+    let finished = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    readable.on("error", (error) => {
+      console.error(`[${label}] Pipe error:`, error);
+      finishErroredStreamResponse(res, label, error);
+      settle({ status: "failed", error });
+    });
+
+    res.on("finish", () => {
+      finished = true;
+      settle({ status: "success" });
+    });
+
+    res.on("close", () => {
+      if (!readable.destroyed) {
+        readable.destroy();
+      }
+      if (!finished) {
+        settle({ status: "cancelled" });
+      }
+    });
+
+    readable.pipe(res);
+  });
 }
 
 async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
@@ -6162,6 +6198,7 @@ function findRegistryProduct(registry, productId) {
 async function readMeterSnapshotForRequest(identity, platform, policy) {
   return readMeterSnapshotForIdentity({
     dbGet,
+    dbAll,
     identity,
     platform,
     policy,
@@ -6375,6 +6412,9 @@ async function issueMeterGrantForIdentity({
     idempotencyKey: normalizedIdempotencyKey,
   });
   if (existing) {
+    if (isMeterGrantExpired(existing)) {
+      return buildExpiredMeterGrantResponse(existing, meter);
+    }
     return {
       allowed: true,
       idempotent: true,
@@ -6532,6 +6572,14 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
       idempotencyKey,
     });
     if (existing) {
+      if (isMeterGrantExpired(existing)) {
+        res.status(409).json({
+          success: false,
+          contractVersion: CENTRAL_METER_CONTRACT_VERSION,
+          ...buildExpiredMeterGrantResponse(existing, meter),
+        });
+        return;
+      }
       res.status(200).json({
         success: true,
         contractVersion: CENTRAL_METER_CONTRACT_VERSION,
@@ -10604,6 +10652,13 @@ const agentChatStreamHandler = async (req, res) => {
       setPromptQuotaHeaders,
     });
     if (!agentQuotaDecision.allowed) {
+      await recordAgentMeterReceiptBestEffort(req, {
+        status: "cancelled",
+        durationMs: Date.now() - meterStartedAtMs,
+        message: originalMessage,
+        payload,
+        idempotencySuffix: "legacy_quota_denied",
+      });
       return res.status(agentQuotaDecision.status).json(agentQuotaDecision.payload);
     }
     promptQuota = agentQuotaDecision.quota;
@@ -10716,14 +10771,15 @@ const agentChatStreamHandler = async (req, res) => {
 
     if (!isSse) {
       const nodeStream = Readable.fromWeb(upstream.body);
+      const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Agent stream");
       await recordAgentMeterReceiptBestEffort(req, {
-        status: upstream.ok ? "success" : "failed",
+        status: upstream.ok && pipeResult.status === "success" ? "success" : pipeResult.status,
         durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload: normalizedPayload,
         model: "nullalis-agent-non-sse",
+        idempotencySuffix: `non_sse_${pipeResult.status}`,
       });
-      pipeReadableToResponse(nodeStream, res, "Agent stream");
       return;
     }
 

@@ -66,7 +66,7 @@ describe("agent central metering helpers", () => {
       estimateAgentPayloadStorageBytes({
         attachments: [{ content_b64: "YWJjZA==", size: 2 }],
       })
-    ).toBe(2);
+    ).toBe(4);
 
     const metrics = createAgentStreamMeterMetrics();
     updateAgentStreamMeterMetrics(metrics, 'event: token\ndata: {"delta":"hello"}\n\n');

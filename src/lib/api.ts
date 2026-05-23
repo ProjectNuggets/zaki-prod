@@ -1357,6 +1357,8 @@ export type MeterStatusProduct = {
   lifecycle?: "current" | "future" | string;
   route?: string | null;
   quotaPolicyId?: string | null;
+  rolling?: MeterWindowSnapshot | null;
+  weekly?: MeterWindowSnapshot | null;
   grantPolicy?: {
     allowed?: boolean;
     reason?: string | null;

@@ -57,6 +57,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.usage.unavailable": "Unavailable",
     "settingsModal.usage.memoryGoverned": "Memory policy",
     "settingsModal.usage.usedOfLimit": "{{used}} / {{limit}}",
+    "settingsModal.usage.usedUnits": "{{used}} used",
     "settingsModal.usage.usedUnlimited": "{{used}} · unlimited",
     "settingsModal.usage.period.day": "Daily",
     "settingsModal.usage.period.week": "Weekly",
@@ -278,9 +279,31 @@ jest.mock("@/queries", () => ({
           resetAt: "2026-05-25T00:00:00.000Z",
         },
         products: {
-          spaces: { id: "spaces", state: "enabled" },
-          agent: { id: "agent", state: "enabled" },
-          learning: { id: "learning", state: "enabled" },
+          spaces: {
+            id: "spaces",
+            state: "enabled",
+            weekly: { used: 2, receipts: 1, resetAt: "2026-05-25T00:00:00.000Z" },
+          },
+          agent: {
+            id: "agent",
+            state: "enabled",
+            weekly: { used: 7, receipts: 2, resetAt: "2026-05-25T00:00:00.000Z" },
+          },
+          learning: {
+            id: "learning",
+            state: "enabled",
+            weekly: { used: 5, receipts: 1, resetAt: "2026-05-25T00:00:00.000Z" },
+          },
+          hire: {
+            id: "hire",
+            state: "disabled",
+            weekly: { used: 0, receipts: 0, resetAt: "2026-05-25T00:00:00.000Z" },
+          },
+          design: {
+            id: "design",
+            state: "disabled",
+            weekly: { used: 0, receipts: 0, resetAt: "2026-05-25T00:00:00.000Z" },
+          },
         },
       },
     },
@@ -409,12 +432,15 @@ describe("SettingsModal", () => {
     expect(within(usage).getByText("1,420 / 1,500 left")).toBeInTheDocument();
     expect(within(usage).getByText("80 / 100 left")).toBeInTheDocument();
     expect(within(usage).getByText("ZAKI Spaces")).toBeInTheDocument();
-    expect(within(usage).getByText("2 / 10")).toBeInTheDocument();
+    expect(within(usage).getByText("2 used")).toBeInTheDocument();
     expect(within(usage).getByText("ZAKI Agent")).toBeInTheDocument();
-    expect(within(usage).getByText("7 · unlimited")).toBeInTheDocument();
+    expect(within(usage).getByText("7 used")).toBeInTheDocument();
+    expect(within(usage).getByText("ZAKI Learn")).toBeInTheDocument();
+    expect(within(usage).getByText("5 used")).toBeInTheDocument();
+    expect(within(usage).getByText("ZAKI Hire")).toBeInTheDocument();
+    expect(within(usage).getByText("ZAKI Design")).toBeInTheDocument();
     expect(within(usage).queryByText("ZAKI Brain")).not.toBeInTheDocument();
     expect(within(usage).queryByText("Memory policy")).not.toBeInTheDocument();
-    expect(within(usage).queryByText("ZAKI Hire")).not.toBeInTheDocument();
     expect(productsAccess).toBeInTheDocument();
   });
 

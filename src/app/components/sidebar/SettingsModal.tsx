@@ -9,6 +9,7 @@ import {
 } from "@/queries";
 import type {
   MeterWindowSnapshot,
+  MeterStatusProduct,
   PlatformUsageProductId,
   ProductOperationalState,
   ProductRegistryItem,
@@ -38,6 +39,10 @@ interface SettingsModalProps {
 }
 
 const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = ["spaces", "agent", "learn"];
+type MeterUsageRow = {
+  product: ProductRegistryItem;
+  meterProduct: MeterStatusProduct | null;
+};
 const PRODUCT_ENTRY_POINT_KEYS: Partial<Record<ProductRegistryProductId, string>> = {
   spaces: "settingsModal.productsAccess.entryPoints.spaces",
   agent: "settingsModal.productsAccess.entryPoints.agent",
@@ -126,6 +131,11 @@ function getMeterWindowLabel(
     return t("settingsModal.usage.usedOfLimit", {
       used: formatUsageUnits(snapshot.used),
       limit: formatUsageUnits(snapshot.limit),
+    });
+  }
+  if (typeof snapshot.used === "number") {
+    return t("settingsModal.usage.usedUnits", {
+      used: formatUsageUnits(snapshot.used),
     });
   }
   return null;
@@ -252,7 +262,7 @@ export function SettingsModal({
           hours: allowance.burst.windowHours,
         })
       : t("settingsModal.usage.burstWindowPending"));
-  const usageProducts = PLATFORM_USAGE_PRODUCTS.map((productId) => {
+  const legacyUsageProducts = PLATFORM_USAGE_PRODUCTS.map((productId) => {
     const product = platformUsage?.products?.[productId];
     if (!product) return null;
     return product;
@@ -261,6 +271,14 @@ export function SettingsModal({
     productRegistry?.products?.filter(
       (product) => product.visibleInSettings !== false && product.state !== "hidden"
     ) ?? [];
+  const meterUsageRows: MeterUsageRow[] = meterStatus
+    ? productAccessRows
+        .filter((product) => product.productKind !== "control_plane")
+        .map((product) => ({
+          product,
+          meterProduct: product.productId ? meterStatus.products?.[product.productId] ?? null : null,
+        }))
+    : [];
 
   useEffect(() => {
     if (isOpen) {
@@ -596,7 +614,34 @@ export function SettingsModal({
               ) : null}
 
               <div className="grid gap-2">
-                {usageProducts.map((product) => {
+                {meterUsageRows.length > 0 ? meterUsageRows.map(({ product, meterProduct }) => {
+                  const weekly = meterProduct?.weekly ?? null;
+                  const resetLabel = formatUsageReset(weekly?.resetAt);
+                  const summaryLabel = getMeterWindowLabel(t, weekly) || t("settingsModal.usage.pending");
+                  return (
+                    <div
+                      key={product?.productId}
+                      className="grid gap-1 rounded-zaki-md border border-zaki-subtle bg-zaki-raised px-3 py-3 text-sm dark:border-zaki-dark-border dark:bg-zaki-dark-panel"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                          {product?.label}
+                        </span>
+                        <span className="font-mono-ui text-xs text-zaki-primary dark:text-zaki-dark-primary">
+                          {summaryLabel}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 text-xs text-zaki-muted dark:text-zaki-dark-muted">
+                        <span>{t("settingsModal.usage.period.week")}</span>
+                        <span>
+                          {resetLabel
+                            ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
+                            : t("settingsModal.usage.resetPending")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }) : legacyUsageProducts.map((product) => {
                   const quota = product?.quota;
                   const resetLabel = formatUsageReset(quota?.resetAt);
                   const periodLabel = getUsagePeriodLabel(t, quota?.period);

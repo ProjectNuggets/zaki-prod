@@ -1,8 +1,11 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  buildExpiredMeterGrantResponse,
   buildMeterGrantDecision,
   buildMeterReceiptDebit,
+  buildMeterStatusPayload,
   calculateRawUnitsFromUsageFacts,
+  isMeterGrantExpired,
   normalizeMeterAction,
   resolveMeterCapabilityForAction,
   signMeterGrant,
@@ -65,6 +68,34 @@ describe("central meter contract", () => {
     ).toEqual(expect.objectContaining({ valid: false, reason: "expired" }));
   });
 
+  it("treats expired idempotent grants as non-reusable", () => {
+    const grant = {
+      grantId: "00000000-0000-4000-8000-000000000003",
+      productId: "hire",
+      productState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+      expiresAt: "2026-05-22T10:05:00.000Z",
+    };
+
+    expect(
+      isMeterGrantExpired(grant, {
+        nowDate: new Date("2026-05-22T10:04:59.000Z"),
+      })
+    ).toBe(false);
+    expect(
+      isMeterGrantExpired(grant, {
+        nowDate: new Date("2026-05-22T10:05:00.000Z"),
+      })
+    ).toBe(true);
+    expect(buildExpiredMeterGrantResponse(grant)).toEqual(
+      expect.objectContaining({
+        allowed: false,
+        status: 409,
+        error: "meter_grant_expired",
+        product: "hire",
+      })
+    );
+  });
+
   it("builds a Hire grant from central plan allowance and product state", () => {
     const decision = buildMeterGrantDecision({
       tenantId: "tenant-1",
@@ -95,6 +126,76 @@ describe("central meter contract", () => {
     );
     expect(decision.signedGrant).toContain(".");
     expect(decision.maxUnits).toBeGreaterThan(0);
+  });
+
+  it("adds per-product usage windows to meter status without per-product limits", () => {
+    const payload = buildMeterStatusPayload({
+      identity: { type: "user", tenantId: "tenant-1", userId: 42 },
+      platform: platformFor("pro"),
+      meterSnapshot: {
+        rolling: {
+          windowHours: 5,
+          used: 10,
+          receipts: 4,
+          limit: 200,
+          remaining: 190,
+          startedAt: "2026-05-22T05:00:00.000Z",
+          resetAt: "2026-05-22T10:00:00.000Z",
+        },
+        weekly: {
+          used: 40,
+          receipts: 9,
+          limit: 1000,
+          remaining: 960,
+          startedAt: "2026-05-18T00:00:00.000Z",
+          resetAt: "2026-05-25T00:00:00.000Z",
+        },
+        products: {
+          hire: {
+            rolling: { used: 2, receipts: 1 },
+            weekly: { used: 7, receipts: 3 },
+          },
+        },
+      },
+      productRegistry: {
+        contractVersion: "test.registry",
+        products: [
+          {
+            productId: "hire",
+            state: PRODUCT_OPERATIONAL_STATES.ENABLED,
+            lifecycle: "future",
+            route: "/hire",
+            quotaPolicyId: "hire_pipeline",
+          },
+          {
+            productId: "spaces",
+            state: PRODUCT_OPERATIONAL_STATES.ENABLED,
+            lifecycle: "current",
+            route: "/spaces",
+            quotaPolicyId: "spaces_workspace",
+          },
+        ],
+      },
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    expect(payload.products.hire.weekly).toEqual(
+      expect.objectContaining({
+        used: 7,
+        receipts: 3,
+        limit: null,
+        remaining: null,
+        resetAt: "2026-05-25T00:00:00.000Z",
+      })
+    );
+    expect(payload.products.spaces.weekly).toEqual(
+      expect.objectContaining({
+        used: 0,
+        receipts: 0,
+        limit: null,
+        remaining: null,
+      })
+    );
   });
 
   it("denies grants when the product is operationally hidden", () => {
