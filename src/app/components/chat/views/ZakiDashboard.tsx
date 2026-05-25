@@ -20,6 +20,16 @@ import {
   useProductRegistry,
   useZakiSessions,
 } from "@/queries";
+import {
+  V2Badge,
+  V2Button,
+  V2Panel,
+  V2PanelHead,
+  V2ProductCard,
+  V2SectionHeader,
+  V2StatusStrip,
+  type V2BadgeTone,
+} from "@/app/components/v2";
 import type {
   AgentSession,
   MeterStatusProduct,
@@ -209,13 +219,13 @@ function sortProducts(products: ProductRegistryItem[]) {
   });
 }
 
-function getBadgeTone(state?: ProductOperationalState) {
-  if (state === "enabled") return "zaki-dashboard-v2__badge--success";
+function getBadgeTone(state?: ProductOperationalState): V2BadgeTone {
+  if (state === "enabled") return "success";
   if (state === "degraded" || state === "maintenance") {
-    return "zaki-dashboard-v2__badge--warn";
+    return "warn";
   }
-  if (state === "readOnly") return "zaki-dashboard-v2__badge--accent";
-  return "zaki-dashboard-v2__badge--muted";
+  if (state === "readOnly") return "accent";
+  return "default";
 }
 
 function getProductTag(t: TranslateFn, product: ProductRegistryItem) {
@@ -386,38 +396,48 @@ export function ZakiDashboard({
       aria-labelledby="zaki-command-center-title"
       data-testid="zaki-command-center"
     >
-      <div className="zaki-dashboard-v2__status" role="status" aria-live="polite">
-        <span className="zaki-dashboard-v2__status-group">
-          <span className="zaki-dashboard-v2__pip zaki-dashboard-v2__pip--success" />
-          {statusLabel}
-        </span>
-        <span className="zaki-dashboard-v2__status-group">
-          {t("zakiDashboard.status.plan")}
-          <span className="zaki-dashboard-v2__status-value">
-            {meterLoading
+      <V2StatusStrip
+        aria-live="polite"
+        items={[
+          {
+            id: "online",
+            label: statusLabel,
+            active: true,
+            tone: productRegistryLoading || meterLoading ? "warn" : "success",
+          },
+          {
+            id: "plan",
+            label: t("zakiDashboard.status.plan"),
+            value: meterLoading
               ? t("zakiDashboard.meter.loading")
-              : meterStatus?.plan?.label || t("zakiDashboard.meter.free")}
-          </span>
-        </span>
-        <span className="zaki-dashboard-v2__status-group">
-          {t("zakiDashboard.status.weeklyReset")}
-          <span className="zaki-dashboard-v2__status-value">
-            {weeklyReset || t("zakiDashboard.meter.resetPending")}
-          </span>
-        </span>
-        <span className="zaki-dashboard-v2__status-group">
-          {t("zakiDashboard.status.identity")}
-          <span className="zaki-dashboard-v2__status-value">{identityLabel}</span>
-        </span>
-        {liveAgentSession ? (
-          <span className="zaki-dashboard-v2__status-group zaki-dashboard-v2__live">
-            <span className="zaki-dashboard-v2__pip zaki-dashboard-v2__pip--accent" />
-            {t("zakiDashboard.status.agentLive", {
-              id: liveAgentSession.session_key.split(":").pop() || "agent",
-            })}
-          </span>
-        ) : null}
-      </div>
+              : meterStatus?.plan?.label || t("zakiDashboard.meter.free"),
+          },
+          {
+            id: "weekly-reset",
+            label: t("zakiDashboard.status.weeklyReset"),
+            value: weeklyReset || t("zakiDashboard.meter.resetPending"),
+          },
+          {
+            id: "identity",
+            label: t("zakiDashboard.status.identity"),
+            value: identityLabel,
+          },
+          ...(liveAgentSession
+            ? [
+                {
+                  id: "agent-live",
+                  label: t("zakiDashboard.status.agentLive", {
+                    id:
+                      liveAgentSession.session_key.split(":").pop() ||
+                      "agent",
+                  }),
+                  active: true,
+                  tone: "accent" as const,
+                },
+              ]
+            : []),
+        ]}
+      />
 
       <div className="zaki-dashboard-v2__wrap">
         <section className="zaki-dashboard-v2__hero">
@@ -440,25 +460,20 @@ export function ZakiDashboard({
               {t("zakiDashboard.subtitle")}
             </p>
             <div className="zaki-dashboard-v2__hero-actions">
-              <button
-                type="button"
-                className="zaki-dashboard-v2__button zaki-dashboard-v2__button--accent"
+              <V2Button
+                variant="accent"
                 onClick={() => navigate("/agent")}
               >
-                <Sparkles className="size-4" />
+                <Sparkles className="size-4" aria-hidden="true" />
                 {t("zakiDashboard.actions.openAgent")}
-              </button>
-              <button
-                type="button"
-                className="zaki-dashboard-v2__button"
+              </V2Button>
+              <V2Button
                 onClick={() => navigate("/spaces")}
               >
-                <MessageSquareText className="size-4" />
+                <MessageSquareText className="size-4" aria-hidden="true" />
                 {t("zakiDashboard.actions.openChat")}
-              </button>
-              <button
-                type="button"
-                className="zaki-dashboard-v2__button"
+              </V2Button>
+              <V2Button
                 onClick={() =>
                   onSendExample(
                     t("zakiDashboard.agentPrompt", {
@@ -468,26 +483,26 @@ export function ZakiDashboard({
                   )
                 }
               >
-                <ArrowRight className="size-4" />
+                <ArrowRight className="size-4" aria-hidden="true" />
                 {t("zakiDashboard.actions.askAgent")}
-              </button>
+              </V2Button>
             </div>
             <div className="zaki-dashboard-v2__tags">
-              <span className="zaki-dashboard-v2__tag">
+              <V2Badge>
                 {t("zakiDashboard.tags.plan")} ·{" "}
                 <strong>{meterStatus?.plan?.label || t("zakiDashboard.meter.free")}</strong>
-              </span>
-              <span className="zaki-dashboard-v2__tag">
+              </V2Badge>
+              <V2Badge>
                 {t("zakiDashboard.tags.products")} ·{" "}
                 <strong>{productsAvailable}</strong>
-              </span>
-              <span className="zaki-dashboard-v2__tag">
+              </V2Badge>
+              <V2Badge>
                 {t("zakiDashboard.tags.memory")} ·{" "}
                 <strong>{memoryScopes.length}</strong>
-              </span>
-              <span className="zaki-dashboard-v2__tag zaki-dashboard-v2__tag--accent">
+              </V2Badge>
+              <V2Badge tone="accent">
                 {getInitials(displayName)}
-              </span>
+              </V2Badge>
             </div>
           </div>
 
@@ -563,25 +578,17 @@ export function ZakiDashboard({
           </aside>
         </section>
 
-        <div className="zaki-dashboard-v2__section-head">
-          <div>
-            <h2 className="zaki-dashboard-v2__section-title">
-              {t("zakiDashboard.products.title")}
-            </h2>
-            <div className="zaki-dashboard-v2__section-meta">
-              {t("zakiDashboard.products.subtitle")}
-            </div>
-          </div>
-          <div className="zaki-dashboard-v2__section-meta">
-            {t("zakiDashboard.products.availableCount", {
-              count: productsAvailable,
-              total: dashboardProducts.length,
-            })}
-          </div>
-        </div>
+        <V2SectionHeader
+          title={t("zakiDashboard.products.title")}
+          subtitle={t("zakiDashboard.products.subtitle")}
+          meta={t("zakiDashboard.products.availableCount", {
+            count: productsAvailable,
+            total: dashboardProducts.length,
+          })}
+        />
 
         <section
-          className="zaki-dashboard-v2__products"
+          className="v2-product-grid"
           data-testid="zaki-dashboard-products"
         >
           {productRegistryLoading ? (
@@ -601,96 +608,70 @@ export function ZakiDashboard({
             const productWeekly = formatWindowLabel(t, meterProduct?.weekly);
             const productName = getProductName(t, product);
             return (
-              <article
+              <V2ProductCard
                 key={product.productId}
-                className={cn(
-                  "zaki-dashboard-v2__product",
-                  product.productId === "agent" && "zaki-dashboard-v2__product--primary",
-                  !isOpenable && "zaki-dashboard-v2__product--blocked"
-                )}
-                data-testid={`zaki-product-card-${product.productId}`}
-              >
-                <div className="zaki-dashboard-v2__product-head">
-                  <span className="zaki-dashboard-v2__code">
-                    {product.productId}
-                  </span>
-                  <span
-                    className={cn(
-                      "zaki-dashboard-v2__badge",
-                      getBadgeTone(product.state)
-                    )}
-                  >
-                    {getProductTag(t, product)}
-                  </span>
-                </div>
-
-                <div>
-                  <Icon className="mb-3 size-5 text-current" aria-hidden="true" />
-                  <h3 className="zaki-dashboard-v2__product-title">
-                    {productName}
-                  </h3>
-                </div>
-
-                <p className="zaki-dashboard-v2__product-desc">
-                  {t(getProductDescriptionKey(product.productId), {
-                    defaultValue: product.entryPoint || product.label,
-                  })}
-                </p>
-
-                <dl className="zaki-dashboard-v2__product-meta">
-                  <div>
-                    <dt>{t("zakiDashboard.products.usage")}</dt>
-                    <dd>{productWeekly}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("zakiDashboard.products.memory")}</dt>
-                    <dd>{getMemoryScopeLabel(t, product.memoryScope)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("zakiDashboard.products.state")}</dt>
-                    <dd>{getProductStateLabel(t, product.state)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("zakiDashboard.products.surface")}</dt>
-                    <dd>{product.entryPoint || route || product.productId}</dd>
-                  </div>
-                </dl>
-
-                <div className="zaki-dashboard-v2__product-foot">
-                  <button
-                    type="button"
-                    className="zaki-dashboard-v2__enter"
-                    disabled={!isOpenable}
-                    aria-label={
-                      isOpenable
-                        ? t("zakiDashboard.products.openAria", {
-                            product: productName,
-                          })
-                        : t("zakiDashboard.products.notAvailableAria", {
-                            product: productName,
-                          })
-                    }
-                    onClick={() => {
-                      if (route && isOpenable) navigate(route);
-                    }}
-                  >
-                    {isOpenable
-                      ? t("zakiDashboard.products.open")
-                      : t("zakiDashboard.products.notAvailable")}
-                    <ArrowRight className="size-3.5" />
-                  </button>
-                </div>
-              </article>
+                code={product.productId}
+                tag={getProductTag(t, product)}
+                tagTone={getBadgeTone(product.state)}
+                icon={<Icon className="size-5" aria-hidden="true" />}
+                title={productName}
+                description={t(getProductDescriptionKey(product.productId), {
+                  defaultValue: product.entryPoint || product.label,
+                })}
+                primary={product.productId === "agent"}
+                disabled={!isOpenable}
+                testId={`zaki-product-card-${product.productId}`}
+                meta={[
+                  {
+                    id: "usage",
+                    label: t("zakiDashboard.products.usage"),
+                    value: productWeekly,
+                  },
+                  {
+                    id: "memory",
+                    label: t("zakiDashboard.products.memory"),
+                    value: getMemoryScopeLabel(t, product.memoryScope),
+                  },
+                  {
+                    id: "state",
+                    label: t("zakiDashboard.products.state"),
+                    value: getProductStateLabel(t, product.state),
+                  },
+                  {
+                    id: "surface",
+                    label: t("zakiDashboard.products.surface"),
+                    value: product.entryPoint || route || product.productId,
+                  },
+                ]}
+                actionLabel={
+                  isOpenable
+                    ? t("zakiDashboard.products.open")
+                    : t("zakiDashboard.products.notAvailable")
+                }
+                actionDisabled={!isOpenable}
+                actionAriaLabel={
+                  isOpenable
+                    ? t("zakiDashboard.products.openAria", {
+                        product: productName,
+                      })
+                    : t("zakiDashboard.products.notAvailableAria", {
+                        product: productName,
+                      })
+                }
+                onAction={() => {
+                  if (route && isOpenable) navigate(route);
+                }}
+              />
             );
           })}
         </section>
 
         <section className="zaki-dashboard-v2__row-grid">
-          <div className="zaki-dashboard-v2__panel" data-testid="zaki-dashboard-active-work">
-            <div className="zaki-dashboard-v2__panel-head">
-              <span>{t("zakiDashboard.activeWork.title")}</span>
-              <span>{t("zakiDashboard.activeWork.source")}</span>
-            </div>
+          <V2Panel data-testid="zaki-dashboard-active-work">
+            <V2PanelHead
+              title={t("zakiDashboard.activeWork.title")}
+              meta={t("zakiDashboard.activeWork.source")}
+            />
             {zakiSessionsLoading ? (
               <div className="zaki-dashboard-v2__empty">
                 {t("zakiDashboard.activeWork.loading")}
@@ -716,16 +697,15 @@ export function ZakiDashboard({
                 {t("zakiDashboard.activeWork.empty")}
               </div>
             )}
-          </div>
+          </V2Panel>
 
-          <aside
-            className="zaki-dashboard-v2__panel"
+          <V2Panel
             data-testid="zaki-dashboard-memory"
           >
-            <div className="zaki-dashboard-v2__panel-head">
-              <span>{t("zakiDashboard.memory.title")}</span>
-              <span>{t("zakiDashboard.memory.scopeCount", { count: memoryScopes.length })}</span>
-            </div>
+            <V2PanelHead
+              title={t("zakiDashboard.memory.title")}
+              meta={t("zakiDashboard.memory.scopeCount", { count: memoryScopes.length })}
+            />
             {memoryScopes.length > 0 ? (
               memoryScopes.map((row, index) => (
                 <div className="zaki-dashboard-v2__memory-row" key={row.scope}>
@@ -759,27 +739,24 @@ export function ZakiDashboard({
               </div>
             )}
             <div className="zaki-dashboard-v2__panel-actions">
-              <button
-                type="button"
-                className="zaki-dashboard-v2__button zaki-dashboard-v2__button--primary"
+              <V2Button
+                variant="primary"
                 data-onboarding-id="zaki-dashboard-brain-entry"
                 onClick={() => navigate("/brain")}
               >
-                <Brain className="size-4" />
+                <Brain className="size-4" aria-hidden="true" />
                 {t("zakiDashboard.memory.open")}
-              </button>
+              </V2Button>
               {onOpenMemoryImport ? (
-                <button
-                  type="button"
-                  className="zaki-dashboard-v2__button"
+                <V2Button
                   onClick={onOpenMemoryImport}
                 >
-                  <Upload className="size-4" />
+                  <Upload className="size-4" aria-hidden="true" />
                   {t("zakiDashboard.memory.import")}
-                </button>
+                </V2Button>
               ) : null}
             </div>
-          </aside>
+          </V2Panel>
         </section>
 
         <section className="zaki-dashboard-v2__commercial">
@@ -792,22 +769,19 @@ export function ZakiDashboard({
             </p>
           </div>
           <div className="zaki-dashboard-v2__actions">
-            <button
-              type="button"
-              className="zaki-dashboard-v2__button"
+            <V2Button
               onClick={() => navigate("/pricing")}
             >
-              <Gauge className="size-4" />
+              <Gauge className="size-4" aria-hidden="true" />
               {t("zakiDashboard.commercial.plans")}
-            </button>
-            <button
-              type="button"
-              className="zaki-dashboard-v2__button zaki-dashboard-v2__button--accent"
+            </V2Button>
+            <V2Button
+              variant="accent"
               onClick={() => navigate("/brain")}
             >
-              <Database className="size-4" />
+              <Database className="size-4" aria-hidden="true" />
               {t("zakiDashboard.commercial.memory")}
-            </button>
+            </V2Button>
           </div>
         </section>
       </div>

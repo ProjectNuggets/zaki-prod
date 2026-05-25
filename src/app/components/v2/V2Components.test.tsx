@@ -5,6 +5,8 @@ import {
   V2ActionGrid,
   V2Meter,
   V2MetricGrid,
+  V2ProductCard,
+  V2SectionHeader,
   V2SegmentedControl,
   V2StatusStrip,
   V2Tabs,
@@ -87,5 +89,32 @@ describe("V2 component primitives", () => {
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Memory" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Share" })).not.toBeDisabled();
+  });
+
+  it("renders product cards and section headers from reusable V2 primitives", () => {
+    const onAction = jest.fn();
+    render(
+      <>
+        <V2SectionHeader title="Products" subtitle="What you can use" meta="6 available" />
+        <V2ProductCard
+          code="agent"
+          tag="live"
+          tagTone="accent"
+          title="ZAKI Agent"
+          description="Personal agent with memory."
+          meta={[
+            { id: "usage", label: "Usage", value: "10 left" },
+            { id: "memory", label: "Memory", value: "User scoped" },
+          ]}
+          actionLabel="Open"
+          actionAriaLabel="Open ZAKI Agent"
+          onAction={onAction}
+        />
+      </>
+    );
+
+    expect(screen.getByRole("heading", { name: "Products" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open ZAKI Agent" }));
+    expect(onAction).toHaveBeenCalledTimes(1);
   });
 });

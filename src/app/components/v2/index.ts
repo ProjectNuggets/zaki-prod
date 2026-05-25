@@ -12,6 +12,10 @@ export { V2MetricGrid } from "./V2MetricGrid";
 export type { V2MetricGridItem, V2MetricGridProps } from "./V2MetricGrid";
 export { V2Panel, V2PanelBody, V2PanelHead } from "./V2Panel";
 export type { V2PanelHeadProps, V2PanelProps } from "./V2Panel";
+export { V2ProductCard } from "./V2ProductCard";
+export type { V2ProductCardMeta, V2ProductCardProps } from "./V2ProductCard";
+export { V2SectionHeader } from "./V2SectionHeader";
+export type { V2SectionHeaderProps } from "./V2SectionHeader";
 export { V2SegmentedControl } from "./V2SegmentedControl";
 export type {
   V2SegmentedControlProps,

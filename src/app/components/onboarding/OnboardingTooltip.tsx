@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { V2Button } from "@/app/components/v2";
 
 type Placement = "top" | "bottom" | "left" | "right";
 
@@ -165,7 +165,7 @@ export function OnboardingTooltip({
 
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[100]"
+      className="zaki-onboarding-v2"
       role="dialog"
       aria-modal="false"
       aria-label={title}
@@ -173,7 +173,7 @@ export function OnboardingTooltip({
       {spotlight && rect ? (
         <svg
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full"
+          className="zaki-onboarding-v2__spotlight"
         >
           <defs>
             <mask id="onboarding-spotlight-mask">
@@ -183,7 +183,7 @@ export function OnboardingTooltip({
                 y={Math.max(0, rect.top - 6)}
                 width={rect.width + 12}
                 height={rect.height + 12}
-                rx={Math.min(20, rect.height / 2 + 6)}
+                rx={Math.min(6, rect.height / 2 + 6)}
                 fill="black"
               />
             </mask>
@@ -193,51 +193,54 @@ export function OnboardingTooltip({
             y="0"
             width="100%"
             height="100%"
-            fill="rgba(20, 14, 10, 0.55)"
+            className="zaki-onboarding-v2__spotlight-fill"
             mask="url(#onboarding-spotlight-mask)"
           />
         </svg>
       ) : (
-        <div className="pointer-events-none absolute inset-0 bg-[rgba(20,14,10,0.45)]" />
+        <div className="zaki-onboarding-v2__overlay" />
       )}
       <div
-        className={cn(
-          "pointer-events-auto absolute rounded-zaki-xl border border-zaki-strong bg-zaki-raised p-4 shadow-[0_24px_60px_rgba(15,15,15,0.32)] dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.12)]",
-        )}
+        className="zaki-onboarding-v2__card"
         style={tooltipStyle}
       >
-        <button
+        <V2Button
           type="button"
           onClick={resolvedDismissHandler}
-          className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-full text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+          className="zaki-onboarding-v2__close"
+          variant="ghost"
+          size="sm"
+          iconOnly
           aria-label={resolvedDismissLabel}
         >
-          <X className="size-3.5" />
-        </button>
+          <X className="size-3.5" aria-hidden="true" />
+        </V2Button>
         {stepLabel ? (
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
+          <div className="zaki-onboarding-v2__step">
             {stepLabel}
           </div>
         ) : null}
-        <h3 className="pr-6 font-display text-base font-bold leading-snug tracking-tight text-zaki-primary">
+        <h3>
           {title}
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-zaki-secondary">{body}</p>
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <button
+        <p>{body}</p>
+        <div className="zaki-onboarding-v2__actions">
+          <V2Button
             type="button"
             onClick={onSkip}
-            className="rounded-full px-3 py-1.5 text-xs font-medium text-zaki-secondary transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+            variant="ghost"
+            size="sm"
           >
             {resolvedSkipLabel}
-          </button>
-          <button
+          </V2Button>
+          <V2Button
             type="button"
             onClick={onNext}
-            className="rounded-full bg-zaki-brand px-4 py-1.5 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(241,2,2,0.22)] transition-all hover:-translate-y-0.5 hover:bg-zaki-brand-hover"
+            variant="accent"
+            size="sm"
           >
             {resolvedNextLabel}
-          </button>
+          </V2Button>
         </div>
       </div>
     </div>
