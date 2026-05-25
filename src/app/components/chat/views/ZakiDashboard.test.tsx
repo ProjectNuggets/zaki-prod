@@ -9,6 +9,7 @@ const mockNavigate = jest.fn();
 const mockUseProductRegistry = jest.fn();
 const mockUseMeterStatus = jest.fn();
 const mockUseAnonymousMeterStatus = jest.fn();
+const mockUseZakiSessions = jest.fn();
 
 jest.mock("react-router-dom", () => {
   const actual = jest.requireActual("react-router-dom") as Record<string, unknown>;
@@ -22,6 +23,7 @@ jest.mock("@/queries", () => ({
   useProductRegistry: () => mockUseProductRegistry(),
   useMeterStatus: () => mockUseMeterStatus(),
   useAnonymousMeterStatus: (enabled?: boolean) => mockUseAnonymousMeterStatus(enabled),
+  useZakiSessions: (enabled?: boolean) => mockUseZakiSessions(enabled),
 }));
 
 const tMock = (key: string, options?: Record<string, unknown>) => {
@@ -33,14 +35,30 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.agentPrompt": "Choose my next step.",
     "zakiDashboard.identity.signedIn": "Signed-in account",
     "zakiDashboard.identity.anonymous": "Anonymous free session",
+    "zakiDashboard.status.online": "Online",
+    "zakiDashboard.status.syncing": "Syncing",
+    "zakiDashboard.status.plan": "Plan",
+    "zakiDashboard.status.weeklyReset": "Weekly reset",
+    "zakiDashboard.status.identity": "Identity",
+    "zakiDashboard.status.agentLive": "Agent live · #{{id}}",
     "zakiDashboard.actions.askAgent": "Ask Agent",
+    "zakiDashboard.actions.openAgent": "Open Agent",
     "zakiDashboard.actions.openChat": "Open Chat",
+    "zakiDashboard.hero.title": "Hi, {{name}}.",
+    "zakiDashboard.hero.remaining": "{{remaining}} left.",
+    "zakiDashboard.tags.plan": "Plan",
+    "zakiDashboard.tags.products": "Open products",
+    "zakiDashboard.tags.memory": "Memory scopes",
     "zakiDashboard.meter.label": "Platform meter",
     "zakiDashboard.meter.plan": "Plan",
     "zakiDashboard.meter.weekly": "Weekly allowance",
     "zakiDashboard.meter.rolling": "{{hours}}h window",
     "zakiDashboard.meter.loading": "Loading",
     "zakiDashboard.meter.pending": "Pending",
+    "zakiDashboard.meter.free": "Free",
+    "zakiDashboard.meter.units": "units",
+    "zakiDashboard.meter.used": "Used",
+    "zakiDashboard.meter.remaining": "Remaining",
     "zakiDashboard.meter.remainingOfLimit": "{{remaining}} / {{limit}} left",
     "zakiDashboard.meter.usedOfLimit": "{{used}} / {{limit}} used",
     "zakiDashboard.meter.usedUnits": "{{used}} used",
@@ -48,14 +66,33 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.meter.resetPending": "Reset pending",
     "zakiDashboard.products.title": "Products",
     "zakiDashboard.products.subtitle": "Central routing and state.",
+    "zakiDashboard.products.availableCount": "{{count}} / {{total}} open",
     "zakiDashboard.products.loading": "Loading products...",
     "zakiDashboard.products.empty": "No products published yet.",
     "zakiDashboard.products.memory": "Memory",
     "zakiDashboard.products.usage": "Weekly usage",
+    "zakiDashboard.products.state": "State",
+    "zakiDashboard.products.surface": "Surface",
     "zakiDashboard.products.open": "Open",
+    "zakiDashboard.products.openAria": "Open {{product}}",
     "zakiDashboard.products.notAvailable": "Not available",
+    "zakiDashboard.products.notAvailableAria": "{{product}} is not available",
+    "zakiDashboard.products.names.agent": "Agent",
+    "zakiDashboard.products.names.spaces": "Chat",
+    "zakiDashboard.products.names.brain": "Brain",
+    "zakiDashboard.products.names.learning": "Learn",
+    "zakiDashboard.products.names.hire": "Hire",
+    "zakiDashboard.products.names.design": "Design",
+    "zakiDashboard.products.tags.live": "Live",
+    "zakiDashboard.products.tags.privateBeta": "Private beta",
+    "zakiDashboard.products.tags.waitlist": "Waitlist",
+    "zakiDashboard.products.tags.controlPlane": "Control plane",
+    "zakiDashboard.products.tags.degraded": "Degraded",
+    "zakiDashboard.products.tags.readOnly": "Read only",
+    "zakiDashboard.products.tags.maintenance": "Maintenance",
     "zakiDashboard.products.descriptions.agent": "Personal agent.",
     "zakiDashboard.products.descriptions.spaces": "Workspace chat.",
+    "zakiDashboard.products.descriptions.brain": "Memory graph.",
     "zakiDashboard.products.descriptions.learning": "Study surface.",
     "zakiDashboard.products.descriptions.hire": "Hiring workflow.",
     "zakiDashboard.products.descriptions.design": "Design surface.",
@@ -64,6 +101,22 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.memory.pending": "Pending",
     "zakiDashboard.memory.loading": "Memory scopes are loading.",
     "zakiDashboard.memory.open": "Open memory controls",
+    "zakiDashboard.memory.scopeCount": "{{count}} scopes",
+    "zakiDashboard.memory.productUnit": "products",
+    "zakiDashboard.activeWork.title": "Active work · Agent",
+    "zakiDashboard.activeWork.source": "Runtime",
+    "zakiDashboard.activeWork.loading": "Loading active work.",
+    "zakiDashboard.activeWork.empty": "No active agent work.",
+    "zakiDashboard.activeWork.untitled": "Untitled session",
+    "zakiDashboard.activeWork.pendingApproval": "{{title}} · {{count}} approval waiting",
+    "zakiDashboard.activeWork.liveSession": "{{title}} · streaming",
+    "zakiDashboard.activeWork.recentSession": "{{title}} · recent",
+    "zakiDashboard.activeWork.sessionMeta": "{{messages}} messages · {{mode}}",
+    "zakiDashboard.activeWork.noMode": "standard",
+    "zakiDashboard.commercial.title": "Commercial release spine is central.",
+    "zakiDashboard.commercial.copy": "Meter and memory are central.",
+    "zakiDashboard.commercial.plans": "See plans",
+    "zakiDashboard.commercial.memory": "Open Brain",
     "zakiDashboard.readiness.title": "Commercial plumbing",
     "zakiDashboard.readiness.subtitle": "V2 foundation.",
     "zakiDashboard.readiness.registry": "Product registry drives launch cards",
@@ -90,7 +143,14 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{remaining}}", String(options?.remaining ?? ""))
     .replace("{{limit}}", String(options?.limit ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
-    .replace("{{reset}}", String(options?.reset ?? ""));
+    .replace("{{reset}}", String(options?.reset ?? ""))
+    .replace("{{count}}", String(options?.count ?? ""))
+    .replace("{{total}}", String(options?.total ?? ""))
+    .replace("{{product}}", String(options?.product ?? ""))
+    .replace("{{id}}", String(options?.id ?? ""))
+    .replace("{{title}}", String(options?.title ?? ""))
+    .replace("{{messages}}", String(options?.messages ?? ""))
+    .replace("{{mode}}", String(options?.mode ?? ""));
 };
 
 jest.mock("react-i18next", () => ({
@@ -231,6 +291,22 @@ function setupQueries() {
     },
     isLoading: false,
   });
+  mockUseZakiSessions.mockImplementation((enabled?: boolean) => ({
+    data: enabled
+      ? [
+          {
+            session_key: "agent:4821",
+            title: "Investor brief",
+            last_active: "2026-05-20T12:00:00.000Z",
+            message_count: 8,
+            live: true,
+            mode: "execute",
+            pending_approval_count: 0,
+          },
+        ]
+      : [],
+    isLoading: false,
+  }));
 }
 
 function renderDashboard() {
@@ -257,18 +333,20 @@ describe("ZakiDashboard", () => {
     renderDashboard();
 
     expect(screen.getByTestId("zaki-command-center")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "ZAKI, Nova User" })).toBeInTheDocument();
-    expect(within(screen.getByTestId("zaki-dashboard-meter")).getByText("Pro")).toBeInTheDocument();
-    expect(screen.getByText("1,420 / 1,500 left")).toBeInTheDocument();
-    expect(screen.getByText("80 / 100 left")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hi, Nova User. 1,420 left." })).toBeInTheDocument();
+    expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1,420").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("80 / 100 left")).toBeInTheDocument();
     expect(screen.getByText("Signed-in account")).toBeInTheDocument();
 
-    expect(screen.getByTestId("zaki-product-card-agent")).toHaveTextContent("ZAKI Agent");
-    expect(screen.getByTestId("zaki-product-card-spaces")).toHaveTextContent("ZAKI Spaces");
-    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("ZAKI Learn");
+    expect(screen.getByTestId("zaki-product-card-agent")).toHaveTextContent("Agent");
+    expect(screen.getByTestId("zaki-product-card-spaces")).toHaveTextContent("Chat");
+    expect(screen.getByTestId("zaki-product-card-brain")).toHaveTextContent("Brain");
+    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Learn");
     expect(screen.getByTestId("zaki-product-card-hire")).toHaveTextContent("Not available");
     expect(screen.getByTestId("zaki-product-card-design")).toHaveTextContent("Not available");
     expect(screen.queryByText("ZAKI CLI")).not.toBeInTheDocument();
+    expect(screen.getByTestId("zaki-dashboard-active-work")).toHaveTextContent("Investor brief · streaming");
 
     const memory = screen.getByTestId("zaki-dashboard-memory");
     expect(within(memory).getByText("Personal brain")).toBeInTheDocument();
@@ -290,15 +368,15 @@ describe("ZakiDashboard", () => {
 
     expect(mockUseAnonymousMeterStatus).toHaveBeenCalledWith(true);
     expect(screen.getByText("Anonymous free session")).toBeInTheDocument();
-    expect(within(screen.getByTestId("zaki-dashboard-meter")).getByText("Free")).toBeInTheDocument();
-    expect(screen.getByText("97 / 100 left")).toBeInTheDocument();
+    expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("97").length).toBeGreaterThan(0);
   });
 
   it("routes the Agent launcher to the product surface instead of the command center", () => {
     renderDashboard();
 
     const agentCard = screen.getByTestId("zaki-product-card-agent");
-    fireEvent.click(within(agentCard).getByRole("button", { name: /open/i }));
+    fireEvent.click(within(agentCard).getByRole("button", { name: "Open Agent" }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/agent");
   });

@@ -6549,7 +6549,7 @@ export function ChatArea() {
           )}
 
           {/* Input Area */}
-          {!showAbout && !showSpacesView && !showSpaceDetail && (
+          {!showAbout && !showSpacesView && !showSpaceDetail && !(showZakiHome && sidebarMode === "zaki") && (
             <div
               ref={inputWrapRef}
               className="zaki-input-float relative z-20"
@@ -6705,7 +6705,7 @@ export function ChatArea() {
         }}
       />
 
-      {sidebarMode === "zaki" ? (
+      {sidebarMode === "zaki" && !showZakiHome ? (
         <OnboardingTour
           progress={onboardingProgress}
           setStage={setOnboardingStage}

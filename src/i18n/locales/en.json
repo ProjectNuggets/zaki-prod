@@ -1755,15 +1755,33 @@
   "zakiDashboard": {
     "eyebrow": "Command center",
     "title": "ZAKI, {{name}}",
-    "subtitle": "Launch products, inspect plan usage, and see which memory scope each surface owns. Billing, usage, routing, and memory stay centralized here.",
+    "subtitle": "Launch the product family, inspect allowance, and see which memory scope each surface owns. Billing, routing, usage, and memory stay centralized here.",
     "agentPrompt": "Look at my ZAKI products and help me choose the best next step.",
     "identity": {
       "signedIn": "Signed-in account",
       "anonymous": "Anonymous free session"
     },
+    "status": {
+      "online": "Online",
+      "syncing": "Syncing",
+      "plan": "Plan",
+      "weeklyReset": "Weekly reset",
+      "identity": "Identity",
+      "agentLive": "Agent live · #{{id}}"
+    },
     "actions": {
       "askAgent": "Ask Agent",
+      "openAgent": "Open Agent",
       "openChat": "Open Chat"
+    },
+    "hero": {
+      "title": "Hi, {{name}}.",
+      "remaining": "{{remaining}} left."
+    },
+    "tags": {
+      "plan": "Plan",
+      "products": "Open products",
+      "memory": "Memory scopes"
     },
     "meter": {
       "label": "Platform meter",
@@ -1772,6 +1790,10 @@
       "rolling": "{{hours}}h window",
       "loading": "Loading",
       "pending": "Pending",
+      "free": "Free",
+      "units": "units",
+      "used": "Used",
+      "remaining": "Remaining",
       "remainingOfLimit": "{{remaining}} / {{limit}} left",
       "usedOfLimit": "{{used}} / {{limit}} used",
       "usedUnits": "{{used}} used",
@@ -1779,17 +1801,40 @@
       "resetPending": "Reset pending"
     },
     "products": {
-      "title": "Products",
+      "title": "Products · what you can use",
       "subtitle": "Product state controls launch and routing. The central meter owns allowance and debits.",
+      "availableCount": "{{count}} / {{total}} open",
       "loading": "Loading products...",
       "empty": "No products published yet.",
       "memory": "Memory",
       "usage": "Weekly usage",
+      "state": "State",
+      "surface": "Surface",
       "open": "Open",
+      "openAria": "Open {{product}}",
       "notAvailable": "Not available",
+      "notAvailableAria": "{{product}} is not available",
+      "names": {
+        "agent": "Agent",
+        "spaces": "Chat",
+        "brain": "Brain",
+        "learning": "Learn",
+        "hire": "Hire",
+        "design": "Design"
+      },
+      "tags": {
+        "live": "Live",
+        "privateBeta": "Private beta",
+        "waitlist": "Waitlist",
+        "controlPlane": "Control plane",
+        "degraded": "Degraded",
+        "readOnly": "Read only",
+        "maintenance": "Maintenance"
+      },
       "descriptions": {
         "agent": "Personal agent for planning, follow-through, tools, channels, and durable brain memory.",
         "spaces": "Workspace chat for threads, files, and focused shared context.",
+        "brain": "The memory graph made visible: provenance, scopes, conflicts, and governance.",
         "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
         "hire": "Hiring workflow surface for candidates, jobs, evaluations, and hire memory.",
         "design": "Future design surface for briefs, assets, iterations, and design memory."
@@ -1801,7 +1846,27 @@
       "pending": "Pending",
       "loading": "Memory scopes are loading.",
       "open": "Open memory controls",
-      "import": "Import memory"
+      "import": "Import memory",
+      "scopeCount": "{{count}} scopes",
+      "productUnit": "products"
+    },
+    "activeWork": {
+      "title": "Active work · Agent",
+      "source": "Runtime",
+      "loading": "Loading active work.",
+      "empty": "No active agent work. Start from Agent when you need ZAKI to plan, execute, or review.",
+      "untitled": "Untitled session",
+      "pendingApproval": "{{title}} · {{count}} approval waiting",
+      "liveSession": "{{title}} · streaming",
+      "recentSession": "{{title}} · recent",
+      "sessionMeta": "{{messages}} messages · {{mode}}",
+      "noMode": "standard"
+    },
+    "commercial": {
+      "title": "Commercial release spine is central: plan, meter, memory, products, and settings.",
+      "copy": "Every expensive action should request a grant, report raw usage facts, and debit through the shared weekly allowance. Product surfaces stay focused on work.",
+      "plans": "See plans",
+      "memory": "Open Brain"
     },
     "readiness": {
       "title": "Commercial plumbing",
