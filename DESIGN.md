@@ -1,99 +1,143 @@
 # ZAKI Design Contract
 
-Status: Accepted baseline for production finalization
-Date: 2026-05-19
+Status: V2 accepted product law
+Date: 2026-05-25
 Owner: CTO/Product + Design Engineering
 
-This document defines the product and interaction design target for ZAKI Prod. The existing `.claude/DESIGN.md` remains the visual brand law for tokens, typography, color discipline, accessibility, and component behavior. This root design contract defines the product experience that those visuals must serve.
+This document defines the product and interaction design target for ZAKI Prod.
+
+## Decision
+
+V2 is the product design system.
+
+Nothing from V1 intentionally remains in product surfaces. Existing V1 UI and token usage are migration debt until replaced. The old warm/soft visual language is not an acceptable product direction for new work.
+
+The accepted V2 source artifact is:
+
+- `/Users/nova/Desktop/ZAKI Design System.zip`
+
+The repo-native implementation must translate that artifact into React components, app tokens, routes, i18n, APIs, and tests. Static HTML from the design artifact is reference material, not shippable app code.
 
 ## Design North Star
 
 ZAKI should feel like a premium AI operating system that belongs to the user.
 
-The app must be clean, modern, minimal, and operationally useful. It should not feel like a landing page, a generic chatbot wrapper, or a fragmented set of experimental products.
+The app must be tactical, modern, minimal, operationally dense, and precise. It should not feel like a landing page, a generic chatbot wrapper, a fragmented product lab, or a soft SaaS dashboard.
+
+## V2 Product Identity
+
+The product UI is:
+
+- terminal-grade.
+- monospace-forward.
+- dark/paper stage.
+- hairline-structured.
+- low-radius.
+- low-shadow.
+- meter-aware.
+- memory-visible.
+- controlled by one ember accent.
+
+V2 should learn from Codex, Claude Code, and high-discipline operational tools, while keeping ZAKI's own differentiator: personal graph memory across products.
 
 ## Experience Principles
 
 1. Central control before decoration.
-   The first screen should help users understand their plan, usage, products, and memory state.
+   The first signed-in screen helps users understand plan, usage, products, active work, and memory state.
 
-2. Products are available, limits are explicit.
-   Every plan shows every product. The UI communicates quota state without making lower tiers feel like disabled demos.
+2. Products are visible, limits are explicit.
+   Every plan shows every product state. The UI communicates quota, product state, and beta/waitlist status without hiding the system.
 
 3. Memory is visible and governable.
-   Users should see which memories exist by scope and should have controls for enabling, exporting, deleting, or disabling them where policy allows.
+   Users see memory by scope and can reach controls for export, deletion, retention, and review where policy allows.
 
-4. Premium means calm, precise, and fast.
-   The app should avoid visual noise, marketing-card layouts, generic AI gradients, and ornamental dashboards.
+4. Premium means precise and fast.
+   The app avoids visual noise, marketing-card layouts, generic AI gradients, ornamental dashboards, and vague empty states.
 
-5. Product surfaces should share one language.
-   Spaces, Agent, Learn, and future tools should feel like parts of one system, even when their workflows differ.
+5. Product surfaces share one system.
+   Agent, Chat, Brain, Learn, Hire, Design, Settings, and Operator use one V2 spine, even when workflows differ.
 
 6. Mobile is first-class.
-   Navigation, usage, memory controls, and chat/learning flows must remain usable on small screens.
+   Mobile is hardened during implementation. It is not deferred to a final polish pass.
 
 ## Information Architecture
 
 ### Primary Areas
 
-- Dashboard: product command center and usage overview.
-- Spaces: workspace/product conversations.
-- Agent: personal agent and Brain experience.
-- Learn: learner workspace and progress.
-- Memory: personal, workspace, learner, and session memory controls.
-- Settings: account, OAuth, billing, usage, privacy, developer access.
-- Admin/Ops: internal support, audit, entitlement, and health views.
+- Dashboard: mission control and usage overview.
+- Agent: personal terminal and Personal Brain.
+- Chat: workspace conversations and Workspace Memory.
+- Brain: memory control plane.
+- Learn: learner workspace and Learner Memory.
+- Hire: private beta operations console and Hire Memory.
+- Design: early-access placeholder, then design workspace.
+- Settings: account, OAuth, billing, usage, privacy, memory/data, developer access.
+- Operator: internal support, audit, entitlement, product state, billing, meter, memory, and health views.
 
 ### Dashboard Requirements
 
 The dashboard must show:
 
-- Current plan.
-- Weekly allowance remaining.
-- Five-hour burst/session status.
-- Product quota breakdown.
-- Product launchers.
-- Recent activity.
-- Memory scope status.
-- Billing/upgrade affordances.
+- current plan.
+- weekly allowance remaining.
+- five-hour burst/session status.
+- product quota breakdown.
+- product launchers.
+- active work.
+- recent usage/activity.
+- memory scope status.
+- billing/upgrade affordances.
+- product operational states.
 
-It should be dense enough to be useful, but not crowded. Repeated cards are acceptable for product summaries. Page sections should not be styled as nested cards.
+The dashboard should answer three questions within five seconds:
+
+- What can I use?
+- How much do I have left?
+- What does ZAKI remember?
 
 ### Settings Requirements
 
-Settings must become the place for:
+Settings owns:
 
-- Profile.
-- Sign-in methods and OAuth connections.
-- Plan and billing.
-- Usage and quota history.
-- Memory controls.
-- Privacy and exports.
-- Future developer access: API keys, CLI auth, local app sessions, extension sessions.
+- profile.
+- sign-in methods and OAuth connections.
+- plan and billing.
+- usage and quota history.
+- product access.
+- memory and data governance.
+- privacy and exports.
+- developer access: browser extension, API keys, CLI auth, local app sessions, future clients.
 
-Usage belongs in Settings as a durable history view, while the Dashboard shows the current operational summary.
+Usage belongs in Settings as a durable history view. Dashboard shows the current operational summary.
+
+### Product Settings Requirements
+
+Product settings own only product-local behavior.
+
+Examples:
+
+- Agent: autonomy, browser control, stream style, approval defaults, proactive behavior.
+- Chat: workspace defaults, sharing, files/context, Workspace Memory shortcuts.
+- Learn: study preferences, cadence, source defaults, learner memory.
+- Hire: role/candidate/pipeline preferences, retention shortcuts, hire memory.
+- Design: early-access preferences and future project/brand defaults.
+
+Global policy never hides inside a product settings panel.
 
 ## Visual System Requirements
 
-Use `.claude/DESIGN.md` as source of truth for:
-
-- Color tokens.
-- Typefaces.
-- Dark/light behavior.
-- Arabic/RTL support.
-- Accessibility thresholds.
-- Component primitives.
-- Icon policy.
-- Forbidden visual patterns.
+Use this document as the repo-local product law. Local agent files such as `.claude/DESIGN.md` may mirror this contract, but they are not the committed source of truth.
 
 Implementation guardrails:
 
+- No intentional V1 product styling in new work.
 - No hardcoded hex colors in components unless explicitly documented.
 - No purple/pink AI gradients.
 - No generic SaaS hero sections inside the app.
 - No card-inside-card layouts.
+- No pill-heavy product chrome.
+- No blurred drop-shadow product surfaces.
 - No visible instructional copy explaining obvious controls.
-- No negative letter spacing.
 - No viewport-scaled type.
 - Use icons for standard tool actions.
 - Preserve keyboard navigation and focus states.
@@ -103,55 +147,74 @@ Implementation guardrails:
 
 ### Dashboard
 
-The dashboard should answer three questions within five seconds:
-
-- What can I use?
-- How much do I have left?
-- What does ZAKI remember?
-
-### Spaces
-
-Spaces should feel like a work surface, not only chat. Workspace memory, artifacts, files, service routes, and conversation context need clear scope.
+Dashboard is mission control. It is not Agent, not Chat, not Settings, and not marketing.
 
 ### Agent
 
-Agent should make the Brain visible without exposing implementation details. Personal memory should feel trustworthy, inspectable, and editable.
+Agent is the primary consumer product: personal terminal, visible work, tool traces, approvals, browser control, and Personal Brain.
+
+### Chat
+
+Chat is the renamed customer-facing evolution of Spaces: workspace workshop, threads, files, scoped prompt, members, and Workspace Memory.
+
+### Brain
+
+Brain is the memory control plane: graph, provenance, conflicts, supersession, scopes, export/delete/governance.
 
 ### Learn
 
-Learn should surface progress, learning goals, weaknesses, next actions, and learner memory. It should not inherit generic chat affordances where pedagogy needs structure.
+Learn surfaces progress, goals, weaknesses, next actions, source material, and Learner Memory. Pedagogy can use more prose than the operational surfaces.
 
-### Memory
+### Hire
 
-Memory UI must separate:
+Hire is a private beta operations console: pipeline, leads, fit scoring, consent, retention, and Hire Memory. It must use central metering.
 
-- Personal Brain.
-- Workspace Memory.
-- Learner Memory.
-- Session Memory.
+### Design
 
-Each memory item should communicate scope, source, last used time, and available actions.
+Design is early access first. It should be visible as a future product without pretending the workflow exists.
+
+### Operator
+
+Operator mirrors the commercial system: users, entitlements, product state, billing, meter, memory diagnostics, runtime health, and audit trails.
+
+## Mobile Standards
+
+Mobile hardening is part of every slice:
+
+- no clipped text.
+- no horizontal overflow.
+- no desktop-only control dependencies.
+- sheets before cramped modals.
+- readable usage/meter state.
+- clear product and memory scope.
+- composer does not hide approval or memory state.
+- dashboard EN/AR checked.
+- keyboard and screen-reader paths preserved.
 
 ## Competition-Quality Bar
 
 The app is not done until:
 
-- The first five seconds of the dashboard communicate product quality and platform coherence.
-- Usage and plan state are understandable without support.
-- Memory controls are credible and not hidden.
-- Product navigation is obvious on desktop and mobile.
-- Typography, spacing, contrast, and motion feel deliberate.
-- Empty, loading, error, and limit states are designed.
-- Main workflows pass manual browser review and automated checks.
+- the dashboard communicates product quality and platform coherence in five seconds.
+- usage and plan state are understandable without support.
+- memory controls are credible and visible.
+- product navigation is obvious on desktop and mobile.
+- typography, spacing, contrast, and motion feel deliberate.
+- empty, loading, error, permission, disabled, maintenance, degraded, readOnly, and limit states are designed.
+- every expensive product action uses central grant/receipt metering.
+- every product has product surface, product settings, memory scope, usage/meter behavior, and operator mirror.
+- main workflows pass browser review and automated checks.
 
 ## Review Ritual
 
 Every major UI slice must pass:
 
-- Desktop visual review.
-- Mobile visual review.
-- Keyboard navigation review.
-- EN/AR copy review.
-- Light/dark review when applicable.
-- Accessibility check.
-- Product truth check against `PRODUCT.md`.
+- desktop visual review.
+- mobile visual review.
+- keyboard navigation review.
+- EN/AR dashboard review where dashboard is touched.
+- light/dark stage review.
+- accessibility check.
+- product truth check against app map and backend contracts.
+- meter/memory/entitlement check.
+- operator/support check where relevant.

@@ -17,7 +17,15 @@ No product UI implementation should start until these contracts are accepted.
 
 ## Design Concept
 
-ZAKI V2 should feel like a quiet premium command system.
+ZAKI V2 is the accepted product design system.
+
+The source artifact is:
+
+- `/Users/nova/Desktop/ZAKI Design System.zip`
+
+The product app follows V2, not V1. Existing V1 styling in the repo is migration debt until replaced. New product UI should not preserve warm/soft V1 patterns for continuity.
+
+ZAKI V2 should feel like a tactical premium command system.
 
 It should be:
 
@@ -25,6 +33,8 @@ It should be:
 - Operational, but not enterprise-cluttered.
 - Calm, but visibly powerful.
 - Human-readable, but built on exact product/meter/memory truth.
+- Monospace-forward in chrome, labels, usage, meters, tables, and controls.
+- Low-radius, hairline-structured, and dark/paper stage ready.
 
 Avoid:
 
@@ -34,16 +44,25 @@ Avoid:
 - Dashboard as marketing copy.
 - Product-specific settings on global pages.
 - Hidden global policy inside product panels.
+- Intentional V1 product styling.
+- Pill-heavy product chrome.
+- Blurred shadow elevation on product surfaces.
+- Warm/soft marketing visual language in app surfaces.
 
 Preferred app surface style:
 
 - Full-width bands or unframed layouts for page structure.
-- Cards only for repeated product/status items or modals.
+- Hairline panels for repeated product/status items or modals.
 - Dense, scan-friendly dashboard rows.
 - Clear left navigation.
 - Strong empty/error/loading/disabled states.
 - Icons for tools and controls.
 - Text only where it carries decision value.
+- Product scope always visible.
+- Memory scope always explicit.
+- Meter and entitlement state visible where usage decisions happen.
+
+V2 mobile is not fully solved by the source artifact. Mobile hardening is part of implementation, not a later polish pass.
 
 ## Dashboard Contract
 
@@ -192,7 +211,7 @@ Rules:
 
 #### Active Work Component
 
-Initial V2 source:
+Initial implementation source:
 
 - Agent tasks/runs/traces.
 - Scheduled jobs.
@@ -488,17 +507,17 @@ No slice is accepted because it "looks done." A slice is accepted only when all 
 
 If one gate fails, the slice remains in progress. Visual polish cannot compensate for missing contract, meter, memory, or permission behavior.
 
-## Claude Design Mockup Intake
+## V2 Design Artifact Intake
 
-Claude design files can accelerate V2, but they do not override product architecture.
+The accepted V2 design files are the visual source for product implementation, but they do not override product architecture.
 
-Use mockups as:
+Use the V2 artifact as:
 
 - visual direction.
 - layout inspiration.
 - interaction/motion reference.
 - typography and density reference.
-- website/app continuity reference.
+- product/website continuity reference.
 
 Do not use mockups as:
 
@@ -518,7 +537,7 @@ Every mockup must be mapped before implementation:
 | Actions | Permission, entitlement, meter, and audit implications. |
 | Memory references | Exact scope and governance link. |
 | Navigation | Entry, exit, browser back, logo behavior, mobile behavior. |
-| Visual system | Conformance to `.claude/DESIGN.md`, `DESIGN.md`, `DESIGN_TOKENS.md`, and app tokens. |
+| Visual system | Conformance to `DESIGN.md`, this contract, `DESIGN_TOKENS.md`, and app tokens. |
 
 If a mockup combines concerns that this contract separates, preserve the visual quality but split the behavior into the correct surfaces.
 
@@ -551,7 +570,7 @@ This matrix reflects the current repo state as of this contract update.
 | Design | Registry product exists, disabled by default. No route in this repo. | Planned | Add early-access placeholder, waitlist path, settings placeholder, and operator waitlist page. |
 | Memory control plane | `/brain` exists and memory backend routes exist. | Partial | Surface per-product memory scopes and governance links from dashboard and Settings. |
 | OAuth/connections | Google OAuth routes and Settings connection status exist. | Partial | Expand account-wide connection governance and product-local connection usage rules. |
-| Developer clients | Browser extension/server browser work is planned for V1 Agent; future CLI/local app are represented in registry. | Partial | Add Developer Access UX, token/client revocation model, and operator visibility. |
+| Developer clients | Browser extension/server browser work is planned for the Agent release; future CLI/local app are represented in registry. | Partial | Add Developer Access UX, token/client revocation model, and operator visibility. |
 | Test harness | Unit tests, backend tests, Playwright config, and smoke scripts exist. | Ready foundation | Add V2 dashboard/settings/operator browser specs and production release checklist. |
 
 Conclusion: we have enough plumbing to start Dashboard V2 without waiting, but not enough to call the commercial release complete. The release becomes complete only after each product adopts the central meter, memory scope, settings tab, and operator mirror.

@@ -1,6 +1,13 @@
 # ZAKI Design Tokens
 
-A systematic design language for ZAKI's warm desert aesthetic.
+Status: Legacy V1 token reference
+Date: 2026-05-25
+
+This document describes the existing V1 token layer still present in the app. It is not the product design target anymore.
+
+V2 is now the accepted product design system. New product work should follow `DESIGN.md` and `docs/zaki-v2-dashboard-settings-operator-contract.md`, then migrate tokens carefully into `src/styles/tokens.css` and `src/styles/theme.css`.
+
+Do not use this document to justify preserving warm/soft V1 product styling. Treat it as implementation context while replacing V1 surfaces with V2.
 
 ## Quick Reference
 
