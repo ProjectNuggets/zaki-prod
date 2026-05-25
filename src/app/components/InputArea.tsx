@@ -1057,6 +1057,11 @@ export function InputArea({
           </div>
         )}
         <div className="flex items-end gap-2 px-1">
+          {zakiBotMode ? (
+            <span className="zaki-input-prompt" aria-hidden="true">
+              ›
+            </span>
+          ) : null}
           <textarea 
             id="chat-input"
             ref={textareaRef}

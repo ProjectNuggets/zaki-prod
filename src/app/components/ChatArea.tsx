@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import {
   autoTitleThread,
   autoTitleAgentSession,
@@ -30,6 +31,7 @@ import {
   type MemoryActivity,
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
+  type AgentSession,
 } from "@/lib/api";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
@@ -195,6 +197,16 @@ function numericValue(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function sessionHasContextSnapshot(session: Partial<AgentSession> | null | undefined) {
+  if (!session) return false;
+  return [
+    session.context_pressure_percent,
+    session.context_window_used,
+    session.context_window_max,
+    session.token_count,
+  ].some((value) => typeof value === "number" && Number.isFinite(value));
 }
 
 /**
@@ -2073,6 +2085,7 @@ export function ChatArea() {
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [sessionModePending, setSessionModePending] = useState(false);
   const approvalSeenBySessionRef = useRef<Record<string, Set<string>>>({});
 
@@ -2347,6 +2360,8 @@ export function ChatArea() {
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const primarySpace = spacesList[0] ?? null;
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const isAgentSurface =
+    isZakiBotActiveSpace && !showZakiHome && !showAbout && !showSpacesView && !showSpaceDetail;
   const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
@@ -2423,9 +2438,9 @@ export function ChatArea() {
   );
 
   useEffect(() => {
-    if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey) return;
+    if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey || !zakiBotProvisionReady) return;
     void hydrateActiveSessionDetail(normalizedActiveZakiSessionKey);
-  }, [hydrateActiveSessionDetail, isZakiBotActiveSpace, normalizedActiveZakiSessionKey]);
+  }, [hydrateActiveSessionDetail, isZakiBotActiveSpace, normalizedActiveZakiSessionKey, zakiBotProvisionReady]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
@@ -3055,6 +3070,9 @@ export function ChatArea() {
 
   const refreshContextGauge = useCallback(async () => {
     try {
+      if (!zakiBotProvisionReady) return;
+      if (!activeSessionRecord) return;
+      if (!sessionHasContextSnapshot(activeSessionRecord)) return;
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
       const { response, data } = await fetchAgentSessionContext(sessionKey);
@@ -3081,7 +3099,7 @@ export function ChatArea() {
     } catch {
       // non-critical — gauge just won't update
     }
-  }, [activeThreadId, activeZakiSessionKey, agentUserId, setSessionContextPressure]);
+  }, [activeSessionRecord, activeThreadId, activeZakiSessionKey, agentUserId, setSessionContextPressure, zakiBotProvisionReady]);
 
   // 2026-05-08 — Programmatic compact. Replaces the old "/compact" text
   // hack the pre-flight banner used to send. Direct API call against
@@ -5136,12 +5154,16 @@ export function ChatArea() {
     async (silent = false) => {
       if (!isZakiBotActiveSpace) return true;
       if (!isAuthReady) return false;
-      if (zakiBotProvisionedRef.current) return true;
+      if (zakiBotProvisionedRef.current) {
+        setZakiBotProvisionReady(true);
+        return true;
+      }
       if (zakiBotProvisionPromiseRef.current) {
         return zakiBotProvisionPromiseRef.current;
       }
 
       const pending = (async () => {
+        setZakiBotProvisionReady(false);
         const { response, data } = await provisionAgent({
           spaceId: ZAKI_BOT_SPACE_ID,
           threadId: activeThreadId || ZAKI_BOT_THREAD_ID,
@@ -5156,6 +5178,7 @@ export function ChatArea() {
           return false;
         }
         zakiBotProvisionedRef.current = true;
+        setZakiBotProvisionReady(true);
         return true;
       })()
         .catch((error) => {
@@ -5182,6 +5205,7 @@ export function ChatArea() {
   useEffect(() => {
     zakiBotProvisionedRef.current = false;
     zakiBotProvisionPromiseRef.current = null;
+    setZakiBotProvisionReady(false);
   }, [authUserId]);
 
   useEffect(() => {
@@ -6353,7 +6377,11 @@ export function ChatArea() {
   return (
     <div
       ref={containerRef}
-      className="zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden"
+      className={cn(
+        "zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden",
+        isAgentSurface && "zaki-agent-v2"
+      )}
+      data-agent-surface={isAgentSurface ? "true" : undefined}
       style={
         {
           "--zaki-input-height": `${inputHeight}px`,
@@ -6408,12 +6436,18 @@ export function ChatArea() {
 
       <div className="relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col">
         {/* Background */}
-        <BackgroundPattern />
+        {!isAgentSurface ? <BackgroundPattern /> : null}
 
         <div className="relative z-20 flex flex-col h-full">
           {/* Header / Breadcrumb */}
           {!showZakiHome && !showSpacesView ? (
-            <div className="px-6 py-4 flex items-center gap-2" dir="ltr">
+            <div
+              className={cn(
+                "px-6 py-4 flex items-center gap-2",
+                isAgentSurface && "zaki-agent-v2__head"
+              )}
+              dir="ltr"
+            >
               <span
                 className="zaki-subheader-pill"
                 dir={isRtl ? "rtl" : "ltr"}
@@ -6426,7 +6460,7 @@ export function ChatArea() {
               <SandboxBadge
                 active={isZakiBotActiveSpace}
                 sandbox={sandboxState}
-                className="ml-2"
+                className={cn("ml-2", isAgentSurface && "zaki-agent-v2__sandbox")}
               />
               <div className="relative z-30 ml-auto flex items-center gap-2" ref={menuRef}>
                 <button
@@ -6555,9 +6589,11 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
-              <ZakiExperimentalNotice
-                active={isZakiBotActiveSpace && zakiBootstrapCompleted}
-              />
+              {!isAgentSurface ? (
+                <ZakiExperimentalNotice
+                  active={isZakiBotActiveSpace && zakiBootstrapCompleted}
+                />
+              ) : null}
               {/* Single source of truth for ApprovalRequiredCard. The
                   timeline copy was dropped in 18328cd so the decided
                   state has one owner. Surfaces directly above the

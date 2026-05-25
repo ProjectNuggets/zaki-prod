@@ -229,7 +229,16 @@ import {
   readMeterSnapshotForIdentity,
 } from "./platform-meter.js";
 import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
-import { createThreadAutoTitleHandler } from "./thread-auto-title.js";
+import {
+  createThreadAutoTitleHandler,
+  generateThreadTitleFromExchange,
+  isDefaultThreadLabel,
+} from "./thread-auto-title.js";
+import {
+  buildCanonicalZakiThreadSessionKey,
+  mergeZakiAgentSessions,
+  parseZakiSessionKey,
+} from "./zaki-agent-sessions.js";
 import {
   fetchTypWorkspaces,
   fetchTypWorkspaceSlugs,
@@ -10782,6 +10791,11 @@ const agentChatStreamHandler = async (req, res) => {
     const resolvedThreadId = rawThreadId || ZAKI_BOT_THREAD_ID;
 
     if (isZakiBotSpace) {
+      await touchZakiBotThreadBestEffort({
+        userId,
+        spaceId: resolvedSpaceId,
+        threadId: resolvedThreadId,
+      });
       await dbQuery(
         `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
          VALUES ($1, $2, $3, 'user', $4)`,
@@ -10921,6 +10935,11 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     if (isZakiBotSpace && assistantAccumulated.trim()) {
+      await touchZakiBotThreadBestEffort({
+        userId,
+        spaceId: resolvedSpaceId,
+        threadId: resolvedThreadId,
+      });
       await dbQuery(
         `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
          VALUES ($1, $2, $3, 'assistant', $4)`,
@@ -10961,6 +10980,177 @@ const agentChatStreamHandler = async (req, res) => {
     });
   }
 };
+
+function normalizeZakiBotThreadTitle(title, threadId) {
+  const trimmed = String(title || "").replace(/\s+/g, " ").trim();
+  if (trimmed) return trimmed.slice(0, 120);
+  return String(threadId || "").trim() === ZAKI_BOT_THREAD_ID ? "Main" : "New chat";
+}
+
+function toIsoOrNull(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+async function touchZakiBotThread({
+  userId,
+  spaceId = ZAKI_BOT_SPACE_ID,
+  threadId = ZAKI_BOT_THREAD_ID,
+  title = null,
+} = {}) {
+  const safeUserId = Number(userId);
+  const safeSpaceId = String(spaceId || ZAKI_BOT_SPACE_ID).trim() || ZAKI_BOT_SPACE_ID;
+  const safeThreadId = String(threadId || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
+  if (!Number.isFinite(safeUserId) || safeUserId <= 0) return null;
+
+  const normalizedTitle = normalizeZakiBotThreadTitle(title, safeThreadId);
+  const hasExplicitTitle = String(title || "").trim().length > 0;
+
+  const result = await dbGet(
+    `INSERT INTO zaki_bot_threads
+       (user_id, space_id, thread_id, title, created_at, updated_at, last_active_at)
+     VALUES ($1, $2, $3, $4, NOW(), NOW(), NOW())
+     ON CONFLICT (user_id, space_id, thread_id)
+     DO UPDATE SET
+       title = CASE
+         WHEN $5::boolean THEN EXCLUDED.title
+         ELSE zaki_bot_threads.title
+       END,
+       updated_at = NOW(),
+       last_active_at = NOW()
+     RETURNING thread_id, title, created_at, last_active_at`,
+    [safeUserId, safeSpaceId, safeThreadId, normalizedTitle, hasExplicitTitle]
+  );
+
+  return result || null;
+}
+
+async function touchZakiBotThreadBestEffort(options) {
+  try {
+    return await touchZakiBotThread(options);
+  } catch (error) {
+    console.warn("[Agent] Local thread metadata update failed:", {
+      userId: options?.userId,
+      threadId: options?.threadId,
+      error: error?.message || "thread metadata update failed",
+    });
+    return null;
+  }
+}
+
+async function loadZakiBotLocalThreadSummaries(userId) {
+  const safeUserId = Number(userId);
+  if (!Number.isFinite(safeUserId) || safeUserId <= 0) return [];
+
+  const [threadRows, messageRows] = await Promise.all([
+    dbAll(
+      `SELECT thread_id, title, created_at, last_active_at
+       FROM zaki_bot_threads
+       WHERE user_id = $1 AND space_id = $2`,
+      [safeUserId, ZAKI_BOT_SPACE_ID]
+    ),
+    dbAll(
+      `SELECT thread_id,
+              MIN(created_at) AS created_at,
+              MAX(created_at) AS last_active_at,
+              COUNT(*)::int AS message_count
+       FROM zaki_bot_messages
+       WHERE user_id = $1 AND space_id = $2
+       GROUP BY thread_id`,
+      [safeUserId, ZAKI_BOT_SPACE_ID]
+    ),
+  ]);
+
+  const byThread = new Map();
+  for (const row of messageRows) {
+    const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
+    byThread.set(threadId, {
+      threadId,
+      title: normalizeZakiBotThreadTitle(null, threadId),
+      created_at: row.created_at,
+      last_active: row.last_active_at,
+      message_count: Number(row.message_count || 0),
+    });
+  }
+
+  for (const row of threadRows) {
+    const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
+    const existing = byThread.get(threadId) || {};
+    byThread.set(threadId, {
+      ...existing,
+      threadId,
+      title: normalizeZakiBotThreadTitle(row.title, threadId),
+      created_at: row.created_at || existing.created_at || null,
+      last_active: row.last_active_at || existing.last_active || null,
+      message_count: Number(existing.message_count || 0),
+    });
+  }
+
+  return Array.from(byThread.values()).map((entry) => ({
+    session_key: buildCanonicalZakiThreadSessionKey(String(safeUserId), entry.threadId),
+    title: entry.title,
+    created_at: toIsoOrNull(entry.created_at),
+    last_active: toIsoOrNull(entry.last_active),
+    message_count: entry.message_count,
+  }));
+}
+
+async function agentSessionsListHandler(req, res) {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+
+  const requestId = String(req.requestId || crypto.randomUUID());
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const localThreads = await loadZakiBotLocalThreadSummaries(userId);
+    let upstreamSessions = [];
+    let upstreamWarning = null;
+
+    try {
+      const upstream = await sendBotBffUpstreamRequest({
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
+        userId,
+        requestId,
+      });
+      const upstreamData = await upstream.json().catch(() => ({}));
+      if (upstream.ok) {
+        upstreamSessions = Array.isArray(upstreamData?.sessions)
+          ? upstreamData.sessions
+          : Array.isArray(upstreamData)
+          ? upstreamData
+          : [];
+      } else {
+        upstreamWarning =
+          String(upstreamData?.code || upstreamData?.error || "").trim() ||
+          `upstream_${upstream.status}`;
+      }
+    } catch (error) {
+      upstreamWarning = error?.message || "upstream_sessions_unavailable";
+    }
+
+    const sessions = mergeZakiAgentSessions({ upstreamSessions, localThreads });
+    res.status(200).json({
+      sessions,
+      ...(upstreamWarning ? { warning: upstreamWarning } : {}),
+    });
+  } catch (error) {
+    console.error("[Agent] Session list error:", {
+      requestId,
+      error: error?.message || "session list failed",
+    });
+    res.status(500).json({ error: error?.message || "Unable to load agent sessions." });
+  }
+}
 
 app.get("/api/agent/history", requireAgentContext, async (req, res) => {
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
@@ -13222,12 +13412,90 @@ const makeSessionProxyHandler = (pathBuilder) => {
   };
 };
 
+async function agentSessionAutoTitleHandler(req, res) {
+  const sessionKey = validateSessionKeyParam(req, res);
+  if (!sessionKey) return;
+
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const parsed = parseZakiSessionKey(sessionKey);
+    if (parsed.userId !== String(userId)) {
+      return res.status(403).json({ error: "session_not_owned" });
+    }
+    if (parsed.lane !== "thread" || !parsed.threadId) {
+      return res.status(200).json({ status: "skipped", reason: "session_not_found" });
+    }
+
+    const threadId = parsed.threadId;
+    if (threadId === ZAKI_BOT_THREAD_ID) {
+      await touchZakiBotThreadBestEffort({ userId, threadId, title: "Main" });
+      return res.status(200).json({ status: "skipped", reason: "not_default_label" });
+    }
+
+    const existing = await dbGet(
+      `SELECT title
+       FROM zaki_bot_threads
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
+      [userId, ZAKI_BOT_SPACE_ID, threadId]
+    );
+    const existingTitle = String(existing?.title || "").trim();
+    if (existingTitle && !isDefaultThreadLabel(existingTitle)) {
+      return res.status(200).json({ status: "skipped", reason: "not_default_label" });
+    }
+
+    const userMessage = String(req.body?.userMessage || "").trim();
+    const assistantMessage = String(req.body?.assistantMessage || "").trim();
+    if (!userMessage || !assistantMessage) {
+      return res.status(200).json({ status: "skipped", reason: "insufficient_content" });
+    }
+
+    const generatedTitle = await generateThreadTitleFromExchange({
+      userMessage,
+      assistantMessage,
+    });
+    if (!generatedTitle) {
+      return res.status(200).json({ status: "skipped", reason: "generation_failed" });
+    }
+
+    await touchZakiBotThread({
+      userId,
+      threadId,
+      title: generatedTitle,
+    });
+
+    res.status(200).json({
+      status: "updated",
+      session: {
+        key: sessionKey,
+        title: generatedTitle,
+      },
+    });
+  } catch (error) {
+    console.error("[Agent] Session auto-title error:", {
+      sessionKey,
+      error: error?.message || "session auto-title failed",
+    });
+    res.status(500).json({ error: error?.message || "Unable to auto-title session." });
+  }
+}
+
+app.post(
+  "/api/agent/sessions/:sessionKey/auto-title",
+  requireAgentContext,
+  agentJson1mb,
+  agentSessionAutoTitleHandler
+);
+
 app.get(
   "/api/agent/sessions",
   requireAgentContext,
-  makeAgentUserProxyHandler(
-    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/sessions`
-  )
+  agentSessionsListHandler
 );
 
 app.get(

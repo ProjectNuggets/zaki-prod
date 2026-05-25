@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { ThinkingIndicator } from "../ThinkingIndicator";
@@ -87,6 +88,7 @@ export function ChatView({
   onQuickReply,
   isRtl = false,
 }: ChatViewProps) {
+  const { t } = useTranslation();
   // Unified timeline surface: Nullalis (native reasoning) or bot mode
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
   // Bot mode is treated as a Nullalis-compatible mode for rendering.
@@ -149,12 +151,44 @@ export function ChatView({
     <div
       className={cn(
         "zaki-chat-thread max-w-3xl mx-auto pt-16 pb-6 px-4 flex flex-col gap-6",
+        botMode && "zaki-chat-thread--agent",
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
       {/* C4: ContextGauge is rendered persistently whenever data is available,
           independent of timelineMode or nullalisMode */}
       {contextGaugeData ? <ContextGauge data={contextGaugeData} /> : null}
+      {messages.length === 0 && botMode && !isStreaming ? (
+        <section className="zaki-agent-empty-v2" aria-labelledby="zaki-agent-empty-title">
+          <div className="zaki-agent-empty-v2__kicker">
+            <span className="zaki-agent-empty-v2__live" aria-hidden="true" />
+            {t("zakiAgent.empty.kicker", { defaultValue: "Agent ready" })}
+          </div>
+          <h2 id="zaki-agent-empty-title">
+            {t("zakiAgent.empty.title", { defaultValue: "Start with the work, not the interface." })}
+          </h2>
+          <p>
+            {t("zakiAgent.empty.body", {
+              defaultValue:
+                "ZAKI can plan, execute, review, use tools, browse through approved controls, and cite personal brain memory when it matters.",
+            })}
+          </p>
+          {onQuickReply ? (
+            <div className="zaki-agent-empty-v2__actions" aria-label={t("zakiAgent.empty.actionsLabel", { defaultValue: "Example tasks" })}>
+              {[
+                t("zakiAgent.empty.examples.plan", { defaultValue: "Plan my next execution slice." }),
+                t("zakiAgent.empty.examples.research", { defaultValue: "Research this and give me the decision." }),
+                t("zakiAgent.empty.examples.review", { defaultValue: "Review the current work and find risks." }),
+              ].map((example) => (
+                <button key={example} type="button" onClick={() => onQuickReply(example)}>
+                  {example}
+                  <span aria-hidden="true">›</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;

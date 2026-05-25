@@ -1752,6 +1752,19 @@
     "messageCount_one": "{{count}} message in session",
     "messageCount_other": "{{count}} messages in session"
   },
+  "zakiAgent": {
+    "empty": {
+      "kicker": "Agent ready",
+      "title": "Start with the work, not the interface.",
+      "body": "ZAKI can plan, execute, review, use tools, browse through approved controls, and cite personal brain memory when it matters.",
+      "actionsLabel": "Example tasks",
+      "examples": {
+        "plan": "Plan my next execution slice.",
+        "research": "Research this and give me the decision.",
+        "review": "Review the current work and find risks."
+      }
+    }
+  },
   "zakiDashboard": {
     "eyebrow": "Command center",
     "title": "ZAKI, {{name}}",

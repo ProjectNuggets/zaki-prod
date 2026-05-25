@@ -118,12 +118,14 @@ export function MessageBubble({
     <div
       className={cn(
         "group zaki-message-row flex gap-4 font-body",
+        isUser ? "zaki-message-row--user" : "zaki-message-row--assistant",
         isUser ? "justify-end items-start" : "justify-start items-start",
         animate && (isUser ? "zaki-message-enter-user" : "zaki-message-enter-assistant")
       )}
+      data-message-role={message.role}
     >
       {!isUser && (
-        <div className="size-8 shrink-0 flex items-start justify-center pt-[6px]">
+        <div className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]">
           <div className="scale-75">
             <CenterLogo />
           </div>

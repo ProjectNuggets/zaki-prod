@@ -6,6 +6,13 @@ jest.mock("../index", () => ({
   MessageBubble: ({ message }: { message: { content: string } }) => <div>{message.content}</div>,
 }));
 
+jest.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    i18n: { language: "en", dir: () => "ltr" },
+  }),
+}));
+
 import { ChatView } from "./ChatView";
 
 describe("ChatView", () => {

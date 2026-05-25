@@ -448,18 +448,18 @@ describe("ChatArea Component", () => {
     expect(screen.queryByText("[[ZAKI_MEMORY_CONTEXT_V2]]")).not.toBeInTheDocument();
   });
 
-  it("shows the experimental notice in the ZAKI space until dismissed for the session", async () => {
+  it("does not show the legacy experimental notice in the V2 Agent surface", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
+    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
     window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
   });
 
-  it("shows the experimental notice for signed-in users who land directly in a ZAKI thread", async () => {
+  it("keeps signed-in users on the V2 Agent thread without the legacy bootstrap card", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -474,7 +474,7 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     expect(screen.queryByText("zakiBootstrapCard.title")).not.toBeInTheDocument();
-    expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
+    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
   });
 
   it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {
@@ -518,7 +518,7 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.getByText("zakiExperimentalNotice.title")).toBeInTheDocument();
+    expect(screen.getByText("zakiAgent.empty.kicker")).toBeInTheDocument();
   });
 
   it("parses task progress events as structured live execution", () => {
