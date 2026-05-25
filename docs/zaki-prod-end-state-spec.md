@@ -3,9 +3,11 @@
 Date: 2026-05-19
 Purpose: define the target state before implementation.
 
+Update note, 2026-05-25: this end-state spec is now interpreted through the Agent-first V1 decision in `docs/zaki-agent-first-v1-product-spec.md` and the app map in `docs/zaki-v1-app-map.md`. ZAKI Agent is the main consumer product; Chat/Spaces, Learn, Hire, Design, Brain, and future clients sit around the same platform spine.
+
 ## Product North Star
 
-ZAKI should become a central AI operating system for a user’s work, learning, memory, and autonomous agent activity.
+ZAKI should become a central AI operating system for a user's work, learning, memory, and autonomous agent activity. The flagship consumer surface is ZAKI Agent: a persistent personal agent with graph memory, task execution, and browser control.
 
 The final product should feel:
 
@@ -66,9 +68,9 @@ Use two layers:
 1. Weekly allowance: the main visible budget.
 2. 5-hour burst/session window: protects capacity and creates ChatGPT/Claude-like predictability.
 
-All product usage counts toward the user’s weekly allowance. Product-specific caps prevent one product from consuming the whole plan if that would damage cost or fairness.
+All product usage counts toward the user's weekly allowance. Product-specific caps prevent one product from consuming the whole plan if that would damage cost or fairness.
 
-Weekly allowance is an entitlement-week bucket. For paid users, monthly billing starts on subscription activation, while the weekly meter starts on first metered use after that entitlement becomes active. For anonymous/free usage, the weekly meter starts on first metered use for the durable anonymous session. It resets every seven days; unused allowance expires at reset and does not roll over or add to the next week’s allowance.
+Weekly allowance is an entitlement-week bucket. For paid users, monthly billing starts on subscription activation, while the weekly meter starts on first metered use after that entitlement becomes active. For anonymous/free usage, the weekly meter starts on first metered use for the durable anonymous session. It resets every seven days; unused allowance expires at reset and does not roll over or add to the next week's allowance.
 
 ### Usage Units
 
@@ -93,7 +95,7 @@ Each usage event should record:
 - Request ID.
 - Upstream run ID if available.
 
-The UI can display simplified “hours” or “credits,” but the backend should track weighted usage.
+The UI can display simplified "hours" or "credits," but the backend should track weighted usage.
 
 ### Example Plan Shape
 
@@ -108,11 +110,13 @@ Exact prices and numbers are a business decision. The system should support:
 
 Every product should be registered in a product catalog:
 
-- `spaces`
 - `agent`
+- `spaces`
 - `brain`
 - `learn`
-- `cli_agent` future
+- `hire`
+- `design`
+- `cli` future
 - `local_app` future
 - `extensions` future
 
@@ -148,7 +152,7 @@ Provider roadmap:
 - Next: Apple, Microsoft, GitHub.
 - Later: SAML/OIDC for teams if Business/Enterprise emerges.
 
-Future CLI/local/extensions should be designed now, implemented later:
+Browser extensions ship in V1 for Agent browser control. Future CLI/local clients should be designed now, implemented later:
 
 - OAuth authorization code with PKCE for local app.
 - Device authorization flow for CLI.
@@ -172,7 +176,7 @@ Memory should become a governed platform layer, not a hidden feature in Spaces.
    - Replaces current ambiguous Spaces memory.
    - Scoped to a workspace/space and optionally thread.
    - Used for project facts, decisions, writing preferences, working context.
-   - Not treated as the user’s full personal brain.
+   - Not treated as the user's full personal brain.
 
 3. Learner Memory
    - Owned by Learning.
@@ -182,7 +186,17 @@ Memory should become a governed platform layer, not a hidden feature in Spaces.
 4. Session Memory
    - Temporary/ephemeral.
    - Used for current conversation continuity.
-   - Can be promoted into Personal Brain, Workspace Memory, or Learner Memory.
+   - Can be promoted into Personal Brain, Workspace Memory, Learner Memory, Hire Memory, or Design Memory by policy.
+
+5. Hire Memory
+   - Owned by Hire.
+   - Scoped to role, candidate, pipeline, interview, and hiring-workflow context.
+   - Visible through central memory governance.
+
+6. Design Memory
+   - Owned by Design when launched.
+   - Scoped to brand, product, asset, and design-project context.
+   - Visible through central memory governance.
 
 ### Memory Record Contract
 
@@ -228,9 +242,10 @@ If these are not done, Spaces memory should be frozen in production rather than 
 Left rail:
 
 - ZAKI Home
-- Spaces
 - Agent
+- Chat/Spaces
 - Learn
+- Hire
 - Brain/Memory
 - Settings
 
@@ -272,6 +287,18 @@ Settings should be a true control center:
 
 ### Product Screens
 
+Agent:
+
+- Agent workbench.
+- Active run/chat.
+- Task timeline.
+- Browser control panel for server browser and user extension.
+- Approvals.
+- Artifacts/files.
+- Tools/secrets/channels.
+- Cron/heartbeat.
+- Diagnostics.
+
 Spaces:
 
 - Workspace list.
@@ -279,15 +306,6 @@ Spaces:
 - Thread chat.
 - Workspace memory controls.
 - Files and pinned context.
-
-Agent:
-
-- Agent home/session list.
-- Active session/chat.
-- Approvals.
-- Tools/secrets/channels.
-- Cron/heartbeat.
-- Diagnostics.
 
 Learn:
 
@@ -298,6 +316,20 @@ Learn:
 - Review/question bank.
 - Tutor agents.
 - Learning memory.
+
+Hire:
+
+- Private beta entry.
+- Role/job workspaces.
+- Candidate pipeline.
+- Interview and evaluation memory.
+- Central meter status.
+
+Design:
+
+- Early access/waitlist.
+- Future design workspace.
+- Design memory placeholder.
 
 Brain/Memory:
 
@@ -432,7 +464,7 @@ Nothing is S-tier until these pass:
 
 ## Open Questions
 
-1. Exact plan pricing and quota numbers.
+1. Exact quota numbers and weight calibration per product and capability.
 2. Whether Workspace Memory can be promoted into Agent Brain automatically or only with user approval.
 3. Whether Personal Brain Memory is allowed to influence Spaces by default.
 4. Default retention by plan.

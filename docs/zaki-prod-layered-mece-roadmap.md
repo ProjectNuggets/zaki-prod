@@ -228,11 +228,21 @@ Completed:
   - The window starts on first metered use after the active paid entitlement starts, or first metered use for a durable anonymous/free session.
   - Unused allowance expires at reset and does not add to the next week.
   - Current-window aggregation counts receipts from entitlement-week start through now; `resetAt` is seven days after the current entitlement-week start.
+- Agent-first code-truth sweep:
+  - ZAKI Agent is now the declared main consumer product for V1.
+  - Nullalis is strong enough to be the runtime wedge: graph memory, SSE events, approvals, subagents, sandboxing, server browser MCP, and browser-extension gateway exist.
+  - Current UI still opens Agent through the fixed Spaces/Bot thread; `/agent` workbench is required before final product polish.
+  - Browser extension ships in V1, but needs central pairing, extension tool parity, STOP/audit UX, and raw usage facts before production launch.
+  - Findings are captured in `docs/zaki-agent-nullalis-integration-audit-2026-05-25.md`.
+  - Target product spec and app map are captured in `docs/zaki-agent-first-v1-product-spec.md` and `docs/zaki-v1-app-map.md`.
 
 Next:
 
-1. S09-S10 central meter authority: five-hour persistence, product weights, and enforcement bridge.
-2. S11 pricing/checkout migration to Free, Personal, Pro, and Pro MAX.
-3. S12-S15 Memory Control Plane governance across personal Brain, workspace memory, learner memory, and future product memory.
-4. S16 product router policy metadata so every route declares auth, entitlement, meter, memory, and audit behavior.
-5. Product surface polish and Website V2 after Claude V2 design files land.
+1. S09 central meter authority: persist the five-hour burst window and define receipt over-max behavior.
+2. S10 product weights and enforcement bridge: retire legacy prompt quota after central-meter proof.
+3. Agent-first route slice: create the `/agent` workbench contract and keep fixed Spaces/Bot as compatibility only.
+4. Browser-control slice: `zaki-prod` extension pairing plus Nullalis extension tool parity and raw usage facts.
+5. S11 pricing/checkout migration to Free, Personal, Pro, and Pro MAX.
+6. S12-S15 Memory Control Plane governance across personal Brain, workspace memory, learner memory, hire memory, design memory, and session memory.
+7. S16 product router policy metadata so every route declares auth, entitlement, meter, memory, and audit behavior.
+8. Product surface polish and Website V2 after Claude V2 design files land.

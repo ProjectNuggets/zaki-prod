@@ -1,5 +1,9 @@
 # App Finalization Spec
 
+Status: historical V1 UI notes. The Agent-first commercial release direction is now governed by `docs/zaki-agent-first-v1-product-spec.md`, `docs/zaki-v1-app-map.md`, and `docs/zaki-agent-nullalis-integration-audit-2026-05-25.md`.
+
+The older "experimental ZAKI space" language below is retained for audit context only. The current product decision is that ZAKI Agent is the main consumer product, with the old fixed Spaces/Bot thread kept as compatibility until the `/agent` workbench is complete.
+
 ## Purpose
 This spec locks the app-facing release decisions for the final app polish pass. It is meant to be execution-grade: another engineer should be able to review the intended UI states, copy, and acceptance criteria without guessing.
 
