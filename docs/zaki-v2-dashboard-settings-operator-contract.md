@@ -467,6 +467,95 @@ Every V2 UI slice must pass:
 - Loading, empty, error, disabled, readOnly, maintenance states where applicable.
 - Existing dirty user files untouched.
 
+## Hard Acceptance Gate
+
+No slice is accepted because it "looks done." A slice is accepted only when all gates below pass.
+
+| Gate | Required proof |
+| --- | --- |
+| Ownership | The screen owns only the jobs assigned to it in this contract. Dashboard, Settings, product settings, and Operator do not duplicate each other. |
+| Backend contract | Every live data block has a named API, typed frontend client, loading state, empty state, error state, and permission-denied state. Mock data is labelled and blocked from production acceptance. |
+| Meter | Any expensive product action goes through central grants before work and receipts after work. Products report raw usage facts only. Central app computes weighted debit. |
+| Memory | The product memory scope is visible, correct, and separate from other scopes. Personal Brain, Workspace Memory, Learner Memory, Hire Memory, Design Memory, and session memory do not blur together. |
+| Routing | Direct URL, nav click, logo click, browser back, refresh, and auth-return paths land on the correct surface. |
+| Entitlement | Anonymous, free, personal, pro, and pro MAX states are checked where the slice touches access, usage, or billing. |
+| Operational state | enabled, disabled, maintenance, degraded, hidden, and readOnly states are visible and tested where relevant. |
+| UI quality | Desktop and mobile browser smoke pass. No overlap, clipping, card-inside-card page sections, clipped buttons, unreadable contrast, or generic AI-app visual pattern. |
+| Accessibility | Keyboard walkthrough works; focus is visible; landmarks and labels are correct; dialogs trap and restore focus. |
+| i18n | Customer-facing dashboard strings support EN and AR now. Other new user-facing strings use i18n hooks and are ready for later localization. |
+| Security | No secrets exposed; admin/operator actions are permission-gated; destructive actions have confirmation and audit expectation. |
+| Observability | The slice emits or exposes enough state for support: request failure, product state, meter state, and user entitlement where relevant. |
+
+If one gate fails, the slice remains in progress. Visual polish cannot compensate for missing contract, meter, memory, or permission behavior.
+
+## Claude Design Mockup Intake
+
+Claude design files can accelerate V2, but they do not override product architecture.
+
+Use mockups as:
+
+- visual direction.
+- layout inspiration.
+- interaction/motion reference.
+- typography and density reference.
+- website/app continuity reference.
+
+Do not use mockups as:
+
+- route ownership authority.
+- source of billing, meter, memory, auth, or operator rules.
+- permission model.
+- product availability model.
+- replacement for backend truth.
+
+Every mockup must be mapped before implementation:
+
+| Mockup artifact | Required mapping |
+| --- | --- |
+| Screen name | Route and owner from the app map. |
+| Main zones | Dashboard, Settings, product, product settings, or Operator. |
+| Data blocks | API source, loading/empty/error states, and fallback behavior. |
+| Actions | Permission, entitlement, meter, and audit implications. |
+| Memory references | Exact scope and governance link. |
+| Navigation | Entry, exit, browser back, logo behavior, mobile behavior. |
+| Visual system | Conformance to `.claude/DESIGN.md`, `DESIGN.md`, `DESIGN_TOKENS.md`, and app tokens. |
+
+If a mockup combines concerns that this contract separates, preserve the visual quality but split the behavior into the correct surfaces.
+
+## Plumbing Readiness Matrix
+
+This matrix reflects the current repo state as of this contract update.
+
+| Area | Current state | Status | Required before production final |
+| --- | --- | --- | --- |
+| Public guest root `/` | Exists through `WebsiteHomePage` and public route allowlist. | Partial | Redesign as Agent-first product-family entry from V2 mockups. Confirm anonymous start path. |
+| Signed-in root `/` | Routes to `ChatArea`; current home can render `ZakiDashboard`. | Partial | Convert to V2 platform dashboard and remove product-welcome behavior from this surface. |
+| Main logo behavior | Sidebar ZAKI icon opens ZAKI bot/home state; mobile logo is static. | Partial | Make logo behavior explicit: signed-in logo returns dashboard, guest logo returns public root. |
+| Product registry | `/api/products/registry` exists; states and memory scopes are centralized in `platform-policy.js`. | Ready foundation | Add Operator controls or documented deploy-time env workflow for changing product states. |
+| Product states | enabled, disabled, maintenance, degraded, hidden, readOnly exist in policy and meter grant logic. | Ready foundation | UI needs complete state treatment across dashboard, Settings, products, and Operator. |
+| Central meter status | `/api/meter/status` exists for authenticated and anonymous users. | Ready foundation | Browser and contract tests need to cover dashboard and Settings consumption. |
+| Central grant API | `/api/meter/grants` exists with idempotency, signed grants, product state, plan tier, and anonymous/user support. | Ready foundation | Downstream products must verify grants before expensive work. |
+| Central receipt API | `/api/meter/receipts` exists; central app computes weighted debit from raw usage facts. | Ready foundation | Agent, Learn, Chat, and Hire must all report receipts consistently. |
+| Meter weights | Product and capability weights exist and are env configurable. | Ready foundation | Calibrate launch defaults and expose read-only policy in Operator. |
+| Weekly reset model | Entitlement-week and no-rollover policy exists in platform policy and meter snapshot tests. | Ready foundation | UI copy must explain reset timing clearly. |
+| Anonymous session | Durable anonymous session ID path exists through meter identity resolution. | Partial | Finalize retention, migration to account, allowed anonymous actions, and deletion UX. |
+| Billing/subscription | Checkout, portal, cancel, sync, webhooks, reconciliation, and billing telemetry exist. | Partial | Align plans/pricing to Free, Personal, Pro, Pro MAX and test mid-month upgrade behavior. |
+| Global Settings | Settings modal exists with account, billing, usage, products, memory/data, developer access, privacy sections. | Partial | Promote to route-ready `/settings` IA and slim profile menu. |
+| Profile menu | Exists, but includes billing, dark mode, memory, controls, settings, language, tour, and logout. | Partial | Reduce to account/profile, Settings, usage remaining, sign out, and optional manage plan shortcut. |
+| Product settings | Agent settings sheets exist; space settings exists; Learn has internal settings areas. | Partial | Normalize product-local settings tabs and link global policy back to Settings. |
+| Operator/internal | `/internal/admin-access-codes` exists with access codes, admins, student verification, rate limits, and Learning AI stack. | Partial | Create `/internal/operator` shell and move current admin tools into target IA. |
+| Agent runtime facade | Agent routes, diagnostics, history, proxy contracts, browser/control-plane plumbing exist. | Partial | Product surface needs V2 UX, run/work visibility, browser extension state, and operator mirror. |
+| Chat/Spaces | Legacy `/spaces` routes and TYP proxy exist. | Partial | Add `/chat` alias, rename customer-facing surface, and govern Workspace Memory clearly. |
+| Learn | `/learn` surface and many learning APIs exist. | Partial | Adopt central meter grant/receipt everywhere expensive and expose learner memory/settings/operator. |
+| Hire | Registry product exists, disabled by default. No route in this repo. | Planned | Add private beta placeholder route, central meter contract integration, settings tab, and operator page when Hire branch is ready. |
+| Design | Registry product exists, disabled by default. No route in this repo. | Planned | Add early-access placeholder, waitlist path, settings placeholder, and operator waitlist page. |
+| Memory control plane | `/brain` exists and memory backend routes exist. | Partial | Surface per-product memory scopes and governance links from dashboard and Settings. |
+| OAuth/connections | Google OAuth routes and Settings connection status exist. | Partial | Expand account-wide connection governance and product-local connection usage rules. |
+| Developer clients | Browser extension/server browser work is planned for V1 Agent; future CLI/local app are represented in registry. | Partial | Add Developer Access UX, token/client revocation model, and operator visibility. |
+| Test harness | Unit tests, backend tests, Playwright config, and smoke scripts exist. | Ready foundation | Add V2 dashboard/settings/operator browser specs and production release checklist. |
+
+Conclusion: we have enough plumbing to start Dashboard V2 without waiting, but not enough to call the commercial release complete. The release becomes complete only after each product adopts the central meter, memory scope, settings tab, and operator mirror.
+
 ## Ready For Coding Checklist
 
 Before implementing Dashboard V2:
