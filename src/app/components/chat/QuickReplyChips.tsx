@@ -62,7 +62,7 @@ export function QuickReplyChips({
             onClick={() => onPick(prefill)}
             data-testid={`quick-reply-${kind}`}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border border-zaki bg-zaki-raised px-3 py-1.5 text-xs font-medium text-zaki-secondary transition-colors hover:border-zaki-brand-40 hover:bg-zaki-brand-10 hover:text-zaki-brand focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 dark:bg-zaki-dark-card dark:border-zaki-dark-card",
+              "v2-btn v2-btn--sm inline-flex min-h-0 items-center gap-1.5 px-2.5 py-1 text-[11px] normal-case tracking-[0.02em]",
               isRtl && "flex-row-reverse"
             )}
           >

@@ -49,26 +49,27 @@ export function SheetShell({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side={side}
+        hideCloseButton
         className={cn(
-          "p-0 font-body text-zaki-primary border-zaki-strong bg-zaki-raised dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]",
+          "zaki-v2-sheet p-0",
           WIDTH_CLASSES[width],
           className
         )}
       >
         <div className="flex h-full flex-col">
-          <div className="sticky top-0 z-20 flex items-start justify-between gap-3 border-b border-zaki bg-zaki-raised px-5 py-4 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.06)]">
+          <div className="zaki-v2-sheet__head sticky top-0 z-20 flex items-start justify-between gap-3 px-5 py-4">
             <div className="flex items-start gap-3 min-w-0 flex-1">
               {icon ? (
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
+                <span className="zaki-v2-sheet__icon inline-flex size-9 shrink-0 items-center justify-center">
                   {icon}
                 </span>
               ) : null}
               <div className="min-w-0 flex-1">
-                <SheetTitle className="font-display text-base font-bold tracking-[-0.02em] text-zaki-primary truncate">
+                <SheetTitle className="zaki-v2-sheet__title truncate">
                   {title}
                 </SheetTitle>
                 {subtitle ? (
-                  <p className="mt-0.5 text-xs text-zaki-secondary leading-relaxed">
+                  <p className="zaki-v2-sheet__subtitle mt-1">
                     {subtitle}
                   </p>
                 ) : null}
@@ -82,7 +83,7 @@ export function SheetShell({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 size-8 rounded-full flex items-center justify-center text-zaki-muted hover:bg-zaki-hover hover:text-zaki-primary transition-colors"
+              className="zaki-v2-sheet__close shrink-0 size-8 flex items-center justify-center transition-colors"
               aria-label="Close"
             >
               <X className="size-4" />
@@ -91,7 +92,7 @@ export function SheetShell({
 
           <div
             className={cn(
-              "flex-1 overflow-y-auto zaki-scrollbar-fade",
+              "zaki-v2-sheet__body flex-1 overflow-y-auto zaki-scrollbar-fade",
               padded && "px-5 py-4"
             )}
           >
@@ -99,7 +100,7 @@ export function SheetShell({
           </div>
 
           {footer ? (
-            <div className="sticky bottom-0 z-10 border-t border-zaki bg-zaki-raised/95 backdrop-blur px-5 py-3 dark:bg-[#141210]/95 dark:border-[rgba(240,236,230,0.06)]">
+            <div className="zaki-v2-sheet__footer sticky bottom-0 z-10 px-5 py-3">
               {footer}
             </div>
           ) : null}

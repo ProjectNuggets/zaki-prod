@@ -70,7 +70,7 @@ export function ModalShell({
       )}
     >
       <div
-        className={cn("zaki-modal-backdrop absolute inset-0", backdropClassName)}
+        className={cn("zaki-modal-backdrop zaki-v2-modal-backdrop absolute inset-0", backdropClassName)}
         onClick={closeOnBackdrop ? onClose : undefined}
         aria-hidden="true"
       />
@@ -81,7 +81,7 @@ export function ModalShell({
         aria-labelledby={ariaLabelledBy}
         aria-label={ariaLabelledBy ? undefined : ariaLabel || "Dialog"}
         className={cn(
-          "zaki-modal-panel relative w-[420px] max-w-[calc(100%-2rem)] rounded-zaki-2xl",
+          "zaki-modal-panel zaki-v2-modal-panel relative w-[420px] max-w-[calc(100%-2rem)]",
           className
         )}
         onClick={(event) => event.stopPropagation()}

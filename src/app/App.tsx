@@ -295,11 +295,10 @@ export default function App() {
 
   if (isHydrating) {
     return (
-      <div className="min-h-screen bg-[#fff8f0] dark:bg-[#0c0a09] flex items-center justify-center">
+      <div className="zaki-v2-loading" data-v2-stage={appStage}>
         <div className="flex flex-col items-center gap-4">
-          {/* Spinner */}
-          <div className="size-8 border-2 border-[#88735A]/20 border-t-[#88735A] rounded-full animate-spin" />
-          <div className="text-sm text-zaki-muted dark:text-[#c9b8a4]">
+          <div className="zaki-v2-loading__mark" aria-hidden="true" />
+          <div className="zaki-v2-loading__label">
             {t("app.loadingSession")}
           </div>
         </div>
@@ -375,19 +374,19 @@ export default function App() {
       </div>
       {legalReconsentRequired && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-lg rounded-2xl border border-zaki-subtle bg-white p-6 shadow-[0px_20px_60px_rgba(0,0,0,0.35)] dark:border-[#2a2018] dark:bg-[#0c0a09]">
-            <h2 className="text-lg font-semibold text-zaki-primary dark:text-[#efe6d9]">
+          <div className="zaki-legal-reconsent-v2 w-full max-w-lg p-6">
+            <h2>
               {t("app.legal.title")}
             </h2>
-            <p className="mt-2 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+            <p className="mt-3 text-sm leading-6">
               {t("app.legal.body", { policyVersion: legalPolicyVersion })}
             </p>
-            <label className="mt-4 flex items-start gap-3 rounded-zaki-md border border-zaki-strong bg-zaki-base/70 px-3 py-3 text-xs font-medium text-zaki-secondary dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#c9b8a4]">
+            <label className="mt-4 flex items-start gap-3 px-3 py-3 text-xs">
               <input
                 type="checkbox"
                 checked={legalReconsentChecked}
                 onChange={(event) => setLegalReconsentChecked(event.target.checked)}
-                className="mt-0.5 size-4 rounded border border-zaki-strong bg-white accent-[var(--zaki-brand)] dark:border-[#3a3026] dark:bg-[#0c0a09]"
+                className="mt-0.5 size-4 border border-zaki-strong bg-transparent accent-[var(--v2-accent)]"
               />
               <span className="leading-relaxed">
                 {t("app.legal.checkboxPrefix")}{" "}
@@ -403,14 +402,14 @@ export default function App() {
               </span>
             </label>
             {legalReconsentError && (
-              <div className="mt-3 rounded-zaki-md border border-zaki-strong bg-zaki-error px-3 py-2 text-xs text-zaki-brand dark:border-[#3a1f1b] dark:bg-[rgba(241,2,2,0.18)] dark:text-[#ffe7e2]">
+              <div className="mt-3 border border-[var(--v2-accent-hairline)] bg-[var(--v2-danger-faint)] px-3 py-2 text-xs text-[var(--v2-danger)]">
                 {legalReconsentError}
               </div>
             )}
             <div className="mt-4 flex items-center justify-end gap-3">
               <button
                 type="button"
-                className="rounded-zaki-md border border-zaki-strong px-4 py-2 text-xs font-semibold text-zaki-secondary hover:text-zaki-primary dark:border-[#2a2018] dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+                className="v2-btn v2-btn--sm"
                 onClick={() => {
                   logout();
                   setLegalReconsentRequired(false);
@@ -423,7 +422,7 @@ export default function App() {
               <button
                 type="button"
                 disabled={!legalReconsentChecked || legalReconsentSubmitting}
-                className="rounded-zaki-md bg-zaki-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zaki-brand-hover disabled:opacity-60"
+                className="v2-btn v2-btn--accent v2-btn--sm"
                 onClick={handleLegalReconsent}
               >
                 {legalReconsentSubmitting

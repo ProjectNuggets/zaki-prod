@@ -77,27 +77,27 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-zaki-body p-6">
-          <div className="max-w-md w-full bg-white rounded-zaki-2xl shadow-[0px_24px_60px_rgba(15,15,15,0.18)] p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-50 flex items-center justify-center">
-              <AlertCircle className="w-8 h-8 text-red-500" />
+        <div className="zaki-v2-loading p-6">
+          <div className="v2-modal max-w-md p-8 text-center">
+            <div className="mx-auto mb-6 flex size-12 items-center justify-center border border-[var(--v2-accent-hairline)] bg-[var(--v2-danger-faint)] text-[var(--v2-danger)]">
+              <AlertCircle className="size-6" />
             </div>
             
-            <h2 className="text-xl font-semibold text-zaki-primary mb-2">
+            <h2 className="v2-modal-title mb-3">
               Something went wrong
             </h2>
             
-            <p className="text-sm text-zaki-secondary mb-6">
+            <p className="v2-body-sm mb-6">
               We encountered an unexpected error. Don't worry, your data is safe.
             </p>
 
             {IS_DEVELOPMENT && this.state.error && (
-              <div className="mb-6 p-4 bg-gray-50 rounded-zaki-xl text-left overflow-hidden">
-                <p className="text-xs font-mono text-red-600 mb-2">
+              <div className="mb-6 overflow-hidden border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-4 text-left">
+                <p className="mb-2 font-mono text-xs text-[var(--v2-danger)]">
                   {this.state.error.message}
                 </p>
                 {this.state.errorInfo && (
-                  <pre className="text-xs text-zaki-secondary overflow-auto max-h-32">
+                  <pre className="max-h-32 overflow-auto text-xs text-[var(--v2-ink-2)]">
                     {this.state.errorInfo.componentStack}
                   </pre>
                 )}
@@ -107,7 +107,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="flex gap-3 justify-center">
               <button
                 onClick={this.handleRetry}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-zaki-brand text-white rounded-zaki-xl font-medium text-sm hover:bg-zaki-brand-hover transition-colors"
+                className="v2-btn v2-btn--accent"
               >
                 <RefreshCw className="w-4 h-4" />
                 Try Again
@@ -115,7 +115,7 @@ export class ErrorBoundary extends Component<Props, State> {
               
               <button
                 onClick={this.handleGoHome}
-                className="inline-flex items-center px-4 py-2 bg-zaki-card text-zaki-primary rounded-zaki-xl font-medium text-sm hover:bg-zaki-card-hover transition-colors"
+                className="v2-btn"
               >
                 Go Home
               </button>
