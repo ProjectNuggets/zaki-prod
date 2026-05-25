@@ -1323,6 +1323,46 @@
   border-radius: 2px;
 }
 
+.zaki-app-v2 .zaki-agent-v2__status-strip {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.zaki-app-v2 .zaki-agent-v2__status-group {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.zaki-app-v2 .zaki-agent-v2__status-group strong {
+  color: var(--v2-ink-1);
+  font-weight: 500;
+}
+
+.zaki-app-v2 .zaki-agent-v2__status-pip {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: var(--v2-ink-3);
+}
+
+.zaki-app-v2 .zaki-agent-v2__status-pip--live {
+  background: var(--v2-accent);
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-scrollbar-fade {
   scrollbar-color: var(--v2-hairline-strong) transparent;
 }
@@ -1658,6 +1698,426 @@
   background: var(--v2-bg-raised);
   color: var(--v2-ink-2);
   box-shadow: none;
+}
+
+.zaki-app-v2 .zaki-agent-v2__workspace {
+  min-height: 0;
+}
+
+.zaki-app-v2 .zaki-agent-v2__scroll {
+  min-width: 0;
+}
+
+.zaki-agent-inspector {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .zaki-app-v2 .zaki-agent-v2--inspector {
+    --zaki-agent-inspector-width: 340px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2--inspector .zaki-input-float {
+    margin-right: var(--zaki-agent-inspector-width);
+  }
+
+  .zaki-agent-inspector {
+    display: flex;
+    width: var(--zaki-agent-inspector-width);
+    min-width: var(--zaki-agent-inspector-width);
+    max-width: var(--zaki-agent-inspector-width);
+    min-height: 0;
+    flex: 0 0 var(--zaki-agent-inspector-width);
+    flex-direction: column;
+    border-left: 1px solid var(--v2-hairline);
+    background: var(--v2-bg);
+    color: var(--v2-ink-1);
+    font-family: var(--v2-font-mono);
+    overflow-y: auto;
+  }
+}
+
+@media (min-width: 1280px) and (max-width: 1420px) {
+  .zaki-app-v2 .zaki-agent-v2--inspector {
+    --zaki-agent-inspector-width: 312px;
+  }
+}
+
+.zaki-agent-inspector :where(h2, p, ol, dl, dt, dd) {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.zaki-agent-inspector__head {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__kicker,
+.zaki-agent-inspector__panel-head,
+.zaki-agent-inspector__status-grid span,
+.zaki-agent-inspector__meter span,
+.zaki-agent-inspector__facts dt,
+.zaki-agent-inspector__foot {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__kicker {
+  margin-bottom: 5px;
+}
+
+.zaki-agent-inspector h2 {
+  color: var(--v2-ink-1);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.zaki-agent-inspector__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--v2-hairline-strong);
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__live.is-live {
+  border-color: var(--v2-accent-hairline);
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+  gap: 1px;
+}
+
+.zaki-agent-inspector__status-grid div {
+  min-width: 0;
+  background: var(--v2-bg);
+  padding: 10px 12px;
+}
+
+.zaki-agent-inspector__status-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__modes,
+.zaki-agent-inspector__tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-inspector__modes button,
+.zaki-agent-inspector__tabs button,
+.zaki-agent-inspector__actions button {
+  min-width: 0;
+  border: 0;
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 160ms ease-out, color 160ms ease-out;
+}
+
+.zaki-agent-inspector__modes button {
+  min-height: 34px;
+}
+
+.zaki-agent-inspector__tabs button {
+  min-height: 36px;
+}
+
+.zaki-agent-inspector__modes button:hover,
+.zaki-agent-inspector__tabs button:hover,
+.zaki-agent-inspector__actions button:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-inspector__modes button[aria-pressed="true"],
+.zaki-agent-inspector__tabs button[aria-selected="true"] {
+  background: var(--v2-selected);
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__modes button:disabled,
+.zaki-agent-inspector__actions button:disabled {
+  cursor: not-allowed;
+  color: var(--v2-ink-4);
+}
+
+.zaki-agent-inspector__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.zaki-agent-inspector__panel {
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__panel-head {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-agent-inspector__approval,
+.zaki-agent-inspector__now {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline);
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__approval strong,
+.zaki-agent-inspector__now strong {
+  display: block;
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__approval span,
+.zaki-agent-inspector__now span {
+  display: block;
+  margin-top: 2px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__task-list,
+.zaki-agent-inspector__trace-list {
+  list-style: none;
+  padding: 0;
+}
+
+.zaki-agent-inspector__task-list li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__task-list li:last-child,
+.zaki-agent-inspector__trace-list li:last-child {
+  border-bottom: 0;
+}
+
+.zaki-agent-inspector__status-icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: var(--v2-ink-4);
+}
+
+.zaki-agent-inspector__status-icon.is-done {
+  color: var(--v2-success);
+}
+
+.zaki-agent-inspector__status-icon.is-running {
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__status-icon.is-alert {
+  color: var(--v2-warn);
+}
+
+.zaki-agent-inspector__task-list span,
+.zaki-agent-inspector__trace-list span {
+  display: block;
+  min-width: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__task-list small,
+.zaki-agent-inspector__task-list b {
+  color: var(--v2-ink-4);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__task-list small {
+  display: block;
+  margin-top: 3px;
+}
+
+.zaki-agent-inspector__trace-list li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__trace-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  background: var(--v2-accent);
+}
+
+.zaki-agent-inspector__trace-list strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--v2-ink-1);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__empty {
+  padding: 14px 10px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.zaki-agent-inspector__meter {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__meter div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zaki-agent-inspector__meter strong {
+  color: var(--v2-ink-1);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-agent-inspector__bar {
+  height: 4px;
+  margin-top: 9px;
+  background: var(--v2-bg-sunken);
+  overflow: hidden;
+}
+
+.zaki-agent-inspector__bar span {
+  display: block;
+  height: 100%;
+  background: var(--v2-accent);
+}
+
+.zaki-agent-inspector__meter small {
+  display: block;
+  margin-top: 6px;
+  color: var(--v2-ink-4);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-inspector__facts div {
+  min-width: 0;
+  background: var(--v2-bg);
+  padding: 10px;
+}
+
+.zaki-agent-inspector__facts dd {
+  margin-top: 5px;
+  color: var(--v2-ink-1);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-inspector__actions button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.zaki-agent-inspector__foot {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__foot span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
 }
 
 .zaki-dashboard-v2 {

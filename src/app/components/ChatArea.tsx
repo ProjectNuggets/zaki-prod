@@ -51,6 +51,7 @@ import {
   EditInstructionsModal,
   ApprovalRequiredCard,
 } from "./chat";
+import { AgentInspectorRail } from "./chat/AgentInspectorRail";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type {
@@ -2490,6 +2491,22 @@ export function ChatArea() {
           ),
         }
       : null;
+  const agentContextPercent =
+    isZakiBotActiveSpace && nullalisContextGauge?.contextMax
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            ((nullalisContextGauge.tokenCount ?? 0) / nullalisContextGauge.contextMax) *
+              100
+          )
+        )
+      : null;
+  const agentWeeklyLabel = zakiBotQuotaInfo
+    ? `${zakiBotQuotaInfo.remaining}/${zakiBotQuotaInfo.limit}`
+    : freeDailyQuota?.unlimited
+      ? "unlimited"
+      : "metering";
   const isZakiBotSendLocked = Boolean(
     zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
   );
@@ -6379,7 +6396,7 @@ export function ChatArea() {
       ref={containerRef}
       className={cn(
         "zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden",
-        isAgentSurface && "zaki-agent-v2"
+        isAgentSurface && "zaki-agent-v2 zaki-agent-v2--inspector"
       )}
       data-agent-surface={isAgentSurface ? "true" : undefined}
       style={
@@ -6529,35 +6546,100 @@ export function ChatArea() {
 	            <div className="h-[64px]" aria-hidden="true" />
 	          )}
 
+          {isAgentSurface ? (
+            <div className="zaki-agent-v2__status-strip" role="status" aria-label="Agent status">
+              <span className="zaki-agent-v2__status-group">
+                <span
+                  className={cn(
+                    "zaki-agent-v2__status-pip",
+                    (isStreaming || activeSessionUi?.live || activeSessionRecord?.live) &&
+                      "zaki-agent-v2__status-pip--live"
+                  )}
+                  aria-hidden
+                />
+                {(isStreaming || activeSessionUi?.live || activeSessionRecord?.live)
+                  ? "Online"
+                  : "Ready"}
+              </span>
+              <span className="zaki-agent-v2__status-group">
+                Mode <strong>{activeSessionMode ?? "execute"}</strong>
+              </span>
+              <span className="zaki-agent-v2__status-group">
+                Context{" "}
+                <strong>
+                  {agentContextPercent != null
+                    ? `${Math.round(agentContextPercent)}%`
+                    : "0%"}
+                </strong>
+              </span>
+              <span className="zaki-agent-v2__status-group">
+                Weekly <strong>{agentWeeklyLabel}</strong>
+              </span>
+              <span className="zaki-agent-v2__status-group">
+                Trace <strong>{nullalisTranscriptEntries.length}</strong>
+              </span>
+            </div>
+          ) : null}
+
           {/* C5: System notices — rendered here so they appear on ALL views
               (home, spaces, chat, brain) regardless of which view is active */}
           <SystemNoticesStack className="-mb-2" />
 
           {/* Main Content */}
-          <div
-            className="flex-1 relative z-10 overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade"
-            ref={scrollRef}
-            style={{
-              paddingBottom:
-                !showZakiHome && !showSpacesView && !showSpaceDetail
-                  ? Math.max(24, inputHeight + 24)
-                  : undefined,
-              WebkitOverflowScrolling: "touch",
-            }}
-            onScroll={() => {
-              if (!scrollRef.current) return;
-              if (scrollRafRef.current) return;
-              scrollRafRef.current = window.requestAnimationFrame(() => {
+          <div className={cn("zaki-chat-main flex-1 relative z-10 min-h-0 flex overflow-hidden", isAgentSurface && "zaki-agent-v2__workspace")}>
+            <div
+              className={cn(
+                "flex-1 relative z-10 overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade",
+                isAgentSurface && "zaki-agent-v2__scroll"
+              )}
+              ref={scrollRef}
+              style={{
+                paddingBottom:
+                  !showZakiHome && !showSpacesView && !showSpaceDetail
+                    ? Math.max(24, inputHeight + 24)
+                    : undefined,
+                WebkitOverflowScrolling: "touch",
+              }}
+              onScroll={() => {
                 if (!scrollRef.current) return;
-                const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-                const atBottom = scrollTop + clientHeight >= scrollHeight - 48;
-                autoScrollRef.current = atBottom;
-                setShowScrollToBottom(scrollHeight - clientHeight > 120 && !atBottom);
-                scrollRafRef.current = null;
-              });
-            }}
-          >
-            {renderContent()}
+                if (scrollRafRef.current) return;
+                scrollRafRef.current = window.requestAnimationFrame(() => {
+                  if (!scrollRef.current) return;
+                  const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+                  const atBottom = scrollTop + clientHeight >= scrollHeight - 48;
+                  autoScrollRef.current = atBottom;
+                  setShowScrollToBottom(scrollHeight - clientHeight > 120 && !atBottom);
+                  scrollRafRef.current = null;
+                });
+              }}
+            >
+              {renderContent()}
+            </div>
+
+            {isAgentSurface ? (
+              <AgentInspectorRail
+                mode={activeSessionMode ?? "execute"}
+                modePending={sessionModePending}
+                onModeChange={handleSessionModeChange}
+                isStreaming={isStreaming}
+                live={activeSessionUi?.live ?? activeSessionRecord?.live ?? null}
+                lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
+                sandbox={sandboxState}
+                tasks={nullalisTaskItems}
+                transcriptEntries={nullalisTranscriptEntries}
+                narrationFrame={nullalisNarrationFrame}
+                approvalRequest={nullalisApprovalRequest}
+                approvalCount={activeSessionUi?.approvalCount ?? activeSessionRecord?.pending_approval_count ?? 0}
+                contextGaugeData={nullalisContextGauge}
+                usageSummary={zakiUsageSummary}
+                quotaInfo={zakiBotQuotaInfo}
+                turnStartedAt={turnStartedAt}
+                turnDurationMs={turnDurationMs}
+                onOpenMemory={openMemoryViewer}
+                onShare={handleShare}
+                onExport={handleExport}
+              />
+            ) : null}
           </div>
 
           {showScrollToBottom && !showZakiHome && !showSpacesView && !showSpaceDetail && (
