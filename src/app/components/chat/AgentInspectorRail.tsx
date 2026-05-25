@@ -15,7 +15,17 @@ import {
 } from "lucide-react";
 import type { AgentSessionMode } from "@/lib/api";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
-import { cn } from "@/lib/utils";
+import {
+  V2ActionGrid,
+  V2Badge,
+  V2InlineRow,
+  V2Meter,
+  V2MetricGrid,
+  V2Panel,
+  V2PanelHead,
+  V2SegmentedControl,
+  V2Tabs,
+} from "@/app/components/v2";
 import type {
   NullalisApprovalRequest,
   NullalisNarrationFrame,
@@ -177,80 +187,61 @@ export function AgentInspectorRail({
           <p className="zaki-agent-inspector__kicker">Agent Ops</p>
           <h2>ZAKI Agent</h2>
         </div>
-        <span className={cn("zaki-agent-inspector__live", liveState && "is-live")}>
+        <V2Badge tone={liveState ? "accent" : "default"} dot pulse={liveState}>
           <Radio className="size-3" aria-hidden />
           {liveState ? "Live" : "Idle"}
-        </span>
+        </V2Badge>
       </div>
 
-      <div className="zaki-agent-inspector__status-grid" aria-label="Runtime status">
-        <div>
-          <span>Mode</span>
-          <strong>{modeLabel(currentMode)}</strong>
-        </div>
-        <div>
-          <span>Sandbox</span>
-          <strong>{sandboxLabel}</strong>
-        </div>
-        <div>
-          <span>Approvals</span>
-          <strong>{activeApprovals}</strong>
-        </div>
-        <div>
-          <span>Elapsed</span>
-          <strong>{elapsed != null ? formatElapsed(elapsed) : "0s"}</strong>
-        </div>
-      </div>
+      <V2MetricGrid
+        items={[
+          { id: "mode", label: "Mode", value: modeLabel(currentMode).toUpperCase() },
+          { id: "sandbox", label: "Sandbox", value: sandboxLabel.toUpperCase() },
+          { id: "approvals", label: "Approvals", value: activeApprovals },
+          {
+            id: "elapsed",
+            label: "Elapsed",
+            value: elapsed != null ? formatElapsed(elapsed) : "0s",
+          },
+        ]}
+      />
 
-      <div className="zaki-agent-inspector__modes" aria-label="Agent mode">
-        {(["plan", "execute", "review"] as const).map((entry) => (
-          <button
-            key={entry}
-            type="button"
-            disabled={modePending || !onModeChange}
-            aria-pressed={currentMode === entry}
-            onClick={() => {
-              if (currentMode !== entry) void onModeChange?.(entry);
-            }}
-          >
-            {entry}
-          </button>
-        ))}
-      </div>
+      <V2SegmentedControl
+        fullWidth
+        ariaLabel="Agent mode"
+        value={currentMode}
+        disabled={modePending}
+        onChange={onModeChange}
+        options={[
+          { id: "plan", label: "Plan" },
+          { id: "execute", label: "Execute" },
+          { id: "review", label: "Review" },
+        ]}
+      />
 
-      <div className="zaki-agent-inspector__tabs" role="tablist" aria-label="Agent panels">
-        {([
-          ["plan", "Plan"],
-          ["trace", "Trace"],
-          ["context", "Context"],
-        ] as const).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <V2Tabs
+        fullWidth
+        ariaLabel="Agent panels"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { id: "plan", label: "Plan" },
+          { id: "trace", label: "Trace" },
+          { id: "context", label: "Context" },
+        ]}
+      />
 
       <div className="zaki-agent-inspector__body">
         {tab === "plan" ? (
-          <section className="zaki-agent-inspector__panel" aria-label="Plan">
-            <div className="zaki-agent-inspector__panel-head">
-              <span>Run Plan</span>
-              <span>{sortedTasks.length || 0} steps</span>
-            </div>
+          <V2Panel aria-label="Plan">
+            <V2PanelHead title="Run Plan" meta={`${sortedTasks.length || 0} steps`} />
             {approvalRequest ? (
-              <div className="zaki-agent-inspector__approval">
-                <ShieldAlert className="size-4" aria-hidden />
-                <div>
-                  <strong>{approvalRequest.tool}</strong>
-                  <span>{approvalRequest.riskLevel || "approval needed"}</span>
-                </div>
-              </div>
+              <V2InlineRow
+                tone="warn"
+                icon={<ShieldAlert className="size-4" aria-hidden />}
+                title={approvalRequest.tool}
+                meta={approvalRequest.riskLevel || "approval needed"}
+              />
             ) : null}
             {sortedTasks.length ? (
               <ol className="zaki-agent-inspector__task-list">
@@ -268,27 +259,23 @@ export function AgentInspectorRail({
                 ))}
               </ol>
             ) : (
-              <div className="zaki-agent-inspector__empty">
+              <div className="v2-empty-line">
                 {isStreaming ? "Plan is forming." : "No active plan."}
               </div>
             )}
-          </section>
+          </V2Panel>
         ) : null}
 
         {tab === "trace" ? (
-          <section className="zaki-agent-inspector__panel" aria-label="Trace">
-            <div className="zaki-agent-inspector__panel-head">
-              <span>Activity Trace</span>
-              <span>{timelineBlocks.length} blocks</span>
-            </div>
+          <V2Panel aria-label="Trace">
+            <V2PanelHead title="Activity Trace" meta={`${timelineBlocks.length} blocks`} />
             {narrationFrame ? (
-              <div className="zaki-agent-inspector__now">
-                <Activity className="size-4" aria-hidden />
-                <div>
-                  <strong>{narrationFrame.label}</strong>
-                  <span>{narrationFrame.tool || narrationFrame.phase}</span>
-                </div>
-              </div>
+              <V2InlineRow
+                tone="accent"
+                icon={<Activity className="size-4" aria-hidden />}
+                title={narrationFrame.label}
+                meta={narrationFrame.tool || narrationFrame.phase}
+              />
             ) : null}
             {recentTrace.length ? (
               <ol className="zaki-agent-inspector__trace-list">
@@ -303,81 +290,77 @@ export function AgentInspectorRail({
                 ))}
               </ol>
             ) : (
-              <div className="zaki-agent-inspector__empty">
+              <div className="v2-empty-line">
                 {isStreaming ? "Waiting for trace events." : "No trace in this turn."}
               </div>
             )}
-          </section>
+          </V2Panel>
         ) : null}
 
         {tab === "context" ? (
-          <section className="zaki-agent-inspector__panel" aria-label="Context">
-            <div className="zaki-agent-inspector__panel-head">
-              <span>Context</span>
-              <span>{lastChannel || "agent"}</span>
-            </div>
-            <div className="zaki-agent-inspector__meter">
-              <div>
-                <span>Context window</span>
-                <strong>{ctxPct != null ? `${Math.round(ctxPct)}%` : "0%"}</strong>
-              </div>
-              <div className="zaki-agent-inspector__bar" aria-hidden>
-                <span style={{ width: `${ctxPct ?? 0}%` }} />
-              </div>
-              <small>
-                {contextGaugeData
+          <V2Panel aria-label="Context">
+            <V2PanelHead title="Context" meta={lastChannel || "agent"} />
+            <V2Meter
+              label="Context window"
+              value={ctxPct}
+              detail={
+                contextGaugeData
                   ? `${formatTokens(contextGaugeData.tokenCount)} / ${formatTokens(contextGaugeData.contextMax)} tokens`
-                  : "No context sample"}
-              </small>
-            </div>
+                  : "No context sample"
+              }
+            />
             {weeklyRemaining != null ? (
-              <div className="zaki-agent-inspector__meter">
-                <div>
-                  <span>Weekly allowance</span>
-                  <strong>{Math.round(weeklyRemaining)}%</strong>
-                </div>
-                <div className="zaki-agent-inspector__bar" aria-hidden>
-                  <span style={{ width: `${weeklyRemaining}%` }} />
-                </div>
-                <small>
-                  {quotaInfo?.remaining ?? 0} of {quotaInfo?.limit ?? 0} preview turns
-                </small>
-              </div>
+              <V2Meter
+                label="Weekly allowance"
+                value={weeklyRemaining}
+                detail={`${quotaInfo?.remaining ?? 0} of ${quotaInfo?.limit ?? 0} preview turns`}
+              />
             ) : null}
-            <dl className="zaki-agent-inspector__facts">
-              <div>
-                <dt>Tokens</dt>
-                <dd>{formatTokens(usageSummary?.usageTokens)}</dd>
-              </div>
-              <div>
-                <dt>Cost</dt>
-                <dd>{formatCost(usageSummary?.costUsd)}</dd>
-              </div>
-              <div>
-                <dt>Memory</dt>
-                <dd>User scoped</dd>
-              </div>
-            </dl>
-          </section>
+            <V2MetricGrid
+              columns={3}
+              items={[
+                {
+                  id: "tokens",
+                  label: "Tokens",
+                  value: formatTokens(usageSummary?.usageTokens),
+                },
+                {
+                  id: "cost",
+                  label: "Cost",
+                  value: formatCost(usageSummary?.costUsd),
+                },
+                { id: "memory", label: "Memory", value: "User scoped" },
+              ]}
+            />
+          </V2Panel>
         ) : null}
       </div>
 
-      <div className="zaki-agent-inspector__actions" aria-label="Agent actions">
-        <button type="button" onClick={onOpenMemory} disabled={!onOpenMemory}>
-          <Brain className="size-4" aria-hidden />
-          Memory
-        </button>
-        <button type="button" onClick={onShare} disabled={!onShare}>
-          <Share2 className="size-4" aria-hidden />
-          Share
-        </button>
-        <button type="button" onClick={onExport} disabled={!onExport}>
-          <FileDown className="size-4" aria-hidden />
-          Export
-        </button>
-      </div>
+      <V2ActionGrid
+        ariaLabel="Agent actions"
+        actions={[
+          {
+            id: "memory",
+            label: "Memory",
+            icon: <Brain className="size-4" aria-hidden />,
+            onClick: onOpenMemory,
+          },
+          {
+            id: "share",
+            label: "Share",
+            icon: <Share2 className="size-4" aria-hidden />,
+            onClick: onShare,
+          },
+          {
+            id: "export",
+            label: "Export",
+            icon: <FileDown className="size-4" aria-hidden />,
+            onClick: onExport,
+          },
+        ]}
+      />
 
-      <div className="zaki-agent-inspector__foot">
+      <div className="v2-footnote-grid">
         <span>
           <ShieldCheck className="size-3" aria-hidden />
           Server guarded

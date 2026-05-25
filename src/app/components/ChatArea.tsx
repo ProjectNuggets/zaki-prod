@@ -53,6 +53,7 @@ import {
 } from "./chat";
 import { AgentInspectorRail } from "./chat/AgentInspectorRail";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
+import { V2StatusStrip } from "@/app/components/v2";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
 import type {
   BotReasoningSummary,
@@ -6547,38 +6548,41 @@ export function ChatArea() {
 	          )}
 
           {isAgentSurface ? (
-            <div className="zaki-agent-v2__status-strip" role="status" aria-label="Agent status">
-              <span className="zaki-agent-v2__status-group">
-                <span
-                  className={cn(
-                    "zaki-agent-v2__status-pip",
-                    (isStreaming || activeSessionUi?.live || activeSessionRecord?.live) &&
-                      "zaki-agent-v2__status-pip--live"
-                  )}
-                  aria-hidden
-                />
-                {(isStreaming || activeSessionUi?.live || activeSessionRecord?.live)
-                  ? "Online"
-                  : "Ready"}
-              </span>
-              <span className="zaki-agent-v2__status-group">
-                Mode <strong>{activeSessionMode ?? "execute"}</strong>
-              </span>
-              <span className="zaki-agent-v2__status-group">
-                Context{" "}
-                <strong>
-                  {agentContextPercent != null
-                    ? `${Math.round(agentContextPercent)}%`
-                    : "0%"}
-                </strong>
-              </span>
-              <span className="zaki-agent-v2__status-group">
-                Weekly <strong>{agentWeeklyLabel}</strong>
-              </span>
-              <span className="zaki-agent-v2__status-group">
-                Trace <strong>{nullalisTranscriptEntries.length}</strong>
-              </span>
-            </div>
+            <V2StatusStrip
+              aria-label="Agent status"
+              items={[
+                {
+                  id: "runtime",
+                  label:
+                    isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+                      ? "Online"
+                      : "Ready",
+                  active: Boolean(
+                    isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+                  ),
+                  tone: "accent",
+                },
+                {
+                  id: "mode",
+                  label: "Mode",
+                  value: activeSessionMode ?? "execute",
+                },
+                {
+                  id: "context",
+                  label: "Context",
+                  value:
+                    agentContextPercent != null
+                      ? `${Math.round(agentContextPercent)}%`
+                      : "0%",
+                },
+                { id: "weekly", label: "Weekly", value: agentWeeklyLabel },
+                {
+                  id: "trace",
+                  label: "Trace",
+                  value: nullalisTranscriptEntries.length,
+                },
+              ]}
+            />
           ) : null}
 
           {/* C5: System notices — rendered here so they appear on ALL views
