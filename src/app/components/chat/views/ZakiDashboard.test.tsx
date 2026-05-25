@@ -111,8 +111,8 @@ const registryProducts = [
     state: "enabled",
     lifecycle: "current",
     visibleInSettings: true,
-    route: "/",
-    entryPoint: "Agent home",
+    route: "/agent",
+    entryPoint: "Agent workbench",
     memoryScope: "personal_brain",
   },
   {
@@ -300,6 +300,6 @@ describe("ZakiDashboard", () => {
     const agentCard = screen.getByTestId("zaki-product-card-agent");
     fireEvent.click(within(agentCard).getByRole("button", { name: /open/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/spaces/zaki-bot/threads/main");
+    expect(mockNavigate).toHaveBeenCalledWith("/agent");
   });
 });

@@ -46,6 +46,10 @@ export const router = createBrowserRouter([
         element: <HomeRoute />, // Public website for guests, app home for signed-in users
       },
       {
+        path: 'agent',
+        element: <ChatArea />, // Authenticated Agent workbench
+      },
+      {
         path: 'spaces',
         element: <ChatArea />, // Will show spaces view
       },

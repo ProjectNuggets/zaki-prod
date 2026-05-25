@@ -20,6 +20,28 @@ export const BOT_CHAT_STREAM_SESSION_KEY_CONTRACT = Object.freeze({
   supportedOverrideLanes: Object.freeze(["main", "thread:<id>", "task:<id>", "cron:<id>"]),
 });
 
+export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
+  { method: "get", path: "/api/agent/diagnostics/context" },
+  { method: "get", path: "/api/agent/diagnostics/memory-doctor" },
+  { method: "get", path: "/api/agent/tasks" },
+  { method: "get", path: "/api/agent/tasks/:taskId" },
+  { method: "post", path: "/api/agent/tasks/:taskId/stop" },
+  { method: "get", path: "/api/agent/jobs" },
+  { method: "get", path: "/api/agent/traces" },
+  { method: "get", path: "/api/agent/traces/:runId" },
+  { method: "post", path: "/api/agent/traces/:runId/share" },
+  { method: "delete", path: "/api/agent/traces/:runId/share" },
+  { method: "get", path: "/api/agent/artifacts" },
+  { method: "get", path: "/api/agent/artifacts/:artifactId" },
+  { method: "put", path: "/api/agent/artifacts/:artifactId" },
+  { method: "get", path: "/api/agent/artifacts/:artifactId/history" },
+  { method: "get", path: "/api/agent/artifacts/:artifactId/diff/:fromVersion/:toVersion" },
+  { method: "post", path: "/api/agent/artifacts/:artifactId/share" },
+  { method: "delete", path: "/api/agent/artifacts/:artifactId/share" },
+  { method: "post", path: "/api/agent/artifacts/:artifactId/export" },
+  { method: "get", path: "/api/agent/brain/documents" },
+]);
+
 export function buildBotProvisionPayload(userId, payload = {}) {
   return {
     ...(payload && typeof payload === "object" ? payload : {}),

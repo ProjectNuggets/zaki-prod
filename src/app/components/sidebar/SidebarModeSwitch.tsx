@@ -51,6 +51,8 @@ export function SidebarModeSwitch({
   useEffect(() => {
     if (location.pathname === "/brain" && sidebarMode !== "brain") {
       setSidebarMode("brain");
+    } else if (location.pathname === "/agent" && sidebarMode !== "zaki") {
+      setSidebarMode("zaki");
     } else if (location.pathname === "/learn" && sidebarMode !== "learning") {
       setSidebarMode("learning");
     }

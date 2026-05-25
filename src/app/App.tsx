@@ -18,6 +18,7 @@ import {
   submitLegalReconsent,
 } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
+import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
 const PUBLIC_WEBSITE_PATHS = new Set([
@@ -99,6 +100,7 @@ export default function App() {
     const path = location.pathname;
     const threadMatch = path.match(/^\/spaces\/([^/]+)\/threads\/([^/]+)/);
     const spaceMatch = path.match(/^\/spaces\/([^/]+)$/);
+    const agentThreadId = new URLSearchParams(location.search).get("thread");
     const spaceId = threadMatch?.[1] ?? spaceMatch?.[1] ?? null;
     const threadId = threadMatch?.[2] ?? null;
     
@@ -107,6 +109,11 @@ export default function App() {
     
     if (path === '/about') {
       store.goToAbout();
+    } else if (path === '/agent') {
+      store.goToThread(
+        ZAKI_BOT_SPACE_ID,
+        agentThreadId && agentThreadId.trim() ? agentThreadId.trim() : ZAKI_BOT_THREAD_ID
+      );
     } else if (path === '/learn') {
       store.setSidebarMode("learning");
     } else if (path === '/spaces' && !spaceId) {
@@ -118,7 +125,7 @@ export default function App() {
     } else {
       store.goHome();
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   // Sync theme to DOM
   useEffect(() => {

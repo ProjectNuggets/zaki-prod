@@ -29,7 +29,6 @@ import type {
   ProductRegistryItem,
   ProductRegistryProductId,
 } from "@/lib/api";
-import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../../icons";
@@ -154,7 +153,7 @@ function getProductDescriptionKey(productId: ProductRegistryProductId) {
 
 function getProductRoute(product: ProductRegistryItem) {
   if (product.productId === "agent") {
-    return `/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`;
+    return product.route || "/agent";
   }
   if (product.productId === "spaces") return "/spaces";
   if (product.productId === "learning") return "/learn";

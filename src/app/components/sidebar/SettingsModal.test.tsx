@@ -115,7 +115,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.memoryScopes.designMemory": "Design memory",
     "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
     "settingsModal.productsAccess.entryPoints.spaces": "Spaces / Chat",
-    "settingsModal.productsAccess.entryPoints.agent": "Agent home",
+    "settingsModal.productsAccess.entryPoints.agent": "Agent workbench",
     "settingsModal.productsAccess.entryPoints.learning": "Learning",
     "settingsModal.productsAccess.entryPoints.hire": "Hire",
     "settingsModal.productsAccess.entryPoints.design": "Design",
@@ -357,8 +357,8 @@ jest.mock("@/queries", () => ({
             state: "enabled",
             lifecycle: "current",
             visibleInSettings: true,
-            route: "/",
-            entryPoint: "Agent home",
+            route: "/agent",
+            entryPoint: "Agent workbench",
             memoryScope: "personal_brain",
           },
           {
@@ -555,7 +555,7 @@ describe("SettingsModal", () => {
     expect(within(productsAccess).getByText("Products & Access")).toBeInTheDocument();
     expect(within(productsAccess).getByText("ZAKI Spaces")).toBeInTheDocument();
     expect(within(productsAccess).getByText("Workspace memory")).toBeInTheDocument();
-    expect(within(productsAccess).getByText("Agent home")).toBeInTheDocument();
+    expect(within(productsAccess).getByText("Agent workbench")).toBeInTheDocument();
     expect(within(productsAccess).getByText("ZAKI Hire")).toBeInTheDocument();
     expect(within(productsAccess).getByText("Hire memory")).toBeInTheDocument();
     expect(within(productsAccess).getByText("ZAKI Design")).toBeInTheDocument();

@@ -151,7 +151,7 @@
       },
       "entryPoints": {
         "spaces": "Spaces / Chat",
-        "agent": "Agent home",
+        "agent": "Agent workbench",
         "learning": "Learning",
         "hire": "Hire",
         "design": "Design",

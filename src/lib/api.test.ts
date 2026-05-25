@@ -271,3 +271,54 @@ describe("fetchAnonymousMeterStatus", () => {
     expect(headers.has("Authorization")).toBe(false);
   });
 });
+
+describe("agent runtime API clients", () => {
+  it("calls the canonical Agent diagnostics facade", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { active: true }));
+
+    const { fetchContextDiagnostics } = await import("@/lib/api");
+    const { data } = await fetchContextDiagnostics();
+
+    expect(data.active).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/diagnostics/context",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("lists Agent tasks with allowlisted query params", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { tasks: [] }));
+
+    const { listAgentTasks } = await import("@/lib/api");
+    await listAgentTasks({ status: "running", limit: 20, cursor: "abc" });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/tasks?status=running&limit=20&cursor=abc",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("encodes artifact diff path segments", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { diff: [] }));
+
+    const { fetchAgentArtifactDiff } = await import("@/lib/api");
+    await fetchAgentArtifactDiff("artifact:1", "v:1", "v.2");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/artifacts/artifact%3A1/diff/v%3A1/v.2",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("fetches Brain documents through the Agent BFF", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { documents: [] }));
+
+    const { fetchBrainDocuments } = await import("@/lib/api");
+    await fetchBrainDocuments("42", { q: "source", limit: 10 });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/brain/documents?q=source&limit=10",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+});

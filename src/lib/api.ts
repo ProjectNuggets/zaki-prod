@@ -2227,7 +2227,7 @@ export async function fetchBotRuntimeStatus() {
 }
 
 export async function fetchContextDiagnostics() {
-  const response = await backendAuthRequest("/api/me/diagnostics/context", {
+  const response = await backendAuthRequest("/api/agent/diagnostics/context", {
     method: "GET",
   });
   const data = await parseApiJson<ContextDiagnosticsResponse>(response);
@@ -2235,7 +2235,7 @@ export async function fetchContextDiagnostics() {
 }
 
 export async function fetchMemoryDoctor() {
-  const response = await backendAuthRequest("/api/me/diagnostics/memory-doctor", {
+  const response = await backendAuthRequest("/api/agent/diagnostics/memory-doctor", {
     method: "GET",
   });
   const data = await parseApiJson<MemoryDoctorResponse>(response);
@@ -2253,6 +2253,258 @@ export async function approveAgentSession(
     body: JSON.stringify(payload),
   });
   const data = await parseApiJson<{ ok: boolean }>(response);
+  return { response, data };
+}
+
+export type AgentRuntimeStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "timed_out"
+  | "lost"
+  | string;
+
+export type AgentTask = {
+  id?: string;
+  task_id?: string;
+  status?: AgentRuntimeStatus;
+  title?: string;
+  label?: string;
+  session_key?: string;
+  created_at?: string | number;
+  updated_at?: string | number;
+  started_at?: string | number | null;
+  completed_at?: string | number | null;
+  error?: string | null;
+  [key: string]: unknown;
+};
+
+export type AgentJob = {
+  id?: string;
+  job_id?: string;
+  status?: AgentRuntimeStatus;
+  title?: string;
+  label?: string;
+  schedule?: string;
+  next_run_at?: string | number | null;
+  last_run_at?: string | number | null;
+  created_at?: string | number;
+  [key: string]: unknown;
+};
+
+export type AgentTrace = {
+  run_id?: string;
+  id?: string;
+  session_key?: string;
+  status?: AgentRuntimeStatus;
+  started_at?: string | number;
+  completed_at?: string | number | null;
+  events?: Record<string, unknown>[];
+  share_code?: string | null;
+  public_url?: string | null;
+  [key: string]: unknown;
+};
+
+export type AgentArtifact = {
+  id?: string;
+  artifact_id?: string;
+  title?: string;
+  type?: string;
+  mime_type?: string;
+  version?: string | number;
+  session_key?: string;
+  created_at?: string | number;
+  updated_at?: string | number;
+  share_code?: string | null;
+  public_url?: string | null;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+export async function listAgentTasks(opts?: {
+  status?: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/tasks", {
+      status: opts?.status,
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+    }),
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{ tasks?: AgentTask[]; items?: AgentTask[] }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentTask(taskId: string) {
+  const response = await backendAuthRequest(`/api/agent/tasks/${encodeURIComponent(taskId)}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentTask>(response);
+  return { response, data };
+}
+
+export async function stopAgentTask(taskId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/tasks/${encodeURIComponent(taskId)}/stop`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<{ ok?: boolean; status?: string; error?: string }>(response);
+  return { response, data };
+}
+
+export async function listAgentJobs(opts?: {
+  status?: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/jobs", {
+      status: opts?.status,
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+    }),
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{ jobs?: AgentJob[]; items?: AgentJob[] }>(response);
+  return { response, data };
+}
+
+export async function listAgentTraces(opts?: { limit?: number; cursor?: string }) {
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/traces", {
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+    }),
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{ traces?: AgentTrace[]; items?: AgentTrace[] }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentTrace(runId: string) {
+  const response = await backendAuthRequest(`/api/agent/traces/${encodeURIComponent(runId)}`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentTrace>(response);
+  return { response, data };
+}
+
+export async function shareAgentTrace(runId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/traces/${encodeURIComponent(runId)}/share`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<AgentTrace>(response);
+  return { response, data };
+}
+
+export async function revokeAgentTraceShare(runId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/traces/${encodeURIComponent(runId)}/share`,
+    { method: "DELETE" }
+  );
+  const data = await parseApiJson<{ ok?: boolean; error?: string }>(response);
+  return { response, data };
+}
+
+export async function listAgentArtifacts(opts?: {
+  limit?: number;
+  cursor?: string;
+  session_key?: string;
+}) {
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/artifacts", {
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+      session_key: opts?.session_key,
+    }),
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{ artifacts?: AgentArtifact[]; items?: AgentArtifact[] }>(
+    response
+  );
+  return { response, data };
+}
+
+export async function fetchAgentArtifact(artifactId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/artifacts/${encodeURIComponent(artifactId)}`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<AgentArtifact>(response);
+  return { response, data };
+}
+
+export async function updateAgentArtifact(
+  artifactId: string,
+  payload: Record<string, unknown>
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/artifacts/${encodeURIComponent(artifactId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await parseApiJson<AgentArtifact>(response);
+  return { response, data };
+}
+
+export async function fetchAgentArtifactHistory(artifactId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/artifacts/${encodeURIComponent(artifactId)}/history`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{ versions?: AgentArtifact[]; history?: AgentArtifact[] }>(
+    response
+  );
+  return { response, data };
+}
+
+export async function fetchAgentArtifactDiff(
+  artifactId: string,
+  fromVersion: string,
+  toVersion: string
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/artifacts/${encodeURIComponent(artifactId)}/diff/${encodeURIComponent(fromVersion)}/${encodeURIComponent(toVersion)}`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<Record<string, unknown>>(response);
+  return { response, data };
+}
+
+export async function shareAgentArtifact(artifactId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/artifacts/${encodeURIComponent(artifactId)}/share`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<AgentArtifact>(response);
+  return { response, data };
+}
+
+export async function revokeAgentArtifactShare(artifactId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/artifacts/${encodeURIComponent(artifactId)}/share`,
+    { method: "DELETE" }
+  );
+  const data = await parseApiJson<{ ok?: boolean; error?: string }>(response);
+  return { response, data };
+}
+
+export async function exportAgentArtifact(artifactId: string, format: string) {
+  const response = await backendAuthRequest(
+    appendBrainQueryParams(`/api/agent/artifacts/${encodeURIComponent(artifactId)}/export`, {
+      format,
+    }),
+    { method: "POST" }
+  );
+  const data = await parseApiJson<Record<string, unknown>>(response);
   return { response, data };
 }
 
@@ -2358,6 +2610,26 @@ export interface BrainComposeResponse {
 
 export interface BrainSearchResponse {
   results: BrainGraphNode[];
+}
+
+export interface BrainDocument {
+  id?: string;
+  key?: string;
+  title?: string;
+  summary?: string;
+  kind?: string;
+  source?: string;
+  created_at?: number | string;
+  updated_at?: number | string;
+  memory_count?: number;
+  [key: string]: unknown;
+}
+
+export interface BrainDocumentsResponse {
+  documents?: BrainDocument[];
+  items?: BrainDocument[];
+  next_cursor?: string | null;
+  has_more?: boolean;
 }
 
 export interface BrainMemoryDetail {
@@ -2662,6 +2934,24 @@ export async function fetchBrainSearch(
   );
   if (!response.ok) throw new Error(`brain/search ${response.status}`);
   return parseRequiredApiJson<BrainSearchResponse>(response, "brain/search");
+}
+
+export async function fetchBrainDocuments(
+  userId: string,
+  opts?: { q?: string; kind?: string; limit?: number; cursor?: string }
+): Promise<BrainDocumentsResponse> {
+  void userId;
+  const response = await backendAuthRequest(
+    appendBrainQueryParams("/api/agent/brain/documents", {
+      q: opts?.q,
+      kind: opts?.kind,
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+    }),
+    { method: "GET" }
+  );
+  if (!response.ok) throw new Error(`brain/documents ${response.status}`);
+  return parseRequiredApiJson<BrainDocumentsResponse>(response, "brain/documents");
 }
 
 // Audit (2026-05-08) — backend Day 1 #6 changed the response shape from

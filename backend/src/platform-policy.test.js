@@ -131,7 +131,11 @@ describe("platform policy", () => {
       })
     );
     expect(registry.products.find((product) => product.productId === "agent")).toEqual(
-      expect.objectContaining({ state: PRODUCT_OPERATIONAL_STATES.DEGRADED })
+      expect.objectContaining({
+        state: PRODUCT_OPERATIONAL_STATES.DEGRADED,
+        route: "/agent",
+        entryPoint: "Agent workbench",
+      })
     );
     expect(registry.products.find((product) => product.productId === "hire")).toEqual(
       expect.objectContaining({

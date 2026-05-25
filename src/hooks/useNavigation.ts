@@ -38,21 +38,29 @@ export function useNavigation() {
     options?: { zakiSessionKey?: string | null }
   ) => {
     store.goToThread(spaceId, threadId, options);
+    if (spaceId === ZAKI_BOT_SPACE_ID) {
+      const agentPath =
+        threadId && threadId !== ZAKI_BOT_THREAD_ID
+          ? `/agent?thread=${encodeURIComponent(threadId)}`
+          : "/agent";
+      navigate(agentPath);
+      return;
+    }
     navigate(`/spaces/${spaceId}/threads/${threadId}`);
   };
 
   const goToZakiBot = () => {
     store.goToThread(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID);
-    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${ZAKI_BOT_THREAD_ID}`);
+    navigate("/agent");
   };
 
   const goToZakiSession = (sessionKey: string, threadId?: string | null) => {
     store.goToZakiSession(sessionKey, threadId ?? null);
     if (threadId) {
-      navigate(`/spaces/${ZAKI_BOT_SPACE_ID}/threads/${encodeURIComponent(threadId)}`);
+      navigate(`/agent?thread=${encodeURIComponent(threadId)}`);
       return;
     }
-    navigate(`/spaces/${ZAKI_BOT_SPACE_ID}`);
+    navigate("/agent");
   };
 
   const clearThread = () => {

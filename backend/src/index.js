@@ -12701,6 +12701,49 @@ const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req
   }
 };
 
+const AGENT_RUNTIME_ID_SAFE_PATTERN = /^[a-zA-Z0-9:_.\-]+$/;
+
+function appendAllowedQueryParams(path, req, allowedKeys) {
+  const qs = new URLSearchParams();
+  for (const key of allowedKeys) {
+    const rawValue = req.query?.[key];
+    if (rawValue === undefined || rawValue === null || rawValue === "") continue;
+    if (Array.isArray(rawValue)) {
+      rawValue.forEach((value) => {
+        if (value !== undefined && value !== null && String(value).trim()) {
+          qs.append(key, String(value));
+        }
+      });
+      continue;
+    }
+    qs.set(key, String(rawValue));
+  }
+  const queryString = qs.toString();
+  return queryString ? `${path}?${queryString}` : path;
+}
+
+function validateAgentRuntimeParams(req, res, paramNames) {
+  for (const paramName of paramNames) {
+    const value = String(req.params?.[paramName] || "").trim();
+    if (!value || value.length > 255 || !AGENT_RUNTIME_ID_SAFE_PATTERN.test(value)) {
+      res.status(400).json({
+        error: `invalid_${paramName}`,
+        code: `invalid_${paramName}`,
+      });
+      return false;
+    }
+  }
+  return true;
+}
+
+const makeAgentRuntimeProxyHandler = (paramNames, pathBuilder, proxyOptions = {}) => {
+  const inner = makeAgentUserProxyHandler(pathBuilder, proxyOptions);
+  return async (req, res) => {
+    if (!validateAgentRuntimeParams(req, res, paramNames)) return;
+    return inner(req, res);
+  };
+};
+
 const agentTelegramConnectHandler = async (req, res) => {
   try {
     const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
@@ -12980,6 +13023,39 @@ app.get("/api/agent/me", requireAgentContext, (req, res) => {
 });
 
 app.get(
+  "/api/agent/diagnostics/context",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/context`,
+    { responseMode: "json", label: "Nullclaw Agent diagnostics proxy response" }
+  )
+);
+app.get(
+  "/api/agent/diagnostics/memory-doctor",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/memory-doctor`,
+    { responseMode: "json", label: "Nullclaw Agent diagnostics proxy response" }
+  )
+);
+app.get(
+  "/api/me/diagnostics/context",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/context`,
+    { responseMode: "json", label: "Nullclaw Agent diagnostics proxy response" }
+  )
+);
+app.get(
+  "/api/me/diagnostics/memory-doctor",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/diagnostics/memory-doctor`,
+    { responseMode: "json", label: "Nullclaw Agent diagnostics proxy response" }
+  )
+);
+
+app.get(
   "/api/agent/onboarding",
   requireAgentContext,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/onboarding`)
@@ -13219,6 +13295,190 @@ app.post(
 );
 
 // =============================================================================
+// AGENT RUNTIME FACADE
+// =============================================================================
+// These are reviewed, allowlisted product facades over Nullalis runtime
+// resources. Keep them explicit so the browser never receives a generic
+// upstream proxy surface.
+
+const AGENT_RUNTIME_JSON_PROXY_OPTIONS = {
+  responseMode: "json",
+  label: "Nullclaw Agent runtime proxy response",
+};
+
+app.get(
+  "/api/agent/tasks",
+  requireAgentContext,
+  makeAgentUserProxyHandler((userId, req) => {
+    const path = `/api/v1/users/${encodeURIComponent(userId)}/tasks`;
+    return appendAllowedQueryParams(path, req, ["status", "limit", "cursor"]);
+  }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
+);
+
+app.get(
+  "/api/agent/tasks/:taskId",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["taskId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/tasks/${encodeURIComponent(req.params.taskId)}`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.post(
+  "/api/agent/tasks/:taskId/stop",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["taskId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/tasks/${encodeURIComponent(req.params.taskId)}/stop`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.get(
+  "/api/agent/jobs",
+  requireAgentContext,
+  makeAgentUserProxyHandler((userId, req) => {
+    const path = `/api/v1/users/${encodeURIComponent(userId)}/jobs`;
+    return appendAllowedQueryParams(path, req, ["status", "limit", "cursor"]);
+  }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
+);
+
+app.get(
+  "/api/agent/traces",
+  requireAgentContext,
+  makeAgentUserProxyHandler((userId, req) => {
+    const path = `/api/v1/users/${encodeURIComponent(userId)}/traces`;
+    return appendAllowedQueryParams(path, req, ["limit", "cursor"]);
+  }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
+);
+
+app.get(
+  "/api/agent/traces/:runId",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["runId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/traces/${encodeURIComponent(req.params.runId)}`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.post(
+  "/api/agent/traces/:runId/share",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["runId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/traces/${encodeURIComponent(req.params.runId)}/share`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.delete(
+  "/api/agent/traces/:runId/share",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["runId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/traces/${encodeURIComponent(req.params.runId)}/share`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.get(
+  "/api/agent/artifacts",
+  requireAgentContext,
+  makeAgentUserProxyHandler((userId, req) => {
+    const path = `/api/v1/users/${encodeURIComponent(userId)}/artifacts`;
+    return appendAllowedQueryParams(path, req, ["limit", "cursor", "session_key"]);
+  }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
+);
+
+app.get(
+  "/api/agent/artifacts/:artifactId",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.put(
+  "/api/agent/artifacts/:artifactId",
+  requireAgentContext,
+  agentJson10mb,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.get(
+  "/api/agent/artifacts/:artifactId/history",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}/history`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.get(
+  "/api/agent/artifacts/:artifactId/diff/:fromVersion/:toVersion",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId", "fromVersion", "toVersion"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}/diff/${encodeURIComponent(req.params.fromVersion)}/${encodeURIComponent(req.params.toVersion)}`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.post(
+  "/api/agent/artifacts/:artifactId/share",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}/share`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.delete(
+  "/api/agent/artifacts/:artifactId/share",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}/share`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.post(
+  "/api/agent/artifacts/:artifactId/export",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentRuntimeProxyHandler(
+    ["artifactId"],
+    (userId, req) => {
+      const path = `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}/export`;
+      return appendAllowedQueryParams(path, req, ["format"]);
+    },
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+// =============================================================================
 // CONVERSATION SUMMARIZATION (Memory)
 // =============================================================================
 
@@ -13244,6 +13504,15 @@ const NULLCLAW_BRAIN_JSON_PROXY_OPTIONS = {
   responseMode: "json",
   label: "Nullclaw Brain proxy response",
 };
+
+app.get(
+  "/api/agent/brain/documents",
+  requireAgentContext,
+  makeAgentUserProxyHandler((userId, req) => {
+    const path = `/api/v1/users/${encodeURIComponent(userId)}/brain/documents`;
+    return appendAllowedQueryParams(path, req, ["q", "kind", "limit", "cursor"]);
+  }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
+);
 
 app.get(
   "/api/agent/brain/graph",
