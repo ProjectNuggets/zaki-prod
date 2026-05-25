@@ -154,6 +154,7 @@ describe("platform policy", () => {
       effectiveTier: "personal",
       source: "subscription",
       premium: true,
+      weeklyAllowanceEntitlementStartedAt: "2026-05-20T09:00:00.000Z",
       env: {},
     });
 
@@ -170,6 +171,11 @@ describe("platform policy", () => {
     expect(summary.usage).toEqual(
       expect.objectContaining({
         model: "shared_weekly_allowance",
+        weeklyAllowancePeriod: "entitlement_week",
+        weeklyAllowanceAnchorPolicy: "first_metered_use_after_entitlement_active",
+        weeklyAllowanceEntitlementStartedAt: "2026-05-20T09:00:00.000Z",
+        weeklyAllowanceResetPolicy: "fixed_7_day_no_rollover",
+        weeklyAllowanceRollover: false,
         burstWindowHours: 5,
         productQuotaMode: "weighted_product_caps",
       })

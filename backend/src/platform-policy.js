@@ -295,6 +295,12 @@ function normalizeProductOperationalState(value, fallback) {
   return PRODUCT_STATE_VALUES.has(normalized) ? normalized : fallback;
 }
 
+function normalizeIsoOrNull(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 function resolveProductOperationalState(product, env = process.env) {
   const envKey = PRODUCT_STATE_ENV_KEYS[product.id];
   return normalizeProductOperationalState(
@@ -463,6 +469,7 @@ export function buildPlatformEntitlementSummary({
   effectiveTier = "",
   source = "free",
   premium = false,
+  weeklyAllowanceEntitlementStartedAt = null,
   env = process.env,
 } = {}) {
   const policy = buildPlatformPlanPolicy({ env });
@@ -489,8 +496,12 @@ export function buildPlatformEntitlementSummary({
       model: policy.usageModel,
       weeklyAllowanceUnits: plan.weeklyAllowanceUnits,
       weeklyAllowanceConfigured: plan.weeklyAllowanceConfigured,
-      weeklyAllowancePeriod: "utc_week",
-      weeklyAllowanceResetPolicy: "fixed_window_no_rollover",
+      weeklyAllowancePeriod: "entitlement_week",
+      weeklyAllowanceAnchorPolicy: "first_metered_use_after_entitlement_active",
+      weeklyAllowanceEntitlementStartedAt: normalizeIsoOrNull(
+        weeklyAllowanceEntitlementStartedAt
+      ),
+      weeklyAllowanceResetPolicy: "fixed_7_day_no_rollover",
       weeklyAllowanceRollover: false,
       rollingAllowanceUnits: plan.rollingAllowanceUnits,
       rollingAllowanceConfigured: plan.rollingAllowanceConfigured,

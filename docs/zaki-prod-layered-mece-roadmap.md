@@ -224,9 +224,10 @@ Completed:
   - Memory scope rows are derived from product registry metadata so product surfaces remain downstream of the central memory model.
 - S08 weekly allowance aggregation and reset rule:
   - `/api/usage/summary` now reports weekly used, remaining, and reset data from central meter receipts.
-  - Weekly allowance is a fixed UTC-week bucket with `fixed_window_no_rollover`.
+  - Weekly allowance is an entitlement-week bucket with `fixed_7_day_no_rollover`.
+  - The window starts on first metered use after the active paid entitlement starts, or first metered use for a durable anonymous/free session.
   - Unused allowance expires at reset and does not add to the next week.
-  - Current-week aggregation counts receipts from week start through now; `resetAt` remains the next Monday UTC.
+  - Current-window aggregation counts receipts from entitlement-week start through now; `resetAt` is seven days after the current entitlement-week start.
 
 Next:
 

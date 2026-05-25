@@ -14,6 +14,7 @@ describe("platform meter", () => {
   it("reads rolling and weekly weighted usage windows", async () => {
     const dbGet = jest
       .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-20T12:00:00.000Z" })
       .mockResolvedValueOnce({ weighted_units: 2.5, receipts: 2 })
       .mockResolvedValueOnce({ weighted_units: 7, receipts: 5 });
 
@@ -26,6 +27,7 @@ describe("platform meter", () => {
           burstWindowHours: 5,
           rollingAllowanceUnits: 20,
           weeklyAllowanceUnits: 100,
+          weeklyAllowanceEntitlementStartedAt: "2026-05-20T09:00:00.000Z",
         },
       },
       nowDate: new Date("2026-05-22T10:00:00.000Z"),
@@ -43,26 +45,32 @@ describe("platform meter", () => {
     );
     expect(snapshot.weekly).toEqual(
       expect.objectContaining({
-        period: "utc_week",
-        resetPolicy: "fixed_window_no_rollover",
+        period: "entitlement_week",
+        resetPolicy: "fixed_7_day_no_rollover",
         rollover: false,
-        unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
+        anchorType: "first_metered_use",
+        anchorAt: "2026-05-20T12:00:00.000Z",
+        entitlementStartedAt: "2026-05-20T09:00:00.000Z",
+        planMeterGroup: "paid",
+        pendingFirstUse: false,
+        unusedUnitsExpireAt: "2026-05-27T12:00:00.000Z",
         used: 7,
         receipts: 5,
         limit: 100,
         remaining: 93,
-        startedAt: "2026-05-18T00:00:00.000Z",
-        resetAt: "2026-05-25T00:00:00.000Z",
+        startedAt: "2026-05-20T12:00:00.000Z",
+        resetAt: "2026-05-27T12:00:00.000Z",
       })
     );
-    expect(dbGet).toHaveBeenCalledTimes(2);
+    expect(dbGet).toHaveBeenCalledTimes(3);
     expect(dbGet.mock.calls[0][0]).toMatch(/g\.tenant_id = \$1/);
+    expect(dbGet.mock.calls[0][0]).toMatch(/MIN\(g\.created_at\)/);
     expect(dbGet.mock.calls[0][1][0]).toBe("tenant-a");
     expect(dbGet.mock.calls[0][1][1]).toBe(42);
-    expect(dbGet.mock.calls[1][1]).toEqual([
+    expect(dbGet.mock.calls[2][1]).toEqual([
       "tenant-a",
       42,
-      "2026-05-18T00:00:00.000Z",
+      "2026-05-20T12:00:00.000Z",
       "2026-05-22T10:00:00.000Z",
     ]);
   });
@@ -70,6 +78,7 @@ describe("platform meter", () => {
   it("resets weekly allowance without carrying unused units into the next week", async () => {
     const dbGet = jest
       .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-20T00:00:00.000Z" })
       .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 })
       .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 });
 
@@ -84,34 +93,76 @@ describe("platform meter", () => {
           weeklyAllowanceUnits: 100,
         },
       },
-      nowDate: new Date("2026-05-25T00:01:00.000Z"),
+      nowDate: new Date("2026-05-27T00:01:00.000Z"),
     });
 
     expect(snapshot.weekly).toEqual(
       expect.objectContaining({
-        period: "utc_week",
-        resetPolicy: "fixed_window_no_rollover",
+        period: "entitlement_week",
+        resetPolicy: "fixed_7_day_no_rollover",
         rollover: false,
-        unusedUnitsExpireAt: "2026-06-01T00:00:00.000Z",
+        unusedUnitsExpireAt: "2026-06-03T00:00:00.000Z",
         used: 0,
         limit: 100,
         remaining: 100,
-        startedAt: "2026-05-25T00:00:00.000Z",
-        resetAt: "2026-06-01T00:00:00.000Z",
+        startedAt: "2026-05-27T00:00:00.000Z",
+        resetAt: "2026-06-03T00:00:00.000Z",
       })
     );
     expect(snapshot.weekly.remaining).toBeLessThanOrEqual(snapshot.weekly.limit);
-    expect(dbGet.mock.calls[1][1]).toEqual([
+    expect(dbGet.mock.calls[2][1]).toEqual([
       "tenant-a",
       42,
-      "2026-05-25T00:00:00.000Z",
-      "2026-05-25T00:01:00.000Z",
+      "2026-05-27T00:00:00.000Z",
+      "2026-05-27T00:01:00.000Z",
     ]);
+  });
+
+  it("keeps the weekly window pending until the first metered use", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ anchor_at: null })
+      .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 });
+
+    const snapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: {
+        plan: { id: "personal", label: "Personal" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 20,
+          weeklyAllowanceUnits: 100,
+          weeklyAllowanceEntitlementStartedAt: "2026-05-20T09:00:00.000Z",
+        },
+      },
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    expect(snapshot.weekly).toEqual(
+      expect.objectContaining({
+        period: "entitlement_week",
+        resetPolicy: "fixed_7_day_no_rollover",
+        anchorType: "first_metered_use",
+        anchorAt: null,
+        entitlementStartedAt: "2026-05-20T09:00:00.000Z",
+        pendingFirstUse: true,
+        used: 0,
+        receipts: 0,
+        limit: 100,
+        remaining: 100,
+        startedAt: null,
+        resetAt: null,
+        unusedUnitsExpireAt: null,
+      })
+    );
+    expect(dbGet).toHaveBeenCalledTimes(2);
   });
 
   it("keeps tenant usage windows isolated for anonymous sessions", async () => {
     const dbGet = jest
       .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-21T10:00:00.000Z" })
       .mockResolvedValueOnce({ weighted_units: 1, receipts: 1 })
       .mockResolvedValueOnce({ weighted_units: 3, receipts: 2 });
 
@@ -135,7 +186,7 @@ describe("platform meter", () => {
 
     expect(dbGet.mock.calls[0][0]).toMatch(/g\.tenant_id = \$1/);
     expect(dbGet.mock.calls[0][0]).toMatch(/g\.anonymous_key_hash = \$2/);
-    expect(dbGet.mock.calls[0][1]).toEqual([
+    expect(dbGet.mock.calls[1][1]).toEqual([
       "tenant-b",
       "hash-1",
       "2026-05-22T05:00:00.000Z",
@@ -146,6 +197,7 @@ describe("platform meter", () => {
   it("aggregates product usage windows from the central receipt ledger", async () => {
     const dbGet = jest
       .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-20T12:00:00.000Z" })
       .mockResolvedValueOnce({ weighted_units: 3, receipts: 2 })
       .mockResolvedValueOnce({ weighted_units: 8, receipts: 4 });
     const dbAll = jest
@@ -193,7 +245,7 @@ describe("platform meter", () => {
     expect(dbAll.mock.calls[1][1]).toEqual([
       "tenant-a",
       42,
-      "2026-05-18T00:00:00.000Z",
+      "2026-05-20T12:00:00.000Z",
       "2026-05-22T10:00:00.000Z",
     ]);
   });

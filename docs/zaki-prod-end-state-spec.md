@@ -68,7 +68,7 @@ Use two layers:
 
 All product usage counts toward the user’s weekly allowance. Product-specific caps prevent one product from consuming the whole plan if that would damage cost or fairness.
 
-Weekly allowance is a fixed UTC week bucket. Unused allowance expires at the weekly reset and does not roll over or add to the next week’s allowance.
+Weekly allowance is an entitlement-week bucket. For paid users, monthly billing starts on subscription activation, while the weekly meter starts on first metered use after that entitlement becomes active. For anonymous/free usage, the weekly meter starts on first metered use for the durable anonymous session. It resets every seven days; unused allowance expires at reset and does not roll over or add to the next week’s allowance.
 
 ### Usage Units
 

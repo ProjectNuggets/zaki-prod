@@ -19,6 +19,14 @@ export function isIncomingStripeEventStale({
 // statuses either preserve access (active/trialing) or are write-only
 // to the DB and don't need out-of-band signaling.
 const REVOKE_STATUSES = new Set(["canceled", "past_due", "unpaid", "incomplete_expired"]);
+const METER_ENTITLEMENT_ACTIVE_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+function hasMeteredEntitlement(tier, status) {
+  return (
+    String(tier || "").trim().toLowerCase() !== "free" &&
+    METER_ENTITLEMENT_ACTIVE_STATUSES.has(String(status || "").trim().toLowerCase())
+  );
+}
 
 async function fireRevoke({ revokeNullalisEntitlement, user, requestId, eventType }) {
   if (!revokeNullalisEntitlement || !user) return;
@@ -196,6 +204,8 @@ export function createStripeWebhookHandler({
           : null;
         const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
         const incomingEventCreatedAt = toIsoFromUnixSeconds(event?.created);
+        const currentPeriodStart =
+          toIsoFromUnixSeconds(subscription.current_period_start) || incomingEventCreatedAt;
 
         const user = await resolveUserByStripeCustomer(customerId, subscription.metadata?.user_email);
         if (user) {
@@ -211,6 +221,7 @@ export function createStripeWebhookHandler({
               event.type === "customer.subscription.deleted" ? "free" : resolvedTier;
             const statusToStore =
               event.type === "customer.subscription.deleted" ? "canceled" : status;
+            const meteredEntitlementActive = hasMeteredEntitlement(tierToStore, statusToStore);
 
             await dbQuery(
               `UPDATE zaki_users
@@ -223,9 +234,20 @@ export function createStripeWebhookHandler({
                    cancel_at_period_end = $7,
                    stripe_last_event_created_at = COALESCE($8::timestamptz, stripe_last_event_created_at),
                    stripe_last_event_id = COALESCE($9, stripe_last_event_id),
+                   meter_entitlement_started_at = CASE
+                     WHEN $10::boolean THEN
+                       CASE
+                         WHEN meter_entitlement_started_at IS NULL
+                           OR plan_status NOT IN ('active', 'trialing', 'past_due')
+                           OR plan_tier = 'free'
+                         THEN COALESCE($11::timestamptz, NOW())
+                         ELSE meter_entitlement_started_at
+                       END
+                     ELSE NULL
+                   END,
                    billing_updated_at = NOW(),
                    updated_at = NOW()
-               WHERE id = $10`,
+               WHERE id = $12`,
               [
                 customerId,
                 subscription.id,
@@ -236,6 +258,8 @@ export function createStripeWebhookHandler({
                 cancelAtPeriodEnd,
                 incomingEventCreatedAt,
                 eventId || null,
+                meteredEntitlementActive,
+                currentPeriodStart,
                 user.id,
               ]
             );

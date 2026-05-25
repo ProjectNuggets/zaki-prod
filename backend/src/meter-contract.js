@@ -232,6 +232,11 @@ function buildProductWindowSnapshot(windowSnapshot = {}, productWindow = {}) {
     resetPolicy: windowSnapshot?.resetPolicy || null,
     rollover:
       typeof windowSnapshot?.rollover === "boolean" ? windowSnapshot.rollover : null,
+    anchorType: windowSnapshot?.anchorType || null,
+    anchorAt: windowSnapshot?.anchorAt || null,
+    entitlementStartedAt: windowSnapshot?.entitlementStartedAt || null,
+    planMeterGroup: windowSnapshot?.planMeterGroup || null,
+    pendingFirstUse: Boolean(windowSnapshot?.pendingFirstUse),
     unusedUnitsExpireAt: windowSnapshot?.unusedUnitsExpireAt || null,
     windowHours: windowSnapshot?.windowHours,
     used: productWindow?.used ?? 0,

@@ -194,7 +194,7 @@ describe("requireAuthUser — ZAKI path (AUTH-01, AUTH-03, AUTH-04)", () => {
     await requireAuthUser(req, res);
 
     const [sql, args] = dbGetMock.mock.calls[0];
-    expect(sql).toMatch(/SELECT id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, full_name FROM zaki_users WHERE id = \$1/);
+    expect(sql).toMatch(/SELECT id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, full_name, billing_updated_at, meter_entitlement_started_at FROM zaki_users WHERE id = \$1/);
     expect(args).toEqual([42]);
     expect(sql).not.toMatch(/password_hash/i);
   });
@@ -298,7 +298,7 @@ describe("requireAuthUser — legacy TYP path (AUTH-02, AUTH-04, AUTH-05)", () =
     await requireAuthUser(req, res);
 
     const [sql] = dbGetMock.mock.calls[0];
-    expect(sql).toMatch(/SELECT id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, full_name FROM zaki_users WHERE email = \$1/);
+    expect(sql).toMatch(/SELECT id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, full_name, billing_updated_at, meter_entitlement_started_at FROM zaki_users WHERE email = \$1/);
     expect(sql).not.toMatch(/password_hash/i);
   });
 

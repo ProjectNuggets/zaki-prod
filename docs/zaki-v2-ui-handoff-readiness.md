@@ -34,7 +34,7 @@ V2 UI should consume these contracts first:
 - `GET /api/meter/status`
   - Plan tier, rolling five-hour window, weekly allowance, reset times, product states, grant policies, and per-product weighted usage windows.
   - Supports authenticated users and anonymous sessions.
-  - Weekly allowance uses a fixed UTC-week reset with no rollover; unused units expire at reset.
+  - Weekly allowance uses an entitlement-week reset with no rollover. It starts on first metered use after the active entitlement starts; unused units expire at reset.
 - `POST /api/meter/grants`
   - Central grant contract for downstream products such as Hire.
 - `POST /api/meter/receipts`

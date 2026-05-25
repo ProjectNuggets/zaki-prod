@@ -625,6 +625,11 @@ export async function fetchEntitlements() {
         model?: "shared_weekly_allowance";
         weeklyAllowanceUnits?: number | null;
         weeklyAllowanceConfigured?: boolean;
+        weeklyAllowancePeriod?: string;
+        weeklyAllowanceAnchorPolicy?: string;
+        weeklyAllowanceEntitlementStartedAt?: string | null;
+        weeklyAllowanceResetPolicy?: string;
+        weeklyAllowanceRollover?: boolean;
         burstWindowHours?: number;
         productQuotaMode?: "weighted_product_caps";
         numericLimitsFinalized?: boolean;
@@ -1345,6 +1350,11 @@ export type MeterWindowSnapshot = {
   period?: string | null;
   resetPolicy?: string | null;
   rollover?: boolean | null;
+  anchorType?: string | null;
+  anchorAt?: string | null;
+  entitlementStartedAt?: string | null;
+  planMeterGroup?: string | null;
+  pendingFirstUse?: boolean;
   unusedUnitsExpireAt?: string | null;
   windowHours?: number;
   used?: number | null;
@@ -1433,6 +1443,11 @@ export type PlatformUsageSummary = {
       resetAt?: string | null;
       startedAt?: string | null;
       period?: string | null;
+      anchorType?: string | null;
+      anchorAt?: string | null;
+      entitlementStartedAt?: string | null;
+      planMeterGroup?: string | null;
+      pendingFirstUse?: boolean;
       resetPolicy?: string | null;
       rollover?: boolean | null;
       unusedUnitsExpireAt?: string | null;

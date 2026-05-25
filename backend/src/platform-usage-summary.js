@@ -183,7 +183,16 @@ export async function buildPlatformUsageSummary({
           typeof weeklyMeter?.remaining === "number" ? weeklyMeter.remaining : null,
         resetAt: weeklyMeter?.resetAt || null,
         startedAt: weeklyMeter?.startedAt || null,
-        period: weeklyMeter?.period || "utc_week",
+        period:
+          weeklyMeter?.period || platform.usage.weeklyAllowancePeriod || "entitlement_week",
+        anchorType: weeklyMeter?.anchorType || null,
+        anchorAt: weeklyMeter?.anchorAt || null,
+        entitlementStartedAt:
+          weeklyMeter?.entitlementStartedAt ||
+          platform.usage.weeklyAllowanceEntitlementStartedAt ||
+          null,
+        planMeterGroup: weeklyMeter?.planMeterGroup || null,
+        pendingFirstUse: Boolean(weeklyMeter?.pendingFirstUse),
         resetPolicy:
           weeklyMeter?.resetPolicy || platform.usage.weeklyAllowanceResetPolicy || null,
         rollover:

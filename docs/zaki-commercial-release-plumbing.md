@@ -27,7 +27,7 @@ This note defines the commercial spine for the first fully commercialized ZAKI r
 - Future products stay visible in architecture and docs. They can be disabled, maintenance, degraded, read-only, hidden, or gated in UI.
 - Free usage can be anonymous only when the central app issues a durable anonymous session and grants every expensive action.
 - Products report raw facts. The central app computes weighted usage and owns final debit policy.
-- Weekly allowance is a fixed UTC-week bucket. It resets weekly, unused units expire at reset, and there is no rollover balance.
+- Weekly allowance is an entitlement-week bucket anchored to first metered use after the active entitlement starts. It resets every seven days, unused units expire at reset, and there is no rollover balance.
 - Every product route must be explainable by auth state, product state, entitlement, meter grant, memory side effect, and audit trail.
 
 ## Launch Blockers

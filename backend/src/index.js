@@ -1493,6 +1493,15 @@ function parseCreemDate(value) {
   return date.toISOString();
 }
 
+const METER_ENTITLEMENT_ACTIVE_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+function hasMeteredEntitlement(tier, status) {
+  return (
+    String(tier || "").trim().toLowerCase() !== "free" &&
+    METER_ENTITLEMENT_ACTIVE_STATUSES.has(String(status || "").trim().toLowerCase())
+  );
+}
+
 function mapCreemStatus(type, payload = {}) {
   const subscriptionStatus = String(payload?.status || "").toLowerCase();
   const eventType = String(type || "").toLowerCase();
@@ -1559,6 +1568,13 @@ async function handleCreemWebhookEvent(eventType, payload = {}) {
     parseCreemDate(payload?.renews_at) ||
     parseCreemDate(payload?.ends_at) ||
     null;
+  const currentPeriodStart =
+    parseCreemDate(payload?.current_period_start) ||
+    parseCreemDate(payload?.period_start) ||
+    parseCreemDate(payload?.starts_at) ||
+    parseCreemDate(payload?.created_at) ||
+    null;
+  const meteredEntitlementActive = hasMeteredEntitlement(finalTier, statusState.status);
 
   await dbQuery(
     `UPDATE zaki_users
@@ -1569,9 +1585,20 @@ async function handleCreemWebhookEvent(eventType, payload = {}) {
          plan_status = $5,
          current_period_end = $6,
          cancel_at_period_end = $7,
+         meter_entitlement_started_at = CASE
+           WHEN $8::boolean THEN
+             CASE
+               WHEN meter_entitlement_started_at IS NULL
+                 OR plan_status NOT IN ('active', 'trialing', 'past_due')
+                 OR plan_tier = 'free'
+               THEN COALESCE($9::timestamptz, NOW())
+               ELSE meter_entitlement_started_at
+             END
+           ELSE NULL
+         END,
          billing_updated_at = NOW(),
          updated_at = NOW()
-     WHERE id = $8`,
+     WHERE id = $10`,
     [
       customerId,
       subscriptionId,
@@ -1580,6 +1607,8 @@ async function handleCreemWebhookEvent(eventType, payload = {}) {
       statusState.status,
       currentPeriodEnd,
       statusState.cancelAtPeriodEnd,
+      meteredEntitlementActive,
+      currentPeriodStart,
       user.id,
     ]
   );
@@ -3905,7 +3934,7 @@ function isSecureCookieRequest(req) {
 
 // AUTH-01..05: ZAKI dual-auth — ZAKI-first local verify, legacy TYP fallback.
 // SELECT list excludes password_hash (AUTH-03). Legacy path mints a ZAKI session on success (AUTH-05).
-const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, cancel_at_period_end, stripe_price_id, stripe_customer_id, stripe_subscription_id, legal_consent_version, legal_consent_at, full_name, access_expires_at, access_code_campaign, student_verified";
+const _ZAKI_USER_COLS = "id, email, verified, plan_tier, plan_status, nova_user_id, current_period_end, cancel_at_period_end, stripe_price_id, stripe_customer_id, stripe_subscription_id, legal_consent_version, legal_consent_at, full_name, access_expires_at, access_code_campaign, student_verified, billing_updated_at, meter_entitlement_started_at";
 const _LEGACY_TYP_CUTOFF_MS = (() => {
   const v = process.env.ZAKI_LEGACY_TYP_AUTH_CUTOFF;
   if (!v) return null;
@@ -4379,6 +4408,7 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
            plan_status = 'inactive',
            current_period_end = NULL,
            cancel_at_period_end = FALSE,
+           meter_entitlement_started_at = NULL,
            billing_updated_at = NOW(),
            updated_at = NOW()
        WHERE id = $2`,
@@ -4406,7 +4436,11 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
   const currentPeriodEnd = preferred.current_period_end
     ? new Date(preferred.current_period_end * 1000).toISOString()
     : null;
+  const currentPeriodStart = preferred.current_period_start
+    ? new Date(preferred.current_period_start * 1000).toISOString()
+    : null;
   const cancelAtPeriodEnd = Boolean(preferred.cancel_at_period_end);
+  const meteredEntitlementActive = hasMeteredEntitlement(tier, status);
 
   await dbQuery(
     `UPDATE zaki_users
@@ -4417,9 +4451,20 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
          plan_status = $5,
          current_period_end = $6,
          cancel_at_period_end = $7,
+         meter_entitlement_started_at = CASE
+           WHEN $8::boolean THEN
+             CASE
+               WHEN meter_entitlement_started_at IS NULL
+                 OR plan_status NOT IN ('active', 'trialing', 'past_due')
+                 OR plan_tier = 'free'
+               THEN COALESCE($9::timestamptz, NOW())
+               ELSE meter_entitlement_started_at
+             END
+           ELSE NULL
+         END,
          billing_updated_at = NOW(),
          updated_at = NOW()
-     WHERE id = $8`,
+     WHERE id = $10`,
     [
       customerId,
       preferred.id || null,
@@ -4428,6 +4473,8 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
       status,
       currentPeriodEnd,
       cancelAtPeriodEnd,
+      meteredEntitlementActive,
+      currentPeriodStart,
       zakiUser.id,
     ]
   );
@@ -6011,6 +6058,10 @@ app.get("/api/usage/summary", async (req, res) => {
       effectiveTier: effective.tier,
       source: effective.source,
       premium: effective.premium,
+      weeklyAllowanceEntitlementStartedAt: resolveMeterEntitlementStartedAt(
+        zakiUser,
+        effective
+      ),
     });
     const meterSnapshot = await readMeterSnapshotForIdentity({
       dbGet,
@@ -6086,6 +6137,12 @@ function normalizeMeterTenantId(value) {
   return String(value || "default").trim().slice(0, 120) || "default";
 }
 
+function resolveMeterEntitlementStartedAt(zakiUser, effective) {
+  const source = String(effective?.source || "").trim();
+  if (source !== "subscription" && source !== "access_code") return null;
+  return zakiUser?.meter_entitlement_started_at || zakiUser?.billing_updated_at || null;
+}
+
 function buildPlatformForMeterIdentity(identity) {
   if (identity?.type === "user") {
     const effective = getEffectiveEntitlementState(identity.zakiUser);
@@ -6095,6 +6152,10 @@ function buildPlatformForMeterIdentity(identity) {
       effectiveTier: effective.tier,
       source: effective.source,
       premium: effective.premium,
+      weeklyAllowanceEntitlementStartedAt: resolveMeterEntitlementStartedAt(
+        identity.zakiUser,
+        effective
+      ),
     });
   }
   return buildPlatformEntitlementSummary({
@@ -6482,11 +6543,12 @@ async function issueMeterGrantForIdentity({
   if (!grant) {
     throw new Error("Meter grant insert did not return a grant.");
   }
+  const responseMeter = await buildMeterResponsePayload(identity, platform, registry, policy);
   return {
     allowed: true,
     idempotent: !insertedGrant,
     grant,
-    meter,
+    meter: responseMeter,
     registryProduct,
     platform,
     policy,
@@ -6647,6 +6709,9 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
     if (!grant) {
       throw new Error("Meter grant insert did not return a grant.");
     }
+    const responseMeter = insertedGrant
+      ? await buildMeterResponsePayload(identity, platform, registry, policy)
+      : meter;
     if (!insertedGrant) {
       res.status(200).json({
         success: true,
@@ -6673,7 +6738,7 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
       planTier: grant.planTier,
       productState: grant.productState,
       product: grant.productId,
-      meter,
+      meter: responseMeter,
     });
   } catch (error) {
     console.error("[Meter] Grant endpoint error:", error);

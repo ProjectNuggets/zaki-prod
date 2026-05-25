@@ -36,7 +36,12 @@ function platformFor(planId = "pro") {
 function meterSnapshotFor() {
   return {
     rolling: { remaining: 200, resetAt: "2026-05-22T15:00:00.000Z" },
-    weekly: { remaining: 1000, resetAt: "2026-05-25T00:00:00.000Z" },
+    weekly: {
+      period: "entitlement_week",
+      resetPolicy: "fixed_7_day_no_rollover",
+      remaining: 1000,
+      resetAt: "2026-05-27T12:00:00.000Z",
+    },
   };
 }
 
@@ -143,16 +148,21 @@ describe("central meter contract", () => {
           resetAt: "2026-05-22T10:00:00.000Z",
         },
         weekly: {
-          period: "utc_week",
-          resetPolicy: "fixed_window_no_rollover",
+          period: "entitlement_week",
+          resetPolicy: "fixed_7_day_no_rollover",
           rollover: false,
-          unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
+          anchorType: "first_metered_use",
+          anchorAt: "2026-05-20T12:00:00.000Z",
+          entitlementStartedAt: "2026-05-20T09:00:00.000Z",
+          planMeterGroup: "paid",
+          pendingFirstUse: false,
+          unusedUnitsExpireAt: "2026-05-27T12:00:00.000Z",
           used: 40,
           receipts: 9,
           limit: 1000,
           remaining: 960,
-          startedAt: "2026-05-18T00:00:00.000Z",
-          resetAt: "2026-05-25T00:00:00.000Z",
+          startedAt: "2026-05-20T12:00:00.000Z",
+          resetAt: "2026-05-27T12:00:00.000Z",
         },
         products: {
           hire: {
@@ -185,15 +195,20 @@ describe("central meter contract", () => {
 
     expect(payload.products.hire.weekly).toEqual(
       expect.objectContaining({
-        period: "utc_week",
-        resetPolicy: "fixed_window_no_rollover",
+        period: "entitlement_week",
+        resetPolicy: "fixed_7_day_no_rollover",
         rollover: false,
-        unusedUnitsExpireAt: "2026-05-25T00:00:00.000Z",
+        anchorType: "first_metered_use",
+        anchorAt: "2026-05-20T12:00:00.000Z",
+        entitlementStartedAt: "2026-05-20T09:00:00.000Z",
+        planMeterGroup: "paid",
+        pendingFirstUse: false,
+        unusedUnitsExpireAt: "2026-05-27T12:00:00.000Z",
         used: 7,
         receipts: 3,
         limit: null,
         remaining: null,
-        resetAt: "2026-05-25T00:00:00.000Z",
+        resetAt: "2026-05-27T12:00:00.000Z",
       })
     );
     expect(payload.products.spaces.weekly).toEqual(
