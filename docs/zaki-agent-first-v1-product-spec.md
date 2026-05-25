@@ -44,6 +44,7 @@ Nullalis owns:
 - Agent runtime, tool execution, graph/personal memory internals, runtime state.
 - SSE event stream and runtime lifecycle.
 - Agent tool registry, sandboxing, subagents, browser MCP, extension command execution.
+- Operator-owned OpenAPI/API connector execution through the `openapi` meta-tool.
 - Raw usage facts, runtime health, tool/action trace facts.
 - Runtime-native connector mechanics where agreed by contract.
 
@@ -145,6 +146,26 @@ Rules:
 - User can see current browser state.
 - `evaluate_js` remains disabled unless explicitly enabled by operator policy.
 - Meter tool calls, screenshots, external API calls, and runtime.
+
+## API Connector Model
+
+Nullalis includes a universal OpenAPI connector for operator-registered APIs.
+
+V1 product rules:
+
+- Agent may use registered OpenAPI specs only when the operator or platform has configured them.
+- Users cannot ask the Agent to ingest arbitrary API specs at runtime.
+- Read operations can auto-run under supervised mode when the runtime classifies them as read-only.
+- Write operations require approval in supervised mode and are blocked entirely when the spec is registered `read_only`.
+- API calls must appear in the Agent run timeline and central usage ledger.
+- Static credential handling remains operator-side until the native connector/OAuth contract is productized.
+
+ZAKI product implication:
+
+- Browser control handles websites.
+- OpenAPI connectors handle structured APIs.
+- OAuth/native connectors handle user-owned accounts.
+- All three must use central auth, approval, audit, and metering.
 
 ### User Browser Extension
 
@@ -265,6 +286,7 @@ ZAKI Agent V1 is ready for the commercial release only when:
 2. Add `/agent` workbench route contract and keep old Spaces/Bot path as compatibility.
 3. Define and implement extension pairing endpoints in `zaki-prod`.
 4. Ask Nullalis to wire extension tool parity and raw usage facts.
-5. Add durable Agent run/action ledger.
-6. Implement Memory Control Plane scope APIs.
-7. Integrate Claude V2 UI files onto these contracts.
+5. Add OpenAPI/API connector attribution to Agent run history and central meter receipts.
+6. Add durable Agent run/action ledger.
+7. Implement Memory Control Plane scope APIs.
+8. Integrate Claude V2 UI files onto these contracts.

@@ -39,6 +39,7 @@ Owner: CTO/Product
 | `/agent` | Agent workbench | Agent product | Main consumer surface. Conversation, task timeline, browser panel, approvals, artifacts, memory context, usage. |
 | `/agent/runs/:runId` | Agent run detail | Agent product | Durable trace, tool calls, approvals, receipts, artifacts, memory side effects. |
 | `/agent/browser` | Browser sessions | Agent product + Developer Access | Server browser and extension status, active sessions, STOP, revoke. |
+| `/agent/connectors` | Agent connectors | Agent product + Developer Access | OpenAPI/API connector activity, native connector readiness, approval and usage attribution. |
 | `/spaces` | Chat/Spaces list | Chat/Spaces product | Supporting chat and workspace context. |
 | `/spaces/:spaceId/threads/:threadId` | Chat thread | Chat/Spaces product | Workspace memory only. Fixed ZAKI Bot thread remains compatibility, not flagship. |
 | `/learn` | Learn | Learn product | Private beta; learner memory and progress. |
@@ -86,7 +87,7 @@ Desktop:
 
 - Left rail: product nav.
 - Center: Agent conversation and composer.
-- Right panel: task timeline, browser/live preview, approvals, memory context, artifacts, usage.
+- Right panel: task timeline, browser/live preview, API/tool activity, approvals, memory context, artifacts, usage.
 - Settings button opens global Settings. Agent-local controls are a compact product panel.
 
 Mobile:
@@ -149,6 +150,7 @@ Hire local controls:
 - Usage derives from `/api/meter/status`.
 - All expensive actions use `/api/meter/grants` and `/api/meter/receipts`.
 - Browser extension appears in Developer Access and Agent workbench.
+- OpenAPI/API connector actions appear in the Agent timeline and central meter.
 - Private beta products are gated but not hidden from the product family story.
 - Brain shows memory scopes, not one vague memory bucket.
 - Settings remains global and does not duplicate Agent product controls.

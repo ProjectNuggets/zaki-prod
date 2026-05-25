@@ -52,6 +52,8 @@ For V1, ZAKI must become Agent-first. The current app still routes the flagship 
 - `docs/extension-ws-contract.md` confirms the remaining extension tools are a follow-up recipe, not current production parity.
 - `.spike/playwright-mcp` is a server-side browser MCP for public/non-auth web tasks. It has SSRF defense, per-session BrowserContext isolation, capped text/DOM/screenshot output, and gated `evaluate_js`.
 - `.spike/nullalis-extension` is the user-browser path for logged-in websites. It blocks commands before `auth_ack`, rejects non-loopback `ws://`, persists STOP state, and avoids cookie/webRequest permissions.
+- `docs/openapi-access.md`, `src/openapi/`, and `src/tools/openapi.zig` show the universal OpenAPI connector is delivered. Operators register `api_specs`; the Agent receives one `openapi` meta-tool with `list`, `describe`, and `invoke` modes. Specs are operator-owned, not tenant-settable.
+- OpenAPI invoke is approval-aware: GET/HEAD/OPTIONS classify as read-only, write methods classify as mutating, and `read_only` specs hard-refuse write operations before approval can override them.
 
 ## Findings
 
@@ -137,6 +139,31 @@ Required operating model:
 - The contract between them must expose connected-account inventory, scopes, expiry, revocation, and runtime health to Settings.
 - No product-local connector can silently bypass global Settings.
 
+### P1 - Universal API connector needs product activation rules
+
+Nullalis has shipped an operator-owned OpenAPI connector. This is a major Agent capability: point the runtime at an OpenAPI 3.x spec and the Agent can discover and invoke operations through a governed meta-tool.
+
+Current strengths:
+
+- One `openapi` tool avoids per-endpoint tool explosion.
+- Specs are operator-owned and cannot be supplied by the Agent at runtime.
+- HTTPS and SSRF-safe egress are required.
+- Static credentials stay out of model context.
+- Read/write approval classification reuses the existing approval engine.
+
+Gaps for ZAKI launch:
+
+- `zaki-prod` has no user-facing surface for connected APIs or operator-visible API specs.
+- OpenAPI actions must be attributed in central metering as external API/tool usage.
+- Write operations need the same durable approval and run ledger as browser/tool actions.
+- Full secret-vault integration is deferred in Nullalis; current auth reads environment variables.
+
+Required:
+
+- Represent OpenAPI/API connectors in Settings Developer Access or Agent connectors once productized.
+- Log API spec id, operation id, method, approval state, duration, response size, and meter ids.
+- Keep operator-owned specs separate from user OAuth connections until the native connector model is finalized.
+
 ### P1 - Runtime events are good, but V1 needs durable action history
 
 The SSE contract is rich and the frontend parses the important event classes. Nullalis trace state is not yet a durable product ledger.
@@ -165,9 +192,10 @@ The next slices should stay infrastructure-first and UI-contract-ready:
 2. Persisted five-hour meter window and receipt over-max policy.
 3. Browser extension pairing contract in `zaki-prod`.
 4. Nullalis extension tool parity and usage facts.
-5. Durable Agent run/action ledger.
-6. Memory Control Plane scope APIs.
-7. V2 UI integration on top of those contracts.
+5. OpenAPI/API connector attribution, approval, and meter facts.
+6. Durable Agent run/action ledger.
+7. Memory Control Plane scope APIs.
+8. V2 UI integration on top of those contracts.
 
 ## Acceptance Bar
 

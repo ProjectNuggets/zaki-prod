@@ -231,6 +231,7 @@ Completed:
 - Agent-first code-truth sweep:
   - ZAKI Agent is now the declared main consumer product for V1.
   - Nullalis is strong enough to be the runtime wedge: graph memory, SSE events, approvals, subagents, sandboxing, server browser MCP, and browser-extension gateway exist.
+  - Nullalis also has an operator-owned OpenAPI connector: one `openapi` meta-tool over registered API specs with read/write approval classification.
   - Current UI still opens Agent through the fixed Spaces/Bot thread; `/agent` workbench is required before final product polish.
   - Browser extension ships in V1, but needs central pairing, extension tool parity, STOP/audit UX, and raw usage facts before production launch.
   - Findings are captured in `docs/zaki-agent-nullalis-integration-audit-2026-05-25.md`.
@@ -242,7 +243,8 @@ Next:
 2. S10 product weights and enforcement bridge: retire legacy prompt quota after central-meter proof.
 3. Agent-first route slice: create the `/agent` workbench contract and keep fixed Spaces/Bot as compatibility only.
 4. Browser-control slice: `zaki-prod` extension pairing plus Nullalis extension tool parity and raw usage facts.
-5. S11 pricing/checkout migration to Free, Personal, Pro, and Pro MAX.
-6. S12-S15 Memory Control Plane governance across personal Brain, workspace memory, learner memory, hire memory, design memory, and session memory.
-7. S16 product router policy metadata so every route declares auth, entitlement, meter, memory, and audit behavior.
-8. Product surface polish and Website V2 after Claude V2 design files land.
+5. API connector activation slice: OpenAPI/API connector activity, approval, and metering in Agent run history.
+6. S11 pricing/checkout migration to Free, Personal, Pro, and Pro MAX.
+7. S12-S15 Memory Control Plane governance across personal Brain, workspace memory, learner memory, hire memory, design memory, and session memory.
+8. S16 product router policy metadata so every route declares auth, entitlement, meter, memory, and audit behavior.
+9. Product surface polish and Website V2 after Claude V2 design files land.

@@ -97,6 +97,20 @@ Required:
 - Emit usage facts for navigation, screenshots, DOM/text extraction, external calls, and runtime.
 - Expose current URL/title/screenshot/tool state enough for `zaki-prod` Agent workbench to show a live run panel.
 
+## OpenAPI/API Connector Requirements
+
+Current code truth: Nullalis has an operator-owned OpenAPI connector with one `openapi` tool and `list` / `describe` / `invoke` modes.
+
+Please make sure this is production-consumable by `zaki-prod`:
+
+- Emit runtime events for OpenAPI tool calls with spec id, operation id, method, approval state, status, duration, request size, response size, and safe error code.
+- Include OpenAPI calls in raw usage facts as `toolCalls` and `externalApiCalls`.
+- Preserve the hard gate: specs registered `read_only` must refuse write operations before approval can override them.
+- Preserve approval classification: read methods auto-run where policy allows; write methods require approval in supervised mode.
+- Do not expose credentials in tool args, output, logs, events, or model context.
+- Flag the current env-var credential behavior as operator-only until secret-vault integration is complete.
+- Keep agent-supplied arbitrary specs blocked.
+
 ## Memory Requirements
 
 User-scoped memory must be keyed by canonical ZAKI user id, not email strings.
