@@ -2,7 +2,8 @@
    Scoped classes keep V2 implementation separate from legacy V1 tokens while
    the rest of the app is migrated surface by surface. */
 
-:root {
+:root,
+[data-v2-stage="light"] {
   --v2-font-mono: "DM Mono", "SF Mono", ui-monospace, monospace;
   --v2-font-prose: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
@@ -32,7 +33,8 @@
   --v2-active: rgba(14, 13, 11, 0.08);
 }
 
-.dark {
+.dark,
+[data-v2-stage="dark"] {
   --v2-bg: #0a0908;
   --v2-bg-raised: #131110;
   --v2-bg-sunken: #050403;
@@ -47,6 +49,462 @@
   --v2-hairline-faint: rgba(236, 231, 223, 0.05);
   --v2-hover: rgba(236, 231, 223, 0.04);
   --v2-active: rgba(236, 231, 223, 0.08);
+}
+
+.zaki-app-v2 {
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.zaki-app-v2 *,
+.zaki-app-v2 *::before,
+.zaki-app-v2 *::after {
+  box-sizing: border-box;
+}
+
+.zaki-app-v2 :where(button, input, textarea, select) {
+  font-family: inherit;
+}
+
+.zaki-app-v2 :focus-visible {
+  outline: 1px solid var(--v2-accent);
+  outline-offset: 2px;
+}
+
+.zaki-product-rail {
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0;
+  border-right: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-3);
+  overflow: visible;
+  z-index: 30;
+}
+
+.zaki-product-rail__mark {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+  border: 0;
+  background: var(--v2-accent);
+  cursor: pointer;
+}
+
+.zaki-product-rail__mark::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-product-rail__mark::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  background: var(--v2-accent);
+}
+
+.zaki-product-rail__sep {
+  width: 18px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--v2-hairline);
+}
+
+.zaki-product-rail__button {
+  position: relative;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--v2-ink-3);
+  cursor: pointer;
+  transition: color 160ms ease-out, background 160ms ease-out;
+}
+
+.zaki-product-rail__button:hover {
+  color: var(--v2-ink-1);
+  background: var(--v2-hover);
+}
+
+.zaki-product-rail__button[aria-current="page"] {
+  color: var(--v2-accent);
+}
+
+.zaki-product-rail__button[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  background: var(--v2-accent);
+}
+
+.zaki-product-rail__button.is-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.zaki-product-rail__icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.5;
+}
+
+.zaki-product-rail__tip {
+  position: absolute;
+  left: 36px;
+  top: 50%;
+  z-index: 80;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-inverse);
+  color: var(--v2-ink-on-accent);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms ease-out;
+}
+
+.zaki-product-rail__button:hover .zaki-product-rail__tip,
+.zaki-product-rail__button:focus-visible .zaki-product-rail__tip {
+  opacity: 1;
+}
+
+.zaki-product-rail__kbd {
+  padding-left: 8px;
+  border-left: 1px solid var(--v2-hairline);
+  color: var(--v2-ink-3);
+}
+
+.zaki-product-rail__spacer {
+  flex: 1;
+}
+
+.zaki-app-topbar {
+  flex: 0 0 auto;
+  height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-app-topbar__crumbs,
+.zaki-app-topbar__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.zaki-app-topbar__crumb,
+.zaki-app-topbar__here,
+.zaki-app-topbar__sep {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.zaki-app-topbar__crumb {
+  border: 0;
+  background: transparent;
+  color: var(--v2-ink-3);
+  cursor: pointer;
+}
+
+.zaki-app-topbar__crumb:hover {
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-topbar__here {
+  color: var(--v2-ink-1);
+  text-transform: uppercase;
+}
+
+.zaki-app-topbar__sep {
+  color: var(--v2-ink-4);
+}
+
+.zaki-app-topbar__command,
+.zaki-app-topbar__toggle,
+.zaki-app-topbar__avatar {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-3);
+  cursor: pointer;
+}
+
+.zaki-app-topbar__command {
+  min-width: 260px;
+  height: 28px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 8px;
+  background: var(--v2-bg-raised);
+  font-size: 11px;
+}
+
+.zaki-app-topbar__command span {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.zaki-app-topbar__command kbd {
+  border: 1px solid var(--v2-hairline);
+  padding: 1px 5px;
+  color: var(--v2-ink-3);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.zaki-app-topbar__toggle {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.zaki-app-topbar__avatar {
+  width: 26px;
+  height: 26px;
+  justify-content: center;
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-1);
+  font-size: 11px;
+}
+
+.zaki-app-topbar__command:hover,
+.zaki-app-topbar__toggle:hover,
+.zaki-app-topbar__avatar:hover {
+  border-color: var(--v2-hairline-strong);
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-sidebar--context {
+  width: 232px !important;
+  height: 100%;
+  padding: 0 !important;
+  border-right: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-sidebar-v2-head {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-sidebar-v2-kicker {
+  margin-bottom: 4px;
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-sidebar-v2-title {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.zaki-sidebar-v2-icon {
+  position: relative;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-2);
+  cursor: pointer;
+}
+
+.zaki-sidebar-v2-icon:hover {
+  border-color: var(--v2-hairline-strong);
+  color: var(--v2-ink-1);
+  background: var(--v2-hover);
+}
+
+.zaki-sidebar-v2-count {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  min-width: 16px;
+  padding: 1px 4px;
+  border: 1px solid var(--v2-bg);
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.zaki-sidebar-v2-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 14px 12px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-sidebar-v2-search {
+  margin: 10px 10px 8px !important;
+  border: 1px solid var(--v2-hairline);
+  border-radius: 0 !important;
+  background: var(--v2-bg-raised) !important;
+}
+
+.zaki-sidebar-v2-search input {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.zaki-sidebar-v2-search input::placeholder {
+  color: var(--v2-ink-3);
+}
+
+.zaki-sidebar-v2-action-row button,
+.zaki-sidebar-v2-static button {
+  min-height: 30px;
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-2);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.zaki-sidebar-v2-action-row button:hover,
+.zaki-sidebar-v2-static button:hover {
+  border-color: var(--v2-hairline-strong);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-sidebar-v2-static {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0;
+}
+
+.zaki-sidebar-v2-static button {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  align-items: center;
+  border-width: 0 0 1px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.zaki-app-v2 .zaki-sidebar--context .bg-zaki-hover,
+.zaki-app-v2 .zaki-sidebar--context .hover\:bg-zaki-hover:hover {
+  background: var(--v2-hover);
+}
+
+.zaki-app-v2 .zaki-sidebar--context .text-zaki-primary,
+.zaki-app-v2 .zaki-sidebar--context .dark\:text-\[\#efe6d9\] {
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-sidebar--context .text-zaki-secondary,
+.zaki-app-v2 .zaki-sidebar--context .text-zaki-muted {
+  color: var(--v2-ink-3);
+}
+
+.zaki-app-v2 .zaki-sidebar--context .bg-zaki-sunken,
+.zaki-app-v2 .zaki-sidebar--context .border-zaki-subtle {
+  border-color: var(--v2-hairline);
+}
+
+.zaki-app-v2 .zaki-sidebar--context input {
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-sidebar--context :where(.rounded-lg, .rounded-zaki-md, .rounded-\[10px\]) {
+  border-radius: 0;
+}
+
+.zaki-app-v2 .zaki-sidebar--context .zaki-thread-item,
+.zaki-app-v2 .zaki-sidebar--context [class*="zaki-thread-item"] {
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+}
+
+.zaki-app-v2 .zaki-sidebar--context .zaki-thread-item:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-sidebar--context .zaki-nav-active {
+  border-left-color: var(--v2-accent);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-main-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  background: var(--v2-bg);
+}
+
+.zaki-app-v2 .zaki-main-panel {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--v2-bg);
+  box-shadow: none;
+}
+
+.zaki-app-v2 .zaki-main-inner {
+  height: 100%;
+  background: var(--v2-bg);
 }
 
 .zaki-dashboard-v2 {

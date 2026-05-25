@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "./components/Sidebar";
 import { MobileSidebar } from "./components/MobileSidebar";
 import { MobileHeader } from "./components/MobileHeader";
+import { ProductRail } from "./components/ProductRail";
+import { AppTopbar } from "./components/AppTopbar";
 import { SkipLink } from "./components/SkipLink";
 import { LoginScreen } from "./components/LoginScreen";
 import { LegalPage } from "./components/LegalPage";
@@ -67,6 +69,7 @@ export default function App() {
   const { t } = useTranslation();
   const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
   const isLearningRoute = location.pathname === "/learn";
+  const isDashboardRoute = normalizedPath === "/";
   const isPublicWebsiteRoute =
     PUBLIC_WEBSITE_PATHS.has(normalizedPath) ||
     PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
@@ -94,6 +97,7 @@ export default function App() {
     setSystemTheme,
     resolvedTheme,
   } = useUIStore();
+  const appStage = resolvedTheme() === "dark" ? "dark" : "light";
 
   // Sync navigation store with React Router location (without triggering re-renders)
   useEffect(() => {
@@ -337,16 +341,26 @@ export default function App() {
       {/* Mobile sidebar drawer */}
       <MobileSidebar />
       
-      <div className="zaki-app flex flex-col md:flex-row w-full h-[100dvh] overflow-x-hidden overflow-y-hidden font-sans text-zaki-primary dark:text-[#efe6d9]">
+      <div
+        className={`zaki-app zaki-app-v2 flex w-full h-[100dvh] flex-col overflow-x-hidden overflow-y-hidden font-sans text-zaki-primary md:grid dark:text-[#efe6d9] ${
+          isDashboardRoute
+            ? "md:grid-cols-[40px_minmax(0,1fr)]"
+            : "md:grid-cols-[40px_232px_minmax(0,1fr)]"
+        }`}
+        data-v2-stage={appStage}
+        data-v2-density="comfortable"
+      >
         {/* Mobile header with hamburger menu */}
         <MobileHeader />
-        
-        {/* Desktop sidebar - hidden on mobile */}
-        <div className="hidden md:block">
-          <Sidebar />
+
+        {/* Desktop product rail and contextual navigation */}
+        <ProductRail />
+        <div className={isDashboardRoute ? "hidden" : "hidden min-h-0 overflow-hidden md:block"}>
+          <Sidebar chrome="context" />
         </div>
         
-        <main id="main-content" role="main" className="flex-1 flex flex-col min-w-0 overflow-hidden border-l-0 zaki-shell-surface">
+        <main id="main-content" role="main" className="flex min-w-0 flex-1 flex-col overflow-hidden border-l-0 zaki-shell-surface">
+          <AppTopbar />
           <div className={isLearningRoute ? "zaki-main-shell zaki-main-shell--workspace" : "zaki-main-shell"}>
             <div className={isLearningRoute ? "zaki-main-panel zaki-main-panel--workspace" : "zaki-main-panel"}>
               <div className="zaki-main-inner">

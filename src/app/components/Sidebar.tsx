@@ -2,7 +2,7 @@ import {
   LogoArabicRed, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, type LucideIcon } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, Database, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -63,6 +63,10 @@ import {
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 const APP_VERSION = "1.5.69";
 
+type SidebarProps = {
+  chrome?: "full" | "context";
+};
+
 /**
  * Build a safe filename for the session-download flow. Strips path
  * separators, control chars, RTL-override codepoints, leading dots,
@@ -112,8 +116,9 @@ function normalizeLearningView(value: string | null) {
   return LEARNING_VIEW_ALIASES[normalized] || normalized || "chat";
 }
 
-export function Sidebar() {
+export function Sidebar({ chrome = "full" }: SidebarProps) {
   const { t, i18n } = useTranslation();
+  const contextOnly = chrome === "context";
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const location = useLocation();
   const activeLearningView = normalizeLearningView(
@@ -136,6 +141,7 @@ export function Sidebar() {
   // Get state from stores
   const { user, logout, setUser } = useAuthStore();
   const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
+  const effectiveCollapsed = !contextOnly && collapsed;
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
   const {
     currentView,
@@ -1367,10 +1373,11 @@ export function Sidebar() {
       aria-label="Main navigation"
       className={cn(
         "zaki-sidebar h-full flex flex-col border-r-0 shrink-0 transition-[width,padding] duration-300",
-        collapsed ? "w-[72px] py-4 px-2" : "w-[272px] py-5 px-3.5"
+        contextOnly && "zaki-sidebar--context",
+        effectiveCollapsed ? "w-[72px] py-4 px-2" : "w-[272px] py-5 px-3.5"
       )}
     >
-      {collapsed ? (
+      {effectiveCollapsed ? (
         <>
           <div className="flex flex-col items-center gap-4">
             <button
@@ -1456,65 +1463,128 @@ export function Sidebar() {
       ) : (
         <>
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-4 pr-1">
-        <button
-          type="button"
-          onClick={openAboutView}
-        >
-          <LogoArabicRed />
-        </button>
-        <button
-          className="size-10 shrink-0 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-          onClick={() => setCollapsed(true)}
-          type="button"
-          aria-label="Collapse sidebar"
-        >
-          <SideBarIcon />
-        </button>
-      </div>
+      {contextOnly ? (
+        <div className="zaki-sidebar-v2-head">
+          <div>
+            <div className="zaki-sidebar-v2-kicker">
+              {sidebarMode === "zaki"
+                ? t("sidebar.context.agent", { defaultValue: "Agent" })
+                : sidebarMode === "learning"
+                ? t("sidebar.context.learn", { defaultValue: "Learn" })
+                : sidebarMode === "brain"
+                ? t("sidebar.context.brain", { defaultValue: "Brain" })
+                : t("sidebar.context.chat", { defaultValue: "Chat" })}
+            </div>
+            <div className="zaki-sidebar-v2-title">
+              {sidebarMode === "zaki"
+                ? t("sidebar.context.threads", { defaultValue: "Threads" })
+                : sidebarMode === "learning"
+                ? t("sidebar.context.learningTools", { defaultValue: "Learning tools" })
+                : sidebarMode === "brain"
+                ? t("sidebar.context.memoryGraph", { defaultValue: "Memory graph" })
+                : t("sidebar.context.workspaces", { defaultValue: "Workspaces" })}
+            </div>
+          </div>
+          {sidebarMode === "zaki" ? (
+            <button
+              type="button"
+              className="zaki-sidebar-v2-icon"
+              onClick={() => {
+                setPowerUserInitialTab(totalPendingApprovals > 0 ? "approvals" : "controls");
+                setPowerUserOpen(true);
+              }}
+              aria-label={t("zakiControls.common.controls")}
+            >
+              <ShieldCheck className="size-4" />
+              {totalPendingApprovals > 0 ? (
+                <span className="zaki-sidebar-v2-count">{totalPendingApprovals}</span>
+              ) : null}
+            </button>
+          ) : sidebarMode === "spaces" ? (
+            <button
+              type="button"
+              className="zaki-sidebar-v2-icon"
+              onClick={openCreateSpaceFlow}
+              aria-label={t("sidebar.actions.createSpace")}
+            >
+              <AddIcon color="currentColor" />
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3 mb-4 pr-1">
+          <button
+            type="button"
+            onClick={openAboutView}
+          >
+            <LogoArabicRed />
+          </button>
+          <button
+            className="size-10 shrink-0 rounded-zaki-md border border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:bg-zaki-dark-hover transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+            onClick={() => setCollapsed(true)}
+            type="button"
+            aria-label="Collapse sidebar"
+          >
+            <SideBarIcon />
+          </button>
+        </div>
+      )}
 
       {/* Search */}
-      <div className="bg-zaki-hover rounded-[10px] flex items-center p-2.5 gap-2 mb-2">
-        <SearchIcon />
-        <input 
-          type="text" 
-          value={spaceSearchQuery}
-          onChange={(event) => setSpaceSearchQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setSpaceSearchQuery("");
-              (event.currentTarget as HTMLInputElement).blur();
-            }
-          }}
-          placeholder={t("sidebar.searchPlaceholder")}
-          className="bg-transparent border-none outline-none text-zaki-muted placeholder-zaki text-sm w-full font-medium"
-        />
-      </div>
+      {(!contextOnly || sidebarMode === "spaces") && (
+        <div className="zaki-sidebar-v2-search bg-zaki-hover rounded-[10px] flex items-center p-2.5 gap-2 mb-2">
+          <SearchIcon />
+          <input
+            type="text"
+            value={spaceSearchQuery}
+            onChange={(event) => setSpaceSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setSpaceSearchQuery("");
+                (event.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+            placeholder={t("sidebar.searchPlaceholder")}
+            className="bg-transparent border-none outline-none text-zaki-muted placeholder-zaki text-sm w-full font-medium"
+          />
+        </div>
+      )}
       
       {/* Mode Switch */}
-      <SidebarModeSwitch
-        sidebarMode={sidebarMode}
-        onSelectZaki={() => {
-          openHomeView();
-        }}
-        onSelectSpaces={() => {
-          goToSpaces();
-        }}
-        isRtl={!!isRtl}
-        onOpenControls={() => {
-          setPowerUserInitialTab(totalPendingApprovals > 0 ? "approvals" : "controls");
-          setPowerUserOpen(true);
-        }}
-        controlBadgeCount={totalPendingApprovals}
-        onOpenSettings={() => setZakiSettingsOpen(true)}
-        onOpenSessions={() => setZakiSessionsOpen(true)}
-        onOpenCron={() => setZakiCronOpen(true)}
-        onOpenSecrets={() => setZakiSecretsOpen(true)}
-        onOpenDiagnostics={() => setZakiDiagnosticsOpen(true)}
-      />
+      {!contextOnly ? (
+        <SidebarModeSwitch
+          sidebarMode={sidebarMode}
+          onSelectZaki={() => {
+            openHomeView();
+          }}
+          onSelectSpaces={() => {
+            goToSpaces();
+          }}
+          isRtl={!!isRtl}
+          onOpenControls={() => {
+            setPowerUserInitialTab(totalPendingApprovals > 0 ? "approvals" : "controls");
+            setPowerUserOpen(true);
+          }}
+          controlBadgeCount={totalPendingApprovals}
+          onOpenSettings={() => setZakiSettingsOpen(true)}
+          onOpenSessions={() => setZakiSessionsOpen(true)}
+          onOpenCron={() => setZakiCronOpen(true)}
+          onOpenSecrets={() => setZakiSecretsOpen(true)}
+          onOpenDiagnostics={() => setZakiDiagnosticsOpen(true)}
+        />
+      ) : sidebarMode === "zaki" ? (
+        <div className="zaki-sidebar-v2-action-row" aria-label={t("sidebar.context.agentActions", { defaultValue: "Agent actions" })}>
+          <button type="button" onClick={() => setZakiSessionsOpen(true)}>
+            {t("zakiControls.sidebarMenu.sessions")}
+          </button>
+          <button type="button" onClick={() => setZakiSettingsOpen(true)}>
+            {t("zakiControls.sidebarMenu.settings")}
+          </button>
+        </div>
+      ) : null}
 
       {/* Divider */}
-      <div className="h-px bg-zaki-sunken w-full mb-5" />
+      {!contextOnly && <div className="h-px bg-zaki-sunken w-full mb-5" />}
 
       {/* Space Section */}
       <div className="flex-1 overflow-y-auto zaki-scrollbar-fade">
@@ -1660,6 +1730,30 @@ export function Sidebar() {
                 </button>
               );
             })}
+          </div>
+        ) : sidebarMode === "brain" ? (
+          <div className="zaki-sidebar-v2-static">
+            <button type="button" onClick={() => navigate("/brain")}>
+              <Brain className="size-4" />
+              <span>{t("sidebar.brain")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMemorySearchQuery("");
+                setMemoryOpen(true);
+              }}
+            >
+              <Database className="size-4" />
+              <span>{t("sidebar.profile.memory")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("zaki:open-settings"))}
+            >
+              <Settings className="size-4" />
+              <span>{t("sidebar.profile.settings")}</span>
+            </button>
           </div>
         ) : (
           <>
