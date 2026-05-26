@@ -115,6 +115,15 @@ jest.mock("@/lib/api", () => ({
       context_pressure_percent: null,
     },
   })),
+  deleteAgentSession: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+      headers: new Headers(),
+    },
+    data: { ok: true },
+  })),
   listAgentSessions: jest.fn(async () => ({
     response: {
       ok: true,

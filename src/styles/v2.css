@@ -1436,6 +1436,43 @@
   text-transform: uppercase;
 }
 
+.zaki-mobile-topbar__agent {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 8px;
+  text-align: center;
+}
+
+.zaki-mobile-topbar__agent strong {
+  display: block;
+  max-width: 24ch;
+  overflow: hidden;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.zaki-mobile-topbar__agent span {
+  display: block;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
 .zaki-mobile-topbar__mark {
   position: relative;
   width: 20px;
@@ -2743,11 +2780,7 @@
 /* Agent surface: V2 tactical chat shell. Keeps the existing runtime wiring
    while replacing the migrated route's V1 visual vocabulary. */
 .zaki-app-v2 .zaki-agent-v2 {
-  background:
-    linear-gradient(to right, var(--v2-hairline-faint) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--v2-hairline-faint) 1px, transparent 1px),
-    var(--v2-bg);
-  background-size: 32px 32px;
+  background: var(--v2-bg);
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
 }
@@ -2756,9 +2789,286 @@
   letter-spacing: 0;
 }
 
+.zaki-app-v2 .zaki-agent-v2__surface {
+  min-height: 0;
+  background: var(--v2-bg);
+}
+
+.zaki-app-v2 .zaki-agent-v2__grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.zaki-app-v2 .zaki-agent-v2__chat {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-session-rail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  overflow: hidden;
+}
+
+.zaki-agent-session-rail__head {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-agent-session-rail__kicker {
+  margin-bottom: 3px;
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail h2 {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail__icon {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-3);
+}
+
+.zaki-agent-session-rail__icon:hover {
+  border-color: var(--v2-ink-4);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-session-rail__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.zaki-agent-session-rail__summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-session-rail__summary-cell {
+  min-width: 0;
+  background: var(--v2-bg-sunken);
+  padding: 8px 10px;
+}
+
+.zaki-agent-session-rail__summary-cell span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail__summary-cell strong {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--v2-ink-1);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+  text-transform: lowercase;
+}
+
+.zaki-agent-session-rail__summary-cell strong i {
+  width: 6px;
+  height: 6px;
+  background: var(--v2-ink-4);
+}
+
+.zaki-agent-session-rail__summary-cell strong.is-live i {
+  background: var(--v2-accent);
+  animation: v2-pulse 1.6s var(--v2-ease-linear) infinite;
+}
+
+.zaki-agent-session-rail__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-session-rail__actions button {
+  display: inline-flex;
+  min-width: 0;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail__actions button:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-session-rail__actions svg {
+  width: 13px;
+  height: 13px;
+}
+
+.zaki-agent-session-rail__actions b {
+  min-width: 16px;
+  border: 1px solid var(--v2-accent-hairline);
+  color: var(--v2-accent);
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 14px;
+  text-align: center;
+}
+
+.zaki-agent-session-rail__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item {
+  border-left: 2px solid transparent;
+  border-radius: 0 !important;
+  padding: 8px 12px !important;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item:hover {
+  background: var(--v2-hover);
+}
+
+.zaki-agent-session-rail__list .zaki-nav-active {
+  border-left-color: var(--v2-accent);
+  background: var(--v2-bg-raised) !important;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item :where(.text-zaki-secondary, .text-zaki-primary) {
+  color: var(--v2-ink-1) !important;
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item :where(.text-zaki-muted, .text-2xs) {
+  color: var(--v2-ink-3) !important;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item :where(.rounded-full, .rounded-lg, .rounded-zaki-md, .rounded-zaki-xl, .rounded-2xl) {
+  border-radius: 0 !important;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item :where(.bg-zaki-raised, .bg-zaki-hover) {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken) !important;
+  color: var(--v2-ink-3) !important;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item > div:last-child {
+  opacity: 0;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item:hover > div:last-child,
+.zaki-agent-session-rail__list .zaki-thread-item:focus-within > div:last-child {
+  opacity: 1;
+}
+
+.zaki-agent-session-rail__list input {
+  border-radius: 0 !important;
+  border-color: var(--v2-hairline-strong) !important;
+  background: var(--v2-bg-raised) !important;
+  color: var(--v2-ink-1) !important;
+  font-family: var(--v2-font-mono) !important;
+}
+
+.zaki-agent-session-rail__list > div > button:last-child {
+  margin: 6px 12px 0;
+  border: 1px dashed var(--v2-hairline-strong);
+  border-radius: 0 !important;
+  padding: 7px 8px !important;
+  color: var(--v2-ink-2);
+}
+
+.zaki-agent-session-rail__list > div > button:last-child:hover {
+  border-style: solid;
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-session-rail__foot {
+  display: grid;
+  gap: 1px;
+  border-top: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-session-rail__foot div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-3);
+  padding: 7px 12px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail__foot svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
 .zaki-app-v2 .zaki-agent-v2__head {
-  min-height: 48px;
-  padding: 9px 16px;
+  min-height: 54px;
+  padding: 12px 24px;
   border-bottom: 1px solid var(--v2-hairline);
   background: var(--v2-bg);
 }
@@ -3190,6 +3500,47 @@
 @media (min-width: 1280px) and (max-width: 1420px) {
   .zaki-app-v2 .zaki-agent-v2--inspector {
     --zaki-agent-inspector-width: 312px;
+  }
+}
+
+@media (max-width: 900px) {
+  .zaki-app-v2 .zaki-agent-v2__grid {
+    display: block;
+  }
+
+  .zaki-agent-session-rail {
+    display: none;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2__chat {
+    height: 100%;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2__head {
+    min-height: 48px;
+    padding: 10px 12px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-subheader-pill {
+    max-width: min(68vw, 520px);
+  }
+}
+
+@media (max-width: 640px) {
+  .zaki-app-v2 .zaki-agent-v2 .zaki-chat-thread {
+    padding: 18px 12px 16px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--user .zaki-message-stack {
+    max-width: min(88%, 560px);
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-shell {
+    padding: 10px 12px 14px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row {
+    overflow-x: auto;
   }
 }
 

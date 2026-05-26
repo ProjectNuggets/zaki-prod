@@ -1,5 +1,6 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle } from "./InputArea";
+import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
 import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
@@ -20,6 +21,7 @@ import {
   fetchAgentSession,
   fetchAgentSessionContext,
   compactAgentSession,
+  deleteAgentSession,
   fetchBotRuntimeStatus,
   setAgentSessionMode,
   approveAgentSession,
@@ -84,6 +86,7 @@ import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
+import { PowerUserSheet, type PowerUserTab } from "./agent/PowerUserSheet";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
@@ -95,6 +98,8 @@ import {
 } from "@/lib/zakiBot";
 import {
   buildCanonicalZakiThreadSessionKey,
+  extractThreadSlugFromSessionKey,
+  isThreadLaneZakiSessionKey,
   normalizeZakiSessionKey,
 } from "@/lib/zakiSessions";
 import {
@@ -256,6 +261,17 @@ function formatAcceptedTypeHint(types: Record<string, string[]>) {
   )
     .slice(0, 8)
     .join(", ");
+}
+
+function safeAgentSessionFilename(name: string | null | undefined, fallback: string) {
+  const cleaned = (name || fallback || "agent-session")
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/^\.+/, "")
+    .slice(0, 80)
+    .trim();
+  return cleaned || fallback || "agent-session";
 }
 
 function splitFilesByAcceptedTypes(
@@ -2089,6 +2105,9 @@ export function ChatArea() {
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [sessionModePending, setSessionModePending] = useState(false);
+  const [powerUserOpen, setPowerUserOpen] = useState(false);
+  const [powerUserInitialTab, setPowerUserInitialTab] =
+    useState<PowerUserTab>("controls");
   const approvalSeenBySessionRef = useRef<Record<string, Set<string>>>({});
 
   // Canonical user ID for agent/nullalis routing (resolved from BFF).
@@ -2106,7 +2125,8 @@ export function ChatArea() {
   const normalizedActiveZakiSessionKey = activeZakiSessionKey
     ? normalizeZakiSessionKey(activeZakiSessionKey)
     : null;
-  const { data: zakiSessions = [] } = useZakiSessions(isZakiBotRouteActive);
+  const { data: zakiSessions = [], isLoading: zakiSessionsLoading } =
+    useZakiSessions(isZakiBotRouteActive);
   const activeSessionRecord = useMemo(
     () =>
       normalizedActiveZakiSessionKey
@@ -2143,6 +2163,10 @@ export function ChatArea() {
     activeSessionRecord?.mode === "review"
       ? activeSessionRecord.mode
       : null);
+  const zakiThreadSessions = useMemo(
+    () => zakiSessions.filter((session) => isThreadLaneZakiSessionKey(session.session_key)),
+    [zakiSessions]
+  );
 
   // Memory state for the simplified normal-chat capture flow
   const [recentSavedMemories, setRecentSavedMemories] = useState<
@@ -2597,6 +2621,114 @@ export function ChatArea() {
       setMenuOpen(false);
     }
   }, [chatCopy.exportFailed, chatCopy.exported, headerThreadName, serializeChat]);
+
+  const selectAgentSession = useCallback(
+    (sessionKey: string) => {
+      const normalized = normalizeZakiSessionKey(sessionKey);
+      const threadSlug = extractThreadSlugFromSessionKey(normalized);
+      if (!threadSlug) return;
+      goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: normalized });
+      const agentPath =
+        threadSlug === ZAKI_BOT_THREAD_ID
+          ? "/agent"
+          : `/agent?thread=${encodeURIComponent(threadSlug)}`;
+      navigate(agentPath);
+    },
+    [goToThread, navigate]
+  );
+
+  const handleCreateAgentSession = useCallback(() => {
+    const nextThreadId = createAnonymousThreadId();
+    goToThread(ZAKI_BOT_SPACE_ID, nextThreadId, { zakiSessionKey: null });
+    setAttachments([]);
+    setNullalisApprovalRequest(null);
+    navigate(`/agent?thread=${encodeURIComponent(nextThreadId)}`);
+    toast.success(t("zakiControls.sessionList.newSessionCreated", { defaultValue: "New session started" }));
+  }, [goToThread, navigate, t]);
+
+  const handleDownloadAgentSession = useCallback(
+    async (sessionKey: string, label: string) => {
+      const normalized = normalizeZakiSessionKey(sessionKey);
+      const threadSlug = extractThreadSlugFromSessionKey(normalized);
+      if (!threadSlug) return;
+      try {
+        const { data } = await fetchAgentHistory(
+          ZAKI_BOT_SPACE_ID,
+          threadSlug,
+          "merged",
+        );
+        const payload = {
+          spaceId: ZAKI_BOT_SPACE_ID,
+          threadId: threadSlug,
+          sessionKey: normalized,
+          exportedAt: new Date().toISOString(),
+          history: data?.history ?? [],
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${safeAgentSessionFilename(label, threadSlug)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        toast.success(
+          t("zakiControls.sessionList.downloadSuccess", {
+            defaultValue: "Session downloaded.",
+          }),
+        );
+      } catch {
+        toast.error(
+          t("zakiControls.sessionList.downloadError", {
+            defaultValue: "Couldn't download the session. Try again.",
+          }),
+        );
+      }
+    },
+    [t]
+  );
+
+  const handleShareAgentSession = useCallback(
+    (sessionKey: string) => {
+      selectAgentSession(sessionKey);
+      window.dispatchEvent(
+        new CustomEvent("zaki:open-share", {
+          detail: { sessionKey: normalizeZakiSessionKey(sessionKey) },
+        }),
+      );
+    },
+    [selectAgentSession]
+  );
+
+  const handleDeleteAgentSession = useCallback(
+    async (sessionKey: string, label: string) => {
+      const normalized = normalizeZakiSessionKey(sessionKey);
+      try {
+        const { response } = await deleteAgentSession(normalized);
+        if (!response.ok) throw new Error(`delete ${response.status}`);
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+        if (normalizedActiveZakiSessionKey === normalized) {
+          handleCreateAgentSession();
+        }
+        toast.success(
+          t("zakiControls.sessionList.deleteSuccess", {
+            defaultValue: "Session deleted.",
+            label,
+          }),
+        );
+      } catch {
+        toast.error(
+          t("zakiControls.sessionList.deleteError", {
+            defaultValue: "Couldn't delete the session. Try again.",
+          }),
+        );
+      }
+    },
+    [handleCreateAgentSession, normalizedActiveZakiSessionKey, queryClient, t]
+  );
 
   const uploadFilesToWorkspace = useCallback(
     async (workspaceSlug: string, files: File[]) => {
@@ -4764,6 +4896,10 @@ export function ChatArea() {
     openSpacesMemoryViewer({ enabled: isMemoryPipelineEnabled, query, tab });
   }, [isMemoryPipelineEnabled]);
 
+  const openAgentMemorySurface = useCallback(() => {
+    navigate("/brain");
+  }, [navigate]);
+
   const maybeShowSessionSummaryCue = useCallback(
     async (threadId?: string | null) => {
       if (!authUserId || !isMemoryPipelineEnabled) return;
@@ -6452,11 +6588,66 @@ export function ChatArea() {
         </div>
       )}
 
-      <div className="relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col">
+      <div
+        className={cn(
+          "relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col",
+          isAgentSurface && "zaki-agent-v2__surface"
+        )}
+      >
         {/* Background */}
         {!isAgentSurface ? <BackgroundPattern /> : null}
 
-        <div className="relative z-20 flex flex-col h-full">
+        <div
+          className={cn(
+            "relative z-20 h-full",
+            isAgentSurface ? "zaki-agent-v2__grid" : "flex flex-col"
+          )}
+        >
+          {isAgentSurface ? (
+            <AgentSessionRail
+              sessions={zakiThreadSessions}
+              isLoading={zakiSessionsLoading}
+              activeSessionKey={normalizedActiveZakiSessionKey}
+              activeMode={activeSessionMode}
+              isStreaming={isStreaming}
+              live={activeSessionUi?.live ?? activeSessionRecord?.live ?? null}
+              pendingApprovals={
+                activeSessionUi?.approvalCount ??
+                activeSessionRecord?.pending_approval_count ??
+                0
+              }
+              contextLabel={
+                agentContextPercent != null
+                  ? `${Math.round(agentContextPercent)}% ctx`
+                  : "0% ctx"
+              }
+              quotaLabel={agentWeeklyLabel}
+              isRtl={isRtl}
+              onSelectSession={selectAgentSession}
+              onCreateSession={handleCreateAgentSession}
+              onDownloadSession={handleDownloadAgentSession}
+              onShareSession={handleShareAgentSession}
+              onDeleteSession={handleDeleteAgentSession}
+              onOpenMemory={openAgentMemorySurface}
+              onOpenControls={() => {
+                setPowerUserInitialTab(
+                  (activeSessionUi?.approvalCount ??
+                    activeSessionRecord?.pending_approval_count ??
+                    0) > 0
+                    ? "approvals"
+                    : "controls"
+                );
+                setPowerUserOpen(true);
+              }}
+            />
+          ) : null}
+
+          <section
+            className={cn(
+              "min-h-0",
+              isAgentSurface ? "zaki-agent-v2__chat" : "flex h-full flex-col"
+            )}
+          >
           {/* Header / Breadcrumb */}
           {!showZakiHome && !showSpacesView ? (
             <div
@@ -6511,7 +6702,11 @@ export function ChatArea() {
                       role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
-                        openMemoryViewer();
+                        if (isAgentSurface) {
+                          openAgentMemorySurface();
+                        } else {
+                          openMemoryViewer();
+                        }
                       }}
                       aria-label={chatCopy.reviewMemoriesAria}
                     >
@@ -6643,7 +6838,7 @@ export function ChatArea() {
                 quotaInfo={zakiBotQuotaInfo}
                 turnStartedAt={turnStartedAt}
                 turnDurationMs={turnDurationMs}
-                onOpenMemory={openMemoryViewer}
+                onOpenMemory={openAgentMemorySurface}
                 onShare={handleShare}
                 onExport={handleExport}
               />
@@ -6790,6 +6985,7 @@ export function ChatArea() {
               handleWorkspaceFilesSelected(targetSpaceId, files);
             }}
           />
+          </section>
         </div>
       </div>
 
@@ -6820,6 +7016,22 @@ export function ChatArea() {
         threadTitle={headerThreadName}
         messages={messages}
       />
+
+      {isAgentSurface ? (
+        <PowerUserSheet
+          isOpen={powerUserOpen}
+          onClose={() => setPowerUserOpen(false)}
+          initialTab={powerUserInitialTab}
+          activeSessionKey={normalizedActiveZakiSessionKey}
+          activeMode={activeSessionMode}
+          modePending={sessionModePending}
+          onModeChange={handleSessionModeChange}
+          contextPressurePercent={agentContextPercent}
+          sandbox={sandboxState}
+          pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
+          onApproveRequest={handleApprovalAction}
+        />
+      ) : null}
 
       <MemoryImportSheet
         isOpen={memoryImportOpen}
