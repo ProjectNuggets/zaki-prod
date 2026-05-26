@@ -91,6 +91,7 @@ const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
   .fetchMemoryDoctor as jest.Mock;
+const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
 const listAgentArtifactsMock = jest.requireMock("@/lib/api").listAgentArtifacts as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
@@ -118,6 +119,10 @@ beforeEach(() => {
   listAgentArtifactsMock.mockResolvedValue({
     response: { ok: true },
     data: { artifacts: [] },
+  });
+  exportAgentArtifactMock.mockResolvedValue({
+    response: { ok: true },
+    data: { url: "https://download.local/artifact.pdf" },
   });
   listAgentTracesMock.mockResolvedValue({
     response: { ok: true },
@@ -239,6 +244,51 @@ describe("PowerUserSheet", () => {
     await waitFor(() => {
       expect(shareAgentArtifactMock).toHaveBeenCalledWith("artifact-1");
     });
+  });
+
+  it("does not treat private artifact export urls as public share links", async () => {
+    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+    listAgentArtifactsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        artifacts: [
+          {
+            id: "artifact-private",
+            title: "Private preview",
+            type: "markdown",
+            version: 1,
+            url: "https://download.local/private-preview",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Private preview")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByLabelText("zakiControls.powerUser.artifacts.openShared")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("power-user-artifact-revoke-artifact-private")
+    ).toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-private"));
+    });
+    await waitFor(() => {
+      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-private", "pdf");
+    });
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://download.local/artifact.pdf",
+      "_blank",
+      "noopener,noreferrer"
+    );
+    openSpy.mockRestore();
   });
 
   it("lists traces and can request a sanitized share", async () => {

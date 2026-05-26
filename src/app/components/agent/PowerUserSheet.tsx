@@ -201,15 +201,24 @@ function getTraceId(trace: AgentTrace): string {
   return trace.run_id || trace.id || "";
 }
 
-function getShareUrl(item: Record<string, unknown>): string | null {
+function getPublicShareUrl(item: Record<string, unknown>): string | null {
   const candidates = [
     item.public_url,
     item.publicUrl,
     item.share_url,
     item.shareUrl,
-    item.url,
+  ];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  return typeof match === "string" ? match : null;
+}
+
+function getExportDownloadUrl(item: Record<string, unknown>): string | null {
+  const candidates = [
     item.download_url,
     item.downloadUrl,
+    item.url,
+    item.public_url,
+    item.publicUrl,
   ];
   const match = candidates.find((value) => typeof value === "string" && value.trim());
   return typeof match === "string" ? match : null;
@@ -1133,7 +1142,7 @@ export function PowerUserSheet({
     try {
       const { response, data } = await exportAgentArtifact(artifactId, format);
       if (!response.ok) throw new Error(String(data?.error || "export_failed"));
-      const url = getShareUrl(data);
+      const url = getExportDownloadUrl(data);
       if (url && typeof window !== "undefined") {
         window.open(url, "_blank", "noopener,noreferrer");
       }
@@ -1321,7 +1330,7 @@ export function PowerUserSheet({
       ) : null}
       {(artifacts || []).map((artifact, index) => {
         const artifactId = getArtifactId(artifact);
-        const shareUrl = getShareUrl(artifact);
+        const shareUrl = getPublicShareUrl(artifact);
         const title = getArtifactTitle(artifact);
         return (
           <article
@@ -1415,7 +1424,7 @@ export function PowerUserSheet({
       ) : null}
       {(traces || []).map((trace, index) => {
         const traceId = getTraceId(trace);
-        const shareUrl = getShareUrl(trace);
+        const shareUrl = getPublicShareUrl(trace);
         const eventCount = Array.isArray(trace.events) ? trace.events.length : null;
         return (
           <article

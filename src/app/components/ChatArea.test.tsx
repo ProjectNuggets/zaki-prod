@@ -5,6 +5,7 @@
 
 import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
+import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -528,6 +529,44 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     expect(screen.getByText("zakiAgent.empty.kicker")).toBeInTheDocument();
+  });
+
+  it("opens the canonical Agent controls sheet from the global controls event", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(screen.queryByTestId("power-user-controls")).not.toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:open-power-user", {
+          detail: { tab: "controls" },
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-controls")).toBeInTheDocument();
+    });
+  });
+
+  it("opens a pending Agent controls tab after route handoff", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    window.sessionStorage.setItem("zaki:pendingPowerUserTab", "approvals");
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-tab-approvals")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+    expect(window.sessionStorage.getItem("zaki:pendingPowerUserTab")).toBeNull();
   });
 
   it("parses task progress events as structured live execution", () => {

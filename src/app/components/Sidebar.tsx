@@ -9,15 +9,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   apiRequest,
-  approveAgentSession,
   deleteAgentSession,
   fetchAgentHistory,
-  setAgentSessionMode,
   updateProfile,
-  type AgentSessionMode,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
-import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore, useZakiSessionUiStore } from "@/stores";
+import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { SkeletonSpaceList } from "./ui/skeleton";
@@ -37,7 +34,6 @@ import { SessionManagementSheet } from "./agent/SessionManagementSheet";
 import { CronManagementSheet } from "./agent/CronManagementSheet";
 import { SecretsVaultSheet } from "./agent/SecretsVaultSheet";
 import { DiagnosticsSheet } from "./agent/DiagnosticsSheet";
-import { PowerUserSheet, type PowerUserTab } from "./agent/PowerUserSheet";
 import { SettingsModal } from "./sidebar/SettingsModal";
 import { SidebarModeSwitch } from "./sidebar/SidebarModeSwitch";
 import { ZakiSessionList } from "./sidebar/ZakiSessionList";
@@ -66,6 +62,18 @@ const APP_VERSION = "1.5.69";
 type SidebarProps = {
   chrome?: "full" | "context";
 };
+
+type AgentControlTab =
+  | "controls"
+  | "approvals"
+  | "browser"
+  | "artifacts"
+  | "trace"
+  | "context"
+  | "memory"
+  | "usage";
+
+const PENDING_AGENT_CONTROLS_TAB_KEY = "zaki:pendingPowerUserTab";
 
 /**
  * Build a safe filename for the session-download flow. Strips path
@@ -165,26 +173,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     isZakiBotSpaceId(activeSpaceId) && (activeZakiSessionKey || storedZakiSessionKey)
       ? normalizeZakiSessionKey(activeZakiSessionKey || storedZakiSessionKey || "")
       : null;
-  const zakiSessionUiByKey = useZakiSessionUiStore((state) => state.sessions);
-  const setZakiSessionModeUi = useZakiSessionUiStore((state) => state.setMode);
-  const decrementSessionApprovalCount = useZakiSessionUiStore(
-    (state) => state.decrementApprovalCount
-  );
-  const sandboxState = useZakiSessionUiStore((state) => state.sandbox);
-  const activeSessionUi = activeSessionKey ? zakiSessionUiByKey[activeSessionKey] : undefined;
-  const activeSessionRecord =
-    activeSessionKey != null
-      ? zakiSessions.find(
-          (session) => normalizeZakiSessionKey(session.session_key) === activeSessionKey
-        ) ?? null
-      : null;
-  const activeSessionMode =
-    activeSessionUi?.mode ??
-    (activeSessionRecord?.mode === "plan" ||
-    activeSessionRecord?.mode === "execute" ||
-    activeSessionRecord?.mode === "review"
-      ? activeSessionRecord.mode
-      : null);
   const totalPendingApprovals = useMemo(
     () =>
       zakiSessions.reduce(
@@ -211,9 +199,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     "memories" | "pending" | "conflicts"
   >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
-  const [powerUserOpen, setPowerUserOpen] = useState(false);
-  const [powerUserInitialTab, setPowerUserInitialTab] = useState<PowerUserTab>("controls");
-  const [powerUserModePending, setPowerUserModePending] = useState(false);
   const { data: entitlementsResult } = useEntitlements();
   const entitlements = entitlementsResult?.data ?? null;
   const planTierRaw = entitlements?.plan?.tier ?? "free";
@@ -264,6 +249,30 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   const [removingDocumentKey, setRemovingDocumentKey] = useState<string | null>(null);
   const expandStorageKey = user?.username ? `zaki:expanded-space:${user.username}` : "zaki:expanded-space";
 
+  const requestAgentControls = useCallback(
+    (tab: AgentControlTab) => {
+      const dispatch = () => {
+        window.dispatchEvent(
+          new CustomEvent("zaki:open-power-user", {
+            detail: { tab },
+          })
+        );
+      };
+      if (location.pathname !== "/agent") {
+        try {
+          window.sessionStorage.setItem(PENDING_AGENT_CONTROLS_TAB_KEY, tab);
+        } catch {
+          // Non-critical handoff; the backup event below still handles same-tick navigation.
+        }
+        navigate("/agent");
+        window.setTimeout(dispatch, 0);
+        return;
+      }
+      dispatch();
+    },
+    [location.pathname, navigate]
+  );
+
   useEffect(() => {
     const handleOpenMemory = (event: Event) => {
       if (!user?.username) return;
@@ -298,106 +307,17 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         setMemoryConflictCount(detail.count);
       }
     };
-    const handleOpenPowerUser = (event: Event) => {
-      const detail = (event as CustomEvent<{ tab?: PowerUserTab }>).detail;
-      const tab =
-	        detail?.tab === "controls" ||
-	        detail?.tab === "approvals" ||
-	        detail?.tab === "browser" ||
-	        detail?.tab === "artifacts" ||
-	        detail?.tab === "trace" ||
-	        detail?.tab === "context" ||
-	        detail?.tab === "memory" ||
-	        detail?.tab === "usage"
-          ? detail.tab
-          : "controls";
-      setPowerUserInitialTab(tab);
-      setPowerUserOpen(true);
-    };
     window.addEventListener("zaki:open-memory", handleOpenMemory);
     window.addEventListener("zaki:close-memory", handleCloseMemory);
     window.addEventListener("zaki:open-settings", handleOpenSettings);
     window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
-    window.addEventListener("zaki:open-power-user", handleOpenPowerUser);
     return () => {
       window.removeEventListener("zaki:open-memory", handleOpenMemory);
       window.removeEventListener("zaki:close-memory", handleCloseMemory);
       window.removeEventListener("zaki:open-settings", handleOpenSettings);
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
-      window.removeEventListener("zaki:open-power-user", handleOpenPowerUser);
     };
   }, [navigate, user?.username]);
-
-  const handlePowerUserModeChange = useCallback(
-    async (mode: AgentSessionMode) => {
-      if (!activeSessionKey) {
-        toast.error(t("zakiControls.errors.openSessionFirst"));
-        return;
-      }
-      const previousMode = activeSessionUi?.mode ?? "execute";
-      if (previousMode === mode) return;
-      setPowerUserModePending(true);
-      setZakiSessionModeUi(activeSessionKey, mode);
-      try {
-        const { response, data } = await setAgentSessionMode(activeSessionKey, mode);
-        if (!response.ok) {
-          throw new Error(
-            data?.error || data?.message || t("zakiControls.errors.updateModeFailed")
-          );
-        }
-        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
-      } catch (error) {
-        setZakiSessionModeUi(activeSessionKey, previousMode);
-        toast.error(
-          error instanceof Error ? error.message : t("zakiControls.errors.updateModeFailed")
-        );
-      } finally {
-        setPowerUserModePending(false);
-      }
-    },
-    [activeSessionKey, activeSessionUi?.mode, queryClient, setZakiSessionModeUi, t]
-  );
-
-  const handlePowerUserApprovalAction = useCallback(
-    async (requestId: string, approved: boolean) => {
-      if (!activeSessionKey) {
-        toast.error(t("zakiControls.errors.openSessionFirst"));
-        return;
-      }
-      const request = (activeSessionUi?.pendingApprovals ?? []).find((entry) => entry.id === requestId);
-      try {
-        const { response, data } = await approveAgentSession(activeSessionKey, {
-          approved,
-          approval_id: requestId,
-          tool: request?.tool,
-          reason: approved ? undefined : "User denied from controls",
-        });
-        if (!response.ok) {
-          throw new Error(
-            (data as { error?: string } | null)?.error || t("zakiControls.errors.updateApprovalFailed")
-          );
-        }
-        decrementSessionApprovalCount(activeSessionKey, requestId);
-        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
-        window.dispatchEvent(
-          new CustomEvent("zaki:approval-resolved", {
-            detail: { sessionKey: activeSessionKey, requestId },
-          })
-        );
-        toast.success(
-          approved
-            ? t("zakiControls.success.approvalSent")
-            : t("zakiControls.success.requestDenied")
-        );
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("zakiControls.errors.updateApprovalFailed")
-        );
-        throw error;
-      }
-    },
-    [activeSessionKey, activeSessionUi?.pendingApprovals, decrementSessionApprovalCount, queryClient, t]
-  );
 
   useEffect(() => {
     if (!profileMenuOpen || !user?.username) return;
@@ -1492,10 +1412,9 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             <button
               type="button"
               className="zaki-sidebar-v2-icon"
-              onClick={() => {
-                setPowerUserInitialTab(totalPendingApprovals > 0 ? "approvals" : "controls");
-                setPowerUserOpen(true);
-              }}
+              onClick={() =>
+                requestAgentControls(totalPendingApprovals > 0 ? "approvals" : "controls")
+              }
               aria-label={t("zakiControls.common.controls")}
             >
               <ShieldCheck className="size-4" />
@@ -1565,8 +1484,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           }}
           isRtl={!!isRtl}
           onOpenControls={() => {
-            setPowerUserInitialTab(totalPendingApprovals > 0 ? "approvals" : "controls");
-            setPowerUserOpen(true);
+            requestAgentControls(totalPendingApprovals > 0 ? "approvals" : "controls");
           }}
           controlBadgeCount={totalPendingApprovals}
           onOpenSettings={() => setZakiSettingsOpen(true)}
@@ -2294,23 +2212,22 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                       "inline-flex min-w-[18px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-semibold text-white",
                       isRtl ? "mr-auto" : "ml-auto"
                     )}>
-		                  {memoryConflictCount}
-	                </span>
-	              )}
-	            </button>
-	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
-	              type="button"
-	              onClick={() => {
-	                setProfileMenuOpen(false);
-	                setPowerUserInitialTab(totalPendingApprovals > 0 ? "approvals" : "controls");
-	                setPowerUserOpen(true);
-	              }}
+                      {memoryConflictCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+                  type="button"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    requestAgentControls(totalPendingApprovals > 0 ? "approvals" : "controls");
+                  }}
               data-testid="profile-menu-power-user"
-	            >
-	              <ShieldCheck className="size-4 text-zaki-muted" />
-	              {t("zakiControls.common.controls")}
-	            </button>
+                >
+                  <ShieldCheck className="size-4 text-zaki-muted" />
+                  {t("zakiControls.common.controls")}
+                </button>
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
               type="button"
@@ -2511,19 +2428,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       <DiagnosticsSheet
         isOpen={zakiDiagnosticsOpen}
         onClose={() => setZakiDiagnosticsOpen(false)}
-      />
-      <PowerUserSheet
-        isOpen={powerUserOpen}
-        onClose={() => setPowerUserOpen(false)}
-        initialTab={powerUserInitialTab}
-        activeSessionKey={activeSessionKey}
-        activeMode={activeSessionMode}
-        modePending={powerUserModePending}
-        onModeChange={handlePowerUserModeChange}
-        contextPressurePercent={activeSessionUi?.contextPressurePercent ?? null}
-        sandbox={sandboxState}
-        pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
-        onApproveRequest={handlePowerUserApprovalAction}
       />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}

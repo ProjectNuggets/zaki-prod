@@ -115,6 +115,37 @@ import {
   type SystemNoticePayload,
 } from "./ui/zaki/SystemNotice";
 
+const POWER_USER_EVENT_TABS: PowerUserTab[] = [
+  "controls",
+  "approvals",
+  "browser",
+  "artifacts",
+  "trace",
+  "context",
+  "memory",
+  "usage",
+];
+
+const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
+
+function normalizePowerUserTab(value: unknown): PowerUserTab {
+  return POWER_USER_EVENT_TABS.includes(value as PowerUserTab)
+    ? (value as PowerUserTab)
+    : "controls";
+}
+
+function takePendingPowerUserTab(): PowerUserTab | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(POWER_USER_PENDING_TAB_KEY);
+    if (!raw) return null;
+    window.sessionStorage.removeItem(POWER_USER_PENDING_TAB_KEY);
+    return normalizePowerUserTab(raw);
+  } catch {
+    return null;
+  }
+}
+
 const SYSTEM_NOTICE_KINDS: readonly SystemNoticeKind[] = [
   "compaction",
   "provider_fallback",
@@ -5995,6 +6026,28 @@ export function ChatArea() {
       window.removeEventListener("zaki:approval-resolved", handleApprovalResolved);
     };
   }, [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest?.id]);
+
+  useEffect(() => {
+    const handleOpenPowerUser = (event: Event) => {
+      if (!isAgentSurface) return;
+      const detail = (event as CustomEvent<{ tab?: unknown } | undefined>).detail;
+      setPowerUserInitialTab(normalizePowerUserTab(detail?.tab));
+      setPowerUserOpen(true);
+    };
+
+    window.addEventListener("zaki:open-power-user", handleOpenPowerUser);
+    return () => {
+      window.removeEventListener("zaki:open-power-user", handleOpenPowerUser);
+    };
+  }, [isAgentSurface]);
+
+  useEffect(() => {
+    if (!isAgentSurface) return;
+    const pendingTab = takePendingPowerUserTab();
+    if (!pendingTab) return;
+    setPowerUserInitialTab(pendingTab);
+    setPowerUserOpen(true);
+  }, [isAgentSurface]);
 
   // ZakiSessionList per-row share button dispatches this event after
   // navigating to the chosen session. We queue the requested sessionKey
