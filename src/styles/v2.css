@@ -3674,6 +3674,10 @@
   letter-spacing: 0;
 }
 
+.zaki-agent-inspector :where(button, input, textarea, select) {
+  font-family: var(--v2-font-mono);
+}
+
 .zaki-agent-inspector__head {
   display: flex;
   min-height: 64px;
@@ -3717,100 +3721,103 @@
   padding: 0 10px;
 }
 
-.zaki-agent-inspector__capabilities {
-  margin: 12px 12px 0;
-}
-
-.zaki-agent-inspector__capability-grid {
-  display: grid;
-  gap: 1px;
-  border-top: 1px solid var(--v2-hairline-faint);
-  background: var(--v2-hairline-faint);
-}
-
-.zaki-agent-inspector__capability-card {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 9px;
+.zaki-agent-inspector__tabs button {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  flex-direction: column;
   align-items: center;
-  min-height: 48px;
-  padding: 9px 10px;
-  border: 0;
-  background: var(--v2-bg);
-  color: var(--v2-ink-2);
-  text-align: left;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 3px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.zaki-agent-inspector__capability-card:not(:disabled) {
+.zaki-agent-inspector__tabs .count {
+  margin-left: 0;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.zaki-agent-inspector__panel-action {
+  display: inline-flex;
+  width: calc(100% - 20px);
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.zaki-agent-inspector__panel-action:not(:disabled) {
   cursor: pointer;
 }
 
-.zaki-agent-inspector__capability-card:not(:disabled):hover,
-.zaki-agent-inspector__capability-card:not(:disabled):focus-visible {
-  background: var(--v2-bg-raised);
-  color: var(--v2-ink-1);
+.zaki-agent-inspector__panel-action:not(:disabled):hover,
+.zaki-agent-inspector__panel-action:not(:disabled):focus-visible {
+  border-color: var(--v2-accent);
+  background: var(--v2-selected);
+  color: var(--v2-accent);
 }
 
-.zaki-agent-inspector__capability-card:focus-visible {
+.zaki-agent-inspector__panel-action:focus-visible {
   outline: 1px solid var(--v2-accent);
   outline-offset: -1px;
 }
 
-.zaki-agent-inspector__capability-card:disabled {
-  opacity: 0.72;
-}
-
-.zaki-agent-inspector__capability-icon {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--v2-hairline-faint);
-  color: var(--v2-ink-3);
-}
-
-.zaki-agent-inspector__capability-card[data-tone="success"] .zaki-agent-inspector__capability-icon {
-  color: var(--v2-success);
-}
-
-.zaki-agent-inspector__capability-card[data-tone="accent"] .zaki-agent-inspector__capability-icon {
-  color: var(--v2-accent);
-}
-
-.zaki-agent-inspector__capability-card[data-tone="warn"] .zaki-agent-inspector__capability-icon {
-  color: var(--v2-warn);
-}
-
-.zaki-agent-inspector__capability-title,
-.zaki-agent-inspector__capability-meta {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.zaki-agent-inspector__capability-title {
-  color: var(--v2-ink-1);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-.zaki-agent-inspector__capability-meta {
-  margin-top: 2px;
+.zaki-agent-inspector__panel-action:disabled {
   color: var(--v2-ink-4);
-  font-size: 10px;
+  cursor: not-allowed;
+}
+
+.zaki-agent-inspector__fact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid var(--v2-hairline-faint);
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__fact-grid > div {
+  min-width: 0;
+  padding: 10px;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__fact-grid dt {
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__fact-grid dd {
+  margin-top: 4px;
+  color: var(--v2-ink-1);
+  font-size: 11px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
 .zaki-agent-inspector__task-list,
-.zaki-agent-inspector__trace-list {
+.zaki-agent-inspector__trace-list,
+.zaki-agent-inspector__event-list {
   list-style: none;
   padding: 0;
 }
@@ -3825,7 +3832,8 @@
 }
 
 .zaki-agent-inspector__task-list li:last-child,
-.zaki-agent-inspector__trace-list li:last-child {
+.zaki-agent-inspector__trace-list li:last-child,
+.zaki-agent-inspector__event-list li:last-child {
   border-bottom: 0;
 }
 
@@ -3849,18 +3857,20 @@
 }
 
 .zaki-agent-inspector__task-list span,
-.zaki-agent-inspector__trace-list span {
+.zaki-agent-inspector__trace-list span,
+.zaki-agent-inspector__event-list span {
   display: block;
   min-width: 0;
   color: var(--v2-ink-2);
-  font-family: var(--v2-font-prose);
+  font-family: var(--v2-font-mono);
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .zaki-agent-inspector__task-list small,
-.zaki-agent-inspector__task-list b {
+.zaki-agent-inspector__task-list b,
+.zaki-agent-inspector__event-list small {
   color: var(--v2-ink-4);
   font-size: 10px;
   font-weight: 400;
@@ -3871,6 +3881,38 @@
 .zaki-agent-inspector__task-list small {
   display: block;
   margin-top: 3px;
+}
+
+.zaki-agent-inspector__event-list li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__event-icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__event-list strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--v2-ink-1);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__event-list small {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
 }
 
 .zaki-agent-inspector__trace-list li {

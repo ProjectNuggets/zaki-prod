@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   Brain,
   Boxes,
+  CalendarClock,
   CheckCircle2,
   Circle,
   Clock3,
   FileDown,
+  FileText,
   Globe2,
   Loader2,
   PanelRight,
@@ -41,7 +43,13 @@ import type {
 import type { ContextGaugeData } from "./NullalisRuntimeWidgets";
 import { composeTurnTimeline } from "./NullalisTurnTimeline";
 
-type AgentInspectorTab = "plan" | "trace" | "context";
+type AgentInspectorTab =
+  | "plan"
+  | "cron"
+  | "sources"
+  | "artifacts"
+  | "browser"
+  | "trace";
 
 export type AgentInspectorRailProps = {
   mode: AgentSessionMode | null;
@@ -133,6 +141,60 @@ function modeLabel(mode: AgentSessionMode | null) {
   return "Execute";
 }
 
+function transcriptLabel(entry: NullalisTranscriptEntry): string {
+  return entry.tool || entry.intent || entry.kind;
+}
+
+function transcriptSummary(entry: NullalisTranscriptEntry): string {
+  return (
+    entry.activityLabel ||
+    entry.resultSummary ||
+    entry.outputPreview ||
+    entry.inputPreview ||
+    entry.text
+  );
+}
+
+function entryMatches(entry: NullalisTranscriptEntry, terms: readonly string[]) {
+  const haystack = [
+    entry.intent,
+    entry.kind,
+    entry.tool,
+    entry.activityLabel,
+    entry.text,
+    entry.resultSummary,
+    entry.inputPreview,
+    entry.outputPreview,
+    ...(entry.files ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return terms.some((term) => haystack.includes(term));
+}
+
+function PanelActionButton({
+  children,
+  onClick,
+  ariaLabel,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="zaki-agent-inspector__panel-action"
+      onClick={onClick}
+      disabled={!onClick}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function AgentInspectorRail({
   mode,
   modePending = false,
@@ -161,6 +223,7 @@ export function AgentInspectorRail({
   onExport,
 }: AgentInspectorRailProps) {
   const [tab, setTab] = useState<AgentInspectorTab>("plan");
+  const [manualTabSelected, setManualTabSelected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -175,6 +238,41 @@ export function AgentInspectorRail({
     [transcriptEntries]
   );
   const recentTrace = useMemo(() => transcriptEntries.slice(-7).reverse(), [transcriptEntries]);
+  const sourceEntries = useMemo(
+    () =>
+      transcriptEntries
+        .filter(
+          (entry) =>
+            entry.intent === "memory" ||
+            entry.intent === "context" ||
+            entry.intent === "file" ||
+            Boolean(entry.files?.length) ||
+            entryMatches(entry, ["source", "citation", "document", "web"])
+        )
+        .slice(-5)
+        .reverse(),
+    [transcriptEntries]
+  );
+  const artifactEntries = useMemo(
+    () =>
+      transcriptEntries
+        .filter(
+          (entry) =>
+            Boolean(entry.files?.length) ||
+            entryMatches(entry, ["artifact", "canvas", "document", "export", "pdf", "docx"])
+        )
+        .slice(-5)
+        .reverse(),
+    [transcriptEntries]
+  );
+  const browserEntries = useMemo(
+    () =>
+      transcriptEntries
+        .filter((entry) => entryMatches(entry, ["browser", "playwright", "extension"]))
+        .slice(-5)
+        .reverse(),
+    [transcriptEntries]
+  );
   const sortedTasks = useMemo(
     () => [...tasks].sort((a, b) => a.updatedAt - b.updatedAt),
     [tasks]
@@ -199,41 +297,17 @@ export function AgentInspectorRail({
     quotaInfo && quotaInfo.limit > 0
       ? Math.max(0, Math.min(100, (quotaInfo.remaining / quotaInfo.limit) * 100))
       : null;
+  const browserActivity =
+    browserEntries.length > 0 || /\b(browser|playwright|extension)\b/i.test(lastChannel ?? "");
+  const handleTabChange = (nextTab: AgentInspectorTab) => {
+    setManualTabSelected(true);
+    setTab(nextTab);
+  };
 
-  const capabilityCards = [
-    {
-      id: "memory",
-      icon: <Brain className="size-4" aria-hidden />,
-      title: "Graph Memory",
-      meta: "user scoped",
-      tone: "success",
-      onClick: onOpenMemory,
-    },
-    {
-      id: "browser",
-      icon: <Globe2 className="size-4" aria-hidden />,
-      title: "Browser Control",
-      meta: "server + extension",
-      tone: sandbox?.enabled ? "success" : "accent",
-      onClick: onOpenBrowser,
-    },
-    {
-      id: "artifacts",
-      icon: <Boxes className="size-4" aria-hidden />,
-      title: "Artifacts",
-      meta: artifactCount > 0 ? `${artifactCount} events` : "ready",
-      tone: artifactCount > 0 ? "accent" : "default",
-      onClick: onOpenArtifacts,
-    },
-    {
-      id: "trace",
-      icon: <Activity className="size-4" aria-hidden />,
-      title: "Trace Share",
-      meta: `${recentTrace.length} recent`,
-      tone: recentTrace.length > 0 ? "accent" : "default",
-      onClick: onOpenTrace,
-    },
-  ] as const;
+  useEffect(() => {
+    if (!isStreaming || !browserActivity || manualTabSelected) return;
+    setTab("browser");
+  }, [browserActivity, isStreaming, manualTabSelected]);
 
   return (
     <aside className="zaki-agent-inspector" aria-label="Agent inspector">
@@ -276,43 +350,27 @@ export function AgentInspectorRail({
 
       <V2Tabs
         fullWidth
+        className="zaki-agent-inspector__tabs"
         ariaLabel="Agent panels"
         value={tab}
-        onChange={setTab}
+        onChange={handleTabChange}
         options={[
-          { id: "plan", label: "Plan" },
-          { id: "trace", label: "Trace" },
-          { id: "context", label: "Context" },
+          { id: "plan", label: "Plan", count: sortedTasks.length || undefined },
+          { id: "cron", label: "Cron" },
+          { id: "sources", label: "Sources", count: sourceEntries.length || undefined },
+          {
+            id: "artifacts",
+            label: "Artifacts",
+            count: artifactCount || artifactEntries.length || undefined,
+          },
+          {
+            id: "browser",
+            label: "Browser",
+            count: browserActivity ? "live" : sandbox?.enabled ? "on" : undefined,
+          },
+          { id: "trace", label: "Trace", count: recentTrace.length || undefined },
         ]}
       />
-
-      <V2Panel className="zaki-agent-inspector__capabilities" aria-label="Agent capabilities">
-        <V2PanelHead title="Capability Plane" meta={defaultModel.contextWindow} />
-        <div className="zaki-agent-inspector__capability-grid">
-          {capabilityCards.map((card) => (
-            <button
-              key={card.id}
-              type="button"
-              className="zaki-agent-inspector__capability-card"
-              data-tone={card.tone}
-              onClick={card.onClick}
-              disabled={!card.onClick}
-            >
-              <span className="zaki-agent-inspector__capability-icon">
-                {card.icon}
-              </span>
-              <span className="min-w-0">
-                <span className="zaki-agent-inspector__capability-title">
-                  {card.title}
-                </span>
-                <span className="zaki-agent-inspector__capability-meta">
-                  {card.meta}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </V2Panel>
 
       <div className="zaki-agent-inspector__body">
         {tab === "plan" ? (
@@ -349,40 +407,28 @@ export function AgentInspectorRail({
           </V2Panel>
         ) : null}
 
-        {tab === "trace" ? (
-          <V2Panel aria-label="Trace">
-            <V2PanelHead title="Activity Trace" meta={`${timelineBlocks.length} blocks`} />
-            {narrationFrame ? (
-              <V2InlineRow
-                tone="accent"
-                icon={<Activity className="size-4" aria-hidden />}
-                title={narrationFrame.label}
-                meta={narrationFrame.tool || narrationFrame.phase}
-              />
-            ) : null}
-            {recentTrace.length ? (
-              <ol className="zaki-agent-inspector__trace-list">
-                {recentTrace.map((entry) => (
-                  <li key={entry.id}>
-                    <span className="zaki-agent-inspector__trace-dot" aria-hidden />
-                    <div>
-                      <strong>{entry.tool || entry.intent || entry.kind}</strong>
-                      <span>{entry.activityLabel || entry.text}</span>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="v2-empty-line">
-                {isStreaming ? "Waiting for trace events." : "No trace in this turn."}
-              </div>
-            )}
+        {tab === "cron" ? (
+          <V2Panel aria-label="Cron">
+            <V2PanelHead title="Cron" meta="scheduled runs" />
+            <V2InlineRow
+              tone={isStreaming ? "accent" : "default"}
+              icon={<CalendarClock className="size-4" aria-hidden />}
+              title={isStreaming ? "Foreground run active" : "No scheduled run active"}
+              meta={
+                isStreaming
+                  ? "This turn is live now; scheduled runs will be linked here."
+                  : "Automations and background retries will appear here once wired."
+              }
+            />
+            <div className="v2-empty-line">
+              No linked cron jobs or autonomous follow-ups in this session.
+            </div>
           </V2Panel>
         ) : null}
 
-        {tab === "context" ? (
-          <V2Panel aria-label="Context">
-            <V2PanelHead title="Context" meta={lastChannel || "agent"} />
+        {tab === "sources" ? (
+          <V2Panel aria-label="Sources">
+            <V2PanelHead title="Sources" meta={lastChannel || "agent"} />
             <V2Meter
               label="Context window"
               value={ctxPct}
@@ -397,6 +443,133 @@ export function AgentInspectorRail({
                 label="Weekly allowance"
                 value={weeklyRemaining}
                 detail={`${quotaInfo?.remaining ?? 0} of ${quotaInfo?.limit ?? 0} preview turns`}
+              />
+            ) : null}
+            <V2MetricGrid
+              columns={2}
+              items={[
+                { id: "memory", label: "Memory", value: "User scoped" },
+                { id: "model", label: "Model", value: defaultModel.label },
+              ]}
+            />
+            {sourceEntries.length ? (
+              <ol className="zaki-agent-inspector__event-list">
+                {sourceEntries.map((entry) => (
+                  <li key={entry.id}>
+                    <FileText className="zaki-agent-inspector__event-icon" aria-hidden />
+                    <div>
+                      <strong>{transcriptLabel(entry)}</strong>
+                      <span>{transcriptSummary(entry)}</span>
+                      {entry.files?.length ? <small>{entry.files.join(", ")}</small> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="v2-empty-line">
+                No sources surfaced in this turn yet.
+              </div>
+            )}
+            <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">
+              <Brain className="size-4" aria-hidden />
+              Open memory graph
+            </PanelActionButton>
+          </V2Panel>
+        ) : null}
+
+        {tab === "artifacts" ? (
+          <V2Panel aria-label="Artifacts">
+            <V2PanelHead
+              title="Artifacts"
+              meta={`${artifactCount || artifactEntries.length || 0} events`}
+            />
+            <V2InlineRow
+              tone={artifactCount || artifactEntries.length ? "accent" : "default"}
+              icon={<Boxes className="size-4" aria-hidden />}
+              title={
+                artifactCount || artifactEntries.length
+                  ? "Artifact activity captured"
+                  : "No artifact activity"
+              }
+              meta="Documents, canvases, exports, and generated files"
+            />
+            {artifactEntries.length ? (
+              <ol className="zaki-agent-inspector__event-list">
+                {artifactEntries.map((entry) => (
+                  <li key={entry.id}>
+                    <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
+                    <div>
+                      <strong>{transcriptLabel(entry)}</strong>
+                      <span>{transcriptSummary(entry)}</span>
+                      {entry.files?.length ? <small>{entry.files.join(", ")}</small> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="v2-empty-line">
+                Generated outputs will appear here as the agent creates them.
+              </div>
+            )}
+            <PanelActionButton onClick={onOpenArtifacts} ariaLabel="Open artifacts manager">
+              <Boxes className="size-4" aria-hidden />
+              Open artifacts
+            </PanelActionButton>
+          </V2Panel>
+        ) : null}
+
+        {tab === "browser" ? (
+          <V2Panel aria-label="Browser">
+            <V2PanelHead title="Browser" meta={sandboxLabel} />
+            <V2InlineRow
+              tone={browserActivity || sandbox?.enabled ? "accent" : "default"}
+              icon={<Globe2 className="size-4" aria-hidden />}
+              title={browserActivity ? "Browser activity detected" : "Browser lane ready"}
+              meta="Server Playwright plus extension handoff"
+            />
+            <dl className="zaki-agent-inspector__fact-grid">
+              <div>
+                <dt>Sandbox</dt>
+                <dd>{sandboxLabel}</dd>
+              </div>
+              <div>
+                <dt>Extension</dt>
+                <dd>{sandbox?.enabled ? "available" : "idle"}</dd>
+              </div>
+            </dl>
+            {browserEntries.length ? (
+              <ol className="zaki-agent-inspector__event-list">
+                {browserEntries.map((entry) => (
+                  <li key={entry.id}>
+                    <Globe2 className="zaki-agent-inspector__event-icon" aria-hidden />
+                    <div>
+                      <strong>{transcriptLabel(entry)}</strong>
+                      <span>{transcriptSummary(entry)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="v2-empty-line">
+                Browser traces will appear here when the agent opens or controls a page.
+              </div>
+            )}
+            <PanelActionButton onClick={onOpenBrowser} ariaLabel="Open browser controls">
+              <Globe2 className="size-4" aria-hidden />
+              Open browser controls
+            </PanelActionButton>
+          </V2Panel>
+        ) : null}
+
+        {tab === "trace" ? (
+          <V2Panel aria-label="Trace">
+            <V2PanelHead title="Trace" meta={`${timelineBlocks.length} blocks`} />
+            {narrationFrame ? (
+              <V2InlineRow
+                tone="accent"
+                icon={<Activity className="size-4" aria-hidden />}
+                title={narrationFrame.label}
+                meta={narrationFrame.tool || narrationFrame.phase}
               />
             ) : null}
             <V2MetricGrid
@@ -422,10 +595,29 @@ export function AgentInspectorRail({
                   label: "Session",
                   value: formatWeight(usageSummary?.sessionWeight),
                 },
-                { id: "memory", label: "Memory", value: "User scoped" },
-                { id: "model", label: "Model", value: defaultModel.label },
               ]}
             />
+            {recentTrace.length ? (
+              <ol className="zaki-agent-inspector__trace-list">
+                {recentTrace.map((entry) => (
+                  <li key={entry.id}>
+                    <span className="zaki-agent-inspector__trace-dot" aria-hidden />
+                    <div>
+                      <strong>{entry.tool || entry.intent || entry.kind}</strong>
+                      <span>{entry.activityLabel || entry.text}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="v2-empty-line">
+                {isStreaming ? "Waiting for trace events." : "No trace in this turn."}
+              </div>
+            )}
+            <PanelActionButton onClick={onOpenTrace} ariaLabel="Open trace viewer">
+              <Activity className="size-4" aria-hidden />
+              Open trace viewer
+            </PanelActionButton>
           </V2Panel>
         ) : null}
       </div>
