@@ -236,11 +236,13 @@ type NavState = {
   view: "home" | "spaces" | "space-detail" | "chat";
   spaceId: string | null;
   threadId: string | null;
+  zakiSessionKey: string | null;
   goHome: () => void;
   goToSpaces: () => void;
   goToSpace: (spaceId: string) => void;
   goToThread: (spaceId: string, threadId: string) => void;
   clearThread: () => void;
+  setZakiSessionKey: (sessionKey: string | null) => void;
 };
 
 type TestZakiSessionUiState = {
@@ -309,11 +311,15 @@ describe("ChatArea Component", () => {
       view: "chat",
       spaceId: null,
       threadId: null,
+      zakiSessionKey: null,
       goHome: jest.fn(),
       goToSpaces: jest.fn(),
       goToSpace: jest.fn(),
       goToThread: jest.fn(),
       clearThread: jest.fn(),
+      setZakiSessionKey: jest.fn((sessionKey: string | null) => {
+        navState.zakiSessionKey = sessionKey;
+      }),
     };
 
     (useNavigationStore as jest.Mock).mockImplementation((selector?: (state: NavState) => unknown) =>
@@ -567,6 +573,40 @@ describe("ChatArea Component", () => {
       );
     });
     expect(window.sessionStorage.getItem("zaki:pendingPowerUserTab")).toBeNull();
+  });
+
+  it("opens exact Agent power tabs from composer control actions", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "agent@example.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "agent@example.com");
+
+    await renderChatAreaAndWaitForEffects();
+
+    fireEvent.click(screen.getByTestId("zaki-composer-open-approvals"));
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-tab-approvals")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+
+    fireEvent.click(screen.getByTestId("zaki-composer-open-browser"));
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-tab-browser")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+
+    fireEvent.click(screen.getByTestId("zaki-composer-open-output"));
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-tab-artifacts")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
   });
 
   it("parses task progress events as structured live execution", () => {

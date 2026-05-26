@@ -92,6 +92,7 @@ export function detectMention(
 // drafts, sessionStorage, and attachment-clearing all stay consistent.
 export type InputAreaHandle = {
   submitWith: (text: string) => void;
+  setDraft: (text: string) => void;
 };
 
 export function InputArea({
@@ -694,8 +695,29 @@ export function InputArea({
     composerHandleRef,
     () => ({
       submitWith: (text: string) => submitMessage(text),
+      setDraft: (text: string) => {
+        const next = String(text ?? "");
+        setInputValue(next);
+        if (draftStorageKey && typeof window !== "undefined") {
+          try {
+            if (next) {
+              window.sessionStorage.setItem(draftStorageKey, next);
+            } else {
+              window.sessionStorage.removeItem(draftStorageKey);
+            }
+          } catch {
+            /* ignore quota / disabled storage */
+          }
+        }
+        if (typeof window !== "undefined") {
+          window.requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+            textareaRef.current?.setSelectionRange(next.length, next.length);
+          });
+        }
+      },
     }),
-    [submitMessage, composerHandleRef]
+    [submitMessage, composerHandleRef, draftStorageKey]
   );
 
   // 2026-05-08 — Draft persistence side-effects.
@@ -1046,6 +1068,11 @@ export function InputArea({
                 )}
                 onClick={onOpenZakiApprovals}
                 disabled={!onOpenZakiApprovals}
+                aria-label={t("input.zaki.approvalsAria", {
+                  defaultValue: "{{count}} pending approvals",
+                  count: normalizedApprovalCount,
+                })}
+                title={t("input.zaki.approvals", { defaultValue: "Approvals" })}
                 data-testid="zaki-composer-open-approvals"
               >
                 <ShieldCheck className="size-3.5" aria-hidden />
@@ -1057,6 +1084,11 @@ export function InputArea({
                 className="zaki-composer-surface-action"
                 onClick={onOpenZakiBrowser}
                 disabled={!onOpenZakiBrowser}
+                aria-label={t("input.zaki.browserAria", {
+                  defaultValue: "Open browser controls. Sandbox {{state}}",
+                  state: sandboxCopy,
+                })}
+                title={t("input.zaki.browser", { defaultValue: "Browser" })}
                 data-testid="zaki-composer-open-browser"
               >
                 <Globe2 className="size-3.5" aria-hidden />
@@ -1068,6 +1100,11 @@ export function InputArea({
                 className="zaki-composer-surface-action"
                 onClick={() => setPinContextOpen(true)}
                 disabled={!agentUserId}
+                aria-label={t("input.zaki.memoryAria", {
+                  defaultValue: "{{count}} pinned memories",
+                  count: pinnedMemories.length,
+                })}
+                title={t("input.zaki.memory", { defaultValue: "Memory" })}
                 data-testid="zaki-composer-open-memory"
               >
                 <Brain className="size-3.5" aria-hidden />
@@ -1079,6 +1116,11 @@ export function InputArea({
                 className="zaki-composer-surface-action"
                 onClick={onOpenZakiArtifacts}
                 disabled={!onOpenZakiArtifacts}
+                aria-label={t("input.zaki.outputAria", {
+                  defaultValue: "{{count}} outputs available",
+                  count: normalizedArtifactCount,
+                })}
+                title={t("input.zaki.output", { defaultValue: "Output" })}
                 data-testid="zaki-composer-open-output"
               >
                 <Boxes className="size-3.5" aria-hidden />

@@ -3,9 +3,12 @@ import {
   CheckCircle2,
   Circle,
   Loader2,
+  PencilLine,
   ShieldAlert,
+  TimerReset,
+  XCircle,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type {
@@ -13,6 +16,8 @@ import type {
   NullalisTaskItem,
   NullalisTaskStatus,
 } from "./BotStatusRail";
+
+const APPROVAL_DECISION_WINDOW_SECONDS = 60;
 
 function taskStatusCopy(status: NullalisTaskStatus) {
   if (status === "succeeded") return "done";
@@ -89,52 +94,82 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
 export function ApprovalRequiredCard({
   request,
   onApprove,
+  onModify,
   onDeny,
 }: {
   request: NullalisApprovalRequest | null;
   onApprove?: (requestId: string) => void | Promise<void>;
+  onModify?: (requestId: string, request: NullalisApprovalRequest) => void | Promise<void>;
   onDeny?: (requestId: string) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [submitting, setSubmitting] = useState<"approve" | "deny" | null>(null);
-  const [decided, setDecided] = useState<"approved" | "denied" | null>(null);
+  const [submitting, setSubmitting] = useState<"approve" | "modify" | "deny" | null>(null);
+  const [decided, setDecided] = useState<"approved" | "modified" | "denied" | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setSubmitting(null);
+    setDecided(null);
+    setNow(Date.now());
+  }, [request?.id]);
+
+  useEffect(() => {
+    if (!request || decided) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [request, decided]);
+
+  const secondsRemaining = useMemo(() => {
+    if (!request?.timestamp) return APPROVAL_DECISION_WINDOW_SECONDS;
+    const elapsed = Math.max(0, Math.floor((now - request.timestamp) / 1000));
+    return Math.max(0, APPROVAL_DECISION_WINDOW_SECONDS - elapsed);
+  }, [now, request?.timestamp]);
 
   const handleAction = useCallback(
-    async (action: "approve" | "deny") => {
+    async (action: "approve" | "modify" | "deny") => {
       if (!request || submitting || decided) return;
+      const cb =
+        action === "approve" ? onApprove : action === "modify" ? onModify : onDeny;
+      if (!cb) return;
       setSubmitting(action);
       try {
-        const cb = action === "approve" ? onApprove : onDeny;
-        await cb?.(request.id);
-        setDecided(action === "approve" ? "approved" : "denied");
+        await cb(request.id, request);
+        setDecided(
+          action === "approve" ? "approved" : action === "modify" ? "modified" : "denied"
+        );
       } catch {
         setSubmitting(null);
       }
     },
-    [request, submitting, decided, onApprove, onDeny]
+    [request, submitting, decided, onApprove, onModify, onDeny]
   );
 
   if (!request) return null;
 
   if (decided) {
+    const isApproved = decided === "approved";
+    const isModified = decided === "modified";
+    const Icon = isApproved ? CheckCircle2 : isModified ? PencilLine : XCircle;
     return (
       <div
         role="status"
-        className={cn(
-          "mt-2 max-w-[88%] rounded-zaki-xl border p-3 text-xs shadow-sm",
-          decided === "approved"
-            ? "border-zaki-accent/40 bg-zaki-accent-10 text-zaki-accent"
-            : "border-zaki-brand/40 bg-zaki-brand-10 text-zaki-brand"
-        )}
+        className={cn("zaki-approval-card zaki-approval-card--decided", {
+          "is-approved": isApproved,
+          "is-modified": isModified,
+          "is-denied": decided === "denied",
+        })}
       >
-        <div className="flex items-center gap-2">
-          {decided === "approved" ? (
-            <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-          ) : (
-            <ShieldAlert className="size-4 shrink-0" aria-hidden />
-          )}
-          <span className="font-semibold font-mono-ui">
-            {request.tool} . {decided === "approved" ? t("zakiControls.approval.decidedApproved") : t("zakiControls.approval.decidedDenied")}
+        <div className="zaki-approval-card__decided-row">
+          <Icon className="size-4 shrink-0" aria-hidden />
+          <span>
+            {request.tool} .{" "}
+            {isApproved
+              ? t("zakiControls.approval.decidedApproved")
+              : isModified
+                ? t("zakiControls.approval.decidedModified", {
+                    defaultValue: "Revision requested",
+                  })
+                : t("zakiControls.approval.decidedDenied")}
           </span>
         </div>
       </div>
@@ -142,45 +177,66 @@ export function ApprovalRequiredCard({
   }
 
   const approveLabel = t("zakiControls.approval.approveAria", { tool: request.tool });
+  const modifyLabel = t("zakiControls.approval.modifyAria", {
+    defaultValue: "Modify {{tool}} action",
+    tool: request.tool,
+  });
   const denyLabel = t("zakiControls.approval.denyAria", { tool: request.tool });
+  const timerLabel =
+    secondsRemaining > 0
+      ? t("zakiControls.approval.timer", {
+          defaultValue: "{{seconds}}s to decide",
+          seconds: secondsRemaining,
+        })
+      : t("zakiControls.approval.timerElapsed", {
+          defaultValue: "Decision overdue",
+        });
 
   return (
     <div
       role="alertdialog"
       aria-labelledby={`approval-title-${request.id}`}
       aria-describedby={`approval-reason-${request.id}`}
-      className="mt-2 max-w-[88%] rounded-zaki-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-sm dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-100"
+      className="zaki-approval-card"
     >
-      <div className="flex items-start gap-2">
-        <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <div className="min-w-0">
-          <div id={`approval-title-${request.id}`} className="font-semibold">
-            {t("zakiControls.approval.title", { tool: request.tool })}
-          </div>
+      <div className="zaki-approval-card__layout">
+        <ShieldAlert className="zaki-approval-card__icon" aria-hidden />
+        <div className="zaki-approval-card__body">
+          <header className="zaki-approval-card__head">
+            <div>
+              <p>{t("zakiControls.approval.kicker", { defaultValue: "Approval gate" })}</p>
+              <h3 id={`approval-title-${request.id}`}>
+                {t("zakiControls.approval.title", { tool: request.tool })}
+              </h3>
+            </div>
+            <span
+              className="zaki-approval-card__timer"
+              aria-label={timerLabel}
+            >
+              <TimerReset className="size-3" aria-hidden />
+              {timerLabel}
+            </span>
+          </header>
           <div
             id={`approval-reason-${request.id}`}
-            className="mt-1 text-amber-900/80 dark:text-amber-100/80"
+            className="zaki-approval-card__reason"
           >
             {request.reason || t("zakiControls.approval.defaultReason")}
           </div>
-          <div className="mt-2 text-[11px] uppercase tracking-[0.1em] text-amber-800/70 dark:text-amber-100/70">
-            {t("zakiControls.approval.riskLabel")} {request.riskLevel || "unknown"}
+          <div className="zaki-approval-card__meta">
+            <span>{t("zakiControls.approval.riskLabel")} {request.riskLevel || "unknown"}</span>
+            <span>{request.tool}</span>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="zaki-approval-card__actions">
             <button
               type="button"
-              disabled={!!submitting}
+              disabled={!!submitting || !onApprove}
               onClick={() => handleAction("approve")}
               aria-label={approveLabel}
-              className={cn(
-                "rounded-full border border-zaki-accent bg-zaki-accent px-3 py-1 text-[11px] font-semibold text-white transition-colors",
-                "hover:bg-zaki-accent-hover",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50 dark:focus-visible:ring-offset-amber-950",
-                submitting === "approve" && "opacity-70"
-              )}
+              className={cn("zaki-approval-card__button is-primary", submitting === "approve" && "is-loading")}
             >
               {submitting === "approve" ? (
-                <span className="flex items-center gap-1">
+                <span>
                   <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.approvingState")}
                 </span>
               ) : (
@@ -189,18 +245,31 @@ export function ApprovalRequiredCard({
             </button>
             <button
               type="button"
-              disabled={!!submitting}
+              disabled={!!submitting || !onModify}
+              onClick={() => handleAction("modify")}
+              aria-label={modifyLabel}
+              className={cn("zaki-approval-card__button", submitting === "modify" && "is-loading")}
+            >
+              {submitting === "modify" ? (
+                <span>
+                  <Loader2 className="size-3 animate-spin" aria-hidden />{" "}
+                  {t("zakiControls.approval.modifyingState", {
+                    defaultValue: "Preparing...",
+                  })}
+                </span>
+              ) : (
+                t("zakiControls.approval.modifyBtn", { defaultValue: "Modify" })
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={!!submitting || !onDeny}
               onClick={() => handleAction("deny")}
               aria-label={denyLabel}
-              className={cn(
-                "rounded-full border border-zaki-brand bg-zaki-brand px-3 py-1 text-[11px] font-semibold text-white transition-colors",
-                "hover:bg-zaki-brand-hover",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50 dark:focus-visible:ring-offset-amber-950",
-                submitting === "deny" && "opacity-70"
-              )}
+              className={cn("zaki-approval-card__button is-danger", submitting === "deny" && "is-loading")}
             >
               {submitting === "deny" ? (
-                <span className="flex items-center gap-1">
+                <span>
                   <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.denyingState")}
                 </span>
               ) : (

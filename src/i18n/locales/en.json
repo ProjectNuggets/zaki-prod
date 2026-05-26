@@ -569,7 +569,15 @@
       "contextPercentUnknown": "Context: waiting for the agent to report token pressure",
       "contextCompactAria": "Context at {{percent}} percent. Click to compact.",
       "contextCompactHint": "Click to compact and free space.",
-      "contextCompactBusy": "Compacting..."
+      "contextCompactBusy": "Compacting...",
+      "approvals": "Approvals",
+      "approvalsAria": "{{count}} pending approvals",
+      "browser": "Browser",
+      "browserAria": "Open browser controls. Sandbox {{state}}",
+      "memory": "Memory",
+      "memoryAria": "{{count}} pinned memories",
+      "output": "Output",
+      "outputAria": "{{count}} outputs available"
     },
     "voice": {
       "tapToRecord": "Tap to record",
@@ -898,13 +906,22 @@
       "defaultReason": "ZAKI requested approval before continuing.",
       "riskLabel": "Risk:",
       "approveAria": "Approve {{tool}} action",
+      "modifyAria": "Modify {{tool}} action",
       "denyAria": "Deny {{tool}} action",
+      "kicker": "Approval gate",
       "approveBtn": "Approve",
+      "modifyBtn": "Modify",
       "denyBtn": "Deny",
       "approvingState": "Approving...",
+      "modifyingState": "Preparing...",
       "denyingState": "Denying...",
       "decidedApproved": "Approved",
-      "decidedDenied": "Denied"
+      "decidedModified": "Revision requested",
+      "decidedDenied": "Denied",
+      "timer": "{{seconds}}s to decide",
+      "timerElapsed": "Decision overdue",
+      "modifyDraft": "Please retry {{tool}} with these changes: ",
+      "modifyReady": "Approval denied. Describe the change and ZAKI will retry."
     },
     "sidebarMenu": {
       "settings": "Settings",

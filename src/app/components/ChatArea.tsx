@@ -5959,7 +5959,11 @@ export function ChatArea() {
   );
 
   const handleApprovalAction = useCallback(
-    async (requestId: string, approved: boolean) => {
+    async (
+      requestId: string,
+      approved: boolean,
+      options?: { reason?: string; tool?: string | null }
+    ) => {
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) {
         toast.error("Agent user ID not yet resolved — try again in a moment");
@@ -5969,8 +5973,8 @@ export function ChatArea() {
         await approveAgentSession(sessionKey, {
           approved,
           approval_id: requestId,
-          tool: nullalisApprovalRequest?.tool,
-          reason: approved ? undefined : "User denied from UI",
+          tool: options?.tool ?? nullalisApprovalRequest?.tool,
+          reason: approved ? undefined : options?.reason ?? "User denied from UI",
         });
         decrementSessionApprovalCount(sessionKey, requestId);
         setNullalisApprovalRequest(null);
@@ -5988,10 +5992,31 @@ export function ChatArea() {
       agentUserId,
       decrementSessionApprovalCount,
       hydrateActiveSessionDetail,
-      nullalisApprovalRequest,
+      nullalisApprovalRequest?.tool,
       queryClient,
       t,
     ]
+  );
+
+  const handleApprovalModify = useCallback(
+    async (requestId: string, request: NullalisApprovalRequest) => {
+      await handleApprovalAction(requestId, false, {
+        tool: request.tool,
+        reason: "User requested modified arguments from UI",
+      });
+      composerHandleRef.current?.setDraft(
+        t("zakiControls.approval.modifyDraft", {
+          defaultValue: "Please retry {{tool}} with these changes: ",
+          tool: request.tool,
+        })
+      );
+      toast.info(
+        t("zakiControls.approval.modifyReady", {
+          defaultValue: "Approval denied. Describe the change and ZAKI will retry.",
+        })
+      );
+    },
+    [handleApprovalAction, t]
   );
 
   const handleSessionModeChange = useCallback(
@@ -7028,6 +7053,7 @@ export function ChatArea() {
                   <ApprovalRequiredCard
                     request={nullalisApprovalRequest}
                     onApprove={handleApprovalAction ? (id) => handleApprovalAction(id, true) : undefined}
+                    onModify={handleApprovalModify}
                     onDeny={handleApprovalAction ? (id) => handleApprovalAction(id, false) : undefined}
                   />
                 </div>

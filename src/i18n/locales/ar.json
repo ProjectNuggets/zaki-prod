@@ -569,7 +569,15 @@
       "contextPercentUnknown": "السياق: في انتظار تقرير ضغط الرموز من الوكيل",
       "contextCompactAria": "السياق عند {{percent}} بالمئة. اضغط للتقليص.",
       "contextCompactHint": "اضغط لتقليص السياق وتوفير مساحة.",
-      "contextCompactBusy": "جارٍ التقليص..."
+      "contextCompactBusy": "جارٍ التقليص...",
+      "approvals": "الموافقات",
+      "approvalsAria": "{{count}} موافقات معلقة",
+      "browser": "المتصفح",
+      "browserAria": "فتح عناصر تحكم المتصفح. البيئة المعزولة {{state}}",
+      "memory": "الذاكرة",
+      "memoryAria": "{{count}} ذكريات مثبتة",
+      "output": "المخرجات",
+      "outputAria": "{{count}} مخرجات متاحة"
     },
     "voice": {
       "tapToRecord": "اضغط للتسجيل",
@@ -898,13 +906,22 @@
       "defaultReason": "زاكي طلب الموافقة قبل المتابعة.",
       "riskLabel": "المخاطرة:",
       "approveAria": "الموافقة على إجراء {{tool}}",
+      "modifyAria": "تعديل إجراء {{tool}}",
       "denyAria": "رفض إجراء {{tool}}",
+      "kicker": "بوابة الموافقة",
       "approveBtn": "موافقة",
+      "modifyBtn": "تعديل",
       "denyBtn": "رفض",
       "approvingState": "جارٍ الموافقة...",
+      "modifyingState": "جارٍ التحضير...",
       "denyingState": "جارٍ الرفض...",
       "decidedApproved": "تمت الموافقة",
-      "decidedDenied": "تم الرفض"
+      "decidedModified": "تم طلب تعديل",
+      "decidedDenied": "تم الرفض",
+      "timer": "{{seconds}} ثانية لاتخاذ القرار",
+      "timerElapsed": "تأخر القرار",
+      "modifyDraft": "أعد محاولة {{tool}} بهذه التغييرات: ",
+      "modifyReady": "تم رفض الموافقة. صف التغيير وسيعيد زكي المحاولة."
     },
     "sidebarMenu": {
       "settings": "الإعدادات",
