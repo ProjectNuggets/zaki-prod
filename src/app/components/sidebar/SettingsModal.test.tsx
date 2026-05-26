@@ -15,9 +15,35 @@ jest.mock("sonner", () => ({
 
 jest.mock("@/lib/api", () => ({
   exportAccountData: jest.fn(),
+  fetchBotSettings: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      assistant_mode: "balanced",
+      group_activation: "mention",
+      proactive_updates: true,
+      voice_replies: false,
+      session_timeout_minutes: 30,
+      dream_enabled: true,
+      query_expansion_enabled: false,
+      selected_model: null,
+    },
+  })),
   fetchGoogleOAuthStatus: jest.fn(async () => ({
     response: { ok: true },
     data: { enabled: true },
+  })),
+  updateBotSettings: jest.fn(async (payload) => ({
+    response: { ok: true },
+    data: {
+      assistant_mode: "balanced",
+      group_activation: "mention",
+      proactive_updates: true,
+      voice_replies: false,
+      session_timeout_minutes: 30,
+      dream_enabled: payload?.dream_enabled ?? true,
+      query_expansion_enabled: payload?.query_expansion_enabled ?? false,
+      selected_model: payload?.selected_model ?? null,
+    },
   })),
   updateProfile: jest.fn(async () => ({
     response: { ok: true },
@@ -129,7 +155,31 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.entryPoints.cli": "CLI",
     "settingsModal.productsAccess.entryPoints.localApp": "Local app",
     "settingsModal.productsAccess.entryPoints.extensions": "Extensions",
+    "settingsModal.agentModel.eyebrow": "Agent model",
+    "settingsModal.agentModel.title": "AI model routing",
+    "settingsModal.agentModel.operatorDefault": "Operator default",
+    "settingsModal.agentModel.userSelected": "User selected",
+    "settingsModal.agentModel.tableLabel": "Agent model options",
+    "settingsModal.agentModel.columns.model": "Model",
+    "settingsModal.agentModel.columns.context": "Context",
+    "settingsModal.agentModel.columns.cost": "Cost",
+    "settingsModal.agentModel.columns.action": "Action",
+    "settingsModal.agentModel.costClass": "Class {{class}}",
+    "settingsModal.agentModel.current": "Current",
+    "settingsModal.agentModel.use": "Use",
+    "settingsModal.agentModel.useOperatorDefault": "Use operator default",
+    "settingsModal.agentModel.helper":
+      "Model changes persist per user and take effect on the next Agent turn.",
+    "settingsModal.agentSettings.loading": "Loading Agent memory settings...",
+    "settingsModal.agentSettings.success.updated": "Agent settings updated.",
+    "settingsModal.agentSettings.errors.update": "Unable to update Agent settings.",
     "settingsModal.memoryData.openMemory": "Open memory controls",
+    "settingsModal.memoryData.dreamReflection": "Dream reflection",
+    "settingsModal.memoryData.dreamReflectionHelper":
+      "Run the nightly 3 AM memory reflection job for this user.",
+    "settingsModal.memoryData.queryExpansion": "Query expansion",
+    "settingsModal.memoryData.queryExpansionHelper":
+      "Expand short or vague memory searches with AI. Improves recall and costs more.",
     "settingsModal.privacy.exportAllData": "Export all data",
     "settingsModal.privacy.exportHelper": "Download your chats and files",
     "settingsModal.privacy.deleteAccount": "Delete account",
@@ -150,7 +200,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{remaining}}", String(options?.remaining ?? ""))
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
-    .replace("{{reset}}", String(options?.reset ?? ""));
+    .replace("{{reset}}", String(options?.reset ?? ""))
+    .replace("{{class}}", String(options?.class ?? ""));
 };
 
 jest.mock("react-i18next", () => ({
@@ -607,7 +658,11 @@ describe("SettingsPage", () => {
 
     expect(within(screen.getByTestId("settings-platform-usage")).getByText("ZAKI Hire")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-products-access")).getByText("ZAKI Design")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-agent-model")).getAllByText("Kimi K2.6").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("settings-agent-model")).getByText("Claude Opus 4.7")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Personal brain")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-memory-data")).getByText("Dream reflection")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-memory-data")).getByText("Query expansion")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();

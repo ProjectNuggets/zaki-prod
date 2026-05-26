@@ -1445,8 +1445,14 @@ export function extractNullalisUsageSummary(
 ): ZakiUsageSummary | null {
   const usageTokens = numericValue(payload.usage_tokens ?? payload.usageTokens);
   const costUsd = numericValue(payload.cost_usd ?? payload.costUsd);
-  if (usageTokens == null && costUsd == null) return null;
-  return { usageTokens, costUsd };
+  const turnWeight = numericValue(
+    payload.turn_weight ?? payload.turnWeight ?? payload.weighted_debit ?? payload.weightedDebit
+  );
+  const sessionWeight = numericValue(payload.session_weight ?? payload.sessionWeight);
+  if (usageTokens == null && costUsd == null && turnWeight == null && sessionWeight == null) {
+    return null;
+  }
+  return { usageTokens, costUsd, turnWeight, sessionWeight };
 }
 
 export function extractNullalisReasoningNarrationFrame(
@@ -1938,6 +1944,41 @@ export function extractNullalisTranscriptEntry(
     };
   }
 
+  if (type === "artifact_event") {
+    const artifactTitle =
+      (typeof payload.title === "string" && payload.title.trim()) ||
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      (typeof payload.artifact_id === "string" && payload.artifact_id.trim()) ||
+      (typeof payload.artifactId === "string" && payload.artifactId.trim()) ||
+      "artifact";
+    const eventName =
+      (typeof payload.event === "string" && payload.event.trim()) ||
+      (typeof payload.action === "string" && payload.action.trim()) ||
+      (typeof payload.status === "string" && payload.status.trim()) ||
+      "updated";
+    const artifactType =
+      (typeof payload.artifact_type === "string" && payload.artifact_type.trim()) ||
+      (typeof payload.artifactType === "string" && payload.artifactType.trim()) ||
+      (typeof payload.type_name === "string" && payload.type_name.trim()) ||
+      null;
+    const text = `Artifact ${eventName}: ${artifactTitle}`;
+    return {
+      id: nullalisEntryId("artifact", now),
+      kind: "tool",
+      intent: "file",
+      text,
+      timestamp: now,
+      importance: 82,
+      phase: "artifact_event",
+      tool: "artifact",
+      status: eventName,
+      resultSummary: artifactType,
+      resultState: eventName.toLowerCase().includes("fail") ? "failed" : "done",
+      groupKey: `artifact:${artifactTitle}`,
+      source: "tool",
+    };
+  }
+
   if (type === "done") {
     return {
       id: nullalisEntryId("done", now),
@@ -2062,6 +2103,7 @@ export function ChatArea() {
   const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
+  const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
   const [nullalisContextGauge, setNullalisContextGauge] = useState<{
     tokenCount: number;
     contextMax: number;
@@ -3214,6 +3256,7 @@ export function ChatArea() {
       setNullalisTranscriptEntries([]);
       setNullalisTaskItems([]);
       setNullalisApprovalRequest(null);
+      setAgentArtifactEventCount(0);
       setZakiUsageSummary(null);
     }
   }, []);
@@ -4456,6 +4499,11 @@ export function ChatArea() {
         }
         if (eventType === "task_update" || payloadType === "task_update") {
           upsertNullalisTaskItem(payload);
+          return {};
+        }
+        if (eventType === "artifact_event" || payloadType === "artifact_event") {
+          setAgentArtifactEventCount((count) => count + 1);
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("artifact_event", payload));
           return {};
         }
         if (eventType === "approval_required" || payloadType === "approval_required") {
@@ -6833,12 +6881,14 @@ export function ChatArea() {
                 narrationFrame={nullalisNarrationFrame}
                 approvalRequest={nullalisApprovalRequest}
                 approvalCount={activeSessionUi?.approvalCount ?? activeSessionRecord?.pending_approval_count ?? 0}
+                artifactCount={agentArtifactEventCount}
                 contextGaugeData={nullalisContextGauge}
                 usageSummary={zakiUsageSummary}
                 quotaInfo={zakiBotQuotaInfo}
                 turnStartedAt={turnStartedAt}
                 turnDurationMs={turnDurationMs}
                 onOpenMemory={openAgentMemorySurface}
+                onOpenSettings={() => navigate("/settings#settings-products")}
                 onShare={handleShare}
                 onExport={handleExport}
               />

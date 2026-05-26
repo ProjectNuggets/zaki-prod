@@ -175,6 +175,8 @@ export type NullalisApprovalRequest = {
 export type ZakiUsageSummary = {
   usageTokens?: number | null;
   costUsd?: number | null;
+  turnWeight?: number | null;
+  sessionWeight?: number | null;
 };
 
 interface BotStatusRailProps {

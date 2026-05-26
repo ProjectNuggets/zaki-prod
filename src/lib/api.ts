@@ -1532,6 +1532,9 @@ export type BotSettingsProfile = BotApiError & {
   voice_replies?: boolean;
   session_timeout_minutes?: number;
   autonomy?: "read_only" | "supervised" | "full";
+  dream_enabled?: boolean;
+  query_expansion_enabled?: boolean;
+  selected_model?: string | null;
 };
 
 export type BotSettingsPatch = {
@@ -1541,6 +1544,9 @@ export type BotSettingsPatch = {
   voice_replies?: boolean;
   session_timeout_minutes?: number;
   autonomy?: "read_only" | "supervised" | "full";
+  dream_enabled?: boolean;
+  query_expansion_enabled?: boolean;
+  selected_model?: string | null;
 };
 
 export type BotTelegramConnectPayload = {

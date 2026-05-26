@@ -685,8 +685,10 @@ describe("ChatArea Component", () => {
       extractNullalisUsageSummary({
         usage_tokens: 1500,
         cost_usd: 0.003,
+        turn_weight: 0.7,
+        session_weight: 3.2,
       })
-    ).toEqual({ usageTokens: 1500, costUsd: 0.003 });
+    ).toEqual({ usageTokens: 1500, costUsd: 0.003, turnWeight: 0.7, sessionWeight: 3.2 });
   });
 
   it("maps nullalis reasoning summaries into visible narration frames", () => {
@@ -852,6 +854,25 @@ describe("ChatArea Component", () => {
       text: "Approval required for write_file",
       tool: "write_file",
       status: "high",
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "artifact_event",
+        {
+          event: "created",
+          title: "Launch plan",
+          artifact_type: "docx",
+        },
+        556
+      )
+    ).toMatchObject({
+      kind: "tool",
+      intent: "file",
+      text: "Artifact created: Launch plan",
+      tool: "artifact",
+      status: "created",
+      resultSummary: "docx",
     });
 
     expect(extractNullalisTranscriptEntry("done", {}, 666)).toMatchObject({

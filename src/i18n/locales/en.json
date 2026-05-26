@@ -161,8 +161,39 @@
         "extensions": "Extensions"
       }
     },
+    "agentModel": {
+      "eyebrow": "Agent model",
+      "title": "AI model routing",
+      "operatorDefault": "Operator default",
+      "userSelected": "User selected",
+      "tableLabel": "Agent model options",
+      "columns": {
+        "model": "Model",
+        "context": "Context",
+        "cost": "Cost",
+        "action": "Action"
+      },
+      "costClass": "Class {{class}}",
+      "current": "Current",
+      "use": "Use",
+      "useOperatorDefault": "Use operator default",
+      "helper": "Model changes persist per user and take effect on the next Agent turn."
+    },
+    "agentSettings": {
+      "loading": "Loading Agent memory settings...",
+      "success": {
+        "updated": "Agent settings updated."
+      },
+      "errors": {
+        "update": "Unable to update Agent settings."
+      }
+    },
     "memoryData": {
-      "openMemory": "Open memory controls"
+      "openMemory": "Open memory controls",
+      "dreamReflection": "Dream reflection",
+      "dreamReflectionHelper": "Run the nightly 3 AM memory reflection job for this user.",
+      "queryExpansion": "Query expansion",
+      "queryExpansionHelper": "Expand short or vague memory searches with AI. Improves recall and costs more."
     },
     "privacy": {
       "preparingExport": "Preparing export...",

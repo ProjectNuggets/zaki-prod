@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   Boxes,
+  Cpu,
   CreditCard,
   Database,
   Gauge,
@@ -23,8 +24,12 @@ import {
 } from "@/queries";
 import {
   exportAccountData,
+  fetchBotSettings,
   fetchGoogleOAuthStatus,
+  updateBotSettings,
   updateProfile,
+  type BotSettingsPatch,
+  type BotSettingsProfile,
   type MeterStatusProduct,
   type MeterWindowSnapshot,
   type PlatformUsageProductId,
@@ -33,6 +38,12 @@ import {
   type ProductRegistryProductId,
   type UsageQuotaSnapshot,
 } from "@/lib/api";
+import {
+  AGENT_MODEL_CATALOG,
+  DEFAULT_AGENT_MODEL_ID,
+  formatAgentModelCapabilities,
+  resolveAgentModel,
+} from "@/lib/agentModelCatalog";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore } from "@/stores";
@@ -87,6 +98,15 @@ const MEMORY_SCOPE_ORDER = [
   "design_memory",
   "session_memory",
 ] as const;
+
+const DEFAULT_AGENT_SETTINGS: Pick<
+  BotSettingsProfile,
+  "dream_enabled" | "query_expansion_enabled" | "selected_model"
+> = {
+  dream_enabled: true,
+  query_expansion_enabled: false,
+  selected_model: null,
+};
 
 function formatUsageCount(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -236,6 +256,12 @@ export function SettingsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean | null>(null);
+  const [agentSettingsDraft, setAgentSettingsDraft] =
+    useState<Pick<BotSettingsProfile, "dream_enabled" | "query_expansion_enabled" | "selected_model">>(
+      DEFAULT_AGENT_SETTINGS
+    );
+  const [agentSettingsLoading, setAgentSettingsLoading] = useState(true);
+  const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
 
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
@@ -290,6 +316,35 @@ export function SettingsPage() {
       })
       .catch(() => {
         if (active) setGoogleOAuthEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setAgentSettingsLoading(true);
+    fetchBotSettings()
+      .then(({ response, data }) => {
+        if (!active) return;
+        if (!response.ok || data?.error) {
+          setAgentSettingsDraft(DEFAULT_AGENT_SETTINGS);
+          return;
+        }
+        setAgentSettingsDraft({
+          dream_enabled: data.dream_enabled ?? DEFAULT_AGENT_SETTINGS.dream_enabled,
+          query_expansion_enabled:
+            data.query_expansion_enabled ?? DEFAULT_AGENT_SETTINGS.query_expansion_enabled,
+          selected_model: data.selected_model ?? DEFAULT_AGENT_SETTINGS.selected_model,
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setAgentSettingsDraft(DEFAULT_AGENT_SETTINGS);
+      })
+      .finally(() => {
+        if (active) setAgentSettingsLoading(false);
       });
     return () => {
       active = false;
@@ -370,6 +425,9 @@ export function SettingsPage() {
       return a.scope.localeCompare(b.scope);
     });
   }, [productAccessRows]);
+  const effectiveAgentModelId = agentSettingsDraft.selected_model || DEFAULT_AGENT_MODEL_ID;
+  const effectiveAgentModel = resolveAgentModel(effectiveAgentModelId);
+  const selectedModelIsOperatorDefault = !agentSettingsDraft.selected_model;
 
   const navItems: V2SettingsNavItem[] = [
     { href: "#settings-account", label: t("settingsModal.nav.account"), icon: UserRound },
@@ -411,6 +469,46 @@ export function SettingsPage() {
       toast.error(t("sidebar.profile.saveError", { defaultValue: "Unable to save profile." }));
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const patchAgentSettings = async (patch: BotSettingsPatch) => {
+    if (agentSettingsSaving) return;
+    const previousDraft = agentSettingsDraft;
+    setAgentSettingsSaving(true);
+    try {
+      const { response, data } = await updateBotSettings(patch);
+      if (!response.ok || data?.error) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            t("settingsModal.agentSettings.errors.update", {
+              defaultValue: "Unable to update Agent settings.",
+            })
+        );
+      }
+      setAgentSettingsDraft({
+        dream_enabled: data.dream_enabled ?? DEFAULT_AGENT_SETTINGS.dream_enabled,
+        query_expansion_enabled:
+          data.query_expansion_enabled ?? DEFAULT_AGENT_SETTINGS.query_expansion_enabled,
+        selected_model: data.selected_model ?? DEFAULT_AGENT_SETTINGS.selected_model,
+      });
+      toast.success(
+        t("settingsModal.agentSettings.success.updated", {
+          defaultValue: "Agent settings updated.",
+        })
+      );
+    } catch (err) {
+      setAgentSettingsDraft(previousDraft);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("settingsModal.agentSettings.errors.update", {
+              defaultValue: "Unable to update Agent settings.",
+            })
+      );
+    } finally {
+      setAgentSettingsSaving(false);
     }
   };
 
@@ -663,6 +761,106 @@ export function SettingsPage() {
               {productAccessRows.length === 0 && !productRegistryLoading ? (
                 <p className="v2-body-sm">{t("settingsModal.productsAccess.empty")}</p>
               ) : null}
+              <div className="zaki-settings-v2__agent-model" data-testid="settings-agent-model">
+                <header>
+                  <div>
+                    <p>{t("settingsModal.agentModel.eyebrow", { defaultValue: "Agent model" })}</p>
+                    <h3>{t("settingsModal.agentModel.title", { defaultValue: "AI model routing" })}</h3>
+                  </div>
+                  <V2Badge tone="accent">
+                    {selectedModelIsOperatorDefault
+                      ? t("settingsModal.agentModel.operatorDefault", {
+                          defaultValue: "Operator default",
+                        })
+                      : t("settingsModal.agentModel.userSelected", {
+                          defaultValue: "User selected",
+                        })}
+                  </V2Badge>
+                </header>
+                <div className="zaki-settings-v2__agent-model-active">
+                  <Cpu className="size-4" aria-hidden />
+                  <div>
+                    <strong>{effectiveAgentModel.label}</strong>
+                    <span>
+                      {effectiveAgentModel.contextWindow} context · {effectiveAgentModel.maxOutput} output ·{" "}
+                      {formatAgentModelCapabilities(effectiveAgentModel)}
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className="zaki-settings-v2__model-table"
+                  role="table"
+                  aria-label={t("settingsModal.agentModel.tableLabel", {
+                    defaultValue: "Agent model options",
+                  })}
+                >
+                  <div role="row" className="zaki-settings-v2__model-table-head">
+                    <span role="columnheader">{t("settingsModal.agentModel.columns.model", { defaultValue: "Model" })}</span>
+                    <span role="columnheader">{t("settingsModal.agentModel.columns.context", { defaultValue: "Context" })}</span>
+                    <span role="columnheader">{t("settingsModal.agentModel.columns.cost", { defaultValue: "Cost" })}</span>
+                    <span role="columnheader">{t("settingsModal.agentModel.columns.action", { defaultValue: "Action" })}</span>
+                  </div>
+                  {AGENT_MODEL_CATALOG.map((model) => {
+                    const isActive = effectiveAgentModel.id === model.id;
+                    return (
+                      <div
+                        key={model.id}
+                        role="row"
+                        className={isActive ? "is-active" : undefined}
+                      >
+                        <span role="cell">
+                          <strong>{model.label}</strong>
+                          <small>{model.note}</small>
+                        </span>
+                        <span role="cell">
+                          {model.contextWindow} · {model.maxOutput}
+                          <small>{formatAgentModelCapabilities(model)}</small>
+                        </span>
+                        <span role="cell">
+                          <V2Badge tone={model.costClass === "C" ? "warn" : "default"}>
+                            {t("settingsModal.agentModel.costClass", {
+                              class: model.costClass,
+                              defaultValue: `Class ${model.costClass}`,
+                            })}
+                          </V2Badge>
+                        </span>
+                        <span role="cell">
+                          <V2Button
+                            size="sm"
+                            disabled={agentSettingsLoading || agentSettingsSaving || isActive}
+                            onClick={() => void patchAgentSettings({ selected_model: model.id })}
+                          >
+                            {isActive
+                              ? t("settingsModal.agentModel.current", { defaultValue: "Current" })
+                              : t("settingsModal.agentModel.use", { defaultValue: "Use" })}
+                          </V2Button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="zaki-settings-v2__actions">
+                  <V2Button
+                    size="sm"
+                    disabled={
+                      agentSettingsLoading ||
+                      agentSettingsSaving ||
+                      selectedModelIsOperatorDefault
+                    }
+                    onClick={() => void patchAgentSettings({ selected_model: null })}
+                  >
+                    {t("settingsModal.agentModel.useOperatorDefault", {
+                      defaultValue: "Use operator default",
+                    })}
+                  </V2Button>
+                </div>
+                <p className="v2-body-sm">
+                  {t("settingsModal.agentModel.helper", {
+                    defaultValue:
+                      "Model changes persist per user and take effect on the next Agent turn.",
+                  })}
+                </p>
+              </div>
               <p className="v2-body-sm">{t("settingsModal.productsAccess.helper")}</p>
             </V2SettingsBlock>
 
@@ -736,6 +934,13 @@ export function SettingsPage() {
               data-testid="settings-memory-data"
               title={t("settingsModal.sections.memoryData")}
             >
+              {agentSettingsLoading ? (
+                <p className="v2-body-sm">
+                  {t("settingsModal.agentSettings.loading", {
+                    defaultValue: "Loading Agent memory settings...",
+                  })}
+                </p>
+              ) : null}
               <div className="zaki-settings-v2__memory-list">
                 {memoryScopeRows.map((row) => (
                   <div key={row.scope}>
@@ -744,6 +949,43 @@ export function SettingsPage() {
                   </div>
                 ))}
               </div>
+              <V2SettingsRow
+                name={t("settingsModal.memoryData.dreamReflection")}
+                description={t("settingsModal.memoryData.dreamReflectionHelper")}
+              >
+                <input
+                  className="v2-toggle"
+                  type="checkbox"
+                  aria-label={t("settingsModal.memoryData.dreamReflection")}
+                  checked={agentSettingsDraft.dream_enabled ?? true}
+                  disabled={agentSettingsLoading || agentSettingsSaving}
+                  onChange={(event) => {
+                    const dream_enabled = event.target.checked;
+                    setAgentSettingsDraft((current) => ({ ...current, dream_enabled }));
+                    void patchAgentSettings({ dream_enabled });
+                  }}
+                />
+              </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.memoryData.queryExpansion")}
+                description={t("settingsModal.memoryData.queryExpansionHelper")}
+              >
+                <input
+                  className="v2-toggle"
+                  type="checkbox"
+                  aria-label={t("settingsModal.memoryData.queryExpansion")}
+                  checked={agentSettingsDraft.query_expansion_enabled ?? false}
+                  disabled={agentSettingsLoading || agentSettingsSaving}
+                  onChange={(event) => {
+                    const query_expansion_enabled = event.target.checked;
+                    setAgentSettingsDraft((current) => ({
+                      ...current,
+                      query_expansion_enabled,
+                    }));
+                    void patchAgentSettings({ query_expansion_enabled });
+                  }}
+                />
+              </V2SettingsRow>
               <div className="zaki-settings-v2__actions">
                 <V2Button size="sm" onClick={() => navigate("/brain")}>
                   {t("settingsModal.memoryData.openMemory")}

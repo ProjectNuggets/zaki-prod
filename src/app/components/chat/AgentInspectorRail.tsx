@@ -2,18 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Brain,
+  Boxes,
   CheckCircle2,
   Circle,
   Clock3,
   FileDown,
+  Globe2,
   Loader2,
   PanelRight,
   Radio,
+  Settings2,
   Share2,
   ShieldCheck,
   ShieldAlert,
 } from "lucide-react";
 import type { AgentSessionMode } from "@/lib/api";
+import { DEFAULT_AGENT_MODEL_ID, resolveAgentModel } from "@/lib/agentModelCatalog";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
   V2ActionGrid,
@@ -52,12 +56,14 @@ export type AgentInspectorRailProps = {
   narrationFrame: NullalisNarrationFrame | null;
   approvalRequest: NullalisApprovalRequest | null;
   approvalCount?: number;
+  artifactCount?: number;
   contextGaugeData: ContextGaugeData | null;
   usageSummary: ZakiUsageSummary | null;
   quotaInfo: { limit: number; remaining: number } | null;
   turnStartedAt?: number | null;
   turnDurationMs?: number | null;
   onOpenMemory?: () => void;
+  onOpenSettings?: () => void;
   onShare?: () => void;
   onExport?: () => void;
 };
@@ -105,6 +111,11 @@ function formatCost(value?: number | null): string {
   return `$${value.toFixed(digits)}`;
 }
 
+function formatWeight(value?: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "0.0";
+  return value.toFixed(value > 0 && value < 0.1 ? 2 : 1);
+}
+
 function contextPercent(data: ContextGaugeData | null): number | null {
   if (!data || !data.contextMax || data.contextMax <= 0) return null;
   const tokenCount =
@@ -132,12 +143,14 @@ export function AgentInspectorRail({
   narrationFrame,
   approvalRequest,
   approvalCount = 0,
+  artifactCount = 0,
   contextGaugeData,
   usageSummary,
   quotaInfo,
   turnStartedAt = null,
   turnDurationMs = null,
   onOpenMemory,
+  onOpenSettings,
   onShare,
   onExport,
 }: AgentInspectorRailProps) {
@@ -174,6 +187,7 @@ export function AgentInspectorRail({
       ? sandbox.backend
       : "enabled"
     : "off";
+  const defaultModel = resolveAgentModel(DEFAULT_AGENT_MODEL_ID);
   const liveState = live === true || isStreaming;
   const weeklyRemaining =
     quotaInfo && quotaInfo.limit > 0
@@ -230,6 +244,36 @@ export function AgentInspectorRail({
           { id: "context", label: "Context" },
         ]}
       />
+
+      <V2Panel className="zaki-agent-inspector__capabilities" aria-label="Agent capabilities">
+        <V2PanelHead title="Capability Plane" meta={defaultModel.contextWindow} />
+        <div className="zaki-agent-inspector__capability-grid">
+          <V2InlineRow
+            icon={<Brain className="size-4" aria-hidden />}
+            title="Graph Memory"
+            meta="user scoped"
+            tone="success"
+          />
+          <V2InlineRow
+            icon={<Globe2 className="size-4" aria-hidden />}
+            title="Browser Control"
+            meta="server + extension"
+            tone={sandbox?.enabled ? "success" : "accent"}
+          />
+          <V2InlineRow
+            icon={<Boxes className="size-4" aria-hidden />}
+            title="Artifacts"
+            meta={artifactCount > 0 ? `${artifactCount} events` : "ready"}
+            tone={artifactCount > 0 ? "accent" : "default"}
+          />
+          <V2InlineRow
+            icon={<Activity className="size-4" aria-hidden />}
+            title="Trace Share"
+            meta={`${recentTrace.length} recent`}
+            tone={recentTrace.length > 0 ? "accent" : "default"}
+          />
+        </div>
+      </V2Panel>
 
       <div className="zaki-agent-inspector__body">
         {tab === "plan" ? (
@@ -317,7 +361,7 @@ export function AgentInspectorRail({
               />
             ) : null}
             <V2MetricGrid
-              columns={3}
+              columns={2}
               items={[
                 {
                   id: "tokens",
@@ -329,7 +373,18 @@ export function AgentInspectorRail({
                   label: "Cost",
                   value: formatCost(usageSummary?.costUsd),
                 },
+                {
+                  id: "turn-weight",
+                  label: "Turn weight",
+                  value: formatWeight(usageSummary?.turnWeight),
+                },
+                {
+                  id: "session-weight",
+                  label: "Session",
+                  value: formatWeight(usageSummary?.sessionWeight),
+                },
                 { id: "memory", label: "Memory", value: "User scoped" },
+                { id: "model", label: "Model", value: defaultModel.label },
               ]}
             />
           </V2Panel>
@@ -356,6 +411,12 @@ export function AgentInspectorRail({
             label: "Export",
             icon: <FileDown className="size-4" aria-hidden />,
             onClick: onExport,
+          },
+          {
+            id: "settings",
+            label: "Settings",
+            icon: <Settings2 className="size-4" aria-hidden />,
+            onClick: onOpenSettings,
           },
         ]}
       />

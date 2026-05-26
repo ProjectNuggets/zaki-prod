@@ -418,6 +418,13 @@
   border-color: var(--v2-accent);
 }
 
+.v2-toggle {
+  width: 34px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--v2-accent);
+}
+
 .v2-field-label {
   font-family: var(--v2-font-mono);
   font-size: var(--v2-text-2xs);
@@ -2319,6 +2326,117 @@
   overflow-wrap: anywhere;
 }
 
+.zaki-settings-v2__agent-model {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-settings-v2__agent-model header,
+.zaki-settings-v2__agent-model-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.zaki-settings-v2__agent-model header p {
+  margin: 0 0 4px;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__agent-model h3 {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.zaki-settings-v2__agent-model-active {
+  justify-content: flex-start;
+  padding: 10px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+}
+
+.zaki-settings-v2__agent-model-active svg {
+  color: var(--v2-accent);
+}
+
+.zaki-settings-v2__agent-model-active strong,
+.zaki-settings-v2__agent-model-active span {
+  display: block;
+}
+
+.zaki-settings-v2__agent-model-active strong {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__agent-model-active span {
+  margin-top: 2px;
+  color: var(--v2-ink-3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__model-table {
+  display: grid;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-settings-v2__model-table > div {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) minmax(120px, 0.8fr) minmax(80px, auto) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  background: var(--v2-bg);
+}
+
+.zaki-settings-v2__model-table > div.is-active {
+  background: color-mix(in srgb, var(--v2-accent) 8%, var(--v2-bg));
+}
+
+.zaki-settings-v2__model-table-head {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__model-table strong,
+.zaki-settings-v2__model-table small {
+  display: block;
+}
+
+.zaki-settings-v2__model-table strong {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__model-table small {
+  margin-top: 2px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .zaki-settings-v2__usage-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -2388,6 +2506,7 @@
   .v2-settings-row,
   .zaki-settings-v2__plan-card,
   .zaki-settings-v2__product-row dl,
+  .zaki-settings-v2__model-table > div,
   .zaki-settings-v2__usage-row,
   .zaki-settings-v2__memory-list > div {
     grid-template-columns: 1fr;
@@ -3590,6 +3709,21 @@
 .zaki-agent-inspector .v2-panel-head {
   min-height: 34px;
   padding: 0 10px;
+}
+
+.zaki-agent-inspector__capabilities {
+  margin: 12px 12px 0;
+}
+
+.zaki-agent-inspector__capability-grid {
+  display: grid;
+  gap: 1px;
+  border-top: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__capability-grid .v2-inline-row {
+  background: var(--v2-bg);
 }
 
 .zaki-agent-inspector__task-list,

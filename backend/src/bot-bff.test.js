@@ -436,6 +436,9 @@ describe("bot BFF T6 contract", () => {
       proactive_updates: true,
       voice_replies: false,
       session_timeout_minutes: 45,
+      dream_enabled: true,
+      query_expansion_enabled: false,
+      selected_model: "claude-opus-4.7",
     };
     const { handlers, sendUpstreamRequest } = createHandlers({
       sendUpstreamRequest: jest.fn(async ({ body }) => {
@@ -588,6 +591,9 @@ describe("bot BFF T6 contract", () => {
       proactive_updates: true,
       voice_replies: false,
       session_timeout_minutes: 30,
+      dream_enabled: true,
+      query_expansion_enabled: false,
+      selected_model: null,
     };
     const { handlers } = createHandlers({
       sendUpstreamRequest: jest.fn(async () => jsonResponse(settingsPayload)),
@@ -604,8 +610,11 @@ describe("bot BFF T6 contract", () => {
     expect(mobileClient(res.jsonBody)).toBe("30:false");
     expect(Object.keys(res.jsonBody).sort()).toEqual([
       "assistant_mode",
+      "dream_enabled",
       "group_activation",
       "proactive_updates",
+      "query_expansion_enabled",
+      "selected_model",
       "session_timeout_minutes",
       "voice_replies",
     ]);
