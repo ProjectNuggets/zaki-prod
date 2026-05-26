@@ -15,6 +15,7 @@ function getRouteCrumb(pathname: string) {
   if (pathname === "/agent") return "agent";
   if (pathname === "/learn") return "learn";
   if (pathname === "/brain") return "brain";
+  if (pathname === "/settings") return "settings";
   if (pathname === "/spaces" || pathname.startsWith("/spaces/")) return "chat";
   if (pathname === "/pricing") return "billing";
   if (pathname === "/help") return "help";
@@ -75,7 +76,7 @@ export function AppTopbar() {
         <button
           type="button"
           className="zaki-app-topbar__avatar"
-          onClick={() => window.dispatchEvent(new Event("zaki:open-settings"))}
+          onClick={() => navigate("/settings")}
           aria-label={t("appTopbar.accountAria", { defaultValue: "Open account settings" })}
         >
           {initials}

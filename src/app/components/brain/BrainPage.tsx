@@ -16,6 +16,8 @@ import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
 import { BrainInsightsStrip } from "./BrainInsightsStrip";
 import { KIND_COLOR, KIND_LABEL } from "./brainColors";
+import { V2Badge, V2StatusStrip, V2Tabs } from "@/app/components/v2";
+import type { BrainGraphNode } from "@/lib/api";
 
 type BrainTab = "timeline" | "graph";
 
@@ -208,33 +210,66 @@ export function BrainPage() {
       Same pattern Obsidian-class panels use: outer flex column with
       explicit min-h-0 to defeat default flex-min-content sizing.
     */
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto py-8">
-      <div className="mx-auto max-w-7xl px-6">
-        <header className="mb-6">
-          <h1 className="text-xl font-semibold text-zaki-text">{t("brain.title")}</h1>
-          <p className="text-sm text-zaki-muted">{t("brain.subtitle")}</p>
+    <div className="zaki-brain-v2">
+      <V2StatusStrip
+        aria-label={t("brain.status.ariaLabel", { defaultValue: "Brain status" })}
+        items={[
+          {
+            id: "scope",
+            label: t("brain.status.scope", { defaultValue: "Scope" }),
+            value: t("brain.status.userScoped", { defaultValue: "User memory" }),
+          },
+          {
+            id: "nodes",
+            label: t("brain.status.memories", { defaultValue: "Memories" }),
+            value: totalNodes.toLocaleString(),
+            tone: "accent",
+          },
+          {
+            id: "view",
+            label: t("brain.status.view", { defaultValue: "View" }),
+            value: tab,
+          },
+          {
+            id: "health",
+            label: semanticDegraded
+              ? t("brain.status.semanticDegraded", { defaultValue: "Semantic degraded" })
+              : t("brain.status.semanticReady", { defaultValue: "Semantic ready" }),
+            tone: semanticDegraded ? "warn" : "success",
+          },
+        ]}
+      />
+      <div className="zaki-brain-v2__wrap">
+        <header className="zaki-brain-v2__hero">
+          <div>
+            <p>{t("brain.status.userScoped", { defaultValue: "User memory" })}</p>
+            <h1>{t("brain.title")}</h1>
+          </div>
+          <span>{t("brain.subtitle")}</span>
         </header>
 
         {semanticDegraded && !degradedDismissed && (
-          <div className="mb-4">
+          <div className="zaki-brain-v2__banner">
             <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
           </div>
         )}
 
         <BrainInsightsStrip userId={userId} />
 
-        <div className="mb-6 flex gap-2 border-b border-zaki-border">
-          <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
-            {t("brain.tabs.timeline")}
-          </TabButton>
-          <TabButton active={tab === "graph"} onClick={() => setTab("graph")}>
-            {t("brain.tabs.graph")}
-          </TabButton>
-        </div>
+        <V2Tabs
+          ariaLabel={t("brain.tabs.ariaLabel", { defaultValue: "Brain views" })}
+          value={tab}
+          onChange={setTab}
+          fullWidth
+          options={[
+            { id: "timeline", label: t("brain.tabs.timeline") },
+            { id: "graph", label: t("brain.tabs.graph"), count: initialGraphQuery.data?.nodes?.length ?? 0 },
+          ]}
+        />
       </div>
 
       {tab === "timeline" ? (
-        <div className="mx-auto max-w-4xl px-6" data-testid="brain-timeline-slot">
+        <div className="zaki-brain-v2__timeline" data-testid="brain-timeline-slot">
           <BrainTimelineView userId={userId} />
         </div>
       ) : (
@@ -250,10 +285,14 @@ export function BrainPage() {
           ultra-wide monitors. Header + tabs above remain max-w-7xl —
           they don't need the extra width.
         */
-        <div data-testid="brain-graph-slot" className="mx-auto max-w-screen-2xl px-3 sm:px-5">
+        <div data-testid="brain-graph-slot" className="zaki-brain-v2__graph-shell">
+          <aside className="zaki-brain-v2__filters-rail" aria-label={t("brain.panel.filters", { defaultValue: "Filters" })}>
+            <BrainFilterPanel filters={filters} onChange={setFilters} />
+          </aside>
+          <section className="zaki-brain-v2__graph-main">
           {/* Search bar — debounced into ?search= */}
-          <div className="mb-3">
-            <div className="relative">
+          <div className="zaki-brain-v2__search">
+            <div>
               <svg
                 className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zaki-muted"
                 fill="none"
@@ -275,7 +314,7 @@ export function BrainPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t("brain.graph.search.placeholder")}
                 aria-label={t("brain.graph.search.placeholder")}
-                className="w-full rounded-zaki-lg border border-zaki-border bg-zaki-raised py-2 pl-8 pr-8 text-sm text-zaki-text placeholder:text-zaki-muted focus:border-zaki-brand focus:outline-none focus:ring-zaki-brand"
+                className="v2-input pl-8 pr-8"
                 data-testid="brain-search-input"
               />
               {!searchQuery && (
@@ -294,7 +333,7 @@ export function BrainPage() {
                     searchInputRef.current?.focus();
                   }}
                   aria-label={t("brain.graph.search.clear")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-zaki-muted hover:text-zaki-text"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zaki-muted hover:text-zaki-text"
                 >
                   <svg
                     className="size-3.5"
@@ -394,7 +433,7 @@ export function BrainPage() {
             ~576px of horizontal chrome before the graph got any room.
             Now the graph claims the whole viewport.
           */}
-          <div className="relative min-h-[640px] overflow-hidden rounded-zaki-lg border border-zaki-border bg-[#0a0a0a] shadow-md">
+          <div className="zaki-brain-v2__canvas-frame">
             <BrainGraphView
               userId={userId}
               selectedIds={selectedNodeIds}
@@ -408,16 +447,18 @@ export function BrainPage() {
             />
 
             {/* Top-right floating control cluster */}
-            <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col gap-2">
-              <PanelToggle
-                icon={SlidersHorizontal}
-                label={t("brain.panel.filters", { defaultValue: "Filters" })}
-                shortcut="F"
-                active={activePanel === "filters"}
-                onClick={() =>
-                  setActivePanel(activePanel === "filters" ? null : "filters")
-                }
-              />
+            <div className="zaki-brain-v2__canvas-controls">
+              <span className="zaki-brain-v2__filters-toggle">
+                <PanelToggle
+                  icon={SlidersHorizontal}
+                  label={t("brain.panel.filters", { defaultValue: "Filters" })}
+                  shortcut="F"
+                  active={activePanel === "filters"}
+                  onClick={() =>
+                    setActivePanel(activePanel === "filters" ? null : "filters")
+                  }
+                />
+              </span>
               <PanelToggle
                 icon={Boxes}
                 label={t("brain.panel.clusters", { defaultValue: "Clusters" })}
@@ -444,20 +485,6 @@ export function BrainPage() {
                 <BrainFilterPanel filters={filters} onChange={setFilters} />
               </FloatingOverlay>
             )}
-            {activePanel === "clusters" && (
-              <FloatingOverlay onClose={() => setActivePanel(null)}>
-                <BrainCommunityLegend
-                  userId={userId}
-                  selectedCommunityId={selectedCommunityId}
-                  onSelectCommunity={setSelectedCommunityId}
-                />
-              </FloatingOverlay>
-            )}
-            {activePanel === "orphans" && (
-              <FloatingOverlay onClose={() => setActivePanel(null)}>
-                <BrainOrphanRail userId={userId} onPick={handlePickKey} />
-              </FloatingOverlay>
-            )}
           </div>
 
           {/*
@@ -477,7 +504,7 @@ export function BrainPage() {
                 setComposeOpen(true);
                 setActivePanel(null);
               }}
-              className="absolute bottom-3 left-3 z-30 inline-flex items-center gap-2 rounded-full bg-zaki-brand px-4 py-2.5 text-sm font-medium text-white shadow-lg transition hover:bg-zaki-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/40"
+              className="zaki-brain-v2__compose"
               data-testid="brain-compose-from-selection-button"
             >
               {t("brain.compose.fromSelection", { count: selectedNodeIds.length, defaultValue: "Compose from {{count}}" })}
@@ -493,16 +520,28 @@ export function BrainPage() {
               setSelectedNodeIds([]);
             }}
           />
+          </section>
+          <aside className="zaki-brain-v2__detail-rail" aria-label={t("brain.panel.detail", { defaultValue: "Memory detail" })}>
+            {activePanel === "clusters" ? (
+              <BrainCommunityLegend
+                userId={userId}
+                selectedCommunityId={selectedCommunityId}
+                onSelectCommunity={setSelectedCommunityId}
+              />
+            ) : activePanel === "orphans" ? (
+              <BrainOrphanRail userId={userId} onPick={handlePickKey} />
+            ) : (
+              <BrainDetailSummary
+                nodes={selectedNodes}
+                centerKey={centerKey}
+                selectedCommunityId={selectedCommunityId}
+              />
+            )}
+          </aside>
         </div>
       )}
     </div>
   );
-}
-
-interface TabButtonProps {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
 }
 
 // V1.11 (2026-05-07) — Floating control button used inside the canvas
@@ -579,19 +618,62 @@ function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
   );
 }
 
-function TabButton({ active, onClick, children }: TabButtonProps) {
+function BrainDetailSummary({
+  nodes,
+  centerKey,
+  selectedCommunityId,
+}: {
+  nodes: BrainGraphNode[];
+  centerKey: string | null;
+  selectedCommunityId: number | null;
+}) {
+  const { t } = useTranslation();
+  const hasSelection = nodes.length > 0;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-        active
-          ? "border-zaki-brand text-zaki-text"
-          : "border-transparent text-zaki-muted hover:text-zaki-text"
-      }`}
-    >
-      {children}
-    </button>
+    <section className="zaki-brain-v2__detail-summary">
+      <header>
+        <div>
+          <p>{t("brain.detail.title", { defaultValue: "Selection" })}</p>
+          <h2>
+            {hasSelection
+              ? t("brain.detail.selectedCount", {
+                  defaultValue: "{{count}} selected",
+                  count: nodes.length,
+                })
+              : t("brain.detail.noSelection", { defaultValue: "No memory selected" })}
+          </h2>
+        </div>
+        {selectedCommunityId != null ? (
+          <V2Badge tone="accent">
+            {t("brain.detail.community", {
+              defaultValue: "Cluster {{id}}",
+              id: selectedCommunityId,
+            })}
+          </V2Badge>
+        ) : centerKey ? (
+          <V2Badge tone="accent">
+            {t("brain.detail.localGraph", { defaultValue: "Local graph" })}
+          </V2Badge>
+        ) : null}
+      </header>
+      {hasSelection ? (
+        <ul>
+          {nodes.slice(0, 6).map((node) => (
+            <li key={node.id}>
+              <strong>{node.display_label || node.summary}</strong>
+              <span>{node.kind}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>
+          {t("brain.detail.emptyHelper", {
+            defaultValue:
+              "Select memories on the canvas, open clusters, or inspect loose facts without leaving the graph.",
+          })}
+        </p>
+      )}
+    </section>
   );
 }
 

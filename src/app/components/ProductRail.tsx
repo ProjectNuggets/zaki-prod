@@ -143,7 +143,8 @@ export function ProductRail() {
       <button
         type="button"
         className="zaki-product-rail__button"
-        onClick={() => window.dispatchEvent(new Event("zaki:open-settings"))}
+        onClick={() => navigate("/settings")}
+        aria-current={location.pathname === "/settings" ? "page" : undefined}
         title={t("productRail.settings", { defaultValue: "Settings" })}
         aria-label={t("productRail.settings", { defaultValue: "Settings" })}
       >

@@ -23,5 +23,7 @@ export type {
 } from "./V2SegmentedControl";
 export { V2StatusStrip } from "./V2StatusStrip";
 export type { V2StatusStripItem, V2StatusStripProps } from "./V2StatusStrip";
+export { V2UsageGauge } from "./V2UsageGauge";
+export type { V2UsageGaugeProps } from "./V2UsageGauge";
 export { V2Tabs } from "./V2Tabs";
 export type { V2TabOption, V2TabsProps } from "./V2Tabs";

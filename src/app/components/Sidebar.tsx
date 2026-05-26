@@ -284,7 +284,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     const handleOpenSettings = () => {
       if (!user?.username) return;
       setProfileMenuOpen(false);
-      setSettingsModalOpen(true);
+      navigate("/settings");
       window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
     };
     const handleCloseMemory = () => {
@@ -323,7 +323,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
       window.removeEventListener("zaki:open-power-user", handleOpenPowerUser);
     };
-  }, [user?.username]);
+  }, [navigate, user?.username]);
 
   const handlePowerUserModeChange = useCallback(
     async (mode: AgentSessionMode) => {
@@ -1749,7 +1749,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             </button>
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new Event("zaki:open-settings"))}
+              onClick={() => navigate("/settings")}
             >
               <Settings className="size-4" />
               <span>{t("sidebar.profile.settings")}</span>
@@ -2310,10 +2310,10 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	            </button>
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
-	              type="button"
+              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
-                setSettingsModalOpen(true);
+                navigate("/settings");
                 window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
               }}
               data-onboarding-id="profile-menu-settings"
@@ -2326,7 +2326,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
-                setSettingsModalOpen(true);
+                navigate("/settings#settings-account");
 	              }}
 	            >
 	              <Globe className="size-4 text-zaki-muted" />

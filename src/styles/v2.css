@@ -740,6 +740,74 @@
   background: var(--v2-accent);
 }
 
+.v2-usage-gauge {
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  padding: 18px;
+}
+
+.v2-usage-gauge__head,
+.v2-usage-gauge__foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.v2-usage-gauge__number {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-usage-gauge__number strong {
+  color: var(--v2-ink-1);
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.v2-usage-gauge__number span {
+  font-size: var(--v2-text-lg);
+}
+
+.v2-usage-gauge__number em {
+  margin-left: auto;
+  color: var(--v2-ink-3);
+  font-size: var(--v2-text-2xs);
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.v2-usage-gauge__bar {
+  height: 6px;
+  margin-top: 14px;
+  background: var(--v2-bg-sunken);
+}
+
+.v2-usage-gauge__bar span {
+  display: block;
+  width: var(--v2-usage-percent, 0%);
+  height: 100%;
+  background: var(--v2-accent);
+}
+
+.v2-usage-gauge__foot {
+  margin-top: 10px;
+}
+
 .v2-meter small {
   display: block;
   margin-top: 6px;
@@ -1895,6 +1963,781 @@
   border: 1px solid var(--v2-hairline);
   border-radius: var(--v2-r-2);
   background: var(--v2-bg);
+}
+
+.zaki-settings-v2 {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  background:
+    linear-gradient(to right, var(--v2-hairline-faint) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--v2-hairline-faint) 1px, transparent 1px),
+    var(--v2-bg);
+  background-size: 32px 32px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-settings-v2 :where(h1, h2, h3, p, dl, dt, dd) {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.zaki-settings-v2__grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: calc(100% - 30px);
+}
+
+.v2-settings-nav {
+  position: sticky;
+  top: 0;
+  height: calc(100dvh - 78px);
+  min-height: 0;
+  border-right: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  overflow: hidden;
+}
+
+.v2-settings-nav__head {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.v2-settings-nav__head div {
+  margin-bottom: 6px;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.v2-settings-nav__head h1 {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.v2-settings-nav__list {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+}
+
+.v2-settings-nav__list a {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 18px;
+  border-left: 2px solid transparent;
+  color: var(--v2-ink-2);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.v2-settings-nav__list a:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.v2-settings-nav__list a:focus-visible {
+  outline-offset: -2px;
+}
+
+.v2-settings-nav__list a.is-danger {
+  color: var(--v2-danger);
+}
+
+.v2-settings-nav__list svg {
+  color: var(--v2-ink-3);
+}
+
+.v2-settings-nav__list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-settings-nav__list small {
+  color: var(--v2-ink-4);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-settings-v2__main {
+  width: min(100%, 960px);
+  padding: 34px 48px 96px;
+}
+
+.zaki-settings-v2__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 28px;
+  margin-bottom: 30px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__hero p {
+  margin-bottom: 8px;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__hero h1 {
+  max-width: 640px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 600;
+  line-height: 1.08;
+}
+
+.v2-settings-block {
+  margin-bottom: 34px;
+  scroll-margin-top: 76px;
+}
+
+.v2-settings-block__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 9px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.v2-settings-block__head h2 {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.v2-settings-block__head span {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.v2-settings-block__body {
+  display: grid;
+  gap: 0;
+}
+
+.v2-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
+  gap: 24px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.v2-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.v2-settings-row__label > div {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.v2-settings-row__label p,
+.zaki-settings-v2__product-row p {
+  margin-top: 3px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.v2-settings-row__control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.v2-settings-row__control .v2-input,
+.v2-settings-row__control select {
+  width: min(100%, 320px);
+  min-width: 220px;
+}
+
+.v2-settings-row--danger .v2-settings-row__label > div {
+  color: var(--v2-danger);
+}
+
+.zaki-settings-v2__plan-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: start;
+  padding: 18px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  margin: 14px 0;
+}
+
+.zaki-settings-v2__plan-card span,
+.zaki-settings-v2__product-row dt {
+  display: block;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__plan-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--v2-ink-1);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__plan-card p {
+  margin-top: 8px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.zaki-settings-v2__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 0;
+}
+
+.zaki-settings-v2__product-list,
+.zaki-settings-v2__usage-grid,
+.zaki-settings-v2__memory-list {
+  display: grid;
+  gap: 1px;
+  margin-top: 14px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-settings-v2__product-row,
+.zaki-settings-v2__usage-row,
+.zaki-settings-v2__memory-list > div {
+  min-width: 0;
+  background: var(--v2-bg);
+}
+
+.zaki-settings-v2__product-row {
+  padding: 14px;
+}
+
+.zaki-settings-v2__product-row header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.zaki-settings-v2__product-row strong,
+.zaki-settings-v2__usage-row strong,
+.zaki-settings-v2__memory-list strong {
+  color: var(--v2-ink-1);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__product-row dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.zaki-settings-v2__product-row dd {
+  margin-top: 4px;
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.zaki-settings-v2__usage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: baseline;
+  padding: 12px 14px;
+}
+
+.zaki-settings-v2__usage-row span {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__usage-row small,
+.zaki-settings-v2__memory-list span {
+  color: var(--v2-ink-3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__memory-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 14px;
+}
+
+@media (max-width: 900px) {
+  .zaki-settings-v2__grid {
+    display: block;
+  }
+
+  .v2-settings-nav {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--v2-hairline);
+  }
+
+  .v2-settings-nav__head {
+    display: none;
+  }
+
+  .v2-settings-nav__list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 8px;
+  }
+
+  .v2-settings-nav__list a {
+    min-height: 38px;
+    padding: 0 8px;
+    border-left: 0;
+    border: 1px solid transparent;
+  }
+
+  .zaki-settings-v2__main {
+    width: 100%;
+    padding: 26px 16px 88px;
+  }
+}
+
+@media (max-width: 640px) {
+  .zaki-settings-v2__hero,
+  .v2-settings-row,
+  .zaki-settings-v2__plan-card,
+  .zaki-settings-v2__product-row dl,
+  .zaki-settings-v2__usage-row,
+  .zaki-settings-v2__memory-list > div {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-settings-v2__hero {
+    display: grid;
+  }
+
+  .v2-settings-row__control {
+    justify-content: stretch;
+  }
+
+  .v2-settings-row__control .v2-input,
+  .v2-settings-row__control select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .v2-settings-nav__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-settings-v2__usage-row small {
+    justify-self: start;
+  }
+}
+
+.zaki-brain-v2 {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  background:
+    linear-gradient(to right, var(--v2-hairline-faint) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--v2-hairline-faint) 1px, transparent 1px),
+    var(--v2-bg);
+  background-size: 32px 32px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-brain-v2 :where(h1, h2, h3, p, dl, dt, dd) {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.zaki-brain-v2__wrap {
+  width: min(100%, 1280px);
+  margin: 0 auto;
+  padding: 30px 18px 0;
+}
+
+.zaki-brain-v2__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 32px;
+  align-items: end;
+  padding-bottom: 24px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-brain-v2__hero p {
+  margin-bottom: 10px;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__hero h1 {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: clamp(30px, 5vw, 48px);
+  font-weight: 600;
+  line-height: 1.02;
+}
+
+.zaki-brain-v2__hero > span {
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.zaki-brain-v2__banner {
+  margin-bottom: 16px;
+}
+
+.zaki-brain-v2 .v2-tabs {
+  margin-bottom: 0;
+}
+
+.zaki-brain-v2 .v2-tabs--grid {
+  border: 1px solid var(--v2-hairline);
+}
+
+.zaki-brain-v2 .v2-tabs .count {
+  margin-left: 8px;
+  color: var(--v2-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-brain-v2__timeline {
+  width: min(100%, 880px);
+  margin: 0 auto;
+  padding: 24px 18px 96px;
+}
+
+.zaki-brain-v2__graph-shell {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 320px;
+  gap: 1px;
+  width: min(100%, 1600px);
+  min-height: calc(100dvh - 206px);
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.zaki-brain-v2__filters-rail,
+.zaki-brain-v2__detail-rail {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  overflow: hidden;
+}
+
+.zaki-brain-v2__filters-rail {
+  display: flex;
+}
+
+.zaki-brain-v2__filters-rail > aside,
+.zaki-brain-v2__detail-rail > section {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+}
+
+.zaki-brain-v2__graph-main {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.zaki-brain-v2__search > div {
+  position: relative;
+}
+
+.zaki-brain-v2__search .v2-input {
+  height: 34px;
+  min-height: 34px;
+  background: var(--v2-bg-raised);
+}
+
+.zaki-brain-v2__graph-main > .mb-3,
+.zaki-brain-v2__graph-main > .mb-3 + .mb-3 {
+  margin-bottom: 0;
+}
+
+.zaki-brain-v2__graph-main > .mb-3.flex {
+  padding: 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__graph-main [data-testid="brain-time-scrubber"] {
+  border-radius: 0;
+  border-color: var(--v2-hairline);
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+}
+
+.zaki-brain-v2__canvas-frame {
+  position: relative;
+  min-height: 640px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 0;
+  background: var(--v2-bg-sunken);
+  box-shadow: none;
+}
+
+.zaki-brain-v2__canvas-controls {
+  pointer-events: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zaki-brain-v2__compose {
+  position: absolute;
+  bottom: 12px;
+  left: 24px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--v2-accent);
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__detail-summary {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.zaki-brain-v2__detail-summary > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-brain-v2__detail-summary header p {
+  margin-bottom: 5px;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__detail-summary h2 {
+  color: var(--v2-ink-1);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.zaki-brain-v2__detail-summary > p {
+  padding: 14px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.zaki-brain-v2__detail-summary ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zaki-brain-v2__detail-summary li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-brain-v2__detail-summary li strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.zaki-brain-v2__detail-summary li span {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-community-legend"],
+.zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-orphan-rail"] {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--v2-bg);
+}
+
+.zaki-brain-v2 :where(.rounded-full, .rounded-zaki-lg, .rounded-zaki-md, .shadow-md, .shadow-lg, .shadow-2xl) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.zaki-brain-v2 :where(.bg-zaki-raised, .bg-zaki-raised\/60, .bg-\[\#181818\], .bg-\[\#1f1f1f\]) {
+  background: var(--v2-bg-raised) !important;
+}
+
+.zaki-brain-v2 :where(.text-white\/85, .text-zaki-text) {
+  color: var(--v2-ink-1) !important;
+}
+
+.zaki-brain-v2 :where(.text-white\/55, .text-zaki-muted) {
+  color: var(--v2-ink-3) !important;
+}
+
+.zaki-brain-v2 :where(.border-white\/10, .border-zaki-border) {
+  border-color: var(--v2-hairline) !important;
+}
+
+.zaki-brain-v2 .zaki-brain-v2__canvas-frame :where(.bg-\[\#181818\], .bg-zaki-raised\/90) {
+  background: rgba(14, 13, 11, 0.92) !important;
+  color: #ece7df !important;
+}
+
+.zaki-brain-v2 .zaki-brain-v2__canvas-frame :where(.text-white\/85) {
+  color: #ece7df !important;
+}
+
+.zaki-brain-v2 .zaki-brain-v2__canvas-frame :where(.text-white\/55, .text-white\/60) {
+  color: rgba(236, 231, 223, 0.6) !important;
+}
+
+@media (max-width: 1280px) {
+  .zaki-brain-v2__graph-shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .zaki-brain-v2__detail-rail {
+    display: none;
+  }
+}
+
+@media (min-width: 901px) {
+  .zaki-brain-v2__filters-toggle {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .zaki-brain-v2__hero,
+  .zaki-brain-v2__graph-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-brain-v2__filters-rail {
+    display: none;
+  }
+
+  .zaki-brain-v2__graph-shell {
+    padding: 14px 10px 96px;
+  }
+
+  .zaki-brain-v2__graph-main {
+    padding: 0;
+  }
+
+  .zaki-brain-v2__canvas-frame {
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 640px) {
+  .zaki-brain-v2__wrap {
+    padding: 24px 12px 0;
+  }
+
+  .zaki-brain-v2__timeline {
+    padding: 18px 12px 88px;
+  }
+
+  .zaki-brain-v2__canvas-frame {
+    min-height: 500px;
+  }
 }
 
 /* Agent surface: V2 tactical chat shell. Keeps the existing runtime wiring

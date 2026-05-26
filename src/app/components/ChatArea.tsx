@@ -6549,14 +6549,14 @@ export function ChatArea() {
 
           {isAgentSurface ? (
             <V2StatusStrip
-              aria-label="Agent status"
+              aria-label={t("agent.status.ariaLabel", { defaultValue: "Agent status" })}
               items={[
                 {
                   id: "runtime",
                   label:
                     isStreaming || activeSessionUi?.live || activeSessionRecord?.live
-                      ? "Online"
-                      : "Ready",
+                      ? t("agent.status.online", { defaultValue: "Online" })
+                      : t("agent.status.ready", { defaultValue: "Ready" }),
                   active: Boolean(
                     isStreaming || activeSessionUi?.live || activeSessionRecord?.live
                   ),
@@ -6564,21 +6564,25 @@ export function ChatArea() {
                 },
                 {
                   id: "mode",
-                  label: "Mode",
+                  label: t("agent.status.mode", { defaultValue: "Mode" }),
                   value: activeSessionMode ?? "execute",
                 },
                 {
                   id: "context",
-                  label: "Context",
+                  label: t("agent.status.context", { defaultValue: "Context" }),
                   value:
                     agentContextPercent != null
                       ? `${Math.round(agentContextPercent)}%`
                       : "0%",
                 },
-                { id: "weekly", label: "Weekly", value: agentWeeklyLabel },
+                {
+                  id: "weekly",
+                  label: t("agent.status.weekly", { defaultValue: "Weekly" }),
+                  value: agentWeeklyLabel,
+                },
                 {
                   id: "trace",
-                  label: "Trace",
+                  label: t("agent.status.trace", { defaultValue: "Trace" }),
                   value: nullalisTranscriptEntries.length,
                 },
               ]}

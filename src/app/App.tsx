@@ -70,6 +70,9 @@ export default function App() {
   const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
   const isLearningRoute = location.pathname === "/learn";
   const isDashboardRoute = normalizedPath === "/";
+  const isBrainRoute = normalizedPath === "/brain";
+  const isSettingsRoute = normalizedPath === "/settings";
+  const isWideSurfaceRoute = isDashboardRoute || isBrainRoute || isSettingsRoute;
   const isPublicWebsiteRoute =
     PUBLIC_WEBSITE_PATHS.has(normalizedPath) ||
     PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
@@ -118,6 +121,8 @@ export default function App() {
         ZAKI_BOT_SPACE_ID,
         agentThreadId && agentThreadId.trim() ? agentThreadId.trim() : ZAKI_BOT_THREAD_ID
       );
+    } else if (path === '/brain') {
+      store.setSidebarMode("brain");
     } else if (path === '/learn') {
       store.setSidebarMode("learning");
     } else if (path === '/spaces' && !spaceId) {
@@ -342,7 +347,7 @@ export default function App() {
       
       <div
         className={`zaki-app zaki-app-v2 flex w-full h-[100dvh] flex-col overflow-x-hidden overflow-y-hidden font-sans text-zaki-primary md:grid dark:text-[#efe6d9] ${
-          isDashboardRoute
+          isWideSurfaceRoute
             ? "md:grid-cols-[40px_minmax(0,1fr)]"
             : "md:grid-cols-[40px_232px_minmax(0,1fr)]"
         }`}
@@ -354,7 +359,7 @@ export default function App() {
 
         {/* Desktop product rail and contextual navigation */}
         <ProductRail />
-        <div className={isDashboardRoute ? "hidden" : "hidden min-h-0 overflow-hidden md:block"}>
+        <div className={isWideSurfaceRoute ? "hidden" : "hidden min-h-0 overflow-hidden md:block"}>
           <Sidebar chrome="context" />
         </div>
         

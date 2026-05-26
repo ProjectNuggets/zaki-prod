@@ -3,6 +3,8 @@ import { describe, expect, it, jest } from "@jest/globals";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { SettingsModal } from "./SettingsModal";
+import { SettingsPage } from "../settings/SettingsPage";
+import { useAuthStore, useUIStore } from "@/stores";
 
 jest.mock("sonner", () => ({
   toast: Object.assign(jest.fn(), {
@@ -16,6 +18,10 @@ jest.mock("@/lib/api", () => ({
   fetchGoogleOAuthStatus: jest.fn(async () => ({
     response: { ok: true },
     data: { enabled: true },
+  })),
+  updateProfile: jest.fn(async () => ({
+    response: { ok: true },
+    data: { success: true, user: { username: "nova@example.com", fullName: "Nova" } },
   })),
 }));
 
@@ -466,6 +472,21 @@ function renderSettingsModal() {
   );
 }
 
+function renderSettingsPage() {
+  useAuthStore.setState({
+    token: "token",
+    user: { id: "user-1", username: "nova@example.com", fullName: "Nova" },
+    isHydrating: false,
+    isLoading: false,
+  });
+  useUIStore.setState({ themePreference: "system", systemTheme: "light" });
+  return render(
+    <MemoryRouter>
+      <SettingsPage />
+    </MemoryRouter>
+  );
+}
+
 describe("SettingsModal", () => {
   it("renders the settings control plane as MECE sections", async () => {
     renderSettingsModal();
@@ -564,6 +585,30 @@ describe("SettingsModal", () => {
     expect(within(productsAccess).getByText("Memory control plane")).toBeInTheDocument();
     expect(within(productsAccess).getAllByText("Disabled")).toHaveLength(2);
     expect(within(productsAccess).queryByText("ZAKI CLI")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("SettingsPage", () => {
+  it("renders the route-level V2 settings surface with the same MECE sections", async () => {
+    renderSettingsPage();
+
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+    expect(screen.getByTestId("settings-account")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-connections")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-billing")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-products-access")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-developer-access")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
+
+    expect(within(screen.getByTestId("settings-platform-usage")).getByText("ZAKI Hire")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-products-access")).getByText("ZAKI Design")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-memory-data")).getByText("Personal brain")).toBeInTheDocument();
+
     await waitFor(() => {
       expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
     });

@@ -10,6 +10,7 @@ import {
   V2SegmentedControl,
   V2StatusStrip,
   V2Tabs,
+  V2UsageGauge,
 } from ".";
 
 describe("V2 component primitives", () => {
@@ -83,10 +84,19 @@ describe("V2 component primitives", () => {
             { id: "share", label: "Share", onClick: jest.fn() },
           ]}
         />
+        <V2UsageGauge
+          label="Weekly allowance"
+          used={3}
+          limit={5}
+          remaining="2 hours left"
+          reset="Resets Jun 1"
+          unit="hours"
+        />
       </>
     );
 
     expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("2 hours left")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Memory" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Share" })).not.toBeDisabled();
   });
