@@ -3,16 +3,34 @@ import { useTranslation } from "react-i18next";
 import {
   Activity,
   Brain,
+  Download,
+  ExternalLink,
+  FileText,
   Gauge,
+  Globe2,
+  History,
+  Link2Off,
+  Share2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
+  exportAgentArtifact,
   fetchContextDiagnostics,
+  fetchAgentDiagnostics,
   fetchMemoryDoctor,
   fetchUsageQuota,
+  listAgentArtifacts,
+  listAgentTraces,
+  revokeAgentArtifactShare,
+  revokeAgentTraceShare,
+  shareAgentArtifact,
+  shareAgentTrace,
+  type AgentArtifact,
+  type AgentTrace,
   type AgentSessionMode,
   type ContextDiagnosticsResponse,
   type MemoryDoctorResponse,
@@ -23,7 +41,15 @@ import {
   type ZakiRuntimeSandbox,
 } from "@/stores/zakiSessionUiStore";
 
-export type PowerUserTab = "controls" | "approvals" | "context" | "memory" | "usage";
+export type PowerUserTab =
+  | "controls"
+  | "approvals"
+  | "browser"
+  | "artifacts"
+  | "trace"
+  | "context"
+  | "memory"
+  | "usage";
 
 export type SoftLimitState = "normal" | "warning" | "near_limit" | "unlimited";
 
@@ -73,21 +99,53 @@ export interface PowerUserSheetProps {
   onApproveRequest?: (id: string, approved: boolean) => Promise<void> | void;
   contextSnapshot?: PowerUserContextSnapshot | null;
   memoryHealth?: PowerUserMemoryHealth | null;
+  artifactEventCount?: number;
 }
 
 const TAB_ICONS: Record<PowerUserTab, typeof ShieldCheck> = {
   controls: Sparkles,
   approvals: ShieldCheck,
+  browser: Globe2,
+  artifacts: FileText,
+  trace: History,
   context: Activity,
   memory: Brain,
   usage: Gauge,
 };
+
+const POWER_USER_TABS: PowerUserTab[] = [
+  "controls",
+  "approvals",
+  "browser",
+  "artifacts",
+  "trace",
+  "context",
+  "memory",
+  "usage",
+];
+
+const EXTENSION_TOOL_NAMES = [
+  "extension_navigate",
+  "extension_click",
+  "extension_type",
+  "extension_fill_form",
+  "extension_screenshot",
+  "extension_get_text",
+  "extension_get_dom",
+  "extension_wait_for",
+  "extension_scroll",
+  "extension_list_tabs",
+];
+
+const ARTIFACT_EXPORT_FORMATS = ["pdf", "docx", "pptx", "html", "xlsx"];
 
 const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; labelKey: string }> = [
   { surface: "app_chat", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
   { surface: "zaki_bot", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
   { surface: "learning", labelKey: "zakiControls.powerUser.usage.surfaces.learning" },
 ];
+
+type AgentDiagnosticsSurface = Awaited<ReturnType<typeof fetchAgentDiagnostics>>["data"];
 
 const SOFT_LIMIT_WARNING_THRESHOLD = 0.7;
 const SOFT_LIMIT_NEAR_THRESHOLD = 0.9;
@@ -115,11 +173,52 @@ function formatCount(value?: number | null) {
   return Intl.NumberFormat().format(Math.max(0, Math.round(value)));
 }
 
-function formatTs(value?: string | null) {
+function formatTs(value?: string | number | null) {
   if (!value) return "—";
-  const parsed = new Date(value);
+  const parsed =
+    typeof value === "number"
+      ? new Date(value < 10_000_000_000 ? value * 1000 : value)
+      : new Date(value);
   if (Number.isNaN(parsed.getTime())) return "—";
   return parsed.toLocaleString();
+}
+
+function normalizeList<T>(data: { items?: T[] } & Record<string, unknown>, key: string): T[] {
+  const keyed = data[key];
+  if (Array.isArray(keyed)) return keyed as T[];
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+function getArtifactId(artifact: AgentArtifact): string {
+  return artifact.id || artifact.artifact_id || "";
+}
+
+function getArtifactTitle(artifact: AgentArtifact): string {
+  return artifact.title || artifact.type || artifact.mime_type || getArtifactId(artifact) || "Artifact";
+}
+
+function getTraceId(trace: AgentTrace): string {
+  return trace.run_id || trace.id || "";
+}
+
+function getShareUrl(item: Record<string, unknown>): string | null {
+  const candidates = [
+    item.public_url,
+    item.publicUrl,
+    item.share_url,
+    item.shareUrl,
+    item.url,
+    item.download_url,
+    item.downloadUrl,
+  ];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  return typeof match === "string" ? match : null;
+}
+
+function getBooleanRecordValue(data: unknown, key: string): boolean | null {
+  if (!data || typeof data !== "object") return null;
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === "boolean" ? value : null;
 }
 
 function formatScalar(value: unknown): string {
@@ -187,6 +286,7 @@ export function PowerUserSheet({
   onApproveRequest,
   contextSnapshot = null,
   memoryHealth = null,
+  artifactEventCount = 0,
 }: PowerUserSheetProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<PowerUserTab>(initialTab);
@@ -200,6 +300,16 @@ export function PowerUserSheet({
   const [memoryDiag, setMemoryDiag] = useState<MemoryDoctorResponse | null>(null);
   const [memoryDiagLoading, setMemoryDiagLoading] = useState(false);
   const [memoryDiagError, setMemoryDiagError] = useState<string | null>(null);
+  const [agentDiagnostics, setAgentDiagnostics] =
+    useState<AgentDiagnosticsSurface | null>(null);
+  const [agentDiagnosticsLoading, setAgentDiagnosticsLoading] = useState(false);
+  const [agentDiagnosticsError, setAgentDiagnosticsError] = useState<string | null>(null);
+  const [artifacts, setArtifacts] = useState<AgentArtifact[] | null>(null);
+  const [artifactsLoading, setArtifactsLoading] = useState(false);
+  const [artifactsError, setArtifactsError] = useState<string | null>(null);
+  const [traces, setTraces] = useState<AgentTrace[] | null>(null);
+  const [tracesLoading, setTracesLoading] = useState(false);
+  const [tracesError, setTracesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) setTab(initialTab);
@@ -262,6 +372,93 @@ export function PowerUserSheet({
   }, [isOpen, tab]);
 
   useEffect(() => {
+    if (!isOpen || tab !== "browser") return;
+    let active = true;
+    setAgentDiagnosticsLoading(true);
+    setAgentDiagnosticsError(null);
+    void (async () => {
+      try {
+        const { response, data } = await fetchAgentDiagnostics();
+        if (!active) return;
+        if (!response.ok) {
+          setAgentDiagnosticsError(data?.error || "unavailable");
+          setAgentDiagnostics(null);
+        } else {
+          setAgentDiagnostics(data);
+        }
+      } catch {
+        if (!active) return;
+        setAgentDiagnosticsError("network_error");
+        setAgentDiagnostics(null);
+      } finally {
+        if (active) setAgentDiagnosticsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isOpen, tab]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "artifacts") return;
+    let active = true;
+    setArtifactsLoading(true);
+    setArtifactsError(null);
+    void (async () => {
+      try {
+        const { response, data } = await listAgentArtifacts({
+          limit: 20,
+          session_key: activeSessionKey || undefined,
+        });
+        if (!active) return;
+        if (!response.ok) {
+          setArtifactsError((data as { error?: string | null })?.error || "unavailable");
+          setArtifacts(null);
+        } else {
+          setArtifacts(normalizeList<AgentArtifact>(data, "artifacts"));
+        }
+      } catch {
+        if (!active) return;
+        setArtifactsError("network_error");
+        setArtifacts(null);
+      } finally {
+        if (active) setArtifactsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [activeSessionKey, artifactEventCount, isOpen, tab]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "trace") return;
+    let active = true;
+    setTracesLoading(true);
+    setTracesError(null);
+    void (async () => {
+      try {
+        const { response, data } = await listAgentTraces({ limit: 20 });
+        if (!active) return;
+        if (!response.ok) {
+          setTracesError((data as { error?: string | null })?.error || "unavailable");
+          setTraces(null);
+        } else {
+          setTraces(normalizeList<AgentTrace>(data, "traces"));
+        }
+      } catch {
+        if (!active) return;
+        setTracesError("network_error");
+        setTraces(null);
+      } finally {
+        if (active) setTracesLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isOpen, tab]);
+
+  useEffect(() => {
     if (!isOpen || tab !== "usage") return;
     let active = true;
     setUsageLoading(true);
@@ -303,8 +500,12 @@ export function PowerUserSheet({
   const pendingCount = pendingApprovals.length;
 
   const header = (
-    <div className="flex items-center gap-1 rounded-full bg-zaki-hover p-1" role="tablist">
-      {(["controls", "approvals", "context", "memory", "usage"] as PowerUserTab[]).map((tabId) => {
+    <div
+      className="flex max-w-full items-center gap-1 overflow-x-auto rounded-zaki-lg border border-zaki bg-zaki-hover p-1 zaki-scrollbar-fade"
+      role="tablist"
+      aria-label={t("zakiControls.powerUser.tabsAria")}
+    >
+      {POWER_USER_TABS.map((tabId) => {
         const Icon = TAB_ICONS[tabId];
         const active = tab === tabId;
         const badge =
@@ -318,7 +519,7 @@ export function PowerUserSheet({
             data-testid={`power-user-tab-${tabId}`}
             onClick={() => setTab(tabId)}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+              "flex shrink-0 items-center gap-1.5 rounded-zaki-md px-3 py-1.5 text-xs font-semibold transition-colors",
               active
                 ? "bg-zaki-raised text-zaki-primary shadow-zaki-sm"
                 : "text-zaki-secondary hover:text-zaki-primary"
@@ -876,9 +1077,416 @@ export function PowerUserSheet({
     );
   };
 
+  const mergeArtifact = (artifactId: string, patch: AgentArtifact) => {
+    setArtifacts((current) =>
+      (current || []).map((artifact) =>
+        getArtifactId(artifact) === artifactId ? { ...artifact, ...patch } : artifact
+      )
+    );
+  };
+
+  const mergeTrace = (traceId: string, patch: AgentTrace | Record<string, unknown>) => {
+    setTraces((current) =>
+      (current || []).map((trace) =>
+        getTraceId(trace) === traceId ? { ...trace, ...patch } : trace
+      )
+    );
+  };
+
+  const handleArtifactShare = async (artifact: AgentArtifact) => {
+    const artifactId = getArtifactId(artifact);
+    if (!artifactId) return;
+    setBusyId(`artifact-share:${artifactId}`);
+    try {
+      const { response, data } = await shareAgentArtifact(artifactId);
+      if (!response.ok)
+        throw new Error(String((data as { error?: unknown })?.error || "share_failed"));
+      mergeArtifact(artifactId, data);
+      toast.success(t("zakiControls.powerUser.artifacts.shareSuccess"));
+    } catch {
+      toast.error(t("zakiControls.powerUser.artifacts.shareFailed"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleArtifactRevoke = async (artifact: AgentArtifact) => {
+    const artifactId = getArtifactId(artifact);
+    if (!artifactId) return;
+    setBusyId(`artifact-revoke:${artifactId}`);
+    try {
+      const { response, data } = await revokeAgentArtifactShare(artifactId);
+      if (!response.ok) throw new Error(data?.error || "revoke_failed");
+      mergeArtifact(artifactId, { public_url: null, share_code: null });
+      toast.success(t("zakiControls.powerUser.artifacts.revokeSuccess"));
+    } catch {
+      toast.error(t("zakiControls.powerUser.artifacts.revokeFailed"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleArtifactExport = async (artifact: AgentArtifact, format: string) => {
+    const artifactId = getArtifactId(artifact);
+    if (!artifactId) return;
+    setBusyId(`artifact-export:${artifactId}:${format}`);
+    try {
+      const { response, data } = await exportAgentArtifact(artifactId, format);
+      if (!response.ok) throw new Error(String(data?.error || "export_failed"));
+      const url = getShareUrl(data);
+      if (url && typeof window !== "undefined") {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      toast.success(t("zakiControls.powerUser.artifacts.exportSuccess", { format: format.toUpperCase() }));
+    } catch {
+      toast.error(t("zakiControls.powerUser.artifacts.exportFailed"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleTraceShare = async (trace: AgentTrace) => {
+    const traceId = getTraceId(trace);
+    if (!traceId) return;
+    setBusyId(`trace-share:${traceId}`);
+    try {
+      const { response, data } = await shareAgentTrace(traceId);
+      if (!response.ok)
+        throw new Error(String((data as { error?: unknown })?.error || "share_failed"));
+      mergeTrace(traceId, data);
+      toast.success(t("zakiControls.powerUser.trace.shareSuccess"));
+    } catch {
+      toast.error(t("zakiControls.powerUser.trace.shareFailed"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleTraceRevoke = async (trace: AgentTrace) => {
+    const traceId = getTraceId(trace);
+    if (!traceId) return;
+    setBusyId(`trace-revoke:${traceId}`);
+    try {
+      const { response, data } = await revokeAgentTraceShare(traceId);
+      if (!response.ok) throw new Error(data?.error || "revoke_failed");
+      mergeTrace(traceId, { public_url: null, share_code: null });
+      toast.success(t("zakiControls.powerUser.trace.revokeSuccess"));
+    } catch {
+      toast.error(t("zakiControls.powerUser.trace.revokeFailed"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const renderBrowser = () => {
+    const controlPlane = agentDiagnostics?.upstreamControlPlane || null;
+    const extensionEnabled =
+      getBooleanRecordValue(controlPlane, "extension_ws_enabled") ??
+      getBooleanRecordValue(agentDiagnostics, "extension_ws_enabled");
+    const upstreamReady = agentDiagnostics?.upstreamReady?.ok;
+    const upstreamHealth = agentDiagnostics?.upstreamHealth?.ok;
+    const latency =
+      agentDiagnostics?.upstreamReady?.latencyMs ??
+      agentDiagnostics?.upstreamHealth?.latencyMs ??
+      null;
+
+    return (
+      <div className="space-y-3" data-testid="power-user-browser">
+        {agentDiagnosticsLoading && !agentDiagnostics ? (
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+            {t("zakiControls.powerUser.browser.loading")}
+          </div>
+        ) : null}
+        {agentDiagnosticsError ? (
+          <div className="rounded-zaki-lg border border-rose-400/40 bg-rose-50 px-4 py-6 text-center text-sm text-rose-900 dark:border-rose-700/40 dark:bg-rose-950/30 dark:text-rose-100">
+            {t("zakiControls.powerUser.browser.unavailable", { error: agentDiagnosticsError })}
+          </div>
+        ) : null}
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              {t("zakiControls.powerUser.browser.serverLane")}
+            </div>
+            <div className="mt-2 text-lg font-semibold text-zaki-primary">
+              {upstreamReady === true
+                ? t("zakiControls.powerUser.browser.ready")
+                : upstreamReady === false
+                  ? t("zakiControls.powerUser.browser.degraded")
+                  : "—"}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted">
+              {latency != null
+                ? t("zakiControls.powerUser.browser.latency", { count: Math.round(latency) })
+                : t("zakiControls.powerUser.browser.publicWeb")}
+            </div>
+          </div>
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              {t("zakiControls.powerUser.browser.extensionLane")}
+            </div>
+            <div className="mt-2 text-lg font-semibold text-zaki-primary">
+              {extensionEnabled === false
+                ? t("zakiControls.powerUser.browser.disabled")
+                : t("zakiControls.powerUser.browser.pairingRequired")}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted">
+              {t("zakiControls.powerUser.browser.loggedInSessions")}
+            </div>
+          </div>
+          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+              {t("zakiControls.powerUser.browser.approvalGate")}
+            </div>
+            <div className="mt-2 text-lg font-semibold text-zaki-primary">
+              {pendingCount > 0 ? pendingCount : t("zakiControls.powerUser.browser.supervised")}
+            </div>
+            <div className="mt-1 text-xs text-zaki-muted">
+              {t("zakiControls.powerUser.browser.approvalHelper")}
+            </div>
+          </div>
+        </div>
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-zaki-primary">
+                {t("zakiControls.powerUser.browser.toolSurface")}
+              </div>
+              <div className="text-xs text-zaki-muted">
+                {t("zakiControls.powerUser.browser.toolSurfaceHelper")}
+              </div>
+            </div>
+            <span className="font-mono-ui text-xs text-zaki-muted">
+              {EXTENSION_TOOL_NAMES.length}/10
+            </span>
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {EXTENSION_TOOL_NAMES.map((toolName) => (
+              <span
+                key={toolName}
+                className="min-w-0 rounded-zaki-md border border-zaki-subtle bg-zaki-hover px-2 py-1 font-mono-ui text-[11px] text-zaki-secondary"
+              >
+                {toolName}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+          {upstreamHealth === false
+            ? t("zakiControls.powerUser.browser.healthDegraded")
+            : t("zakiControls.powerUser.browser.footer")}
+        </div>
+      </div>
+    );
+  };
+
+  const renderArtifacts = () => (
+    <div className="space-y-3" data-testid="power-user-artifacts">
+      <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-zaki-primary">
+              {t("zakiControls.powerUser.artifacts.deliverables")}
+            </div>
+            <div className="text-xs text-zaki-muted">
+              {t("zakiControls.powerUser.artifacts.deliverablesHelper")}
+            </div>
+          </div>
+          <FileText className="size-4 text-zaki-muted" aria-hidden />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {ARTIFACT_EXPORT_FORMATS.map((format) => (
+            <span
+              key={format}
+              className="rounded-zaki-md border border-zaki-subtle bg-zaki-hover px-2 py-1 font-mono-ui text-[11px] uppercase text-zaki-secondary"
+            >
+              {format}
+            </span>
+          ))}
+        </div>
+      </div>
+      {artifactsLoading && !artifacts ? (
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+          {t("zakiControls.powerUser.artifacts.loading")}
+        </div>
+      ) : null}
+      {artifactsError ? (
+        <div className="rounded-zaki-lg border border-rose-400/40 bg-rose-50 px-4 py-6 text-center text-sm text-rose-900 dark:border-rose-700/40 dark:bg-rose-950/30 dark:text-rose-100">
+          {t("zakiControls.powerUser.artifacts.unavailable", { error: artifactsError })}
+        </div>
+      ) : null}
+      {artifacts && artifacts.length === 0 ? (
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+          {t("zakiControls.powerUser.artifacts.empty")}
+        </div>
+      ) : null}
+      {(artifacts || []).map((artifact, index) => {
+        const artifactId = getArtifactId(artifact);
+        const shareUrl = getShareUrl(artifact);
+        const title = getArtifactTitle(artifact);
+        return (
+          <article
+            key={artifactId || index}
+            className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card"
+            data-testid="power-user-artifact-item"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-zaki-primary">
+                  {title}
+                </h3>
+                <div className="mt-1 flex flex-wrap items-center gap-2 font-mono-ui text-[11px] text-zaki-muted">
+                  <span>{artifact.type || artifact.mime_type || "artifact"}</span>
+                  <span>v{formatScalar(artifact.version ?? "—")}</span>
+                  <span>{formatTs(artifact.updated_at || artifact.created_at)}</span>
+                </div>
+              </div>
+              {shareUrl ? (
+                <a
+                  href={shareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-zaki-md border border-zaki-subtle text-zaki-secondary hover:text-zaki-primary"
+                  aria-label={t("zakiControls.powerUser.artifacts.openShared")}
+                >
+                  <ExternalLink className="size-3.5" aria-hidden />
+                </a>
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                disabled={!artifactId || busyId === `artifact-share:${artifactId}`}
+                onClick={() => void handleArtifactShare(artifact)}
+                data-testid={`power-user-artifact-share-${artifactId || index}`}
+                className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 text-xs font-semibold text-zaki-primary hover:bg-zaki-hover disabled:opacity-50"
+              >
+                <Share2 className="size-3.5" aria-hidden />
+                {t("zakiControls.powerUser.artifacts.share")}
+              </button>
+              <button
+                type="button"
+                disabled={!artifactId || !shareUrl || busyId === `artifact-revoke:${artifactId}`}
+                onClick={() => void handleArtifactRevoke(artifact)}
+                data-testid={`power-user-artifact-revoke-${artifactId || index}`}
+                className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 text-xs font-semibold text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary disabled:opacity-50"
+              >
+                <Link2Off className="size-3.5" aria-hidden />
+                {t("zakiControls.powerUser.artifacts.revoke")}
+              </button>
+              {ARTIFACT_EXPORT_FORMATS.slice(0, 3).map((format) => (
+                <button
+                  key={format}
+                  type="button"
+                  disabled={!artifactId || busyId === `artifact-export:${artifactId}:${format}`}
+                  onClick={() => void handleArtifactExport(artifact, format)}
+                  data-testid={`power-user-artifact-export-${format}-${artifactId || index}`}
+                  className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 font-mono-ui text-[11px] font-semibold uppercase text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary disabled:opacity-50"
+                >
+                  <Download className="size-3.5" aria-hidden />
+                  {format}
+                </button>
+              ))}
+            </div>
+          </article>
+        );
+      })}
+      <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+        {t("zakiControls.powerUser.artifacts.footer")}
+      </div>
+    </div>
+  );
+
+  const renderTrace = () => (
+    <div className="space-y-3" data-testid="power-user-trace">
+      {tracesLoading && !traces ? (
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+          {t("zakiControls.powerUser.trace.loading")}
+        </div>
+      ) : null}
+      {tracesError ? (
+        <div className="rounded-zaki-lg border border-rose-400/40 bg-rose-50 px-4 py-6 text-center text-sm text-rose-900 dark:border-rose-700/40 dark:bg-rose-950/30 dark:text-rose-100">
+          {t("zakiControls.powerUser.trace.unavailable", { error: tracesError })}
+        </div>
+      ) : null}
+      {traces && traces.length === 0 ? (
+        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+          {t("zakiControls.powerUser.trace.empty")}
+        </div>
+      ) : null}
+      {(traces || []).map((trace, index) => {
+        const traceId = getTraceId(trace);
+        const shareUrl = getShareUrl(trace);
+        const eventCount = Array.isArray(trace.events) ? trace.events.length : null;
+        return (
+          <article
+            key={traceId || index}
+            className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card"
+            data-testid="power-user-trace-item"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate font-mono-ui text-xs font-semibold text-zaki-primary">
+                  {traceId || t("zakiControls.powerUser.trace.unknownRun")}
+                </h3>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zaki-muted">
+                  <span>{trace.status || "unknown"}</span>
+                  <span>{formatTs(trace.started_at)}</span>
+                  {eventCount != null ? (
+                    <span>
+                      {t("zakiControls.powerUser.trace.events", { count: eventCount })}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {shareUrl ? (
+                <a
+                  href={shareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-zaki-md border border-zaki-subtle text-zaki-secondary hover:text-zaki-primary"
+                  aria-label={t("zakiControls.powerUser.trace.openShared")}
+                >
+                  <ExternalLink className="size-3.5" aria-hidden />
+                </a>
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                disabled={!traceId || busyId === `trace-share:${traceId}`}
+                onClick={() => void handleTraceShare(trace)}
+                data-testid={`power-user-trace-share-${traceId || index}`}
+                className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 text-xs font-semibold text-zaki-primary hover:bg-zaki-hover disabled:opacity-50"
+              >
+                <Share2 className="size-3.5" aria-hidden />
+                {t("zakiControls.powerUser.trace.share")}
+              </button>
+              <button
+                type="button"
+                disabled={!traceId || !shareUrl || busyId === `trace-revoke:${traceId}`}
+                onClick={() => void handleTraceRevoke(trace)}
+                data-testid={`power-user-trace-revoke-${traceId || index}`}
+                className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 text-xs font-semibold text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary disabled:opacity-50"
+              >
+                <Link2Off className="size-3.5" aria-hidden />
+                {t("zakiControls.powerUser.trace.revoke")}
+              </button>
+            </div>
+          </article>
+        );
+      })}
+      <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+        {t("zakiControls.powerUser.trace.footer")}
+      </div>
+    </div>
+  );
+
   const body = useMemo(() => {
     if (tab === "controls") return renderControls();
     if (tab === "approvals") return renderApprovals();
+    if (tab === "browser") return renderBrowser();
+    if (tab === "artifacts") return renderArtifacts();
+    if (tab === "trace") return renderTrace();
     if (tab === "context") return renderContext();
     if (tab === "usage") return renderUsage();
     return renderMemory();
@@ -897,6 +1505,16 @@ export function PowerUserSheet({
     memoryDiag,
     memoryDiagLoading,
     memoryDiagError,
+    agentDiagnostics,
+    agentDiagnosticsLoading,
+    agentDiagnosticsError,
+    artifacts,
+    artifactsLoading,
+    artifactsError,
+    traces,
+    tracesLoading,
+    tracesError,
+    artifactEventCount,
     activeSessionKey,
     activeMode,
     modePending,
@@ -913,7 +1531,7 @@ export function PowerUserSheet({
       title={t("zakiControls.powerUser.title")}
       icon={<Sparkles className="size-4" />}
       subtitle={t("zakiControls.powerUser.subtitle")}
-      width="md"
+      width="lg"
       padded={false}
     >
       <div className="flex flex-col gap-3 px-4 py-4">

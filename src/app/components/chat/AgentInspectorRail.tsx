@@ -63,6 +63,9 @@ export type AgentInspectorRailProps = {
   turnStartedAt?: number | null;
   turnDurationMs?: number | null;
   onOpenMemory?: () => void;
+  onOpenBrowser?: () => void;
+  onOpenArtifacts?: () => void;
+  onOpenTrace?: () => void;
   onOpenSettings?: () => void;
   onShare?: () => void;
   onExport?: () => void;
@@ -150,6 +153,9 @@ export function AgentInspectorRail({
   turnStartedAt = null,
   turnDurationMs = null,
   onOpenMemory,
+  onOpenBrowser,
+  onOpenArtifacts,
+  onOpenTrace,
   onOpenSettings,
   onShare,
   onExport,
@@ -193,6 +199,41 @@ export function AgentInspectorRail({
     quotaInfo && quotaInfo.limit > 0
       ? Math.max(0, Math.min(100, (quotaInfo.remaining / quotaInfo.limit) * 100))
       : null;
+
+  const capabilityCards = [
+    {
+      id: "memory",
+      icon: <Brain className="size-4" aria-hidden />,
+      title: "Graph Memory",
+      meta: "user scoped",
+      tone: "success",
+      onClick: onOpenMemory,
+    },
+    {
+      id: "browser",
+      icon: <Globe2 className="size-4" aria-hidden />,
+      title: "Browser Control",
+      meta: "server + extension",
+      tone: sandbox?.enabled ? "success" : "accent",
+      onClick: onOpenBrowser,
+    },
+    {
+      id: "artifacts",
+      icon: <Boxes className="size-4" aria-hidden />,
+      title: "Artifacts",
+      meta: artifactCount > 0 ? `${artifactCount} events` : "ready",
+      tone: artifactCount > 0 ? "accent" : "default",
+      onClick: onOpenArtifacts,
+    },
+    {
+      id: "trace",
+      icon: <Activity className="size-4" aria-hidden />,
+      title: "Trace Share",
+      meta: `${recentTrace.length} recent`,
+      tone: recentTrace.length > 0 ? "accent" : "default",
+      onClick: onOpenTrace,
+    },
+  ] as const;
 
   return (
     <aside className="zaki-agent-inspector" aria-label="Agent inspector">
@@ -248,30 +289,28 @@ export function AgentInspectorRail({
       <V2Panel className="zaki-agent-inspector__capabilities" aria-label="Agent capabilities">
         <V2PanelHead title="Capability Plane" meta={defaultModel.contextWindow} />
         <div className="zaki-agent-inspector__capability-grid">
-          <V2InlineRow
-            icon={<Brain className="size-4" aria-hidden />}
-            title="Graph Memory"
-            meta="user scoped"
-            tone="success"
-          />
-          <V2InlineRow
-            icon={<Globe2 className="size-4" aria-hidden />}
-            title="Browser Control"
-            meta="server + extension"
-            tone={sandbox?.enabled ? "success" : "accent"}
-          />
-          <V2InlineRow
-            icon={<Boxes className="size-4" aria-hidden />}
-            title="Artifacts"
-            meta={artifactCount > 0 ? `${artifactCount} events` : "ready"}
-            tone={artifactCount > 0 ? "accent" : "default"}
-          />
-          <V2InlineRow
-            icon={<Activity className="size-4" aria-hidden />}
-            title="Trace Share"
-            meta={`${recentTrace.length} recent`}
-            tone={recentTrace.length > 0 ? "accent" : "default"}
-          />
+          {capabilityCards.map((card) => (
+            <button
+              key={card.id}
+              type="button"
+              className="zaki-agent-inspector__capability-card"
+              data-tone={card.tone}
+              onClick={card.onClick}
+              disabled={!card.onClick}
+            >
+              <span className="zaki-agent-inspector__capability-icon">
+                {card.icon}
+              </span>
+              <span className="min-w-0">
+                <span className="zaki-agent-inspector__capability-title">
+                  {card.title}
+                </span>
+                <span className="zaki-agent-inspector__capability-meta">
+                  {card.meta}
+                </span>
+              </span>
+            </button>
+          ))}
         </div>
       </V2Panel>
 

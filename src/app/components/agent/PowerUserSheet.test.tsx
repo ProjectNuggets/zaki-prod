@@ -6,9 +6,24 @@ import { PowerUserSheet, deriveSoftLimitState } from "./PowerUserSheet";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 
 jest.mock("@/lib/api", () => ({
+  exportAgentArtifact: jest.fn(),
+  fetchAgentDiagnostics: jest.fn(),
   fetchUsageQuota: jest.fn(),
   fetchContextDiagnostics: jest.fn(),
   fetchMemoryDoctor: jest.fn(),
+  listAgentArtifacts: jest.fn(),
+  listAgentTraces: jest.fn(),
+  revokeAgentArtifactShare: jest.fn(),
+  revokeAgentTraceShare: jest.fn(),
+  shareAgentArtifact: jest.fn(),
+  shareAgentTrace: jest.fn(),
+}));
+
+jest.mock("sonner", () => ({
+  toast: {
+    error: jest.fn(),
+    success: jest.fn(),
+  },
 }));
 
 const tMock = (key: string, options?: Record<string, unknown>) => {
@@ -20,11 +35,23 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiControls.powerUser.context.sections.memory": "Memory",
     "zakiControls.powerUser.tabs.controls": "Controls",
     "zakiControls.powerUser.tabs.approvals": "Approvals",
+    "zakiControls.powerUser.tabs.browser": "Browser",
+    "zakiControls.powerUser.tabs.artifacts": "Artifacts",
+    "zakiControls.powerUser.tabs.trace": "Trace",
     "zakiControls.powerUser.tabs.context": "Context",
     "zakiControls.powerUser.tabs.memory": "Memory",
     "zakiControls.powerUser.tabs.usage": "Usage",
     "zakiControls.powerUser.approvals.approve": "Approve",
     "zakiControls.powerUser.approvals.deny": "Deny",
+    "zakiControls.powerUser.browser.toolSurface": "Extension tool surface",
+    "zakiControls.powerUser.browser.ready": "Ready",
+    "zakiControls.powerUser.browser.pairingRequired": "Pairing required",
+    "zakiControls.powerUser.artifacts.share": "Share",
+    "zakiControls.powerUser.artifacts.revoke": "Stop sharing",
+    "zakiControls.powerUser.artifacts.shareSuccess": "Artifact share created",
+    "zakiControls.powerUser.trace.share": "Share run",
+    "zakiControls.powerUser.trace.revoke": "Stop sharing",
+    "zakiControls.powerUser.trace.shareSuccess": "Trace share created",
   };
   if (labels[key]) return labels[key];
   if (key === "zakiControls.powerUser.context.unavailable") {
@@ -45,6 +72,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   if (key === "zakiControls.powerUser.usage.footer") {
     return `Soft-limit warning at ${String(options?.warning ?? "")}% used; near-limit at ${String(options?.near ?? "")}%. Hard stops still apply on hit.`;
   }
+  if (key === "zakiControls.powerUser.trace.events") {
+    return `${String(options?.count ?? "")} events`;
+  }
   return key;
 };
 
@@ -55,12 +85,28 @@ jest.mock("react-i18next", () => ({
 }));
 
 const fetchUsageQuotaMock = jest.requireMock("@/lib/api").fetchUsageQuota as jest.Mock;
+const fetchAgentDiagnosticsMock = jest.requireMock("@/lib/api")
+  .fetchAgentDiagnostics as jest.Mock;
 const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
   .fetchMemoryDoctor as jest.Mock;
+const listAgentArtifactsMock = jest.requireMock("@/lib/api").listAgentArtifacts as jest.Mock;
+const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
+const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
+const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
 
 beforeEach(() => {
+  jest.clearAllMocks();
+  fetchAgentDiagnosticsMock.mockResolvedValue({
+    response: { ok: true },
+    data: {
+      agentBackendEnabled: true,
+      upstreamReady: { ok: true, latencyMs: 24 },
+      upstreamHealth: { ok: true, latencyMs: 20 },
+      upstreamControlPlane: { extension_ws_enabled: true },
+    },
+  });
   fetchContextDiagnosticsMock.mockResolvedValue({
     response: { ok: true },
     data: { active: false, reason: "no_active_session" },
@@ -68,6 +114,22 @@ beforeEach(() => {
   fetchMemoryDoctorMock.mockResolvedValue({
     response: { ok: true },
     data: { active: false, reason: "no_active_session" },
+  });
+  listAgentArtifactsMock.mockResolvedValue({
+    response: { ok: true },
+    data: { artifacts: [] },
+  });
+  listAgentTracesMock.mockResolvedValue({
+    response: { ok: true },
+    data: { traces: [] },
+  });
+  shareAgentArtifactMock.mockResolvedValue({
+    response: { ok: true },
+    data: { id: "artifact-1", public_url: "https://share.local/a" },
+  });
+  shareAgentTraceMock.mockResolvedValue({
+    response: { ok: true },
+    data: { run_id: "run-1", public_url: "https://share.local/t" },
   });
 });
 
@@ -108,15 +170,109 @@ describe("PowerUserSheet", () => {
     expect(screen.getAllByTestId("power-user-approval-item")).toHaveLength(2);
   });
 
-  it("switches to Context and Memory tabs on click", () => {
+  it("switches to Context and Memory tabs on click", async () => {
     render(<PowerUserSheet isOpen onClose={() => {}} />);
-    fireEvent.click(screen.getByTestId("power-user-tab-context"));
-    expect(screen.getByTestId("power-user-context")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("power-user-tab-memory"));
-    expect(screen.getByTestId("power-user-memory")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-tab-context"));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-context")).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-tab-memory"));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-memory")).toBeInTheDocument();
+    });
   });
 
-  it("invokes onApproveRequest with true when Approve is clicked", () => {
+  it("renders the browser surface from Agent diagnostics", async () => {
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="browser" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-browser")).toBeInTheDocument();
+      expect(screen.getByText("extension_navigate")).toBeInTheDocument();
+    });
+    expect(screen.getByText("extension_list_tabs")).toBeInTheDocument();
+    expect(fetchAgentDiagnosticsMock).toHaveBeenCalled();
+  });
+
+  it("lists session artifacts and can request a share", async () => {
+    listAgentArtifactsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        artifacts: [
+          {
+            id: "artifact-1",
+            title: "Launch brief",
+            type: "markdown",
+            version: 3,
+            updated_at: "2026-05-25T10:00:00Z",
+          },
+        ],
+      },
+    });
+    await act(async () => {
+      render(
+        <PowerUserSheet
+          isOpen
+          onClose={() => {}}
+          initialTab="artifacts"
+          activeSessionKey="agent:zaki:user:test:thread:main"
+        />
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Launch brief")).toBeInTheDocument();
+    });
+    expect(listAgentArtifactsMock).toHaveBeenCalledWith({
+      limit: 20,
+      session_key: "agent:zaki:user:test:thread:main",
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-artifact-share-artifact-1"));
+    });
+    await waitFor(() => {
+      expect(shareAgentArtifactMock).toHaveBeenCalledWith("artifact-1");
+    });
+  });
+
+  it("lists traces and can request a sanitized share", async () => {
+    listAgentTracesMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        traces: [
+          {
+            run_id: "run-1",
+            status: "succeeded",
+            started_at: "2026-05-25T10:00:00Z",
+            events: [{ type: "tool_start" }, { type: "done" }],
+          },
+        ],
+      },
+    });
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="trace" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("run-1")).toBeInTheDocument();
+    });
+    expect(screen.getByText("2 events")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-trace-share-run-1"));
+    });
+    await waitFor(() => {
+      expect(shareAgentTraceMock).toHaveBeenCalledWith("run-1");
+    });
+  });
+
+  it("invokes onApproveRequest with true when Approve is clicked", async () => {
     const onApprove = jest.fn<(id: string, approved: boolean) => Promise<void>>();
     onApprove.mockResolvedValue(undefined);
     const pending: NullalisApprovalRequest[] = [
@@ -131,11 +287,15 @@ describe("PowerUserSheet", () => {
       />
     );
     fireEvent.click(screen.getByTestId("power-user-tab-approvals"));
-    fireEvent.click(screen.getByTestId("power-user-approval-approve-req-1"));
-    expect(onApprove).toHaveBeenCalledWith("req-1", true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-approval-approve-req-1"));
+    });
+    await waitFor(() => {
+      expect(onApprove).toHaveBeenCalledWith("req-1", true);
+    });
   });
 
-  it("invokes onApproveRequest with false when Deny is clicked", () => {
+  it("invokes onApproveRequest with false when Deny is clicked", async () => {
     const onApprove = jest.fn<(id: string, approved: boolean) => Promise<void>>();
     onApprove.mockResolvedValue(undefined);
     const pending: NullalisApprovalRequest[] = [
@@ -150,8 +310,12 @@ describe("PowerUserSheet", () => {
       />
     );
     fireEvent.click(screen.getByTestId("power-user-tab-approvals"));
-    fireEvent.click(screen.getByTestId("power-user-approval-deny-req-1"));
-    expect(onApprove).toHaveBeenCalledWith("req-1", false);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-approval-deny-req-1"));
+    });
+    await waitFor(() => {
+      expect(onApprove).toHaveBeenCalledWith("req-1", false);
+    });
   });
 
   it("renders context diagnostics empty state when no active session", async () => {

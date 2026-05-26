@@ -301,11 +301,14 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     const handleOpenPowerUser = (event: Event) => {
       const detail = (event as CustomEvent<{ tab?: PowerUserTab }>).detail;
       const tab =
-        detail?.tab === "controls" ||
-        detail?.tab === "approvals" ||
-        detail?.tab === "context" ||
-        detail?.tab === "memory" ||
-        detail?.tab === "usage"
+	        detail?.tab === "controls" ||
+	        detail?.tab === "approvals" ||
+	        detail?.tab === "browser" ||
+	        detail?.tab === "artifacts" ||
+	        detail?.tab === "trace" ||
+	        detail?.tab === "context" ||
+	        detail?.tab === "memory" ||
+	        detail?.tab === "usage"
           ? detail.tab
           : "controls";
       setPowerUserInitialTab(tab);

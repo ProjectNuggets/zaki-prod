@@ -1432,6 +1432,12 @@
   color: var(--v2-ink-1);
 }
 
+.zaki-mobile-topbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
 .zaki-mobile-topbar__brand {
   display: inline-flex;
   align-items: center;
@@ -3722,8 +3728,85 @@
   background: var(--v2-hairline-faint);
 }
 
-.zaki-agent-inspector__capability-grid .v2-inline-row {
+.zaki-agent-inspector__capability-card {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  min-height: 48px;
+  padding: 9px 10px;
+  border: 0;
   background: var(--v2-bg);
+  color: var(--v2-ink-2);
+  text-align: left;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.zaki-agent-inspector__capability-card:not(:disabled) {
+  cursor: pointer;
+}
+
+.zaki-agent-inspector__capability-card:not(:disabled):hover,
+.zaki-agent-inspector__capability-card:not(:disabled):focus-visible {
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-inspector__capability-card:focus-visible {
+  outline: 1px solid var(--v2-accent);
+  outline-offset: -1px;
+}
+
+.zaki-agent-inspector__capability-card:disabled {
+  opacity: 0.72;
+}
+
+.zaki-agent-inspector__capability-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--v2-hairline-faint);
+  color: var(--v2-ink-3);
+}
+
+.zaki-agent-inspector__capability-card[data-tone="success"] .zaki-agent-inspector__capability-icon {
+  color: var(--v2-success);
+}
+
+.zaki-agent-inspector__capability-card[data-tone="accent"] .zaki-agent-inspector__capability-icon {
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__capability-card[data-tone="warn"] .zaki-agent-inspector__capability-icon {
+  color: var(--v2-warn);
+}
+
+.zaki-agent-inspector__capability-title,
+.zaki-agent-inspector__capability-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-agent-inspector__capability-title {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__capability-meta {
+  margin-top: 2px;
+  color: var(--v2-ink-4);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
 }
 
 .zaki-agent-inspector__task-list,

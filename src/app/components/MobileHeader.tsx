@@ -5,7 +5,7 @@
  * Includes hamburger button to open sidebar drawer.
  */
 
-import { Menu, Network } from "lucide-react";
+import { Menu, Network, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useNavigationStore, useUIStore } from "@/stores";
@@ -22,6 +22,13 @@ export function MobileHeader() {
     threadId && threadId !== ZAKI_BOT_THREAD_ID
       ? threadId.replace(/[-_]+/g, " ")
       : t("mobileHeader.agentTitle", { defaultValue: "Direct chat" });
+  const openAgentControls = () => {
+    window.dispatchEvent(
+      new CustomEvent("zaki:open-power-user", {
+        detail: { tab: "controls" },
+      })
+    );
+  };
 
   return (
     <header
@@ -50,14 +57,26 @@ export function MobileHeader() {
       )}
 
       {isAgentRoute ? (
-        <button
-          type="button"
-          className="zaki-mobile-topbar__button"
-          onClick={() => navigate("/brain")}
-          aria-label={t("mobileHeader.openBrain", { defaultValue: "Open brain" })}
-        >
-          <Network className="size-5" />
-        </button>
+        <div className="zaki-mobile-topbar__actions">
+          <button
+            type="button"
+            className="zaki-mobile-topbar__button"
+            onClick={openAgentControls}
+            aria-label={t("mobileHeader.openAgentControls", {
+              defaultValue: "Open agent controls",
+            })}
+          >
+            <SlidersHorizontal className="size-5" />
+          </button>
+          <button
+            type="button"
+            className="zaki-mobile-topbar__button"
+            onClick={() => navigate("/brain")}
+            aria-label={t("mobileHeader.openBrain", { defaultValue: "Open brain" })}
+          >
+            <Network className="size-5" />
+          </button>
+        </div>
       ) : (
         <div className="w-11" />
       )}

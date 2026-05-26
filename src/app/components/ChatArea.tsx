@@ -6888,6 +6888,18 @@ export function ChatArea() {
                 turnStartedAt={turnStartedAt}
                 turnDurationMs={turnDurationMs}
                 onOpenMemory={openAgentMemorySurface}
+                onOpenBrowser={() => {
+                  setPowerUserInitialTab("browser");
+                  setPowerUserOpen(true);
+                }}
+                onOpenArtifacts={() => {
+                  setPowerUserInitialTab("artifacts");
+                  setPowerUserOpen(true);
+                }}
+                onOpenTrace={() => {
+                  setPowerUserInitialTab("trace");
+                  setPowerUserOpen(true);
+                }}
                 onOpenSettings={() => navigate("/settings#settings-products")}
                 onShare={handleShare}
                 onExport={handleExport}
@@ -7080,6 +7092,7 @@ export function ChatArea() {
           sandbox={sandboxState}
           pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
           onApproveRequest={handleApprovalAction}
+          artifactEventCount={agentArtifactEventCount}
         />
       ) : null}
 
