@@ -1957,6 +1957,37 @@ export function extractNullalisTranscriptEntry(
     };
   }
 
+  if (type === "tool_only_turn") {
+    const toolCount = numericValue(payload.tool_calls_executed ?? payload.toolCallsExecuted) ?? 0;
+    const taskIds = Array.isArray(payload.spawned_task_ids)
+      ? payload.spawned_task_ids.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : Array.isArray(payload.spawnedTaskIds)
+        ? payload.spawnedTaskIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        : [];
+    const iterations = numericValue(payload.iterations_used ?? payload.iterationsUsed);
+    const textParts = [
+      `${toolCount} tool${toolCount === 1 ? "" : "s"} ran`,
+      taskIds.length
+        ? `${taskIds.length} background task${taskIds.length === 1 ? "" : "s"} spawned`
+        : "",
+      iterations != null ? `${iterations} iteration${iterations === 1 ? "" : "s"}` : "",
+    ].filter(Boolean);
+    return {
+      id: nullalisEntryId("tool-only-turn", now),
+      kind: "task",
+      intent: "planning",
+      text: textParts.join(" · ") || "Background agent work dispatched",
+      timestamp: now,
+      importance: 84,
+      phase: "tool_only_turn",
+      status: taskIds.length ? "background" : "done",
+      resultSummary: taskIds.length ? taskIds.join(", ") : null,
+      resultState: taskIds.length ? "running" : "done",
+      groupKey: "tool-only-turn",
+      source: "task",
+    };
+  }
+
   if (type === "approval_required") {
     const approval = extractNullalisApprovalRequest(payload, now);
     return {
@@ -4487,13 +4518,7 @@ export function ChatArea() {
           spawned_task_ids: taskIds,
           iterations_used: iters,
         });
-        pushNullalisTranscriptEntry({
-          kind: "tool_only_turn",
-          toolCallsExecuted: toolCount,
-          spawnedTaskIds: taskIds,
-          iterationsUsed: iters,
-          timestamp: Date.now(),
-        } as unknown as ZakiTranscriptSeed);
+        pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_only_turn", payload));
         // Don't return done — the gateway will still emit a final
         // chunk (placeholder or real) plus the close frame.
         return {};

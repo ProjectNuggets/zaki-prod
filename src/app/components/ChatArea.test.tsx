@@ -914,6 +914,26 @@ describe("ChatArea Component", () => {
       resultSummary: "docx",
     });
 
+    expect(
+      extractNullalisTranscriptEntry(
+        "tool_only_turn",
+        {
+          tool_calls_executed: 4,
+          spawned_task_ids: ["task-a", "task-b"],
+          iterations_used: 2,
+        },
+        557
+      )
+    ).toMatchObject({
+      kind: "task",
+      intent: "planning",
+      text: "4 tools ran · 2 background tasks spawned · 2 iterations",
+      phase: "tool_only_turn",
+      status: "background",
+      resultSummary: "task-a, task-b",
+      resultState: "running",
+    });
+
     expect(extractNullalisTranscriptEntry("done", {}, 666)).toMatchObject({
       kind: "transition",
       text: "Finalized the response",

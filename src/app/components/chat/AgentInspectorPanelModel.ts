@@ -1,0 +1,226 @@
+import type { NullalisTranscriptEntry } from "./BotStatusRail";
+
+export type AgentInspectorPanelEvent = {
+  id: string;
+  label: string;
+  summary: string;
+  meta: string | null;
+  timestamp: number;
+  state: NullalisTranscriptEntry["resultState"];
+  files: string[];
+  command: string | null;
+};
+
+export type AgentInspectorPanelModel = {
+  sources: AgentInspectorPanelEvent[];
+  artifacts: AgentInspectorPanelEvent[];
+  browser: AgentInspectorPanelEvent[];
+  cron: AgentInspectorPanelEvent[];
+  trace: AgentInspectorPanelEvent[];
+};
+
+const MAX_PANEL_EVENTS = 5;
+const MAX_TRACE_EVENTS = 7;
+
+function valueToText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalize(value: unknown): string {
+  return valueToText(value).toLowerCase();
+}
+
+function haystack(entry: NullalisTranscriptEntry): string {
+  return [
+    entry.kind,
+    entry.intent,
+    entry.phase,
+    entry.source,
+    entry.tool,
+    entry.status,
+    entry.command,
+    entry.activityLabel,
+    entry.resultSummary,
+    entry.inputPreview,
+    entry.outputPreview,
+    entry.groupKey,
+    entry.text,
+    ...(entry.files ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function includesAny(entry: NullalisTranscriptEntry, terms: readonly string[]) {
+  const text = haystack(entry);
+  return terms.some((term) => text.includes(term));
+}
+
+function primaryLabel(entry: NullalisTranscriptEntry): string {
+  return (
+    valueToText(entry.tool) ||
+    valueToText(entry.intent) ||
+    valueToText(entry.phase) ||
+    valueToText(entry.kind) ||
+    "event"
+  );
+}
+
+function primarySummary(entry: NullalisTranscriptEntry): string {
+  return (
+    valueToText(entry.activityLabel) ||
+    valueToText(entry.resultSummary) ||
+    valueToText(entry.outputPreview) ||
+    valueToText(entry.inputPreview) ||
+    valueToText(entry.text) ||
+    "Event captured"
+  );
+}
+
+function hasEntryContent(entry: NullalisTranscriptEntry): boolean {
+  return [
+    entry.activityLabel,
+    entry.resultSummary,
+    entry.outputPreview,
+    entry.inputPreview,
+    entry.text,
+    entry.tool,
+    entry.intent,
+    entry.phase,
+    entry.kind,
+  ].some((value) => valueToText(value).length > 0) || Boolean(entry.files?.length);
+}
+
+function formatDuration(ms?: number | null): string | null {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return null;
+  if (ms < 1000) return `${Math.max(1, Math.round(ms))}ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+}
+
+function metaForEntry(entry: NullalisTranscriptEntry): string | null {
+  const bits = [
+    valueToText(entry.status),
+    entry.resultState ? String(entry.resultState) : "",
+    formatDuration(entry.durationMs) ?? "",
+    entry.files?.length ? `${entry.files.length} file${entry.files.length === 1 ? "" : "s"}` : "",
+  ]
+    .filter(Boolean)
+    .filter((value, index, all) => all.indexOf(value) === index);
+  return bits.length ? bits.join(" · ") : null;
+}
+
+function toPanelEvent(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent {
+  return {
+    id: entry.id || `${entry.kind || "event"}:${entry.timestamp || 0}:${primarySummary(entry)}`,
+    label: primaryLabel(entry),
+    summary: primarySummary(entry),
+    meta: metaForEntry(entry),
+    timestamp: typeof entry.timestamp === "number" ? entry.timestamp : 0,
+    state: entry.resultState ?? null,
+    files: entry.files ? [...entry.files] : [],
+    command: entry.command ?? null,
+  };
+}
+
+function recentEvents(entries: NullalisTranscriptEntry[], limit = MAX_PANEL_EVENTS) {
+  return [...entries]
+    .filter(hasEntryContent)
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    .slice(0, limit)
+    .map(toPanelEvent);
+}
+
+export function isAgentBrowserEntry(entry: NullalisTranscriptEntry): boolean {
+  return includesAny(entry, [
+    "browser",
+    "playwright",
+    "extension",
+    "screenshot",
+    "navigate",
+    "page.goto",
+    "browser.open",
+    "browser_click",
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_take_screenshot",
+  ]);
+}
+
+export function isAgentCronEntry(entry: NullalisTranscriptEntry): boolean {
+  return (
+    normalize(entry.phase) === "tool_only_turn" ||
+    includesAny(entry, [
+      "cron",
+      "automation",
+      "scheduled",
+      "recurring",
+      "background",
+      "follow-up",
+      "follow up",
+      "subagent",
+      "spawned",
+      "wake",
+    ])
+  );
+}
+
+export function isAgentArtifactEntry(entry: NullalisTranscriptEntry): boolean {
+  if (normalize(entry.phase) === "artifact_event") return true;
+  if (normalize(entry.tool) === "artifact") return true;
+  return includesAny(entry, [
+    "artifact",
+    "canvas",
+    "produce_document",
+    "create_document",
+    "write_file",
+    "save_file",
+    "export",
+    "generated file",
+    "generated output",
+    "created file",
+    "wrote ",
+    "saved ",
+  ]);
+}
+
+export function isAgentSourceEntry(entry: NullalisTranscriptEntry): boolean {
+  if (isAgentBrowserEntry(entry) || isAgentCronEntry(entry) || isAgentArtifactEntry(entry)) {
+    return false;
+  }
+  if (entry.intent === "memory" || entry.intent === "context") return true;
+  if (
+    includesAny(entry, [
+      "memory",
+      "context",
+      "source",
+      "citation",
+      "retrieval",
+      "fetch",
+      "web_search",
+      "read_file",
+      "read ",
+      "grep",
+      "rg ",
+      "search",
+      "glob",
+      "list_files",
+    ])
+  ) {
+    return true;
+  }
+  return Boolean(entry.files?.length && includesAny(entry, ["read", "source", "context", "search"]));
+}
+
+export function buildAgentInspectorPanelModel(
+  entries: NullalisTranscriptEntry[]
+): AgentInspectorPanelModel {
+  const normalized = entries.filter((entry) => Boolean(entry && primarySummary(entry)));
+  return {
+    sources: recentEvents(normalized.filter(isAgentSourceEntry)),
+    artifacts: recentEvents(normalized.filter(isAgentArtifactEntry)),
+    browser: recentEvents(normalized.filter(isAgentBrowserEntry)),
+    cron: recentEvents(normalized.filter(isAgentCronEntry)),
+    trace: recentEvents(normalized, MAX_TRACE_EVENTS),
+  };
+}

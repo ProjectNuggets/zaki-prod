@@ -42,6 +42,7 @@ import type {
 } from "./BotStatusRail";
 import type { ContextGaugeData } from "./NullalisRuntimeWidgets";
 import { composeTurnTimeline } from "./NullalisTurnTimeline";
+import { buildAgentInspectorPanelModel } from "./AgentInspectorPanelModel";
 
 type AgentInspectorTab =
   | "plan"
@@ -141,38 +142,6 @@ function modeLabel(mode: AgentSessionMode | null) {
   return "Execute";
 }
 
-function transcriptLabel(entry: NullalisTranscriptEntry): string {
-  return entry.tool || entry.intent || entry.kind;
-}
-
-function transcriptSummary(entry: NullalisTranscriptEntry): string {
-  return (
-    entry.activityLabel ||
-    entry.resultSummary ||
-    entry.outputPreview ||
-    entry.inputPreview ||
-    entry.text
-  );
-}
-
-function entryMatches(entry: NullalisTranscriptEntry, terms: readonly string[]) {
-  const haystack = [
-    entry.intent,
-    entry.kind,
-    entry.tool,
-    entry.activityLabel,
-    entry.text,
-    entry.resultSummary,
-    entry.inputPreview,
-    entry.outputPreview,
-    ...(entry.files ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return terms.some((term) => haystack.includes(term));
-}
-
 function PanelActionButton({
   children,
   onClick,
@@ -237,42 +206,15 @@ export function AgentInspectorRail({
     () => composeTurnTimeline(transcriptEntries),
     [transcriptEntries]
   );
-  const recentTrace = useMemo(() => transcriptEntries.slice(-7).reverse(), [transcriptEntries]);
-  const sourceEntries = useMemo(
-    () =>
-      transcriptEntries
-        .filter(
-          (entry) =>
-            entry.intent === "memory" ||
-            entry.intent === "context" ||
-            entry.intent === "file" ||
-            Boolean(entry.files?.length) ||
-            entryMatches(entry, ["source", "citation", "document", "web"])
-        )
-        .slice(-5)
-        .reverse(),
+  const panelModel = useMemo(
+    () => buildAgentInspectorPanelModel(transcriptEntries),
     [transcriptEntries]
   );
-  const artifactEntries = useMemo(
-    () =>
-      transcriptEntries
-        .filter(
-          (entry) =>
-            Boolean(entry.files?.length) ||
-            entryMatches(entry, ["artifact", "canvas", "document", "export", "pdf", "docx"])
-        )
-        .slice(-5)
-        .reverse(),
-    [transcriptEntries]
-  );
-  const browserEntries = useMemo(
-    () =>
-      transcriptEntries
-        .filter((entry) => entryMatches(entry, ["browser", "playwright", "extension"]))
-        .slice(-5)
-        .reverse(),
-    [transcriptEntries]
-  );
+  const recentTrace = panelModel.trace;
+  const sourceEntries = panelModel.sources;
+  const artifactEntries = panelModel.artifacts;
+  const browserEntries = panelModel.browser;
+  const cronEntries = panelModel.cron;
   const sortedTasks = useMemo(
     () => [...tasks].sort((a, b) => a.updatedAt - b.updatedAt),
     [tasks]
@@ -356,7 +298,7 @@ export function AgentInspectorRail({
         onChange={handleTabChange}
         options={[
           { id: "plan", label: "Plan", count: sortedTasks.length || undefined },
-          { id: "cron", label: "Cron" },
+          { id: "cron", label: "Cron", count: cronEntries.length || undefined },
           { id: "sources", label: "Sources", count: sourceEntries.length || undefined },
           {
             id: "artifacts",
@@ -409,20 +351,43 @@ export function AgentInspectorRail({
 
         {tab === "cron" ? (
           <V2Panel aria-label="Cron">
-            <V2PanelHead title="Cron" meta="scheduled runs" />
+            <V2PanelHead title="Cron" meta={`${cronEntries.length || 0} background`} />
             <V2InlineRow
-              tone={isStreaming ? "accent" : "default"}
+              tone={cronEntries.length || isStreaming ? "accent" : "default"}
               icon={<CalendarClock className="size-4" aria-hidden />}
-              title={isStreaming ? "Foreground run active" : "No scheduled run active"}
+              title={
+                cronEntries.length
+                  ? "Background work captured"
+                  : isStreaming
+                    ? "Foreground run active"
+                    : "No scheduled run active"
+              }
               meta={
-                isStreaming
-                  ? "This turn is live now; scheduled runs will be linked here."
-                  : "Automations and background retries will appear here once wired."
+                cronEntries.length
+                  ? "Scheduled, spawned, or automation events from this turn"
+                  : isStreaming
+                    ? "This turn is live now; scheduled runs will be linked here."
+                    : "Automations and background retries will appear here once wired."
               }
             />
-            <div className="v2-empty-line">
-              No linked cron jobs or autonomous follow-ups in this session.
-            </div>
+            {cronEntries.length ? (
+              <ol className="zaki-agent-inspector__event-list">
+                {cronEntries.map((event) => (
+                  <li key={event.id}>
+                    <CalendarClock className="zaki-agent-inspector__event-icon" aria-hidden />
+                    <div>
+                      <strong>{event.label}</strong>
+                      <span>{event.summary}</span>
+                      {event.meta ? <small>{event.meta}</small> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="v2-empty-line">
+                No linked cron jobs or autonomous follow-ups in this session.
+              </div>
+            )}
           </V2Panel>
         ) : null}
 
@@ -454,13 +419,13 @@ export function AgentInspectorRail({
             />
             {sourceEntries.length ? (
               <ol className="zaki-agent-inspector__event-list">
-                {sourceEntries.map((entry) => (
-                  <li key={entry.id}>
+                {sourceEntries.map((event) => (
+                  <li key={event.id}>
                     <FileText className="zaki-agent-inspector__event-icon" aria-hidden />
                     <div>
-                      <strong>{transcriptLabel(entry)}</strong>
-                      <span>{transcriptSummary(entry)}</span>
-                      {entry.files?.length ? <small>{entry.files.join(", ")}</small> : null}
+                      <strong>{event.label}</strong>
+                      <span>{event.summary}</span>
+                      {event.files.length ? <small>{event.files.join(", ")}</small> : event.meta ? <small>{event.meta}</small> : null}
                     </div>
                   </li>
                 ))}
@@ -495,13 +460,13 @@ export function AgentInspectorRail({
             />
             {artifactEntries.length ? (
               <ol className="zaki-agent-inspector__event-list">
-                {artifactEntries.map((entry) => (
-                  <li key={entry.id}>
+                {artifactEntries.map((event) => (
+                  <li key={event.id}>
                     <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
                     <div>
-                      <strong>{transcriptLabel(entry)}</strong>
-                      <span>{transcriptSummary(entry)}</span>
-                      {entry.files?.length ? <small>{entry.files.join(", ")}</small> : null}
+                      <strong>{event.label}</strong>
+                      <span>{event.summary}</span>
+                      {event.files.length ? <small>{event.files.join(", ")}</small> : event.meta ? <small>{event.meta}</small> : null}
                     </div>
                   </li>
                 ))}
@@ -539,12 +504,13 @@ export function AgentInspectorRail({
             </dl>
             {browserEntries.length ? (
               <ol className="zaki-agent-inspector__event-list">
-                {browserEntries.map((entry) => (
-                  <li key={entry.id}>
+                {browserEntries.map((event) => (
+                  <li key={event.id}>
                     <Globe2 className="zaki-agent-inspector__event-icon" aria-hidden />
                     <div>
-                      <strong>{transcriptLabel(entry)}</strong>
-                      <span>{transcriptSummary(entry)}</span>
+                      <strong>{event.label}</strong>
+                      <span>{event.summary}</span>
+                      {event.meta ? <small>{event.meta}</small> : null}
                     </div>
                   </li>
                 ))}
@@ -599,12 +565,13 @@ export function AgentInspectorRail({
             />
             {recentTrace.length ? (
               <ol className="zaki-agent-inspector__trace-list">
-                {recentTrace.map((entry) => (
-                  <li key={entry.id}>
+                {recentTrace.map((event) => (
+                  <li key={event.id}>
                     <span className="zaki-agent-inspector__trace-dot" aria-hidden />
                     <div>
-                      <strong>{entry.tool || entry.intent || entry.kind}</strong>
-                      <span>{entry.activityLabel || entry.text}</span>
+                      <strong>{event.label}</strong>
+                      <span>{event.summary}</span>
+                      {event.meta ? <small>{event.meta}</small> : null}
                     </div>
                   </li>
                 ))}
