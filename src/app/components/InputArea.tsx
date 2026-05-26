@@ -1,4 +1,22 @@
-import { Plus, ArrowUp, Paperclip, Search, File as FileIcon, FileText, X, Zap, Check, Mic, Square, CalendarClock, Pin } from "lucide-react";
+import {
+  ArrowUp,
+  Boxes,
+  Brain,
+  CalendarClock,
+  Check,
+  File as FileIcon,
+  FileText,
+  Globe2,
+  Mic,
+  Paperclip,
+  Pin,
+  Plus,
+  Search,
+  ShieldCheck,
+  Square,
+  X,
+  Zap,
+} from "lucide-react";
 import { ScheduleFollowUpDialog } from "@/app/components/agent/ScheduleFollowUpDialog";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -96,6 +114,12 @@ export function InputArea({
   zakiContextPressurePercent = null,
   zakiCompactionThresholdPct = null,
   zakiContextTooltipCopy = null,
+  zakiApprovalCount = 0,
+  zakiArtifactCount = 0,
+  zakiSandboxLabel = null,
+  onOpenZakiApprovals,
+  onOpenZakiBrowser,
+  onOpenZakiArtifacts,
   threadKey = null,
   lastUserMessage = null,
   composerHandleRef = null,
@@ -138,6 +162,12 @@ export function InputArea({
    *  null, falls back to a conservative 70% FE default. */
   zakiCompactionThresholdPct?: number | null;
   zakiContextTooltipCopy?: string | null;
+  zakiApprovalCount?: number;
+  zakiArtifactCount?: number;
+  zakiSandboxLabel?: string | null;
+  onOpenZakiApprovals?: () => void;
+  onOpenZakiBrowser?: () => void;
+  onOpenZakiArtifacts?: () => void;
   /** Stable identifier for the active thread/space, used to scope draft
    *  persistence and last-message recall. Null = no persistence. */
   threadKey?: string | null;
@@ -211,6 +241,9 @@ export function InputArea({
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
+  const normalizedApprovalCount = Math.max(0, Math.round(zakiApprovalCount || 0));
+  const normalizedArtifactCount = Math.max(0, Math.round(zakiArtifactCount || 0));
+  const sandboxCopy = zakiSandboxLabel || "off";
   const slashFilter = useMemo(() => detectSlash(inputValue).filter, [inputValue]);
   const filteredSlashCommands = useMemo<SlashCommand[]>(
     () => getDisplayOrder({ filter: slashFilter, showAliases, isOperator: false }).flat,
@@ -972,6 +1005,89 @@ export function InputArea({
               showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
+        {zakiBotMode ? (
+          <div
+            className="zaki-composer-control-strip"
+            data-testid="zaki-composer-control-strip"
+          >
+            <div
+              className="zaki-composer-mode-switch"
+              role="group"
+              aria-label={t("input.zaki.autonomyAria", {
+                defaultValue: "Agent autonomy mode",
+              })}
+            >
+              {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
+                const selected = effectiveZakiMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={zakiModePending || !onZakiModeChange}
+                    onClick={() => handleSelectZakiMode(mode)}
+                    data-testid={`zaki-composer-autonomy-${mode}`}
+                    className={cn(
+                      "zaki-composer-mode-switch__button",
+                      selected && "is-active"
+                    )}
+                  >
+                    {t(`zakiControls.modes.${mode}`)}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="zaki-composer-surface-actions">
+              <button
+                type="button"
+                className={cn(
+                  "zaki-composer-surface-action",
+                  normalizedApprovalCount > 0 && "is-warn"
+                )}
+                onClick={onOpenZakiApprovals}
+                disabled={!onOpenZakiApprovals}
+                data-testid="zaki-composer-open-approvals"
+              >
+                <ShieldCheck className="size-3.5" aria-hidden />
+                <span>{t("input.zaki.approvals", { defaultValue: "Approvals" })}</span>
+                <b>{normalizedApprovalCount}</b>
+              </button>
+              <button
+                type="button"
+                className="zaki-composer-surface-action"
+                onClick={onOpenZakiBrowser}
+                disabled={!onOpenZakiBrowser}
+                data-testid="zaki-composer-open-browser"
+              >
+                <Globe2 className="size-3.5" aria-hidden />
+                <span>{t("input.zaki.browser", { defaultValue: "Browser" })}</span>
+                <b>{sandboxCopy}</b>
+              </button>
+              <button
+                type="button"
+                className="zaki-composer-surface-action"
+                onClick={() => setPinContextOpen(true)}
+                disabled={!agentUserId}
+                data-testid="zaki-composer-open-memory"
+              >
+                <Brain className="size-3.5" aria-hidden />
+                <span>{t("input.zaki.memory", { defaultValue: "Memory" })}</span>
+                <b>{pinnedMemories.length || "pin"}</b>
+              </button>
+              <button
+                type="button"
+                className="zaki-composer-surface-action"
+                onClick={onOpenZakiArtifacts}
+                disabled={!onOpenZakiArtifacts}
+                data-testid="zaki-composer-open-output"
+              >
+                <Boxes className="size-3.5" aria-hidden />
+                <span>{t("input.zaki.output", { defaultValue: "Output" })}</span>
+                <b>{normalizedArtifactCount}</b>
+              </button>
+            </div>
+          </div>
+        ) : null}
         {zakiBotMode && pinnedMemories.length > 0 && (
           <div
             className="flex flex-wrap items-center gap-1.5 px-1"

@@ -206,6 +206,50 @@ describe("InputArea primary action button", () => {
     expect(screen.getByTestId("zaki-mode-hint")).toBeInTheDocument();
   });
 
+  it("surfaces non-model Agent controls around the composer", () => {
+    const onZakiModeChange = jest.fn();
+    const onOpenApprovals = jest.fn();
+    const onOpenBrowser = jest.fn();
+    const onOpenArtifacts = jest.fn();
+
+    render(
+      <InputArea
+        onSend={jest.fn()}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="review"
+        onZakiModeChange={onZakiModeChange}
+        zakiApprovalCount={2}
+        zakiSandboxLabel="playwright"
+        zakiArtifactCount={3}
+        onOpenZakiApprovals={onOpenApprovals}
+        onOpenZakiBrowser={onOpenBrowser}
+        onOpenZakiArtifacts={onOpenArtifacts}
+        agentUserId="tester@example.com"
+      />
+    );
+
+    expect(screen.getByTestId("zaki-composer-control-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-composer-autonomy-review")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    fireEvent.click(screen.getByTestId("zaki-composer-autonomy-execute"));
+    expect(onZakiModeChange).toHaveBeenCalledWith("execute");
+
+    fireEvent.click(screen.getByTestId("zaki-composer-open-approvals"));
+    fireEvent.click(screen.getByTestId("zaki-composer-open-browser"));
+    fireEvent.click(screen.getByTestId("zaki-composer-open-output"));
+    expect(onOpenApprovals).toHaveBeenCalledTimes(1);
+    expect(onOpenBrowser).toHaveBeenCalledTimes(1);
+    expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("zaki-composer-open-memory"));
+    expect(screen.getAllByText("pinContext.title").length).toBeGreaterThan(0);
+  });
+
   it("shows the context meter when ZAKI has known or pending context pressure", () => {
     const { rerender } = render(
       <InputArea

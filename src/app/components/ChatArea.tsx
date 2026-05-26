@@ -7072,6 +7072,45 @@ export function ChatArea() {
                 zakiMode={activeSessionMode ?? "execute"}
                 onZakiModeChange={isZakiBotActiveSpace ? handleSessionModeChange : undefined}
                 zakiModePending={isZakiBotActiveSpace ? sessionModePending : false}
+                zakiApprovalCount={
+                  isZakiBotActiveSpace
+                    ? activeSessionUi?.approvalCount ??
+                      activeSessionRecord?.pending_approval_count ??
+                      0
+                    : 0
+                }
+                zakiArtifactCount={isZakiBotActiveSpace ? agentArtifactEventCount : 0}
+                zakiSandboxLabel={
+                  isZakiBotActiveSpace
+                    ? sandboxState?.enabled
+                      ? sandboxState.backend || "on"
+                      : "off"
+                    : null
+                }
+                onOpenZakiApprovals={
+                  isZakiBotActiveSpace
+                    ? () => {
+                        setPowerUserInitialTab("approvals");
+                        setPowerUserOpen(true);
+                      }
+                    : undefined
+                }
+                onOpenZakiBrowser={
+                  isZakiBotActiveSpace
+                    ? () => {
+                        setPowerUserInitialTab("browser");
+                        setPowerUserOpen(true);
+                      }
+                    : undefined
+                }
+                onOpenZakiArtifacts={
+                  isZakiBotActiveSpace
+                    ? () => {
+                        setPowerUserInitialTab("artifacts");
+                        setPowerUserOpen(true);
+                      }
+                    : undefined
+                }
                 zakiContextPressurePercent={
                   isZakiBotActiveSpace
                     ? activeSessionUi?.contextPressurePercent ??
