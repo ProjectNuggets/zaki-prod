@@ -199,27 +199,27 @@ export function CompactToolRow(props: CompactToolRowProps) {
     );
 
   return (
-    <div className="flex flex-col">
+    <div className={cn("zaki-cot-tool flex flex-col", `is-${status}`)}>
       <button
         type="button"
         onClick={() => hasBody && setOpen((p) => !p)}
         className={cn(
-          "flex w-full items-center gap-2 py-1 text-left text-[14px] leading-6",
+          "zaki-cot-tool__row flex w-full items-center gap-2 py-1 text-left text-[14px] leading-6",
           hasBody ? "cursor-pointer hover:opacity-80" : "cursor-default"
         )}
         aria-expanded={hasBody ? open : undefined}
       >
-        <Icon className="size-3.5 shrink-0 text-zaki-muted dark:text-zaki-dark-muted" aria-hidden />
-        <span className="shrink-0 text-zaki-muted dark:text-zaki-dark-muted">
+        <Icon className="zaki-cot-tool__icon size-3.5 shrink-0 text-zaki-muted dark:text-zaki-dark-muted" aria-hidden />
+        <span className="zaki-cot-tool__verb shrink-0 text-zaki-muted dark:text-zaki-dark-muted">
           {active ? <TextShimmer text={verb} /> : verb}
         </span>
         {target ? (
-          <span className="truncate font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
+          <span className="zaki-cot-tool__target truncate font-mono-ui text-zaki-primary dark:text-zaki-dark-primary">
             {target}
           </span>
         ) : null}
         {elapsedLabel && !running ? (
-          <span className="shrink-0 font-mono-ui text-[12px] text-zaki-muted dark:text-zaki-dark-muted">
+          <span className="zaki-cot-tool__duration shrink-0 font-mono-ui text-[12px] text-zaki-muted dark:text-zaki-dark-muted">
             for {elapsedLabel}
           </span>
         ) : null}

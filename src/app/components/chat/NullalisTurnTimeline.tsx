@@ -356,7 +356,7 @@ export function NullalisTurnTimeline({
   const elapsedLabel = elapsedMs != null ? formatElapsed(elapsedMs) : null;
 
   const renderBlocks = (all: TimelineBlock[]) => (
-    <div className="flex flex-col">
+    <div className="zaki-cot-blocks flex flex-col">
       {all.map((block) => {
         if (block.kind === "reasoning") {
           return (
@@ -394,7 +394,7 @@ export function NullalisTurnTimeline({
   if (showThinkingOnly) {
     return (
       <section
-        className="zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        className="zaki-agent-timeline zaki-agent-timeline--thinking zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
         aria-live="polite"
         dir="auto"
       >
@@ -407,11 +407,11 @@ export function NullalisTurnTimeline({
     const summaryLabel = elapsedLabel ? `Worked for ${elapsedLabel}` : "Worked";
     return (
       <details
-        className="zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
+        className="zaki-agent-timeline zaki-agent-timeline--compact zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
         dir="auto"
       >
         <summary
-          className="flex cursor-pointer list-none items-center gap-1.5 text-[14px] leading-6 text-zaki-muted [&::-webkit-details-marker]:hidden focus-visible:outline-none dark:text-zaki-dark-muted"
+          className="zaki-agent-timeline__summary flex cursor-pointer list-none items-center gap-1.5 text-[14px] leading-6 text-zaki-muted [&::-webkit-details-marker]:hidden focus-visible:outline-none dark:text-zaki-dark-muted"
           aria-label={`${summaryLabel}. Toggle agent trail.`}
         >
           <span>{summaryLabel}</span>
@@ -432,11 +432,11 @@ export function NullalisTurnTimeline({
     const stepLabel = stepCount === 1 ? "1 step" : `${stepCount} steps`;
     return (
       <details
-        className="zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
+        className="zaki-agent-timeline zaki-agent-timeline--compact zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
         dir="auto"
       >
         <summary
-          className="flex cursor-pointer list-none items-center gap-1.5 text-[14px] leading-6 text-zaki-muted [&::-webkit-details-marker]:hidden dark:text-zaki-dark-muted"
+          className="zaki-agent-timeline__summary flex cursor-pointer list-none items-center gap-1.5 text-[14px] leading-6 text-zaki-muted [&::-webkit-details-marker]:hidden dark:text-zaki-dark-muted"
           aria-label={`${stepLabel}. Toggle agent trail.`}
         >
           <span>
@@ -453,7 +453,7 @@ export function NullalisTurnTimeline({
 
   return (
     <section
-      className="zaki-process-enter max-w-[92%] text-zaki-primary dark:text-zaki-dark-primary"
+      className="zaki-agent-timeline zaki-agent-timeline--live zaki-process-enter max-w-[92%] text-zaki-primary dark:text-zaki-dark-primary"
       aria-live="polite"
       aria-busy={isStreaming || undefined}
       aria-label={isStreaming ? "Agent working" : "Agent finished"}

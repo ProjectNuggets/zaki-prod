@@ -48,6 +48,27 @@ describe("MessageBubble source chip", () => {
     expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
   });
 
+  it("renders Agent lane metadata without leaking web/main provenance chips", () => {
+    const message: Message = {
+      id: "agent-2",
+      role: "assistant",
+      content: "Done.",
+      createdAt: "2026-05-27T09:30:00.000Z",
+    };
+    render(
+      <MessageBubble
+        message={message}
+        botMode
+        showSourceChip={false}
+        animate={false}
+      />
+    );
+
+    expect(screen.getByText("ZAKI")).toBeInTheDocument();
+    expect(screen.getByText("final")).toBeInTheDocument();
+    expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
+  });
+
   it("renders a Telegram chip when message originated from Telegram", () => {
     const message: Message = {
       id: "2",

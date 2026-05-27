@@ -125,11 +125,11 @@ export function ContextToolGroup({
   const title = summary(children, running);
 
   return (
-    <div className="flex flex-col">
+    <div className={cn("zaki-cot-group flex flex-col", running && "is-running")}>
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center gap-2 py-1 text-left text-[14px] leading-6"
+        className="zaki-cot-group__head flex w-full items-center gap-2 py-1 text-left text-[14px] leading-6"
         aria-expanded={open}
       >
         {running ? (

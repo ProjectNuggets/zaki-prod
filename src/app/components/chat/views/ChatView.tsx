@@ -230,6 +230,7 @@ export function ChatView({
                 <MessageBubble
                   message={msg}
                   isStreaming={isStreamingMessage}
+                  botMode={botMode}
                   showSourceChip={showSourceChips}
                   onCopy={onCopyMessage}
                   onRegenerate={onRegenerateMessage}
@@ -263,6 +264,7 @@ export function ChatView({
             ) : null}
             <MessageBubble
               message={msg}
+              botMode={botMode}
               showSourceChip={showSourceChips}
               onCopy={onCopyMessage}
               onRegenerate={onRegenerateMessage}

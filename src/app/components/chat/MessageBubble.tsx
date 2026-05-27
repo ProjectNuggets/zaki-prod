@@ -23,6 +23,20 @@ function stripToolCallMarkup(raw: string): string {
     .trim();
 }
 
+function formatMessageTime(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat("en", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return null;
+  }
+}
+
 function isImageAttachment(type?: string | null, name?: string | null) {
   const t = String(type || "").toLowerCase();
   if (t.startsWith("image/")) return true;
@@ -56,6 +70,7 @@ export interface MessageBubbleProps {
   showActions?: boolean;
   isStreaming?: boolean;
   animate?: boolean;
+  botMode?: boolean;
   showSourceChip?: boolean;
   onCopy?: (message: Message) => void;
   onRegenerate?: (message: Message) => void;
@@ -71,6 +86,7 @@ export function MessageBubble({
   showActions = true,
   isStreaming = false,
   animate = true,
+  botMode = false,
   showSourceChip = true,
   onCopy,
   onRegenerate,
@@ -84,6 +100,8 @@ export function MessageBubble({
   const memorySources = message.memorySources || [];
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
+  const messageTime = formatMessageTime(message.createdAt);
+  const agentBadge = isStreaming ? "live" : isAssistantError ? "error" : "final";
 
   // 2026-05-08 — Hoist agent-generated images out of the collapsed
   // tool-result expansion into the main reply slot. The image_generate
@@ -140,6 +158,21 @@ export function MessageBubble({
           isUser ? "max-w-[80%] items-end" : "w-full max-w-[780px] items-start"
         )}
       >
+        {botMode && !isUser ? (
+          <div className="zaki-message-meta zaki-message-meta--assistant">
+            <strong>ZAKI</strong>
+            <span className="sep">.</span>
+            <span className={cn("badge", isStreaming && "is-live", isAssistantError && "is-error")}>
+              {agentBadge}
+            </span>
+            {messageTime ? (
+              <>
+                <span className="sep">.</span>
+                <span>{messageTime}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {message.attachments.map((attachment) => {
@@ -203,6 +236,17 @@ export function MessageBubble({
                     : "zaki-assistant-bubble w-full bg-transparent px-0 py-0 text-zaki-primary"
               )}
             >
+              {botMode && isUser ? (
+                <div className="zaki-message-meta zaki-message-meta--user">
+                  <strong>You</strong>
+                  {messageTime ? (
+                    <>
+                      <span className="sep">.</span>
+                      <span>{messageTime}</span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               {!isUser ? (
                 <MessageContent content={content} role="assistant" surface="chat" />
               ) : (

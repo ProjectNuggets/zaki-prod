@@ -9,6 +9,7 @@ interface StreamingBubbleProps {
   badgeLabel?: string;
   helperText?: string;
   streamingModeVariant?: "thinking" | "final_reply_reveal";
+  botMode?: boolean;
   showActions?: boolean;
   onCopyMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
   onRegenerateMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
@@ -40,6 +41,7 @@ export function StreamingBubble({
   badgeLabel,
   helperText,
   streamingModeVariant = "thinking",
+  botMode = false,
   showActions = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -82,6 +84,13 @@ export function StreamingBubble({
       </div>
 
       <div className="zaki-message-stack w-full max-w-[780px] flex flex-col gap-2 items-start">
+        {botMode ? (
+          <div className="zaki-message-meta zaki-message-meta--assistant">
+            <strong>ZAKI</strong>
+            <span className="sep">.</span>
+            <span className="badge is-live">live</span>
+          </div>
+        ) : null}
         {badgeLabel ? (
           <span
             className={[

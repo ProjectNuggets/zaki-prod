@@ -44,6 +44,7 @@ export function StreamingMessage({
             badgeLabel={streamingBadgeLabel}
             helperText={streamingHelperText}
             streamingModeVariant={streamingModeVariant}
+            botMode={botMode}
           />
         ) : botMode ? (
           <div className="hidden" aria-hidden />
@@ -60,11 +61,13 @@ export function StreamingMessage({
           badgeLabel={streamingBadgeLabel}
           helperText={streamingModeVariant === "final_reply_reveal" ? streamingHelperText : undefined}
           streamingModeVariant={streamingModeVariant}
+          botMode={botMode}
         />
       ) : (
         <StreamingBubble
           content={content}
           isStreaming={false}
+          botMode={botMode}
           showActions
           onCopyMessage={onCopyMessage}
           onRegenerateMessage={onRegenerateMessage}

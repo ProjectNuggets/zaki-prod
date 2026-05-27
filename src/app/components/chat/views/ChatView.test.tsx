@@ -6,13 +6,16 @@ jest.mock("../index", () => ({
   MessageBubble: ({
     message,
     showSourceChip,
+    botMode,
   }: {
     message: { id?: string; content: string };
     showSourceChip?: boolean;
+    botMode?: boolean;
   }) => (
     <div
       data-testid={message.id ? `message-bubble-${message.id}` : undefined}
       data-show-source-chip={String(showSourceChip)}
+      data-bot-mode={String(botMode)}
     >
       {message.content}
     </div>
@@ -62,6 +65,10 @@ describe("ChatView", () => {
     expect(screen.getByTestId("message-bubble-assistant-1")).toHaveAttribute(
       "data-show-source-chip",
       "false"
+    );
+    expect(screen.getByTestId("message-bubble-assistant-1")).toHaveAttribute(
+      "data-bot-mode",
+      "true"
     );
   });
 
