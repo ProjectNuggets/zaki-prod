@@ -170,6 +170,25 @@ export function sanitizeDesignClientPayload(value) {
   return clean;
 }
 
+export function prepareDesignClientPayload({
+  method,
+  path,
+  payload,
+  generateProjectId,
+}) {
+  const clean = sanitizeDesignClientPayload(payload);
+  if (!clean || typeof clean !== "object" || Array.isArray(clean)) return clean;
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  const normalizedPath = String(path || "").split("?")[0];
+  if (normalizedMethod === "POST" && normalizedPath === "/api/projects") {
+    return {
+      ...clean,
+      id: typeof generateProjectId === "function" ? generateProjectId() : clean.id,
+    };
+  }
+  return clean;
+}
+
 export function sanitizeDesignUpstreamPayload(value) {
   if (Array.isArray(value)) return value.map((item) => sanitizeDesignUpstreamPayload(item));
   if (!value || typeof value !== "object") return value;

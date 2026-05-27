@@ -7,9 +7,16 @@ import {
 } from "./design-client.js";
 import {
   getBlockedHostedDesignPathReason,
+  prepareDesignClientPayload,
   sanitizeDesignClientPayload,
   sanitizeDesignUpstreamPayload,
 } from "./design-bff-contract.js";
+import {
+  buildDesignStorageLimitPayload,
+  checkDesignContentLength,
+  checkDesignStorageQuota,
+  resolveDesignQuotaPolicy,
+} from "./design-quota.js";
 
 describe("design client", () => {
   test("normalizes design base", () => {
@@ -140,5 +147,46 @@ describe("design client", () => {
     expect(getBlockedHostedDesignPathReason("/api/import/folder")).toMatch(/local folder/);
     expect(getBlockedHostedDesignPathReason("/api/projects/p1/open-in")).toMatch(/host application/);
     expect(getBlockedHostedDesignPathReason("/api/projects/p1/files")).toBeNull();
+  });
+
+  test("generates server-owned project ids for project creation", () => {
+    const payload = prepareDesignClientPayload({
+      method: "POST",
+      path: "/api/projects",
+      payload: { id: "client-controlled", name: "Project" },
+      generateProjectId: () => "design-server-id",
+    });
+    expect(payload).toEqual({ id: "design-server-id", name: "Project" });
+  });
+
+  test("enforces design request and storage quota policy", () => {
+    const policy = resolveDesignQuotaPolicy(
+      { plan_tier: "free", plan_status: "inactive" },
+      {
+        env: {
+          ZAKI_DESIGN_FREE_MAX_REQUEST_BYTES: "1024",
+          ZAKI_DESIGN_FREE_TENANT_STORAGE_BYTES: "2048",
+        },
+      }
+    );
+    expect(checkDesignContentLength({ incomingBytes: 2048, policy })).toMatchObject({
+      allowed: false,
+      maxBytes: 1024,
+    });
+    const storageDecision = checkDesignStorageQuota({
+      currentBytes: 1900,
+      incomingBytes: 200,
+      policy,
+    });
+    expect(storageDecision).toMatchObject({
+      allowed: false,
+      maxBytes: 2048,
+      projectedBytes: 2100,
+    });
+    expect(buildDesignStorageLimitPayload(storageDecision, "req-1", policy)).toMatchObject({
+      code: "design_storage_limit_reached",
+      requestId: "req-1",
+      policyTier: "free",
+    });
   });
 });

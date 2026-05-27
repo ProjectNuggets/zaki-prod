@@ -122,6 +122,7 @@ import {
   getDesignBase,
   isDesignEnabled,
   mapDesignUpstreamFailure,
+  prepareDesignClientPayload,
   resolveCanonicalDesignUserId,
   sanitizeDesignClientPayload,
   sanitizeDesignUpstreamPayload,
@@ -200,6 +201,15 @@ import {
   resolveLearningActionQuota,
   resolveLearningQuotaPolicy,
 } from "./learning-quota.js";
+import {
+  DEFAULT_DESIGN_ABSOLUTE_MAX_REQUEST_BYTES,
+  buildDesignRequestTooLargePayload,
+  buildDesignStorageLimitPayload,
+  checkDesignContentLength,
+  checkDesignStorageQuota,
+  estimateDesignIncomingBytes,
+  resolveDesignQuotaPolicy,
+} from "./design-quota.js";
 import {
   listLearningAccountAuditEvents,
   recordLearningAccountAuditEvent,
@@ -458,6 +468,10 @@ const LEARNING_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
 const DESIGN_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
   1_000,
   Number(process.env.DESIGN_ENGINE_REQUEST_TIMEOUT_MS || 60_000)
+);
+const ZAKI_DESIGN_MAX_REQUEST_BYTES = Math.max(
+  1_000,
+  Number(process.env.ZAKI_DESIGN_MAX_REQUEST_BYTES || DEFAULT_DESIGN_ABSOLUTE_MAX_REQUEST_BYTES)
 );
 const LEARNING_ENGINE_STREAM_TIMEOUT_MS = Math.max(
   5_000,
@@ -12138,6 +12152,19 @@ function normalizeDesignProxyPath(req) {
   return queryString ? `${targetPath}?${queryString}` : targetPath;
 }
 
+function generateDesignProjectId() {
+  return `design-${crypto.randomUUID()}`;
+}
+
+function buildDesignPathBlockedPayload(reason, requestId) {
+  return {
+    code: "design_path_not_available",
+    error: "Design endpoint is not available.",
+    message: reason,
+    requestId,
+  };
+}
+
 function buildDesignMeterIdentity(req) {
   const zakiUser = req.designAuthResult?.zakiUser;
   if (!zakiUser?.id) return null;
@@ -12253,6 +12280,37 @@ async function recordDesignMeterReceiptBestEffort(req, {
   }
 }
 
+function shouldCheckDesignStorageQuota(req) {
+  const method = String(req.method || "").toUpperCase();
+  if (!["POST", "PUT", "PATCH"].includes(method)) return false;
+  const path = String(req.originalUrl || req.url || "").split("?")[0];
+  return path.startsWith("/api/design");
+}
+
+async function fetchDesignStorageUsageForRequest(req) {
+  const upstream = await fetchDesignPath({
+    ...designClientOptions(req, "Design storage usage request"),
+    path: "/api/zaki/storage-usage",
+    method: "GET",
+    timeoutMs: Math.min(DESIGN_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+  });
+  let payload = {};
+  try {
+    payload = await upstream.json();
+  } catch {
+    payload = {};
+  }
+  if (!upstream.ok || payload?.ok === false) {
+    const error = new Error(payload?.error?.message || payload?.message || "Design storage usage unavailable.");
+    error.status = upstream.status;
+    throw error;
+  }
+  return {
+    totalBytes: Math.max(0, Number(payload?.totalBytes || 0) || 0),
+    projectCount: Math.max(0, Number(payload?.projectCount || 0) || 0),
+  };
+}
+
 async function requireDesignQuotaForIngress(req, res, next) {
   const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(String(req.method || "").toUpperCase());
   if (!isMutation) {
@@ -12269,11 +12327,88 @@ async function requireDesignQuotaForIngress(req, res, next) {
   }
 
   await requireDesignContext(req, res, async () => {
+    const requestId = getOrCreateRequestId(req);
+    const targetPath = normalizeDesignProxyPath(req);
+    const blockedReason = getBlockedHostedDesignPathReason(targetPath);
+    if (blockedReason) {
+      res.status(404).json(buildDesignPathBlockedPayload(blockedReason, requestId));
+      return;
+    }
+
+    const designPolicy = resolveDesignQuotaPolicy(req.designAuthResult?.zakiUser, {
+      absoluteMaxRequestBytes: ZAKI_DESIGN_MAX_REQUEST_BYTES,
+    });
+    const incomingBytes = estimateDesignIncomingBytes(
+      req,
+      req.body && typeof req.body === "object" ? sanitizeDesignClientPayload(req.body) : null
+    );
+    const requestContentType = String(req.headers?.["content-type"] || "").toLowerCase();
+    const hasContentLength =
+      req.headers?.["content-length"] !== undefined ||
+      req.headers?.["Content-Length"] !== undefined;
+    if (
+      shouldCheckDesignStorageQuota(req) &&
+      !requestContentType.includes("application/json") &&
+      !hasContentLength
+    ) {
+      res.status(411).json({
+        code: "design_content_length_required",
+        error: "Content-Length is required.",
+        message: "Design uploads require a Content-Length header so storage quotas can be enforced.",
+        requestId,
+      });
+      return;
+    }
+    const sizeDecision = checkDesignContentLength({
+      incomingBytes,
+      policy: designPolicy,
+    });
+    if (!sizeDecision.allowed) {
+      res
+        .status(413)
+        .json(buildDesignRequestTooLargePayload(sizeDecision, requestId, designPolicy));
+      return;
+    }
+
+    if (shouldCheckDesignStorageQuota(req)) {
+      let usage;
+      try {
+        usage = await fetchDesignStorageUsageForRequest(req);
+      } catch (error) {
+        console.warn("[Design] Storage quota check failed closed:", {
+          requestId,
+          status: error?.status || null,
+          error: error?.message || "Design storage usage unavailable.",
+        });
+        res.status(503).json({
+          code: "design_storage_quota_unavailable",
+          error: "Design storage quota could not be checked.",
+          message: "Design is temporarily unable to check storage quota safely.",
+          retryable: true,
+          requestId,
+        });
+        return;
+      }
+      const storageDecision = checkDesignStorageQuota({
+        currentBytes: usage.totalBytes,
+        incomingBytes: sizeDecision.incomingBytes,
+        policy: designPolicy,
+      });
+      if (!storageDecision.allowed) {
+        res
+          .status(413)
+          .json(buildDesignStorageLimitPayload(storageDecision, requestId, designPolicy));
+        return;
+      }
+      req.designStorageUsage = usage;
+      req.designQuotaPolicy = designPolicy;
+    }
+
     const meterGrantResult = await requireDesignMeterGrantForIngress(req);
     if (!meterGrantResult.allowed) {
       res
         .status(meterGrantResult.status || 403)
-        .json(buildDesignMeterDenialPayload(meterGrantResult, getOrCreateRequestId(req)));
+        .json(buildDesignMeterDenialPayload(meterGrantResult, requestId));
       return;
     }
     req.designQuotaChecked = true;
@@ -12321,12 +12456,7 @@ async function proxyDesignRequest(req, res, targetPath, {
   if (!assertDesignRouteEnabled(req, res)) return;
   const blockedReason = getBlockedHostedDesignPathReason(targetPath);
   if (blockedReason) {
-    res.status(404).json({
-      code: "design_path_not_available",
-      error: "Design endpoint is not available.",
-      message: blockedReason,
-      requestId: getOrCreateRequestId(req),
-    });
+    res.status(404).json(buildDesignPathBlockedPayload(blockedReason, getOrCreateRequestId(req)));
     return;
   }
   const startedAtMs = Date.now();
@@ -12348,7 +12478,14 @@ async function proxyDesignRequest(req, res, targetPath, {
           ...designClientOptions(req, label),
           path: targetPath,
           method,
-          body: hasParsedJsonBody ? sanitizeDesignClientPayload(req.body) : undefined,
+          body: hasParsedJsonBody
+            ? prepareDesignClientPayload({
+                method,
+                path: targetPath,
+                payload: req.body,
+                generateProjectId: generateDesignProjectId,
+              })
+            : undefined,
           contentType: hasParsedJsonBody ? "application/json" : null,
         })
       : await fetchDesignProxyPath({

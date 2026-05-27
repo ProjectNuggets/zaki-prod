@@ -8,11 +8,14 @@ import {
   Settings,
   Sparkles,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useNavigationStore } from "@/stores";
+import { getDesignHealth } from "@/lib/designApi";
+import { useProductRegistry } from "@/queries/useProducts";
 
 type ProductRailItem = {
   id: "dashboard" | "agent" | "chat" | "brain" | "learn" | "hire" | "design";
@@ -40,6 +43,19 @@ export function ProductRail() {
   const navigate = useNavigate();
   const { goHome, goToSpaces, goToZakiBot } = useNavigation();
   const setSidebarMode = useNavigationStore((state) => state.setSidebarMode);
+  const productRegistry = useProductRegistry();
+  const designProduct = productRegistry.data?.data?.products?.find(
+    (product) => product.productId === "design",
+  );
+  const designConfigured = designProduct?.state === "enabled";
+  const designHealth = useQuery({
+    queryKey: ["design", "health", "product-rail"],
+    queryFn: getDesignHealth,
+    enabled: designConfigured,
+    retry: false,
+    staleTime: 15_000,
+  });
+  const designEnabled = designConfigured && designHealth.data?.ok === true;
 
   const items: ProductRailItem[] = [
     {
@@ -103,6 +119,7 @@ export function ProductRail() {
       fallback: "Design",
       shortcut: "⌘7",
       icon: Palette,
+      disabled: !designEnabled,
       action: () => {
         setSidebarMode("zaki");
         navigate("/design");

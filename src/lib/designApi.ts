@@ -50,11 +50,9 @@ export function listDesignProjects() {
 }
 
 export function createDesignProject(input: { name: string; prompt?: string }) {
-  const id = `design-${Date.now().toString(36)}`;
   return designRequest<{ project: DesignProject; conversationId?: string }>("/api/design/projects", {
     method: "POST",
     body: {
-      id,
       name: input.name,
       pendingPrompt: input.prompt || null,
       skipDiscoveryBrief: Boolean(input.prompt),

@@ -145,7 +145,7 @@ const PRODUCT_DEFINITIONS = Object.freeze({
     label: "ZAKI Design",
     productKind: "product",
     lifecycle: "current",
-    defaultState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+    defaultState: PRODUCT_OPERATIONAL_STATES.DISABLED,
     visibleInSettings: true,
     route: "/design",
     entryPoint: "Design",

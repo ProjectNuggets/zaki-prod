@@ -40,6 +40,7 @@ export function DesignPage() {
   );
   const designMeter = meterStatus.data?.data?.products?.[DESIGN_PRODUCT_ID] ?? null;
   const projectList = projects.data?.projects ?? [];
+  const designRuntimeReady = designProduct?.state === "enabled" && health.data?.ok === true;
 
   return (
     <main
@@ -102,7 +103,7 @@ export function DesignPage() {
           <button
             type="submit"
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-zaki-md bg-zaki-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            disabled={createProject.isPending}
+            disabled={createProject.isPending || !designRuntimeReady}
           >
             <Wand2 className="h-4 w-4" aria-hidden="true" />
             {createProject.isPending ? "Creating" : "Create workspace"}
