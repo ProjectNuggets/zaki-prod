@@ -87,6 +87,7 @@ import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { PowerUserSheet, type PowerUserTab } from "./agent/PowerUserSheet";
+import { CronManagementSheet } from "./agent/CronManagementSheet";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
@@ -2212,6 +2213,7 @@ export function ChatArea() {
   const [powerUserOpen, setPowerUserOpen] = useState(false);
   const [powerUserInitialTab, setPowerUserInitialTab] =
     useState<PowerUserTab>("controls");
+  const [agentCronOpen, setAgentCronOpen] = useState(false);
   const approvalSeenBySessionRef = useRef<Record<string, Set<string>>>({});
 
   // Canonical user ID for agent/nullalis routing (resolved from BFF).
@@ -6991,6 +6993,7 @@ export function ChatArea() {
                 turnStartedAt={turnStartedAt}
                 turnDurationMs={turnDurationMs}
                 onOpenMemory={openAgentMemorySurface}
+                onOpenCron={() => setAgentCronOpen(true)}
                 onOpenBrowser={() => {
                   setPowerUserInitialTab("browser");
                   setPowerUserOpen(true);
@@ -7236,6 +7239,13 @@ export function ChatArea() {
           pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
           onApproveRequest={handleApprovalAction}
           artifactEventCount={agentArtifactEventCount}
+        />
+      ) : null}
+
+      {isAgentSurface ? (
+        <CronManagementSheet
+          isOpen={agentCronOpen}
+          onClose={() => setAgentCronOpen(false)}
         />
       ) : null}
 

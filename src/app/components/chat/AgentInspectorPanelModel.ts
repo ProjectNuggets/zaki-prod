@@ -6,6 +6,7 @@ export type AgentInspectorPanelEvent = {
   summary: string;
   meta: string | null;
   timestamp: number;
+  durationMs: number | null;
   state: NullalisTranscriptEntry["resultState"];
   files: string[];
   command: string | null;
@@ -117,6 +118,10 @@ function toPanelEvent(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent 
     summary: primarySummary(entry),
     meta: metaForEntry(entry),
     timestamp: typeof entry.timestamp === "number" ? entry.timestamp : 0,
+    durationMs:
+      typeof entry.durationMs === "number" && Number.isFinite(entry.durationMs)
+        ? entry.durationMs
+        : null,
     state: entry.resultState ?? null,
     files: entry.files ? [...entry.files] : [],
     command: entry.command ?? null,

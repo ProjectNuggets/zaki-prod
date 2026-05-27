@@ -152,6 +152,24 @@ jest.mock("@/lib/api", () => ({
     },
     data: { ok: true },
   })),
+  listAgentCron: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ jobs: [] }),
+      headers: new Headers(),
+    },
+    data: { jobs: [] },
+  })),
+  createAgentCron: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+      headers: new Headers(),
+    },
+    data: { ok: true },
+  })),
   fetchUsageQuota: jest.fn(async () => ({
     response: {
       ok: true,

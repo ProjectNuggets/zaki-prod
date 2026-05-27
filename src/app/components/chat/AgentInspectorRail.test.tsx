@@ -101,8 +101,8 @@ describe("AgentInspectorRail", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /Artifacts/i }));
 
-    expect(screen.getByText("Artifact activity captured")).toBeInTheDocument();
-    expect(screen.getByText("launch-brief.md")).toBeInTheDocument();
+    expect(screen.getByText("output · captured")).toBeInTheDocument();
+    expect(screen.getAllByText("launch-brief.md").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Open artifacts manager" }));
     expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
   });
@@ -133,5 +133,105 @@ describe("AgentInspectorRail", () => {
     expect(screen.getAllByText("playwright")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Open browser controls" }));
     expect(onOpenBrowser).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the schedule manager from the Cron panel", () => {
+    const onOpenCron = jest.fn();
+    renderRail({
+      onOpenCron,
+      transcriptEntries: [
+        {
+          id: "scheduled",
+          kind: "tool",
+          text: "Scheduled weekly automation run.",
+          resultState: "queued",
+          timestamp: 2,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Cron/i }));
+
+    expect(screen.getByText("schedules")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open schedule manager" }));
+    expect(onOpenCron).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders V6 plan progress and delegated subagent work", () => {
+    renderRail({
+      isStreaming: true,
+      tasks: [
+        {
+          taskId: "task-1",
+          status: "done",
+          description: "Read the handoff",
+          updatedAt: 1,
+        },
+        {
+          taskId: "task-2",
+          status: "running",
+          description: "Polish the right rail",
+          progressPct: 55,
+          updatedAt: 2,
+        },
+      ],
+      transcriptEntries: [
+        {
+          id: "subagent-1",
+          kind: "task",
+          phase: "tool_only_turn",
+          text: "subagent verifying trace rows",
+          resultSummary: "subagent verifying trace rows against V6",
+          resultState: "running",
+          timestamp: 3,
+        },
+      ],
+    });
+
+    expect(screen.getByText("current plan")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("Polish the right rail")).toBeInTheDocument();
+    expect(screen.getByText("subagent")).toBeInTheDocument();
+    expect(screen.getByText("subagent verifying trace rows against V6")).toBeInTheDocument();
+  });
+
+  it("renders trace as V6 operation rows with latency and warning count", () => {
+    renderRail({
+      usageSummary: {
+        usageTokens: 1200,
+        costUsd: 0.01,
+        turnWeight: 0.2,
+        sessionWeight: 0.6,
+      },
+      transcriptEntries: [
+        {
+          id: "memory-search",
+          kind: "tool",
+          tool: "memory.search",
+          text: "memory.search query",
+          resultSummary: "memory.search · q=agent inspector",
+          resultState: "done",
+          durationMs: 42,
+          timestamp: 1_800_000,
+        },
+        {
+          id: "stale-file",
+          kind: "tool",
+          tool: "file.stale",
+          text: "file.stale risks.md",
+          resultSummary: "file.stale · risks.md",
+          resultState: "blocked",
+          timestamp: 1_801_000,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Trace/i }));
+
+    expect(screen.getAllByText("42ms").length).toBeGreaterThan(0);
+    expect(screen.getByText(/1 warn/)).toBeInTheDocument();
+    expect(screen.getByText("1.2k")).toBeInTheDocument();
+    expect(screen.getByText("WARN")).toBeInTheDocument();
+    expect(screen.getByText(/memory.search/)).toBeInTheDocument();
   });
 });

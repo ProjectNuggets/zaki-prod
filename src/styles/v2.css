@@ -4069,7 +4069,7 @@
   gap: 3px;
   padding: 0 3px;
   font-size: 9px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -4077,7 +4077,7 @@
 .zaki-agent-inspector__tabs .count {
   margin-left: 0;
   font-size: 8px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
 .zaki-agent-inspector__panel-action {
@@ -4284,6 +4284,488 @@
   font-weight: 500;
   line-height: 1.3;
   text-transform: uppercase;
+}
+
+.zaki-agent-inspector__pane {
+  overflow: hidden;
+}
+
+.zaki-agent-inspector__plan-head,
+.zaki-agent-inspector__cron-head {
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__plan-title,
+.zaki-agent-inspector__cron-title {
+  margin-bottom: 6px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__plan-meta,
+.zaki-agent-inspector__cron-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__plan-meta .sep,
+.zaki-agent-inspector__cron-meta .sep,
+.zaki-agent-inspector__todo-meta .sep {
+  color: var(--v2-ink-4);
+}
+
+.zaki-agent-inspector__plan-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.zaki-agent-inspector__plan-progress .bar {
+  width: 56px;
+  height: 4px;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__plan-progress .fill {
+  display: block;
+  height: 100%;
+  background: var(--v2-accent);
+}
+
+.zaki-agent-inspector__plan-progress .num {
+  color: var(--v2-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-agent-inspector__plan-list,
+.zaki-agent-inspector__cron-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zaki-agent-inspector__todo {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__todo.is-live {
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__todo:last-child {
+  border-bottom: 0;
+}
+
+.zaki-agent-inspector__todo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 1px;
+}
+
+.zaki-agent-inspector__todo-body {
+  min-width: 0;
+}
+
+.zaki-agent-inspector__todo-text {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__subagent {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 8px 7px 14px;
+  border: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__subagent .sa-branch {
+  position: absolute;
+  top: -8px;
+  left: 6px;
+  width: 8px;
+  height: 16px;
+  border-left: 1px solid var(--v2-hairline-strong);
+  border-bottom: 1px solid var(--v2-hairline-strong);
+}
+
+.zaki-agent-inspector__subagent .sa-badge {
+  color: var(--v2-accent);
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__subagent .sa-text {
+  min-width: 0;
+  flex: 1 1 140px;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__subagent .sa-status {
+  color: var(--v2-ink-4);
+}
+
+.zaki-agent-inspector__plan-foot {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--v2-hairline-faint);
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__cron-meta .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  background: var(--v2-ink-4);
+  vertical-align: 1px;
+}
+
+.zaki-agent-inspector__cron-meta .dot.running {
+  background: var(--v2-accent);
+}
+
+.zaki-agent-inspector__cron-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__cron-row.is-running {
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__cron-status {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.zaki-agent-inspector__cron-status .dot,
+.zaki-agent-inspector__cron-status .ring {
+  width: 8px;
+  height: 8px;
+}
+
+.zaki-agent-inspector__cron-status .dot {
+  background: var(--v2-accent);
+}
+
+.zaki-agent-inspector__cron-status .ring {
+  border: 1px solid var(--v2-ink-4);
+}
+
+.zaki-agent-inspector__cron-main {
+  min-width: 0;
+}
+
+.zaki-agent-inspector__cron-name {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__cron-sched {
+  margin-top: 3px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__source-stack {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.zaki-agent-inspector__source-doc {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__source-head .name {
+  min-width: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-agent-inspector__source-head .meta {
+  flex: 0 0 auto;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__source-body {
+  padding: 10px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__source-body .hl {
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-inspector__source-body small {
+  display: block;
+  margin-top: 8px;
+  color: var(--v2-ink-4);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__artifact-versions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__artifact-versions .version,
+.zaki-agent-inspector__artifact-versions .diff {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--v2-hairline);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__artifact-versions .version.is-active {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__artifact-versions .diff {
+  margin-left: auto;
+  border-color: transparent;
+}
+
+.zaki-agent-inspector__artifact-doc {
+  margin: 10px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__artifact-head {
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__artifact-head .tag {
+  margin-bottom: 4px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__artifact-head .title {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__artifact-head .sub {
+  margin-top: 4px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__artifact-body {
+  padding: 10px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.zaki-agent-inspector__artifact-body p {
+  margin: 0;
+}
+
+.zaki-agent-inspector__trace-now {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__trace-now .cell {
+  min-width: 0;
+  padding: 10px;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__trace-now .label {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__trace-now .value {
+  margin-top: 4px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-agent-inspector__trace-now .unit {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+}
+
+.zaki-agent-inspector__trace-steps {
+  padding: 8px 10px 10px;
+}
+
+.zaki-agent-inspector__trace-step {
+  display: grid;
+  grid-template-columns: 58px 38px minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__trace-step:last-child {
+  border-bottom: 0;
+}
+
+.zaki-agent-inspector__trace-step .ts,
+.zaki-agent-inspector__trace-step .ms {
+  color: var(--v2-ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-agent-inspector__trace-step .lvl {
+  color: var(--v2-ink-2);
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__trace-step .lvl.is-ok {
+  color: var(--v2-success);
+}
+
+.zaki-agent-inspector__trace-step .lvl.is-run {
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__trace-step .lvl.is-wait {
+  color: var(--v2-ink-3);
+}
+
+.zaki-agent-inspector__trace-step .lvl.is-warn {
+  color: var(--v2-warn);
+}
+
+.zaki-agent-inspector__trace-step .msg {
+  min-width: 0;
+  color: var(--v2-ink-2);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .zaki-agent-inspector__trace-now {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-agent-inspector__trace-step {
+    grid-template-columns: 48px 34px minmax(0, 1fr);
+  }
+
+  .zaki-agent-inspector__trace-step .ms {
+    display: none;
+  }
 }
 
 .zaki-dashboard-v2 {
