@@ -3,6 +3,11 @@ import { persist } from "zustand/middleware";
 
 type ThemePreference = "light" | "dark" | "system";
 type ToastType = "success" | "error" | "warning" | "info";
+const DEFAULT_THEME_PREFERENCE: ThemePreference = "dark";
+type PersistedUIState = {
+  themePreference: ThemePreference;
+  sidebarCollapsed: boolean;
+};
 
 interface Toast {
   id: string;
@@ -57,8 +62,8 @@ interface UIStore extends UIState {
 export const useUIStore = create<UIStore>()(
   persist(
     (set, get) => ({
-      themePreference: "system",
-      systemTheme: "light",
+      themePreference: DEFAULT_THEME_PREFERENCE,
+      systemTheme: "dark",
       sidebarCollapsed: false,
       mobileSidebarOpen: false,
       shareModalOpen: false,
@@ -105,10 +110,20 @@ export const useUIStore = create<UIStore>()(
     }),
     {
       name: "zaki-ui-storage",
+      version: 1,
       partialize: (state) => ({
         themePreference: state.themePreference,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
+      migrate: (persistedState, version) => {
+        const state = (persistedState ?? {}) as Partial<UIState>;
+        return {
+          themePreference: version < 1
+            ? DEFAULT_THEME_PREFERENCE
+            : state.themePreference ?? DEFAULT_THEME_PREFERENCE,
+          sidebarCollapsed: state.sidebarCollapsed ?? false,
+        } satisfies PersistedUIState;
+      },
     }
   )
 );

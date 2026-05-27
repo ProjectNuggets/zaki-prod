@@ -2,7 +2,7 @@ import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
-import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
+import { Share2, MoreVertical, Download, Brain, ChevronDown, PanelRight } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
@@ -128,6 +128,7 @@ const POWER_USER_EVENT_TABS: PowerUserTab[] = [
 ];
 
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
+const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
 
 function normalizePowerUserTab(value: unknown): PowerUserTab {
   return POWER_USER_EVENT_TABS.includes(value as PowerUserTab)
@@ -2214,6 +2215,10 @@ export function ChatArea() {
   const [powerUserInitialTab, setPowerUserInitialTab] =
     useState<PowerUserTab>("controls");
   const [agentCronOpen, setAgentCronOpen] = useState(false);
+  const [agentInspectorOpen, setAgentInspectorOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem(AGENT_INSPECTOR_OPEN_KEY) !== "false";
+  });
   const approvalSeenBySessionRef = useRef<Record<string, Set<string>>>({});
 
   // Canonical user ID for agent/nullalis routing (resolved from BFF).
@@ -6101,6 +6106,27 @@ export function ChatArea() {
     setPowerUserOpen(true);
   }, [isAgentSurface]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      AGENT_INSPECTOR_OPEN_KEY,
+      agentInspectorOpen ? "true" : "false"
+    );
+  }, [agentInspectorOpen]);
+
+  useEffect(() => {
+    if (!isAgentSurface) return;
+    const handlePanelShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key !== ".") return;
+      event.preventDefault();
+      setAgentInspectorOpen((open) => !open);
+    };
+    window.addEventListener("keydown", handlePanelShortcut);
+    return () => {
+      window.removeEventListener("keydown", handlePanelShortcut);
+    };
+  }, [isAgentSurface]);
+
   // ZakiSessionList per-row share button dispatches this event after
   // navigating to the chosen session. We queue the requested sessionKey
   // and only open the share modal once activeZakiSessionKey matches,
@@ -6686,7 +6712,9 @@ export function ChatArea() {
       ref={containerRef}
       className={cn(
         "zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden",
-        isAgentSurface && "zaki-agent-v2 zaki-agent-v2--inspector"
+        isAgentSurface && "zaki-agent-v2",
+        isAgentSurface && agentInspectorOpen && "zaki-agent-v2--inspector",
+        isAgentSurface && !agentInspectorOpen && "zaki-agent-v2--inspector-collapsed"
       )}
       data-agent-surface={isAgentSurface ? "true" : undefined}
       style={
@@ -6825,6 +6853,25 @@ export function ChatArea() {
                 className={cn("ml-2", isAgentSurface && "zaki-agent-v2__sandbox")}
               />
               <div className="relative z-30 ml-auto flex items-center gap-2" ref={menuRef}>
+                {isAgentSurface ? (
+                  <button
+                    type="button"
+                    className="zaki-panel-toggle inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
+                    onClick={() => setAgentInspectorOpen((open) => !open)}
+                    aria-pressed={agentInspectorOpen}
+                    aria-label={
+                      agentInspectorOpen
+                        ? t("agent.inspector.hideAria", { defaultValue: "Hide agent panel" })
+                        : t("agent.inspector.showAria", { defaultValue: "Show agent panel" })
+                    }
+                    title={t("agent.inspector.shortcut", { defaultValue: "Panel · Command Period" })}
+                    data-testid="agent-inspector-toggle"
+                  >
+                    <PanelRight className="size-4 text-zaki-muted" aria-hidden />
+                    <span>{t("agent.inspector.panel", { defaultValue: "Panel" })}</span>
+                    <kbd>⌘.</kbd>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
@@ -6972,26 +7019,20 @@ export function ChatArea() {
               {renderContent()}
             </div>
 
-            {isAgentSurface ? (
+            {isAgentSurface && agentInspectorOpen ? (
               <AgentInspectorRail
                 mode={activeSessionMode ?? "execute"}
-                modePending={sessionModePending}
-                onModeChange={handleSessionModeChange}
                 isStreaming={isStreaming}
-                live={activeSessionUi?.live ?? activeSessionRecord?.live ?? null}
                 lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
                 sandbox={sandboxState}
                 tasks={nullalisTaskItems}
                 transcriptEntries={nullalisTranscriptEntries}
                 narrationFrame={nullalisNarrationFrame}
                 approvalRequest={nullalisApprovalRequest}
-                approvalCount={activeSessionUi?.approvalCount ?? activeSessionRecord?.pending_approval_count ?? 0}
                 artifactCount={agentArtifactEventCount}
                 contextGaugeData={nullalisContextGauge}
                 usageSummary={zakiUsageSummary}
                 quotaInfo={zakiBotQuotaInfo}
-                turnStartedAt={turnStartedAt}
-                turnDurationMs={turnDurationMs}
                 onOpenMemory={openAgentMemorySurface}
                 onOpenCron={() => setAgentCronOpen(true)}
                 onOpenBrowser={() => {
@@ -7006,9 +7047,6 @@ export function ChatArea() {
                   setPowerUserInitialTab("trace");
                   setPowerUserOpen(true);
                 }}
-                onOpenSettings={() => navigate("/settings#settings-products")}
-                onShare={handleShare}
-                onExport={handleExport}
               />
             ) : null}
           </div>

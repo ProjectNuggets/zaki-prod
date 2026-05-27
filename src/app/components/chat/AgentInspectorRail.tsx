@@ -6,15 +6,8 @@ import {
   CalendarClock,
   CheckCircle2,
   Circle,
-  Clock3,
-  FileDown,
   Globe2,
   Loader2,
-  PanelRight,
-  Radio,
-  Settings2,
-  Share2,
-  ShieldCheck,
   ShieldAlert,
 } from "lucide-react";
 import type { AgentSessionMode } from "@/lib/api";
@@ -22,14 +15,11 @@ import { DEFAULT_AGENT_MODEL_ID, resolveAgentModel } from "@/lib/agentModelCatal
 import { cn } from "@/lib/utils";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
-  V2ActionGrid,
-  V2Badge,
   V2InlineRow,
   V2Meter,
   V2MetricGrid,
   V2Panel,
   V2PanelHead,
-  V2SegmentedControl,
   V2Tabs,
 } from "@/app/components/v2";
 import type {
@@ -54,31 +44,22 @@ type AgentInspectorTab =
 
 export type AgentInspectorRailProps = {
   mode: AgentSessionMode | null;
-  modePending?: boolean;
-  onModeChange?: (mode: AgentSessionMode) => void | Promise<void>;
   isStreaming: boolean;
-  live?: boolean | null;
   lastChannel?: string | null;
   sandbox: ZakiRuntimeSandbox | null;
   tasks: NullalisTaskItem[];
   transcriptEntries: NullalisTranscriptEntry[];
   narrationFrame: NullalisNarrationFrame | null;
   approvalRequest: NullalisApprovalRequest | null;
-  approvalCount?: number;
   artifactCount?: number;
   contextGaugeData: ContextGaugeData | null;
   usageSummary: ZakiUsageSummary | null;
   quotaInfo: { limit: number; remaining: number } | null;
-  turnStartedAt?: number | null;
-  turnDurationMs?: number | null;
   onOpenMemory?: () => void;
   onOpenCron?: () => void;
   onOpenBrowser?: () => void;
   onOpenArtifacts?: () => void;
   onOpenTrace?: () => void;
-  onOpenSettings?: () => void;
-  onShare?: () => void;
-  onExport?: () => void;
 };
 
 function taskStatusLabel(status: NullalisTaskStatus) {
@@ -97,18 +78,6 @@ function taskStatusIcon(status: NullalisTaskStatus) {
     return <ShieldAlert className="zaki-agent-inspector__status-icon is-alert" aria-hidden />;
   }
   return <Circle className="zaki-agent-inspector__status-icon" aria-hidden />;
-}
-
-function formatElapsed(ms: number): string {
-  const safe = Math.max(0, Math.trunc(ms));
-  if (safe < 1000) return "1s";
-  const total = Math.floor(safe / 1000);
-  if (total < 60) return `${total}s`;
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  if (minutes < 60) return `${minutes}m ${seconds}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
 }
 
 function formatTokens(value?: number | null): string {
@@ -225,42 +194,25 @@ function PanelActionButton({
 
 export function AgentInspectorRail({
   mode,
-  modePending = false,
-  onModeChange,
   isStreaming,
-  live = null,
   lastChannel = null,
   sandbox,
   tasks,
   transcriptEntries,
   narrationFrame,
   approvalRequest,
-  approvalCount = 0,
   artifactCount = 0,
   contextGaugeData,
   usageSummary,
   quotaInfo,
-  turnStartedAt = null,
-  turnDurationMs = null,
   onOpenMemory,
   onOpenCron,
   onOpenBrowser,
   onOpenArtifacts,
   onOpenTrace,
-  onOpenSettings,
-  onShare,
-  onExport,
 }: AgentInspectorRailProps) {
   const [tab, setTab] = useState<AgentInspectorTab>("plan");
   const [manualTabSelected, setManualTabSelected] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!isStreaming) return;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [isStreaming]);
 
   const timelineBlocks = useMemo(
     () => composeTurnTimeline(transcriptEntries),
@@ -292,21 +244,13 @@ export function AgentInspectorRail({
     ? Math.round((weightedTaskProgress / sortedTasks.length) * 100)
     : 0;
   const ctxPct = contextPercent(contextGaugeData);
-  const elapsed =
-    turnDurationMs != null
-      ? turnDurationMs
-      : turnStartedAt != null
-        ? now - turnStartedAt
-        : null;
   const currentMode = mode ?? "execute";
-  const activeApprovals = approvalRequest ? Math.max(1, approvalCount) : approvalCount;
   const sandboxLabel = sandbox?.enabled
     ? sandbox.backend
       ? sandbox.backend
       : "enabled"
     : "off";
   const defaultModel = resolveAgentModel(DEFAULT_AGENT_MODEL_ID);
-  const liveState = live === true || isStreaming;
   const weeklyRemaining =
     quotaInfo && quotaInfo.limit > 0
       ? Math.max(0, Math.min(100, (quotaInfo.remaining / quotaInfo.limit) * 100))
@@ -337,43 +281,6 @@ export function AgentInspectorRail({
 
   return (
     <aside className="zaki-agent-inspector" aria-label="Agent inspector">
-      <div className="zaki-agent-inspector__head">
-        <div>
-          <p className="zaki-agent-inspector__kicker">Agent Ops</p>
-          <h2>ZAKI Agent</h2>
-        </div>
-        <V2Badge tone={liveState ? "accent" : "default"} dot pulse={liveState}>
-          <Radio className="size-3" aria-hidden />
-          {liveState ? "Live" : "Idle"}
-        </V2Badge>
-      </div>
-
-      <V2MetricGrid
-        items={[
-          { id: "mode", label: "Mode", value: modeLabel(currentMode).toUpperCase() },
-          { id: "sandbox", label: "Sandbox", value: sandboxLabel.toUpperCase() },
-          { id: "approvals", label: "Approvals", value: activeApprovals },
-          {
-            id: "elapsed",
-            label: "Elapsed",
-            value: elapsed != null ? formatElapsed(elapsed) : "0s",
-          },
-        ]}
-      />
-
-      <V2SegmentedControl
-        fullWidth
-        ariaLabel="Agent mode"
-        value={currentMode}
-        disabled={modePending}
-        onChange={onModeChange}
-        options={[
-          { id: "plan", label: "Plan" },
-          { id: "execute", label: "Execute" },
-          { id: "review", label: "Review" },
-        ]}
-      />
-
       <V2Tabs
         fullWidth
         className="zaki-agent-inspector__tabs"
@@ -768,51 +675,6 @@ export function AgentInspectorRail({
             </PanelActionButton>
           </V2Panel>
         ) : null}
-      </div>
-
-      <V2ActionGrid
-        ariaLabel="Agent actions"
-        actions={[
-          {
-            id: "memory",
-            label: "Memory",
-            icon: <Brain className="size-4" aria-hidden />,
-            onClick: onOpenMemory,
-          },
-          {
-            id: "share",
-            label: "Share",
-            icon: <Share2 className="size-4" aria-hidden />,
-            onClick: onShare,
-          },
-          {
-            id: "export",
-            label: "Export",
-            icon: <FileDown className="size-4" aria-hidden />,
-            onClick: onExport,
-          },
-          {
-            id: "settings",
-            label: "Settings",
-            icon: <Settings2 className="size-4" aria-hidden />,
-            onClick: onOpenSettings,
-          },
-        ]}
-      />
-
-      <div className="v2-footnote-grid">
-        <span>
-          <ShieldCheck className="size-3" aria-hidden />
-          Server guarded
-        </span>
-        <span>
-          <Clock3 className="size-3" aria-hidden />
-          {lastChannel || "thread"}
-        </span>
-        <span>
-          <PanelRight className="size-3" aria-hidden />
-          V2
-        </span>
       </div>
     </aside>
   );

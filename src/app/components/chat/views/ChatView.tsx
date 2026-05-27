@@ -93,6 +93,7 @@ export function ChatView({
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
   // Bot mode is treated as a Nullalis-compatible mode for rendering.
   const timelineMode = nullalisMode || botMode;
+  const showSourceChips = !botMode;
   const hasTimelineArtifacts =
     timelineMode &&
     (nullalisTranscriptEntries.length > 0 ||
@@ -229,6 +230,7 @@ export function ChatView({
                 <MessageBubble
                   message={msg}
                   isStreaming={isStreamingMessage}
+                  showSourceChip={showSourceChips}
                   onCopy={onCopyMessage}
                   onRegenerate={onRegenerateMessage}
                   onThumbsUp={onThumbsUpMessage}
@@ -261,6 +263,7 @@ export function ChatView({
             ) : null}
             <MessageBubble
               message={msg}
+              showSourceChip={showSourceChips}
               onCopy={onCopyMessage}
               onRegenerate={onRegenerateMessage}
               onThumbsUp={onThumbsUpMessage}

@@ -3238,7 +3238,39 @@
   padding: 0 8px;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle {
+  min-height: 28px;
+  border-radius: 0;
+  border-color: var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-2);
+  box-shadow: none;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle kbd {
+  border: 1px solid var(--v2-hairline);
+  padding: 1px 5px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle[aria-pressed="true"] {
+  border-color: var(--v2-hairline-strong);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-share-pill:hover,
+.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle:hover,
 .zaki-app-v2 .zaki-agent-v2__head button:hover {
   border-color: var(--v2-hairline-strong);
   background: var(--v2-hover);
@@ -3863,11 +3895,7 @@
 
 .zaki-app-v2 .zaki-agent-v2__workspace {
   min-height: 0;
-  background-image:
-    linear-gradient(to right, var(--v2-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--v2-grid) 1px, transparent 1px);
-  background-position: -1px -1px;
-  background-size: 32px 32px;
+  background: var(--v2-bg);
 }
 
 .zaki-app-v2 .zaki-agent-v2__scroll {
@@ -3880,7 +3908,7 @@
 
 @media (min-width: 1280px) {
   .zaki-app-v2 .zaki-agent-v2--inspector {
-    --zaki-agent-inspector-width: 340px;
+    --zaki-agent-inspector-width: 380px;
   }
 
   .zaki-app-v2 .zaki-agent-v2--inspector .zaki-input-float {
@@ -3905,7 +3933,7 @@
 
 @media (min-width: 1280px) and (max-width: 1420px) {
   .zaki-app-v2 .zaki-agent-v2--inspector {
-    --zaki-agent-inspector-width: 312px;
+    --zaki-agent-inspector-width: 340px;
   }
 }
 
@@ -3929,6 +3957,10 @@
 
   .zaki-app-v2 .zaki-agent-v2 .zaki-subheader-pill {
     max-width: min(68vw, 520px);
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle {
+    display: none;
   }
 }
 
@@ -4230,13 +4262,13 @@
 .zaki-agent-inspector__body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 12px;
+  padding: 14px;
   overflow-y: auto;
 }
 
 .zaki-agent-inspector .v2-panel {
   border-color: var(--v2-hairline-strong);
-  background: var(--v2-bg-raised);
+  background: var(--v2-bg);
 }
 
 .zaki-agent-inspector .v2-panel-head {
@@ -4247,7 +4279,7 @@
 .zaki-agent-inspector__tabs button {
   display: flex;
   min-width: 0;
-  min-height: 34px;
+  min-height: 38px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -4257,6 +4289,12 @@
   letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.zaki-agent-inspector__tabs {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
 }
 
 .zaki-agent-inspector__tabs .count {

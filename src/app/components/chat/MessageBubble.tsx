@@ -56,6 +56,7 @@ export interface MessageBubbleProps {
   showActions?: boolean;
   isStreaming?: boolean;
   animate?: boolean;
+  showSourceChip?: boolean;
   onCopy?: (message: Message) => void;
   onRegenerate?: (message: Message) => void;
   onThumbsUp?: (message: Message) => void;
@@ -70,6 +71,7 @@ export function MessageBubble({
   showActions = true,
   isStreaming = false,
   animate = true,
+  showSourceChip = true,
   onCopy,
   onRegenerate,
   onThumbsUp,
@@ -209,12 +211,14 @@ export function MessageBubble({
             </div>
           );
         })()}
-        <SourceChip
-          channel={message.channel || "web"}
-          lane={message.lane || "main"}
-          at={message.createdAt}
-          className={cn("mt-0.5", isUser && "self-end")}
-        />
+        {showSourceChip ? (
+          <SourceChip
+            channel={message.channel || "web"}
+            lane={message.lane || "main"}
+            at={message.createdAt}
+            className={cn("mt-0.5", isUser && "self-end")}
+          />
+        ) : null}
         {showActions && !isUser && (
           <>
             <MessageActions

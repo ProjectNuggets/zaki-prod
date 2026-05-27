@@ -3,7 +3,20 @@ import { describe, expect, it, jest } from "@jest/globals";
 import { render, screen } from "@testing-library/react";
 
 jest.mock("../index", () => ({
-  MessageBubble: ({ message }: { message: { content: string } }) => <div>{message.content}</div>,
+  MessageBubble: ({
+    message,
+    showSourceChip,
+  }: {
+    message: { id?: string; content: string };
+    showSourceChip?: boolean;
+  }) => (
+    <div
+      data-testid={message.id ? `message-bubble-${message.id}` : undefined}
+      data-show-source-chip={String(showSourceChip)}
+    >
+      {message.content}
+    </div>
+  ),
 }));
 
 jest.mock("react-i18next", () => ({
@@ -31,6 +44,25 @@ describe("ChatView", () => {
     );
 
     expect(screen.getByText("Thinking")).toBeInTheDocument();
+  });
+
+  it("hides source chips for bot mode messages because provenance lives in the Agent panel", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "assistant-1", role: "assistant", content: "Done." },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByTestId("message-bubble-assistant-1")).toHaveAttribute(
+      "data-show-source-chip",
+      "false"
+    );
   });
 
   it("collapses the trail into 'Worked for' once final reply starts", () => {

@@ -103,6 +103,7 @@ export function AgentSessionRail({
           onDownloadSession={onDownloadSession}
           onShareSession={onShareSession}
           onDeleteSession={onDeleteSession}
+          showRuntimeBadges={false}
           isRtl={isRtl}
         />
       </div>

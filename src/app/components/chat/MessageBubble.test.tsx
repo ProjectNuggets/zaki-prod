@@ -38,6 +38,16 @@ describe("MessageBubble source chip", () => {
     expect(chip?.getAttribute("data-channel")).toBe("web");
   });
 
+  it("can hide source chips on product surfaces that carry provenance elsewhere", () => {
+    const message: Message = {
+      id: "agent-1",
+      role: "assistant",
+      content: "done",
+    };
+    render(<MessageBubble message={message} showSourceChip={false} animate={false} />);
+    expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
+  });
+
   it("renders a Telegram chip when message originated from Telegram", () => {
     const message: Message = {
       id: "2",

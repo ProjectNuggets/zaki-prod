@@ -23,6 +23,8 @@ interface ZakiSessionListProps {
   onShareSession?: (sessionKey: string) => void;
   /** Permanent delete via /api/agent/sessions/:key DELETE. Optional. */
   onDeleteSession?: (sessionKey: string, label: string) => void;
+  /** Hide generic channel/mode badges for product-specific V2 rails. */
+  showRuntimeBadges?: boolean;
 }
 
 export function ZakiSessionList({
@@ -35,6 +37,7 @@ export function ZakiSessionList({
   onDownloadSession,
   onShareSession,
   onDeleteSession,
+  showRuntimeBadges = true,
 }: ZakiSessionListProps) {
   const { getLabel: getOverlayLabel, setLabel: setOverlayLabel } = useSessionTitleOverlay();
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
@@ -187,7 +190,7 @@ export function ZakiSessionList({
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
                   <div className="mt-0.5 flex items-center gap-1.5">
-                    {mode ? (
+                    {showRuntimeBadges && mode ? (
                       <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
                         {mode}
                       </span>
@@ -196,7 +199,7 @@ export function ZakiSessionList({
                       aria-label={live ? "live" : "idle"}
                       className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
                     />
-                    {lastChannel ? (
+                    {showRuntimeBadges && lastChannel ? (
                       <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
                         {lastChannel}
                       </span>

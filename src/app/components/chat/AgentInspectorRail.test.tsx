@@ -7,7 +7,6 @@ function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
   const props: AgentInspectorRailProps = {
     mode: "execute",
     isStreaming: false,
-    live: false,
     lastChannel: null,
     sandbox: null,
     tasks: [],
