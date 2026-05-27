@@ -114,6 +114,19 @@ import {
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 import {
+  buildDesignConfigErrorPayload,
+  buildDesignDisabledPayload,
+  classifyDesignMeterActionForIngress,
+  estimateDesignMeterUnitsForIngress,
+  getBlockedHostedDesignPathReason,
+  getDesignBase,
+  isDesignEnabled,
+  mapDesignUpstreamFailure,
+  resolveCanonicalDesignUserId,
+  sanitizeDesignClientPayload,
+  sanitizeDesignUpstreamPayload,
+} from "./design-bff-contract.js";
+import {
   fetchLearningPath,
   fetchLearningProxyPath,
   fetchLearningSession,
@@ -121,6 +134,11 @@ import {
   getLearningBase,
   probeLearningReady,
 } from "./learning-client.js";
+import {
+  fetchDesignPath,
+  fetchDesignProxyPath,
+  probeDesignReady,
+} from "./design-client.js";
 import {
   completeLearningStudyTask,
   createLearningStudyTask,
@@ -418,6 +436,15 @@ const LEARNING_ENGINE_INTERNAL_TOKEN = (
   process.env.LEARNING_ENGINE_INTERNAL_TOKEN || ""
 ).trim();
 const ZAKI_LEARNING_ENABLED = isLearningEnabled(process.env.ZAKI_LEARNING_ENABLED);
+const DESIGN_ENGINE_BASE_URL = (process.env.DESIGN_ENGINE_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+const DESIGN_ENGINE_INTERNAL_TOKEN = (
+  process.env.DESIGN_ENGINE_INTERNAL_TOKEN ||
+  process.env.ZAKI_DESIGN_INTERNAL_TOKEN ||
+  ""
+).trim();
+const ZAKI_DESIGN_ENABLED = isDesignEnabled(process.env.ZAKI_DESIGN_ENABLED);
 const ZAKI_LEARNING_WEBHOOK_BASE_URL = (
   process.env.ZAKI_LEARNING_WEBHOOK_BASE_URL ||
   ZAKI_AGENT_WEBHOOK_BASE_URL ||
@@ -427,6 +454,10 @@ const ZAKI_LEARNING_WEBHOOK_BASE_URL = (
 const LEARNING_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
   1_000,
   Number(process.env.LEARNING_ENGINE_REQUEST_TIMEOUT_MS || 30_000)
+);
+const DESIGN_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
+  1_000,
+  Number(process.env.DESIGN_ENGINE_REQUEST_TIMEOUT_MS || 60_000)
 );
 const LEARNING_ENGINE_STREAM_TIMEOUT_MS = Math.max(
   5_000,
@@ -2866,57 +2897,97 @@ async function getBackendReadinessDependencies() {
   const learningConfigured = Boolean(
     getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN
   );
+  const designConfigured = Boolean(
+    getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN
+  );
+  const dependencies = {};
   if (!ZAKI_LEARNING_ENABLED) {
-    return {
-      learning: {
-        ok: true,
-        enabled: false,
-        configured: learningConfigured,
-        status: learningConfigured ? "disabled" : "not_configured",
-      },
+    dependencies.learning = {
+      ok: true,
+      enabled: false,
+      configured: learningConfigured,
+      status: learningConfigured ? "disabled" : "not_configured",
     };
-  }
-  if (!learningConfigured) {
-    return {
-      learning: {
-        ok: false,
-        enabled: true,
-        configured: false,
-        status: "config_missing",
-      },
+  } else if (!learningConfigured) {
+    dependencies.learning = {
+      ok: false,
+      enabled: true,
+      configured: false,
+      status: "config_missing",
     };
-  }
-
-  try {
-    const response = await probeLearningReady({
-      baseUrl: LEARNING_ENGINE_BASE_URL,
-      internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
-      userId: "system",
-      requestId: "backend-ready-learning",
-      fetchWithTimeout,
-      timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 3_000),
-      label: "Backend ready learning dependency probe",
-    });
-    return {
-      learning: {
+  } else {
+    try {
+      const response = await probeLearningReady({
+        baseUrl: LEARNING_ENGINE_BASE_URL,
+        internalToken: LEARNING_ENGINE_INTERNAL_TOKEN,
+        userId: "system",
+        requestId: "backend-ready-learning",
+        fetchWithTimeout,
+        timeoutMs: Math.min(LEARNING_ENGINE_REQUEST_TIMEOUT_MS, 3_000),
+        label: "Backend ready learning dependency probe",
+      });
+      dependencies.learning = {
         ok: response.ok,
         enabled: true,
         configured: true,
         status: response.ok ? "ready" : "unavailable",
         upstreamStatus: response.status,
-      },
-    };
-  } catch (error) {
-    return {
-      learning: {
+      };
+    } catch (error) {
+      dependencies.learning = {
         ok: false,
         enabled: true,
         configured: true,
         status: "unavailable",
         error: error?.message || "Learning readiness probe failed.",
-      },
-    };
+      };
+    }
   }
+
+  if (!ZAKI_DESIGN_ENABLED) {
+    dependencies.design = {
+      ok: true,
+      enabled: false,
+      configured: designConfigured,
+      status: designConfigured ? "disabled" : "not_configured",
+    };
+  } else if (!designConfigured) {
+    dependencies.design = {
+      ok: false,
+      enabled: true,
+      configured: false,
+      status: "config_missing",
+    };
+  } else {
+    try {
+      const response = await probeDesignReady({
+        baseUrl: DESIGN_ENGINE_BASE_URL,
+        internalToken: DESIGN_ENGINE_INTERNAL_TOKEN,
+        userId: "system",
+        requestId: "backend-ready-design",
+        fetchWithTimeout,
+        timeoutMs: Math.min(DESIGN_ENGINE_REQUEST_TIMEOUT_MS, 3_000),
+        label: "Backend ready design dependency probe",
+      });
+      dependencies.design = {
+        ok: response.ok,
+        enabled: true,
+        configured: true,
+        status: response.ok ? "ready" : "unavailable",
+        upstreamStatus: response.status,
+      };
+    } catch (error) {
+      dependencies.design = {
+        ok: false,
+        enabled: true,
+        configured: true,
+        status: "unavailable",
+        error: error?.message || "Design readiness probe failed.",
+      };
+    }
+  }
+
+  return dependencies;
 }
 
 app.get("/health", async (_, res) => {
@@ -11998,6 +12069,319 @@ function prepareLearningTutorAgentPayload(req, rawBody) {
   return injectLearningHostedTelegramConfig(req, sanitizeLearningTutorAgentPayload(rawBody));
 }
 
+async function requireDesignContext(req, res, next) {
+  const existingUserId = String(req.designUserId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return;
+
+  const userId = resolveCanonicalDesignUserId(authResult);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    return;
+  }
+
+  req.designAuthResult = authResult;
+  req.designUserId = userId;
+  next();
+}
+
+function assertDesignRouteEnabled(req, res) {
+  const requestId = getOrCreateRequestId(req);
+  if (!ZAKI_DESIGN_ENABLED) {
+    res.status(404).json(buildDesignDisabledPayload(requestId));
+    return false;
+  }
+  if (!getDesignBase(DESIGN_ENGINE_BASE_URL)) {
+    res
+      .status(500)
+      .json(buildDesignConfigErrorPayload("DESIGN_ENGINE_BASE_URL is not configured.", requestId));
+    return false;
+  }
+  if (!DESIGN_ENGINE_INTERNAL_TOKEN) {
+    res
+      .status(500)
+      .json(buildDesignConfigErrorPayload("DESIGN_ENGINE_INTERNAL_TOKEN is not configured.", requestId));
+    return false;
+  }
+  return true;
+}
+
+function designClientOptions(req, label) {
+  return {
+    baseUrl: DESIGN_ENGINE_BASE_URL,
+    internalToken: DESIGN_ENGINE_INTERNAL_TOKEN,
+    userId: String(req.designUserId || ""),
+    requestId: getOrCreateRequestId(req),
+    fetchWithTimeout,
+    timeoutMs: DESIGN_ENGINE_REQUEST_TIMEOUT_MS,
+    label,
+  };
+}
+
+function normalizeDesignProxyPath(req) {
+  const raw = String(req.originalUrl || req.path || req.url || "").split("#")[0];
+  const [pathPart, queryString] = raw.split("?");
+  const pathValue = (pathPart || "/").startsWith("/") ? pathPart || "/" : `/${pathPart || ""}`;
+  const suffix = pathValue.startsWith("/api/design")
+    ? pathValue.slice("/api/design".length) || "/"
+    : pathValue;
+  const targetPath = suffix === "/"
+    ? "/api/projects"
+    : suffix.startsWith("/api/")
+      ? suffix
+      : `/api${suffix}`;
+  return queryString ? `${targetPath}?${queryString}` : targetPath;
+}
+
+function buildDesignMeterIdentity(req) {
+  const zakiUser = req.designAuthResult?.zakiUser;
+  if (!zakiUser?.id) return null;
+  return {
+    type: "user",
+    tenantId: "default",
+    userId: zakiUser.id,
+    zakiUser,
+    anonymousSessionId: null,
+    anonymousKeyHash: null,
+  };
+}
+
+function readDesignIdempotencyKey(req, action) {
+  const headerValue =
+    req.headers?.["idempotency-key"] ||
+    req.headers?.["x-idempotency-key"];
+  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const normalizedHeader = String(raw || "").trim();
+  if (normalizedHeader) return normalizedHeader.slice(0, 180);
+  return `${getOrCreateRequestId(req)}:${normalizeMeterAction(action)}`.slice(0, 180);
+}
+
+function setDesignMeterHeaders(res, grant, meter) {
+  if (!grant || res.headersSent) return;
+  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
+  res.setHeader("X-Zaki-Meter-Product", "design");
+  res.setHeader("X-Zaki-Meter-Action", grant.action);
+  if (meter?.plan?.tier) res.setHeader("X-Zaki-Meter-Plan", meter.plan.tier);
+  if (meter?.rolling?.remaining !== null && meter?.rolling?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Rolling-Remaining", String(meter.rolling.remaining));
+  }
+  if (meter?.weekly?.remaining !== null && meter?.weekly?.remaining !== undefined) {
+    res.setHeader("X-Zaki-Meter-Weekly-Remaining", String(meter.weekly.remaining));
+  }
+}
+
+function buildDesignMeterDenialPayload(result, requestId) {
+  return {
+    code: result?.error || "design_meter_denied",
+    error: "Design usage is not available.",
+    message: result?.message || "Design usage is not currently available.",
+    product: result?.product || "design",
+    productState: result?.productState || null,
+    meter: result?.meter || null,
+    requestId,
+  };
+}
+
+async function requireDesignMeterGrantForIngress(req) {
+  const action = classifyDesignMeterActionForIngress(req);
+  if (!action) return { allowed: true, action: null, grant: null };
+
+  const identity = buildDesignMeterIdentity(req);
+  const requestId = getOrCreateRequestId(req);
+  if (!identity) {
+    return {
+      allowed: false,
+      status: 401,
+      error: "design_meter_identity_required",
+      message: "Design usage requires an authenticated ZAKI user.",
+    };
+  }
+
+  const result = await issueMeterGrantForIdentity({
+    identity,
+    product: "design",
+    action,
+    estimatedUnits: estimateDesignMeterUnitsForIngress(req, action),
+    requestId,
+    idempotencyKey: readDesignIdempotencyKey(req, action),
+    metadata: {
+      surface: "design",
+      route: String(req.originalUrl || req.url || "").split("?")[0],
+      method: req.method,
+    },
+  });
+  return {
+    ...result,
+    action,
+  };
+}
+
+async function recordDesignMeterReceiptBestEffort(req, {
+  grant = req.designMeterGrant,
+  action = req.designMeterAction,
+  status = "success",
+  durationMs = 0,
+  idempotencySuffix = "receipt",
+  model = "design-engine",
+} = {}) {
+  if (!grant || !action) return null;
+  try {
+    return await recordMeterReceiptForGrant({
+      grant,
+      product: "design",
+      action,
+      status,
+      rawUsageFacts: {
+        durationMs,
+        storageBytes: Number(req.headers?.["content-length"] || 0) || 0,
+        model,
+      },
+      idempotencyKey: `${grant.idempotencyKey}:${idempotencySuffix}`.slice(0, 180),
+    });
+  } catch (error) {
+    console.warn("[Design] Meter receipt failed:", {
+      requestId: getOrCreateRequestId(req),
+      action,
+      error: error?.message || "Design meter receipt failed.",
+    });
+    return null;
+  }
+}
+
+async function requireDesignQuotaForIngress(req, res, next) {
+  const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(String(req.method || "").toUpperCase());
+  if (!isMutation) {
+    next();
+    return;
+  }
+  if (!ZAKI_DESIGN_ENABLED || !getDesignBase(DESIGN_ENGINE_BASE_URL) || !DESIGN_ENGINE_INTERNAL_TOKEN) {
+    next();
+    return;
+  }
+  if (req.designQuotaChecked) {
+    next();
+    return;
+  }
+
+  await requireDesignContext(req, res, async () => {
+    const meterGrantResult = await requireDesignMeterGrantForIngress(req);
+    if (!meterGrantResult.allowed) {
+      res
+        .status(meterGrantResult.status || 403)
+        .json(buildDesignMeterDenialPayload(meterGrantResult, getOrCreateRequestId(req)));
+      return;
+    }
+    req.designQuotaChecked = true;
+    req.designMeterGrant = meterGrantResult.grant || null;
+    req.designMeterAction = meterGrantResult.action || null;
+    setDesignMeterHeaders(res, meterGrantResult.grant, meterGrantResult.meter);
+    next();
+  });
+}
+
+async function pipeDesignResponse(req, res, upstream) {
+  const requestId = getOrCreateRequestId(req);
+  if (!upstream.ok) {
+    const mapped = mapDesignUpstreamFailure(upstream.status, requestId);
+    if (mapped) {
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+  }
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      const raw = await upstream.text();
+      const payload = raw ? JSON.parse(raw) : null;
+      res.json(sanitizeDesignUpstreamPayload(payload));
+      return;
+    } catch {
+      // Fall back to streaming below.
+    }
+  }
+  pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Design upstream response");
+}
+
+async function proxyDesignRequest(req, res, targetPath, {
+  method = req.method,
+  label = "Design upstream request",
+} = {}) {
+  if (!assertDesignRouteEnabled(req, res)) return;
+  const blockedReason = getBlockedHostedDesignPathReason(targetPath);
+  if (blockedReason) {
+    res.status(404).json({
+      code: "design_path_not_available",
+      error: "Design endpoint is not available.",
+      message: blockedReason,
+      requestId: getOrCreateRequestId(req),
+    });
+    return;
+  }
+  const startedAtMs = Date.now();
+  const recordReceipt = async (status = "success") => {
+    await recordDesignMeterReceiptBestEffort(req, {
+      status,
+      durationMs: Date.now() - startedAtMs,
+    });
+  };
+
+  try {
+    const contentType = String(req.headers?.["content-type"] || "").toLowerCase();
+    const hasParsedJsonBody =
+      contentType.includes("application/json") &&
+      req.body &&
+      typeof req.body === "object";
+    const upstream = hasParsedJsonBody || ["GET", "HEAD"].includes(String(method).toUpperCase())
+      ? await fetchDesignPath({
+          ...designClientOptions(req, label),
+          path: targetPath,
+          method,
+          body: hasParsedJsonBody ? sanitizeDesignClientPayload(req.body) : undefined,
+          contentType: hasParsedJsonBody ? "application/json" : null,
+        })
+      : await fetchDesignProxyPath({
+          baseUrl: DESIGN_ENGINE_BASE_URL,
+          internalToken: DESIGN_ENGINE_INTERNAL_TOKEN,
+          userId: String(req.designUserId || ""),
+          requestId: getOrCreateRequestId(req),
+          path: targetPath,
+          req,
+          method,
+          fetchWithTimeout,
+          timeoutMs: DESIGN_ENGINE_REQUEST_TIMEOUT_MS,
+          label,
+        });
+    await recordReceipt(upstream.ok ? "success" : "failed");
+    await pipeDesignResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    await recordReceipt("failed");
+    console.error("[Design] Upstream proxy error:", {
+      requestId,
+      error: error?.message || "Design request failed.",
+    });
+    res.status(503).json({
+      code: "design_unavailable",
+      error: "Design is unavailable.",
+      message: "Design is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
+}
+
 async function getLearningTelegramAllowFromForWebhook(req, agentId, requestId) {
   const upstream = await fetchLearningPath({
     ...learningClientOptions(req, "Learning tutor agent Telegram webhook ACL request"),
@@ -13921,6 +14305,86 @@ app.post(
     NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
 );
+
+// =============================================================================
+// DESIGN ENGINE BFF
+// =============================================================================
+
+app.use("/api/design", requireDesignQuotaForIngress);
+
+app.get("/api/internal/design/status", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const userId = resolveCanonicalDesignUserId(authResult);
+    const configured = Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN);
+    const body = {
+      ok: false,
+      enabled: ZAKI_DESIGN_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(DESIGN_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: DESIGN_ENGINE_REQUEST_TIMEOUT_MS,
+      requestId,
+    };
+
+    if (!ZAKI_DESIGN_ENABLED || !configured || !userId) {
+      return res.status(200).json(body);
+    }
+
+    const upstream = await probeDesignReady({
+      baseUrl: DESIGN_ENGINE_BASE_URL,
+      internalToken: DESIGN_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs: Math.min(DESIGN_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+    });
+
+    return res.status(200).json({
+      ...body,
+      ok: upstream.ok,
+      upstreamStatus: upstream.status,
+    });
+  } catch (error) {
+    console.error("[Design] Internal status error:", error);
+    res.status(500).json({ error: error?.message || "Design status failed." });
+  }
+});
+
+app.get("/api/design/health", requireDesignContext, async (req, res) => {
+  if (!assertDesignRouteEnabled(req, res)) return;
+  try {
+    const upstream = await probeDesignReady({
+      ...designClientOptions(req, "Design health request"),
+      timeoutMs: Math.min(DESIGN_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+    });
+    res.status(200).json({
+      ok: upstream.ok,
+      enabled: ZAKI_DESIGN_ENABLED,
+      configured: true,
+      upstreamStatus: upstream.status,
+      requestId: getOrCreateRequestId(req),
+    });
+  } catch (error) {
+    res.status(503).json({
+      code: "design_unavailable",
+      error: "Design is unavailable.",
+      message: error?.message || "Design health check failed.",
+      retryable: true,
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+});
+
+app.all(/^\/api\/design(?:\/.*)?$/, requireDesignContext, async (req, res) => {
+  await proxyDesignRequest(req, res, normalizeDesignProxyPath(req), {
+    method: req.method,
+    label: "Design upstream proxy request",
+  });
+});
 
 // =============================================================================
 // LEARNING ENGINE BFF

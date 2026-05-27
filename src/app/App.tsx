@@ -126,6 +126,8 @@ export default function App() {
       store.setSidebarMode("brain");
     } else if (path === '/learn') {
       store.setSidebarMode("learning");
+    } else if (path === '/design') {
+      store.setSidebarMode("zaki");
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
     } else if (spaceId && threadId) {

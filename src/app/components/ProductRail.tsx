@@ -30,6 +30,7 @@ function isActiveProduct(pathname: string, itemId: ProductRailItem["id"]) {
   if (itemId === "chat") return pathname === "/spaces" || pathname.startsWith("/spaces/");
   if (itemId === "brain") return pathname === "/brain";
   if (itemId === "learn") return pathname === "/learn";
+  if (itemId === "design") return pathname === "/design";
   return false;
 }
 
@@ -102,8 +103,10 @@ export function ProductRail() {
       fallback: "Design",
       shortcut: "⌘7",
       icon: Palette,
-      disabled: true,
-      action: () => undefined,
+      action: () => {
+        setSidebarMode("zaki");
+        navigate("/design");
+      },
     },
   ];
 

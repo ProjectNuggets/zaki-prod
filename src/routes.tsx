@@ -9,6 +9,7 @@ import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
 import { BrainPage } from './app/components/brain/BrainPage';
 import { LearningPage } from './app/components/learning/LearningPage';
+import { DesignPage } from './app/components/design/DesignPage';
 import { SettingsPage } from './app/components/settings/SettingsPage';
 import { WebsiteHomePage, WebsiteProductPage, WebsiteShell } from './app/components/WebsitePage';
 import {
@@ -201,6 +202,10 @@ export const router = createBrowserRouter([
       {
         path: 'learn',
         element: <LearningPage />,
+      },
+      {
+        path: 'design',
+        element: <DesignPage />,
       },
     ],
   },

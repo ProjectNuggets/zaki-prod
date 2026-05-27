@@ -60,6 +60,9 @@ export function validateRuntimeConfig(env = process.env) {
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
+  const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
+  const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
+  const designInternalToken = normalize(env.DESIGN_ENGINE_INTERNAL_TOKEN || env.ZAKI_DESIGN_INTERNAL_TOKEN);
   const nullalisDevUserId = normalize(env.NULLALIS_DEV_USER_ID || env.NULLCLAW_DEV_USER_ID);
   const googleClientId = normalize(env.GOOGLE_CLIENT_ID);
   const googleClientSecret = normalize(env.GOOGLE_CLIENT_SECRET);
@@ -197,6 +200,34 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_LEARNING_ENABLED",
       "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
+    );
+  }
+  if (designEnabled) {
+    if (!designBaseUrl) {
+      pushIssue(
+        errors,
+        "DESIGN_ENGINE_BASE_URL",
+        "DESIGN_ENGINE_BASE_URL is required when ZAKI_DESIGN_ENABLED=true."
+      );
+    } else if (!hasHttpUrl(designBaseUrl)) {
+      pushIssue(
+        errors,
+        "DESIGN_ENGINE_BASE_URL",
+        "DESIGN_ENGINE_BASE_URL must start with http:// or https://."
+      );
+    }
+    if (!designInternalToken) {
+      pushIssue(
+        errors,
+        "DESIGN_ENGINE_INTERNAL_TOKEN",
+        "DESIGN_ENGINE_INTERNAL_TOKEN is required when ZAKI_DESIGN_ENABLED=true."
+      );
+    }
+  } else if (designBaseUrl || designInternalToken) {
+    pushIssue(
+      warnings,
+      "ZAKI_DESIGN_ENABLED",
+      "Design engine config is present, but ZAKI_DESIGN_ENABLED is not true."
     );
   }
 
